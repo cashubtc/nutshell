@@ -9,7 +9,6 @@ sudo apt install pkg-config libffi-dev libpq-dev
 curl https://pyenv.run | bash
 pyenv install 3.9.13
 cd cashu
-mkdir data/wallet data/mint
 poetry install
 ```
 
