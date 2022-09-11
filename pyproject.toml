@@ -26,6 +26,7 @@ Werkzeug = "2.2.2"
 ecc-pycrypto = {git = "https://github.com/lc6chang/ecc-pycrypto.git", rev = "v1.0.1"}
 psycopg2 = "^2.9.3"
 asgiref = "^3.5.2"
+pydantic = "^1.10.2"
 
 [tool.poetry.dev-dependencies]
 
