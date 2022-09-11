@@ -1,0 +1,71 @@
+#!/usr/bin/env python
+
+from wallet.wallet import Wallet as Wallet
+from wallet.migrations import m001_initial
+import asyncio
+import click
+import json
+import base64
+from bech32 import bech32_encode, bech32_decode, convertbits
+
+SERVER_ENDPOINT = "http://localhost:5000"
+
+
+import asyncio
+from functools import wraps
+
+
+# https://github.com/pallets/click/issues/85#issuecomment-503464628
+def coro(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        return asyncio.run(f(*args, **kwargs))
+
+    return wrapper
+
+
+@click.command("mint")
+@click.option("--wallet", default="wallet", help="Mint tokens.")
+@click.option("--mint", default=0, help="Mint tokens.")
+@click.option("--send", default=0, help="Send tokens.")
+@click.option("--receive", default="", help="Receive tokens.")
+@click.option("--invalidate", default="", help="Invalidate tokens.")
+@coro
+async def main(wallet, mint, send, receive, invalidate):
+    wallet = Wallet(SERVER_ENDPOINT, f"data/{wallet}")
+    await m001_initial(db=wallet.db)
+    await wallet.load_proofs()
+    if mint:
+        print(f"Balance: {wallet.balance}")
+        await wallet.mint(mint)
+        print(f"Balance: {wallet.balance}")
+
+    if send:
+        wallet.status()
+        _, send_proofs = await wallet.split(wallet.proofs, send)
+        print(base64.urlsafe_b64encode(json.dumps(send_proofs).encode()).decode())
+
+    if receive:
+        wallet.status()
+        proofs = json.loads(base64.urlsafe_b64decode(receive))
+        _, _ = await wallet.redeem(proofs)
+        wallet.status()
+
+    if invalidate:
+        wallet.status()
+        proofs = json.loads(base64.urlsafe_b64decode(invalidate))
+        await wallet.invalidate(proofs)
+        wallet.status()
+
+
+if __name__ == "__main__":
+    main()
+
+
+@click.command("send")
+@click.option("--send", default=1, help="Mint tokens.")
+@coro
+async def send(send):
+    print("asd")
+    # w1_fst_proofs, w1_snd_proofs = await wallet.split(proofs, 20)
+    return "asd"
