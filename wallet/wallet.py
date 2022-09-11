@@ -63,8 +63,7 @@ class LedgerAPI:
             json={"x": str(B_.x), "y": str(B_.y)},
         ).json()
         if "error" in promises:
-            print("Error: {}".format(promises["error"]))
-            return []
+            raise Exception("Error: {}".format(promises["error"]))
         return self._construct_proofs(promises, [(r, secret)])
 
     def split(self, proofs, amount):
@@ -94,8 +93,7 @@ class LedgerAPI:
             json={"proofs": proofs, "amount": amount, "output_data": output_data},
         ).json()
         if "error" in promises:
-            print("Error: {}".format(promises["error"]))
-            return [], []
+            raise Exception("Error: {}".format(promises["error"]))
 
         # Obtain proofs from promises
         fst_proofs = self._construct_proofs(
@@ -129,7 +127,7 @@ class Wallet(LedgerAPI):
         for amount in split:
             proofs = super().mint(amount)
             if proofs == []:
-                return []
+                raise Exception("received no proofs")
             new_proofs += proofs
             await self._store_proofs(proofs)
         self.proofs += new_proofs
@@ -141,7 +139,7 @@ class Wallet(LedgerAPI):
     async def split(self, proofs, amount):
         fst_proofs, snd_proofs = super().split(proofs, amount)
         if len(fst_proofs) == 0 and len(snd_proofs) == 0:
-            return [], []
+            raise Exception("received no splits")
         used_secrets = [p["secret"] for p in proofs]
         self.proofs = list(
             filter(lambda p: p["secret"] not in used_secrets, self.proofs)
