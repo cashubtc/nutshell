@@ -30,7 +30,7 @@ poetry install
 ## Run mint
 ```bash
 cd mint/
-poetry run flask run --host 0.0.0.0 --port 3338
+poetry run flask run --port 3338
 ```
 ## Run wallet
 
