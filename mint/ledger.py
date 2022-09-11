@@ -11,15 +11,18 @@ import core.b_dhke as b_dhke
 from core.db import Database
 from core.split import amount_split
 from core.settings import MAX_ORDER
-from mint.crud import store_promise, invalidate_proof
+from mint.crud import store_promise, invalidate_proof, get_proofs_used
 
 
 class Ledger:
     def __init__(self, secret_key: str, db: str):
         self.master_key = secret_key
-        self.proofs_used = set()  # no promise proofs have been used
+        self.proofs_used = set()
         self.keys = self._derive_keys(self.master_key)
         self.db = Database("mint", db)
+
+    async def load_used_proofs(self):
+        self.proofs_used = await get_proofs_used(db=self.db)
 
     @staticmethod
     def _derive_keys(master_key):

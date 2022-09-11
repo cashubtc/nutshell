@@ -21,6 +21,8 @@ class MyFlaskApp(Flask):
     def __init__(self, *args, **kwargs):
         async def create_tasks_func():
             await asyncio.wait([m001_initial(ledger.db)])
+            await ledger.load_used_proofs()
+            print("Mint started.")
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(create_tasks_func())

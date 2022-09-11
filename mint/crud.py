@@ -29,6 +29,19 @@ async def store_promise(
     )
 
 
+async def get_proofs_used(
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+
+    rows = await (conn or db).fetchall(
+        """
+        SELECT secret from proofs_used
+        """
+    )
+    return [row[0] for row in rows]
+
+
 async def invalidate_proof(
     proof: dict,
     db: Database,
