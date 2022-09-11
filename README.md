@@ -41,3 +41,6 @@ poetry run flask run --port 3338
 ```bash
 poetry run ./cashu --wallet=wallet --mint=420
 ```
+
+## Screenshot
+![screenshot](https://user-images.githubusercontent.com/93376500/189533335-68a863e2-bacd-47c1-aecc-e4fb09883d11.jpg)
