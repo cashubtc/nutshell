@@ -6,7 +6,7 @@ authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.6"
+python = "^3.8"
 pycrypto = "^2.6.1"
 ecc = "0.0.1"
 requests = "2.27.1"
