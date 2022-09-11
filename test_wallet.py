@@ -6,7 +6,7 @@ from wallet.wallet import Wallet as Wallet2
 from wallet.migrations import m001_initial
 
 
-SERVER_ENDPOINT = "http://localhost:5000"
+SERVER_ENDPOINT = "http://localhost:3338"
 
 
 async def run_test():
