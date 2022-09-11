@@ -44,8 +44,6 @@ async def run_test():
     assert wallet1.balance == 63 + 64
     wallet1.status()
 
-    print("PROOFs")
-    print(proofs)
     w1_fst_proofs, w1_snd_proofs = await wallet1.split(wallet1.proofs, 20)
     # we expect 44 and 20 -> [4, 8, 32], [4, 16]
     print(w1_fst_proofs)

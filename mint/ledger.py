@@ -78,9 +78,30 @@ class Ledger:
             return False
         return True
 
-    @staticmethod
-    def _get_output_split(amount):
+    def _verify_split_amount(self, amount):
+        """Split amount like output amount can't be negative or too big."""
+        try:
+            self._verify_amount(amount)
+        except:
+            # For better error message
+            raise Exception("Invalid split amount: " + str(amount))
+
+    def _verify_amount(self, amount):
+        """Any amount used should be a positive integer not larger than 2^MAX_ORDER."""
+        valid = isinstance(amount, int) and amount > 0 and amount < 2**MAX_ORDER
+        if not valid:
+            raise Exception("Invalid amount: " + str(amount))
+        return amount
+
+    def _verify_equation_balanced(self, proofs, outs):
+        """Verify that Σoutputs - Σinputs = 0."""
+        sum_inputs = sum(self._verify_amount(p["amount"]) for p in proofs)
+        sum_outputs = sum(self._verify_amount(p["amount"]) for p in outs)
+        assert sum_outputs - sum_inputs == 0
+
+    def _get_output_split(self, amount):
         """Given an amount returns a list of amounts returned e.g. 13 is [1, 4, 8]."""
+        self._verify_amount(amount)
         bits_amt = bin(amount)[::-1][:-2]
         rv = []
         for (pos, bit) in enumerate(bits_amt):
@@ -106,6 +127,7 @@ class Ledger:
 
     async def split(self, proofs, amount, output_data):
         """Consumes proofs and prepares new promises based on the amount split."""
+        self._verify_split_amount(amount)
         # Verify proofs are valid
         if not all([self._verify_proof(p) for p in proofs]):
             return False
@@ -132,6 +154,8 @@ class Ledger:
         outs_snd = amount_split(amount)
         B_fst = [od["B'"] for od in output_data[: len(outs_fst)]]
         B_snd = [od["B'"] for od in output_data[len(outs_fst) :]]
-        return await self._generate_promises(
+        prom_fst, prom_snd = await self._generate_promises(
             outs_fst, B_fst
         ), await self._generate_promises(outs_snd, B_snd)
+        self._verify_equation_balanced(proofs, prom_fst + prom_snd)
+        return prom_fst, prom_snd
