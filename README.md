@@ -3,6 +3,7 @@
 ## Install
 
 ```bash
+https://github.com/callebtc/cashu.git
 sudo apt install pkg-config libffi-dev libpq-dev
 # on mac: brew install postgres
 curl https://pyenv.run | bash
