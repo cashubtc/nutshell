@@ -4,7 +4,7 @@
 
 ```bash
 git clone https://github.com/callebtc/cashu.git
-sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev
+sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev
 # on mac: brew install postgres
 
 # install python using pyenv
@@ -21,6 +21,7 @@ curl -sSL https://install.python-poetry.org | python -
 
 # install cashu
 cd cashu
+pyenv local 3.9.13
 poetry install
 ```
 
