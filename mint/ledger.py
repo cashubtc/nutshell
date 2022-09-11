@@ -22,7 +22,7 @@ class Ledger:
         self.db = Database("mint", db)
 
     async def load_used_proofs(self):
-        self.proofs_used = await get_proofs_used(db=self.db)
+        self.proofs_used = set(await get_proofs_used(db=self.db))
 
     @staticmethod
     def _derive_keys(master_key):
