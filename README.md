@@ -4,13 +4,22 @@
 
 ```bash
 git clone https://github.com/callebtc/cashu.git
-sudo apt install -y build-essential pkg-config libffi-dev libpq-dev
+sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev
 # on mac: brew install postgres
 
-# follow the instructions after installing pyenv
+# install python using pyenv
 curl https://pyenv.run | bash
+echo export PYENV_ROOT="$HOME/.pyenv" >> .bashrc
+echo command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH" >> .bashrc
+echo eval "$(pyenv init -)" >> .bashrc
+echo eval "$(pyenv virtualenv-init -)" >> .bashrc
+source .bashrc
 pyenv install 3.9.13
 
+# install poetry
+curl -sSL https://install.python-poetry.org | python -
+
+# install cashu
 cd cashu
 poetry install
 ```
