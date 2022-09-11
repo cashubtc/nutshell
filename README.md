@@ -4,7 +4,7 @@
 
 ```bash
 git clone https://github.com/callebtc/cashu.git
-sudo apt install build-essential pkg-config libffi-dev libpq-dev
+sudo apt install -y build-essential pkg-config libffi-dev libpq-dev
 # on mac: brew install postgres
 
 # follow the instructions after installing pyenv
