@@ -17,7 +17,7 @@ source .bashrc
 pyenv install 3.9.13
 
 # install poetry
-curl -sSL https://install.python-poetry.org | python -
+curl -sSL https://install.python-poetry.org | python3 -
 
 # install cashu
 cd cashu
