@@ -7,6 +7,7 @@ import asyncio
 
 from mint.ledger import Ledger
 from mint.migrations import m001_initial
+from lightning import WALLET
 
 # Ledger pubkey
 ledger = Ledger("supersecretprivatekey", "../data/mint")
@@ -22,6 +23,16 @@ class MyFlaskApp(Flask):
         async def create_tasks_func():
             await asyncio.wait([m001_initial(ledger.db)])
             await ledger.load_used_proofs()
+
+            error_message, balance = await WALLET.status()
+            if error_message:
+                print(
+                    f"The backend for {WALLET.__class__.__name__} isn't working properly: '{error_message}'",
+                    RuntimeWarning,
+                )
+
+            print(f"Lightning balance: {balance} sat")
+
             print("Mint started.")
 
         loop = asyncio.get_event_loop()
@@ -44,13 +55,18 @@ def keys():
 
 @app.route("/mint", methods=["POST"])
 async def mint():
-    amount = int(request.args.get("amount")) or 64
-    x = int(request.json["x"])
-    y = int(request.json["y"])
-    B_ = Point(x, y, secp256k1)
+    payload = request.json
+    amounts = []
+    B_s = []
+    for k, v in payload.items():
+        amounts.append(v["amount"])
+        x = int(v["x"])
+        y = int(v["y"])
+        B_ = Point(x, y, secp256k1)
+        B_s.append(B_)
     try:
-        promise = await ledger.mint(B_, amount)
-        return promise
+        promises = await ledger.mint(B_s, amounts)
+        return promises
     except Exception as exc:
         return {"error": str(exc)}
 

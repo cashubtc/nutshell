@@ -9,12 +9,27 @@ from wallet.migrations import m001_initial
 SERVER_ENDPOINT = "http://localhost:3338"
 
 
+async def assert_err(f, msg):
+    """Compute f() and expect an error message 'msg'."""
+    try:
+        await f
+    except Exception as exc:
+        assert exc.args[0] == msg, Exception(
+            f"Expected error: {msg}, got: {exc.args[0]}"
+        )
+
+
+def assert_amt(proofs, expected):
+    """Assert amounts the proofs contain."""
+    assert [p["amount"] for p in proofs] == expected
+
+
 async def run_test():
-    wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1")
+    wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1", "wallet1")
     await m001_initial(wallet1.db)
     wallet1.status()
 
-    wallet2 = Wallet1(SERVER_ENDPOINT, "data/wallet2")
+    wallet2 = Wallet1(SERVER_ENDPOINT, "data/wallet2", "wallet2")
     await m001_initial(wallet2.db)
     wallet2.status()
 
@@ -30,17 +45,19 @@ async def run_test():
     proofs += await wallet1.mint(63)
     assert wallet1.balance == 64 + 63
 
-    # Error: We try to split by amount higher than available
     w1_fst_proofs, w1_snd_proofs = await wallet1.split(wallet1.proofs, 65)
-    # assert w1_fst_proofs == []
-    # assert w1_snd_proofs == []
     assert wallet1.balance == 63 + 64
     wallet1.status()
 
     # Error: We try to double-spend by providing a valid proof twice
-    w1_fst_proofs, w1_snd_proofs = await wallet1.split(wallet1.proofs + proofs, 20)
-    assert w1_fst_proofs == []
-    assert w1_snd_proofs == []
+    # try:
+    #     await wallet1.split(wallet1.proofs + proofs, 20),
+    # except Exception as exc:
+    #     print(exc.args[0])
+    await assert_err(
+        wallet1.split(wallet1.proofs + proofs, 20),
+        f"Error: Already spent. Secret: {proofs[0]['secret']}",
+    )
     assert wallet1.balance == 63 + 64
     wallet1.status()
 
@@ -54,9 +71,11 @@ async def run_test():
     wallet1.status()
 
     # Error: We try to double-spend and it fails
-    w1_fst_proofs2_fails, w1_snd_proofs2_fails = await wallet1.split([proofs[0]], 10)
-    assert w1_fst_proofs2_fails == []
-    assert w1_snd_proofs2_fails == []
+    await assert_err(
+        wallet1.split([proofs[0]], 10),
+        f"Error: Already spent. Secret: {proofs[0]['secret']}",
+    )
+
     assert wallet1.balance == 63 + 64
     wallet1.status()
 
@@ -81,14 +100,21 @@ async def run_test():
     wallet1.status()
 
     # Error: We try to double-spend and it fails
-    w1_fst_proofs2, w1_snd_proofs2 = await wallet1.split(w1_snd_proofs, 5)
-    assert w1_fst_proofs2 == []
-    assert w1_snd_proofs2 == []
+    await assert_err(
+        wallet1.split(w1_snd_proofs, 5),
+        f"Error: Already spent. Secret: {w1_snd_proofs[0]['secret']}",
+    )
+
     assert wallet1.balance == 63 + 64 - 20
     wallet1.status()
 
     assert wallet1.proof_amounts() == [1, 2, 4, 4, 32, 64]
     assert wallet2.proof_amounts() == [4, 16]
+
+    await assert_err(
+        wallet1.split(w1_snd_proofs, -500),
+        "Error: Invalid split amount: -500",
+    )
 
 
 if __name__ == "__main__":

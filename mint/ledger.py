@@ -3,6 +3,7 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
 import hashlib
+import time
 
 from ecc.curve import secp256k1, Point
 from ecc.key import gen_keypair
@@ -12,6 +13,7 @@ from core.db import Database
 from core.split import amount_split
 from core.settings import MAX_ORDER
 from mint.crud import store_promise, invalidate_proof, get_proofs_used
+from lightning import WALLET
 
 
 class Ledger:
@@ -109,8 +111,27 @@ class Ledger:
                 rv.append(2**pos)
         return rv
 
-    # Public methods
+    async def _request_lightning(self, amount):
+        error, balance = await WALLET.status()
+        if error:
+            raise Exception(f"Lightning wallet not responding: {error}")
+        ok, checking_id, payment_request, error_message = await WALLET.create_invoice(
+            amount, "cashu deposit"
+        )
+        print(payment_request)
 
+        timeout = time.time() + 60  # 1 minute to pay invoice
+        while True:
+            status = await WALLET.get_invoice_status(checking_id)
+            if status.pending and time.time() > timeout:
+                print("Timeout")
+                return False
+            if not status.pending:
+                print("paid")
+                return True
+            time.sleep(5)
+
+    # Public methods
     def get_pubkeys(self):
         """Returns public keys for possible amounts."""
         return {
@@ -118,12 +139,22 @@ class Ledger:
             for amt in [2**i for i in range(MAX_ORDER)]
         }
 
-    async def mint(self, B_, amount):
+    async def mint(self, B_s, amounts, lightning=True):
         """Mints a promise for coins for B_."""
-        if amount not in [2**i for i in range(MAX_ORDER)]:
-            raise Exception(f"Can only mint amounts up to {2**MAX_ORDER}.")
-        split = amount_split(amount)
-        return [await self._generate_promise(a, B_) for a in split]
+        for amount in amounts:
+            if amount not in [2**i for i in range(MAX_ORDER)]:
+                raise Exception(f"Can only mint amounts up to {2**MAX_ORDER}.")
+
+        if lightning:
+            paid = await self._request_lightning(sum(amounts))
+            if not paid:
+                raise Exception(f"Did not receive payment in time.")
+
+        promises = []
+        for B_, amount in zip(B_s, amounts):
+            split = amount_split(amount)
+            promises += [await self._generate_promise(amount, B_) for a in split]
+        return promises
 
     async def split(self, proofs, amount, output_data):
         """Consumes proofs and prepares new promises based on the amount split."""

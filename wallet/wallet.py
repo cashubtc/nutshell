@@ -53,18 +53,25 @@ class LedgerAPI:
             )
         return proofs
 
-    def mint(self, amount):
+    def mint(self, amounts):
         """Mints new coins and returns a proof of promise."""
-        secret = str(random.getrandbits(128))
-        B_, r = b_dhke.step1_bob(secret)
+        payload = {}
+        secrets = []
+        rs = []
+        for i, amount in enumerate(amounts):
+            secret = str(random.getrandbits(128))
+            secrets.append(secret)
+            B_, r = b_dhke.step1_bob(secret)
+            rs.append(r)
+            payload[i] = {"amount": amount, "x": str(B_.x), "y": str(B_.y)}
+
         promises = requests.post(
             self.url + "/mint",
-            params={"amount": amount},
-            json={"x": str(B_.x), "y": str(B_.y)},
+            json=payload,
         ).json()
         if "error" in promises:
             raise Exception("Error: {}".format(promises["error"]))
-        return self._construct_proofs(promises, [(r, secret)])
+        return self._construct_proofs(promises, [(r, s) for r, s in zip(rs, secrets)])
 
     def split(self, proofs, amount):
         """Consume proofs and create new promises based on amount split."""
@@ -109,10 +116,11 @@ class LedgerAPI:
 class Wallet(LedgerAPI):
     """Minimal wallet wrapper."""
 
-    def __init__(self, url: str, db: str):
+    def __init__(self, url: str, db: str, name: str = "no_name"):
         super().__init__(url)
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
+        self.name = name
 
     async def load_proofs(self):
         self.proofs = await get_proofs(db=self.db)
@@ -123,15 +131,12 @@ class Wallet(LedgerAPI):
 
     async def mint(self, amount):
         split = amount_split(amount)
-        new_proofs = []
-        for amount in split:
-            proofs = super().mint(amount)
-            if proofs == []:
-                raise Exception("received no proofs")
-            new_proofs += proofs
-            await self._store_proofs(proofs)
-        self.proofs += new_proofs
-        return new_proofs
+        proofs = super().mint(split)
+        if proofs == []:
+            raise Exception("received no proofs")
+        await self._store_proofs(proofs)
+        self.proofs += proofs
+        return proofs
 
     async def redeem(self, proofs):
         return await self.split(proofs, sum(p["amount"] for p in proofs))
@@ -153,11 +158,12 @@ class Wallet(LedgerAPI):
 
     async def invalidate(self, proofs):
         # first we make sure that the server has invalidated these proofs
-        fst_proofs, snd_proofs = await self.split(
-            proofs, sum(p["amount"] for p in proofs)
-        )
-        assert fst_proofs == []
-        assert snd_proofs == []
+        try:
+            await self.split(proofs, sum(p["amount"] for p in proofs))
+        except Exception as exc:
+            assert exc.args[0].startswith("Error: Already spent."), Exception(
+                "invalidating unspent tokens"
+            )
 
         # TODO: check with server if they were redeemed already
         for proof in proofs:
@@ -172,7 +178,7 @@ class Wallet(LedgerAPI):
         return sum(p["amount"] for p in self.proofs)
 
     def status(self):
-        print("Balance: {}".format(self.balance))
+        print(f"{self.name} balance: {self.balance}")
 
     def proof_amounts(self):
         return [p["amount"] for p in sorted(self.proofs, key=lambda p: p["amount"])]
