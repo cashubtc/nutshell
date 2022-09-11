@@ -4,7 +4,7 @@
 
 ```bash
 git clone https://github.com/callebtc/cashu.git
-sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev
+sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev
 # on mac: brew install postgres
 
 # install python using pyenv
