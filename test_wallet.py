@@ -6,8 +6,10 @@ from wallet.wallet import Wallet as Wallet2
 from wallet.migrations import m001_initial
 
 
+SERVER_ENDPOINT = "http://localhost:5000"
+
+
 async def run_test():
-    SERVER_ENDPOINT = "http://localhost:5000"
     wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1")
     await m001_initial(wallet1.db)
     wallet1.status()

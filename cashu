@@ -8,8 +8,6 @@ import json
 import base64
 from bech32 import bech32_encode, bech32_decode, convertbits
 
-SERVER_ENDPOINT = "http://localhost:5000"
-
 
 import asyncio
 from functools import wraps
@@ -25,14 +23,15 @@ def coro(f):
 
 
 @click.command("mint")
+@click.option("--host", default="http://localhost:5000", help="Mint tokens.")
 @click.option("--wallet", default="wallet", help="Mint tokens.")
 @click.option("--mint", default=0, help="Mint tokens.")
 @click.option("--send", default=0, help="Send tokens.")
 @click.option("--receive", default="", help="Receive tokens.")
 @click.option("--invalidate", default="", help="Invalidate tokens.")
 @coro
-async def main(wallet, mint, send, receive, invalidate):
-    wallet = Wallet(SERVER_ENDPOINT, f"data/{wallet}")
+async def main(host, wallet, mint, send, receive, invalidate):
+    wallet = Wallet(host, f"data/{wallet}")
     await m001_initial(db=wallet.db)
     await wallet.load_proofs()
     if mint:
