@@ -3,7 +3,7 @@ from typing import Optional
 from core.db import Connection, Database
 
 # from wallet import db
-from wallet.models import Proof
+from core.base import Proof
 
 
 async def store_proof(

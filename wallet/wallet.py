@@ -4,13 +4,15 @@ import asyncio
 import requests
 from ecc.curve import secp256k1, Point
 from typing import List
-from wallet.models import Proof
+from core.base import Proof, BasePoint
 
 import core.b_dhke as b_dhke
 from core.db import Database
 from core.split import amount_split
 
 from wallet.crud import store_proof, invalidate_proof, get_proofs
+
+from core.base import MintPayload, MintPayloads, SplitPayload
 
 
 class LedgerAPI:
@@ -41,21 +43,14 @@ class LedgerAPI:
         for promise, (r, secret) in zip(promises, secrets):
             C_ = Point(promise["C'"]["x"], promise["C'"]["y"], secp256k1)
             C = b_dhke.step3_bob(C_, r, self.keys[promise["amount"]])
-            proofs.append(
-                {
-                    "amount": promise["amount"],
-                    "C": {
-                        "x": C.x,
-                        "y": C.y,
-                    },
-                    "secret": secret,
-                }
-            )
+            c_point = BasePoint(x=C.x, y=C.y)
+            proof = Proof(amount=promise["amount"], C=c_point, secret=secret)
+            proofs.append(proof.dict())
         return proofs
 
     def mint(self, amounts):
         """Mints new coins and returns a proof of promise."""
-        payload = {}
+        payloads: MintPayloads = MintPayloads()
         secrets = []
         rs = []
         for i, amount in enumerate(amounts):
@@ -63,14 +58,17 @@ class LedgerAPI:
             secrets.append(secret)
             B_, r = b_dhke.step1_bob(secret)
             rs.append(r)
-            payload[i] = {"amount": amount, "x": str(B_.x), "y": str(B_.y)}
+            blinded_point = BasePoint(x=str(B_.x), y=str(B_.y))
+            payload: MintPayload = MintPayload(amount=amount, B_=blinded_point)
+            payloads.payloads.append(payload)
 
+        print(payloads.dict())
         promises = requests.post(
             self.url + "/mint",
-            json=payload,
+            json=payloads.dict(),
         ).json()
-        if "error" in promises:
-            raise Exception("Error: {}".format(promises["error"]))
+        if "detail" in promises:
+            raise Exception("Error: {}".format(promises["detail"]))
         return self._construct_proofs(promises, [(r, s) for r, s in zip(rs, secrets)])
 
     def split(self, proofs, amount):
@@ -81,23 +79,28 @@ class LedgerAPI:
         snd_outputs = amount_split(snd_amt)
 
         secrets = []
-        output_data = []
+        # output_data = []
+        payloads: MintPayloads = MintPayloads()
         for output_amt in fst_outputs + snd_outputs:
             secret = str(random.getrandbits(128))
             B_, r = b_dhke.step1_bob(secret)
             secrets.append((r, secret))
-            output_data.append(
-                {
-                    "amount": output_amt,
-                    "B'": {
-                        "x": B_.x,
-                        "y": B_.y,
-                    },
-                }
-            )
+            blinded_point = BasePoint(x=str(B_.x), y=str(B_.y))
+            payload: MintPayload = MintPayload(amount=output_amt, B_=blinded_point)
+            payloads.payloads.append(payload)
+            # output_data.append(
+            #     {
+            #         "amount": output_amt,
+            #         "B'": {
+            #             "x": B_.x,
+            #             "y": B_.y,
+            #         },
+            #     }
+            # )
+        split_payload = SplitPayload(proofs=proofs, amount=amount, output_data=payloads)
         promises = requests.post(
             self.url + "/split",
-            json={"proofs": proofs, "amount": amount, "output_data": output_data},
+            json=split_payload.dict(),
         ).json()
         if "error" in promises:
             raise Exception("Error: {}".format(promises["error"]))

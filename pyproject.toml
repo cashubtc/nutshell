@@ -27,8 +27,13 @@ asgiref = "^3.5.2"
 pydantic = "^1.10.2"
 bech32 = "^1.2.0"
 psycopg2-binary = "^2.9.3"
+fastapi = "^0.83.0"
+environs = "^9.5.0"
+uvicorn = "^0.18.3"
+loguru = "^0.6.0"
 
 [tool.poetry.dev-dependencies]
+black = {version = "^22.8.0", allow-prereleases = true}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

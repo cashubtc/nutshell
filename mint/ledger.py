@@ -18,9 +18,11 @@ from lightning import WALLET
 
 class Ledger:
     def __init__(self, secret_key: str, db: str):
-        self.master_key = secret_key
         self.proofs_used = set()
+
+        self.master_key = secret_key
         self.keys = self._derive_keys(self.master_key)
+        self.pub_keys = self._derive_pubkeys(self.keys)
         self.db = Database("mint", db)
 
     async def load_used_proofs(self):
@@ -38,6 +40,12 @@ class Ledger:
                 16,
             )
             for i in range(MAX_ORDER)
+        }
+
+    @staticmethod
+    def _derive_pubkeys(keys):
+        return {
+            amt: keys[amt] * secp256k1.G for amt in [2**i for i in range(MAX_ORDER)]
         }
 
     async def _generate_promises(self, amounts, B_s):
@@ -75,7 +83,7 @@ class Ledger:
         secrets = [p["secret"] for p in proofs]
         if len(secrets) != len(list(set(secrets))):
             return False
-        B_xs = [od["B'"]["x"] for od in output_data]
+        B_xs = [od["B_"]["x"] for od in output_data]
         if len(B_xs) != len(list(set(B_xs))):
             return False
         return True
@@ -134,12 +142,9 @@ class Ledger:
     # Public methods
     def get_pubkeys(self):
         """Returns public keys for possible amounts."""
-        return {
-            amt: self.keys[amt] * secp256k1.G
-            for amt in [2**i for i in range(MAX_ORDER)]
-        }
+        return self.pub_keys
 
-    async def mint(self, B_s, amounts, lightning=True):
+    async def mint(self, B_s, amounts, lightning=False):
         """Mints a promise for coins for B_."""
         for amount in amounts:
             if amount not in [2**i for i in range(MAX_ORDER)]:
@@ -183,8 +188,8 @@ class Ledger:
 
         outs_fst = amount_split(total - amount)
         outs_snd = amount_split(amount)
-        B_fst = [od["B'"] for od in output_data[: len(outs_fst)]]
-        B_snd = [od["B'"] for od in output_data[len(outs_fst) :]]
+        B_fst = [od["B_"] for od in output_data[: len(outs_fst)]]
+        B_snd = [od["B_"] for od in output_data[len(outs_fst) :]]
         prom_fst, prom_snd = await self._generate_promises(
             outs_fst, B_fst
         ), await self._generate_promises(outs_snd, B_snd)
