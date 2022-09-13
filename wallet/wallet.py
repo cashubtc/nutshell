@@ -62,7 +62,6 @@ class LedgerAPI:
             payload: MintPayload = MintPayload(amount=amount, B_=blinded_point)
             payloads.payloads.append(payload)
 
-        print(payloads.dict())
         promises = requests.post(
             self.url + "/mint",
             json=payloads.dict(),
