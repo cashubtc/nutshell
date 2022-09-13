@@ -87,15 +87,6 @@ class LedgerAPI:
             blinded_point = BasePoint(x=str(B_.x), y=str(B_.y))
             payload: MintPayload = MintPayload(amount=output_amt, B_=blinded_point)
             payloads.payloads.append(payload)
-            # output_data.append(
-            #     {
-            #         "amount": output_amt,
-            #         "B'": {
-            #             "x": B_.x,
-            #             "y": B_.y,
-            #         },
-            #     }
-            # )
         split_payload = SplitPayload(proofs=proofs, amount=amount, output_data=payloads)
         promises = requests.post(
             self.url + "/split",
