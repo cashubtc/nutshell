@@ -31,7 +31,6 @@ def coro(f):
 @click.option("--invalidate", default="", help="Invalidate tokens.")
 @coro
 async def main(host, wallet, mint, hash, send, receive, invalidate):
-    print(host)
     wallet = Wallet(host, f"data/{wallet}", wallet)
     await m001_initial(db=wallet.db)
     await wallet.load_proofs()
