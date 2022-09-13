@@ -5,15 +5,18 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 import hashlib
 import time
 
-from ecc.curve import secp256k1, Point
+from ecc.curve import Point, secp256k1
 from ecc.key import gen_keypair
 
 import core.b_dhke as b_dhke
+from core.base import Invoice
 from core.db import Database
-from core.split import amount_split
 from core.settings import MAX_ORDER
-from mint.crud import store_promise, invalidate_proof, get_proofs_used
+from core.split import amount_split
 from lightning import WALLET
+from mint.crud import (get_lightning_invoice, get_proofs_used,
+                       invalidate_proof, store_lightning_invoice,
+                       store_promise, update_lightning_invoice)
 
 
 class Ledger:
@@ -65,7 +68,7 @@ class Ledger:
     def _verify_proof(self, proof):
         """Verifies that the proof of promise was issued by this ledger."""
         if proof["secret"] in self.proofs_used:
-            raise Exception(f"Already spent. Secret: {proof['secret']}")
+            raise Exception(f"tokens already spent. Secret: {proof['secret']}")
         secret_key = self.keys[proof["amount"]]  # Get the correct key to check against
         C = Point(proof["C"]["x"], proof["C"]["y"], secp256k1)
         return b_dhke.verify(secret_key, C, proof["secret"])
@@ -94,13 +97,13 @@ class Ledger:
             self._verify_amount(amount)
         except:
             # For better error message
-            raise Exception("Invalid split amount: " + str(amount))
+            raise Exception("invalid split amount: " + str(amount))
 
     def _verify_amount(self, amount):
         """Any amount used should be a positive integer not larger than 2^MAX_ORDER."""
         valid = isinstance(amount, int) and amount > 0 and amount < 2**MAX_ORDER
         if not valid:
-            raise Exception("Invalid amount: " + str(amount))
+            raise Exception("invalid amount: " + str(amount))
         return amount
 
     def _verify_equation_balanced(self, proofs, outs):
@@ -119,41 +122,61 @@ class Ledger:
                 rv.append(2**pos)
         return rv
 
-    async def _request_lightning(self, amount):
+    async def _request_lightning_invoice(self, amount):
         error, balance = await WALLET.status()
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         ok, checking_id, payment_request, error_message = await WALLET.create_invoice(
             amount, "cashu deposit"
         )
-        print(payment_request)
+        return payment_request, checking_id
 
-        timeout = time.time() + 60  # 1 minute to pay invoice
-        while True:
-            status = await WALLET.get_invoice_status(checking_id)
-            if status.pending and time.time() > timeout:
-                print("Timeout")
-                return False
-            if not status.pending:
-                print("paid")
-                return True
-            time.sleep(5)
+    async def _check_lightning_invoice(self, payment_hash):
+        invoice: Invoice = await get_lightning_invoice(payment_hash, db=self.db)
+        if invoice.issued:
+            raise Exception("tokens already issued for this invoice")
+        status = await WALLET.get_invoice_status(payment_hash)
+        if status.paid:
+            await update_lightning_invoice(payment_hash, issued=True, db=self.db)
+        return status.paid
+
+    # async def _wait_for_lightning_invoice(self, amount):
+    #     timeout = time.time() + 60  # 1 minute to pay invoice
+    #     while True:
+    #         status = await WALLET.get_invoice_status(checking_id)
+    #         if status.pending and time.time() > timeout:
+    #             print("Timeout")
+    #             return False
+    #         if not status.pending:
+    #             print("paid")
+    #             return True
+    #         time.sleep(5)
 
     # Public methods
     def get_pubkeys(self):
         """Returns public keys for possible amounts."""
         return self.pub_keys
 
-    async def mint(self, B_s, amounts, lightning=False):
+    async def request_mint(self, amount):
+        """Returns Lightning invoice and stores it in the db."""
+        payment_request, checking_id = await self._request_lightning_invoice(amount)
+        invoice = Invoice(
+            amount=amount, pr=payment_request, hash=checking_id, issued=False
+        )
+        if not payment_request or not checking_id:
+            raise Exception(f"Could not create Lightning invoice.")
+        await store_lightning_invoice(invoice, db=self.db)
+        return payment_request, checking_id
+
+    async def mint(self, B_s, amounts, payment_hash=None):
         """Mints a promise for coins for B_."""
+        # check if lightning invoice was paid
+        if payment_hash and not await self._check_lightning_invoice(payment_hash):
+            raise Exception("Lightning invoice not paid yet.")
+
         for amount in amounts:
             if amount not in [2**i for i in range(MAX_ORDER)]:
                 raise Exception(f"Can only mint amounts up to {2**MAX_ORDER}.")
-
-        if lightning:
-            paid = await self._request_lightning(sum(amounts))
-            if not paid:
-                raise Exception(f"Did not receive payment in time.")
 
         promises = []
         for B_, amount in zip(B_s, amounts):

@@ -1,9 +1,9 @@
 import secrets
 from typing import Optional
-from core.db import Connection, Database
 
 # from wallet import db
 from core.base import Proof
+from core.db import Connection, Database
 
 
 async def store_proof(

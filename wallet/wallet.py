@@ -1,18 +1,15 @@
-import random
 import asyncio
+import random
+from typing import List
 
 import requests
-from ecc.curve import secp256k1, Point
-from typing import List
-from core.base import Proof, BasePoint
+from ecc.curve import Point, secp256k1
 
 import core.b_dhke as b_dhke
+from core.base import BasePoint, MintPayload, MintPayloads, Proof, SplitPayload
 from core.db import Database
 from core.split import amount_split
-
-from wallet.crud import store_proof, invalidate_proof, get_proofs
-
-from core.base import MintPayload, MintPayloads, SplitPayload
+from wallet.crud import get_proofs, invalidate_proof, store_proof
 
 
 class LedgerAPI:
@@ -48,7 +45,12 @@ class LedgerAPI:
             proofs.append(proof.dict())
         return proofs
 
-    def mint(self, amounts):
+    def request_mint(self, amount):
+        """Requests a mint from the server and returns Lightning invoice."""
+        r = requests.get(self.url + "/mint", params={"amount": amount})
+        return r.json()
+
+    def mint(self, amounts, payment_hash=None):
         """Mints new coins and returns a proof of promise."""
         payloads: MintPayloads = MintPayloads()
         secrets = []
@@ -61,13 +63,13 @@ class LedgerAPI:
             blinded_point = BasePoint(x=str(B_.x), y=str(B_.y))
             payload: MintPayload = MintPayload(amount=amount, B_=blinded_point)
             payloads.payloads.append(payload)
-
         promises = requests.post(
             self.url + "/mint",
             json=payloads.dict(),
+            params={"payment_hash": payment_hash},
         ).json()
-        if "detail" in promises:
-            raise Exception("Error: {}".format(promises["detail"]))
+        if "error" in promises:
+            raise Exception("Error: {}".format(promises["error"]))
         return self._construct_proofs(promises, [(r, s) for r, s in zip(rs, secrets)])
 
     def split(self, proofs, amount):
@@ -122,9 +124,12 @@ class Wallet(LedgerAPI):
         for proof in proofs:
             await store_proof(proof, db=self.db)
 
-    async def mint(self, amount):
+    async def request_mint(self, amount):
+        return super().request_mint(amount)
+
+    async def mint(self, amount, payment_hash=None):
         split = amount_split(amount)
-        proofs = super().mint(split)
+        proofs = super().mint(split, payment_hash)
         if proofs == []:
             raise Exception("received no proofs")
         await self._store_proofs(proofs)
@@ -154,7 +159,7 @@ class Wallet(LedgerAPI):
         try:
             await self.split(proofs, sum(p["amount"] for p in proofs))
         except Exception as exc:
-            assert exc.args[0].startswith("Error: Already spent."), Exception(
+            assert exc.args[0].startswith("Error: tokens already spent."), Exception(
                 "invalidating unspent tokens"
             )
 

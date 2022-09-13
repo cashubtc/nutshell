@@ -1,58 +1,23 @@
-from ecc.curve import secp256k1, Point
-from fastapi import FastAPI
-from fastapi.routing import APIRouter
-from fastapi.params import Depends, Query, Body
-
-import sys
 import asyncio
 import logging
-import uvicorn
+import sys
+from ast import Param
+from typing import Union
+
+from ecc.curve import Point, secp256k1
+from fastapi import FastAPI
+from fastapi.params import Body, Depends, Query
+from fastapi.routing import APIRouter
 from loguru import logger
 
+import core.settings as settings
+from core.base import MintPayloads, SplitPayload
+from core.settings import MINT_PRIVATE_KEY
+from lightning import WALLET
 from mint.ledger import Ledger
 from mint.migrations import m001_initial
-from lightning import WALLET
-import core.settings as settings
 
-from core.base import MintPayload, MintPayloads, SplitPayload
-
-# from .app import create_app
-
-
-# Ledger pubkey
-ledger = Ledger("supersecretprivatekey", "data/mint")
-
-
-# class MyFlaskApp(Flask):
-#     """
-#     We overload the Flask class so we can run a startup script (migration).
-#     Stupid Flask.
-#     """
-
-#     def __init__(self, *args, **kwargs):
-#         async def create_tasks_func():
-#             await asyncio.wait([m001_initial(ledger.db)])
-#             await ledger.load_used_proofs()
-
-#             error_message, balance = await WALLET.status()
-#             if error_message:
-#                 print(
-#                     f"The backend for {WALLET.__class__.__name__} isn't working properly: '{error_message}'",
-#                     RuntimeWarning,
-#                 )
-
-#             print(f"Lightning balance: {balance} sat")
-
-#             print("Mint started.")
-
-#         loop = asyncio.get_event_loop()
-#         loop.run_until_complete(create_tasks_func())
-#         loop.close()
-
-#         return super().__init__(*args, **kwargs)
-
-#     def run(self, *args, **options):
-#         super(MyFlaskApp, self).run(*args, **options)
+ledger = Ledger(MINT_PRIVATE_KEY, "data/mint")
 
 
 def startup(app: FastAPI):
@@ -124,18 +89,39 @@ def create_app(config_object="core.settings") -> FastAPI:
 app = create_app()
 
 
-@app.get("/")
-async def root():
-    return {"Hello": "world"}
-
-
 @app.get("/keys")
 def keys():
+    """Get the public keys of the mint"""
     return ledger.get_pubkeys()
 
 
+@app.get("/mint")
+async def request_mint(amount: int = 0):
+    """Request minting of tokens. Server responds with a Lightning invoice."""
+    payment_request, payment_hash = await ledger.request_mint(amount)
+    print(f"Lightning invoice: {payment_request}")
+    return {"pr": payment_request, "hash": payment_hash}
+
+
 @app.post("/mint")
-async def mint(payloads: MintPayloads):
+async def mint(payloads: MintPayloads, payment_hash: Union[str, None] = None):
+    """
+    Requests the minting of tokens belonging to a paid payment request.
+
+    Parameters:
+    pr: payment_request of the Lightning paid invoice.
+
+    Body (JSON):
+    payloads: contains a list of blinded messages waiting to be signed.
+
+    NOTE:
+    - This needs to be replaced by the preimage otherwise someone knowing
+        the payment_request can request the tokens instead of the rightful
+        owner.
+    - The blinded message should ideally be provided to the server *before* payment
+        in the GET /mint endpoint so that the server knows to sign only these tokens
+        when the invoice is paid.
+    """
     amounts = []
     B_s = []
     for payload in payloads.payloads:
@@ -146,7 +132,7 @@ async def mint(payloads: MintPayloads):
         B_ = Point(x, y, secp256k1)
         B_s.append(B_)
     try:
-        promises = await ledger.mint(B_s, amounts)
+        promises = await ledger.mint(B_s, amounts, payment_hash=payment_hash)
         return promises
     except Exception as exc:
         return {"error": str(exc)}

@@ -1,3 +1,3 @@
-# from core.db import Database
+import sys
 
-# db = Database("database", "data/wallet")
+sys.tracebacklimit = None

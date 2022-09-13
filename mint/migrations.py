@@ -35,6 +35,20 @@ async def m001_initial(db: Database):
 
     await db.execute(
         """
+            CREATE TABLE IF NOT EXISTS invoices (
+                amount INTEGER NOT NULL,
+                pr TEXT NOT NULL,
+                hash TEXT NOT NULL,
+                issued BOOL NOT NULL,
+
+                UNIQUE (hash)
+
+            );
+        """
+    )
+
+    await db.execute(
+        """
         CREATE VIEW IF NOT EXISTS balance_issued AS
         SELECT COALESCE(SUM(s), 0) AS balance FROM (
             SELECT SUM(amount) AS s

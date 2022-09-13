@@ -9,7 +9,6 @@ from sqlalchemy import create_engine
 from sqlalchemy_aio.base import AsyncConnection
 from sqlalchemy_aio.strategy import ASYNCIO_STRATEGY  # type: ignore
 
-
 POSTGRES = "POSTGRES"
 COCKROACH = "COCKROACH"
 SQLITE = "SQLITE"

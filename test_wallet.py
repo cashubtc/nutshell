@@ -1,10 +1,9 @@
 import asyncio
 
 from core.helpers import async_unwrap
+from wallet.migrations import m001_initial
 from wallet.wallet import Wallet as Wallet1
 from wallet.wallet import Wallet as Wallet2
-from wallet.migrations import m001_initial
-
 
 SERVER_ENDPOINT = "http://localhost:3338"
 
@@ -56,7 +55,7 @@ async def run_test():
     #     print(exc.args[0])
     await assert_err(
         wallet1.split(wallet1.proofs + proofs, 20),
-        f"Error: Already spent. Secret: {proofs[0]['secret']}",
+        f"Error: tokens already spent. Secret: {proofs[0]['secret']}",
     )
     assert wallet1.balance == 63 + 64
     wallet1.status()
@@ -73,7 +72,7 @@ async def run_test():
     # Error: We try to double-spend and it fails
     await assert_err(
         wallet1.split([proofs[0]], 10),
-        f"Error: Already spent. Secret: {proofs[0]['secret']}",
+        f"Error: tokens already spent. Secret: {proofs[0]['secret']}",
     )
 
     assert wallet1.balance == 63 + 64
@@ -102,7 +101,7 @@ async def run_test():
     # Error: We try to double-spend and it fails
     await assert_err(
         wallet1.split(w1_snd_proofs, 5),
-        f"Error: Already spent. Secret: {w1_snd_proofs[0]['secret']}",
+        f"Error: tokens already spent. Secret: {w1_snd_proofs[0]['secret']}",
     )
 
     assert wallet1.balance == 63 + 64 - 20
@@ -113,7 +112,7 @@ async def run_test():
 
     await assert_err(
         wallet1.split(w1_snd_proofs, -500),
-        "Error: Invalid split amount: -500",
+        "Error: invalid split amount: -500",
     )
 
 

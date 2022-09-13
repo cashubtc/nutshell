@@ -1,16 +1,15 @@
 #!/usr/bin/env python
 
-from wallet.wallet import Wallet as Wallet
-from wallet.migrations import m001_initial
 import asyncio
-import click
-import json
 import base64
-from bech32 import bech32_encode, bech32_decode, convertbits
-
-
-import asyncio
+import json
 from functools import wraps
+
+import click
+from bech32 import bech32_decode, bech32_encode, convertbits
+
+from wallet.migrations import m001_initial
+from wallet.wallet import Wallet as Wallet
 
 
 # https://github.com/pallets/click/issues/85#issuecomment-503464628
@@ -23,20 +22,26 @@ def coro(f):
 
 
 @click.command("mint")
-@click.option("--host", default="http://localhost:3338", help="Mint tokens.")
-@click.option("--wallet", default="wallet", help="Mint tokens.")
+@click.option("--host", default="http://localhost:3338", help="Mint hostname.")
+@click.option("--wallet", default="wallet", help="Wallet to use.")
 @click.option("--mint", default=0, help="Mint tokens.")
+@click.option("--hash", default="", help="Hash of the paid invoice.")
 @click.option("--send", default=0, help="Send tokens.")
 @click.option("--receive", default="", help="Receive tokens.")
 @click.option("--invalidate", default="", help="Invalidate tokens.")
 @coro
-async def main(host, wallet, mint, send, receive, invalidate):
+async def main(host, wallet, mint, hash, send, receive, invalidate):
     wallet = Wallet(host, f"data/{wallet}", wallet)
     await m001_initial(db=wallet.db)
     await wallet.load_proofs()
-    if mint:
+    if mint and not hash:
         print(f"Balance: {wallet.balance}")
-        await wallet.mint(mint)
+        r = await wallet.request_mint(mint)
+        print(r)
+
+    if mint and hash:
+        print(f"Balance: {wallet.balance}")
+        await wallet.mint(mint, hash)
         print(f"Balance: {wallet.balance}")
 
     if send:
