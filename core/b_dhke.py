@@ -30,9 +30,9 @@ If true, C must have originated from Alice
 """
 
 import hashlib
-from ecc.curve import secp256k1, Point
-from ecc.key import gen_keypair
 
+from ecc.curve import Point, secp256k1
+from ecc.key import gen_keypair
 
 G = secp256k1.G
 

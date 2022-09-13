@@ -6,22 +6,19 @@ from typing import AsyncGenerator, Dict, Optional
 
 import requests
 
-from .base import (
-    InvoiceResponse,
-    PaymentResponse,
-    PaymentStatus,
-    StatusResponse,
-    Wallet,
-)
+from core.settings import LNBITS_ENDPOINT, LNBITS_KEY
+
+from .base import (InvoiceResponse, PaymentResponse, PaymentStatus,
+                   StatusResponse, Wallet)
 
 
 class LNbitsWallet(Wallet):
     """https://github.com/lnbits/lnbits"""
 
     def __init__(self):
-        self.endpoint = getenv("LNBITS_ENDPOINT")
+        self.endpoint = LNBITS_ENDPOINT
 
-        key = getenv("LNBITS_KEY")
+        key = LNBITS_KEY
         self.key = {"X-Api-Key": key}
         self.s = requests.Session()
         self.s.auth = ("user", "pass")

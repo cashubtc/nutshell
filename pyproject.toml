@@ -20,7 +20,7 @@ idna = "3.3"
 itsdangerous = "2.1.1"
 Jinja2 = "3.0.3"
 MarkupSafe = "2.1.1"
-urllib3 = "1.26.9"
+urllib3 = "1.23"
 Werkzeug = "2.2.2"
 ecc-pycrypto = {git = "https://github.com/lc6chang/ecc-pycrypto.git", rev = "v1.0.1"}
 asgiref = "^3.5.2"
@@ -34,6 +34,7 @@ loguru = "^0.6.0"
 
 [tool.poetry.dev-dependencies]
 black = {version = "^22.8.0", allow-prereleases = true}
+isort = "^5.10.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

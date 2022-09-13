@@ -1,6 +1,7 @@
-from pydantic import BaseModel
-from typing import List
 from sqlite3 import Row
+from typing import List
+
+from pydantic import BaseModel
 
 
 class BasePoint(BaseModel):
@@ -24,6 +25,22 @@ class Proof(BaseModel):
                 y=int(row[2]),
             ),
             secret=row[3],
+        )
+
+
+class Invoice(BaseModel):
+    amount: int
+    pr: str
+    hash: str
+    issued: bool = False
+
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            amount=int(row[0]),
+            pr=str(row[1]),
+            hash=str(row[2]),
+            issued=bool(row[3]),
         )
 
 
