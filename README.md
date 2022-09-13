@@ -35,8 +35,7 @@ poetry install
 
 ## Run mint
 ```bash
-cd mint/
-poetry run flask run --port 3338
+poetry run uvicorn mint.app:app --port 3338
 ```
 ## Run wallet
 
