@@ -16,7 +16,7 @@ MINT_PORT = env.int("MINT_PORT", default=3338)
 if MINT_HOST == "127.0.0.1":
     MINT_URL = f"http://{MINT_HOST}:{MINT_PORT}"
 else:
-    MINT_URL = f"https://{MINT_HOST}:{MINT_PORT}"
+    MINT_URL = f"http://{MINT_HOST}:{MINT_PORT}"
 
 LNBITS_ENDPOINT = env.str("LNBITS_ENDPOINT", default=None)
 LNBITS_KEY = env.str("LNBITS_KEY", default=None)
