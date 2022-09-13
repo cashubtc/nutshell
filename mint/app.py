@@ -1,13 +1,10 @@
 import asyncio
 import logging
 import sys
-from ast import Param
 from typing import Union
 
 from ecc.curve import Point, secp256k1
 from fastapi import FastAPI
-from fastapi.params import Body, Depends, Query
-from fastapi.routing import APIRouter
 from loguru import logger
 
 import core.settings as settings

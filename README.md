@@ -36,6 +36,13 @@ pyenv local 3.9.13
 poetry install
 ```
 
+### Configuration
+```bash
+mv .env.example .env
+# edit .env file
+vim .env
+```
+
 ## Run mint
 ```bash
 poetry run uvicorn mint.app:app --port 3338
