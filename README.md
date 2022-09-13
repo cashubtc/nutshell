@@ -51,7 +51,8 @@ poetry run uvicorn mint.app:app --port 3338
 
 #### Request a mint
 
-This will return a Lightning invoice and a payment hash. You have to pay the invoice before you can receive the tokens
+This command will return a Lightning invoice and a payment hash. You have to pay the invoice before you can receive the tokens. Note: Minting tokens involves two separate steps: requesting a mint, and actually minting tokens (see below).
+
 ```bash
 poetry run ./cashu --wallet=wallet --mint=420
 ```
