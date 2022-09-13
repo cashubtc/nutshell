@@ -16,22 +16,18 @@ sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev l
 # install python using pyenv
 curl https://pyenv.run | bash
 
-    # put this in your ~/.bashrc
-    export PYENV_ROOT="$HOME/.pyenv"
-    command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
-    eval "$(pyenv init -)"
-    eval "$(pyenv virtualenv-init -)"
-
-
+# put this in your ~/.bashrc
+echo export PYENV_ROOT=\"$HOME/.pyenv\" >> ~/.bashrc
+echo command -v pyenv >/dev/null || export PATH=\"$PYENV_ROOT/bin:$PATH\" >> ~/.bashrc
+source ~/.bashrc
+echo eval \"$(pyenv init -)\" >> ~/.bashrc
+echo eval \"$(pyenv virtualenv-init -)\" >> ~/.bashrc
 source ~/.bashrc
 pyenv install 3.9.13
 
 # install poetry
 curl -sSL https://install.python-poetry.org | python3 -
-
-    # put this in your ~/.bashrc
-    export PATH="$HOME/.local/bin:$PATH"
-
+echo export PATH=\"$HOME/.local/bin:$PATH\" >> ~/.bashrc
 source ~/.bashrc
 
 # install cashu
