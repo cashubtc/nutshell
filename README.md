@@ -49,7 +49,7 @@ To use the wallet with the [public test mint](#test-instance), you need to chang
 ## Run a mint yourself
 This runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
 ```bash
-poetry run uvicorn mint.app:app --port 3338
+poetry run mint
 ```
 
 ## Use wallet
@@ -59,7 +59,7 @@ poetry run uvicorn mint.app:app --port 3338
 This command will return a Lightning invoice and a payment hash. You have to pay the invoice before you can receive the tokens. Note: Minting tokens involves two steps: requesting a mint, and actually minting tokens (see below).
 
 ```bash
-poetry run ./cashu --wallet=wallet --mint=420
+poetry run cashu mint 420
 ```
 Returns:
 ```bash
@@ -73,7 +73,7 @@ Balance: 0
 #### Mint tokens
 After paying the invoice, copy the `hash` value from above and add it to the command
 ```bash
-poetry run ./cashu --wallet=wallet --mint=420 --hash=009d6eb02da8769b37602ac6d98ecafc1d65bd2408114a5d50e60da200bc85c5
+poetry run cashu mint 420 --hash=009d6eb02da8769b37602ac6d98ecafc1d65bd2408114a5d50e60da200bc85c5
 ```
 You should see your balance update accordingly:
 ```bash
@@ -84,7 +84,7 @@ Balance: 420
 #### Send tokens
 To send tokens to another user, enter
 ```bash
-poetry run ./cashu --send=69
+poetry run cashu send 69
 ```
 You should see the encoded token. Copy the token and send it to another user such as via email or a messenger. The token looks like this:
 ```bash
@@ -94,7 +94,7 @@ W3siYW1vdW50IjogMSwgIkMiOiB7IngiOiAzMzg0Mzg0NDYzNzAwMTY1NDA2MTQxMDY3Mzg1MDg5MjA2
 #### Receive tokens
 To receive tokens, another user enters:
 ```bash
-poetry run ./cashu --receive=W3siYW1vdW50IjogMSwgIkMiOi...
+poetry run cashu receive W3siYW1vdW50IjogMSwgIkMiOi...
 ```
 You should see the balance increase:
 ```bash
@@ -102,10 +102,10 @@ wallet balance: 0
 wallet balance: 69
 ```
 
-#### Invalidate tokens
-The sending user needs to invalidate their tokens from above, otherwise they will try to double spend them (which won't work because the server keeps a list of all spent tokens):
+#### Burn tokens
+The sending user needs to burn (invalidate) their tokens from above, otherwise they will try to double spend them (which won't work because the server keeps a list of all spent tokens):
 ```bash
-poetry run ./cashu --invalidate=W3siYW1vdW50IjogMSwgIkMiOi...
+poetry run cashu burn W3siYW1vdW50IjogMSwgIkMiOi...
 ```
 Returns:
 ```bash
