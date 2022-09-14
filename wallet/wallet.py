@@ -139,6 +139,7 @@ class Wallet(LedgerAPI):
         return await self.split(proofs, sum(p["amount"] for p in proofs))
 
     async def split(self, proofs, amount):
+        assert len(proofs) > 0, ValueError("no proofs provided.")
         fst_proofs, snd_proofs = super().split(proofs, amount)
         if len(fst_proofs) == 0 and len(snd_proofs) == 0:
             raise Exception("received no splits")
