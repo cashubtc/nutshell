@@ -7,16 +7,14 @@ Ecash implementation based on David Wagner's variant of Chaumian blinding. Token
 Big thanks to [phyro](https://github.com/phyro) for their work and further discussions and improvements.
 
 ## Install
-
+### Prerequisites
 ```bash
-git clone https://github.com/callebtc/cashu.git
 sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev
 # on mac: brew install postgres
 
 # install python using pyenv
 curl https://pyenv.run | bash
 
-# put this in your ~/.bashrc
 echo export PYENV_ROOT=\"$HOME/.pyenv\" >> ~/.bashrc
 echo command -v pyenv >/dev/null || export PATH=\"$PYENV_ROOT/bin:$PATH\" >> ~/.bashrc
 source ~/.bashrc
@@ -29,8 +27,11 @@ pyenv install 3.9.13
 curl -sSL https://install.python-poetry.org | python3 -
 echo export PATH=\"$HOME/.local/bin:$PATH\" >> ~/.bashrc
 source ~/.bashrc
-
+```
+### Install Cashu
+```bash
 # install cashu
+git clone https://github.com/callebtc/cashu.git
 cd cashu
 pyenv local 3.9.13
 poetry install
@@ -43,15 +44,19 @@ mv .env.example .env
 vim .env
 ```
 
-## Run mint
+To use the wallet with the [public test mint](#test-instance), you need to change the appropriate entries in the `.env` file. 
+
+## Run a mint yourself
+This runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
 ```bash
 poetry run uvicorn mint.app:app --port 3338
 ```
-## Run wallet
+
+## Use wallet
 
 #### Request a mint
 
-This command will return a Lightning invoice and a payment hash. You have to pay the invoice before you can receive the tokens. Note: Minting tokens involves two separate steps: requesting a mint, and actually minting tokens (see below).
+This command will return a Lightning invoice and a payment hash. You have to pay the invoice before you can receive the tokens. Note: Minting tokens involves two steps: requesting a mint, and actually minting tokens (see below).
 
 ```bash
 poetry run ./cashu --wallet=wallet --mint=420
@@ -77,12 +82,13 @@ Balance: 420
 ```
 
 #### Send tokens
+To send tokens to another user, enter
 ```bash
 poetry run ./cashu --send=69
 ```
-You should see the encoded tokens that you can send via text to another person. Copy them and send them via any means.
+You should see the encoded token. Copy the token and send it to another user such as via email or a messenger. The token looks like this:
 ```bash
-W3siYW1vdW50IjogMSwgIkMiOiB7IngiOiAzMzg0Mzg0NDYzNzAwMTY1NDA2MTQxMDY3Mzg1MDg5MjA2MTU2NjQxMjM4Nzg5MDE4NzAzODg0NjAwNDUzNTAwNzY3ODIzMjA2NzAyOSwgInkiOiA1MDE3NjAwNDA1Nzk2MDU4NDIxNTY4NzUyOTU0MTYwNDEyOTM1MzMwMTQ3MDk3ODMyMjExNzI1NTUyODM4MTY4NDAzMzE5MDgzNjE0MX0sICJzZWNyZXQiOiAiMjc4MDM0ODcwNjExNzAzOTQxODE2MDk1MTgzNTI3Njg4NjY1MzY2In0sIHsiYW1vdW50IjogNCwgIkMiOiB7IngiOiA3NzI5OTU2MTY4NDQ5NzAyMjUwMjQ1MjE0MzMzODEyNDY3MTE4NzAwNTMyNjI1MjExMzM5MzY0MzA3Mjc1MTE4NDQ2MTE0ODMxMTUyMywgInkiOiAxMDE2OTk5MjIyMTI4ODQ0NDM5MDI0NjA3MDcxMDg3MzYzMjA5Mjk1NzI5NDAwNTU1Njg4NDg5NDEzMDI5MzE5MDY4NTU0NjY4MzkzNzB9LCAic2VjcmV0IjogIjExNDQ0MzY1NDkwMjExMjk4NDI0MDAwODI3MDgwNDQ3NzIzMzI1NCJ9LCB7ImFtb3VudCI6IDY0LCAiQyI6IHsieCI6IDk1MDA5NDg4OTA0MDk5MDY3ODk5NzY4NDI3OTEyNzcxMzg0MDc2OTQxOTQ3MTg5NTQ5ODE4NjMwMDE0MjA0MjUxMzkyNTU4NTA5MDksICJ5IjogMzQ0MTQ4OTg3NjM3MTkzMDk0NjU2MjU5Mzk0MzU5NTc3NzQ0MzQ4NTY3MDg2MDQzNzc4NjY5NDE1OTg5OTI5NDQwNTkxNDU4OTA3NjV9LCAic2VjcmV0IjogIjE5MTg4ODU3MjMwODU5NjgyODc5MTgzMTQwNzc2OTgzNDc4NzE5NyJ9XQ
+W3siYW1vdW50IjogMSwgIkMiOiB7IngiOiAzMzg0Mzg0NDYzNzAwMTY1NDA2MTQxMDY3Mzg1MDg5MjA2MTU2NjQxMjM4Nzg5MDE4NzAzODg0NjAwNDUzNTAwNzY3...
 ```
 
 #### Receive tokens
@@ -90,7 +96,7 @@ To receive tokens, another user enters:
 ```bash
 poetry run ./cashu --receive=W3siYW1vdW50IjogMSwgIkMiOi...
 ```
-Returns:
+You should see the balance increase:
 ```bash
 wallet balance: 0
 wallet balance: 69
@@ -110,7 +116,6 @@ wallet balance: 351
 
 ## Test instance
 *Warning: this instance is just for demonstration only. Currently, only Lightning deposits work but not withdrawals. The server could vanish at any moment so consider any Satoshis you deposit a donation. I will add Lightning withdrawals soon so unless someone comes up with a huge inflation bug, you might be able to claim them back at a later point in time.*
-
 
 
 Change the appropriate `.env` file settings to
