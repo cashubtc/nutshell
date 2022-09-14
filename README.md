@@ -81,6 +81,11 @@ Balance: 0
 Balance: 420
 ```
 
+#### Check balance
+```bash
+poetry run cashu balance
+```
+
 #### Send tokens
 To send tokens to another user, enter
 ```bash
