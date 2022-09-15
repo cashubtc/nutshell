@@ -43,3 +43,4 @@ build-backend = "poetry.core.masonry.api"
 [tool.poetry.scripts]
 mint = "mint.app:main"
 cashu = "wallet.cashu:cli"
+wallet-test = "tests.test_wallet:test"

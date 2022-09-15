@@ -8,7 +8,7 @@ import core.b_dhke as b_dhke
 from core.base import BasePoint, MintPayload, MintPayloads, Proof, SplitPayload
 from core.db import Database
 from core.split import amount_split
-from wallet.crud import get_proofs, invalidate_proof, store_proof
+from wallet.crud import get_proofs, invalidate_proof, store_proof, update_proof_reserved
 
 
 class LedgerAPI:
@@ -41,7 +41,7 @@ class LedgerAPI:
             C = b_dhke.step3_bob(C_, r, self.keys[promise["amount"]])
             c_point = BasePoint(x=C.x, y=C.y)
             proof = Proof(amount=promise["amount"], C=c_point, secret=secret)
-            proofs.append(proof.dict())
+            proofs.append(proof)
         return proofs
 
     def request_mint(self, amount):
@@ -135,10 +135,10 @@ class Wallet(LedgerAPI):
         self.proofs += proofs
         return proofs
 
-    async def redeem(self, proofs):
+    async def redeem(self, proofs: List[Proof]):
         return await self.split(proofs, sum(p["amount"] for p in proofs))
 
-    async def split(self, proofs, amount):
+    async def split(self, proofs: List[Proof], amount: int):
         assert len(proofs) > 0, ValueError("no proofs provided.")
         fst_proofs, snd_proofs = super().split(proofs, amount)
         if len(fst_proofs) == 0 and len(snd_proofs) == 0:
@@ -148,11 +148,23 @@ class Wallet(LedgerAPI):
             filter(lambda p: p["secret"] not in used_secrets, self.proofs)
         )
         self.proofs += fst_proofs + snd_proofs
-        # store in db
+
         for proof in proofs:
             await invalidate_proof(proof, db=self.db)
         await self._store_proofs(fst_proofs + snd_proofs)
         return fst_proofs, snd_proofs
+
+    async def split_to_send(self, proofs: List[Proof], amount):
+        """Like self.split but only considers non-reserved tokens."""
+        if len([p for p in proofs if not p.reserved]) <= 0:
+            raise Exception("balance too low")
+        return await self.split([p for p in proofs if not p.reserved], amount)
+
+    async def set_reserved(self, proofs: List[Proof], reserved: bool):
+        """Mark a proof as reserved to avoid reuse or delete marking."""
+        for proof in proofs:
+            proof.reserved = True
+            await update_proof_reserved(proof, reserved=reserved, db=self.db)
 
     async def invalidate(self, proofs):
         # first we make sure that the server has invalidated these proofs
@@ -175,8 +187,14 @@ class Wallet(LedgerAPI):
     def balance(self):
         return sum(p["amount"] for p in self.proofs)
 
+    @property
+    def available_balance(self):
+        return sum(p["amount"] for p in self.proofs if not p.reserved)
+
     def status(self):
-        print(f"{self.name} balance: {self.balance}")
+        print(
+            f"Balance: {self.balance} sat (Available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
+        )
 
     def proof_amounts(self):
         return [p["amount"] for p in sorted(self.proofs, key=lambda p: p["amount"])]

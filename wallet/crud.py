@@ -1,7 +1,5 @@
 import secrets
 from typing import Optional
-
-# from wallet import db
 from core.base import Proof
 from core.db import Connection, Database
 
@@ -19,10 +17,10 @@ async def store_proof(
         VALUES (?, ?, ?, ?)
         """,
         (
-            proof["amount"],
-            str(proof["C"]["x"]),
-            str(proof["C"]["y"]),
-            str(proof["secret"]),
+            proof.amount,
+            str(proof.C.x),
+            str(proof.C.y),
+            str(proof.secret),
         ),
     )
 
@@ -41,7 +39,7 @@ async def get_proofs(
 
 
 async def invalidate_proof(
-    proof: dict,
+    proof: Proof,
     db: Database,
     conn: Optional[Connection] = None,
 ):
@@ -61,9 +59,21 @@ async def invalidate_proof(
         VALUES (?, ?, ?, ?)
         """,
         (
-            proof["amount"],
-            str(proof["C"]["x"]),
-            str(proof["C"]["y"]),
-            str(proof["secret"]),
+            proof.amount,
+            str(proof.C.x),
+            str(proof.C.y),
+            str(proof.secret),
         ),
+    )
+
+
+async def update_proof_reserved(
+    proof: Proof,
+    reserved: bool,
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+    await (conn or db).execute(
+        "UPDATE proofs SET reserved = ? WHERE secret = ?",
+        (reserved, str(proof.secret)),
     )

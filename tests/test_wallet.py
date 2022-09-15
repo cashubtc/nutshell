@@ -118,3 +118,7 @@ async def run_test():
 
 if __name__ == "__main__":
     async_unwrap(run_test())
+
+
+def test():
+    async_unwrap(run_test())
