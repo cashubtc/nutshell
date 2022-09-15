@@ -13,14 +13,9 @@ from core.db import Database
 from core.settings import MAX_ORDER
 from core.split import amount_split
 from lightning import WALLET
-from mint.crud import (
-    get_lightning_invoice,
-    get_proofs_used,
-    invalidate_proof,
-    store_lightning_invoice,
-    store_promise,
-    update_lightning_invoice,
-)
+from mint.crud import (get_lightning_invoice, get_proofs_used,
+                       invalidate_proof, store_lightning_invoice,
+                       store_promise, update_lightning_invoice)
 
 
 class Ledger:
