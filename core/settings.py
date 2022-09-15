@@ -4,6 +4,7 @@ env = Env()
 env.read_env()
 
 DEBUG = env.bool("DEBUG", default=False)
+LIGHTNING = env.bool("LIGHTNING", default=False)
 
 MINT_PRIVATE_KEY = env.str("MINT_PRIVATE_KEY")
 

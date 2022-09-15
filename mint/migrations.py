@@ -1,6 +1,15 @@
 from core.db import Database
 
-# from wallet import db
+
+async def m000_create_migrations_table(db):
+    await db.execute(
+        """
+    CREATE TABLE IF NOT EXISTS dbversions (
+        db TEXT PRIMARY KEY,
+        version INT NOT NULL
+    )
+    """
+    )
 
 
 async def m001_initial(db: Database):

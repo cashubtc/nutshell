@@ -8,14 +8,16 @@ from functools import wraps
 import click
 from bech32 import bech32_decode, bech32_encode, convertbits
 
-from core.settings import MINT_URL
-from wallet.migrations import m001_initial
+from core.settings import MINT_URL, LIGHTNING
+from core.migrations import migrate_databases
+from core.base import Proof
 from wallet.wallet import Wallet as Wallet
+from wallet import migrations
 
 
 async def init_wallet(wallet: Wallet):
     """Performs migrations and loads proofs from db."""
-    await m001_initial(db=wallet.db)
+    await migrate_databases(wallet.db, migrations)
     await wallet.load_proofs()
 
 
@@ -58,17 +60,25 @@ def coro(f):
 @coro
 async def mint(ctx, amount: int, hash: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    await m001_initial(db=wallet.db)
-    await wallet.load_proofs()
+    await init_wallet(wallet)
+
+    if not LIGHTNING:
+        wallet.status()
+        r = await wallet.mint(amount)
+        wallet.status()
+        return
+
     if amount and not hash:
         print(f"Balance: {wallet.balance}")
         r = await wallet.request_mint(amount)
         print(r)
+        return
 
     if amount and hash:
         print(f"Balance: {wallet.balance}")
         await wallet.mint(amount, hash)
         print(f"Balance: {wallet.balance}")
+        return
 
 
 @cli.command("balance", help="See balance.")
@@ -88,8 +98,11 @@ async def send(ctx, amount: int):
     wallet: Wallet = ctx.obj["WALLET"]
     await init_wallet(wallet)
     wallet.status()
-    _, send_proofs = await wallet.split(wallet.proofs, amount)
-    print(base64.urlsafe_b64encode(json.dumps(send_proofs).encode()).decode())
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    await wallet.set_reserved(send_proofs, reserved=True)
+    proofs_serialized = [p.dict() for p in send_proofs]
+    print(base64.urlsafe_b64encode(json.dumps(proofs_serialized).encode()).decode())
+    wallet.status()
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -100,7 +113,7 @@ async def receive(ctx, token: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await init_wallet(wallet)
     wallet.status()
-    proofs = json.loads(base64.urlsafe_b64decode(token))
+    proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
     _, _ = await wallet.redeem(proofs)
     wallet.status()
 
@@ -113,6 +126,6 @@ async def receive(ctx, token: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await init_wallet(wallet)
     wallet.status()
-    proofs = json.loads(base64.urlsafe_b64decode(token))
+    proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
     await wallet.invalidate(proofs)
     wallet.status()
