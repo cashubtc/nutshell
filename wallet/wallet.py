@@ -13,6 +13,7 @@ from core.base import (
     SplitPayload,
     BlindedSignature,
     CheckPayload,
+    MeltPayload,
 )
 from core.db import Database
 from core.split import amount_split
@@ -123,6 +124,14 @@ class LedgerAPI:
             return True
         return False
 
+    async def pay_lightning(self, proofs: List[Proof], amount: int, invoice: str):
+        payload = MeltPayload(proofs=proofs, amount=amount, invoice=invoice)
+        return_dict = requests.post(
+            self.url + "/melt",
+            json=payload.dict(),
+        ).json()
+        return return_dict
+
 
 class Wallet(LedgerAPI):
     """Minimal wallet wrapper."""
@@ -147,7 +156,7 @@ class Wallet(LedgerAPI):
         split = amount_split(amount)
         proofs = super().mint(split, payment_hash)
         if proofs == []:
-            raise Exception("received no proofs")
+            raise Exception("received no proofs.")
         await self._store_proofs(proofs)
         self.proofs += proofs
         return proofs
@@ -159,7 +168,7 @@ class Wallet(LedgerAPI):
         assert len(proofs) > 0, ValueError("no proofs provided.")
         fst_proofs, snd_proofs = super().split(proofs, amount)
         if len(fst_proofs) == 0 and len(snd_proofs) == 0:
-            raise Exception("received no splits")
+            raise Exception("received no splits.")
         used_secrets = [p["secret"] for p in proofs]
         self.proofs = list(
             filter(lambda p: p["secret"] not in used_secrets, self.proofs)
@@ -170,10 +179,19 @@ class Wallet(LedgerAPI):
             await invalidate_proof(proof, db=self.db)
         return fst_proofs, snd_proofs
 
+    async def pay_lightning(self, proofs: List[Proof], amount: int, invoice: str):
+        """Pays a lightning invoice"""
+        status = await super().pay_lightning(proofs, amount, invoice)
+        if status["paid"] == True:
+            await self.invalidate(proofs)
+        else:
+            raise Exception("could not pay invoice.")
+        return status["paid"]
+
     async def split_to_send(self, proofs: List[Proof], amount):
         """Like self.split but only considers non-reserved tokens."""
         if len([p for p in proofs if not p.reserved]) <= 0:
-            raise Exception("balance too low")
+            raise Exception("balance too low.")
         return await self.split([p for p in proofs if not p.reserved], amount)
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):

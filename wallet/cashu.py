@@ -3,14 +3,17 @@
 import asyncio
 import base64
 import json
+import math
 from functools import wraps
 
 import click
 from bech32 import bech32_decode, bech32_encode, convertbits
 
-from core.settings import MINT_URL, LIGHTNING
+from core.settings import MINT_URL, LIGHTNING, LIGHTNING_FEE
 from core.migrations import migrate_databases
 from core.base import Proof
+import core.bolt11 as bolt11
+from core.bolt11 import Invoice
 from wallet.wallet import Wallet as Wallet
 from wallet import migrations
 
@@ -61,24 +64,19 @@ def coro(f):
 async def mint(ctx, amount: int, hash: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await init_wallet(wallet)
-
+    wallet.status()
     if not LIGHTNING:
-        wallet.status()
         r = await wallet.mint(amount)
-        wallet.status()
-        return
-
-    if amount and not hash:
-        print(f"Balance: {wallet.balance}")
+    elif amount and not hash:
         r = await wallet.request_mint(amount)
-        print(r)
-        return
-
-    if amount and hash:
-        print(f"Balance: {wallet.balance}")
+        if "pr" in r:
+            print(f"Pay this invoice to mint {amount} sat:")
+            print(f"Invoice: {r['pr']}")
+            print(f"Hash: {r['hash']}")
+    elif amount and hash:
         await wallet.mint(amount, hash)
-        print(f"Balance: {wallet.balance}")
-        return
+    wallet.status()
+    return
 
 
 @cli.command("balance", help="See balance.")
@@ -128,4 +126,29 @@ async def burn(ctx, token: str):
     wallet.status()
     proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
     await wallet.invalidate(proofs)
+    wallet.status()
+
+
+@cli.command("pay", help="Pay lightning invoice.")
+@click.argument("invoice", type=str)
+@click.pass_context
+@coro
+async def pay(ctx, invoice: str):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await init_wallet(wallet)
+    wallet.status()
+    decoded_invoice: Invoice = bolt11.decode(invoice)
+    amount = math.ceil(
+        decoded_invoice.amount_msat / 1000 * LIGHTNING_FEE
+    )  # 1% fee for Lightning
+    print(
+        f"Paying Lightning invoice of {decoded_invoice.amount_msat // 1000} sat ({amount} sat with fees)"
+    )
+    assert amount > 0, "amount is not positive"
+    if wallet.available_balance < amount:
+        print("Error: Balance too low.")
+        return
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    await wallet.pay_lightning(send_proofs, amount, invoice)
+    print("Invoice paid.")
     wallet.status()
