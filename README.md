@@ -16,12 +16,10 @@ sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev l
 # install python using pyenv
 curl https://pyenv.run | bash
 
-echo export PYENV_ROOT=\"$HOME/.pyenv\" >> ~/.bashrc
-echo command -v pyenv >/dev/null || export PATH=\"$PYENV_ROOT/bin:$PATH\" >> ~/.bashrc
-source ~/.bashrc
-echo eval \"$(pyenv init -)\" >> ~/.bashrc
-echo eval \"$(pyenv virtualenv-init -)\" >> ~/.bashrc
-source ~/.bashrc
+# !! follow the instructions of pyenv init to setup pyenv !!
+pyenv init
+
+# restart your shell (or source your .rc file), then install python:
 pyenv install 3.9.13
 
 # install poetry
