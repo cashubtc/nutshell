@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 import core.settings as settings
-from core.base import MintPayloads, SplitPayload
+from core.base import MintPayloads, SplitPayload, MeltPayload, Proof
 from core.settings import MINT_PRIVATE_KEY, MINT_SERVER_HOST, MINT_SERVER_PORT
 from lightning import WALLET
 from mint.ledger import Ledger
@@ -123,7 +123,7 @@ async def mint(payloads: MintPayloads, payment_hash: Union[str, None] = None):
     """
     amounts = []
     B_s = []
-    for payload in payloads.payloads:
+    for payload in payloads.blinded_messages:
         v = payload.dict()
         amounts.append(v["amount"])
         x = int(v["B_"]["x"])
@@ -137,12 +137,22 @@ async def mint(payloads: MintPayloads, payment_hash: Union[str, None] = None):
         return {"error": str(exc)}
 
 
+@app.post("/melt")
+async def melt(payload: MeltPayload):
+    """
+    Requests tokens to be destroyed and sent out via Lightning.
+    """
+
+
 @app.post("/split")
 async def split(payload: SplitPayload):
-    v = payload.dict()
-    proofs = v["proofs"]
-    amount = v["amount"]
-    output_data = v["output_data"]["payloads"]
+    """
+    Requetst a set of tokens with amount "total" to be split into two
+    newly minted sets with amount "split" and "total-split".
+    """
+    proofs = payload.proofs
+    amount = payload.amount
+    output_data = payload.output_data.blinded_messages
     try:
         fst_promises, snd_promises = await ledger.split(proofs, amount, output_data)
         return {"fst": fst_promises, "snd": snd_promises}

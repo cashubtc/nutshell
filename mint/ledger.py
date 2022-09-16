@@ -7,15 +7,23 @@ import hashlib
 from ecc.curve import Point, secp256k1
 from ecc.key import gen_keypair
 
+from typing import List
+from core.base import Proof, BlindedMessage, BlindedSignature, BasePoint
+
 import core.b_dhke as b_dhke
 from core.base import Invoice
 from core.db import Database
 from core.settings import MAX_ORDER
 from core.split import amount_split
 from lightning import WALLET
-from mint.crud import (get_lightning_invoice, get_proofs_used,
-                       invalidate_proof, store_lightning_invoice,
-                       store_promise, update_lightning_invoice)
+from mint.crud import (
+    get_lightning_invoice,
+    get_proofs_used,
+    invalidate_proof,
+    store_lightning_invoice,
+    store_promise,
+    update_lightning_invoice,
+)
 
 
 class Ledger:
@@ -53,39 +61,39 @@ class Ledger:
     async def _generate_promises(self, amounts, B_s):
         """Generates promises that sum to the given amount."""
         return [
-            await self._generate_promise(amount, Point(B_["x"], B_["y"], secp256k1))
+            await self._generate_promise(amount, Point(B_.x, B_.y, secp256k1))
             for (amount, B_) in zip(amounts, B_s)
         ]
 
-    async def _generate_promise(self, amount, B_):
+    async def _generate_promise(self, amount: int, B_):
         """Generates a promise for given amount and returns a pair (amount, C')."""
         secret_key = self.keys[amount]  # Get the correct key
         C_ = b_dhke.step2_alice(B_, secret_key)
         await store_promise(amount, B_x=B_.x, B_y=B_.y, C_x=C_.x, C_y=C_.y, db=self.db)
-        return {"amount": amount, "C'": C_}
+        return BlindedSignature(amount=amount, C_=BasePoint(x=C_.x, y=C_.y))
 
-    def _verify_proof(self, proof):
+    def _verify_proof(self, proof: Proof):
         """Verifies that the proof of promise was issued by this ledger."""
-        if proof["secret"] in self.proofs_used:
-            raise Exception(f"tokens already spent. Secret: {proof['secret']}")
-        secret_key = self.keys[proof["amount"]]  # Get the correct key to check against
-        C = Point(proof["C"]["x"], proof["C"]["y"], secp256k1)
-        return b_dhke.verify(secret_key, C, proof["secret"])
+        if proof.secret in self.proofs_used:
+            raise Exception(f"tokens already spent. Secret: {proof.secret}")
+        secret_key = self.keys[proof.amount]  # Get the correct key to check against
+        C = Point(proof.C.x, proof.C.y, secp256k1)
+        return b_dhke.verify(secret_key, C, proof.secret)
 
-    def _verify_outputs(self, total, amount, output_data):
+    def _verify_outputs(self, total: int, amount: int, output_data):
         """Verifies the expected split was correctly computed"""
         fst_amt, snd_amt = total - amount, amount  # we have two amounts to split to
         fst_outputs = amount_split(fst_amt)
         snd_outputs = amount_split(snd_amt)
         expected = fst_outputs + snd_outputs
-        given = [o["amount"] for o in output_data]
+        given = [o.amount for o in output_data]
         return given == expected
 
-    def _verify_no_duplicates(self, proofs, output_data):
-        secrets = [p["secret"] for p in proofs]
+    def _verify_no_duplicates(self, proofs: List[Proof], output_data):
+        secrets = [p.secret for p in proofs]
         if len(secrets) != len(list(set(secrets))):
             return False
-        B_xs = [od["B_"]["x"] for od in output_data]
+        B_xs = [od.B_.x for od in output_data]
         if len(B_xs) != len(list(set(B_xs))):
             return False
         return True
@@ -105,10 +113,12 @@ class Ledger:
             raise Exception("invalid amount: " + str(amount))
         return amount
 
-    def _verify_equation_balanced(self, proofs, outs):
+    def _verify_equation_balanced(
+        self, proofs: List[Proof], outs: List[BlindedMessage]
+    ):
         """Verify that Σoutputs - Σinputs = 0."""
-        sum_inputs = sum(self._verify_amount(p["amount"]) for p in proofs)
-        sum_outputs = sum(self._verify_amount(p["amount"]) for p in outs)
+        sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
+        sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
         assert sum_outputs - sum_inputs == 0
 
     def _get_output_split(self, amount):
@@ -122,6 +132,7 @@ class Ledger:
         return rv
 
     async def _request_lightning_invoice(self, amount):
+        """Returns an invoice from the Lightning backend."""
         error, balance = await WALLET.status()
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
@@ -131,6 +142,7 @@ class Ledger:
         return payment_request, checking_id
 
     async def _check_lightning_invoice(self, payment_hash):
+        """Checks with the Lightning backend whether an invoice with this payment_hash was paid."""
         invoice: Invoice = await get_lightning_invoice(payment_hash, db=self.db)
         if invoice.issued:
             raise Exception("tokens already issued for this invoice")
@@ -139,17 +151,14 @@ class Ledger:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
         return status.paid
 
-    # async def _wait_for_lightning_invoice(self, amount):
-    #     timeout = time.time() + 60  # 1 minute to pay invoice
-    #     while True:
-    #         status = await WALLET.get_invoice_status(checking_id)
-    #         if status.pending and time.time() > timeout:
-    #             print("Timeout")
-    #             return False
-    #         if not status.pending:
-    #             print("paid")
-    #             return True
-    #         time.sleep(5)
+    async def _invalidate_proofs(self, proofs: List[Proof]):
+        """Adds secrets of proofs to the list of knwon secrets and stores them in the db."""
+        # Mark proofs as used and prepare new promises
+        proof_msgs = set([p.secret for p in proofs])
+        self.proofs_used |= proof_msgs
+        # store in db
+        for p in proofs:
+            await invalidate_proof(p, db=self.db)
 
     # Public methods
     def get_pubkeys(self):
@@ -183,7 +192,9 @@ class Ledger:
             promises += [await self._generate_promise(amount, B_) for a in split]
         return promises
 
-    async def split(self, proofs, amount, output_data):
+    async def split(
+        self, proofs: List[Proof], amount: int, output_data: List[BlindedMessage]
+    ):
         """Consumes proofs and prepares new promises based on the amount split."""
         self._verify_split_amount(amount)
         # Verify proofs are valid
@@ -199,19 +210,13 @@ class Ledger:
         if not self._verify_outputs(total, amount, output_data):
             raise Exception("split of promises is not as expected")
 
-        # Perform split
-        proof_msgs = set([p["secret"] for p in proofs])
         # Mark proofs as used and prepare new promises
-        self.proofs_used |= proof_msgs
-
-        # store in db
-        for p in proofs:
-            await invalidate_proof(p, db=self.db)
+        await self._invalidate_proofs(proofs)
 
         outs_fst = amount_split(total - amount)
         outs_snd = amount_split(amount)
-        B_fst = [od["B_"] for od in output_data[: len(outs_fst)]]
-        B_snd = [od["B_"] for od in output_data[len(outs_fst) :]]
+        B_fst = [od.B_ for od in output_data[: len(outs_fst)]]
+        B_snd = [od.B_ for od in output_data[len(outs_fst) :]]
         prom_fst, prom_snd = await self._generate_promises(
             outs_fst, B_fst
         ), await self._generate_promises(outs_snd, B_snd)

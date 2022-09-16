@@ -5,7 +5,14 @@ import requests
 from ecc.curve import Point, secp256k1
 
 import core.b_dhke as b_dhke
-from core.base import BasePoint, MintPayload, MintPayloads, Proof, SplitPayload
+from core.base import (
+    BasePoint,
+    BlindedMessage,
+    MintPayloads,
+    Proof,
+    SplitPayload,
+    BlindedSignature,
+)
 from core.db import Database
 from core.split import amount_split
 from wallet.crud import get_proofs, invalidate_proof, store_proof, update_proof_reserved
@@ -33,14 +40,14 @@ class LedgerAPI:
                 rv.append(2**pos)
         return rv
 
-    def _construct_proofs(self, promises, secrets):
+    def _construct_proofs(self, promises: List[BlindedSignature], secrets: List[str]):
         """Returns proofs of promise from promises."""
         proofs = []
         for promise, (r, secret) in zip(promises, secrets):
-            C_ = Point(promise["C'"]["x"], promise["C'"]["y"], secp256k1)
-            C = b_dhke.step3_bob(C_, r, self.keys[promise["amount"]])
+            C_ = Point(promise.C_.x, promise.C_.y, secp256k1)
+            C = b_dhke.step3_bob(C_, r, self.keys[promise.amount])
             c_point = BasePoint(x=C.x, y=C.y)
-            proof = Proof(amount=promise["amount"], C=c_point, secret=secret)
+            proof = Proof(amount=promise.amount, C=c_point, secret=secret)
             proofs.append(proof)
         return proofs
 
@@ -60,15 +67,16 @@ class LedgerAPI:
             B_, r = b_dhke.step1_bob(secret)
             rs.append(r)
             blinded_point = BasePoint(x=str(B_.x), y=str(B_.y))
-            payload: MintPayload = MintPayload(amount=amount, B_=blinded_point)
-            payloads.payloads.append(payload)
-        promises = requests.post(
+            payload: BlindedMessage = BlindedMessage(amount=amount, B_=blinded_point)
+            payloads.blinded_messages.append(payload)
+        promises_dict = requests.post(
             self.url + "/mint",
             json=payloads.dict(),
             params={"payment_hash": payment_hash},
         ).json()
-        if "error" in promises:
-            raise Exception("Error: {}".format(promises["error"]))
+        if "error" in promises_dict:
+            raise Exception("Error: {}".format(promises_dict["error"]))
+        promises = [BlindedSignature.from_dict(p) for p in promises_dict]
         return self._construct_proofs(promises, [(r, s) for r, s in zip(rs, secrets)])
 
     def split(self, proofs, amount):
@@ -79,30 +87,28 @@ class LedgerAPI:
         snd_outputs = amount_split(snd_amt)
 
         secrets = []
-        # output_data = []
         payloads: MintPayloads = MintPayloads()
         for output_amt in fst_outputs + snd_outputs:
             secret = str(random.getrandbits(128))
             B_, r = b_dhke.step1_bob(secret)
             secrets.append((r, secret))
             blinded_point = BasePoint(x=str(B_.x), y=str(B_.y))
-            payload: MintPayload = MintPayload(amount=output_amt, B_=blinded_point)
-            payloads.payloads.append(payload)
+            payload: BlindedMessage = BlindedMessage(
+                amount=output_amt, B_=blinded_point
+            )
+            payloads.blinded_messages.append(payload)
         split_payload = SplitPayload(proofs=proofs, amount=amount, output_data=payloads)
-        promises = requests.post(
+        promises_dict = requests.post(
             self.url + "/split",
             json=split_payload.dict(),
         ).json()
-        if "error" in promises:
-            raise Exception("Error: {}".format(promises["error"]))
-
+        if "error" in promises_dict:
+            raise Exception("Error: {}".format(promises_dict["error"]))
+        promises_fst = [BlindedSignature.from_dict(p) for p in promises_dict["fst"]]
+        promises_snd = [BlindedSignature.from_dict(p) for p in promises_dict["snd"]]
         # Obtain proofs from promises
-        fst_proofs = self._construct_proofs(
-            promises["fst"], secrets[: len(promises["fst"])]
-        )
-        snd_proofs = self._construct_proofs(
-            promises["snd"], secrets[len(promises["fst"]) :]
-        )
+        fst_proofs = self._construct_proofs(promises_fst, secrets[: len(promises_fst)])
+        snd_proofs = self._construct_proofs(promises_snd, secrets[len(promises_fst) :])
 
         return fst_proofs, snd_proofs
 

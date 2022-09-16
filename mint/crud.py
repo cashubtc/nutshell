@@ -1,7 +1,7 @@
 import secrets
 from typing import Optional
 
-from core.base import Invoice
+from core.base import Invoice, Proof
 from core.db import Connection, Database
 
 
@@ -45,7 +45,7 @@ async def get_proofs_used(
 
 
 async def invalidate_proof(
-    proof: dict,
+    proof: Proof,
     db: Database,
     conn: Optional[Connection] = None,
 ):
@@ -58,10 +58,10 @@ async def invalidate_proof(
         VALUES (?, ?, ?, ?)
         """,
         (
-            proof["amount"],
-            str(proof["C"]["x"]),
-            str(proof["C"]["y"]),
-            str(proof["secret"]),
+            proof.amount,
+            str(proof.C.x),
+            str(proof.C.y),
+            str(proof.secret),
         ),
     )
 

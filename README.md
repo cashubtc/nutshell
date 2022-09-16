@@ -121,7 +121,7 @@ Balance: 420 sat (Available: 351 sat in 7 tokens)
 #### Receive tokens
 To receive tokens, another user enters:
 ```bash
-poetry run cashu receive W3siYW1vdW50IjogMSwgIkMiOi...
+cashu receive W3siYW1vdW50IjogMSwgIkMiOi...
 ```
 You should see the balance increase:
 ```bash
@@ -132,7 +132,7 @@ Balance: 69 sat (Available: 69 sat in 3 tokens)
 #### Burn tokens
 The sending user needs to burn (invalidate) their tokens from above, otherwise they will try to double spend them (which won't work because the server keeps a list of all spent tokens):
 ```bash
-poetry run cashu burn W3siYW1vdW50IjogMSwgIkMiOi...
+cashu burn W3siYW1vdW50IjogMSwgIkMiOi...
 ```
 Returns:
 ```bash

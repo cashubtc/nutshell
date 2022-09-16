@@ -1,7 +1,10 @@
 import asyncio
 
 from core.helpers import async_unwrap
-from wallet.migrations import m001_initial
+
+from core.migrations import migrate_databases
+from wallet import migrations
+
 from wallet.wallet import Wallet as Wallet1
 from wallet.wallet import Wallet as Wallet2
 
@@ -25,11 +28,11 @@ def assert_amt(proofs, expected):
 
 async def run_test():
     wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1", "wallet1")
-    await m001_initial(wallet1.db)
+    await migrate_databases(wallet1.db, migrations)
     wallet1.status()
 
     wallet2 = Wallet1(SERVER_ENDPOINT, "data/wallet2", "wallet2")
-    await m001_initial(wallet2.db)
+    await migrate_databases(wallet2.db, migrations)
     wallet2.status()
 
     proofs = []

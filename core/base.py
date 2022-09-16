@@ -70,16 +70,37 @@ class Invoice(BaseModel):
         )
 
 
-class MintPayload(BaseModel):
+class BlindedMessage(BaseModel):
     amount: int
     B_: BasePoint
 
 
+class BlindedSignature(BaseModel):
+    amount: int
+    C_: BasePoint
+
+    @classmethod
+    def from_dict(cls, d: dict):
+        return cls(
+            amount=d["amount"],
+            C_=dict(
+                x=int(d["C_"]["x"]),
+                y=int(d["C_"]["y"]),
+            ),
+        )
+
+
 class MintPayloads(BaseModel):
-    payloads: List[MintPayload] = []
+    blinded_messages: List[BlindedMessage] = []
 
 
 class SplitPayload(BaseModel):
     proofs: List[Proof]
     amount: int
     output_data: MintPayloads
+
+
+class MeltPayload(BaseModel):
+    proofs: List[Proof]
+    amount: int
+    invoice: str
