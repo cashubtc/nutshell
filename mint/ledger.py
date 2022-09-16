@@ -155,13 +155,13 @@ class Ledger:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
         return status.paid
 
-    async def _pay_lightning_invoice(self, invoice):
+    async def _pay_lightning_invoice(self, invoice, amount):
         """Returns an invoice from the Lightning backend."""
         error, balance = await WALLET.status()
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         ok, checking_id, fee_msat, preimage, error_message = await WALLET.pay_invoice(
-            invoice, fee_limit_msat=10
+            invoice, fee_limit_msat=amount * (1 - LIGHTNING_FEE)
         )
         return ok, preimage
 
@@ -217,7 +217,7 @@ class Ledger:
             "provided proofs not enough for Lightning payment."
         )
 
-        status, preimage = await self._pay_lightning_invoice(invoice)
+        status, preimage = await self._pay_lightning_invoice(invoice, amount)
         if status == True:
             await self._invalidate_proofs(proofs)
         return status, preimage

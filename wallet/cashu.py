@@ -72,7 +72,10 @@ async def mint(ctx, amount: int, hash: str):
         if "pr" in r:
             print(f"Pay this invoice to mint {amount} sat:")
             print(f"Invoice: {r['pr']}")
-            print(f"Hash: {r['hash']}")
+            print("")
+            print(
+                f"After paying the invoice, run this command:\ncashu mint {amount} --hash {r['hash']}"
+            )
     elif amount and hash:
         await wallet.mint(amount, hash)
     wallet.status()
@@ -142,7 +145,7 @@ async def pay(ctx, invoice: str):
         decoded_invoice.amount_msat / 1000 * LIGHTNING_FEE
     )  # 1% fee for Lightning
     print(
-        f"Paying Lightning invoice of {decoded_invoice.amount_msat // 1000} sat ({amount} sat with fees)"
+        f"Paying Lightning invoice of {decoded_invoice.amount_msat // 1000} sat ({amount} sat incl. fees)"
     )
     assert amount > 0, "amount is not positive"
     if wallet.available_balance < amount:
