@@ -31,6 +31,9 @@ fastapi = "^0.83.0"
 environs = "^9.5.0"
 uvicorn = "^0.18.3"
 loguru = "^0.6.0"
+ecdsa = "^0.18.0"
+bitstring = "^3.1.9"
+secp256k1 = "^0.14.0"
 
 [tool.poetry.dev-dependencies]
 black = {version = "^22.8.0", allow-prereleases = true}

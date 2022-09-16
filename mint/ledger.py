@@ -3,7 +3,7 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
 import hashlib
-
+import math
 from ecc.curve import Point, secp256k1
 from ecc.key import gen_keypair
 
@@ -13,7 +13,7 @@ from core.base import Proof, BlindedMessage, BlindedSignature, BasePoint
 import core.b_dhke as b_dhke
 from core.base import Invoice
 from core.db import Database
-from core.settings import MAX_ORDER, LIGHTNING
+from core.settings import MAX_ORDER, LIGHTNING, LIGHTNING_FEE
 from core.split import amount_split
 from lightning import WALLET
 from mint.crud import (
@@ -155,6 +155,16 @@ class Ledger:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
         return status.paid
 
+    async def _pay_lightning_invoice(self, invoice):
+        """Returns an invoice from the Lightning backend."""
+        error, balance = await WALLET.status()
+        if error:
+            raise Exception(f"Lightning wallet not responding: {error}")
+        ok, checking_id, fee_msat, preimage, error_message = await WALLET.pay_invoice(
+            invoice, fee_limit_msat=10
+        )
+        return ok, preimage
+
     async def _invalidate_proofs(self, proofs: List[Proof]):
         """Adds secrets of proofs to the list of knwon secrets and stores them in the db."""
         # Mark proofs as used and prepare new promises
@@ -200,9 +210,17 @@ class Ledger:
 
     async def melt(self, proofs: List[Proof], amount: int, invoice: str):
         """Invalidates proofs and pays a Lightning invoice."""
-        if not LIGHTNING:
-            raise Exception("Lightning is not active.")
-        return 0
+        # if not LIGHTNING:
+        total = sum([p["amount"] for p in proofs])
+        # check that lightning fees are included
+        assert math.ceil(total * LIGHTNING_FEE) >= amount, Exception(
+            "provided proofs not enough for Lightning payment."
+        )
+
+        status, preimage = await self._pay_lightning_invoice(invoice)
+        if status == True:
+            await self._invalidate_proofs(proofs)
+        return status, preimage
 
     async def check_spendable(self, proofs: List[Proof]):
         """Checks if all provided proofs are valid and still spendable (i.e. have not been spent)."""

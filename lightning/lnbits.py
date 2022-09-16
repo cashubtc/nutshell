@@ -8,8 +8,13 @@ import requests
 
 from core.settings import LNBITS_ENDPOINT, LNBITS_KEY
 
-from .base import (InvoiceResponse, PaymentResponse, PaymentStatus,
-                   StatusResponse, Wallet)
+from .base import (
+    InvoiceResponse,
+    PaymentResponse,
+    PaymentStatus,
+    StatusResponse,
+    Wallet,
+)
 
 
 class LNbitsWallet(Wallet):
@@ -82,6 +87,8 @@ class LNbitsWallet(Wallet):
         except:
             error_message = r.json()["detail"]
             return PaymentResponse(None, None, None, None, error_message)
+        if "detail" in r.json():
+            return PaymentResponse(None, None, None, None, r.json()["detail"])
         ok, checking_id, fee_msat, preimage, error_message = (
             True,
             None,

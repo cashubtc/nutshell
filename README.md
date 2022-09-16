@@ -1,10 +1,10 @@
 # cashu
 
-**The author is NOT a cryptographer and has not tested the libraries used or the code nor has anyone reviewed the work. This means it's very likely a fatal flaw somewhere. This is meant only as educational and is not production ready.**
+**Cashu is a Chaumian Ecash wallet and mint with Bitcoin Lightning support.**
 
-Ecash implementation based on David Wagner's variant of Chaumian blinding. Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down by Ruben Somsen [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
+*Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
 
-Big thanks to [phyro](https://github.com/phyro) for their work and further discussions and improvements.
+Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding. Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down by Ruben Somsen [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
 
 ## Install
 ### Prerequisites
@@ -16,12 +16,10 @@ sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev l
 # install python using pyenv
 curl https://pyenv.run | bash
 
-echo export PYENV_ROOT=\"$HOME/.pyenv\" >> ~/.bashrc
-echo command -v pyenv >/dev/null || export PATH=\"$PYENV_ROOT/bin:$PATH\" >> ~/.bashrc
-source ~/.bashrc
-echo eval \"$(pyenv init -)\" >> ~/.bashrc
-echo eval \"$(pyenv virtualenv-init -)\" >> ~/.bashrc
-source ~/.bashrc
+# !! follow the instructions of pyenv init to setup pyenv !!
+pyenv init
+
+# restart your shell (or source your .rc file), then install python:
 pyenv install 3.9.13
 
 # install poetry
@@ -140,6 +138,15 @@ Balance: 420 sat (Available: 351 sat in 7 tokens)
 Balance: 351 sat (Available: 351 sat in 7 tokens)
 ```
 
+#### Pay a Lightning invoice
+```bash
+cashu pay lnbc120n1p3jfmdapp5r9jz...
+```
+Returns:
+```bash
+Balance: 351 sat (Available: 351 sat in 7 tokens)
+Balance: 339 sat (Available: 339 sat in 8 tokens)
+```
 
 ## Run a mint yourself
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
