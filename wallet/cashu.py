@@ -154,5 +154,4 @@ async def pay(ctx, invoice: str):
         return
     _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
     await wallet.pay_lightning(send_proofs, amount, invoice)
-    print("Invoice paid.")
     wallet.status()
