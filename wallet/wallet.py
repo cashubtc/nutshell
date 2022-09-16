@@ -12,6 +12,7 @@ from core.base import (
     Proof,
     SplitPayload,
     BlindedSignature,
+    CheckPayload,
 )
 from core.db import Database
 from core.split import amount_split
@@ -112,11 +113,15 @@ class LedgerAPI:
 
         return fst_proofs, snd_proofs
 
-    def check_spendable(self, proofs):
-        promises_dict = requests.post(
+    async def check_spendable(self, proofs: List[Proof]):
+        payload = CheckPayload(proofs=proofs)
+        return_dict = requests.post(
             self.url + "/check",
-            json=proofs.dict(),
+            json=payload.dict(),
         ).json()
+        if "spendable" in return_dict and return_dict["spendable"]:
+            return True
+        return False
 
 
 class Wallet(LedgerAPI):
@@ -178,16 +183,12 @@ class Wallet(LedgerAPI):
             await update_proof_reserved(proof, reserved=reserved, db=self.db)
 
     async def check_spendable(self, proofs):
-        await super().check_spendable(proofs)
+        return await super().check_spendable(proofs)
 
     async def invalidate(self, proofs):
         # first we make sure that the server has invalidated these proofs
-        try:
-            await self.split(proofs, sum(p["amount"] for p in proofs))
-        except Exception as exc:
-            assert exc.args[0].startswith("Error: tokens already spent."), Exception(
-                "invalidating unspent tokens"
-            )
+        if await self.check_spendable(proofs):
+            raise Exception("tokens not yet spent.")
 
         # TODO: check with server if they were redeemed already
         for proof in proofs:

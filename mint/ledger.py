@@ -72,9 +72,13 @@ class Ledger:
         await store_promise(amount, B_x=B_.x, B_y=B_.y, C_x=C_.x, C_y=C_.y, db=self.db)
         return BlindedSignature(amount=amount, C_=BasePoint(x=C_.x, y=C_.y))
 
+    def _check_spendable(self, proof: Proof):
+        """Checks whether the proof was already spent."""
+        return not proof.secret in self.proofs_used
+
     def _verify_proof(self, proof: Proof):
         """Verifies that the proof of promise was issued by this ledger."""
-        if proof.secret in self.proofs_used:
+        if not self._check_spendable(proof):
             raise Exception(f"tokens already spent. Secret: {proof.secret}")
         secret_key = self.keys[proof.amount]  # Get the correct key to check against
         C = Point(proof.C.x, proof.C.y, secp256k1)
@@ -202,8 +206,9 @@ class Ledger:
 
     async def check_spendable(self, proofs: List[Proof]):
         """Checks if all provided proofs are valid and still spendable (i.e. have not been spent)."""
-        if not all([self._verify_proof(p) for p in proofs]):
+        if not all([self._check_spendable(p) for p in proofs]):
             return False
+        return True
 
     async def split(
         self, proofs: List[Proof], amount: int, output_data: List[BlindedMessage]
@@ -211,7 +216,7 @@ class Ledger:
         """Consumes proofs and prepares new promises based on the amount split."""
         self._verify_split_amount(amount)
         # Verify proofs are valid
-        if await self.check_spendable(proofs) == False:
+        if not all([self._verify_proof(p) for p in proofs]):
             return False
 
         total = sum([p["amount"] for p in proofs])

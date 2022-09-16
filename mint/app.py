@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 import core.settings as settings
-from core.base import MintPayloads, SplitPayload, MeltPayload, Proof
+from core.base import MintPayloads, SplitPayload, MeltPayload, CheckPayload
 from core.settings import MINT_PRIVATE_KEY, MINT_SERVER_HOST, MINT_SERVER_PORT
 from lightning import WALLET
 from mint.ledger import Ledger
@@ -144,6 +144,11 @@ async def melt(payload: MeltPayload):
     """
 
 
+@app.post("/check")
+async def check_spendable(payload: CheckPayload):
+    return {"spendable": await ledger.check_spendable(payload.proofs)}
+
+
 @app.post("/split")
 async def split(payload: SplitPayload):
     """
@@ -154,10 +159,14 @@ async def split(payload: SplitPayload):
     amount = payload.amount
     output_data = payload.output_data.blinded_messages
     try:
-        fst_promises, snd_promises = await ledger.split(proofs, amount, output_data)
-        return {"fst": fst_promises, "snd": snd_promises}
+        split_return = await ledger.split(proofs, amount, output_data)
     except Exception as exc:
         return {"error": str(exc)}
+    if not split_return:
+        """There was a problem with the split"""
+        raise Exception("could not split tokens.")
+    fst_promises, snd_promises = split_return
+    return {"fst": fst_promises, "snd": snd_promises}
 
 
 @click.command(
