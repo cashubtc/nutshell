@@ -112,6 +112,12 @@ class LedgerAPI:
 
         return fst_proofs, snd_proofs
 
+    def check_spendable(self, proofs):
+        promises_dict = requests.post(
+            self.url + "/check",
+            json=proofs.dict(),
+        ).json()
+
 
 class Wallet(LedgerAPI):
     """Minimal wallet wrapper."""
@@ -154,10 +160,9 @@ class Wallet(LedgerAPI):
             filter(lambda p: p["secret"] not in used_secrets, self.proofs)
         )
         self.proofs += fst_proofs + snd_proofs
-
+        await self._store_proofs(fst_proofs + snd_proofs)
         for proof in proofs:
             await invalidate_proof(proof, db=self.db)
-        await self._store_proofs(fst_proofs + snd_proofs)
         return fst_proofs, snd_proofs
 
     async def split_to_send(self, proofs: List[Proof], amount):
@@ -171,6 +176,9 @@ class Wallet(LedgerAPI):
         for proof in proofs:
             proof.reserved = True
             await update_proof_reserved(proof, reserved=reserved, db=self.db)
+
+    async def check_spendable(self, proofs):
+        await super().check_spendable(proofs)
 
     async def invalidate(self, proofs):
         # first we make sure that the server has invalidated these proofs

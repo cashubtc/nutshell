@@ -119,14 +119,7 @@ class Database(Compat):
 
             psycopg2.extensions.register_type(
                 psycopg2.extensions.new_type(
-                    (1184, 1114),
-                    "TIMESTAMP2INT",
-                    _parse_timestamp
-                    # lambda value, curs: time.mktime(
-                    #     datetime.datetime.strptime(
-                    #         value, "%Y-%m-%d %H:%M:%S.%f"
-                    #     ).timetuple()
-                    # ),
+                    (1184, 1114), "TIMESTAMP2INT", _parse_timestamp
                 )
             )
         else:

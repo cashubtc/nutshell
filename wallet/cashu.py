@@ -122,7 +122,7 @@ async def receive(ctx, token: str):
 @click.argument("token", type=str)
 @click.pass_context
 @coro
-async def receive(ctx, token: str):
+async def burn(ctx, token: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await init_wallet(wallet)
     wallet.status()

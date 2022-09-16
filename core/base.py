@@ -100,6 +100,12 @@ class SplitPayload(BaseModel):
     output_data: MintPayloads
 
 
+class CheckPayload(BaseModel):
+    proofs: List[Proof]
+    amount: int
+    output_data: MintPayloads
+
+
 class MeltPayload(BaseModel):
     proofs: List[Proof]
     amount: int

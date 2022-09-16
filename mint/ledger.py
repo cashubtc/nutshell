@@ -13,7 +13,7 @@ from core.base import Proof, BlindedMessage, BlindedSignature, BasePoint
 import core.b_dhke as b_dhke
 from core.base import Invoice
 from core.db import Database
-from core.settings import MAX_ORDER
+from core.settings import MAX_ORDER, LIGHTNING
 from core.split import amount_split
 from lightning import WALLET
 from mint.crud import (
@@ -179,7 +179,9 @@ class Ledger:
     async def mint(self, B_s, amounts, payment_hash=None):
         """Mints a promise for coins for B_."""
         # check if lightning invoice was paid
-        if payment_hash and not await self._check_lightning_invoice(payment_hash):
+        if LIGHTNING and (
+            payment_hash and not await self._check_lightning_invoice(payment_hash)
+        ):
             raise Exception("Lightning invoice not paid yet.")
 
         for amount in amounts:
@@ -192,13 +194,24 @@ class Ledger:
             promises += [await self._generate_promise(amount, B_) for a in split]
         return promises
 
+    async def melt(self, proofs: List[Proof], amount: int, invoice: str):
+        """Invalidates proofs and pays a Lightning invoice."""
+        if not LIGHTNING:
+            raise Exception("Lightning is not active.")
+        return 0
+
+    async def check_spendable(self, proofs: List[Proof]):
+        """Checks if all provided proofs are valid and still spendable (i.e. have not been spent)."""
+        if not all([self._verify_proof(p) for p in proofs]):
+            return False
+
     async def split(
         self, proofs: List[Proof], amount: int, output_data: List[BlindedMessage]
     ):
         """Consumes proofs and prepares new promises based on the amount split."""
         self._verify_split_amount(amount)
         # Verify proofs are valid
-        if not all([self._verify_proof(p) for p in proofs]):
+        if await self.check_spendable(proofs) == False:
             return False
 
         total = sum([p["amount"] for p in proofs])

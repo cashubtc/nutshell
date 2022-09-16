@@ -52,10 +52,6 @@ async def run_test():
     wallet1.status()
 
     # Error: We try to double-spend by providing a valid proof twice
-    # try:
-    #     await wallet1.split(wallet1.proofs + proofs, 20),
-    # except Exception as exc:
-    #     print(exc.args[0])
     await assert_err(
         wallet1.split(wallet1.proofs + proofs, 20),
         f"Error: tokens already spent. Secret: {proofs[0]['secret']}",
