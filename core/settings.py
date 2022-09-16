@@ -5,8 +5,9 @@ env.read_env()
 
 DEBUG = env.bool("DEBUG", default=False)
 LIGHTNING = env.bool("LIGHTNING", default=True)
-LIGHTNING_FEE = env.float("LIGHTNING_FEE", default=1.01)
-assert LIGHTNING_FEE >= 1.0, "LIGHTNING_FEE must be at least 1.0"
+LIGHTNING_FEE_PERCENT = env.float("LIGHTNING_FEE_PERCENT", default=1.0)
+assert LIGHTNING_FEE_PERCENT >= 0, "LIGHTNING_FEE_PERCENT must be at least 0"
+LIGHTNING_RESERVE_FEE_MIN = env.float("LIGHTNING_RESERVE_FEE_MIN", default=4000)
 
 MINT_PRIVATE_KEY = env.str("MINT_PRIVATE_KEY")
 

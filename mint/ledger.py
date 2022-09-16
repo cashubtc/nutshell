@@ -13,7 +13,9 @@ from core.base import Proof, BlindedMessage, BlindedSignature, BasePoint
 import core.b_dhke as b_dhke
 from core.base import Invoice
 from core.db import Database
-from core.settings import MAX_ORDER, LIGHTNING, LIGHTNING_FEE
+from core.settings import MAX_ORDER, LIGHTNING
+from core.helpers import fee_reserve
+
 from core.split import amount_split
 from lightning import WALLET
 from mint.crud import (
@@ -161,7 +163,7 @@ class Ledger:
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         ok, checking_id, fee_msat, preimage, error_message = await WALLET.pay_invoice(
-            invoice, fee_limit_msat=amount * (1 - LIGHTNING_FEE)
+            invoice, fee_limit_msat=fee_reserve(amount * 1000)
         )
         return ok, preimage
 
@@ -213,7 +215,7 @@ class Ledger:
         # if not LIGHTNING:
         total = sum([p["amount"] for p in proofs])
         # check that lightning fees are included
-        assert math.ceil(total * LIGHTNING_FEE) >= amount, Exception(
+        assert total + fee_reserve(amount * 1000) >= amount, Exception(
             "provided proofs not enough for Lightning payment."
         )
 

@@ -1,5 +1,6 @@
 import asyncio
 from functools import partial, wraps
+from core.settings import LIGHTNING_FEE_PERCENT, LIGHTNING_RESERVE_FEE_MIN
 
 
 def async_wrap(func):
@@ -24,3 +25,10 @@ def async_unwrap(to_await):
     coroutine = run_and_capture_result()
     loop.run_until_complete(coroutine)
     return async_response[0]
+
+
+def fee_reserve(amount_msat: int) -> int:
+    """Function for calculating the Lightning fee reserve"""
+    return max(
+        int(LIGHTNING_RESERVE_FEE_MIN), int(amount_msat * LIGHTNING_FEE_PERCENT / 100.0)
+    )

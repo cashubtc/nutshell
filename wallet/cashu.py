@@ -9,9 +9,10 @@ from functools import wraps
 import click
 from bech32 import bech32_decode, bech32_encode, convertbits
 
-from core.settings import MINT_URL, LIGHTNING, LIGHTNING_FEE
+from core.settings import MINT_URL, LIGHTNING
 from core.migrations import migrate_databases
 from core.base import Proof
+from core.helpers import fee_reserve
 import core.bolt11 as bolt11
 from core.bolt11 import Invoice
 from wallet.wallet import Wallet as Wallet
@@ -142,7 +143,7 @@ async def pay(ctx, invoice: str):
     wallet.status()
     decoded_invoice: Invoice = bolt11.decode(invoice)
     amount = math.ceil(
-        decoded_invoice.amount_msat / 1000 * LIGHTNING_FEE
+        (decoded_invoice.amount_msat + fee_reserve(decoded_invoice.amount_msat)) / 1000
     )  # 1% fee for Lightning
     print(
         f"Paying Lightning invoice of {decoded_invoice.amount_msat // 1000} sat ({amount} sat incl. fees)"
