@@ -4,13 +4,6 @@ from typing import List
 from pydantic import BaseModel
 
 
-# class BasePoint(BaseModel):
-#     """Named BasePoint because it conflicts with ecc.curve.Point"""
-
-#     x: int
-#     y: int
-
-
 class Proof(BaseModel):
     amount: int
     C: str

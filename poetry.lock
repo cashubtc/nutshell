@@ -128,14 +128,6 @@ optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
 [[package]]
-name = "ecc"
-version = "0.0.1"
-description = "Pure Python implementation of an elliptic curve cryptosystem based on FIPS 186-3"
-category = "main"
-optional = false
-python-versions = "*"
-
-[[package]]
 name = "ecdsa"
 version = "0.18.0"
 description = "ECDSA cryptographic signature library (pure python)"
@@ -681,7 +673,7 @@ testing = ["func-timeout", "jaraco.itertools", "pytest (>=6)", "pytest-black (>=
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "53c2bbcfb2dfec84fa5817caf5bda23bfd494c4397e3b3d3935c96ffa0b2cefe"
+content-hash = "8046f708fe138fcdb9c1e39e18e4c466292f183f0d1736ecee66ec4854ad54cc"
 
 [metadata.files]
 anyio = [
@@ -811,9 +803,6 @@ click = [
 colorama = [
     {file = "colorama-0.4.5-py2.py3-none-any.whl", hash = "sha256:854bf444933e37f5824ae7bfc1e98d5bce2ebe4160d46b5edf346a89358e99da"},
     {file = "colorama-0.4.5.tar.gz", hash = "sha256:e6c6b4334fc50988a639d9b98aa429a0b57da6e17b9a44f0451f930b6967b7a4"},
-]
-ecc = [
-    {file = "ecc-0.0.1.zip", hash = "sha256:4bbcd46e9963ca37422d3244ab503af9dce95cbd35f676f7f9a4dd6306e23538"},
 ]
 ecdsa = [
     {file = "ecdsa-0.18.0-py2.py3-none-any.whl", hash = "sha256:80600258e7ed2f16b9aa1d7c295bd70194109ad5a30fdee0eaeefef1d4c559dd"},
