@@ -5,9 +5,10 @@ from typing import Union
 
 import click
 import uvicorn
-from ecc.curve import Point, secp256k1
 from fastapi import FastAPI
 from loguru import logger
+
+from secp256k1 import PublicKey
 
 import core.settings as settings
 from core.base import MintPayloads, SplitPayload, MeltPayload, CheckPayload
@@ -124,12 +125,8 @@ async def mint(payloads: MintPayloads, payment_hash: Union[str, None] = None):
     amounts = []
     B_s = []
     for payload in payloads.blinded_messages:
-        v = payload.dict()
-        amounts.append(v["amount"])
-        x = int(v["B_"]["x"])
-        y = int(v["B_"]["y"])
-        B_ = Point(x, y, secp256k1)
-        B_s.append(B_)
+        amounts.append(payload.amount)
+        B_s.append(PublicKey(bytes.fromhex(payload.B_), raw=True))
     try:
         promises = await ledger.mint(B_s, amounts, payment_hash=payment_hash)
         return promises

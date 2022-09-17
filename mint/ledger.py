@@ -3,12 +3,10 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
 import hashlib
-import math
-from ecc.curve import Point, secp256k1
-from ecc.key import gen_keypair
+from core.secp import PrivateKey, PublicKey
 
-from typing import List
-from core.base import Proof, BlindedMessage, BlindedSignature, BasePoint
+from typing import List, Set
+from core.base import Proof, BlindedMessage, BlindedSignature
 
 import core.b_dhke as b_dhke
 from core.base import Invoice
@@ -30,49 +28,49 @@ from mint.crud import (
 
 class Ledger:
     def __init__(self, secret_key: str, db: str):
-        self.proofs_used = set()
+        self.proofs_used: Set[str] = set()
 
-        self.master_key = secret_key
-        self.keys = self._derive_keys(self.master_key)
-        self.pub_keys = self._derive_pubkeys(self.keys)
-        self.db = Database("mint", db)
+        self.master_key: str = secret_key
+        self.keys: List[PrivateKey] = self._derive_keys(self.master_key)
+        self.pub_keys: List[PublicKey] = self._derive_pubkeys(self.keys)
+        self.db: Database = Database("mint", db)
 
     async def load_used_proofs(self):
         self.proofs_used = set(await get_proofs_used(db=self.db))
 
     @staticmethod
-    def _derive_keys(master_key):
+    def _derive_keys(master_key: str):
         """Deterministic derivation of keys for 2^n values."""
         return {
             2
-            ** i: int(
+            ** i: PrivateKey(
                 hashlib.sha256((str(master_key) + str(i)).encode("utf-8"))
                 .hexdigest()
-                .encode("utf-8"),
-                16,
+                .encode("utf-8")[:32],
+                raw=True,
             )
             for i in range(MAX_ORDER)
         }
 
     @staticmethod
-    def _derive_pubkeys(keys):
-        return {
-            amt: keys[amt] * secp256k1.G for amt in [2**i for i in range(MAX_ORDER)]
-        }
+    def _derive_pubkeys(keys: List[PrivateKey]):
+        return {amt: keys[amt].pubkey for amt in [2**i for i in range(MAX_ORDER)]}
 
     async def _generate_promises(self, amounts, B_s):
         """Generates promises that sum to the given amount."""
         return [
-            await self._generate_promise(amount, Point(B_.x, B_.y, secp256k1))
+            await self._generate_promise(amount, PublicKey(bytes.fromhex(B_), raw=True))
             for (amount, B_) in zip(amounts, B_s)
         ]
 
-    async def _generate_promise(self, amount: int, B_):
+    async def _generate_promise(self, amount: int, B_: PublicKey):
         """Generates a promise for given amount and returns a pair (amount, C')."""
         secret_key = self.keys[amount]  # Get the correct key
         C_ = b_dhke.step2_alice(B_, secret_key)
-        await store_promise(amount, B_x=B_.x, B_y=B_.y, C_x=C_.x, C_y=C_.y, db=self.db)
-        return BlindedSignature(amount=amount, C_=BasePoint(x=C_.x, y=C_.y))
+        await store_promise(
+            amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
+        )
+        return BlindedSignature(amount=amount, C_=C_.serialize().hex())
 
     def _check_spendable(self, proof: Proof):
         """Checks whether the proof was already spent."""
@@ -83,10 +81,12 @@ class Ledger:
         if not self._check_spendable(proof):
             raise Exception(f"tokens already spent. Secret: {proof.secret}")
         secret_key = self.keys[proof.amount]  # Get the correct key to check against
-        C = Point(proof.C.x, proof.C.y, secp256k1)
+        C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(secret_key, C, proof.secret)
 
-    def _verify_outputs(self, total: int, amount: int, output_data):
+    def _verify_outputs(
+        self, total: int, amount: int, output_data: List[BlindedMessage]
+    ):
         """Verifies the expected split was correctly computed"""
         fst_amt, snd_amt = total - amount, amount  # we have two amounts to split to
         fst_outputs = amount_split(fst_amt)
@@ -95,16 +95,18 @@ class Ledger:
         given = [o.amount for o in output_data]
         return given == expected
 
-    def _verify_no_duplicates(self, proofs: List[Proof], output_data):
+    def _verify_no_duplicates(
+        self, proofs: List[Proof], output_data: List[BlindedMessage]
+    ):
         secrets = [p.secret for p in proofs]
         if len(secrets) != len(list(set(secrets))):
             return False
-        B_xs = [od.B_.x for od in output_data]
-        if len(B_xs) != len(list(set(B_xs))):
+        B_s = [od.B_ for od in output_data]
+        if len(B_s) != len(list(set(B_s))):
             return False
         return True
 
-    def _verify_split_amount(self, amount):
+    def _verify_split_amount(self, amount: int):
         """Split amount like output amount can't be negative or too big."""
         try:
             self._verify_amount(amount)
@@ -179,7 +181,7 @@ class Ledger:
     # Public methods
     def get_pubkeys(self):
         """Returns public keys for possible amounts."""
-        return self.pub_keys
+        return {a: p.serialize().hex() for a, p in self.pub_keys.items()}
 
     async def request_mint(self, amount):
         """Returns Lightning invoice and stores it in the db."""
@@ -239,7 +241,7 @@ class Ledger:
         if not all([self._verify_proof(p) for p in proofs]):
             return False
 
-        total = sum([p["amount"] for p in proofs])
+        total = sum([p.amount for p in proofs])
 
         if not self._verify_no_duplicates(proofs, output_data):
             raise Exception("duplicate proofs or promises")

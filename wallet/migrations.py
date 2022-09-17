@@ -17,8 +17,7 @@ async def m001_initial(db: Database):
         """
             CREATE TABLE IF NOT EXISTS proofs (
                 amount INTEGER NOT NULL,
-                C_x TEXT NOT NULL,
-                C_y TEXT NOT NULL,
+                C TEXT NOT NULL,
                 secret TEXT NOT NULL,
 
                 UNIQUE (secret)
@@ -31,8 +30,7 @@ async def m001_initial(db: Database):
         """
             CREATE TABLE IF NOT EXISTS proofs_used (
                 amount INTEGER NOT NULL,
-                C_x TEXT NOT NULL,
-                C_y TEXT NOT NULL,
+                C TEXT NOT NULL,
                 secret TEXT NOT NULL,
 
                 UNIQUE (secret)

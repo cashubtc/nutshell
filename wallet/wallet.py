@@ -2,11 +2,10 @@ import random
 from typing import List
 
 import requests
-from ecc.curve import Point, secp256k1
+from core.secp import PublicKey
 
 import core.b_dhke as b_dhke
 from core.base import (
-    BasePoint,
     BlindedMessage,
     MintPayloads,
     Proof,
@@ -29,7 +28,8 @@ class LedgerAPI:
     def _get_keys(url):
         resp = requests.get(url + "/keys").json()
         return {
-            int(amt): Point(val["x"], val["y"], secp256k1) for amt, val in resp.items()
+            int(amt): PublicKey(bytes.fromhex(val), raw=True)
+            for amt, val in resp.items()
         }
 
     @staticmethod
@@ -46,10 +46,9 @@ class LedgerAPI:
         """Returns proofs of promise from promises."""
         proofs = []
         for promise, (r, secret) in zip(promises, secrets):
-            C_ = Point(promise.C_.x, promise.C_.y, secp256k1)
+            C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_bob(C_, r, self.keys[promise.amount])
-            c_point = BasePoint(x=C.x, y=C.y)
-            proof = Proof(amount=promise.amount, C=c_point, secret=secret)
+            proof = Proof(amount=promise.amount, C=C.serialize().hex(), secret=secret)
             proofs.append(proof)
         return proofs
 
@@ -63,13 +62,14 @@ class LedgerAPI:
         payloads: MintPayloads = MintPayloads()
         secrets = []
         rs = []
-        for i, amount in enumerate(amounts):
+        for amount in amounts:
             secret = str(random.getrandbits(128))
             secrets.append(secret)
             B_, r = b_dhke.step1_bob(secret)
             rs.append(r)
-            blinded_point = BasePoint(x=str(B_.x), y=str(B_.y))
-            payload: BlindedMessage = BlindedMessage(amount=amount, B_=blinded_point)
+            payload: BlindedMessage = BlindedMessage(
+                amount=amount, B_=B_.serialize().hex()
+            )
             payloads.blinded_messages.append(payload)
         promises_dict = requests.post(
             self.url + "/mint",
@@ -94,9 +94,8 @@ class LedgerAPI:
             secret = str(random.getrandbits(128))
             B_, r = b_dhke.step1_bob(secret)
             secrets.append((r, secret))
-            blinded_point = BasePoint(x=str(B_.x), y=str(B_.y))
             payload: BlindedMessage = BlindedMessage(
-                amount=output_amt, B_=blinded_point
+                amount=output_amt, B_=B_.serialize().hex()
             )
             payloads.blinded_messages.append(payload)
         split_payload = SplitPayload(proofs=proofs, amount=amount, output_data=payloads)
