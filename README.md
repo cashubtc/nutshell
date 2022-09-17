@@ -36,6 +36,12 @@ pyenv local 3.9.13
 poetry install
 ```
 
+#### Update Cashu
+To update Cashu to the newest version enter
+```bash
+git pull && poetry install
+```
+
 ### Configuration
 ```bash
 mv .env.example .env
