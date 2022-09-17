@@ -13,13 +13,12 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (amount, C_x, C_y, secret)
-        VALUES (?, ?, ?, ?)
+          (amount, C, secret)
+        VALUES (?, ?, ?)
         """,
         (
             proof.amount,
-            str(proof.C.x),
-            str(proof.C.y),
+            str(proof.C),
             str(proof.secret),
         ),
     )
@@ -55,13 +54,12 @@ async def invalidate_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs_used
-          (amount, C_x, C_y, secret)
-        VALUES (?, ?, ?, ?)
+          (amount, C, secret)
+        VALUES (?, ?, ?)
         """,
         (
             proof.amount,
-            str(proof.C.x),
-            str(proof.C.y),
+            str(proof.C),
             str(proof.secret),
         ),
     )

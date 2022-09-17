@@ -17,12 +17,10 @@ async def m001_initial(db: Database):
         """
             CREATE TABLE IF NOT EXISTS promises (
                 amount INTEGER NOT NULL,
-                B_x TEXT NOT NULL,
-                B_y TEXT NOT NULL,
-                C_x TEXT NOT NULL,
-                C_y TEXT NOT NULL,
+                B_b TEXT NOT NULL,
+                C_b TEXT NOT NULL,
 
-                UNIQUE (B_x, B_y)
+                UNIQUE (B_b)
 
             );
         """
@@ -32,8 +30,7 @@ async def m001_initial(db: Database):
         """
             CREATE TABLE IF NOT EXISTS proofs_used (
                 amount INTEGER NOT NULL,
-                C_x TEXT NOT NULL,
-                C_y TEXT NOT NULL,
+                C TEXT NOT NULL,
                 secret TEXT NOT NULL,
 
                 UNIQUE (secret)

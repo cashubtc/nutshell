@@ -4,16 +4,16 @@ from typing import List
 from pydantic import BaseModel
 
 
-class BasePoint(BaseModel):
-    """Named BasePoint because it conflicts with ecc.curve.Point"""
+# class BasePoint(BaseModel):
+#     """Named BasePoint because it conflicts with ecc.curve.Point"""
 
-    x: int
-    y: int
+#     x: int
+#     y: int
 
 
 class Proof(BaseModel):
     amount: int
-    C: BasePoint
+    C: str
     secret: str
     reserved: bool = False  # whether this proof is reserved for sending
 
@@ -21,22 +21,16 @@ class Proof(BaseModel):
     def from_row(cls, row: Row):
         return cls(
             amount=row[0],
-            C=dict(
-                x=int(row[1]),
-                y=int(row[2]),
-            ),
-            secret=row[3],
-            reserved=row[4] or False,
+            C=row[1],
+            secret=row[2],
+            reserved=row[3] or False,
         )
 
     @classmethod
     def from_dict(cls, d: dict):
         return cls(
             amount=d["amount"],
-            C=dict(
-                x=int(d["C"]["x"]),
-                y=int(d["C"]["y"]),
-            ),
+            C=d["C"],
             secret=d["secret"],
             reserved=d["reserved"] or False,
         )
@@ -72,21 +66,18 @@ class Invoice(BaseModel):
 
 class BlindedMessage(BaseModel):
     amount: int
-    B_: BasePoint
+    B_: str
 
 
 class BlindedSignature(BaseModel):
     amount: int
-    C_: BasePoint
+    C_: str
 
     @classmethod
     def from_dict(cls, d: dict):
         return cls(
             amount=d["amount"],
-            C_=dict(
-                x=int(d["C_"]["x"]),
-                y=int(d["C_"]["y"]),
-            ),
+            C_=d["C_"],
         )
 
 
