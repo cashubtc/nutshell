@@ -56,7 +56,7 @@ class Ledger:
     def _derive_pubkeys(keys: List[PrivateKey]):
         return {amt: keys[amt].pubkey for amt in [2**i for i in range(MAX_ORDER)]}
 
-    async def _generate_promises(self, amounts, B_s):
+    async def _generate_promises(self, amounts: List[int], B_s: List[str]):
         """Generates promises that sum to the given amount."""
         return [
             await self._generate_promise(amount, PublicKey(bytes.fromhex(B_), raw=True))
@@ -114,7 +114,7 @@ class Ledger:
             # For better error message
             raise Exception("invalid split amount: " + str(amount))
 
-    def _verify_amount(self, amount):
+    def _verify_amount(self, amount: int):
         """Any amount used should be a positive integer not larger than 2^MAX_ORDER."""
         valid = isinstance(amount, int) and amount > 0 and amount < 2**MAX_ORDER
         if not valid:
@@ -129,7 +129,7 @@ class Ledger:
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
         assert sum_outputs - sum_inputs == 0
 
-    def _get_output_split(self, amount):
+    def _get_output_split(self, amount: int):
         """Given an amount returns a list of amounts returned e.g. 13 is [1, 4, 8]."""
         self._verify_amount(amount)
         bits_amt = bin(amount)[::-1][:-2]
@@ -139,7 +139,7 @@ class Ledger:
                 rv.append(2**pos)
         return rv
 
-    async def _request_lightning_invoice(self, amount):
+    async def _request_lightning_invoice(self, amount: int):
         """Returns an invoice from the Lightning backend."""
         error, balance = await WALLET.status()
         if error:
@@ -149,7 +149,7 @@ class Ledger:
         )
         return payment_request, checking_id
 
-    async def _check_lightning_invoice(self, payment_hash):
+    async def _check_lightning_invoice(self, payment_hash: str):
         """Checks with the Lightning backend whether an invoice with this payment_hash was paid."""
         invoice: Invoice = await get_lightning_invoice(payment_hash, db=self.db)
         if invoice.issued:
@@ -159,7 +159,7 @@ class Ledger:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
         return status.paid
 
-    async def _pay_lightning_invoice(self, invoice, amount):
+    async def _pay_lightning_invoice(self, invoice: str, amount: int):
         """Returns an invoice from the Lightning backend."""
         error, balance = await WALLET.status()
         if error:
@@ -194,7 +194,7 @@ class Ledger:
         await store_lightning_invoice(invoice, db=self.db)
         return payment_request, checking_id
 
-    async def mint(self, B_s, amounts, payment_hash=None):
+    async def mint(self, B_s: List[PublicKey], amounts: List[int], payment_hash=None):
         """Mints a promise for coins for B_."""
         # check if lightning invoice was paid
         if LIGHTNING and (
@@ -206,10 +206,9 @@ class Ledger:
             if amount not in [2**i for i in range(MAX_ORDER)]:
                 raise Exception(f"Can only mint amounts up to {2**MAX_ORDER}.")
 
-        promises = []
-        for B_, amount in zip(B_s, amounts):
-            split = amount_split(amount)
-            promises += [await self._generate_promise(amount, B_) for a in split]
+        promises = [
+            await self._generate_promise(amount, B_) for B_, amount in zip(B_s, amounts)
+        ]
         return promises
 
     async def melt(self, proofs: List[Proof], amount: int, invoice: str):
