@@ -144,7 +144,7 @@ async def melt(payload: MeltPayload):
 
 @app.post("/check")
 async def check_spendable(payload: CheckPayload):
-    return {"spendable": await ledger.check_spendable(payload.proofs)}
+    return await ledger.check_spendable(payload.proofs)
 
 
 @app.post("/split")

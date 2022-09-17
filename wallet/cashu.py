@@ -16,6 +16,7 @@ from core.helpers import fee_reserve
 from core.migrations import migrate_databases
 from core.settings import LIGHTNING, MINT_URL
 from wallet import migrations
+from wallet.crud import get_reserved_proofs
 from wallet.wallet import Wallet as Wallet
 
 
@@ -121,14 +122,23 @@ async def receive(ctx, token: str):
 
 
 @cli.command("burn", help="Burn spent tokens.")
-@click.argument("token", type=str)
+@click.argument("token", required=False, type=str)
+@click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent tokens.")
 @click.pass_context
 @coro
-async def burn(ctx, token: str):
+async def burn(ctx, token: str, all: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await init_wallet(wallet)
+    if not (all or token) or (token and all):
+        print("Error: enter a token or use --all to burn all pending tokens.")
+        return
+    if all:
+        proofs = await get_reserved_proofs(wallet.db)
+    else:
+        proofs = [
+            Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))
+        ]
     wallet.status()
-    proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
     await wallet.invalidate(proofs)
     wallet.status()
 

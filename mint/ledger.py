@@ -13,9 +13,14 @@ from core.secp import PrivateKey, PublicKey
 from core.settings import LIGHTNING, MAX_ORDER
 from core.split import amount_split
 from lightning import WALLET
-from mint.crud import (get_lightning_invoice, get_proofs_used,
-                       invalidate_proof, store_lightning_invoice,
-                       store_promise, update_lightning_invoice)
+from mint.crud import (
+    get_lightning_invoice,
+    get_proofs_used,
+    invalidate_proof,
+    store_lightning_invoice,
+    store_promise,
+    update_lightning_invoice,
+)
 
 
 class Ledger:
@@ -219,9 +224,7 @@ class Ledger:
 
     async def check_spendable(self, proofs: List[Proof]):
         """Checks if all provided proofs are valid and still spendable (i.e. have not been spent)."""
-        if not all([self._check_spendable(p) for p in proofs]):
-            return False
-        return True
+        return {i: self._check_spendable(p) for i, p in enumerate(proofs)}
 
     async def split(
         self, proofs: List[Proof], amount: int, output_data: List[BlindedMessage]

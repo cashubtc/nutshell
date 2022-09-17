@@ -4,13 +4,19 @@ from typing import List
 import requests
 
 import core.b_dhke as b_dhke
-from core.base import (BlindedMessage, BlindedSignature, CheckPayload,
-                       MeltPayload, MintPayloads, Proof, SplitPayload)
+from core.base import (
+    BlindedMessage,
+    BlindedSignature,
+    CheckPayload,
+    MeltPayload,
+    MintPayloads,
+    Proof,
+    SplitPayload,
+)
 from core.db import Database
 from core.secp import PublicKey
 from core.split import amount_split
-from wallet.crud import (get_proofs, invalidate_proof, store_proof,
-                         update_proof_reserved)
+from wallet.crud import get_proofs, invalidate_proof, store_proof, update_proof_reserved
 
 
 class LedgerAPI:
@@ -113,9 +119,8 @@ class LedgerAPI:
             self.url + "/check",
             json=payload.dict(),
         ).json()
-        if "spendable" in return_dict and return_dict["spendable"]:
-            return True
-        return False
+
+        return return_dict
 
     async def pay_lightning(self, proofs: List[Proof], amount: int, invoice: str):
         payload = MeltPayload(proofs=proofs, amount=amount, invoice=invoice)
@@ -197,14 +202,14 @@ class Wallet(LedgerAPI):
         return await super().check_spendable(proofs)
 
     async def invalidate(self, proofs):
-        # first we make sure that the server has invalidated these proofs
-        if await self.check_spendable(proofs):
-            raise Exception("tokens not yet spent.")
-
-        # TODO: check with server if they were redeemed already
-        for proof in proofs:
-            await invalidate_proof(proof, db=self.db)
-        invalidate_secrets = [p["secret"] for p in proofs]
+        """Invalidates all spendable tokens supplied in proofs."""
+        spendables = await self.check_spendable(proofs)
+        invalidated_proofs = []
+        for idx, spendable in spendables.items():
+            if not spendable:
+                invalidated_proofs.append(proofs[int(idx)])
+                await invalidate_proof(proofs[int(idx)], db=self.db)
+        invalidate_secrets = [p["secret"] for p in invalidated_proofs]
         self.proofs = list(
             filter(lambda p: p["secret"] not in invalidate_secrets, self.proofs)
         )

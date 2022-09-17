@@ -38,6 +38,20 @@ async def get_proofs(
     return [Proof.from_row(r) for r in rows]
 
 
+async def get_reserved_proofs(
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+
+    rows = await (conn or db).fetchall(
+        """
+        SELECT * from proofs
+        WHERE reserved
+        """
+    )
+    return [Proof.from_row(r) for r in rows]
+
+
 async def invalidate_proof(
     proof: Proof,
     db: Database,
