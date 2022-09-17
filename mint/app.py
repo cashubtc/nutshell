@@ -7,11 +7,10 @@ import click
 import uvicorn
 from fastapi import FastAPI
 from loguru import logger
-
 from secp256k1 import PublicKey
 
 import core.settings as settings
-from core.base import MintPayloads, SplitPayload, MeltPayload, CheckPayload
+from core.base import CheckPayload, MeltPayload, MintPayloads, SplitPayload
 from core.settings import MINT_PRIVATE_KEY, MINT_SERVER_HOST, MINT_SERVER_PORT
 from lightning import WALLET
 from mint.ledger import Ledger

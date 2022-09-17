@@ -1,8 +1,8 @@
-from loguru import logger
-from core.db import Database
-from core.db import COCKROACH, POSTGRES, SQLITE
-
 import re
+
+from loguru import logger
+
+from core.db import COCKROACH, POSTGRES, SQLITE, Database
 
 
 async def migrate_databases(db: Database, migrations_module):

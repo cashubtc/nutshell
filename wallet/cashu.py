@@ -9,14 +9,14 @@ from functools import wraps
 import click
 from bech32 import bech32_decode, bech32_encode, convertbits
 
-from core.settings import MINT_URL, LIGHTNING
-from core.migrations import migrate_databases
-from core.base import Proof
-from core.helpers import fee_reserve
 import core.bolt11 as bolt11
+from core.base import Proof
 from core.bolt11 import Invoice
-from wallet.wallet import Wallet as Wallet
+from core.helpers import fee_reserve
+from core.migrations import migrate_databases
+from core.settings import LIGHTNING, MINT_URL
 from wallet import migrations
+from wallet.wallet import Wallet as Wallet
 
 
 async def init_wallet(wallet: Wallet):

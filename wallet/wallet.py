@@ -2,21 +2,15 @@ import random
 from typing import List
 
 import requests
-from core.secp import PublicKey
 
 import core.b_dhke as b_dhke
-from core.base import (
-    BlindedMessage,
-    MintPayloads,
-    Proof,
-    SplitPayload,
-    BlindedSignature,
-    CheckPayload,
-    MeltPayload,
-)
+from core.base import (BlindedMessage, BlindedSignature, CheckPayload,
+                       MeltPayload, MintPayloads, Proof, SplitPayload)
 from core.db import Database
+from core.secp import PublicKey
 from core.split import amount_split
-from wallet.crud import get_proofs, invalidate_proof, store_proof, update_proof_reserved
+from wallet.crud import (get_proofs, invalidate_proof, store_proof,
+                         update_proof_reserved)
 
 
 class LedgerAPI:

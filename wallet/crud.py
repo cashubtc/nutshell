@@ -1,5 +1,6 @@
 import secrets
 from typing import Optional
+
 from core.base import Proof
 from core.db import Connection, Database
 

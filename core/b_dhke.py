@@ -26,6 +26,7 @@ If true, C must have originated from Alice
 """
 
 import hashlib
+
 from secp256k1 import PrivateKey, PublicKey
 
 

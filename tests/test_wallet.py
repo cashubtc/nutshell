@@ -1,10 +1,8 @@
 import asyncio
 
 from core.helpers import async_unwrap
-
 from core.migrations import migrate_databases
 from wallet import migrations
-
 from wallet.wallet import Wallet as Wallet1
 from wallet.wallet import Wallet as Wallet2
 
