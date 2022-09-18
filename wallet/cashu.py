@@ -45,7 +45,7 @@ def cli(
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
-    ctx.obj["WALLET"] = Wallet(ctx.obj["HOST"], f"data/{walletname}", walletname)
+    ctx.obj["WALLET"] = Wallet(ctx.obj["HOST"], f"./cashu/{walletname}", walletname)
     pass
 
 
