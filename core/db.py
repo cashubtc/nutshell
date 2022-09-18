@@ -128,10 +128,13 @@ class Database(Compat):
                 database_uri = f"sqlite:///{self.path}"
                 self.type = SQLITE
             else:
-                raise NotADirectoryError(
-                    f"db_location named {self.db_location} was not created"
-                    f" - please 'mkdir {self.db_location}' and try again"
-                )
+                print(f"Creating database directory: {self.db_location}")
+                if not os.path.exists(self.db_location):
+                    os.makedirs(self.db_location)
+                # raise NotADirectoryError(
+                #     f"db_location named {self.db_location} was not created"
+                #     f" - please 'mkdir {self.db_location}' and try again"
+                # )
         self.schema = self.name
         if self.name.startswith("ext_"):
             self.schema = self.name[4:]
