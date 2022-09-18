@@ -5,6 +5,7 @@ import base64
 import json
 import math
 from functools import wraps
+from pathlib import Path
 
 import click
 from bech32 import bech32_decode, bech32_encode, convertbits
@@ -45,7 +46,9 @@ def cli(
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
-    ctx.obj["WALLET"] = Wallet(ctx.obj["HOST"], f"~/.cashu/{walletname}", walletname)
+    ctx.obj["WALLET"] = Wallet(
+        ctx.obj["HOST"], f"{str(Path.home())}/.cashu/{walletname}", walletname
+    )
     pass
 
 
@@ -87,7 +90,7 @@ async def mint(ctx, amount: int, hash: str):
 @cli.command("balance", help="See balance.")
 @click.pass_context
 @coro
-async def receive(ctx):
+async def balance(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
     await init_wallet(wallet)
     wallet.status()
