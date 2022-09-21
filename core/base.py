@@ -9,6 +9,7 @@ class Proof(BaseModel):
     C: str
     secret: str
     reserved: bool = False  # whether this proof is reserved for sending
+    send_id: str = ""  # unique ID of send attempt
 
     @classmethod
     def from_row(cls, row: Row):
@@ -17,6 +18,7 @@ class Proof(BaseModel):
             C=row[1],
             secret=row[2],
             reserved=row[3] or False,
+            send_id=row[4] or "",
         )
 
     @classmethod
@@ -26,6 +28,7 @@ class Proof(BaseModel):
             C=d["C"],
             secret=d["secret"],
             reserved=d["reserved"] or False,
+            send_id=d["send_id"] or "",
         )
 
     def __getitem__(self, key):

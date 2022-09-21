@@ -8,8 +8,13 @@ import requests
 
 from core.settings import LNBITS_ENDPOINT, LNBITS_KEY
 
-from .base import (InvoiceResponse, PaymentResponse, PaymentStatus,
-                   StatusResponse, Wallet)
+from .base import (
+    InvoiceResponse,
+    PaymentResponse,
+    PaymentStatus,
+    StatusResponse,
+    Wallet,
+)
 
 
 class LNbitsWallet(Wallet):

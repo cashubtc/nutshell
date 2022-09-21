@@ -5,7 +5,8 @@ import base64
 import json
 import math
 from functools import wraps
-from pathlib import Path
+from itertools import groupby
+from operator import itemgetter
 
 import click
 from bech32 import bech32_decode, bech32_encode, convertbits
@@ -15,7 +16,7 @@ from core.base import Proof
 from core.bolt11 import Invoice
 from core.helpers import fee_reserve
 from core.migrations import migrate_databases
-from core.settings import LIGHTNING, MINT_URL
+from core.settings import CASHU_DIR, LIGHTNING, MINT_URL
 from wallet import migrations
 from wallet.crud import get_reserved_proofs
 from wallet.wallet import Wallet as Wallet
@@ -46,9 +47,7 @@ def cli(
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
-    ctx.obj["WALLET"] = Wallet(
-        ctx.obj["HOST"], f"{str(Path.home())}/.cashu/{walletname}", walletname
-    )
+    ctx.obj["WALLET"] = Wallet(ctx.obj["HOST"], f"{CASHU_DIR}/{walletname}", walletname)
     pass
 
 
@@ -106,8 +105,8 @@ async def send(ctx, amount: int):
     wallet.status()
     _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
     await wallet.set_reserved(send_proofs, reserved=True)
-    proofs_serialized = [p.dict() for p in send_proofs]
-    print(base64.urlsafe_b64encode(json.dumps(proofs_serialized).encode()).decode())
+    token = await wallet.serialize_proofs(send_proofs)
+    print(token)
     wallet.status()
 
 
@@ -144,6 +143,25 @@ async def burn(ctx, token: str, all: bool):
     wallet.status()
     await wallet.invalidate(proofs)
     wallet.status()
+
+
+@cli.command("pending", help="Show pending tokens.")
+@click.pass_context
+@coro
+async def pending(ctx):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await init_wallet(wallet)
+    wallet.status()
+    reserved_proofs = await get_reserved_proofs(wallet.db)
+    if len(reserved_proofs):
+        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))
+        for key, value in groupby(sorted_proofs, key=itemgetter("send_id")):
+            grouped_proofs = list(value)
+            token = await wallet.serialize_proofs(grouped_proofs)
+            print(
+                f"Amount: {sum([p['amount'] for p in grouped_proofs])} sat. ID: {key}"
+            )
+            print(token)
 
 
 @cli.command("pay", help="Pay lightning invoice.")

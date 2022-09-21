@@ -1,4 +1,4 @@
-import secrets
+import time
 from typing import Optional
 
 from core.base import Proof
@@ -14,14 +14,10 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (amount, C, secret)
-        VALUES (?, ?, ?)
+          (amount, C, secret, time_created)
+        VALUES (?, ?, ?, ?)
         """,
-        (
-            proof.amount,
-            str(proof.C),
-            str(proof.secret),
-        ),
+        (proof.amount, str(proof.C), str(proof.secret), int(time.time())),
     )
 
 
@@ -69,24 +65,35 @@ async def invalidate_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs_used
-          (amount, C, secret)
-        VALUES (?, ?, ?)
+          (amount, C, secret, time_used)
+        VALUES (?, ?, ?, ?)
         """,
-        (
-            proof.amount,
-            str(proof.C),
-            str(proof.secret),
-        ),
+        (proof.amount, str(proof.C), str(proof.secret), int(time.time())),
     )
 
 
 async def update_proof_reserved(
     proof: Proof,
     reserved: bool,
-    db: Database,
+    send_id: str = None,
+    db: Database = None,
     conn: Optional[Connection] = None,
 ):
+    clauses = []
+    values = []
+    clauses.append("reserved = ?")
+    values.append(reserved)
+
+    if send_id:
+        clauses.append("send_id = ?")
+        values.append(send_id)
+
+    if reserved:
+        # set the time of reserving
+        clauses.append("time_reserved = ?")
+        values.append(int(time.time()))
+
     await (conn or db).execute(
-        "UPDATE proofs SET reserved = ? WHERE secret = ?",
-        (reserved, str(proof.secret)),
+        f"UPDATE proofs SET {', '.join(clauses)} WHERE secret = ?",
+        (*values, str(proof.secret)),
     )

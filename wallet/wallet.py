@@ -1,4 +1,7 @@
+import base64
+import json
 import random
+import uuid
 from typing import List
 
 import requests
@@ -186,6 +189,14 @@ class Wallet(LedgerAPI):
             raise Exception("could not pay invoice.")
         return status["paid"]
 
+    @staticmethod
+    async def serialize_proofs(proofs: List[Proof]):
+        proofs_serialized = [p.dict() for p in proofs]
+        token = base64.urlsafe_b64encode(
+            json.dumps(proofs_serialized).encode()
+        ).decode()
+        return token
+
     async def split_to_send(self, proofs: List[Proof], amount):
         """Like self.split but only considers non-reserved tokens."""
         if len([p for p in proofs if not p.reserved]) <= 0:
@@ -194,9 +205,12 @@ class Wallet(LedgerAPI):
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
         """Mark a proof as reserved to avoid reuse or delete marking."""
+        uuid_str = str(uuid.uuid1())
         for proof in proofs:
             proof.reserved = True
-            await update_proof_reserved(proof, reserved=reserved, db=self.db)
+            await update_proof_reserved(
+                proof, reserved=reserved, send_id=uuid_str, db=self.db
+            )
 
     async def check_spendable(self, proofs):
         return await super().check_spendable(proofs)
