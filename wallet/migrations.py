@@ -70,7 +70,7 @@ async def m002_add_proofs_reserved(db):
     await db.execute("ALTER TABLE proofs ADD COLUMN reserved BOOL")
 
 
-async def m003_add_proofs_sendid(db):
+async def m003_add_proofs_sendid_and_timestamps(db):
     """
     Column with unique ID for each initiated send attempt
     so proofs can be later grouped together for each send attempt.

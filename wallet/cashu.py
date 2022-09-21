@@ -4,6 +4,8 @@ import asyncio
 import base64
 import json
 import math
+from datetime import datetime
+
 from functools import wraps
 from itertools import groupby
 from operator import itemgetter
@@ -151,17 +153,21 @@ async def burn(ctx, token: str, all: bool):
 async def pending(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
     await init_wallet(wallet)
-    wallet.status()
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))
         for key, value in groupby(sorted_proofs, key=itemgetter("send_id")):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
+            reserved_date = datetime.utcfromtimestamp(
+                int(grouped_proofs[0].time_reserved)
+            ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"Amount: {sum([p['amount'] for p in grouped_proofs])} sat. ID: {key}"
+                f"Amount: {sum([p['amount'] for p in grouped_proofs])} sat Sent: {reserved_date} ID: {key}\n"
             )
             print(token)
+            print("")
+    wallet.status()
 
 
 @cli.command("pay", help="Pay lightning invoice.")
