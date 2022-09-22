@@ -13,7 +13,9 @@ The easiest way to use Cashu is to install the package it via pip:
 pip install cashu
 ```
 
-To update Cashu, use `pip install cashu -U`. You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
+To update Cashu, use `pip install cashu -U`. If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config libpq-dev`.
+
+You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 
 ### Hard install: Poetry
 These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Install Cashu](#install-cashu).

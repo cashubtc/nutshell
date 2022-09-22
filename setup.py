@@ -1,6 +1,6 @@
-import setuptools
-
 from os import path
+
+import setuptools
 
 this_directory = path.abspath(path.dirname(__file__))
 with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
@@ -13,7 +13,7 @@ entry_points = {"console_scripts": ["cashu = wallet.cashu:cli"]}
 
 setuptools.setup(
     name="cashu",
-    version="0.1.7",
+    version="0.1.8",
     description="Ecash wallet and mint with Bitcoin Lightning support",
     long_description=long_description,
     long_description_content_type="text/markdown",

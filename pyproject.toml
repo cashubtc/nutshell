@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cashu"
-version = "0.0.1"
+version = "0.1.8"
 description = "Ecash wallet and mint."
 authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
@@ -33,6 +33,11 @@ bitstring = "^3.1.9"
 secp256k1 = "^0.14.0"
 
 [tool.poetry.dev-dependencies]
+black = {version = "^22.8.0", allow-prereleases = true}
+isort = "^5.10.1"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^0.971"
 black = {version = "^22.8.0", allow-prereleases = true}
 isort = "^5.10.1"
 

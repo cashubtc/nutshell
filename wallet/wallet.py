@@ -1,4 +1,8 @@
+import base64
+import json
 import random
+import secrets as scrts
+import uuid
 from typing import List
 
 import requests
@@ -15,6 +19,7 @@ from core.base import (
 )
 from core.db import Database
 from core.secp import PublicKey
+from core.settings import DEBUG
 from core.split import amount_split
 from wallet.crud import get_proofs, invalidate_proof, store_proof, update_proof_reserved
 
@@ -52,6 +57,10 @@ class LedgerAPI:
             proofs.append(proof)
         return proofs
 
+    def _generate_secret(self, randombits=128):
+        """Returns base64 encoded random string."""
+        return scrts.token_urlsafe(randombits // 8)
+
     def request_mint(self, amount):
         """Requests a mint from the server and returns Lightning invoice."""
         r = requests.get(self.url + "/mint", params={"amount": amount})
@@ -63,7 +72,7 @@ class LedgerAPI:
         secrets = []
         rs = []
         for amount in amounts:
-            secret = str(random.getrandbits(128))
+            secret = self._generate_secret()
             secrets.append(secret)
             B_, r = b_dhke.step1_bob(secret)
             rs.append(r)
@@ -91,7 +100,7 @@ class LedgerAPI:
         secrets = []
         payloads: MintPayloads = MintPayloads()
         for output_amt in fst_outputs + snd_outputs:
-            secret = str(random.getrandbits(128))
+            secret = self._generate_secret()
             B_, r = b_dhke.step1_bob(secret)
             secrets.append((r, secret))
             payload: BlindedMessage = BlindedMessage(
@@ -186,6 +195,14 @@ class Wallet(LedgerAPI):
             raise Exception("could not pay invoice.")
         return status["paid"]
 
+    @staticmethod
+    async def serialize_proofs(proofs: List[Proof]):
+        proofs_serialized = [p.to_dict() for p in proofs]
+        token = base64.urlsafe_b64encode(
+            json.dumps(proofs_serialized).encode()
+        ).decode()
+        return token
+
     async def split_to_send(self, proofs: List[Proof], amount):
         """Like self.split but only considers non-reserved tokens."""
         if len([p for p in proofs if not p.reserved]) <= 0:
@@ -194,9 +211,12 @@ class Wallet(LedgerAPI):
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
         """Mark a proof as reserved to avoid reuse or delete marking."""
+        uuid_str = str(uuid.uuid1())
         for proof in proofs:
             proof.reserved = True
-            await update_proof_reserved(proof, reserved=reserved, db=self.db)
+            await update_proof_reserved(
+                proof, reserved=reserved, send_id=uuid_str, db=self.db
+            )
 
     async def check_spendable(self, proofs):
         return await super().check_spendable(proofs)

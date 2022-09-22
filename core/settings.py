@@ -1,9 +1,15 @@
+from pathlib import Path
+
 from environs import Env  # type: ignore
 
 env = Env()
 env.read_env()
 
 DEBUG = env.bool("DEBUG", default=False)
+CASHU_DIR = env.str("CASHU_DIR", default="~/.cashu")
+CASHU_DIR = CASHU_DIR.replace("~", str(Path.home()))
+assert len(CASHU_DIR), "CASHU_DIR not defined"
+
 LIGHTNING = env.bool("LIGHTNING", default=True)
 LIGHTNING_FEE_PERCENT = env.float("LIGHTNING_FEE_PERCENT", default=1.0)
 assert LIGHTNING_FEE_PERCENT >= 0, "LIGHTNING_FEE_PERCENT must be at least 0"

@@ -6,9 +6,12 @@ from pydantic import BaseModel
 
 class Proof(BaseModel):
     amount: int
-    C: str
     secret: str
+    C: str
     reserved: bool = False  # whether this proof is reserved for sending
+    send_id: str = ""  # unique ID of send attempt
+    time_created: str = ""
+    time_reserved: str = ""
 
     @classmethod
     def from_row(cls, row: Row):
@@ -17,16 +20,27 @@ class Proof(BaseModel):
             C=row[1],
             secret=row[2],
             reserved=row[3] or False,
+            send_id=row[4] or "",
+            time_created=row[5] or "",
+            time_reserved=row[6] or "",
         )
 
     @classmethod
     def from_dict(cls, d: dict):
+        assert "secret" in d, "no secret in proof"
+        assert "amount" in d, "no amount in proof"
         return cls(
-            amount=d["amount"],
-            C=d["C"],
-            secret=d["secret"],
-            reserved=d["reserved"] or False,
+            amount=d.get("amount"),
+            C=d.get("C"),
+            secret=d.get("secret"),
+            reserved=d.get("reserved") or False,
+            send_id=d.get("send_id") or "",
+            time_created=d.get("time_created") or "",
+            time_reserved=d.get("time_reserved") or "",
         )
+
+    def to_dict(self):
+        return dict(amount=self.amount, secret=self.secret, C=self.C)
 
     def __getitem__(self, key):
         return self.__getattribute__(key)

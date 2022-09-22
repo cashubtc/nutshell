@@ -68,3 +68,14 @@ async def m002_add_proofs_reserved(db):
     """
 
     await db.execute("ALTER TABLE proofs ADD COLUMN reserved BOOL")
+
+
+async def m003_add_proofs_sendid_and_timestamps(db):
+    """
+    Column with unique ID for each initiated send attempt
+    so proofs can be later grouped together for each send attempt.
+    """
+    await db.execute("ALTER TABLE proofs ADD COLUMN send_id TEXT")
+    await db.execute("ALTER TABLE proofs ADD COLUMN time_created TIMESTAMP")
+    await db.execute("ALTER TABLE proofs ADD COLUMN time_reserved TIMESTAMP")
+    await db.execute("ALTER TABLE proofs_used ADD COLUMN time_used TIMESTAMP")
