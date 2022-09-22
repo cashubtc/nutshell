@@ -5,7 +5,6 @@ import base64
 import json
 import math
 from datetime import datetime
-
 from functools import wraps
 from itertools import groupby
 from operator import itemgetter
@@ -18,7 +17,7 @@ from core.base import Proof
 from core.bolt11 import Invoice
 from core.helpers import fee_reserve
 from core.migrations import migrate_databases
-from core.settings import CASHU_DIR, LIGHTNING, MINT_URL
+from core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL
 from wallet import migrations
 from wallet.crud import get_reserved_proofs
 from wallet.wallet import Wallet as Wallet

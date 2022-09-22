@@ -1,25 +1,21 @@
 import base64
 import json
 import random
+import secrets as scrts
 import uuid
 from typing import List
 
 import requests
 
 import core.b_dhke as b_dhke
-from core.base import (
-    BlindedMessage,
-    BlindedSignature,
-    CheckPayload,
-    MeltPayload,
-    MintPayloads,
-    Proof,
-    SplitPayload,
-)
+from core.base import (BlindedMessage, BlindedSignature, CheckPayload,
+                       MeltPayload, MintPayloads, Proof, SplitPayload)
 from core.db import Database
 from core.secp import PublicKey
+from core.settings import DEBUG
 from core.split import amount_split
-from wallet.crud import get_proofs, invalidate_proof, store_proof, update_proof_reserved
+from wallet.crud import (get_proofs, invalidate_proof, store_proof,
+                         update_proof_reserved)
 
 
 class LedgerAPI:
@@ -55,6 +51,10 @@ class LedgerAPI:
             proofs.append(proof)
         return proofs
 
+    def _generate_secret(self, randombits=128):
+        """Returns base64 encoded random string."""
+        return scrts.token_urlsafe(randombits // 8)
+
     def request_mint(self, amount):
         """Requests a mint from the server and returns Lightning invoice."""
         r = requests.get(self.url + "/mint", params={"amount": amount})
@@ -66,7 +66,7 @@ class LedgerAPI:
         secrets = []
         rs = []
         for amount in amounts:
-            secret = str(random.getrandbits(128))
+            secret = self._generate_secret()
             secrets.append(secret)
             B_, r = b_dhke.step1_bob(secret)
             rs.append(r)
@@ -94,7 +94,7 @@ class LedgerAPI:
         secrets = []
         payloads: MintPayloads = MintPayloads()
         for output_amt in fst_outputs + snd_outputs:
-            secret = str(random.getrandbits(128))
+            secret = self._generate_secret()
             B_, r = b_dhke.step1_bob(secret)
             secrets.append((r, secret))
             payload: BlindedMessage = BlindedMessage(
@@ -191,7 +191,9 @@ class Wallet(LedgerAPI):
 
     @staticmethod
     async def serialize_proofs(proofs: List[Proof]):
-        proofs_serialized = [p.dict() for p in proofs]
+        proofs_serialized = [p.to_dict() for p in proofs]
+        if DEBUG:
+            print(proofs_serialized)
         token = base64.urlsafe_b64encode(
             json.dumps(proofs_serialized).encode()
         ).decode()

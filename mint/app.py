@@ -11,12 +11,8 @@ from secp256k1 import PublicKey
 
 import core.settings as settings
 from core.base import CheckPayload, MeltPayload, MintPayloads, SplitPayload
-from core.settings import (
-    CASHU_DIR,
-    MINT_PRIVATE_KEY,
-    MINT_SERVER_HOST,
-    MINT_SERVER_PORT,
-)
+from core.settings import (CASHU_DIR, MINT_PRIVATE_KEY, MINT_SERVER_HOST,
+                           MINT_SERVER_PORT)
 from lightning import WALLET
 from mint.ledger import Ledger
 from mint.migrations import m001_initial
