@@ -40,11 +40,7 @@ class NaturalOrderGroup(click.Group):
 @click.option("--host", "-h", default=MINT_URL, help="Mint address.")
 @click.option("--wallet", "-w", "walletname", default="wallet", help="Wallet to use.")
 @click.pass_context
-def cli(
-    ctx,
-    host: str,
-    walletname: str,
-):
+def cli(ctx, host: str, walletname: str):
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
@@ -127,17 +123,27 @@ async def receive(ctx, token: str):
 @cli.command("burn", help="Burn spent tokens.")
 @click.argument("token", required=False, type=str)
 @click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent tokens.")
+@click.option(
+    "--force", "-f", default=False, is_flag=True, help="Force check on all tokens."
+)
 @click.pass_context
 @coro
-async def burn(ctx, token: str, all: bool):
+async def burn(ctx, token: str, all: bool, force: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await init_wallet(wallet)
-    if not (all or token) or (token and all):
-        print("Error: enter a token or use --all to burn all pending tokens.")
+    if not (all or token or force) or (token and all):
+        print(
+            "Error: enter a token or use --all to burn all pending tokens or --force to check all tokens."
+        )
         return
     if all:
+        # check only those who are flagged as reserved
         proofs = await get_reserved_proofs(wallet.db)
+    if force:
+        # check all proofs in db
+        proofs = wallet.proofs
     else:
+        # check only the specified ones
         proofs = [
             Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))
         ]
@@ -191,3 +197,16 @@ async def pay(ctx, invoice: str):
     _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
     await wallet.pay_lightning(send_proofs, amount, invoice)
     wallet.status()
+
+
+@cli.command("info", help="Information about Cashu wallet.")
+@click.pass_context
+@coro
+async def info(ctx):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await init_wallet(wallet)
+    wallet.status()
+    print(f"Debug: {DEBUG}")
+    print(f"Cashu dir: {CASHU_DIR}")
+    print(f"Mint URL: {MINT_URL}")
+    return
