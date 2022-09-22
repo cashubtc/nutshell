@@ -8,14 +8,20 @@ from typing import List
 import requests
 
 import core.b_dhke as b_dhke
-from core.base import (BlindedMessage, BlindedSignature, CheckPayload,
-                       MeltPayload, MintPayloads, Proof, SplitPayload)
+from core.base import (
+    BlindedMessage,
+    BlindedSignature,
+    CheckPayload,
+    MeltPayload,
+    MintPayloads,
+    Proof,
+    SplitPayload,
+)
 from core.db import Database
 from core.secp import PublicKey
 from core.settings import DEBUG
 from core.split import amount_split
-from wallet.crud import (get_proofs, invalidate_proof, store_proof,
-                         update_proof_reserved)
+from wallet.crud import get_proofs, invalidate_proof, store_proof, update_proof_reserved
 
 
 class LedgerAPI:
@@ -192,8 +198,6 @@ class Wallet(LedgerAPI):
     @staticmethod
     async def serialize_proofs(proofs: List[Proof]):
         proofs_serialized = [p.to_dict() for p in proofs]
-        if DEBUG:
-            print(proofs_serialized)
         token = base64.urlsafe_b64encode(
             json.dumps(proofs_serialized).encode()
         ).decode()
