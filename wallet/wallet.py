@@ -80,14 +80,14 @@ class LedgerAPI:
                 amount=amount, B_=B_.serialize().hex()
             )
             payloads.blinded_messages.append(payload)
-        promises_dict = requests.post(
+        promises_list = requests.post(
             self.url + "/mint",
             json=payloads.dict(),
             params={"payment_hash": payment_hash},
         ).json()
-        if "error" in promises_dict:
-            raise Exception("Error: {}".format(promises_dict["error"]))
-        promises = [BlindedSignature.from_dict(p) for p in promises_dict]
+        if "error" in promises_list:
+            raise Exception("Error: {}".format(promises_list["error"]))
+        promises = [BlindedSignature.from_dict(p) for p in promises_list]
         return self._construct_proofs(promises, [(r, s) for r, s in zip(rs, secrets)])
 
     def split(self, proofs, amount):

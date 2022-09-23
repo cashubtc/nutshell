@@ -139,7 +139,7 @@ async def burn(ctx, token: str, all: bool, force: bool):
     if all:
         # check only those who are flagged as reserved
         proofs = await get_reserved_proofs(wallet.db)
-    if force:
+    elif force:
         # check all proofs in db
         proofs = wallet.proofs
     else:
