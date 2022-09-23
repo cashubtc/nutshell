@@ -6,7 +6,7 @@ Alice:
 A = a*G
 return A
 Bob:
-Y = hash_to_curve(secret_message)
+Y = hash_to_point(secret_message)
 r = random blinding factor
 B'= Y + r*G
 return B'
@@ -20,7 +20,7 @@ C = C' - r*A
  (= a*Y)
 return C, secret_message
 Alice:
-Y = hash_to_curve(secret_message)
+Y = hash_to_point(secret_message)
 C == a*Y
 If true, C must have originated from Alice
 """
@@ -30,7 +30,7 @@ import hashlib
 from secp256k1 import PrivateKey, PublicKey
 
 
-def hash_to_curve(secret_msg):
+def hash_to_point(secret_msg):
     """Generates x coordinate from the message hash and checks if the point lies on the curve.
     If it does not, it tries computing again a new x coordinate from the hash of the coordinate."""
     point = None
@@ -49,26 +49,26 @@ def hash_to_curve(secret_msg):
     return point
 
 
-def step1_bob(secret_msg):
+def step1_alice(secret_msg):
     secret_msg = secret_msg.encode("utf-8")
-    Y = hash_to_curve(secret_msg)
+    Y = hash_to_point(secret_msg)
     r = PrivateKey()
     B_ = Y + r.pubkey
     return B_, r
 
 
-def step2_alice(B_, a):
+def step2_bob(B_, a):
     C_ = B_.mult(a)
     return C_
 
 
-def step3_bob(C_, r, A):
+def step3_alice(C_, r, A):
     C = C_ - A.mult(r)
     return C
 
 
 def verify(a, C, secret_msg):
-    Y = hash_to_curve(secret_msg.encode("utf-8"))
+    Y = hash_to_point(secret_msg.encode("utf-8"))
     return C == Y.mult(a)
 
 
@@ -78,9 +78,9 @@ def verify(a, C, secret_msg):
 # a = PrivateKey()
 # A = a.pubkey
 # secret_msg = "test"
-# B_, r = step1_bob(secret_msg)
-# C_ = step2_alice(B_, a)
-# C = step3_bob(C_, r, A)
+# B_, r = step1_alice(secret_msg)
+# C_ = step2_bob(B_, a)
+# C = step3_alice(C_, r, A)
 # print("C:{}, secret_msg:{}".format(C, secret_msg))
 # assert verify(a, C, secret_msg)
 # assert verify(a, C + C, secret_msg) == False  # adding C twice shouldn't pass

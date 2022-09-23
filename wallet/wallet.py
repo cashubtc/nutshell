@@ -52,7 +52,7 @@ class LedgerAPI:
         proofs = []
         for promise, (r, secret) in zip(promises, secrets):
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
-            C = b_dhke.step3_bob(C_, r, self.keys[promise.amount])
+            C = b_dhke.step3_alice(C_, r, self.keys[promise.amount])
             proof = Proof(amount=promise.amount, C=C.serialize().hex(), secret=secret)
             proofs.append(proof)
         return proofs
@@ -74,20 +74,20 @@ class LedgerAPI:
         for amount in amounts:
             secret = self._generate_secret()
             secrets.append(secret)
-            B_, r = b_dhke.step1_bob(secret)
+            B_, r = b_dhke.step1_alice(secret)
             rs.append(r)
             payload: BlindedMessage = BlindedMessage(
                 amount=amount, B_=B_.serialize().hex()
             )
             payloads.blinded_messages.append(payload)
-        promises_dict = requests.post(
+        promises_list = requests.post(
             self.url + "/mint",
             json=payloads.dict(),
             params={"payment_hash": payment_hash},
         ).json()
-        if "error" in promises_dict:
-            raise Exception("Error: {}".format(promises_dict["error"]))
-        promises = [BlindedSignature.from_dict(p) for p in promises_dict]
+        if "error" in promises_list:
+            raise Exception("Error: {}".format(promises_list["error"]))
+        promises = [BlindedSignature.from_dict(p) for p in promises_list]
         return self._construct_proofs(promises, [(r, s) for r, s in zip(rs, secrets)])
 
     def split(self, proofs, amount):
@@ -101,7 +101,7 @@ class LedgerAPI:
         payloads: MintPayloads = MintPayloads()
         for output_amt in fst_outputs + snd_outputs:
             secret = self._generate_secret()
-            B_, r = b_dhke.step1_bob(secret)
+            B_, r = b_dhke.step1_alice(secret)
             secrets.append((r, secret))
             payload: BlindedMessage = BlindedMessage(
                 amount=output_amt, B_=B_.serialize().hex()
@@ -159,7 +159,7 @@ class Wallet(LedgerAPI):
     async def request_mint(self, amount):
         return super().request_mint(amount)
 
-    async def mint(self, amount, payment_hash=None):
+    async def mint(self, amount: int, payment_hash: str = None):
         split = amount_split(amount)
         proofs = super().mint(split, payment_hash)
         if proofs == []:
