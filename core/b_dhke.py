@@ -49,7 +49,7 @@ def hash_to_curve(secret_msg):
     return point
 
 
-def step1_bob(secret_msg):
+def step1_alice(secret_msg):
     secret_msg = secret_msg.encode("utf-8")
     Y = hash_to_curve(secret_msg)
     r = PrivateKey()
@@ -57,12 +57,12 @@ def step1_bob(secret_msg):
     return B_, r
 
 
-def step2_alice(B_, a):
+def step2_bob(B_, a):
     C_ = B_.mult(a)
     return C_
 
 
-def step3_bob(C_, r, A):
+def step3_alice(C_, r, A):
     C = C_ - A.mult(r)
     return C
 
@@ -78,9 +78,9 @@ def verify(a, C, secret_msg):
 # a = PrivateKey()
 # A = a.pubkey
 # secret_msg = "test"
-# B_, r = step1_bob(secret_msg)
-# C_ = step2_alice(B_, a)
-# C = step3_bob(C_, r, A)
+# B_, r = step1_alice(secret_msg)
+# C_ = step2_bob(B_, a)
+# C = step3_alice(C_, r, A)
 # print("C:{}, secret_msg:{}".format(C, secret_msg))
 # assert verify(a, C, secret_msg)
 # assert verify(a, C + C, secret_msg) == False  # adding C twice shouldn't pass

@@ -13,9 +13,14 @@ from core.secp import PrivateKey, PublicKey
 from core.settings import LIGHTNING, MAX_ORDER
 from core.split import amount_split
 from lightning import WALLET
-from mint.crud import (get_lightning_invoice, get_proofs_used,
-                       invalidate_proof, store_lightning_invoice,
-                       store_promise, update_lightning_invoice)
+from mint.crud import (
+    get_lightning_invoice,
+    get_proofs_used,
+    invalidate_proof,
+    store_lightning_invoice,
+    store_promise,
+    update_lightning_invoice,
+)
 
 
 class Ledger:
@@ -58,7 +63,7 @@ class Ledger:
     async def _generate_promise(self, amount: int, B_: PublicKey):
         """Generates a promise for given amount and returns a pair (amount, C')."""
         secret_key = self.keys[amount]  # Get the correct key
-        C_ = b_dhke.step2_alice(B_, secret_key)
+        C_ = b_dhke.step2_bob(B_, secret_key)
         await store_promise(
             amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
         )
