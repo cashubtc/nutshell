@@ -6,6 +6,9 @@
 
 Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding. Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down by Ruben Somsen [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
 
+## Cashu client protocol
+There are ongoing efforts to implement alternative Cashu clients that use the same protocol such as a [Cashu Javascript wallet](https://github.com/motorina0/cashu-js-wallet). If you are interested in helping with Cashu development, please see the [docs](docs/) for the notation and conventions used. 
+
 ## Easy Install
 
 The easiest way to use Cashu is to install the package it via pip:
