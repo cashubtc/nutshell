@@ -97,6 +97,7 @@ class LedgerAPI:
         fst_outputs = amount_split(fst_amt)
         snd_outputs = amount_split(snd_amt)
 
+        # TODO: Refactor together with the same procedure in self.mint()
         secrets = []
         payloads: MintPayloads = MintPayloads()
         for output_amt in fst_outputs + snd_outputs:
