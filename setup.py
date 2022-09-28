@@ -9,7 +9,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 with open("requirements.txt") as f:
     requirements = f.read().splitlines()
 
-entry_points = {"console_scripts": ["cashu = wallet.cashu:cli"]}
+entry_points = {"console_scripts": ["cashu = cahu.wallet.cashu:cli"]}
 
 setuptools.setup(
     name="cashu",
