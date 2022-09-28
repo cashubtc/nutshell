@@ -27,7 +27,9 @@ The easiest way to use Cashu is to install the package it via pip:
 pip install cashu
 ```
 
-To update Cashu, use `pip install cashu -U`. If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config libpq-dev`. On macOS, run `brew install postgresql`.
+To update Cashu, use `pip install cashu -U`. 
+
+If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config libpq-dev`. On macOS, run `brew install postgresql`.
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 
@@ -107,17 +109,17 @@ cashu mint 420
 ```
 Returns:
 ```bash
-Balance: 0 sat (Available: 0 sat in 0 tokens)
-{
-    'pr': 'lnbc4200n1p3jp5clsp5vcfkyqtnkcx9287auhesqwj40che77pd4ymaltc3ruazh3vcgs3qpp5qzwkavpd4pmfkdmq9trdnrk2lswkt0fypqg55h2sucx6yq9ushzsdq4vdshx6r4ypjx2ur0wd5hgxqyjw5qcqpjrzjq0qly7quwdwq2wr52et5gl65dagdgqdwgn9an58mhejnsvmmu996xzetgvqqwzcqqqqqqqqqqqqqqqqq9q9qyysgqfjwnl4za4naf7l2wwcck2gk6y9mvjt5dz9gptfkpl0j50ygkdkuxyjcy3zgd2tk4995yw8gx39cx2qwm9dgwc0t9t6hrgvjzauykqrqpgw0xx3', 
-    'hash': '009d6eb02da8769b37602ac6d98ecafc1d65bd2408114a5d50e60da200bc85c5'
-}
+Pay this invoice to mint 420 sat:
+Invoice: lnbc4200n1p3nfk7zsp522g8wlsx9cvmhtyuyuae48nvreew9x9f8kkqhd2v2umrdtwl2ysspp5w2w6jvcnz4ftcwsxtad5kv3yev62pcp5cvq42dqqrmwtr2k6mk8qdq4vdshx6r4ypjx2ur0wd5hgxqyjw5qcqpjrzjqfe5jlwxmwt4sa4s8mqjqp8qtreqant6mqwwkts46dtawvncjwvhczurxgqqvvgqqqqqqqqnqqqqqzgqyg9qyysgqzaus4lsfs3zzk4ehdzrkxzv8ryu2yxppxyjrune3nks2dgrnua6nv7lsztmyjaf96xp569tf7rxdmfud5q45zmr4xue5hjple6xhcrcpfmveag
+
+After paying the invoice, run this command:
+cashu mint 420 --hash 729da933131552bc3a065f5b4b3224cb34a0e034c3015534001edcb1aadadd8e
 ```
 
 #### Mint tokens
 After paying the invoice, copy the `hash` value from above and add it to the command
 ```bash
-cashu mint 420 --hash=009d6eb02da8769b37602ac6d98ecafc1d65bd2408114a5d50e60da200bc85c5
+cashu mint 420 --hash 729da933131552bc3a065f5b4b3224cb34a0e034c3015534001edcb1aadadd8e
 ```
 You should see your balance update accordingly:
 ```bash
@@ -168,6 +170,29 @@ Returns:
 Balance: 420 sat (Available: 351 sat in 7 tokens)
 Balance: 351 sat (Available: 351 sat in 7 tokens)
 ```
+Use `cashu burn -a` to burn all used tokens or `cashu burn -f` to force a spent recheck on all tokens and burn them is they are used. This command is safe to use, it won't burn unspent tokens.
+
+#### Check pending tokens
+```bash
+cashu pending
+```
+Returns
+```bash
+Amount: 64 sat Sent: 2022-09-28 06:53:03 ID: 33025ade-3efa-11ed-9096-16a10f0dbf61
+
+W3siYW1vdW50Ijog...
+
+Amount: 64 sat Sent: 2022-09-28 06:57:25 ID: cf588354-3efa-11ed-b5ec-16a10f0dbf61
+
+W3siYW1vdW50Ijog...
+
+Amount: 128 sat Sent: 2022-09-28 09:57:43 ID: fef371fa-3f13-11ed-b31a-16a10f0dbf61
+
+W3siYW1vdW50Ij...
+
+Balance: 1234 sat (Available: 1234 sat in 7 tokens)
+```
+You can either burn these tokens manually when the receiver has redeemed them, or you can receive them yourself if you want to cancel a pending payment.
 
 #### Pay a Lightning invoice
 ```bash
@@ -182,7 +207,7 @@ Balance: 339 sat (Available: 339 sat in 8 tokens)
 # Running a mint
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
 ```bash
-mint
+python -m cashu.mint
 ```
 
 You can turn off Lightning support and mint as many tokens as you like by setting `LIGHTNING=FALSE` in the `.env` file.
