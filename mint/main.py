@@ -41,7 +41,7 @@ def main(
             d[a.strip("--")] = True  # argument like --key
 
     config = uvicorn.Config(
-        "mint.__main__:app",
+        "mint.app:app",
         port=port,
         host=host,
         ssl_keyfile=ssl_keyfile,

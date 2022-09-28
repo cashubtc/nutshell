@@ -1,19 +1,14 @@
 import asyncio
 import logging
 import sys
-from typing import Union
 
 
 from fastapi import FastAPI
 from loguru import logger
-from secp256k1 import PublicKey
 
-import core.settings as settings
-from core.settings import (
-    CASHU_DIR,
-)
+from core.settings import CASHU_DIR, DEBUG
+
 from lightning import WALLET
-from mint.ledger import Ledger
 from mint.migrations import m001_initial
 
 from . import ledger
@@ -43,7 +38,7 @@ def create_app(config_object="core.settings") -> FastAPI:
             def __init__(self):
                 self.padding = 0
                 self.minimal_fmt: str = "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level}</level> | <level>{message}</level>\n"
-                if settings.DEBUG:
+                if DEBUG:
                     self.fmt: str = "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level: <4}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>\n"
                 else:
                     self.fmt: str = self.minimal_fmt
@@ -87,3 +82,5 @@ def create_app(config_object="core.settings") -> FastAPI:
 
 # if __name__ == "__main__":
 #     main()
+
+app = create_app()

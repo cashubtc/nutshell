@@ -1,7 +1,6 @@
-from .app import create_app, main
+from .main import main
 
 print("main")
 
-app = create_app()
 
-# main()
+main()
