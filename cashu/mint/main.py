@@ -1,10 +1,7 @@
 import click
 import uvicorn
 
-from cashu.core.settings import (
-    MINT_SERVER_HOST,
-    MINT_SERVER_PORT,
-)
+from cashu.core.settings import MINT_SERVER_HOST, MINT_SERVER_PORT
 
 
 @click.command(

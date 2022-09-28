@@ -1,8 +1,10 @@
-from fastapi import APIRouter
-from cashu.mint import ledger
-from cashu.core.base import CheckPayload, MeltPayload, MintPayloads, SplitPayload
 from typing import Union
+
+from fastapi import APIRouter
 from secp256k1 import PublicKey
+
+from cashu.core.base import CheckPayload, MeltPayload, MintPayloads, SplitPayload
+from cashu.mint import ledger
 
 router: APIRouter = APIRouter()
 

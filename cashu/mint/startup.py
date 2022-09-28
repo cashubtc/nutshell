@@ -1,8 +1,8 @@
 import asyncio
+
 from loguru import logger
 
 from cashu.core.settings import CASHU_DIR
-
 from cashu.lightning import WALLET
 from cashu.mint.migrations import m001_initial
 

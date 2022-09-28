@@ -2,12 +2,10 @@ import asyncio
 import logging
 import sys
 
-
 from fastapi import FastAPI
 from loguru import logger
 
 from cashu.core.settings import CASHU_DIR, DEBUG
-
 from cashu.lightning import WALLET
 from cashu.mint.migrations import m001_initial
 
