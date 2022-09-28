@@ -17,7 +17,7 @@ from cashu.core.base import Proof
 from cashu.core.bolt11 import Invoice
 from cashu.core.helpers import fee_reserve
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL
+from cashu.core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL, VERSION
 from cashu.wallet import migrations
 from cashu.wallet.crud import get_reserved_proofs
 from cashu.wallet.wallet import Wallet as Wallet
@@ -203,9 +203,7 @@ async def pay(ctx, invoice: str):
 @click.pass_context
 @coro
 async def info(ctx):
-    wallet: Wallet = ctx.obj["WALLET"]
-    await init_wallet(wallet)
-    wallet.status()
+    print(f"Version: {VERSION}")
     print(f"Debug: {DEBUG}")
     print(f"Cashu dir: {CASHU_DIR}")
     print(f"Mint URL: {MINT_URL}")
