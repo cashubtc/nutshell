@@ -5,7 +5,7 @@ import sys
 from fastapi import FastAPI
 from loguru import logger
 
-from cashu.core.settings import CASHU_DIR, DEBUG
+from cashu.core.settings import VERSION, DEBUG
 from cashu.lightning import WALLET
 from cashu.mint.migrations import m001_initial
 
@@ -51,7 +51,8 @@ def create_app(config_object="core.settings") -> FastAPI:
 
     app = FastAPI(
         title="Cashu Mint",
-        description="Ecash wallet and mint.",
+        description="Ecash wallet and mint with Bitcoin Lightning support.",
+        version=VERSION,
         license_info={
             "name": "MIT License",
             "url": "https://raw.githubusercontent.com/callebtc/cashu/main/LICENSE",
