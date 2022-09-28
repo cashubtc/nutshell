@@ -1,20 +1,20 @@
-# cashu
+# cashu  
 
 **Cashu is a Chaumian Ecash wallet and mint with Bitcoin Lightning support.**
+
+<a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a>
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
 
 Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding. Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down by Ruben Somsen [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
 
 <p align="center">
-Quick links:
 <a href="#cashu-client-protocol">Cashu client protocol</a> ·
 <a href="#easy-install">Quick Install</a> ·
 <a href="#hard-install-poetry">Manual install</a> ·
 <a href="#configuration">Configuration</a> ·
 <a href="#using-cashu">Using Cashu</a> ·
 <a href="#running-a-mint">Run a mint</a>
-<br><br>    
 </p>
 
 ## Cashu client protocol
