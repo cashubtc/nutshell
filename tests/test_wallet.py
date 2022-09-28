@@ -1,10 +1,8 @@
-import asyncio
-
-from core.helpers import async_unwrap
-from core.migrations import migrate_databases
-from wallet import migrations
-from wallet.wallet import Wallet as Wallet1
-from wallet.wallet import Wallet as Wallet2
+from cashu.core.helpers import async_unwrap
+from cashu.core.migrations import migrate_databases
+from cashu.wallet import migrations
+from cashu.wallet.wallet import Wallet as Wallet1
+from cashu.wallet.wallet import Wallet as Wallet2
 
 SERVER_ENDPOINT = "http://localhost:3338"
 
@@ -29,7 +27,7 @@ async def run_test():
     await migrate_databases(wallet1.db, migrations)
     wallet1.status()
 
-    wallet2 = Wallet1(SERVER_ENDPOINT, "data/wallet2", "wallet2")
+    wallet2 = Wallet2(SERVER_ENDPOINT, "data/wallet2", "wallet2")
     await migrate_databases(wallet2.db, migrations)
     wallet2.status()
 

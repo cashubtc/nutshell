@@ -1,8 +1,8 @@
 import secrets
 from typing import Optional
 
-from core.base import Invoice, Proof
-from core.db import Connection, Database
+from cashu.core.base import Invoice, Proof
+from cashu.core.db import Connection, Database
 
 
 async def store_promise(

@@ -12,15 +12,15 @@ from operator import itemgetter
 import click
 from bech32 import bech32_decode, bech32_encode, convertbits
 
-import core.bolt11 as bolt11
-from core.base import Proof
-from core.bolt11 import Invoice
-from core.helpers import fee_reserve
-from core.migrations import migrate_databases
-from core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL
-from wallet import migrations
-from wallet.crud import get_reserved_proofs
-from wallet.wallet import Wallet as Wallet
+import cashu.core.bolt11 as bolt11
+from cashu.core.base import Proof
+from cashu.core.bolt11 import Invoice
+from cashu.core.helpers import fee_reserve
+from cashu.core.migrations import migrate_databases
+from cashu.core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL, VERSION
+from cashu.wallet import migrations
+from cashu.wallet.crud import get_reserved_proofs
+from cashu.wallet.wallet import Wallet as Wallet
 
 
 async def init_wallet(wallet: Wallet):
@@ -203,9 +203,7 @@ async def pay(ctx, invoice: str):
 @click.pass_context
 @coro
 async def info(ctx):
-    wallet: Wallet = ctx.obj["WALLET"]
-    await init_wallet(wallet)
-    wallet.status()
+    print(f"Version: {VERSION}")
     print(f"Debug: {DEBUG}")
     print(f"Cashu dir: {CASHU_DIR}")
     print(f"Mint URL: {MINT_URL}")

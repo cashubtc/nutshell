@@ -9,11 +9,11 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 with open("requirements.txt") as f:
     requirements = f.read().splitlines()
 
-entry_points = {"console_scripts": ["cashu = wallet.cashu:cli"]}
+entry_points = {"console_scripts": ["cashu = cahu.wallet.cli:cli"]}
 
 setuptools.setup(
     name="cashu",
-    version="0.1.9",
+    version="0.1.10",
     description="Ecash wallet and mint with Bitcoin Lightning support",
     long_description=long_description,
     long_description_content_type="text/markdown",

@@ -1,14 +1,13 @@
 import base64
 import json
-import random
 import secrets as scrts
 import uuid
 from typing import List
 
 import requests
 
-import core.b_dhke as b_dhke
-from core.base import (
+import cashu.core.b_dhke as b_dhke
+from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
     CheckPayload,
@@ -17,11 +16,16 @@ from core.base import (
     Proof,
     SplitPayload,
 )
-from core.db import Database
-from core.secp import PublicKey
-from core.settings import DEBUG
-from core.split import amount_split
-from wallet.crud import get_proofs, invalidate_proof, store_proof, update_proof_reserved
+from cashu.core.db import Database
+from cashu.core.secp import PublicKey
+from cashu.core.settings import DEBUG
+from cashu.core.split import amount_split
+from cashu.wallet.crud import (
+    get_proofs,
+    invalidate_proof,
+    store_proof,
+    update_proof_reserved,
+)
 
 
 class LedgerAPI:
@@ -97,6 +101,7 @@ class LedgerAPI:
         fst_outputs = amount_split(fst_amt)
         snd_outputs = amount_split(snd_amt)
 
+        # TODO: Refactor together with the same procedure in self.mint()
         secrets = []
         payloads: MintPayloads = MintPayloads()
         for output_amt in fst_outputs + snd_outputs:

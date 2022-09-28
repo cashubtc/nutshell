@@ -5,15 +5,15 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 import hashlib
 from typing import List, Set
 
-import core.b_dhke as b_dhke
-from core.base import BlindedMessage, BlindedSignature, Invoice, Proof
-from core.db import Database
-from core.helpers import fee_reserve
-from core.secp import PrivateKey, PublicKey
-from core.settings import LIGHTNING, MAX_ORDER
-from core.split import amount_split
-from lightning import WALLET
-from mint.crud import (
+import cashu.core.b_dhke as b_dhke
+from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof
+from cashu.core.db import Database
+from cashu.core.helpers import fee_reserve
+from cashu.core.secp import PrivateKey, PublicKey
+from cashu.core.settings import LIGHTNING, MAX_ORDER
+from cashu.core.split import amount_split
+from cashu.lightning import WALLET
+from cashu.mint.crud import (
     get_lightning_invoice,
     get_proofs_used,
     invalidate_proof,
