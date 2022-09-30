@@ -227,30 +227,33 @@ class Ledger:
         return {i: self._check_spendable(p) for i, p in enumerate(proofs)}
 
     async def split(
-        self, proofs: List[Proof], amount: int, output_data: List[BlindedMessage]
+        self, proofs: List[Proof], amount: int, outputs: List[BlindedMessage]
     ):
         """Consumes proofs and prepares new promises based on the amount split."""
-        self._verify_split_amount(amount)
-        # Verify proofs are valid
-        if not all([self._verify_proof(p) for p in proofs]):
-            return False
-
         total = sum([p.amount for p in proofs])
 
-        if not self._verify_no_duplicates(proofs, output_data):
-            raise Exception("duplicate proofs or promises")
+        # verify that amount is kosher
+        self._verify_split_amount(amount)
+        # verify overspending attempt
         if amount > total:
-            raise Exception("split amount is higher than the total sum")
-        if not self._verify_outputs(total, amount, output_data):
-            raise Exception("split of promises is not as expected")
+            raise Exception("split amount is higher than the total sum.")
+        # verify that only unique proofs and outputs were used
+        if not self._verify_no_duplicates(proofs, outputs):
+            raise Exception("duplicate proofs or promises")
+        # verify that outputs have the correct amount
+        if not self._verify_outputs(total, amount, outputs):
+            raise Exception("split of promises is not as expected.")
+        # Verify proofs
+        if not all([self._verify_proof(p) for p in proofs]):
+            raise Exception("could not verify proofs.")
 
         # Mark proofs as used and prepare new promises
         await self._invalidate_proofs(proofs)
 
         outs_fst = amount_split(total - amount)
         outs_snd = amount_split(amount)
-        B_fst = [od.B_ for od in output_data[: len(outs_fst)]]
-        B_snd = [od.B_ for od in output_data[len(outs_fst) :]]
+        B_fst = [od.B_ for od in outputs[: len(outs_fst)]]
+        B_snd = [od.B_ for od in outputs[len(outs_fst) :]]
         prom_fst, prom_snd = await self._generate_promises(
             outs_fst, B_fst
         ), await self._generate_promises(outs_snd, B_snd)

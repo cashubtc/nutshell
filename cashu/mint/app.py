@@ -40,7 +40,7 @@ def create_app(config_object="core.settings") -> FastAPI:
                 logger.log(level, record.getMessage())
 
         logger.remove()
-        log_level: str = "INFO"
+        log_level: str = "DEBUG" if DEBUG else "INFO"
         formatter = Formatter()
         logger.add(sys.stderr, level=log_level, format=formatter.format)
 

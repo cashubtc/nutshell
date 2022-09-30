@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 from environs import Env  # type: ignore
@@ -6,6 +7,9 @@ env = Env()
 env.read_env()
 
 DEBUG = env.bool("DEBUG", default=False)
+if not DEBUG:
+    sys.tracebacklimit = 0
+
 CASHU_DIR = env.str("CASHU_DIR", default="~/.cashu")
 CASHU_DIR = CASHU_DIR.replace("~", str(Path.home()))
 assert len(CASHU_DIR), "CASHU_DIR not defined"
@@ -32,4 +36,4 @@ LNBITS_ENDPOINT = env.str("LNBITS_ENDPOINT", default=None)
 LNBITS_KEY = env.str("LNBITS_KEY", default=None)
 
 MAX_ORDER = 64
-VERSION = "0.1.10"
+VERSION = "0.2.0"

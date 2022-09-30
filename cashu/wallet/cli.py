@@ -4,6 +4,8 @@ import asyncio
 import base64
 import json
 import math
+import sys
+from loguru import logger
 from datetime import datetime
 from functools import wraps
 from itertools import groupby
@@ -41,10 +43,15 @@ class NaturalOrderGroup(click.Group):
 @click.option("--wallet", "-w", "walletname", default="wallet", help="Wallet to use.")
 @click.pass_context
 def cli(ctx, host: str, walletname: str):
+    # configure logger
+    logger.remove()
+    logger.add(sys.stderr, level="DEBUG" if DEBUG else "INFO")
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
-    ctx.obj["WALLET"] = Wallet(ctx.obj["HOST"], f"{CASHU_DIR}/{walletname}", walletname)
+    wallet = Wallet(ctx.obj["HOST"], f"{CASHU_DIR}/{walletname}", walletname)
+    ctx.obj["WALLET"] = wallet
+    asyncio.run(init_wallet(wallet))
     pass
 
 
@@ -64,7 +71,7 @@ def coro(f):
 @coro
 async def mint(ctx, amount: int, hash: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    await init_wallet(wallet)
+    wallet.load_mint()
     wallet.status()
     if not LIGHTNING:
         r = await wallet.mint(amount)
@@ -88,35 +95,42 @@ async def mint(ctx, amount: int, hash: str):
 @coro
 async def balance(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    await init_wallet(wallet)
     wallet.status()
 
 
 @cli.command("send", help="Send tokens.")
 @click.argument("amount", type=int)
+@click.option("--secret", "-s", default="", help="Token spending condition.", type=str)
 @click.pass_context
 @coro
-async def send(ctx, amount: int):
+async def send(ctx, amount: int, secret: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    await init_wallet(wallet)
+    wallet.load_mint()
     wallet.status()
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    # TODO: remove this list hack
+    secrets = [secret] if secret else None
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, secrets)
     await wallet.set_reserved(send_proofs, reserved=True)
-    token = await wallet.serialize_proofs(send_proofs)
+    token = await wallet.serialize_proofs(
+        send_proofs, hide_secrets=True if secrets else False
+    )
     print(token)
     wallet.status()
 
 
 @cli.command("receive", help="Receive tokens.")
 @click.argument("token", type=str)
+@click.option("--secret", "-s", default="", help="Token spending condition.", type=str)
 @click.pass_context
 @coro
-async def receive(ctx, token: str):
+async def receive(ctx, token: str, secret: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    await init_wallet(wallet)
+    wallet.load_mint()
     wallet.status()
+    # TODO: remove this list hack
+    secrets = [secret] if secret else None
     proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
-    _, _ = await wallet.redeem(proofs)
+    _, _ = await wallet.redeem(proofs, secrets)
     wallet.status()
 
 
@@ -130,7 +144,7 @@ async def receive(ctx, token: str):
 @coro
 async def burn(ctx, token: str, all: bool, force: bool):
     wallet: Wallet = ctx.obj["WALLET"]
-    await init_wallet(wallet)
+    wallet.load_mint()
     if not (all or token or force) or (token and all):
         print(
             "Error: enter a token or use --all to burn all pending tokens or --force to check all tokens."
@@ -157,7 +171,7 @@ async def burn(ctx, token: str, all: bool, force: bool):
 @coro
 async def pending(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    await init_wallet(wallet)
+    wallet.load_mint()
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))
@@ -181,7 +195,7 @@ async def pending(ctx):
 @coro
 async def pay(ctx, invoice: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    await init_wallet(wallet)
+    wallet.load_mint()
     wallet.status()
     decoded_invoice: Invoice = bolt11.decode(invoice)
     amount = math.ceil(
@@ -206,5 +220,6 @@ async def info(ctx):
     print(f"Version: {VERSION}")
     print(f"Debug: {DEBUG}")
     print(f"Cashu dir: {CASHU_DIR}")
+    print(f"Wallet: {ctx.obj['WALLET_NAME']}")
     print(f"Mint URL: {MINT_URL}")
     return

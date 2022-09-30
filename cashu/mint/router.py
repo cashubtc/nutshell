@@ -82,7 +82,7 @@ async def split(payload: SplitPayload):
     except Exception as exc:
         return {"error": str(exc)}
     if not split_return:
-        """There was a problem with the split"""
-        raise Exception("could not split tokens.")
+        # tere was a problem with the split
+        return {"error": "there was a problem with the split."}
     fst_promises, snd_promises = split_return
     return {"fst": fst_promises, "snd": snd_promises}

@@ -25,10 +25,12 @@ def assert_amt(proofs, expected):
 async def run_test():
     wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1", "wallet1")
     await migrate_databases(wallet1.db, migrations)
+    wallet1.load_mint()
     wallet1.status()
 
     wallet2 = Wallet2(SERVER_ENDPOINT, "data/wallet2", "wallet2")
     await migrate_databases(wallet2.db, migrations)
+    wallet2.load_mint()
     wallet2.status()
 
     proofs = []
@@ -105,6 +107,14 @@ async def run_test():
     assert wallet1.proof_amounts() == [1, 2, 4, 4, 32, 64]
     assert wallet2.proof_amounts() == [4, 16]
 
+    # manipulate the proof amount
+    w1_fst_proofs2[0]["amount"] = 123
+    await assert_err(
+        wallet1.split(w1_fst_proofs2, 20),
+        "Error: 123",
+    )
+
+    # try to split an invalid amount
     await assert_err(
         wallet1.split(w1_snd_proofs, -500),
         "Error: invalid split amount: -500",
