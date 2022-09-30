@@ -32,8 +32,6 @@ from cashu.wallet.crud import (
 class LedgerAPI:
     def __init__(self, url):
         self.url = url
-        # self.keys = self._get_keys(self.url)
-        # self._load_mint()
 
     @staticmethod
     def _get_keys(url):
