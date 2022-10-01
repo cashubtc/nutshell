@@ -76,8 +76,6 @@ class Ledger:
     def _verify_secret_criteria(self, proof: Proof):
         if proof.secret is None or proof.secret == "":
             raise Exception("no secret in proof.")
-        if len(proof.secret) < 10:
-            raise Exception("secret too short, must be at least 10 characters.")
         return True
 
     def _verify_proof(self, proof: Proof):

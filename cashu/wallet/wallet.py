@@ -167,7 +167,6 @@ class LedgerAPI:
         ), "number of secrets does not match number of outputs"
         await self._check_used_secrets(secrets)
         payloads, rs = self._construct_outputs(amounts, secrets)
-
         split_payload = SplitPayload(proofs=proofs, amount=amount, output_data=payloads)
         resp = requests.post(
             self.url + "/split",
