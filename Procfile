@@ -1,1 +1,1 @@
-worker: python - cashu.mint
+web: python -m cashu.mint
