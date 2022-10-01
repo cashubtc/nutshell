@@ -97,3 +97,19 @@ async def update_proof_reserved(
         f"UPDATE proofs SET {', '.join(clauses)} WHERE secret = ?",
         (*values, str(proof.secret)),
     )
+
+
+async def secret_used(
+    secret: str,
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+
+    rows = await (conn or db).fetchone(
+        """
+        SELECT * from proofs
+        WHERE secret = ?
+        """,
+        (secret),
+    )
+    return rows is not None

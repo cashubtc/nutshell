@@ -1,3 +1,5 @@
+import time
+from re import S
 from cashu.core.helpers import async_unwrap
 from cashu.core.migrations import migrate_databases
 from cashu.wallet import migrations
@@ -108,16 +110,48 @@ async def run_test():
     assert wallet2.proof_amounts() == [4, 16]
 
     # manipulate the proof amount
-    w1_fst_proofs2[0]["amount"] = 123
-    await assert_err(
-        wallet1.split(w1_fst_proofs2, 20),
-        "Error: 123",
-    )
+    # w1_fst_proofs2_manipulated = w1_fst_proofs2.copy()
+    # w1_fst_proofs2_manipulated[0]["amount"] = 123
+    # await assert_err(
+    #     wallet1.split(w1_fst_proofs2_manipulated, 20),
+    #     "Error: 123",
+    # )
 
     # try to split an invalid amount
     await assert_err(
         wallet1.split(w1_snd_proofs, -500),
         "Error: invalid split amount: -500",
+    )
+
+    # mint with secrets
+    secret = f"asdasd_{time.time()}"
+    w1_fst_proofs, w1_snd_proofs = await wallet1.split(
+        wallet1.proofs, 65, snd_secret=secret
+    )
+
+    # strip away the secrets
+    w1_snd_proofs_manipulated = w1_snd_proofs.copy()
+    for p in w1_snd_proofs_manipulated:
+        p.secret = ""
+    await assert_err(
+        wallet2.redeem(w1_snd_proofs_manipulated),
+        "Error: duplicate proofs or promises.",
+    )
+
+    # redeem with wrong secret
+    await assert_err(
+        wallet2.redeem(w1_snd_proofs_manipulated, f"{secret}_asd"),
+        "Error: could not verify proofs.",
+    )
+
+    # redeem with correct secret
+    await wallet2.redeem(w1_snd_proofs_manipulated, secret)
+
+    # try to redeem them again
+    # NOTE: token indexing suffix _0
+    await assert_err(
+        wallet2.redeem(w1_snd_proofs_manipulated, secret),
+        f"Error: tokens already spent. Secret: {secret}_0",
     )
 
 

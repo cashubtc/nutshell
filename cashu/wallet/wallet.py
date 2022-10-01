@@ -26,6 +26,7 @@ from cashu.wallet.crud import (
     invalidate_proof,
     store_proof,
     update_proof_reserved,
+    secret_used,
 )
 
 
@@ -97,9 +98,15 @@ class LedgerAPI:
             payloads.blinded_messages.append(payload)
         return payloads, rs
 
-    def mint(self, amounts, payment_hash=None):
+    async def _check_used_secrets(self, secrets):
+        for s in secrets:
+            if await secret_used(s, db=self.db):
+                raise Exception(f"secret already used: {s}")
+
+    async def mint(self, amounts, payment_hash=None):
         """Mints new coins and returns a proof of promise."""
         secrets = [self._generate_secret() for s in range(len(amounts))]
+        await self._check_used_secrets(secrets)
         payloads, rs = self._construct_outputs(amounts, secrets)
 
         resp = requests.post(
@@ -120,12 +127,12 @@ class LedgerAPI:
         promises = [BlindedSignature.from_dict(p) for p in promises_list]
         return self._construct_proofs(promises, secrets, rs)
 
-    def split(self, proofs, amount, snd_secrets: List[str] = None):
+    async def split(self, proofs, amount, snd_secret: str = None):
         """Consume proofs and create new promises based on amount split.
-        If snd_secrets is None, random secrets will be generated for the tokens to keep (fst_outputs)
+        If snd_secret is None, random secrets will be generated for the tokens to keep (fst_outputs)
         and the promises to send (snd_outputs).
 
-        If snd_secrets is provided, the wallet will create blinded secrets with those to attach a
+        If snd_secret is provided, the wallet will create blinded secrets with those to attach a
         predefined spending condition to the tokens they want to send."""
 
         total = sum([p["amount"] for p in proofs])
@@ -134,10 +141,13 @@ class LedgerAPI:
         snd_outputs = amount_split(snd_amt)
 
         amounts = fst_outputs + snd_outputs
-        if snd_secrets is None:
-            secrets = [self._generate_secret() for s in range(len(amounts))]
+        if snd_secret is None:
+            logger.debug("Generating random secrets.")
+            secrets = [self._generate_secret() for _ in range(len(amounts))]
         else:
-            logger.debug("Creating proofs with spending condition.")
+            logger.debug(f"Creating proofs with custom secret: {snd_secret}")
+            # TODO: serialize them here
+            snd_secrets = [f"{snd_secret}_{i}" for i in range(len(snd_outputs))]
             assert len(snd_secrets) == len(
                 snd_outputs
             ), "number of snd_secrets does not match number of ouptus."
@@ -149,7 +159,7 @@ class LedgerAPI:
         assert len(secrets) == len(
             amounts
         ), "number of secrets does not match number of outputs"
-
+        await self._check_used_secrets(secrets)
         payloads, rs = self._construct_outputs(amounts, secrets)
 
         split_payload = SplitPayload(proofs=proofs, amount=amount, output_data=payloads)
@@ -221,27 +231,27 @@ class Wallet(LedgerAPI):
 
     async def mint(self, amount: int, payment_hash: str = None):
         split = amount_split(amount)
-        proofs = super().mint(split, payment_hash)
+        proofs = await super().mint(split, payment_hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
         self.proofs += proofs
         return proofs
 
-    async def redeem(self, proofs: List[Proof], snd_secrets: List[str] = None):
-        if snd_secrets:
-            logger.debug(f"Redeption secrets: {snd_secrets}")
+    async def redeem(self, proofs: List[Proof], snd_secret: str = None):
+        if snd_secret:
+            logger.debug(f"Redeption secret: {snd_secret}")
+            # TODO: serialize them here
+            snd_secrets = [f"{snd_secret}_{i}" for i in range(len(proofs))]
             assert len(proofs) == len(snd_secrets)
             # overload proofs with custom secrets for redemption
             for p, s in zip(proofs, snd_secrets):
                 p.secret = s
         return await self.split(proofs, sum(p["amount"] for p in proofs))
 
-    async def split(
-        self, proofs: List[Proof], amount: int, snd_secrets: List[str] = None
-    ):
+    async def split(self, proofs: List[Proof], amount: int, snd_secret: str = None):
         assert len(proofs) > 0, ValueError("no proofs provided.")
-        fst_proofs, snd_proofs = super().split(proofs, amount, snd_secrets)
+        fst_proofs, snd_proofs = await super().split(proofs, amount, snd_secret)
         if len(fst_proofs) == 0 and len(snd_proofs) == 0:
             raise Exception("received no splits.")
         used_secrets = [p["secret"] for p in proofs]
@@ -274,16 +284,14 @@ class Wallet(LedgerAPI):
         ).decode()
         return token
 
-    async def split_to_send(
-        self, proofs: List[Proof], amount, snd_secrets: List[str] = None
-    ):
+    async def split_to_send(self, proofs: List[Proof], amount, snd_secret: str = None):
         """Like self.split but only considers non-reserved tokens."""
-        if snd_secrets:
-            logger.debug(f"Spending conditions: {snd_secrets}")
+        if snd_secret:
+            logger.debug(f"Spending conditions: {snd_secret}")
         if len([p for p in proofs if not p.reserved]) <= 0:
             raise Exception("balance too low.")
         return await self.split(
-            [p for p in proofs if not p.reserved], amount, snd_secrets
+            [p for p in proofs if not p.reserved], amount, snd_secret
         )
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
@@ -321,7 +329,7 @@ class Wallet(LedgerAPI):
 
     def status(self):
         print(
-            f"Balance: {self.balance} sat (Available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
+            f"Balance: {self.balance} sat (available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
         )
 
     def proof_amounts(self):

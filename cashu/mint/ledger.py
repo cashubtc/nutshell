@@ -150,7 +150,7 @@ class Ledger:
         """Checks with the Lightning backend whether an invoice with this payment_hash was paid."""
         invoice: Invoice = await get_lightning_invoice(payment_hash, db=self.db)
         if invoice.issued:
-            raise Exception("tokens already issued for this invoice")
+            raise Exception("tokens already issued for this invoice.")
         status = await WALLET.get_invoice_status(payment_hash)
         if status.paid:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
@@ -239,7 +239,7 @@ class Ledger:
             raise Exception("split amount is higher than the total sum.")
         # verify that only unique proofs and outputs were used
         if not self._verify_no_duplicates(proofs, outputs):
-            raise Exception("duplicate proofs or promises")
+            raise Exception("duplicate proofs or promises.")
         # verify that outputs have the correct amount
         if not self._verify_outputs(total, amount, outputs):
             raise Exception("split of promises is not as expected.")

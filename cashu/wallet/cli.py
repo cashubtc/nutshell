@@ -100,19 +100,19 @@ async def balance(ctx):
 
 @cli.command("send", help="Send tokens.")
 @click.argument("amount", type=int)
-@click.option("--secret", "-s", default="", help="Token spending condition.", type=str)
+@click.option(
+    "--secret", "-s", default=None, help="Token spending condition.", type=str
+)
 @click.pass_context
 @coro
 async def send(ctx, amount: int, secret: str):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
     wallet.status()
-    # TODO: remove this list hack
-    secrets = [secret] if secret else None
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, secrets)
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, secret)
     await wallet.set_reserved(send_proofs, reserved=True)
     token = await wallet.serialize_proofs(
-        send_proofs, hide_secrets=True if secrets else False
+        send_proofs, hide_secrets=True if secret else False
     )
     print(token)
     wallet.status()
@@ -127,10 +127,8 @@ async def receive(ctx, token: str, secret: str):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
     wallet.status()
-    # TODO: remove this list hack
-    secrets = [secret] if secret else None
     proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
-    _, _ = await wallet.redeem(proofs, secrets)
+    _, _ = await wallet.redeem(proofs, secret)
     wallet.status()
 
 
@@ -175,17 +173,22 @@ async def pending(ctx):
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))
-        for key, value in groupby(sorted_proofs, key=itemgetter("send_id")):
+        grouped_proofs = groupby(sorted_proofs, key=itemgetter("send_id"))
+        for i, (key, value) in enumerate(grouped_proofs):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
+            token_hidden_secret = await wallet.serialize_proofs(
+                grouped_proofs, hide_secrets=True
+            )
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"Amount: {sum([p['amount'] for p in grouped_proofs])} sat Sent: {reserved_date} ID: {key}\n"
+                f"Amount: {sum([p['amount'] for p in grouped_proofs])} sat Sent: {reserved_date} ID: {key} #{i+1}/{len(grouped_proofs)}\n"
             )
-            print(token)
-            print("")
+            print(f"With secret: {token}\n\nSecretless: {token_hidden_secret}\n")
+            if i < len(grouped_proofs) - 1:
+                print(f"--------------------------\n")
     wallet.status()
 
 
