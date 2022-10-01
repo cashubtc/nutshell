@@ -106,6 +106,9 @@ async def balance(ctx):
 @click.pass_context
 @coro
 async def send(ctx, amount: int, secret: str):
+    if secret and len(secret) < 22:
+        print("Error: secret has to be at least 22 characters long.")
+        return
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
     wallet.status()
