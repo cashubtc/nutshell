@@ -73,6 +73,13 @@ class Ledger:
         """Checks whether the proof was already spent."""
         return not proof.secret in self.proofs_used
 
+    def _verify_secret_criteria(self, proof: Proof):
+        if proof.secret is None or proof.secret == "":
+            raise Exception("no secret in proof.")
+        if len(proof.secret) < 10:
+            raise Exception("secret too short, must be at least 10 characters.")
+        return True
+
     def _verify_proof(self, proof: Proof):
         """Verifies that the proof of promise was issued by this ledger."""
         if not self._check_spendable(proof):
@@ -237,9 +244,12 @@ class Ledger:
         # verify overspending attempt
         if amount > total:
             raise Exception("split amount is higher than the total sum.")
+        # Verify proofs
+        if not all([self._verify_secret_criteria(p) for p in proofs]):
+            raise Exception("secrets do not match criteria.")
         # verify that only unique proofs and outputs were used
         if not self._verify_no_duplicates(proofs, outputs):
-            raise Exception("empty or duplicate proofs or promises.")
+            raise Exception("duplicate proofs or promises.")
         # verify that outputs have the correct amount
         if not self._verify_outputs(total, amount, outputs):
             raise Exception("split of promises is not as expected.")
