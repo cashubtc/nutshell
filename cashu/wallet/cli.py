@@ -172,9 +172,11 @@ async def pending(ctx):
     wallet.load_mint()
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
+        print(f"--------------------------\n")
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))
-        grouped_proofs = groupby(sorted_proofs, key=itemgetter("send_id"))
-        for i, (key, value) in enumerate(grouped_proofs):
+        for i, (key, value) in enumerate(
+            groupby(sorted_proofs, key=itemgetter("send_id"))
+        ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
             token_hidden_secret = await wallet.serialize_proofs(
@@ -184,11 +186,10 @@ async def pending(ctx):
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"Amount: {sum([p['amount'] for p in grouped_proofs])} sat Sent: {reserved_date} ID: {key} #{i+1}/{len(grouped_proofs)}\n"
+                f"#{i} Amount: {sum([p['amount'] for p in grouped_proofs])} sat Time: {reserved_date} ID: {key}\n"
             )
             print(f"With secret: {token}\n\nSecretless: {token_hidden_secret}\n")
-            if i < len(grouped_proofs) - 1:
-                print(f"--------------------------\n")
+            print(f"--------------------------\n")
     wallet.status()
 
 

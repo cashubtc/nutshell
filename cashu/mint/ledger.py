@@ -239,7 +239,7 @@ class Ledger:
             raise Exception("split amount is higher than the total sum.")
         # verify that only unique proofs and outputs were used
         if not self._verify_no_duplicates(proofs, outputs):
-            raise Exception("duplicate proofs or promises.")
+            raise Exception("empty or duplicate proofs or promises.")
         # verify that outputs have the correct amount
         if not self._verify_outputs(total, amount, outputs):
             raise Exception("split of promises is not as expected.")

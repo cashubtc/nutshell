@@ -103,6 +103,11 @@ class LedgerAPI:
             if await secret_used(s, db=self.db):
                 raise Exception(f"secret already used: {s}")
 
+    @staticmethod
+    def generate_deterministic_secrets(secret, n):
+        """`secret` is the base string that will be tweaked n times"""
+        return [f"{secret}_{i}" for i in range(n)]
+
     async def mint(self, amounts, payment_hash=None):
         """Mints new coins and returns a proof of promise."""
         secrets = [self._generate_secret() for s in range(len(amounts))]
@@ -146,8 +151,9 @@ class LedgerAPI:
             secrets = [self._generate_secret() for _ in range(len(amounts))]
         else:
             logger.debug(f"Creating proofs with custom secret: {snd_secret}")
-            # TODO: serialize them here
-            snd_secrets = [f"{snd_secret}_{i}" for i in range(len(snd_outputs))]
+            snd_secrets = self.generate_deterministic_secrets(
+                snd_secret, len(snd_outputs)
+            )
             assert len(snd_secrets) == len(
                 snd_outputs
             ), "number of snd_secrets does not match number of ouptus."
@@ -241,8 +247,7 @@ class Wallet(LedgerAPI):
     async def redeem(self, proofs: List[Proof], snd_secret: str = None):
         if snd_secret:
             logger.debug(f"Redeption secret: {snd_secret}")
-            # TODO: serialize them here
-            snd_secrets = [f"{snd_secret}_{i}" for i in range(len(proofs))]
+            snd_secrets = self.generate_deterministic_secrets(snd_secret, len(proofs))
             assert len(proofs) == len(snd_secrets)
             # overload proofs with custom secrets for redemption
             for p, s in zip(proofs, snd_secrets):

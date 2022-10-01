@@ -135,7 +135,7 @@ async def run_test():
         p.secret = ""
     await assert_err(
         wallet2.redeem(w1_snd_proofs_manipulated),
-        "Error: duplicate proofs or promises.",
+        "Error: empty or duplicate proofs or promises.",
     )
 
     # redeem with wrong secret
