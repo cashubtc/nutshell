@@ -1,17 +1,25 @@
+import os
 import sys
 from pathlib import Path
-
 from environs import Env  # type: ignore
+from loguru import logger
 
 env = Env()
-env.read_env()
+
+ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
+if not os.path.isfile(ENV_FILE):
+    ENV_FILE = os.path.join(os.getcwd(), ".env")
+if os.path.isfile(ENV_FILE):
+    logger.info("Using .env: " + ENV_FILE)
+    env.read_env(ENV_FILE)
+else:
+    env.read_env()
 
 DEBUG = env.bool("DEBUG", default=False)
 if not DEBUG:
     sys.tracebacklimit = 0
 
-CASHU_DIR = env.str("CASHU_DIR", default="~/.cashu")
-CASHU_DIR = CASHU_DIR.replace("~", str(Path.home()))
+CASHU_DIR = env.str("CASHU_DIR", default=os.path.join(str(Path.home()), ".cashu"))
 assert len(CASHU_DIR), "CASHU_DIR not defined"
 
 LIGHTNING = env.bool("LIGHTNING", default=True)

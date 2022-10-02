@@ -95,6 +95,11 @@ class Ledger:
         return b_dhke.verify(secret_key, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):
+        """
+        Verify bitcoin script in proof.script commited to by <address> in proof.secret.
+        proof.secret format: P2SH:<address>:<secret>
+        """
+        # if no script is given
         if (
             proof.script is None
             or proof.script.script is None
@@ -106,23 +111,17 @@ class Ledger:
             else:
                 # secret indicates no script, so treat script as valid
                 return True
+        # execute and verify P2SH
         txin_p2sh_address, valid = verify_script(
             proof.script.script, proof.script.signature
         )
         if valid:
             # check if secret commits to script address
             # format: P2SH:<address>:<secret>
-            assert len(proof.secret.split(":")) == 3, "secret format wrong"
+            assert len(proof.secret.split(":")) == 3, "secret format wrong."
             assert proof.secret.split(":")[1] == str(
                 txin_p2sh_address
-            ), f"secret does not contain P2SH address: {proof.secret.split(':')[1]}!={txin_p2sh_address}"
-        # print(
-        #     f"Script {proof.script.script.__repr__()} {'valid' if valid else 'invalid'}."
-        # )
-        # if valid:
-        #     print(f"{idx}:P2SH:{txin_p2sh_address}")
-        #     print("proof.secret", proof.secret)
-        # proof.secret = f"{idx}:P2SH:{txin_p2sh_address}"
+            ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]}!={txin_p2sh_address}."
         return valid
 
     def _verify_outputs(
@@ -276,16 +275,15 @@ class Ledger:
         """Consumes proofs and prepares new promises based on the amount split."""
         total = sum([p.amount for p in proofs])
 
-        # if not all([self._verify_secret_or_script(p) for p in proofs]):
-        #     raise Exception("can't use secret and script at the same time.")
-        # Verify scripts
-        if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
-            raise Exception("could not verify scripts.")
         # verify that amount is kosher
         self._verify_split_amount(amount)
         # verify overspending attempt
         if amount > total:
             raise Exception("split amount is higher than the total sum.")
+
+        # Verify scripts
+        if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
+            raise Exception("script verification failed.")
         # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):
             raise Exception("secrets do not match criteria.")
@@ -309,5 +307,6 @@ class Ledger:
         prom_fst, prom_snd = await self._generate_promises(
             outs_fst, B_fst
         ), await self._generate_promises(outs_snd, B_snd)
+        # verify amounts in produced proofs
         self._verify_equation_balanced(proofs, prom_fst + prom_snd)
         return prom_fst, prom_snd
