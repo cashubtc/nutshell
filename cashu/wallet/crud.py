@@ -1,7 +1,7 @@
 import time
 from typing import Optional
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, P2SHScript
 from cashu.core.db import Connection, Database
 
 
@@ -113,3 +113,50 @@ async def secret_used(
         (secret),
     )
     return rows is not None
+
+
+async def store_p2sh(
+    p2sh: P2SHScript,
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+
+    await (conn or db).execute(
+        """
+        INSERT INTO p2sh
+          (address, script, signature, used)
+        VALUES (?, ?, ?, ?)
+        """,
+        (p2sh.address, p2sh.script, p2sh.signature, False),
+    )
+
+
+async def get_unused_locks(
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+
+    rows = await (conn or db).fetchall(
+        """
+        SELECT * from p2sh
+        WHERE used = 0
+        """
+    )
+    return [P2SHScript.from_row(r) for r in rows]
+
+
+async def update_p2sh_used(
+    p2sh: P2SHScript,
+    used: bool,
+    db: Database = None,
+    conn: Optional[Connection] = None,
+):
+    clauses = []
+    values = []
+    clauses.append("used = ?")
+    values.append(used)
+
+    await (conn or db).execute(
+        f"UPDATE proofs SET {', '.join(clauses)} WHERE address = ?",
+        (*values, str(p2sh.address)),
+    )

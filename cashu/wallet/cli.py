@@ -12,7 +12,6 @@ from itertools import groupby
 from operator import itemgetter
 
 import click
-from bech32 import bech32_decode, bech32_encode, convertbits
 from loguru import logger
 
 import cashu.core.bolt11 as bolt11
@@ -20,10 +19,9 @@ from cashu.core.base import Proof
 from cashu.core.bolt11 import Invoice
 from cashu.core.helpers import fee_reserve
 from cashu.core.migrations import migrate_databases
-from cashu.core.script import *
 from cashu.core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL, VERSION, ENV_FILE
 from cashu.wallet import migrations
-from cashu.wallet.crud import get_reserved_proofs
+from cashu.wallet.crud import get_reserved_proofs, get_unused_locks
 from cashu.wallet.wallet import Wallet as Wallet
 
 
@@ -235,10 +233,11 @@ async def pay(ctx, invoice: str):
 @click.pass_context
 @coro
 async def lock(ctx):
-    alice_privkey = step0_carol_privkey()
-    txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
-    txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
-    # print("Redeem script:", txin_redeemScript.__repr__())
+    wallet: Wallet = ctx.obj["WALLET"]
+    p2shscript = await wallet.create_p2sh_lock()
+    txin_p2sh_address = p2shscript.address
+    txin_redeemScript_b64 = p2shscript.script
+    txin_signature_b64 = p2shscript.signature
     print("---- Pay to script hash (P2SH) ----\n")
     print("Use a lock to receive coins that only you can unlock.")
     print("")
@@ -248,16 +247,32 @@ async def lock(ctx):
         f"Send coins to this lock:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
     )
     print("")
-
-    txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
-    txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
-    txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
     print(
         "!!! The command below is private. Do not share. You have to remember it. Do not lose. !!!\n"
     )
     print(
         f"Receive coins from this lock:\n\ncashu receive <coin> --unlock {txin_redeemScript_b64}:{txin_signature_b64}\n"
     )
+
+
+@cli.command("locks", help="Show all receiving locks.")
+@click.pass_context
+@coro
+async def locks(ctx):
+    wallet: Wallet = ctx.obj["WALLET"]
+    locks = await get_unused_locks(db=wallet.db)
+    if len(locks):
+        print("")
+        print(f"--------------------------\n")
+        for l in locks:
+            print(f"Address: {l.address}")
+            print(f"Script: {l.script}")
+            print(f"Signature: {l.signature}")
+            print("")
+            print(f"Receive: cashu receive <coin> --unlock {l.script}:{l.signature}")
+            print("")
+            print(f"--------------------------\n")
+    return True
 
 
 @cli.command("info", help="Information about Cashu wallet.")

@@ -18,6 +18,12 @@ from cashu.core.base import (
     Proof,
     SplitPayload,
 )
+from cashu.core.script import (
+    step0_carol_privkey,
+    step0_carol_checksig_redeemscrip,
+    step1_carol_create_p2sh_address,
+    step2_carol_sign_tx,
+)
 from cashu.core.db import Database
 from cashu.core.secp import PublicKey
 from cashu.core.settings import DEBUG
@@ -28,6 +34,7 @@ from cashu.wallet.crud import (
     secret_used,
     store_proof,
     update_proof_reserved,
+    store_p2sh,
 )
 
 
@@ -194,9 +201,6 @@ class LedgerAPI:
 
         return fst_proofs, snd_proofs
 
-    async def create_p2sh_lock(self, secrets: List[str]):
-        return None
-
     async def check_spendable(self, proofs: List[Proof]):
         payload = CheckPayload(proofs=proofs)
         return_dict = requests.post(
@@ -333,6 +337,21 @@ class Wallet(LedgerAPI):
         self.proofs = list(
             filter(lambda p: p["secret"] not in invalidate_secrets, self.proofs)
         )
+
+    async def create_p2sh_lock(self):
+        alice_privkey = step0_carol_privkey()
+        txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
+        txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
+        txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
+        txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
+        txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
+        p2shScript = P2SHScript(
+            script=txin_redeemScript_b64,
+            signature=txin_signature_b64,
+            address=str(txin_p2sh_address),
+        )
+        await store_p2sh(p2shScript, db=self.db)
+        return p2shScript
 
     @property
     def balance(self):

@@ -7,6 +7,16 @@ from pydantic import BaseModel
 class P2SHScript(BaseModel):
     script: str
     signature: str
+    address: str = None
+
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            address=row[0],
+            script=row[1],
+            signature=row[2],
+            used=row[3],
+        )
 
 
 class Proof(BaseModel):
