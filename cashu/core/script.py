@@ -6,11 +6,14 @@ COIN = 100_000_000
 TXID = "bff785da9f8169f49be92fa95e31f0890c385bfb1bd24d6b94d7900057c617ae"
 SEED = b"__not__used"
 
-from bitcoin.core import (CMutableTxIn, CMutableTxOut, COutPoint, CTransaction,
-                          lx)
+from bitcoin.core import CMutableTxIn, CMutableTxOut, COutPoint, CTransaction, lx
 from bitcoin.core.script import *
-from bitcoin.core.scripteval import (SCRIPT_VERIFY_P2SH, EvalScriptError,
-                                     VerifyScript, VerifyScriptError)
+from bitcoin.core.scripteval import (
+    SCRIPT_VERIFY_P2SH,
+    EvalScriptError,
+    VerifyScript,
+    VerifyScriptError,
+)
 from bitcoin.wallet import CBitcoinSecret, P2SHBitcoinAddress
 
 
@@ -67,13 +70,12 @@ def step3_bob_verify_script(txin_signature, txin_redeemScript, tx):
         )
         return True
     except VerifyScriptError as e:
-        print("Could not verify script:", e)
+        raise Exception("Script verification failed:", e)
     except EvalScriptError as e:
-        print("Script did not evaluate:", e)
         print(f"Script: {txin_scriptPubKey.__repr__()}")
+        raise Exception("Script evaluation failed:", e)
     except Exception as e:
-        print(e)
-    return False
+        raise Exception("Script execution failed:", e)
 
 
 def verify_script(txin_redeemScript_b64, txin_signature_b64):
