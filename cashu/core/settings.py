@@ -19,6 +19,7 @@ if not DEBUG:
     sys.tracebacklimit = 0
 
 CASHU_DIR = env.str("CASHU_DIR", default=os.path.join(str(Path.home()), ".cashu"))
+CASHU_DIR = CASHU_DIR.replace("~", str(Path.home()))
 assert len(CASHU_DIR), "CASHU_DIR not defined"
 
 LIGHTNING = env.bool("LIGHTNING", default=True)

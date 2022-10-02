@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import math
+import os
 import sys
 from datetime import datetime
 from functools import wraps
@@ -50,7 +51,7 @@ def cli(ctx, host: str, walletname: str):
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
-    wallet = Wallet(ctx.obj["HOST"], f"{CASHU_DIR}/{walletname}", walletname)
+    wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, walletname))
     ctx.obj["WALLET"] = wallet
     asyncio.run(init_wallet(wallet))
     pass
