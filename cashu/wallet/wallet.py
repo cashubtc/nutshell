@@ -246,20 +246,12 @@ class Wallet(LedgerAPI):
     async def redeem(
         self,
         proofs: List[Proof],
-        # snd_secret: str = None,
         snd_script: str = None,
         snd_siganture: str = None,
     ):
-        # if snd_secret:
-        #     logger.debug(f"Redeption secret: {snd_secret}")
-        #     snd_secrets = self.generate_secrets(snd_secret, len(proofs))
-        #     assert len(proofs) == len(snd_secrets)
-        #     # overload proofs with custom secrets for redemption
-        #     for p, s in zip(proofs, snd_secrets):
-        #         p.secret = s
         if snd_script and snd_siganture:
             logger.debug(f"Unlock script: {snd_script}")
-            # overload proofs with unlock script
+            # attach unlock scripts to proofs
             for p in proofs:
                 p.script = P2SHScript(script=snd_script, signature=snd_siganture)
         return await self.split(proofs, sum(p["amount"] for p in proofs))

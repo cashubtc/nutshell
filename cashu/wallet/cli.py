@@ -65,7 +65,7 @@ def coro(f):
     return wrapper
 
 
-@cli.command("mint", help="Mint tokens.")
+@cli.command("mint", help="Mint coins.")
 @click.argument("amount", type=int)
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
 @click.pass_context
@@ -99,9 +99,9 @@ async def balance(ctx):
     wallet.status()
 
 
-@cli.command("send", help="Send tokens.")
+@cli.command("send", help="Send coins.")
 @click.argument("amount", type=int)
-@click.option("--lock", "-l", default=None, help="Token lock (P2SH address).", type=str)
+@click.option("--lock", "-l", default=None, help="Coin lock (P2SH address).", type=str)
 @click.pass_context
 @coro
 async def send(ctx, amount: int, lock: str):
@@ -116,21 +116,19 @@ async def send(ctx, amount: int, lock: str):
     wallet.status()
     _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, lock)
     await wallet.set_reserved(send_proofs, reserved=True)
-    token = await wallet.serialize_proofs(
+    coin = await wallet.serialize_proofs(
         send_proofs, hide_secrets=True if lock and not p2sh else False
     )
-    print(token)
+    print(coin)
     wallet.status()
 
 
-@cli.command("receive", help="Receive tokens.")
-@click.argument("token", type=str)
-# @click.option("--secret", "-s", default=None, help="Token secret.", type=str)
+@cli.command("receive", help="Receive coins.")
+@click.argument("coin", type=str)
 @click.option("--unlock", "-u", default=None, help="Unlock script.", type=str)
-# @click.option("--signature", default=None, help="Script signature.", type=str)
 @click.pass_context
 @coro
-async def receive(ctx, token: str, unlock: str):
+async def receive(ctx, coin: str, unlock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
     wallet.status()
@@ -140,55 +138,27 @@ async def receive(ctx, token: str, unlock: str):
         ), "unlock format wrong, expected <script>:<signature>"
         script = unlock.split(":")[0]
         signature = unlock.split(":")[1]
-    proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
+    else:
+        script, signature = None, None
+    proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(coin))]
     _, _ = await wallet.redeem(proofs, snd_script=script, snd_siganture=signature)
     wallet.status()
 
 
-@cli.command("address", help="Generate receiving address.")
-@click.pass_context
-@coro
-async def address(ctx):
-    alice_privkey = step0_carol_privkey()
-    txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
-    txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
-    # print("Redeem script:", txin_redeemScript.__repr__())
-    print("---- Pay to script hash (P2SH) ----\n")
-    print("You can use this address to receive tokens that only you can redeem.")
-    print("")
-    print(f"Public receiving address: P2SH:{txin_p2sh_address}")
-    print("")
-    print(
-        f"To send to this address:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
-    )
-    print("")
-
-    txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
-    txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
-    txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
-    print("!!! The command below is private. Do not share. Back it up. !!!")
-    print(
-        "If you lose this command (script and signature), you will not\nbe able to redeem tokens sent to this address!\n\n"
-    )
-    print(
-        f"To receive:\n\ncashu receive <token> --unlock {txin_redeemScript_b64}:{txin_signature_b64}\n"
-    )
-
-
-@cli.command("burn", help="Burn spent tokens.")
-@click.argument("token", required=False, type=str)
-@click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent tokens.")
+@cli.command("burn", help="Burn spent coins.")
+@click.argument("coin", required=False, type=str)
+@click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent coins.")
 @click.option(
-    "--force", "-f", default=False, is_flag=True, help="Force check on all tokens."
+    "--force", "-f", default=False, is_flag=True, help="Force check on all coins."
 )
 @click.pass_context
 @coro
-async def burn(ctx, token: str, all: bool, force: bool):
+async def burn(ctx, coin: str, all: bool, force: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
-    if not (all or token or force) or (token and all):
+    if not (all or coin or force) or (coin and all):
         print(
-            "Error: enter a token or use --all to burn all pending tokens or --force to check all tokens."
+            "Error: enter a coin or use --all to burn all pending coins or --force to check all coins."
         )
         return
     if all:
@@ -200,14 +170,14 @@ async def burn(ctx, token: str, all: bool, force: bool):
     else:
         # check only the specified ones
         proofs = [
-            Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))
+            Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(coin))
         ]
     wallet.status()
     await wallet.invalidate(proofs)
     wallet.status()
 
 
-@cli.command("pending", help="Show pending tokens.")
+@cli.command("pending", help="Show pending coins.")
 @click.pass_context
 @coro
 async def pending(ctx):
@@ -221,8 +191,8 @@ async def pending(ctx):
             groupby(sorted_proofs, key=itemgetter("send_id"))
         ):
             grouped_proofs = list(value)
-            token = await wallet.serialize_proofs(grouped_proofs)
-            token_hidden_secret = await wallet.serialize_proofs(
+            coin = await wallet.serialize_proofs(grouped_proofs)
+            coin_hidden_secret = await wallet.serialize_proofs(
                 grouped_proofs, hide_secrets=True
             )
             reserved_date = datetime.utcfromtimestamp(
@@ -231,12 +201,12 @@ async def pending(ctx):
             print(
                 f"#{i} Amount: {sum([p['amount'] for p in grouped_proofs])} sat Time: {reserved_date} ID: {key}\n"
             )
-            print(f"With secret: {token}\n\nSecretless: {token_hidden_secret}\n")
+            print(f"With secret: {coin}\n\nSecretless: {coin_hidden_secret}\n")
             print(f"--------------------------\n")
     wallet.status()
 
 
-@cli.command("pay", help="Pay lightning invoice.")
+@cli.command("pay", help="Pay Lightning invoice.")
 @click.argument("invoice", type=str)
 @click.pass_context
 @coro
@@ -258,6 +228,35 @@ async def pay(ctx, invoice: str):
     _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
     await wallet.pay_lightning(send_proofs, amount, invoice)
     wallet.status()
+
+
+@cli.command("address", help="Generate receiving address.")
+@click.pass_context
+@coro
+async def address(ctx):
+    alice_privkey = step0_carol_privkey()
+    txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
+    txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
+    # print("Redeem script:", txin_redeemScript.__repr__())
+    print("---- Pay to script hash (P2SH) ----\n")
+    print("Use a lock to receive coins that only you can unlock.")
+    print("")
+    print(f"Public receiving address: P2SH:{txin_p2sh_address}")
+    print("")
+    print(
+        f"To send to this address:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
+    )
+    print("")
+
+    txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
+    txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
+    txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
+    print(
+        "!!! The command below is private. Do not share. You have to remember it. Do not lose. !!!\n"
+    )
+    print(
+        f"To receive:\n\ncashu receive <coin> --unlock {txin_redeemScript_b64}:{txin_signature_b64}\n"
+    )
 
 
 @cli.command("info", help="Information about Cashu wallet.")
