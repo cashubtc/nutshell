@@ -39,8 +39,8 @@ class NaturalOrderGroup(click.Group):
 
 
 @click.group(cls=NaturalOrderGroup)
-@click.option("--host", "-h", default=MINT_URL, help="Mint address.")
-@click.option("--wallet", "-w", "walletname", default="wallet", help="Wallet to use.")
+@click.option("--host", "-h", default=MINT_URL, help="Mint URL.")
+@click.option("--wallet", "-w", "walletname", default="wallet", help="Wallet name.")
 @click.pass_context
 def cli(ctx, host: str, walletname: str):
     # configure logger
@@ -64,7 +64,7 @@ def coro(f):
     return wrapper
 
 
-@cli.command("mint", help="Mint coins.")
+@cli.command("mint", help="Mint.")
 @click.argument("amount", type=int)
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
 @click.pass_context
@@ -90,7 +90,7 @@ async def mint(ctx, amount: int, hash: str):
     return
 
 
-@cli.command("balance", help="See balance.")
+@cli.command("balance", help="Balance.")
 @click.pass_context
 @coro
 async def balance(ctx):
@@ -255,7 +255,7 @@ async def lock(ctx):
     )
 
 
-@cli.command("locks", help="Show all receiving locks.")
+@cli.command("locks", help="Show unused receiving locks.")
 @click.pass_context
 @coro
 async def locks(ctx):
