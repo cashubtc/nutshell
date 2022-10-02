@@ -55,7 +55,7 @@ async def run_test():
     # Error: We try to double-spend by providing a valid proof twice
     await assert_err(
         wallet1.split(wallet1.proofs + proofs, 20),
-        f"Error: tokens already spent. Secret: {proofs[0]['secret']}",
+        f"Mint Error: tokens already spent. Secret: {proofs[0]['secret']}",
     )
     assert wallet1.balance == 63 + 64
     wallet1.status()
@@ -72,7 +72,7 @@ async def run_test():
     # Error: We try to double-spend and it fails
     await assert_err(
         wallet1.split([proofs[0]], 10),
-        f"Error: tokens already spent. Secret: {proofs[0]['secret']}",
+        f"Mint Error: tokens already spent. Secret: {proofs[0]['secret']}",
     )
 
     assert wallet1.balance == 63 + 64
@@ -101,7 +101,7 @@ async def run_test():
     # Error: We try to double-spend and it fails
     await assert_err(
         wallet1.split(w1_snd_proofs, 5),
-        f"Error: tokens already spent. Secret: {w1_snd_proofs[0]['secret']}",
+        f"Mint Error: tokens already spent. Secret: {w1_snd_proofs[0]['secret']}",
     )
 
     assert wallet1.balance == 63 + 64 - 20
@@ -121,7 +121,7 @@ async def run_test():
     # try to split an invalid amount
     await assert_err(
         wallet1.split(w1_snd_proofs, -500),
-        "Error: invalid split amount: -500",
+        "Mint Error: invalid split amount: -500",
     )
 
     # mint with secrets
@@ -136,13 +136,13 @@ async def run_test():
         p.secret = ""
     await assert_err(
         wallet2.redeem(w1_snd_proofs_manipulated),
-        "Error: no secret in proof.",
+        "Mint Error: no secret in proof.",
     )
 
     # redeem with wrong secret
     await assert_err(
         wallet2.redeem(w1_snd_proofs_manipulated, f"{secret}_asd"),
-        "Error: could not verify proofs.",
+        "Mint Error: could not verify proofs.",
     )
 
     # redeem with correct secret
@@ -152,7 +152,7 @@ async def run_test():
     # NOTE: token indexing suffix _0
     await assert_err(
         wallet2.redeem(w1_snd_proofs_manipulated, secret),
-        f"Error: tokens already spent. Secret: {secret}_0",
+        f"Mint Error: tokens already spent. Secret: 0:{secret}",
     )
 
 
