@@ -5,7 +5,6 @@ import base64
 import json
 import math
 import sys
-from loguru import logger
 from datetime import datetime
 from functools import wraps
 from itertools import groupby
@@ -13,12 +12,14 @@ from operator import itemgetter
 
 import click
 from bech32 import bech32_decode, bech32_encode, convertbits
+from loguru import logger
 
 import cashu.core.bolt11 as bolt11
 from cashu.core.base import Proof
 from cashu.core.bolt11 import Invoice
 from cashu.core.helpers import fee_reserve
 from cashu.core.migrations import migrate_databases
+from cashu.core.script import *
 from cashu.core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL, VERSION
 from cashu.wallet import migrations
 from cashu.wallet.crud import get_reserved_proofs
@@ -123,17 +124,41 @@ async def send(ctx, amount: int, secret: str):
 
 @cli.command("receive", help="Receive tokens.")
 @click.argument("token", type=str)
-@click.option("--secret", "-s", default="", help="Token spending condition.", type=str)
-@click.option("--script", default=None, help="Token unlock script.", type=str)
+@click.option("--secret", "-s", default=None, help="Token secret.", type=str)
+@click.option("--script", default=None, help="Unlock script.", type=str)
+@click.option("--signature", default=None, help="Script signature.", type=str)
 @click.pass_context
 @coro
-async def receive(ctx, token: str, secret: str, script: str):
+async def receive(ctx, token: str, secret: str, script: str, signature: str):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
     wallet.status()
     proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
-    _, _ = await wallet.redeem(proofs, secret, script)
+    _, _ = await wallet.redeem(
+        proofs, snd_secret=secret, snd_script=script, snd_siganture=signature
+    )
     wallet.status()
+
+
+@cli.command("address", help="Generate receiving address.")
+@click.pass_context
+@coro
+async def address(ctx):
+    alice_privkey = step0_carol_privkey()
+    txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
+    txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
+    print("Redeem script:", txin_redeemScript.__repr__())
+    print(f"Receiving address: P2SH:{txin_p2sh_address}")
+    print("")
+    print(f"Send via command:\ncashu send <amount> --secret P2SH:{txin_p2sh_address}")
+    print("")
+
+    txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
+    txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
+    txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
+    print(
+        f"Receive via command:\ncashu receive <token> --secret P2SH:{txin_p2sh_address} --script {txin_redeemScript_b64} --signature {txin_signature_b64}"
+    )
 
 
 @cli.command("burn", help="Burn spent tokens.")

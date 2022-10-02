@@ -4,11 +4,16 @@ from typing import List
 from pydantic import BaseModel
 
 
+class P2SHScript(BaseModel):
+    script: str
+    signature: str
+
+
 class Proof(BaseModel):
     amount: int
     secret: str = ""
     C: str
-    script: str = ""
+    script: P2SHScript = None
     reserved: bool = False  # whether this proof is reserved for sending
     send_id: str = ""  # unique ID of send attempt
     time_created: str = ""

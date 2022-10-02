@@ -3,24 +3,22 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
 import hashlib
+from inspect import signature
+from signal import signal
 from typing import List, Set
 
 import cashu.core.b_dhke as b_dhke
 from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
+from cashu.core.script import verify_script
 from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER
 from cashu.core.split import amount_split
 from cashu.lightning import WALLET
-from cashu.mint.crud import (
-    get_lightning_invoice,
-    get_proofs_used,
-    invalidate_proof,
-    store_lightning_invoice,
-    store_promise,
-    update_lightning_invoice,
-)
+from cashu.mint.crud import (get_lightning_invoice, get_proofs_used,
+                             invalidate_proof, store_lightning_invoice,
+                             store_promise, update_lightning_invoice)
 
 
 class Ledger:
@@ -73,6 +71,11 @@ class Ledger:
         """Checks whether the proof was already spent."""
         return not proof.secret in self.proofs_used
 
+    def _verify_secret_or_script(self, proof: Proof):
+        if proof.secret and proof.script:
+            raise Exception("secret and script present at the same time.")
+        return True
+
     def _verify_secret_criteria(self, proof: Proof):
         if proof.secret is None or proof.secret == "":
             raise Exception("no secret in proof.")
@@ -86,23 +89,35 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(secret_key, C, proof.secret)
 
-    def _verify_script(self, proof: Proof):
-        print(f"secret: {proof.secret}")
-        print(f"script: {proof.script}")
-        print(
-            f"script_hash: {hashlib.sha256(proof.script.encode('utf-8')).hexdigest()}"
-        )
-        if len(proof.secret.split("SCRIPT:")) != 2:
-            return True
-        if len(proof.script) < 16:
-            raise Exception("Script error: not long enough.")
+    def _verify_script(self, idx: int, proof: Proof):
         if (
-            hashlib.sha256(proof.script.encode("utf-8")).hexdigest()
-            != proof.secret.split("SCRIPT:")[1]
+            proof.script is None
+            or proof.script.script is None
+            or proof.script.signature is None
         ):
-            raise Exception("Script error: script hash not valid.")
-        print(f"Script {proof.script} valid.")
-        return True
+            if len(proof.secret.split("P2SH:")) == 2:
+                # secret indicates a script but no script is present
+                return False
+            else:
+                # secret indicates no script, so treat script as valid
+                return True
+        txin_p2sh_address, valid = verify_script(
+            proof.script.script, proof.script.signature
+        )
+        # if len(proof.script) < 16:
+        #     raise Exception("Script error: not long enough.")
+        # if (
+        #     hashlib.sha256(proof.script.encode("utf-8")).hexdigest()
+        #     != proof.secret.split("P2SH:")[1]
+        # ):
+        #     raise Exception("Script error: script hash not valid.")
+        print(
+            f"Script {proof.script.script.__repr__()} {'valid' if valid else 'invalid'}."
+        )
+        if valid:
+            print(f"{idx}:P2SH:{txin_p2sh_address}")
+            proof.secret = f"{idx}:P2SH:{txin_p2sh_address}"
+        return valid
 
     def _verify_outputs(
         self, total: int, amount: int, output_data: List[BlindedMessage]
@@ -255,6 +270,11 @@ class Ledger:
         """Consumes proofs and prepares new promises based on the amount split."""
         total = sum([p.amount for p in proofs])
 
+        # if not all([self._verify_secret_or_script(p) for p in proofs]):
+        #     raise Exception("can't use secret and script at the same time.")
+        # Verify scripts
+        if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
+            raise Exception("could not verify scripts.")
         # verify that amount is kosher
         self._verify_split_amount(amount)
         # verify overspending attempt
@@ -272,9 +292,6 @@ class Ledger:
         # Verify proofs
         if not all([self._verify_proof(p) for p in proofs]):
             raise Exception("could not verify proofs.")
-        # Verify scripts
-        if not all([self._verify_script(p) for p in proofs]):
-            raise Exception("could not verify scripts.")
 
         # Mark proofs as used and prepare new promises
         await self._invalidate_proofs(proofs)

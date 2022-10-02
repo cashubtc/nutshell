@@ -3,31 +3,20 @@ import json
 import secrets as scrts
 import uuid
 from typing import List
-from loguru import logger
 
 import requests
+from loguru import logger
 
 import cashu.core.b_dhke as b_dhke
-from cashu.core.base import (
-    BlindedMessage,
-    BlindedSignature,
-    CheckPayload,
-    MeltPayload,
-    MintPayloads,
-    Proof,
-    SplitPayload,
-)
+from cashu.core.base import (BlindedMessage, BlindedSignature, CheckPayload,
+                             MeltPayload, MintPayloads, P2SHScript, Proof,
+                             SplitPayload)
 from cashu.core.db import Database
 from cashu.core.secp import PublicKey
 from cashu.core.settings import DEBUG
 from cashu.core.split import amount_split
-from cashu.wallet.crud import (
-    get_proofs,
-    invalidate_proof,
-    store_proof,
-    update_proof_reserved,
-    secret_used,
-)
+from cashu.wallet.crud import (get_proofs, invalidate_proof, secret_used,
+                               store_proof, update_proof_reserved)
 
 
 class LedgerAPI:
@@ -132,9 +121,7 @@ class LedgerAPI:
         promises = [BlindedSignature.from_dict(p) for p in promises_list]
         return self._construct_proofs(promises, secrets, rs)
 
-    async def split(
-        self, proofs, amount, snd_secret: str = None, has_script: bool = False
-    ):
+    async def split(self, proofs, amount, snd_secret: str = None):
         """Consume proofs and create new promises based on amount split.
         If snd_secret is None, random secrets will be generated for the tokens to keep (fst_outputs)
         and the promises to send (snd_outputs).
@@ -182,7 +169,7 @@ class LedgerAPI:
             else:
                 raise Exception("Unkown mint error.")
         if "error" in promises_dict:
-            raise Exception("Error: {}".format(promises_dict["error"]))
+            raise Exception("Mint Error: {}".format(promises_dict["error"]))
         promises_fst = [BlindedSignature.from_dict(p) for p in promises_dict["fst"]]
         promises_snd = [BlindedSignature.from_dict(p) for p in promises_dict["snd"]]
         # Construct proofs from promises (i.e., unblind signatures)
@@ -245,7 +232,11 @@ class Wallet(LedgerAPI):
         return proofs
 
     async def redeem(
-        self, proofs: List[Proof], snd_secret: str = None, snd_script: str = None
+        self,
+        proofs: List[Proof],
+        snd_secret: str = None,
+        snd_script: str = None,
+        snd_siganture: str = None,
     ):
         if snd_secret:
             logger.debug(f"Redeption secret: {snd_secret}")
@@ -254,13 +245,15 @@ class Wallet(LedgerAPI):
             # overload proofs with custom secrets for redemption
             for p, s in zip(proofs, snd_secrets):
                 p.secret = s
-        if snd_script:
+        has_script = False
+        if snd_script and snd_siganture:
+            has_script = True
             logger.debug(f"Unlock script: {snd_script}")
             # overload proofs with unlock script
             for p in proofs:
-                p.script = snd_script
+                p.script = P2SHScript(script=snd_script, signature=snd_siganture)
         return await self.split(
-            proofs, sum(p["amount"] for p in proofs), has_script=snd_script is not None
+            proofs, sum(p["amount"] for p in proofs), has_script=has_script
         )
 
     async def split(
@@ -271,9 +264,7 @@ class Wallet(LedgerAPI):
         has_script: bool = False,
     ):
         assert len(proofs) > 0, ValueError("no proofs provided.")
-        fst_proofs, snd_proofs = await super().split(
-            proofs, amount, snd_secret, has_script
-        )
+        fst_proofs, snd_proofs = await super().split(proofs, amount, snd_secret)
         if len(fst_proofs) == 0 and len(snd_proofs) == 0:
             raise Exception("received no splits.")
         used_secrets = [p["secret"] for p in proofs]
