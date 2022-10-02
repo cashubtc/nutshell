@@ -101,7 +101,7 @@ async def balance(ctx):
 
 @cli.command("send", help="Send coins.")
 @click.argument("amount", type=int)
-@click.option("--lock", "-l", default=None, help="Coin lock (P2SH address).", type=str)
+@click.option("--lock", "-l", default=None, help="Lock coins (P2SH).", type=str)
 @click.pass_context
 @coro
 async def send(ctx, amount: int, lock: str):
@@ -125,7 +125,7 @@ async def send(ctx, amount: int, lock: str):
 
 @cli.command("receive", help="Receive coins.")
 @click.argument("coin", type=str)
-@click.option("--unlock", "-u", default=None, help="Unlock script.", type=str)
+@click.option("--unlock", "-u", default=None, help="Unlock coins.", type=str)
 @click.pass_context
 @coro
 async def receive(ctx, coin: str, unlock: str):
@@ -230,10 +230,10 @@ async def pay(ctx, invoice: str):
     wallet.status()
 
 
-@cli.command("address", help="Generate receiving address.")
+@cli.command("lock", help="Generate receiving lock.")
 @click.pass_context
 @coro
-async def address(ctx):
+async def lock(ctx):
     alice_privkey = step0_carol_privkey()
     txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
     txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
@@ -241,10 +241,10 @@ async def address(ctx):
     print("---- Pay to script hash (P2SH) ----\n")
     print("Use a lock to receive coins that only you can unlock.")
     print("")
-    print(f"Public receiving address: P2SH:{txin_p2sh_address}")
+    print(f"Public receiving lock: P2SH:{txin_p2sh_address}")
     print("")
     print(
-        f"To send to this address:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
+        f"Send coins to this lock:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
     )
     print("")
 
@@ -255,7 +255,7 @@ async def address(ctx):
         "!!! The command below is private. Do not share. You have to remember it. Do not lose. !!!\n"
     )
     print(
-        f"To receive:\n\ncashu receive <coin> --unlock {txin_redeemScript_b64}:{txin_signature_b64}\n"
+        f"Receive coins from this lock:\n\ncashu receive <coin> --unlock {txin_redeemScript_b64}:{txin_signature_b64}\n"
     )
 
 

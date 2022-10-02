@@ -194,6 +194,9 @@ class LedgerAPI:
 
         return fst_proofs, snd_proofs
 
+    async def create_p2sh_lock(self, secrets: List[str]):
+        return None
+
     async def check_spendable(self, proofs: List[Proof]):
         payload = CheckPayload(proofs=proofs)
         return_dict = requests.post(
