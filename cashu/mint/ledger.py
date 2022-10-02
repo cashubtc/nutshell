@@ -16,9 +16,14 @@ from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER
 from cashu.core.split import amount_split
 from cashu.lightning import WALLET
-from cashu.mint.crud import (get_lightning_invoice, get_proofs_used,
-                             invalidate_proof, store_lightning_invoice,
-                             store_promise, update_lightning_invoice)
+from cashu.mint.crud import (
+    get_lightning_invoice,
+    get_proofs_used,
+    invalidate_proof,
+    store_lightning_invoice,
+    store_promise,
+    update_lightning_invoice,
+)
 
 
 class Ledger:
@@ -104,19 +109,20 @@ class Ledger:
         txin_p2sh_address, valid = verify_script(
             proof.script.script, proof.script.signature
         )
-        # if len(proof.script) < 16:
-        #     raise Exception("Script error: not long enough.")
-        # if (
-        #     hashlib.sha256(proof.script.encode("utf-8")).hexdigest()
-        #     != proof.secret.split("P2SH:")[1]
-        # ):
-        #     raise Exception("Script error: script hash not valid.")
-        print(
-            f"Script {proof.script.script.__repr__()} {'valid' if valid else 'invalid'}."
-        )
         if valid:
-            print(f"{idx}:P2SH:{txin_p2sh_address}")
-            proof.secret = f"{idx}:P2SH:{txin_p2sh_address}"
+            # check if secret commits to script address
+            # format: P2SH:<address>:<secret>
+            assert len(proof.secret.split(":")) == 3, "secret format wrong"
+            assert proof.secret.split(":")[1] == str(
+                txin_p2sh_address
+            ), f"secret does not contain P2SH address: {proof.secret.split(':')[1]}!={txin_p2sh_address}"
+        # print(
+        #     f"Script {proof.script.script.__repr__()} {'valid' if valid else 'invalid'}."
+        # )
+        # if valid:
+        #     print(f"{idx}:P2SH:{txin_p2sh_address}")
+        #     print("proof.secret", proof.secret)
+        # proof.secret = f"{idx}:P2SH:{txin_p2sh_address}"
         return valid
 
     def _verify_outputs(

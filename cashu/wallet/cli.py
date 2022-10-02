@@ -101,22 +101,23 @@ async def balance(ctx):
 
 @cli.command("send", help="Send tokens.")
 @click.argument("amount", type=int)
-@click.option(
-    "--secret", "-s", default=None, help="Token spending condition.", type=str
-)
+@click.option("--lock", "-l", default=None, help="Token lock (P2SH address).", type=str)
 @click.pass_context
 @coro
-async def send(ctx, amount: int, secret: str):
-    if secret and len(secret) < 22:
-        print("Error: secret has to be at least 22 characters long.")
+async def send(ctx, amount: int, lock: str):
+    if lock and len(lock) < 22:
+        print("Error: lock has to be at least 22 characters long.")
         return
+    p2sh = False
+    if len(lock.split("P2SH:")) == 2:
+        p2sh = True
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
     wallet.status()
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, secret)
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, lock)
     await wallet.set_reserved(send_proofs, reserved=True)
     token = await wallet.serialize_proofs(
-        send_proofs, hide_secrets=True if secret else False
+        send_proofs, hide_secrets=True if lock and not p2sh else False
     )
     print(token)
     wallet.status()
@@ -124,19 +125,23 @@ async def send(ctx, amount: int, secret: str):
 
 @cli.command("receive", help="Receive tokens.")
 @click.argument("token", type=str)
-@click.option("--secret", "-s", default=None, help="Token secret.", type=str)
-@click.option("--script", default=None, help="Unlock script.", type=str)
-@click.option("--signature", default=None, help="Script signature.", type=str)
+# @click.option("--secret", "-s", default=None, help="Token secret.", type=str)
+@click.option("--unlock", "-u", default=None, help="Unlock script.", type=str)
+# @click.option("--signature", default=None, help="Script signature.", type=str)
 @click.pass_context
 @coro
-async def receive(ctx, token: str, secret: str, script: str, signature: str):
+async def receive(ctx, token: str, unlock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
     wallet.status()
+    if unlock:
+        assert (
+            len(unlock.split(":")) == 2
+        ), "unlock format wrong, expected <script>:<signature>"
+        script = unlock.split(":")[0]
+        signature = unlock.split(":")[1]
     proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
-    _, _ = await wallet.redeem(
-        proofs, snd_secret=secret, snd_script=script, snd_siganture=signature
-    )
+    _, _ = await wallet.redeem(proofs, snd_script=script, snd_siganture=signature)
     wallet.status()
 
 
@@ -147,17 +152,26 @@ async def address(ctx):
     alice_privkey = step0_carol_privkey()
     txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
     txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
-    print("Redeem script:", txin_redeemScript.__repr__())
-    print(f"Receiving address: P2SH:{txin_p2sh_address}")
+    # print("Redeem script:", txin_redeemScript.__repr__())
+    print("---- Pay to script hash (P2SH) ----\n")
+    print("You can use this address to receive tokens that only you can redeem.")
     print("")
-    print(f"Send via command:\ncashu send <amount> --secret P2SH:{txin_p2sh_address}")
+    print(f"Public receiving address: P2SH:{txin_p2sh_address}")
+    print("")
+    print(
+        f"To send to this address:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
+    )
     print("")
 
     txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
     txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
     txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
+    print("!!! The command below is private. Do not share. Back it up. !!!")
     print(
-        f"Receive via command:\ncashu receive <token> --secret P2SH:{txin_p2sh_address} --script {txin_redeemScript_b64} --signature {txin_signature_b64}"
+        "If you lose this command (script and signature), you will not\nbe able to redeem tokens sent to this address!\n\n"
+    )
+    print(
+        f"To receive:\n\ncashu receive <token> --unlock {txin_redeemScript_b64}:{txin_signature_b64}\n"
     )
 
 

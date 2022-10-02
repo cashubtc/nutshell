@@ -8,15 +8,27 @@ import requests
 from loguru import logger
 
 import cashu.core.b_dhke as b_dhke
-from cashu.core.base import (BlindedMessage, BlindedSignature, CheckPayload,
-                             MeltPayload, MintPayloads, P2SHScript, Proof,
-                             SplitPayload)
+from cashu.core.base import (
+    BlindedMessage,
+    BlindedSignature,
+    CheckPayload,
+    MeltPayload,
+    MintPayloads,
+    P2SHScript,
+    Proof,
+    SplitPayload,
+)
 from cashu.core.db import Database
 from cashu.core.secp import PublicKey
 from cashu.core.settings import DEBUG
 from cashu.core.split import amount_split
-from cashu.wallet.crud import (get_proofs, invalidate_proof, secret_used,
-                               store_proof, update_proof_reserved)
+from cashu.wallet.crud import (
+    get_proofs,
+    invalidate_proof,
+    secret_used,
+    store_proof,
+    update_proof_reserved,
+)
 
 
 class LedgerAPI:
@@ -53,7 +65,8 @@ class LedgerAPI:
             proofs.append(proof)
         return proofs
 
-    def _generate_secret(self, randombits=128):
+    @staticmethod
+    def _generate_secret(randombits=128):
         """Returns base64 encoded random string."""
         return scrts.token_urlsafe(randombits // 8)
 
@@ -92,9 +105,10 @@ class LedgerAPI:
             if await secret_used(s, db=self.db):
                 raise Exception(f"secret already used: {s}")
 
-    @staticmethod
-    def generate_deterministic_secrets(secret, n):
+    def generate_secrets(self, secret, n):
         """`secret` is the base string that will be tweaked n times"""
+        if len(secret.split("P2SH:")) == 2:
+            return [f"{secret}:{self._generate_secret()}" for i in range(n)]
         return [f"{i}:{secret}" for i in range(n)]
 
     async def mint(self, amounts, payment_hash=None):
@@ -138,10 +152,8 @@ class LedgerAPI:
         if snd_secret is None:
             secrets = [self._generate_secret() for _ in range(len(amounts))]
         else:
-            logger.debug(f"Creating proofs with custom secret: {snd_secret}")
-            snd_secrets = self.generate_deterministic_secrets(
-                snd_secret, len(snd_outputs)
-            )
+            snd_secrets = self.generate_secrets(snd_secret, len(snd_outputs))
+            logger.debug(f"Creating proofs with custom secrets: {snd_secrets}")
             assert len(snd_secrets) == len(
                 snd_outputs
             ), "number of snd_secrets does not match number of ouptus."
@@ -234,34 +246,29 @@ class Wallet(LedgerAPI):
     async def redeem(
         self,
         proofs: List[Proof],
-        snd_secret: str = None,
+        # snd_secret: str = None,
         snd_script: str = None,
         snd_siganture: str = None,
     ):
-        if snd_secret:
-            logger.debug(f"Redeption secret: {snd_secret}")
-            snd_secrets = self.generate_deterministic_secrets(snd_secret, len(proofs))
-            assert len(proofs) == len(snd_secrets)
-            # overload proofs with custom secrets for redemption
-            for p, s in zip(proofs, snd_secrets):
-                p.secret = s
-        has_script = False
+        # if snd_secret:
+        #     logger.debug(f"Redeption secret: {snd_secret}")
+        #     snd_secrets = self.generate_secrets(snd_secret, len(proofs))
+        #     assert len(proofs) == len(snd_secrets)
+        #     # overload proofs with custom secrets for redemption
+        #     for p, s in zip(proofs, snd_secrets):
+        #         p.secret = s
         if snd_script and snd_siganture:
-            has_script = True
             logger.debug(f"Unlock script: {snd_script}")
             # overload proofs with unlock script
             for p in proofs:
                 p.script = P2SHScript(script=snd_script, signature=snd_siganture)
-        return await self.split(
-            proofs, sum(p["amount"] for p in proofs), has_script=has_script
-        )
+        return await self.split(proofs, sum(p["amount"] for p in proofs))
 
     async def split(
         self,
         proofs: List[Proof],
         amount: int,
         snd_secret: str = None,
-        has_script: bool = False,
     ):
         assert len(proofs) > 0, ValueError("no proofs provided.")
         fst_proofs, snd_proofs = await super().split(proofs, amount, snd_secret)
