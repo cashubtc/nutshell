@@ -10,7 +10,6 @@ ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
 if not os.path.isfile(ENV_FILE):
     ENV_FILE = os.path.join(os.getcwd(), ".env")
 if os.path.isfile(ENV_FILE):
-    logger.info("Using .env: " + ENV_FILE)
     env.read_env(ENV_FILE)
 else:
     env.read_env()

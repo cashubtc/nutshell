@@ -20,7 +20,7 @@ from cashu.core.bolt11 import Invoice
 from cashu.core.helpers import fee_reserve
 from cashu.core.migrations import migrate_databases
 from cashu.core.script import *
-from cashu.core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL, VERSION
+from cashu.core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL, VERSION, ENV_FILE
 from cashu.wallet import migrations
 from cashu.wallet.crud import get_reserved_proofs
 from cashu.wallet.wallet import Wallet as Wallet
@@ -109,7 +109,7 @@ async def send(ctx, amount: int, lock: str):
         print("Error: lock has to be at least 22 characters long.")
         return
     p2sh = False
-    if len(lock.split("P2SH:")) == 2:
+    if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
@@ -267,6 +267,8 @@ async def info(ctx):
     print(f"Version: {VERSION}")
     print(f"Debug: {DEBUG}")
     print(f"Cashu dir: {CASHU_DIR}")
+    if ENV_FILE:
+        print(f"Settings: {ENV_FILE}")
     print(f"Wallet: {ctx.obj['WALLET_NAME']}")
     print(f"Mint URL: {MINT_URL}")
     return
