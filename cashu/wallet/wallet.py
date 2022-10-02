@@ -106,7 +106,7 @@ class LedgerAPI:
     @staticmethod
     def generate_deterministic_secrets(secret, n):
         """`secret` is the base string that will be tweaked n times"""
-        return [f"{secret}_{i}" for i in range(n)]
+        return [f"{i}:{secret}" for i in range(n)]
 
     async def mint(self, amounts, payment_hash=None):
         """Mints new coins and returns a proof of promise."""
@@ -132,7 +132,9 @@ class LedgerAPI:
         promises = [BlindedSignature.from_dict(p) for p in promises_list]
         return self._construct_proofs(promises, secrets, rs)
 
-    async def split(self, proofs, amount, snd_secret: str = None):
+    async def split(
+        self, proofs, amount, snd_secret: str = None, has_script: bool = False
+    ):
         """Consume proofs and create new promises based on amount split.
         If snd_secret is None, random secrets will be generated for the tokens to keep (fst_outputs)
         and the promises to send (snd_outputs).
@@ -147,7 +149,6 @@ class LedgerAPI:
 
         amounts = fst_outputs + snd_outputs
         if snd_secret is None:
-            logger.debug("Generating random secrets.")
             secrets = [self._generate_secret() for _ in range(len(amounts))]
         else:
             logger.debug(f"Creating proofs with custom secret: {snd_secret}")
@@ -243,7 +244,9 @@ class Wallet(LedgerAPI):
         self.proofs += proofs
         return proofs
 
-    async def redeem(self, proofs: List[Proof], snd_secret: str = None):
+    async def redeem(
+        self, proofs: List[Proof], snd_secret: str = None, snd_script: str = None
+    ):
         if snd_secret:
             logger.debug(f"Redeption secret: {snd_secret}")
             snd_secrets = self.generate_deterministic_secrets(snd_secret, len(proofs))
@@ -251,11 +254,26 @@ class Wallet(LedgerAPI):
             # overload proofs with custom secrets for redemption
             for p, s in zip(proofs, snd_secrets):
                 p.secret = s
-        return await self.split(proofs, sum(p["amount"] for p in proofs))
+        if snd_script:
+            logger.debug(f"Unlock script: {snd_script}")
+            # overload proofs with unlock script
+            for p in proofs:
+                p.script = snd_script
+        return await self.split(
+            proofs, sum(p["amount"] for p in proofs), has_script=snd_script is not None
+        )
 
-    async def split(self, proofs: List[Proof], amount: int, snd_secret: str = None):
+    async def split(
+        self,
+        proofs: List[Proof],
+        amount: int,
+        snd_secret: str = None,
+        has_script: bool = False,
+    ):
         assert len(proofs) > 0, ValueError("no proofs provided.")
-        fst_proofs, snd_proofs = await super().split(proofs, amount, snd_secret)
+        fst_proofs, snd_proofs = await super().split(
+            proofs, amount, snd_secret, has_script
+        )
         if len(fst_proofs) == 0 and len(snd_proofs) == 0:
             raise Exception("received no splits.")
         used_secrets = [p["secret"] for p in proofs]

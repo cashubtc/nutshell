@@ -431,6 +431,14 @@ typing-extensions = {version = ">=3.7.2", markers = "python_version < \"3.8\""}
 testing = ["coverage (>=6.2)", "flaky (>=3.5.0)", "hypothesis (>=5.7.1)", "mypy (>=0.931)", "pytest-trio (>=0.7.0)"]
 
 [[package]]
+name = "python-bitcoinlib"
+version = "0.11.2"
+description = "The Swiss Army Knife of the Bitcoin protocol."
+category = "main"
+optional = false
+python-versions = "*"
+
+[[package]]
 name = "python-dotenv"
 version = "0.21.0"
 description = "Read key-value pairs from a .env file and set them as environment variables"
@@ -632,7 +640,7 @@ testing = ["func-timeout", "jaraco.itertools", "pytest (>=6)", "pytest-black (>=
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.7"
-content-hash = "fbb8f977f71b77cf9b6514134111dc466f7fa1f70f8114e47b858d85c39199e4"
+content-hash = "be65b895cb013a28ac6a6b2aacc131d140d6eafcd071aa021dbf2d2fbe311802"
 
 [metadata.files]
 anyio = [
@@ -963,6 +971,10 @@ pytest = [
 pytest-asyncio = [
     {file = "pytest-asyncio-0.19.0.tar.gz", hash = "sha256:ac4ebf3b6207259750bc32f4c1d8fcd7e79739edbc67ad0c58dd150b1d072fed"},
     {file = "pytest_asyncio-0.19.0-py3-none-any.whl", hash = "sha256:7a97e37cfe1ed296e2e84941384bdd37c376453912d397ed39293e0916f521fa"},
+]
+python-bitcoinlib = [
+    {file = "python-bitcoinlib-0.11.2.tar.gz", hash = "sha256:61ba514e0d232cc84741e49862dcedaf37199b40bba252a17edc654f63d13f39"},
+    {file = "python_bitcoinlib-0.11.2-py3-none-any.whl", hash = "sha256:78bd4ee717fe805cd760dfdd08765e77b7c7dbef4627f8596285e84953756508"},
 ]
 python-dotenv = [
     {file = "python-dotenv-0.21.0.tar.gz", hash = "sha256:b77d08274639e3d34145dfa6c7008e66df0f04b7be7a75fd0d5292c191d79045"},

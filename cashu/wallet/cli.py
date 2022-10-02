@@ -124,14 +124,15 @@ async def send(ctx, amount: int, secret: str):
 @cli.command("receive", help="Receive tokens.")
 @click.argument("token", type=str)
 @click.option("--secret", "-s", default="", help="Token spending condition.", type=str)
+@click.option("--script", default=None, help="Token unlock script.", type=str)
 @click.pass_context
 @coro
-async def receive(ctx, token: str, secret: str):
+async def receive(ctx, token: str, secret: str, script: str):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
     wallet.status()
     proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(token))]
-    _, _ = await wallet.redeem(proofs, secret)
+    _, _ = await wallet.redeem(proofs, secret, script)
     wallet.status()
 
 

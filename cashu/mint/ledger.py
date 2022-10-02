@@ -86,6 +86,24 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(secret_key, C, proof.secret)
 
+    def _verify_script(self, proof: Proof):
+        print(f"secret: {proof.secret}")
+        print(f"script: {proof.script}")
+        print(
+            f"script_hash: {hashlib.sha256(proof.script.encode('utf-8')).hexdigest()}"
+        )
+        if len(proof.secret.split("SCRIPT:")) != 2:
+            return True
+        if len(proof.script) < 16:
+            raise Exception("Script error: not long enough.")
+        if (
+            hashlib.sha256(proof.script.encode("utf-8")).hexdigest()
+            != proof.secret.split("SCRIPT:")[1]
+        ):
+            raise Exception("Script error: script hash not valid.")
+        print(f"Script {proof.script} valid.")
+        return True
+
     def _verify_outputs(
         self, total: int, amount: int, output_data: List[BlindedMessage]
     ):
@@ -242,7 +260,7 @@ class Ledger:
         # verify overspending attempt
         if amount > total:
             raise Exception("split amount is higher than the total sum.")
-        # Verify proofs
+        # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):
             raise Exception("secrets do not match criteria.")
         # verify that only unique proofs and outputs were used
@@ -254,6 +272,9 @@ class Ledger:
         # Verify proofs
         if not all([self._verify_proof(p) for p in proofs]):
             raise Exception("could not verify proofs.")
+        # Verify scripts
+        if not all([self._verify_script(p) for p in proofs]):
+            raise Exception("could not verify scripts.")
 
         # Mark proofs as used and prepare new promises
         await self._invalidate_proofs(proofs)
