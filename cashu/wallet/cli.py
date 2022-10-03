@@ -241,8 +241,6 @@ async def lock(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
     p2shscript = await wallet.create_p2sh_lock()
     txin_p2sh_address = p2shscript.address
-    txin_redeemScript_b64 = p2shscript.script
-    txin_signature_b64 = p2shscript.signature
     print("---- Pay to script hash (P2SH) ----\n")
     print("Use a lock to receive coins that only you can unlock.")
     print("")

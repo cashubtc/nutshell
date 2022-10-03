@@ -130,6 +130,15 @@ async def run_test():
         wallet1.proofs, 65, snd_secret=secret
     )
 
+    # p2sh test
+    p2shscript = await wallet2.create_p2sh_lock()
+    txin_p2sh_address = p2shscript.address
+    lock = f"P2SH:{txin_p2sh_address}"
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
+    _, _ = await wallet2.redeem(
+        send_proofs, snd_script=p2shscript.script, snd_siganture=p2shscript.signature
+    )
+
     # strip away the secrets
     w1_snd_proofs_manipulated = w1_snd_proofs.copy()
     for p in w1_snd_proofs_manipulated:
@@ -137,22 +146,6 @@ async def run_test():
     await assert_err(
         wallet2.redeem(w1_snd_proofs_manipulated),
         "Mint Error: no secret in proof.",
-    )
-
-    # redeem with wrong secret
-    await assert_err(
-        wallet2.redeem(w1_snd_proofs_manipulated, f"{secret}_asd"),
-        "Mint Error: could not verify proofs.",
-    )
-
-    # redeem with correct secret
-    await wallet2.redeem(w1_snd_proofs_manipulated, secret)
-
-    # try to redeem them again
-    # NOTE: token indexing suffix _0
-    await assert_err(
-        wallet2.redeem(w1_snd_proofs_manipulated, secret),
-        f"Mint Error: tokens already spent. Secret: 0:{secret}",
     )
 
 

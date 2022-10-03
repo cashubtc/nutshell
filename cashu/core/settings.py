@@ -12,6 +12,7 @@ if not os.path.isfile(ENV_FILE):
 if os.path.isfile(ENV_FILE):
     env.read_env(ENV_FILE)
 else:
+    ENV_FILE = None
     env.read_env()
 
 DEBUG = env.bool("DEBUG", default=False)
