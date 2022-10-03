@@ -127,16 +127,16 @@ async def send(ctx, amount: int, lock: str):
 @click.option("--lock", "-l", default=None, help="Unlock coins.", type=str)
 @click.pass_context
 @coro
-async def receive(ctx, coin: str, unlock: str):
+async def receive(ctx, coin: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.load_mint()
     wallet.status()
-    if unlock:
+    if lock:
         # load the script and signature of this address from the database
-        assert len(unlock.split("P2SH:")) == 2, Exception(
+        assert len(lock.split("P2SH:")) == 2, Exception(
             "lock has wrong format. Expected P2SH:<address>."
         )
-        address_split = unlock.split("P2SH:")[1]
+        address_split = lock.split("P2SH:")[1]
 
         p2shscripts = await get_unused_locks(address_split, db=wallet.db)
         assert len(p2shscripts) == 1
