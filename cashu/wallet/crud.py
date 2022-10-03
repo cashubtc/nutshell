@@ -1,5 +1,5 @@
 import time
-from typing import Optional
+from typing import Optional, List
 
 from cashu.core.base import Proof, P2SHScript
 from cashu.core.db import Connection, Database
@@ -132,15 +132,30 @@ async def store_p2sh(
 
 
 async def get_unused_locks(
-    db: Database,
+    address: str = None,
+    db: Database = None,
     conn: Optional[Connection] = None,
 ):
 
+    clause: List[str] = []
+    args: List[str] = []
+
+    clause.append("used = 0")
+
+    if address:
+        clause.append("address = ?")
+        args.append(address)
+
+    where = ""
+    if clause:
+        where = f"WHERE {' AND '.join(clause)}"
+
     rows = await (conn or db).fetchall(
-        """
+        f"""
         SELECT * from p2sh
-        WHERE used = 0
-        """
+        {where}
+        """,
+        tuple(args),
     )
     return [P2SHScript.from_row(r) for r in rows]
 

@@ -124,7 +124,7 @@ async def send(ctx, amount: int, lock: str):
 
 @cli.command("receive", help="Receive coins.")
 @click.argument("coin", type=str)
-@click.option("--unlock", "-u", default=None, help="Unlock coins.", type=str)
+@click.option("--lock", "-l", default=None, help="Unlock coins.", type=str)
 @click.pass_context
 @coro
 async def receive(ctx, coin: str, unlock: str):
@@ -132,11 +132,16 @@ async def receive(ctx, coin: str, unlock: str):
     wallet.load_mint()
     wallet.status()
     if unlock:
-        assert (
-            len(unlock.split(":")) == 2
-        ), "unlock format wrong, expected <script>:<signature>"
-        script = unlock.split(":")[0]
-        signature = unlock.split(":")[1]
+        # load the script and signature of this address from the database
+        assert len(unlock.split("P2SH:")) == 2, Exception(
+            "lock has wrong format. Expected P2SH:<address>."
+        )
+        address_split = unlock.split("P2SH:")[1]
+
+        p2shscripts = await get_unused_locks(address_split, db=wallet.db)
+        assert len(p2shscripts) == 1
+        script = p2shscripts[0].script
+        signature = p2shscripts[0].signature
     else:
         script, signature = None, None
     proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(coin))]
@@ -244,14 +249,11 @@ async def lock(ctx):
     print(f"Public receiving lock: P2SH:{txin_p2sh_address}")
     print("")
     print(
-        f"Send coins to this lock:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
+        f"Anyone can send coins to this lock:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
     )
     print("")
     print(
-        "!!! The command below is private. Do not share. You have to remember it. Do not lose. !!!\n"
-    )
-    print(
-        f"Receive coins from this lock:\n\ncashu receive <coin> --unlock {txin_redeemScript_b64}:{txin_signature_b64}\n"
+        f"Only you can receive coins from this lock:\n\ncashu receive <coin> --lock P2SH:{txin_p2sh_address}\n"
     )
 
 
@@ -269,7 +271,7 @@ async def locks(ctx):
             print(f"Script: {l.script}")
             print(f"Signature: {l.signature}")
             print("")
-            print(f"Receive: cashu receive <coin> --unlock {l.script}:{l.signature}")
+            print(f"Receive: cashu receive <coin> --lock P2SH:{l.address}")
             print("")
             print(f"--------------------------\n")
     return True
