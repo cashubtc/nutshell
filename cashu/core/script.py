@@ -8,6 +8,7 @@ SEED = b"__not__used"
 
 from bitcoin.core import CMutableTxIn, CMutableTxOut, COutPoint, CTransaction, lx
 from bitcoin.core.script import *
+from bitcoin.core.script import CScript
 from bitcoin.core.scripteval import (
     SCRIPT_VERIFY_P2SH,
     EvalScriptError,

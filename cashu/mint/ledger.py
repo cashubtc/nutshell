@@ -162,7 +162,7 @@ class Ledger:
         return amount
 
     def _verify_equation_balanced(
-        self, proofs: List[Proof], outs: List[BlindedMessage]
+        self, proofs: List[Proof], outs: List[BlindedSignature]
     ):
         """Verify that Σoutputs - Σinputs = 0."""
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
