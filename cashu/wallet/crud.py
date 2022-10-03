@@ -1,5 +1,5 @@
 import time
-from typing import Optional, List
+from typing import Optional, List, Any
 
 from cashu.core.base import Proof, P2SHScript
 from cashu.core.db import Connection, Database
@@ -59,7 +59,7 @@ async def invalidate_proof(
         DELETE FROM proofs
         WHERE secret = ?
         """,
-        str(proof["secret"]),
+        (str(proof["secret"]),),
     )
 
     await (conn or db).execute(
@@ -80,7 +80,7 @@ async def update_proof_reserved(
     conn: Optional[Connection] = None,
 ):
     clauses = []
-    values = []
+    values: List[Any] = []
     clauses.append("reserved = ?")
     values.append(reserved)
 
@@ -110,7 +110,7 @@ async def secret_used(
         SELECT * from proofs
         WHERE secret = ?
         """,
-        (secret),
+        (secret,),
     )
     return rows is not None
 
@@ -127,7 +127,12 @@ async def store_p2sh(
           (address, script, signature, used)
         VALUES (?, ?, ?, ?)
         """,
-        (p2sh.address, p2sh.script, p2sh.signature, False),
+        (
+            p2sh.address,
+            p2sh.script,
+            p2sh.signature,
+            False,
+        ),
     )
 
 

@@ -30,9 +30,9 @@ class Ledger:
     def __init__(self, secret_key: str, db: str):
         self.proofs_used: Set[str] = set()
 
-        self.master_key: str = secret_key
-        self.keys: List[PrivateKey] = self._derive_keys(self.master_key)
-        self.pub_keys: List[PublicKey] = self._derive_pubkeys(self.keys)
+        self.master_key = secret_key
+        self.keys = self._derive_keys(self.master_key)
+        self.pub_keys = self._derive_pubkeys(self.keys)
         self.db: Database = Database("mint", db)
 
     async def load_used_proofs(self):

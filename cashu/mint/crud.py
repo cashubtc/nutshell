@@ -93,7 +93,7 @@ async def get_lightning_invoice(
         SELECT * from invoices
         WHERE hash = ?
         """,
-        hash,
+        (hash,),
     )
     return Invoice.from_row(row)
 
@@ -106,5 +106,8 @@ async def update_lightning_invoice(
 ):
     await (conn or db).execute(
         "UPDATE invoices SET issued = ? WHERE hash = ?",
-        (issued, hash),
+        (
+            issued,
+            hash,
+        ),
     )
