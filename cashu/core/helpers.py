@@ -1,7 +1,8 @@
 import asyncio
 from functools import partial, wraps
 
-from cashu.core.settings import LIGHTNING_FEE_PERCENT, LIGHTNING_RESERVE_FEE_MIN
+from cashu.core.settings import (LIGHTNING_FEE_PERCENT,
+                                 LIGHTNING_RESERVE_FEE_MIN)
 
 
 def async_wrap(func):

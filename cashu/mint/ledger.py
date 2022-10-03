@@ -3,12 +3,15 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
 import hashlib
+from inspect import signature
+from signal import signal
 from typing import List, Set
 
 import cashu.core.b_dhke as b_dhke
 from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
+from cashu.core.script import verify_script
 from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER
 from cashu.core.split import amount_split
@@ -27,9 +30,9 @@ class Ledger:
     def __init__(self, secret_key: str, db: str):
         self.proofs_used: Set[str] = set()
 
-        self.master_key: str = secret_key
-        self.keys: List[PrivateKey] = self._derive_keys(self.master_key)
-        self.pub_keys: List[PublicKey] = self._derive_pubkeys(self.keys)
+        self.master_key = secret_key
+        self.keys = self._derive_keys(self.master_key)
+        self.pub_keys = self._derive_pubkeys(self.keys)
         self.db: Database = Database("mint", db)
 
     async def load_used_proofs(self):
@@ -73,6 +76,16 @@ class Ledger:
         """Checks whether the proof was already spent."""
         return not proof.secret in self.proofs_used
 
+    def _verify_secret_or_script(self, proof: Proof):
+        if proof.secret and proof.script:
+            raise Exception("secret and script present at the same time.")
+        return True
+
+    def _verify_secret_criteria(self, proof: Proof):
+        if proof.secret is None or proof.secret == "":
+            raise Exception("no secret in proof.")
+        return True
+
     def _verify_proof(self, proof: Proof):
         """Verifies that the proof of promise was issued by this ledger."""
         if not self._check_spendable(proof):
@@ -80,6 +93,36 @@ class Ledger:
         secret_key = self.keys[proof.amount]  # Get the correct key to check against
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(secret_key, C, proof.secret)
+
+    def _verify_script(self, idx: int, proof: Proof):
+        """
+        Verify bitcoin script in proof.script commited to by <address> in proof.secret.
+        proof.secret format: P2SH:<address>:<secret>
+        """
+        # if no script is given
+        if (
+            proof.script is None
+            or proof.script.script is None
+            or proof.script.signature is None
+        ):
+            if len(proof.secret.split("P2SH:")) == 2:
+                # secret indicates a script but no script is present
+                return False
+            else:
+                # secret indicates no script, so treat script as valid
+                return True
+        # execute and verify P2SH
+        txin_p2sh_address, valid = verify_script(
+            proof.script.script, proof.script.signature
+        )
+        if valid:
+            # check if secret commits to script address
+            # format: P2SH:<address>:<secret>
+            assert len(proof.secret.split(":")) == 3, "secret format wrong."
+            assert proof.secret.split(":")[1] == str(
+                txin_p2sh_address
+            ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]}!={txin_p2sh_address}."
+        return valid
 
     def _verify_outputs(
         self, total: int, amount: int, output_data: List[BlindedMessage]
@@ -150,7 +193,7 @@ class Ledger:
         """Checks with the Lightning backend whether an invoice with this payment_hash was paid."""
         invoice: Invoice = await get_lightning_invoice(payment_hash, db=self.db)
         if invoice.issued:
-            raise Exception("tokens already issued for this invoice")
+            raise Exception("tokens already issued for this invoice.")
         status = await WALLET.get_invoice_status(payment_hash)
         if status.paid:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
@@ -227,32 +270,43 @@ class Ledger:
         return {i: self._check_spendable(p) for i, p in enumerate(proofs)}
 
     async def split(
-        self, proofs: List[Proof], amount: int, output_data: List[BlindedMessage]
+        self, proofs: List[Proof], amount: int, outputs: List[BlindedMessage]
     ):
         """Consumes proofs and prepares new promises based on the amount split."""
-        self._verify_split_amount(amount)
-        # Verify proofs are valid
-        if not all([self._verify_proof(p) for p in proofs]):
-            return False
-
         total = sum([p.amount for p in proofs])
 
-        if not self._verify_no_duplicates(proofs, output_data):
-            raise Exception("duplicate proofs or promises")
+        # verify that amount is kosher
+        self._verify_split_amount(amount)
+        # verify overspending attempt
         if amount > total:
-            raise Exception("split amount is higher than the total sum")
-        if not self._verify_outputs(total, amount, output_data):
-            raise Exception("split of promises is not as expected")
+            raise Exception("split amount is higher than the total sum.")
+
+        # Verify scripts
+        if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
+            raise Exception("script verification failed.")
+        # Verify secret criteria
+        if not all([self._verify_secret_criteria(p) for p in proofs]):
+            raise Exception("secrets do not match criteria.")
+        # verify that only unique proofs and outputs were used
+        if not self._verify_no_duplicates(proofs, outputs):
+            raise Exception("duplicate proofs or promises.")
+        # verify that outputs have the correct amount
+        if not self._verify_outputs(total, amount, outputs):
+            raise Exception("split of promises is not as expected.")
+        # Verify proofs
+        if not all([self._verify_proof(p) for p in proofs]):
+            raise Exception("could not verify proofs.")
 
         # Mark proofs as used and prepare new promises
         await self._invalidate_proofs(proofs)
 
         outs_fst = amount_split(total - amount)
         outs_snd = amount_split(amount)
-        B_fst = [od.B_ for od in output_data[: len(outs_fst)]]
-        B_snd = [od.B_ for od in output_data[len(outs_fst) :]]
+        B_fst = [od.B_ for od in outputs[: len(outs_fst)]]
+        B_snd = [od.B_ for od in outputs[len(outs_fst) :]]
         prom_fst, prom_snd = await self._generate_promises(
             outs_fst, B_fst
         ), await self._generate_promises(outs_snd, B_snd)
+        # verify amounts in produced proofs
         self._verify_equation_balanced(proofs, prom_fst + prom_snd)
         return prom_fst, prom_snd

@@ -79,3 +79,22 @@ async def m003_add_proofs_sendid_and_timestamps(db):
     await db.execute("ALTER TABLE proofs ADD COLUMN time_created TIMESTAMP")
     await db.execute("ALTER TABLE proofs ADD COLUMN time_reserved TIMESTAMP")
     await db.execute("ALTER TABLE proofs_used ADD COLUMN time_used TIMESTAMP")
+
+
+async def m004_p2sh_locks(db: Database):
+    """
+    Stores P2SH addresses and unlock scripts.
+    """
+    await db.execute(
+        """
+            CREATE TABLE IF NOT EXISTS p2sh (
+                address TEXT NOT NULL,
+                script TEXT NOT NULL,
+                signature TEXT NOT NULL,
+                used BOOL NOT NULL,
+
+                UNIQUE (address, script, signature)
+
+            );
+        """
+    )
