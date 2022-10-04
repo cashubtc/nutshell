@@ -1,12 +1,25 @@
+import os
+import sys
 from pathlib import Path
-
 from environs import Env  # type: ignore
+from loguru import logger
 
 env = Env()
-env.read_env()
+
+ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
+if not os.path.isfile(ENV_FILE):
+    ENV_FILE = os.path.join(os.getcwd(), ".env")
+if os.path.isfile(ENV_FILE):
+    env.read_env(ENV_FILE)
+else:
+    ENV_FILE = None
+    env.read_env()
 
 DEBUG = env.bool("DEBUG", default=False)
-CASHU_DIR = env.str("CASHU_DIR", default="~/.cashu")
+if not DEBUG:
+    sys.tracebacklimit = 0
+
+CASHU_DIR = env.str("CASHU_DIR", default=os.path.join(str(Path.home()), ".cashu"))
 CASHU_DIR = CASHU_DIR.replace("~", str(Path.home()))
 assert len(CASHU_DIR), "CASHU_DIR not defined"
 
@@ -32,4 +45,4 @@ LNBITS_ENDPOINT = env.str("LNBITS_ENDPOINT", default=None)
 LNBITS_KEY = env.str("LNBITS_KEY", default=None)
 
 MAX_ORDER = 64
-VERSION = "0.1.10"
+VERSION = "0.2.0"

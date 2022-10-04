@@ -3,7 +3,8 @@ from typing import Union
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
-from cashu.core.base import CheckPayload, MeltPayload, MintPayloads, SplitPayload
+from cashu.core.base import (CheckPayload, MeltPayload, MintPayloads,
+                             SplitPayload)
 from cashu.mint import ledger
 
 router: APIRouter = APIRouter()
@@ -82,7 +83,6 @@ async def split(payload: SplitPayload):
     except Exception as exc:
         return {"error": str(exc)}
     if not split_return:
-        """There was a problem with the split"""
-        raise Exception("could not split tokens.")
+        return {"error": "there was a problem with the split."}
     fst_promises, snd_promises = split_return
     return {"fst": fst_promises, "snd": snd_promises}

@@ -4,10 +4,26 @@ from typing import List
 from pydantic import BaseModel
 
 
+class P2SHScript(BaseModel):
+    script: str
+    signature: str
+    address: str = None
+
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            address=row[0],
+            script=row[1],
+            signature=row[2],
+            used=row[3],
+        )
+
+
 class Proof(BaseModel):
     amount: int
-    secret: str
+    secret: str = ""
     C: str
+    script: P2SHScript = None
     reserved: bool = False  # whether this proof is reserved for sending
     send_id: str = ""  # unique ID of send attempt
     time_created: str = ""
@@ -27,12 +43,11 @@ class Proof(BaseModel):
 
     @classmethod
     def from_dict(cls, d: dict):
-        assert "secret" in d, "no secret in proof"
         assert "amount" in d, "no amount in proof"
         return cls(
             amount=d.get("amount"),
             C=d.get("C"),
-            secret=d.get("secret"),
+            secret=d.get("secret") or "",
             reserved=d.get("reserved") or False,
             send_id=d.get("send_id") or "",
             time_created=d.get("time_created") or "",
@@ -41,6 +56,9 @@ class Proof(BaseModel):
 
     def to_dict(self):
         return dict(amount=self.amount, secret=self.secret, C=self.C)
+
+    def to_dict_no_secret(self):
+        return dict(amount=self.amount, C=self.C)
 
     def __getitem__(self, key):
         return self.__getattribute__(key)
