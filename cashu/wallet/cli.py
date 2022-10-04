@@ -7,6 +7,7 @@ import math
 import os
 import sys
 from datetime import datetime
+import time
 from functools import wraps
 from itertools import groupby
 from operator import itemgetter
@@ -39,8 +40,14 @@ class NaturalOrderGroup(click.Group):
 
 
 @click.group(cls=NaturalOrderGroup)
-@click.option("--host", "-h", default=MINT_URL, help="Mint URL.")
-@click.option("--wallet", "-w", "walletname", default="wallet", help="Wallet name.")
+@click.option("--host", "-h", default=MINT_URL, help=f"Mint URL (default: {MINT_URL}).")
+@click.option(
+    "--wallet",
+    "-w",
+    "walletname",
+    default="wallet",
+    help="Wallet name (default: wallet).",
+)
 @click.pass_context
 def cli(ctx, host: str, walletname: str):
     # configure logger
@@ -64,7 +71,7 @@ def coro(f):
     return wrapper
 
 
-@cli.command("mint", help="Mint.")
+@cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=int)
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
 @click.pass_context
@@ -78,16 +85,59 @@ async def mint(ctx, amount: int, hash: str):
     elif amount and not hash:
         r = await wallet.request_mint(amount)
         if "pr" in r:
-            print(f"Pay this invoice to mint {amount} sat:")
+            print(f"Pay invoice to mint {amount} sat:")
+            print("")
             print(f"Invoice: {r['pr']}")
             print("")
             print(
-                f"After paying the invoice, run this command:\ncashu mint {amount} --hash {r['hash']}"
+                f"Execute this command if you abort the check:\ncashu mint {amount} --hash {r['hash']}"
             )
+            check_until = time.time() + 5 * 60  # check for five minutes
+            print("")
+            print(
+                f"Checking invoice ...",
+                end="",
+                flush=True,
+            )
+            paid = False
+            while time.time() < check_until and not paid:
+                time.sleep(3)
+                try:
+                    await wallet.mint(amount, r["hash"])
+                except Exception as e:
+                    if str(e) == "Error: Lightning invoice not paid yet.":
+                        print(".", end="", flush=True)
+                        continue
+                paid = True
+                print(" Invoice paid.")
     elif amount and hash:
         await wallet.mint(amount, hash)
     wallet.status()
     return
+
+
+@cli.command("pay", help="Pay Lightning invoice.")
+@click.argument("invoice", type=str)
+@click.pass_context
+@coro
+async def pay(ctx, invoice: str):
+    wallet: Wallet = ctx.obj["WALLET"]
+    wallet.load_mint()
+    wallet.status()
+    decoded_invoice: Invoice = bolt11.decode(invoice)
+    amount = math.ceil(
+        (decoded_invoice.amount_msat + fee_reserve(decoded_invoice.amount_msat)) / 1000
+    )  # 1% fee for Lightning
+    print(
+        f"Paying Lightning invoice of {decoded_invoice.amount_msat // 1000} sat ({amount} sat incl. fees)"
+    )
+    assert amount > 0, "amount is not positive"
+    if wallet.available_balance < amount:
+        print("Error: Balance too low.")
+        return
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    await wallet.pay_lightning(send_proofs, amount, invoice)
+    wallet.status()
 
 
 @cli.command("balance", help="Balance.")
@@ -207,30 +257,6 @@ async def pending(ctx):
             )
             print(f"With secret: {coin}\n\nSecretless: {coin_hidden_secret}\n")
             print(f"--------------------------\n")
-    wallet.status()
-
-
-@cli.command("pay", help="Pay Lightning invoice.")
-@click.argument("invoice", type=str)
-@click.pass_context
-@coro
-async def pay(ctx, invoice: str):
-    wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
-    wallet.status()
-    decoded_invoice: Invoice = bolt11.decode(invoice)
-    amount = math.ceil(
-        (decoded_invoice.amount_msat + fee_reserve(decoded_invoice.amount_msat)) / 1000
-    )  # 1% fee for Lightning
-    print(
-        f"Paying Lightning invoice of {decoded_invoice.amount_msat // 1000} sat ({amount} sat incl. fees)"
-    )
-    assert amount > 0, "amount is not positive"
-    if wallet.available_balance < amount:
-        print("Error: Balance too low.")
-        return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
-    await wallet.pay_lightning(send_proofs, amount, invoice)
     wallet.status()
 
 
