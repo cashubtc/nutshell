@@ -237,10 +237,13 @@ class Ledger:
     async def mint(self, B_s: List[PublicKey], amounts: List[int], payment_hash=None):
         """Mints a promise for coins for B_."""
         # check if lightning invoice was paid
-        if LIGHTNING and (
-            payment_hash and not await self._check_lightning_invoice(payment_hash)
-        ):
-            raise Exception("Lightning invoice not paid yet.")
+        if LIGHTNING:
+            try:
+                paid = await self._check_lightning_invoice(payment_hash)
+            except:
+                raise Exception("could not check invoice.")
+            if not paid:
+                raise Exception("Lightning invoice not paid yet.")
 
         for amount in amounts:
             if amount not in [2**i for i in range(MAX_ORDER)]:

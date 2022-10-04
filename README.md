@@ -29,7 +29,7 @@ pip install cashu
 
 To update Cashu, use `pip install cashu -U`. 
 
-If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config libpq-dev`. On macOS, run `brew install postgresql`.
+If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config`.
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 
