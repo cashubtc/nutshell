@@ -1,0 +1,38 @@
+name: tests
+
+on: [push, pull_request]
+
+jobs:
+  poetry:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+        poetry-version: ["1.2.1"]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Set up Poetry ${{ matrix.poetry-version }}
+        uses: abatilo/actions-poetry@v2
+        with:
+          poetry-version: ${{ matrix.poetry-version }}
+      - name: Install dependencies
+        run: |
+          poetry install --with dev
+      - name: Run mint
+        env:
+          LIGHTNING: False
+          MINT_SERVER_HOST: 0.0.0.0
+          MINT_SERVER_PORT: 3338
+        run: |
+          nohup poetry run mint &
+      - name: Run tests
+        env:
+          LIGHTNING: False
+          MINT_HOST: localhost
+          MINT_PORT: 3338
+        run: |
+          poetry run pytest tests

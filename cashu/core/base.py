@@ -4,6 +4,11 @@ from typing import List
 from pydantic import BaseModel
 
 
+class CashuError(BaseModel):
+    code = "000"
+    error = "CashuError"
+
+
 class P2SHScript(BaseModel):
     script: str
     signature: str
@@ -106,21 +111,47 @@ class BlindedSignature(BaseModel):
         )
 
 
-class MintPayloads(BaseModel):
+class MintRequest(BaseModel):
     blinded_messages: List[BlindedMessage] = []
 
 
-class SplitPayload(BaseModel):
+class GetMintResponse(BaseModel):
+    pr: str
+    hash: str
+
+
+class GetMeltResponse(BaseModel):
+    paid: str
+    preimage: str
+
+
+class SplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
-    output_data: MintPayloads
+    output_data: MintRequest = None  # backwards compatibility with clients < v0.2.1
+    outputs: MintRequest = None
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.backwards_compatibility_v021()
+
+    def backwards_compatibility_v021(self):
+        # before v0.2.1: output_data, after: outputs
+        if self.output_data:
+            self.outputs = self.output_data
+            self.output_data = None
 
 
-class CheckPayload(BaseModel):
+class PostSplitResponse(BaseModel):
+    fst: List[BlindedSignature]
+    snd: List[BlindedSignature]
+
+
+class CheckRequest(BaseModel):
     proofs: List[Proof]
 
 
-class MeltPayload(BaseModel):
+class MeltRequest(BaseModel):
     proofs: List[Proof]
     amount: int
     invoice: str
