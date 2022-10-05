@@ -116,6 +116,8 @@ class LNbitsWallet(Wallet):
             )
         except:
             return PaymentStatus(None)
+        if r.json().get("detail"):
+            return PaymentStatus(None)
         return PaymentStatus(r.json()["paid"])
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:

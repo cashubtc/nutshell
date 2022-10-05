@@ -153,8 +153,12 @@ class CheckRequest(BaseModel):
     proofs: List[Proof]
 
 
-class CheckInternalRequest(BaseModel):
+class CheckFeesRequest(BaseModel):
     pr: str
+
+
+class CheckFeesResponse(BaseModel):
+    fee: Union[int, None]
 
 
 class MeltRequest(BaseModel):

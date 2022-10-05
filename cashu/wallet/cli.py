@@ -17,7 +17,7 @@ from loguru import logger
 
 import cashu.core.bolt11 as bolt11
 from cashu.core.base import Proof
-from cashu.core.bolt11 import Invoice
+from cashu.core.bolt11 import Invoice, decode
 from cashu.core.helpers import fee_reserve
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
@@ -125,11 +125,13 @@ async def pay(ctx, invoice: str):
     wallet.load_mint()
     wallet.status()
     decoded_invoice: Invoice = bolt11.decode(invoice)
+    # check if it's an internal payment
+    fees = (await wallet.check_fees(invoice))["fee"]
     amount = math.ceil(
-        (decoded_invoice.amount_msat + fee_reserve(decoded_invoice.amount_msat)) / 1000
+        (decoded_invoice.amount_msat + fees * 1000) / 1000
     )  # 1% fee for Lightning
     print(
-        f"Paying Lightning invoice of {decoded_invoice.amount_msat // 1000} sat ({amount} sat incl. fees)"
+        f"Paying Lightning invoice of {decoded_invoice.amount_msat//1000} sat ({amount} sat incl. fees)"
     )
     assert amount > 0, "amount is not positive"
     if wallet.available_balance < amount:

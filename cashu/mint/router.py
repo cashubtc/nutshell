@@ -5,7 +5,9 @@ from secp256k1 import PublicKey
 
 from cashu.core.base import (
     CashuError,
+    CheckFeesResponse,
     CheckRequest,
+    CheckFeesRequest,
     GetMeltResponse,
     GetMintResponse,
     MeltRequest,
@@ -70,6 +72,12 @@ async def melt(payload: MeltRequest):
 @router.post("/check")
 async def check_spendable(payload: CheckRequest):
     return await ledger.check_spendable(payload.proofs)
+
+
+@router.post("/checkfees")
+async def check_fees(payload: CheckFeesRequest):
+    fees_msat = await ledger.check_fees(payload.pr)
+    return CheckFeesResponse(fee=fees_msat / 1000)
 
 
 @router.post("/split")

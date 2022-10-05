@@ -11,7 +11,7 @@ import cashu.core.b_dhke as b_dhke
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckInternalRequest,
+    CheckFeesRequest,
     CheckRequest,
     MeltRequest,
     MintRequest,
@@ -211,14 +211,13 @@ class LedgerAPI:
 
         return return_dict
 
-    async def check_internal(self, payment_request: str):
+    async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
-        payload = CheckInternalRequest(pr=payment_request)
+        payload = CheckFeesRequest(pr=payment_request)
         return_dict = requests.post(
-            self.url + "/checkinternal",
+            self.url + "/checkfees",
             json=payload.dict(),
         ).json()
-
         return return_dict
 
     async def pay_lightning(self, proofs: List[Proof], invoice: str):
