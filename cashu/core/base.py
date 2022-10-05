@@ -116,7 +116,8 @@ class SplitRequest(BaseModel):
     output_data: MintRequest = None  # backwards compatibility with clients < v0.2.1
     outputs: MintRequest = None
 
-    def __init__(self):
+    def __init__(self, **data):
+        super().__init__(**data)
         self.backwards_compatibility_v021()
 
     def backwards_compatibility_v021(self):
