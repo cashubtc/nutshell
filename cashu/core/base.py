@@ -113,7 +113,17 @@ class MintPayloads(BaseModel):
 class SplitPayload(BaseModel):
     proofs: List[Proof]
     amount: int
-    output_data: MintPayloads
+    output_data: MintPayloads = None  # backwards compatibility with clients < v0.2.1
+    outputs: MintPayloads = None
+
+    def __init__(self):
+        self.backwards_compatibility_v021()
+
+    def backwards_compatibility_v021(self):
+        # before v0.2.1: output_data, after: outputs
+        if self.output_data:
+            self.outputs = self.output_data
+            self.output_data = None
 
 
 class CheckPayload(BaseModel):

@@ -124,24 +124,20 @@ class Ledger:
             ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]}!={txin_p2sh_address}."
         return valid
 
-    def _verify_outputs(
-        self, total: int, amount: int, output_data: List[BlindedMessage]
-    ):
+    def _verify_outputs(self, total: int, amount: int, outputs: List[BlindedMessage]):
         """Verifies the expected split was correctly computed"""
         fst_amt, snd_amt = total - amount, amount  # we have two amounts to split to
         fst_outputs = amount_split(fst_amt)
         snd_outputs = amount_split(snd_amt)
         expected = fst_outputs + snd_outputs
-        given = [o.amount for o in output_data]
+        given = [o.amount for o in outputs]
         return given == expected
 
-    def _verify_no_duplicates(
-        self, proofs: List[Proof], output_data: List[BlindedMessage]
-    ):
+    def _verify_no_duplicates(self, proofs: List[Proof], outputs: List[BlindedMessage]):
         secrets = [p.secret for p in proofs]
         if len(secrets) != len(list(set(secrets))):
             return False
-        B_s = [od.B_ for od in output_data]
+        B_s = [od.B_ for od in outputs]
         if len(B_s) != len(list(set(B_s))):
             return False
         return True
