@@ -8,34 +8,19 @@ import requests
 from loguru import logger
 
 import cashu.core.b_dhke as b_dhke
-from cashu.core.base import (
-    BlindedMessage,
-    BlindedSignature,
-    CheckRequest,
-    MeltRequest,
-    MintRequest,
-    P2SHScript,
-    Proof,
-    SplitRequest,
-)
+from cashu.core.base import (BlindedMessage, BlindedSignature, CheckRequest,
+                             MeltRequest, MintRequest, P2SHScript, Proof,
+                             SplitRequest)
 from cashu.core.db import Database
-from cashu.core.script import (
-    step0_carol_checksig_redeemscrip,
-    step0_carol_privkey,
-    step1_carol_create_p2sh_address,
-    step2_carol_sign_tx,
-)
+from cashu.core.script import (step0_carol_checksig_redeemscrip,
+                               step0_carol_privkey,
+                               step1_carol_create_p2sh_address,
+                               step2_carol_sign_tx)
 from cashu.core.secp import PublicKey
 from cashu.core.settings import DEBUG
 from cashu.core.split import amount_split
-from cashu.wallet.crud import (
-    get_proofs,
-    invalidate_proof,
-    secret_used,
-    store_p2sh,
-    store_proof,
-    update_proof_reserved,
-)
+from cashu.wallet.crud import (get_proofs, invalidate_proof, secret_used,
+                               store_p2sh, store_proof, update_proof_reserved)
 
 
 class LedgerAPI:
