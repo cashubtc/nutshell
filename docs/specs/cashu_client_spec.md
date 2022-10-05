@@ -103,12 +103,13 @@ Here we describe how `Alice` checks with the mint whether the tokens she sent `C
 - If `<spendable>` is `False`, `Alice` removes the proof [NOTE: consistent name?] from her list of spendable proofs.
 
 ## 6 - Pay a Lightning invoice
-Here we describe how `Alice` can request from `Bob` to make a Lightning payment for her and burn an appropriate amount of tokens in return. `Alice` wants to pay a bolt11 invoice with the amount `<invoice_amount>`. She has to add a predefined fee to the request to account for the possible Lightning fees which results in a request with tokens with the total amount of `<total>`. [NOTE: there is no way to do this dynamically as for now. We simply include a amount-dependent fee with the request and the mint essentially keeps the difference if it can find a cheaper-than-expected route. The mint refuses to pay the invoice if the fees included are not high-enough.] 
+Here we describe how `Alice` can request from `Bob` to make a Lightning payment for her and burn an appropriate amount of tokens in return. `Alice` wants to pay a bolt11 invoice with the amount `<invoice_amount>`. She has to add a fee to the request to account for the possible Lightning fees which results in a request with tokens with the total amount of `<total>`. 
 
 - `Alice` wants to pay the bolt11 invoice `<invoice>`.
-- `Alice` calculates the fees for the Lightning payments upfront with the function `max(<MIN_FEE>, <invoice_amount> * <PROPORTIONAL_FEE>*)` with `<MIN_FEE>` currently being `4` Satoshis and `<PROPORTIONAL_FEE>` being `0.01` (or 1% of `<invoice_amount>`). `Alice` then adds this fee to `<invoice_amount>` and rounds it up to the next higher integer which results in `<amount>`.
-- `Alice` now performs the same set of instructions as in Step 3.1 and 3.2 and splits her spendable tokens into a set `<keep_proofs>` that she keeps and and a set `<send_proofs>` that she can send for making the Lightning payment.
-- `Alice` constructs the JSON `MeltRequest` of the form `{"proofs" : <List[Proof]>, "amount" : <total>, "invoice" : <invoice>}` [NOTE: Maybe use notation List[Proof] everywhere. Used MeltRequest here, maybe define each payload at the beginning of each section.]
+- `Alice` asks `Bob` for the Lightning fee via `GET /checkfee` with the body being the json `{pr : <invoice>}`
+- `Alice` receives the `CheckFeeResponse` in the form of the json `{"fee" : <fee>}` resulting in `<total> = <invoice_amount> + <fee>`.
+- `Alice` now performs the same set of instructions as in Step 3.1 and 3.2 and splits her spendable tokens into a set `<keep_proofs>` that she keeps and and a set `<send_proofs>` with a sum of at least `<total>` that she can send for making the Lightning payment.
+- `Alice` constructs the JSON `MeltRequest` of the form `{"proofs" : <List[Proof]>, "invoice" : <invoice>}` [NOTE: Maybe use notation List[Proof] everywhere. Used MeltRequest here, maybe define each payload at the beginning of each section.]
 - `Alice` requests a payment from `Bob` via the endpoint `POST /melt` with the JSON as the body of the request.
 - `Alice` receives a JSON of the form `{"paid" :  <status:bool>}` with `<status>` being `True` if the payment was successful and `False` otherwise.
 - If `<status> == True`, `Alice` removes `<send_proofs>` from her database of spendable tokens [NOTE: called it tokens again]
