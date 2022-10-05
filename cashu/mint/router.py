@@ -5,9 +5,9 @@ from secp256k1 import PublicKey
 
 from cashu.core.base import (
     CashuError,
+    CheckFeesRequest,
     CheckFeesResponse,
     CheckRequest,
-    CheckFeesRequest,
     GetMeltResponse,
     GetMintResponse,
     MeltRequest,
