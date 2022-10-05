@@ -126,11 +126,11 @@ class SplitRequest(BaseModel):
             self.output_data = None
 
 
-class CheckPayload(BaseModel):
+class CheckRequest(BaseModel):
     proofs: List[Proof]
 
 
-class MeltPayload(BaseModel):
+class MeltRequest(BaseModel):
     proofs: List[Proof]
     amount: int
     invoice: str

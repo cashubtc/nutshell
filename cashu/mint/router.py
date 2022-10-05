@@ -3,7 +3,7 @@ from typing import Union
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
-from cashu.core.base import CheckPayload, MeltPayload, MintPayloads, SplitRequest
+from cashu.core.base import CheckRequest, MeltRequest, MintPayloads, SplitRequest
 from cashu.mint import ledger
 
 router: APIRouter = APIRouter()
@@ -55,7 +55,7 @@ async def mint(payloads: MintPayloads, payment_hash: Union[str, None] = None):
 
 
 @router.post("/melt")
-async def melt(payload: MeltPayload):
+async def melt(payload: MeltRequest):
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
@@ -64,7 +64,7 @@ async def melt(payload: MeltPayload):
 
 
 @router.post("/check")
-async def check_spendable(payload: CheckPayload):
+async def check_spendable(payload: CheckRequest):
     return await ledger.check_spendable(payload.proofs)
 
 

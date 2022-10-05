@@ -11,8 +11,8 @@ import cashu.core.b_dhke as b_dhke
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckPayload,
-    MeltPayload,
+    CheckRequest,
+    MeltRequest,
     MintPayloads,
     P2SHScript,
     Proof,
@@ -202,7 +202,7 @@ class LedgerAPI:
         return fst_proofs, snd_proofs
 
     async def check_spendable(self, proofs: List[Proof]):
-        payload = CheckPayload(proofs=proofs)
+        payload = CheckRequest(proofs=proofs)
         return_dict = requests.post(
             self.url + "/check",
             json=payload.dict(),
@@ -211,7 +211,7 @@ class LedgerAPI:
         return return_dict
 
     async def pay_lightning(self, proofs: List[Proof], amount: int, invoice: str):
-        payload = MeltPayload(proofs=proofs, amount=amount, invoice=invoice)
+        payload = MeltRequest(proofs=proofs, amount=amount, invoice=invoice)
         return_dict = requests.post(
             self.url + "/melt",
             json=payload.dict(),
