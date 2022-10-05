@@ -87,6 +87,6 @@ async def split(payload: SplitRequest):
         return CashuError(error=str(exc))
     if not split_return:
         return {"error": "there was a problem with the split."}
-    fst_promises, snd_promises = split_return
-    resp = PostSplitResponse(fst=fst_promises, snd=snd_promises)
+    frst_promises, scnd_promises = split_return
+    resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
     return resp

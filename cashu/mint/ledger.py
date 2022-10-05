@@ -126,10 +126,10 @@ class Ledger:
 
     def _verify_outputs(self, total: int, amount: int, outputs: List[BlindedMessage]):
         """Verifies the expected split was correctly computed"""
-        fst_amt, snd_amt = total - amount, amount  # we have two amounts to split to
-        fst_outputs = amount_split(fst_amt)
-        snd_outputs = amount_split(snd_amt)
-        expected = fst_outputs + snd_outputs
+        frst_amt, scnd_amt = total - amount, amount  # we have two amounts to split to
+        frst_outputs = amount_split(frst_amt)
+        scnd_outputs = amount_split(scnd_amt)
+        expected = frst_outputs + scnd_outputs
         given = [o.amount for o in outputs]
         return given == expected
 

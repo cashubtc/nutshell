@@ -142,32 +142,32 @@ class LedgerAPI:
         promises = [BlindedSignature.from_dict(p) for p in promises_list]
         return self._construct_proofs(promises, secrets, rs)
 
-    async def split(self, proofs, amount, snd_secret: str = None):
+    async def split(self, proofs, amount, scnd_secret: str = None):
         """Consume proofs and create new promises based on amount split.
-        If snd_secret is None, random secrets will be generated for the tokens to keep (fst_outputs)
-        and the promises to send (snd_outputs).
+        If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
+        and the promises to send (scnd_outputs).
 
-        If snd_secret is provided, the wallet will create blinded secrets with those to attach a
+        If scnd_secret is provided, the wallet will create blinded secrets with those to attach a
         predefined spending condition to the tokens they want to send."""
 
         total = sum([p["amount"] for p in proofs])
-        fst_amt, snd_amt = total - amount, amount
-        fst_outputs = amount_split(fst_amt)
-        snd_outputs = amount_split(snd_amt)
+        frst_amt, scnd_amt = total - amount, amount
+        frst_outputs = amount_split(frst_amt)
+        scnd_outputs = amount_split(scnd_amt)
 
-        amounts = fst_outputs + snd_outputs
-        if snd_secret is None:
+        amounts = frst_outputs + scnd_outputs
+        if scnd_secret is None:
             secrets = [self._generate_secret() for _ in range(len(amounts))]
         else:
-            snd_secrets = self.generate_secrets(snd_secret, len(snd_outputs))
-            logger.debug(f"Creating proofs with custom secrets: {snd_secrets}")
-            assert len(snd_secrets) == len(
-                snd_outputs
-            ), "number of snd_secrets does not match number of ouptus."
+            scnd_secrets = self.generate_secrets(scnd_secret, len(scnd_outputs))
+            logger.debug(f"Creating proofs with custom secrets: {scnd_secrets}")
+            assert len(scnd_secrets) == len(
+                scnd_outputs
+            ), "number of scnd_secrets does not match number of ouptus."
             # append predefined secrets (to send) to random secrets (to keep)
             secrets = [
-                self._generate_secret() for s in range(len(fst_outputs))
-            ] + snd_secrets
+                self._generate_secret() for s in range(len(frst_outputs))
+            ] + scnd_secrets
 
         assert len(secrets) == len(
             amounts
@@ -192,14 +192,14 @@ class LedgerAPI:
         promises_fst = [BlindedSignature.from_dict(p) for p in promises_dict["fst"]]
         promises_snd = [BlindedSignature.from_dict(p) for p in promises_dict["snd"]]
         # Construct proofs from promises (i.e., unblind signatures)
-        fst_proofs = self._construct_proofs(
+        frst_proofs = self._construct_proofs(
             promises_fst, secrets[: len(promises_fst)], rs[: len(promises_fst)]
         )
-        snd_proofs = self._construct_proofs(
+        scnd_proofs = self._construct_proofs(
             promises_snd, secrets[len(promises_fst) :], rs[len(promises_fst) :]
         )
 
-        return fst_proofs, snd_proofs
+        return frst_proofs, scnd_proofs
 
     async def check_spendable(self, proofs: List[Proof]):
         payload = CheckRequest(proofs=proofs)
@@ -253,35 +253,35 @@ class Wallet(LedgerAPI):
     async def redeem(
         self,
         proofs: List[Proof],
-        snd_script: str = None,
-        snd_siganture: str = None,
+        scnd_script: str = None,
+        scnd_siganture: str = None,
     ):
-        if snd_script and snd_siganture:
-            logger.debug(f"Unlock script: {snd_script}")
+        if scnd_script and scnd_siganture:
+            logger.debug(f"Unlock script: {scnd_script}")
             # attach unlock scripts to proofs
             for p in proofs:
-                p.script = P2SHScript(script=snd_script, signature=snd_siganture)
+                p.script = P2SHScript(script=scnd_script, signature=scnd_siganture)
         return await self.split(proofs, sum(p["amount"] for p in proofs))
 
     async def split(
         self,
         proofs: List[Proof],
         amount: int,
-        snd_secret: str = None,
+        scnd_secret: str = None,
     ):
         assert len(proofs) > 0, ValueError("no proofs provided.")
-        fst_proofs, snd_proofs = await super().split(proofs, amount, snd_secret)
-        if len(fst_proofs) == 0 and len(snd_proofs) == 0:
+        frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
+        if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
         used_secrets = [p["secret"] for p in proofs]
         self.proofs = list(
             filter(lambda p: p["secret"] not in used_secrets, self.proofs)
         )
-        self.proofs += fst_proofs + snd_proofs
-        await self._store_proofs(fst_proofs + snd_proofs)
+        self.proofs += frst_proofs + scnd_proofs
+        await self._store_proofs(frst_proofs + scnd_proofs)
         for proof in proofs:
             await invalidate_proof(proof, db=self.db)
-        return fst_proofs, snd_proofs
+        return frst_proofs, scnd_proofs
 
     async def pay_lightning(self, proofs: List[Proof], amount: int, invoice: str):
         """Pays a lightning invoice"""
@@ -303,14 +303,14 @@ class Wallet(LedgerAPI):
         ).decode()
         return token
 
-    async def split_to_send(self, proofs: List[Proof], amount, snd_secret: str = None):
+    async def split_to_send(self, proofs: List[Proof], amount, scnd_secret: str = None):
         """Like self.split but only considers non-reserved tokens."""
-        if snd_secret:
-            logger.debug(f"Spending conditions: {snd_secret}")
+        if scnd_secret:
+            logger.debug(f"Spending conditions: {scnd_secret}")
         if len([p for p in proofs if not p.reserved]) <= 0:
             raise Exception("balance too low.")
         return await self.split(
-            [p for p in proofs if not p.reserved], amount, snd_secret
+            [p for p in proofs if not p.reserved], amount, scnd_secret
         )
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):

@@ -195,7 +195,7 @@ async def receive(ctx, coin: str, lock: str):
     else:
         script, signature = None, None
     proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(coin))]
-    _, _ = await wallet.redeem(proofs, snd_script=script, snd_siganture=signature)
+    _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
     wallet.status()
 
 

@@ -48,7 +48,7 @@ async def run_test():
     proofs += await wallet1.mint(63)
     assert wallet1.balance == 64 + 63
 
-    w1_fst_proofs, w1_snd_proofs = await wallet1.split(wallet1.proofs, 65)
+    w1_frst_proofs, w1_scnd_proofs = await wallet1.split(wallet1.proofs, 65)
     assert wallet1.balance == 63 + 64
     wallet1.status()
 
@@ -60,12 +60,12 @@ async def run_test():
     assert wallet1.balance == 63 + 64
     wallet1.status()
 
-    w1_fst_proofs, w1_snd_proofs = await wallet1.split(wallet1.proofs, 20)
+    w1_frst_proofs, w1_scnd_proofs = await wallet1.split(wallet1.proofs, 20)
     # we expect 44 and 20 -> [4, 8, 32], [4, 16]
-    print(w1_fst_proofs)
-    print(w1_snd_proofs)
-    # assert [p["amount"] for p in w1_fst_proofs] == [4, 8, 32]
-    assert [p["amount"] for p in w1_snd_proofs] == [4, 16]
+    print(w1_frst_proofs)
+    print(w1_scnd_proofs)
+    # assert [p["amount"] for p in w1_frst_proofs] == [4, 8, 32]
+    assert [p["amount"] for p in w1_scnd_proofs] == [4, 16]
     assert wallet1.balance == 63 + 64
     wallet1.status()
 
@@ -79,29 +79,29 @@ async def run_test():
     wallet1.status()
 
     # Redeem the tokens in wallet2
-    w2_fst_proofs, w2_snd_proofs = await wallet2.redeem(w1_snd_proofs)
-    print(w2_fst_proofs)
-    print(w2_snd_proofs)
+    w2_frst_proofs, w2_scnd_proofs = await wallet2.redeem(w1_scnd_proofs)
+    print(w2_frst_proofs)
+    print(w2_scnd_proofs)
     assert wallet1.balance == 63 + 64
     assert wallet2.balance == 20
     wallet2.status()
 
     # wallet1 invalidates his proofs
-    await wallet1.invalidate(w1_snd_proofs)
+    await wallet1.invalidate(w1_scnd_proofs)
     assert wallet1.balance == 63 + 64 - 20
     wallet1.status()
 
-    w1_fst_proofs2, w1_snd_proofs2 = await wallet1.split(w1_fst_proofs, 5)
+    w1_frst_proofs2, w1_scnd_proofs2 = await wallet1.split(w1_frst_proofs, 5)
     # we expect 15 and 5 -> [1, 2, 4, 8], [1, 4]
-    print(w1_fst_proofs2)
-    print(w1_snd_proofs2)
+    print(w1_frst_proofs2)
+    print(w1_scnd_proofs2)
     assert wallet1.balance == 63 + 64 - 20
     wallet1.status()
 
     # Error: We try to double-spend and it fails
     await assert_err(
-        wallet1.split(w1_snd_proofs, 5),
-        f"Mint Error: tokens already spent. Secret: {w1_snd_proofs[0]['secret']}",
+        wallet1.split(w1_scnd_proofs, 5),
+        f"Mint Error: tokens already spent. Secret: {w1_scnd_proofs[0]['secret']}",
     )
 
     assert wallet1.balance == 63 + 64 - 20
@@ -111,23 +111,23 @@ async def run_test():
     assert wallet2.proof_amounts() == [4, 16]
 
     # manipulate the proof amount
-    # w1_fst_proofs2_manipulated = w1_fst_proofs2.copy()
-    # w1_fst_proofs2_manipulated[0]["amount"] = 123
+    # w1_frst_proofs2_manipulated = w1_frst_proofs2.copy()
+    # w1_frst_proofs2_manipulated[0]["amount"] = 123
     # await assert_err(
-    #     wallet1.split(w1_fst_proofs2_manipulated, 20),
+    #     wallet1.split(w1_frst_proofs2_manipulated, 20),
     #     "Error: 123",
     # )
 
     # try to split an invalid amount
     await assert_err(
-        wallet1.split(w1_snd_proofs, -500),
+        wallet1.split(w1_scnd_proofs, -500),
         "Mint Error: invalid split amount: -500",
     )
 
     # mint with secrets
     secret = f"asdasd_{time.time()}"
-    w1_fst_proofs, w1_snd_proofs = await wallet1.split(
-        wallet1.proofs, 65, snd_secret=secret
+    w1_frst_proofs, w1_scnd_proofs = await wallet1.split(
+        wallet1.proofs, 65, scnd_secret=secret
     )
 
     # p2sh test
@@ -136,15 +136,15 @@ async def run_test():
     lock = f"P2SH:{txin_p2sh_address}"
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
     _, _ = await wallet2.redeem(
-        send_proofs, snd_script=p2shscript.script, snd_siganture=p2shscript.signature
+        send_proofs, scnd_script=p2shscript.script, scnd_siganture=p2shscript.signature
     )
 
     # strip away the secrets
-    w1_snd_proofs_manipulated = w1_snd_proofs.copy()
-    for p in w1_snd_proofs_manipulated:
+    w1_scnd_proofs_manipulated = w1_scnd_proofs.copy()
+    for p in w1_scnd_proofs_manipulated:
         p.secret = ""
     await assert_err(
-        wallet2.redeem(w1_snd_proofs_manipulated),
+        wallet2.redeem(w1_scnd_proofs_manipulated),
         "Mint Error: no secret in proof.",
     )
 
