@@ -153,7 +153,11 @@ class CheckRequest(BaseModel):
     proofs: List[Proof]
 
 
+class CheckInternalRequest(BaseModel):
+    pr: str
+
+
 class MeltRequest(BaseModel):
     proofs: List[Proof]
-    amount: int
+    amount: int = None  # deprecated
     invoice: str

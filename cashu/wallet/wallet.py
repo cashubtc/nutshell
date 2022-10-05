@@ -17,6 +17,7 @@ from cashu.core.base import (
     P2SHScript,
     Proof,
     SplitRequest,
+    CheckInternalRequest,
 )
 from cashu.core.db import Database
 from cashu.core.script import (
@@ -205,6 +206,16 @@ class LedgerAPI:
         payload = CheckRequest(proofs=proofs)
         return_dict = requests.post(
             self.url + "/check",
+            json=payload.dict(),
+        ).json()
+
+        return return_dict
+
+    async def check_internal(self, payment_request: str):
+        """Checks whether the Lightning payment is internal."""
+        payload = CheckInternalRequest(pr=payment_request)
+        return_dict = requests.post(
+            self.url + "/checkinternal",
             json=payload.dict(),
         ).json()
 
