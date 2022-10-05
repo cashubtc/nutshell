@@ -80,7 +80,7 @@ async def split(payload: SplitRequest):
     """
     proofs = payload.proofs
     amount = payload.amount
-    outputs = payload.outputs.blinded_messages
+    outputs = payload.outputs.blinded_messages if payload.outputs else None
     try:
         split_return = await ledger.split(proofs, amount, outputs)
     except Exception as exc:

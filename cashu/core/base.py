@@ -1,5 +1,5 @@
 from sqlite3 import Row
-from typing import List
+from typing import List, Union
 
 from pydantic import BaseModel
 
@@ -12,7 +12,7 @@ class CashuError(BaseModel):
 class P2SHScript(BaseModel):
     script: str
     signature: str
-    address: str = None
+    address: Union[str, None] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -28,7 +28,7 @@ class Proof(BaseModel):
     amount: int
     secret: str = ""
     C: str
-    script: P2SHScript = None
+    script: Union[P2SHScript, None] = None
     reserved: bool = False  # whether this proof is reserved for sending
     send_id: str = ""  # unique ID of send attempt
     time_created: str = ""
@@ -121,15 +121,17 @@ class GetMintResponse(BaseModel):
 
 
 class GetMeltResponse(BaseModel):
-    paid: str
-    preimage: str
+    paid: Union[bool, None]
+    preimage: Union[str, None]
 
 
 class SplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
-    output_data: MintRequest = None  # backwards compatibility with clients < v0.2.2
-    outputs: MintRequest = None
+    output_data: Union[
+        MintRequest, None
+    ] = None  # backwards compatibility with clients < v0.2.2
+    outputs: Union[MintRequest, None] = None
 
     def __init__(self, **data):
         super().__init__(**data)
