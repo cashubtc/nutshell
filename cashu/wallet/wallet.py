@@ -16,7 +16,7 @@ from cashu.core.base import (
     MintPayloads,
     P2SHScript,
     Proof,
-    SplitPayload,
+    SplitRequest,
 )
 from cashu.core.script import (
     step0_carol_privkey,
@@ -174,7 +174,7 @@ class LedgerAPI:
         ), "number of secrets does not match number of outputs"
         await self._check_used_secrets(secrets)
         payloads, rs = self._construct_outputs(amounts, secrets)
-        split_payload = SplitPayload(proofs=proofs, amount=amount, outputs=payloads)
+        split_payload = SplitRequest(proofs=proofs, amount=amount, outputs=payloads)
         resp = requests.post(
             self.url + "/split",
             json=split_payload.dict(),

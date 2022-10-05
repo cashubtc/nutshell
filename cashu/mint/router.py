@@ -3,7 +3,7 @@ from typing import Union
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
-from cashu.core.base import CheckPayload, MeltPayload, MintPayloads, SplitPayload
+from cashu.core.base import CheckPayload, MeltPayload, MintPayloads, SplitRequest
 from cashu.mint import ledger
 
 router: APIRouter = APIRouter()
@@ -69,7 +69,7 @@ async def check_spendable(payload: CheckPayload):
 
 
 @router.post("/split")
-async def split(payload: SplitPayload):
+async def split(payload: SplitRequest):
     """
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".

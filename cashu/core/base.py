@@ -110,7 +110,7 @@ class MintPayloads(BaseModel):
     blinded_messages: List[BlindedMessage] = []
 
 
-class SplitPayload(BaseModel):
+class SplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
     output_data: MintPayloads = None  # backwards compatibility with clients < v0.2.1
