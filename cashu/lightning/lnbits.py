@@ -87,7 +87,7 @@ class LNbitsWallet(Wallet):
         except:
             error_message = r.json()["detail"]
             return PaymentResponse(None, None, None, None, error_message)
-        if r.status_code != 200:
+        if r.status_code > 299:
             return PaymentResponse(None, None, None, None, f"HTTP status: {r.reason}")
         if "detail" in r.json():
             return PaymentResponse(None, None, None, None, r.json()["detail"])
