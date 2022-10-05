@@ -11,13 +11,13 @@ import cashu.core.b_dhke as b_dhke
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
+    CheckInternalRequest,
     CheckRequest,
     MeltRequest,
     MintRequest,
     P2SHScript,
     Proof,
     SplitRequest,
-    CheckInternalRequest,
 )
 from cashu.core.db import Database
 from cashu.core.script import (

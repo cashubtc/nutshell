@@ -3,11 +3,13 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
 import hashlib
+import math
 from inspect import signature
 from signal import signal
 from typing import List, Set
-import math
+
 import cashu.core.b_dhke as b_dhke
+import cashu.core.bolt11 as bolt11
 from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
@@ -24,7 +26,6 @@ from cashu.mint.crud import (
     store_promise,
     update_lightning_invoice,
 )
-import cashu.core.bolt11 as bolt11
 
 
 class Ledger:
