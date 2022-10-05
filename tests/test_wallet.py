@@ -1,5 +1,6 @@
 import time
 from re import S
+import pytest
 
 from cashu.core.helpers import async_unwrap
 from cashu.core.migrations import migrate_databases
@@ -25,6 +26,7 @@ def assert_amt(proofs, expected):
     assert [p["amount"] for p in proofs] == expected
 
 
+@pytest.mark.asyncio
 async def run_test():
     wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1", "wallet1")
     await migrate_databases(wallet1.db, migrations)
