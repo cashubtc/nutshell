@@ -3,9 +3,16 @@ from typing import Union
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
-from cashu.core.base import (CashuError, CheckRequest, GetMeltResponse,
-                             GetMintResponse, MeltRequest, MintRequest,
-                             PostSplitResponse, SplitRequest)
+from cashu.core.base import (
+    CashuError,
+    CheckRequest,
+    GetMeltResponse,
+    GetMintResponse,
+    MeltRequest,
+    MintRequest,
+    PostSplitResponse,
+    SplitRequest,
+)
 from cashu.mint import ledger
 
 router: APIRouter = APIRouter()

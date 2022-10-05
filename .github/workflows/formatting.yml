@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  checks:
+  poetry:
     runs-on: ubuntu-latest
     strategy:
       matrix:
