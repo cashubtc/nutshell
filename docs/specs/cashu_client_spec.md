@@ -39,11 +39,11 @@ Mint: `Bob`
 
 ### Step 2: Request tokens
 - To request tokens of value `amount : int`, `Alice` decomposes `amount` into a sum of values of `2^n`, e.g. `13` is `amounts : List[int] = [1, 4, 8]`. This can be easily done by representing `amount` as binary and using each binary digit that is `1` as part of the sum, e.g. `8` would be `1101` wich is `2^0 + 2^2 + 2^3`. In this example, `Alice` will request `N = len(amounts) = 3` tokens.
-- `Alice` generates a random secret string `x_i` of `128` random bits with `i \in [0,..,N-1]`for each of the `N` requested tokens and encodes them in `base64`. [TODO: remove index i]
+- `Alice` generates a random secret string `x_i` of `128` random bits with `i \in [0,..,N-1]`for each of the `N` requested tokens and encodes them in `base64`. [*TODO: remove index i*]
 - `Alice` remembers `x` for the construction of the proof in Step 5.
 
 ### Step 3: Generate blinded message
-Here we see how `Alice` generates `N` blinded messages `T_i`. The following steps are executed for each of the `N` tokens that `Alice` requests. The index `i` is dropped for simplicity. [TODO: either write everything independent of i or not, don't mix]
+Here we see how `Alice` generates `N` blinded messages `T_i`. The following steps are executed for each of the `N` tokens that `Alice` requests. The index `i` is dropped for simplicity. [*TODO: either write everything independent of i or not, don't mix*]
 - `Alice` generates a point `Y` on the elliptic curve from the secret `x` using the deterministic function `Y = hash_to_curve(hash(x : string)) : Point`. 
 - `h = hash(x : string) : string` can be the `SHA256` hash function.
 - `Y = hash_to_curve(h :  string) : Point` verifies that `Y` is an element of the elliptic curve.
@@ -55,7 +55,7 @@ Here we see how `Alice` generates `N` blinded messages `T_i`. The following step
 - `Alice` constructs JSON `MintRequest = {"blinded_messages" : ["amount" : <amount>, "B_" : <blinded_message>] }` [NOTE: rename "blinded_messages", rename "B_", rename "MintRequest"] 
 - `Alice` requests tokens via `POST /mint?payment_hash=<payment_hash>` with body `MintRequest` [NOTE: rename MintRequest]
 - `Alice` receives from `Bob` a list of blinded signatures `List[BlindedSignature]`, one for each token, e.g. `[{"amount" : <amount>, "C_" : <blinded_signature>}, ...]` [NOTE: rename C_]
-- If an error occured, `Alice` receives JSON `{"error" : <error_reason>}}`[TODO: Specify case of error]
+- If an error occured, `Alice` receives JSON `{"error" : <error_reason>}}`[*TODO: Specify case of error*]
 
 ### Step 5: Construct proofs
 Here, `Alice` construct proofs for each token using the tuple `(blinded_signature, r, s)`. Again, all steps are repeated for each token separately but we show it here for only one token.
@@ -67,13 +67,13 @@ Here we describe how `Alice` sends tokens to `Carol`.
 
 ### 3.1 – Split tokens to desired amount
 `Alice` wants to send tokens of total value `<total>` to `Carol` but doesn't necessarily have a set of tokens that sum to `<total>`. Say `Alice` has tokens of the amount `<alice_balance>` which is greater than `<total>` in here database. Note that `<alice_balance>` does not need to include all of `Alice`'s tokens but only at least tokens of a total amount of `<total>`. Therefore, `Alice` sends tokens of amount `<alice_balance>` to `Bob` asks `Bob` to issue two new sets of tokens of value `<total>` and `<alice_balance>-<total>` each.
-- `Alice` performs a split on the amounts `<total>` and `<alice_balance>-<total>` separately as in 2.2 - Request tokens. [TODO: fix reference]
-- `Alice` constructs two new sets of blinded messages like in 2.3 - Generate blind messages [TODO: fix reference], one for each of the two amounts `<total>` and `<alice_balance>-<total>`.
-- `Alice` concatenates both sets of blinded messages into the list `<blinded_messages>` [TODO: list?]
-- `Alice` constructs a JSON out of multiple tokens from her database that sum to `<alice_balance>` of the form `{"amount" : <total>, "proofs" : [{"amount" : <amount>, "secret" : s, "C" : Z}, ...], "outputs" : ["amount" : <amount>, "B_" : <blinded_message>]}`. The blinded messages in `"outputs"` are the list of concatenated blinded message from the previous step. [TODO: refer to this as BlindMessages or something and reuse in Section 4 and 2]
+- `Alice` performs a split on the amounts `<total>` and `<alice_balance>-<total>` separately as in 2.2 - Request tokens. [*TODO: fix reference*]
+- `Alice` constructs two new sets of blinded messages like in 2.3 - Generate blind messages [*TODO: fix reference*], one for each of the two amounts `<total>` and `<alice_balance>-<total>`.
+- `Alice` concatenates both sets of blinded messages into the list `<blinded_messages>` [*TODO: list?*]
+- `Alice` constructs a JSON out of multiple tokens from her database that sum to `<alice_balance>` of the form `{"amount" : <total>, "proofs" : [{"amount" : <amount>, "secret" : s, "C" : Z}, ...], "outputs" : ["amount" : <amount>, "B_" : <blinded_message>]}`. The blinded messages in `"outputs"` are the list of concatenated blinded message from the previous step. [*TODO: refer to this as BlindMessages or something and reuse in Section 4 and 2*]
 
 ### 3.2 - Request new tokens for sending
-- `Alice` constructs a JSON out of multiple tokens of the form `[{"amount" : <amount>, "secret" : s, "C" : Z}, ...]` and serializes is as a Base64 string `TOKEN` which is then sent to `Carol` as a payment of value `sum(<amount_i>)`. [NOTE: rename C, rewrite sum, find consistency in writing labels, values, TOKEN, in code this is called `Proof`]
+- `Alice` constructs a JSON out of multiple tokens of the form `[{"amount" : <amount>, "secret" : s, "C" : Z}, ...]` and serializes is as a Base64 string `TOKEN` which is then sent to `Carol` as a payment of value `sum(<amount_i>)`. [*NOTE: rename C, rewrite sum, find consistency in writing labels, values, TOKEN, in code this is called `Proof`*]
 - `Alice` requests new tokens via `POST /mint` with the JSON as the body of the request.
 - `Alice` receives a JSON of the form `{"fst" : <signatures_to_keep>}, "snd" : <signatures_to_send>` with both entries being of the type `List[BlindedSignature]`. `Alice` constructs proofs `<keep_proofs>` and `<send_proofs>` from both of these entries like in Step 2.5 [TODO: fix reference]. 
 - `Alice` stores the proofs `<keep_proofs>` and `<send_proofs>` in her database and flags `<send_proofs>` as `pending` (for example in a separate column).
@@ -81,37 +81,38 @@ Here we describe how `Alice` sends tokens to `Carol`.
 
 ### 3.3 - Serialize tokens for sending
 Here, `Alice` serializes the proofs from the set `<send_proofs>` for sending to `Carol`.
-- `Alice` constructs a JSON of the form `[{"amount" : <amount>, "secret" : s, "C" : Z}, ...]` from `<send_proofs>` and encodes it as a Base64 string using url-safe Base64 encoder. [NOTE: it probably doesn't need to be url-safe, maybe it shouldn't if this is not widespread or consistent across languages]
+- `Alice` constructs a JSON of the form `[{"amount" : <amount>, "secret" : s, "C" : Z}, ...]` from `<send_proofs>` and encodes it as a Base64 string using url-safe Base64 encoder. [*NOTE: it probably doesn't need to be url-safe, maybe it shouldn't if this is not widespread or consistent across languages*]
 - `Alice` sends the resulting `TOKEN` as the string `W3siYW1vdW50IjogMiwgInNlY3...` to `Carol`.
 
 ## 4 - Receive new tokens
-Here we describe how `Carol` can redeem new tokens from `Bob` that she previously received from `Alice`. `Carol` receives tokens as a url-safe [NOTE: remove url-safe?] base64-encoded string `TOKEN` that, when decoded, is a JSON of the form `[{"amount" : <amount>, "secret" : s, "C" : Z}, ...]`. In the following, we will refer to the tuple `(<amount>, Z, s)` as a single token. [NOTE: clarify whether a TOKEN is a single token or a list of tokens] To redeem a token, `Carol` sends it to `Bob` and receives a one of the same value.
+Here we describe how `Carol` can redeem new tokens from `Bob` that she previously received from `Alice`. `Carol` receives tokens as a url-safe [*NOTE: remove url-safe?*] base64-encoded string `TOKEN` that, when decoded, is a JSON of the form `[{"amount" : <amount>, "secret" : s, "C" : Z}, ...]`. In the following, we will refer to the tuple `(<amount>, Z, s)` as a single token. [*NOTE: clarify whether a TOKEN is a single token or a list of tokens*] To redeem a token, `Carol` sends it to `Bob` and receives a one of the same value.
 
 `Carol` essentially performs the same procedure to receive tokens as `Alice` did earlier when she prepared her tokens for sending: She sends constructs new blinded messages and sends them together with the tokens she received in order to receive a newly-issued set of tokens which settles the transaction between `Alice` and `Carol`.
 
 Note that the following steps can also be performed by `Alice` herself if she wants to cancel the pending token transfer and claim them for herself.
 
-- `Carol` constructs a list of `<blinded_message>`'s each with the same amount as the list list of tokens that she received. This can be done by the same procedure as during the minting of new tokens in Section 2 [TODO: update ref] or during sending in Section 3 [TODO: update ref] since the splitting into amounts is deterministic.
-- `Carol` performs the same steps as `Alice` when she split the tokens before sending it to her and calls the endpoint `POIT /split` with the JSON `SplitRequests` as the body of the request [TODO: rename SplitRequests?]
+- `Carol` constructs a list of `<blinded_message>`'s each with the same amount as the list list of tokens that she received. This can be done by the same procedure as during the minting of new tokens in Section 2 [*TODO: update ref*] or during sending in Section 3 [*TODO: update ref*] since the splitting into amounts is deterministic.
+- `Carol` performs the same steps as `Alice` when she split the tokens before sending it to her and calls the endpoint `POIT /split` with the JSON `SplitRequests` as the body of the request.
 
 ## 5 - Burn sent tokens
 Here we describe how `Alice` checks with the mint whether the tokens she sent `Carol` have been redeemed so she can safely delete them from her database. This step is optional but highly recommended so `Alice` can properly account for the tokens and adjust her balance accordingly.
 - `Alice` loads all `<send_proofs>` with `pending=True` from her database and might group them by the `send_id`.
-- `Alice` constructs a JSON of the form `{"proofs" : [{"amount" : <amount>, "secret" : s, "C" : Z}, ...]}` from these (grouped) tokens. [TODO: this object is called CheckRequest]
+- `Alice` constructs a JSON of the form `{"proofs" : [{"amount" : <amount>, "secret" : s, "C" : Z}, ...]}` from these (grouped) tokens. [*TODO: this object is called CheckRequest*]
 - `Alice` sends them to the mint `Bob` via the endpoint `POST /check` with the JSON as the body of the request.
 - `Alice` receives a JSON of the form `{"1" : <spendable : bool>, "2" : ...}` where `"1"` is the index of the proof she sent to the mint before and `<spendable>` is a boolean that is `True` if the token has not been claimed yet by `Carol` and `False` if it has already been claimed.
-- If `<spendable>` is `False`, `Alice` removes the proof [NOTE: consistent name?] from her list of spendable proofs.
+- If `<spendable>` is `False`, `Alice` removes the proof [*NOTE: consistent name?*] from her list of spendable proofs.
 
 ## 6 - Pay a Lightning invoice
-Here we describe how `Alice` can request from `Bob` to make a Lightning payment for her and burn an appropriate amount of tokens in return. `Alice` wants to pay a bolt11 invoice with the amount `<invoice_amount>`. She has to add a predefined fee to the request to account for the possible Lightning fees which results in a request with tokens with the total amount of `<total>`. [NOTE: there is no way to do this dynamically as for now. We simply include a amount-dependent fee with the request and the mint essentially keeps the difference if it can find a cheaper-than-expected route. The mint refuses to pay the invoice if the fees included are not high-enough.] 
+Here we describe how `Alice` can request from `Bob` to make a Lightning payment for her and burn an appropriate amount of tokens in return. `Alice` wants to pay a bolt11 invoice with the amount `<invoice_amount>`. She has to add a fee to the request to account for the possible Lightning fees which results in a request with tokens with the total amount of `<total>`. 
 
 - `Alice` wants to pay the bolt11 invoice `<invoice>`.
-- `Alice` calculates the fees for the Lightning payments upfront with the function `max(<MIN_FEE>, <invoice_amount> * <PROPORTIONAL_FEE>*)` with `<MIN_FEE>` currently being `4` Satoshis and `<PROPORTIONAL_FEE>` being `0.01` (or 1% of `<invoice_amount>`). `Alice` then adds this fee to `<invoice_amount>` and rounds it up to the next higher integer which results in `<amount>`.
-- `Alice` now performs the same set of instructions as in Step 3.1 and 3.2 and splits her spendable tokens into a set `<keep_proofs>` that she keeps and and a set `<send_proofs>` that she can send for making the Lightning payment.
-- `Alice` constructs the JSON `MeltRequest` of the form `{"proofs" : <List[Proof]>, "amount" : <total>, "invoice" : <invoice>}` [NOTE: Maybe use notation List[Proof] everywhere. Used MeltRequest here, maybe define each payload at the beginning of each section.]
+- `Alice` asks `Bob` for the Lightning fee via `GET /checkfee` with the body `CheckFeeRequest` being the json `{pr : <invoice>}`
+- `Alice` receives the `CheckFeeResponse` in the form of the json `{"fee" : <fee>}` resulting in `<total> = <invoice_amount> + <fee>`.
+- `Alice` now performs the same set of instructions as in Step 3.1 and 3.2 and splits her spendable tokens into a set `<keep_proofs>` that she keeps and and a set `<send_proofs>` with a sum of at least `<total>` that she can send for making the Lightning payment.
+- `Alice` constructs the JSON `MeltRequest` of the form `{"proofs" : <List[Proof]>, "invoice" : <invoice>}` [*NOTE: Maybe use notation List[Proof] everywhere. Used MeltRequest here, maybe define each payload at the beginning of each section.*]
 - `Alice` requests a payment from `Bob` via the endpoint `POST /melt` with the JSON as the body of the request.
 - `Alice` receives a JSON of the form `{"paid" :  <status:bool>}` with `<status>` being `True` if the payment was successful and `False` otherwise.
-- If `<status> == True`, `Alice` removes `<send_proofs>` from her database of spendable tokens [NOTE: called it tokens again]
+- If `<status> == True`, `Alice` removes `<send_proofs>` from her database of spendable tokens [*NOTE: called it tokens again*]
 
 
 

@@ -197,13 +197,13 @@ class Ledger:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
         return status.paid
 
-    async def _pay_lightning_invoice(self, invoice: str, amount: int):
+    async def _pay_lightning_invoice(self, invoice: str, fees_msat: int):
         """Returns an invoice from the Lightning backend."""
         error, _ = await WALLET.status()
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         ok, checking_id, fee_msat, preimage, error_message = await WALLET.pay_invoice(
-            invoice, fee_limit_msat=fee_reserve(amount * 1000)
+            invoice, fee_limit_msat=fees_msat
         )
         return ok, preimage
 
@@ -258,16 +258,15 @@ class Ledger:
         if not all([self._verify_proof(p) for p in proofs]):
             raise Exception("could not verify proofs.")
 
-        total = sum([p["amount"] for p in proofs])
+        total_provided = sum([p["amount"] for p in proofs])
         invoice_obj = bolt11.decode(invoice)
         amount = math.ceil(invoice_obj.amount_msat / 1000)
-
-        # check that lightning fees are included
-        assert total + fee_reserve(amount * 1000) >= amount, Exception(
+        fees_msat = await self.check_fees(invoice)
+        assert total_provided >= amount + fees_msat / 1000, Exception(
             "provided proofs not enough for Lightning payment."
         )
 
-        status, preimage = await self._pay_lightning_invoice(invoice, amount)
+        status, preimage = await self._pay_lightning_invoice(invoice, fees_msat)
         if status == True:
             await self._invalidate_proofs(proofs)
         return status, preimage
@@ -275,6 +274,17 @@ class Ledger:
     async def check_spendable(self, proofs: List[Proof]):
         """Checks if all provided proofs are valid and still spendable (i.e. have not been spent)."""
         return {i: self._check_spendable(p) for i, p in enumerate(proofs)}
+
+    async def check_fees(self, pr: str):
+        """Returns the fees (in msat) required to pay this pr."""
+        decoded_invoice = bolt11.decode(pr)
+        amount = math.ceil(decoded_invoice.amount_msat / 1000)
+        # hack: check if it's internal, if it exists, it will return paid = False,
+        # if id does not exist (not internal), it returns paid = None
+        paid = await WALLET.get_invoice_status(decoded_invoice.payment_hash)
+        internal = paid.paid == False
+        fees_msat = fee_reserve(amount * 1000, internal)
+        return fees_msat
 
     async def split(
         self, proofs: List[Proof], amount: int, outputs: List[BlindedMessage]
