@@ -1,5 +1,6 @@
 import time
 from re import S
+
 import pytest
 
 from cashu.core.helpers import async_unwrap
