@@ -128,7 +128,7 @@ class GetMeltResponse(BaseModel):
 class SplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
-    output_data: MintRequest = None  # backwards compatibility with clients < v0.2.1
+    output_data: MintRequest = None  # backwards compatibility with clients < v0.2.2
     outputs: MintRequest = None
 
     def __init__(self, **data):
@@ -136,7 +136,7 @@ class SplitRequest(BaseModel):
         self.backwards_compatibility_v021()
 
     def backwards_compatibility_v021(self):
-        # before v0.2.1: output_data, after: outputs
+        # before v0.2.2: output_data, after: outputs
         if self.output_data:
             self.outputs = self.output_data
             self.output_data = None
