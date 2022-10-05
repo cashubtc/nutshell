@@ -20,8 +20,7 @@ from cashu.core.base import Proof
 from cashu.core.bolt11 import Invoice
 from cashu.core.helpers import fee_reserve
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import (CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING,
-                                 MINT_URL, VERSION)
+from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
 from cashu.wallet import migrations
 from cashu.wallet.crud import get_reserved_proofs, get_unused_locks
 from cashu.wallet.wallet import Wallet as Wallet

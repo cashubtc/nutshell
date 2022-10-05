@@ -28,4 +28,4 @@ jobs:
       - name: Check black
         run: poetry run black --check .
       - name: Check isort
-        run: poetry run isort --check-only .
+        run: poetry run isort --profile black --check-only .

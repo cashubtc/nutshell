@@ -16,9 +16,14 @@ from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER
 from cashu.core.split import amount_split
 from cashu.lightning import WALLET
-from cashu.mint.crud import (get_lightning_invoice, get_proofs_used,
-                             invalidate_proof, store_lightning_invoice,
-                             store_promise, update_lightning_invoice)
+from cashu.mint.crud import (
+    get_lightning_invoice,
+    get_proofs_used,
+    invalidate_proof,
+    store_lightning_invoice,
+    store_promise,
+    update_lightning_invoice,
+)
 
 
 class Ledger:
