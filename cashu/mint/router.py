@@ -3,7 +3,16 @@ from typing import Union
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
-from cashu.core.base import CheckRequest, MeltRequest, MintRequest, SplitRequest
+from cashu.core.base import (
+    CashuError,
+    CheckRequest,
+    MeltRequest,
+    MintRequest,
+    SplitRequest,
+    GetMintResponse,
+    GetMeltResponse,
+    PostSplitResponse,
+)
 from cashu.mint import ledger
 
 router: APIRouter = APIRouter()
@@ -17,10 +26,16 @@ def keys():
 
 @router.get("/mint")
 async def request_mint(amount: int = 0):
-    """Request minting of tokens. Server responds with a Lightning invoice."""
+    """
+    Request minting of new tokens. The mint responds with a Lightning invoice.
+    This endpoint can be used for a Lightning invoice UX flow.
+
+    Call `POST /mint` after paying the invoice.
+    """
     payment_request, payment_hash = await ledger.request_mint(amount)
     print(f"Lightning invoice: {payment_request}")
-    return {"pr": payment_request, "hash": payment_hash}
+    resp = GetMintResponse(pr=payment_request, hash=payment_hash)
+    return resp
 
 
 @router.post("/mint")
@@ -28,19 +43,7 @@ async def mint(payloads: MintRequest, payment_hash: Union[str, None] = None):
     """
     Requests the minting of tokens belonging to a paid payment request.
 
-    Parameters:
-    pr: payment_request of the Lightning paid invoice.
-
-    Body (JSON):
-    payloads: contains a list of blinded messages waiting to be signed.
-
-    NOTE:
-    - This needs to be replaced by the preimage otherwise someone knowing
-        the payment_request can request the tokens instead of the rightful
-        owner.
-    - The blinded message should ideally be provided to the server *before* payment
-        in the GET /mint endpoint so that the server knows to sign only these tokens
-        when the invoice is paid.
+    Call this endpoint after `GET /mint`.
     """
     amounts = []
     B_s = []
@@ -51,7 +54,7 @@ async def mint(payloads: MintRequest, payment_hash: Union[str, None] = None):
         promises = await ledger.mint(B_s, amounts, payment_hash=payment_hash)
         return promises
     except Exception as exc:
-        return {"error": str(exc)}
+        return CashuError(error=str(exc))
 
 
 @router.post("/melt")
@@ -60,7 +63,8 @@ async def melt(payload: MeltRequest):
     Requests tokens to be destroyed and sent out via Lightning.
     """
     ok, preimage = await ledger.melt(payload.proofs, payload.amount, payload.invoice)
-    return {"paid": ok, "preimage": preimage}
+    resp = GetMeltResponse(paid=ok, preimage=preimage)
+    return resp
 
 
 @router.post("/check")
@@ -80,8 +84,9 @@ async def split(payload: SplitRequest):
     try:
         split_return = await ledger.split(proofs, amount, outputs)
     except Exception as exc:
-        return {"error": str(exc)}
+        return CashuError(error=str(exc))
     if not split_return:
         return {"error": "there was a problem with the split."}
     fst_promises, snd_promises = split_return
-    return {"fst": fst_promises, "snd": snd_promises}
+    resp = PostSplitResponse(fst=fst_promises, snd=snd_promises)
+    return resp

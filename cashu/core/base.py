@@ -4,6 +4,11 @@ from typing import List
 from pydantic import BaseModel
 
 
+class CashuError(BaseModel):
+    code = "000"
+    error = "CashuError"
+
+
 class P2SHScript(BaseModel):
     script: str
     signature: str
@@ -110,6 +115,16 @@ class MintRequest(BaseModel):
     blinded_messages: List[BlindedMessage] = []
 
 
+class GetMintResponse(BaseModel):
+    pr: str
+    hash: str
+
+
+class GetMeltResponse(BaseModel):
+    paid: str
+    preimage: str
+
+
 class SplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
@@ -125,6 +140,11 @@ class SplitRequest(BaseModel):
         if self.output_data:
             self.outputs = self.output_data
             self.output_data = None
+
+
+class PostSplitResponse(BaseModel):
+    fst: List[BlindedSignature]
+    snd: List[BlindedSignature]
 
 
 class CheckRequest(BaseModel):
