@@ -3,11 +3,13 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
 import hashlib
+import math
 from inspect import signature
 from signal import signal
 from typing import List, Set
 
 import cashu.core.b_dhke as b_dhke
+import cashu.core.bolt11 as bolt11
 from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
@@ -197,7 +199,7 @@ class Ledger:
 
     async def _pay_lightning_invoice(self, invoice: str, amount: int):
         """Returns an invoice from the Lightning backend."""
-        error, balance = await WALLET.status()
+        error, _ = await WALLET.status()
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         ok, checking_id, fee_msat, preimage, error_message = await WALLET.pay_invoice(
@@ -250,10 +252,16 @@ class Ledger:
         ]
         return promises
 
-    async def melt(self, proofs: List[Proof], amount: int, invoice: str):
+    async def melt(self, proofs: List[Proof], invoice: str):
         """Invalidates proofs and pays a Lightning invoice."""
-        # if not LIGHTNING:
+        # Verify proofs
+        if not all([self._verify_proof(p) for p in proofs]):
+            raise Exception("could not verify proofs.")
+
         total = sum([p["amount"] for p in proofs])
+        invoice_obj = bolt11.decode(invoice)
+        amount = math.ceil(invoice_obj.amount_msat / 1000)
+
         # check that lightning fees are included
         assert total + fee_reserve(amount * 1000) >= amount, Exception(
             "provided proofs not enough for Lightning payment."

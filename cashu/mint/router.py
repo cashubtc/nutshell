@@ -62,7 +62,7 @@ async def melt(payload: MeltRequest):
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
-    ok, preimage = await ledger.melt(payload.proofs, payload.amount, payload.invoice)
+    ok, preimage = await ledger.melt(payload.proofs, payload.invoice)
     resp = GetMeltResponse(paid=ok, preimage=preimage)
     return resp
 

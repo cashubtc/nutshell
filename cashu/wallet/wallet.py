@@ -11,6 +11,7 @@ import cashu.core.b_dhke as b_dhke
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
+    CheckInternalRequest,
     CheckRequest,
     MeltRequest,
     MintRequest,
@@ -210,8 +211,18 @@ class LedgerAPI:
 
         return return_dict
 
-    async def pay_lightning(self, proofs: List[Proof], amount: int, invoice: str):
-        payload = MeltRequest(proofs=proofs, amount=amount, invoice=invoice)
+    async def check_internal(self, payment_request: str):
+        """Checks whether the Lightning payment is internal."""
+        payload = CheckInternalRequest(pr=payment_request)
+        return_dict = requests.post(
+            self.url + "/checkinternal",
+            json=payload.dict(),
+        ).json()
+
+        return return_dict
+
+    async def pay_lightning(self, proofs: List[Proof], invoice: str):
+        payload = MeltRequest(proofs=proofs, invoice=invoice)
         return_dict = requests.post(
             self.url + "/melt",
             json=payload.dict(),
@@ -283,9 +294,9 @@ class Wallet(LedgerAPI):
             await invalidate_proof(proof, db=self.db)
         return frst_proofs, scnd_proofs
 
-    async def pay_lightning(self, proofs: List[Proof], amount: int, invoice: str):
+    async def pay_lightning(self, proofs: List[Proof], invoice: str):
         """Pays a lightning invoice"""
-        status = await super().pay_lightning(proofs, amount, invoice)
+        status = await super().pay_lightning(proofs, invoice)
         if status["paid"] == True:
             await self.invalidate(proofs)
         else:
