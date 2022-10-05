@@ -3,7 +3,7 @@ from typing import Union
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
-from cashu.core.base import CheckRequest, MeltRequest, MintPayloads, SplitRequest
+from cashu.core.base import CheckRequest, MeltRequest, MintRequest, SplitRequest
 from cashu.mint import ledger
 
 router: APIRouter = APIRouter()
@@ -24,7 +24,7 @@ async def request_mint(amount: int = 0):
 
 
 @router.post("/mint")
-async def mint(payloads: MintPayloads, payment_hash: Union[str, None] = None):
+async def mint(payloads: MintRequest, payment_hash: Union[str, None] = None):
     """
     Requests the minting of tokens belonging to a paid payment request.
 

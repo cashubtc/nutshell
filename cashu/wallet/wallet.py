@@ -13,7 +13,7 @@ from cashu.core.base import (
     BlindedSignature,
     CheckRequest,
     MeltRequest,
-    MintPayloads,
+    MintRequest,
     P2SHScript,
     Proof,
     SplitRequest,
@@ -96,7 +96,7 @@ class LedgerAPI:
         assert len(amounts) == len(
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
-        payloads: MintPayloads = MintPayloads()
+        payloads: MintRequest = MintRequest()
         rs = []
         for secret, amount in zip(secrets, amounts):
             B_, r = b_dhke.step1_alice(secret)

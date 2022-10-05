@@ -106,15 +106,15 @@ class BlindedSignature(BaseModel):
         )
 
 
-class MintPayloads(BaseModel):
+class MintRequest(BaseModel):
     blinded_messages: List[BlindedMessage] = []
 
 
 class SplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
-    output_data: MintPayloads = None  # backwards compatibility with clients < v0.2.1
-    outputs: MintPayloads = None
+    output_data: MintRequest = None  # backwards compatibility with clients < v0.2.1
+    outputs: MintRequest = None
 
     def __init__(self):
         self.backwards_compatibility_v021()
