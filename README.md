@@ -3,6 +3,7 @@
 **Cashu is a Chaumian Ecash wallet and mint with Bitcoin Lightning support.**
 
 <a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a>
+[![Twitter](https://img.shields.io/twitter/follow/cashuBTC.svg?style=social)](https://twitter.com/intent/follow?screen_name=cashuBTC)
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
 
