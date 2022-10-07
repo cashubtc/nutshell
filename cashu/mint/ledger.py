@@ -187,11 +187,14 @@ class Ledger:
         )
         return payment_request, checking_id
 
-    async def _check_lightning_invoice(self, payment_hash: str):
+    async def _check_lightning_invoice(self, amounts, payment_hash: str):
         """Checks with the Lightning backend whether an invoice with this payment_hash was paid."""
         invoice: Invoice = await get_lightning_invoice(payment_hash, db=self.db)
         if invoice.issued:
             raise Exception("tokens already issued for this invoice.")
+        total_requested = sum([amount for amount in amounts])
+        if total_requested > invoice.amount:
+            raise Exception(f"Requested amount too high: {total_requested}. Invoice amount: {invoice.amount}")
         status = await WALLET.get_invoice_status(payment_hash)
         if status.paid:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
@@ -237,9 +240,9 @@ class Ledger:
         # check if lightning invoice was paid
         if LIGHTNING:
             try:
-                paid = await self._check_lightning_invoice(payment_hash)
-            except:
-                raise Exception("could not check invoice.")
+                paid = await self._check_lightning_invoice(amounts, payment_hash)
+            except Exception as e:
+                raise Exception("could not check invoice: " + str(e))
             if not paid:
                 raise Exception("Lightning invoice not paid yet.")
 
