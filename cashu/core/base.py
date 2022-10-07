@@ -1,5 +1,5 @@
 from sqlite3 import Row
-from typing import List, Union
+from typing import List, Union, Dict
 
 from pydantic import BaseModel
 
@@ -7,6 +7,26 @@ from pydantic import BaseModel
 class CashuError(BaseModel):
     code = "000"
     error = "CashuError"
+
+
+class Keyset(BaseModel):
+    id: str
+    keys: Dict
+    mint_url: Union[str, None] = None
+    first_seen: Union[str, None] = None
+    active: bool = True
+
+    @classmethod
+    def from_row(cls, row: Row):
+        if row is None:
+            return cls
+        return cls(
+            id=row[0],
+            keys=row[1],
+            mint_url=row[2],
+            first_seen=row[3],
+            active=row[4],
+        )
 
 
 class P2SHScript(BaseModel):
@@ -25,6 +45,7 @@ class P2SHScript(BaseModel):
 
 
 class Proof(BaseModel):
+    id: str = ""
     amount: int
     secret: str = ""
     C: str
@@ -60,10 +81,10 @@ class Proof(BaseModel):
         )
 
     def to_dict(self):
-        return dict(amount=self.amount, secret=self.secret, C=self.C)
+        return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
     def to_dict_no_secret(self):
-        return dict(amount=self.amount, C=self.C)
+        return dict(id=self.id, amount=self.amount, C=self.C)
 
     def __getitem__(self, key):
         return self.__getattribute__(key)

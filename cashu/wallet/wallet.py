@@ -2,7 +2,7 @@ import base64
 import json
 import secrets as scrts
 import uuid
-from typing import List
+from typing import List, Dict
 
 import requests
 from loguru import logger
@@ -18,6 +18,7 @@ from cashu.core.base import (
     P2SHScript,
     Proof,
     SplitRequest,
+    Keyset,
 )
 from cashu.core.db import Database
 from cashu.core.script import (
@@ -36,20 +37,37 @@ from cashu.wallet.crud import (
     store_p2sh,
     store_proof,
     update_proof_reserved,
+    store_keyset,
+    get_keyset,
 )
 
 
 class LedgerAPI:
+    keys: Dict[int, str]
+    keyset: str
+
     def __init__(self, url):
         self.url = url
 
-    @staticmethod
-    def _get_keys(url):
+    def _get_keys(self, url):
         resp = requests.get(url + "/keys").json()
-        return {
-            int(amt): PublicKey(bytes.fromhex(val), raw=True)
-            for amt, val in resp.items()
-        }
+        keyset_id = resp["id"]
+        keys = resp["keys"]
+        # return {
+        #     "id": keyset_id,
+        # "keys": {
+        #     int(amt): PublicKey(bytes.fromhex(val), raw=True)
+        #     for amt, val in keys.items()
+        # },
+        # }
+        keyset_keys = (
+            {
+                int(amt): PublicKey(bytes.fromhex(val), raw=True)
+                for amt, val in keys.items()
+            },
+        )
+        print(resp)
+        return Keyset(id=keyset_id, keys=keyset_keys, mint_url=self.url)
 
     @staticmethod
     def _get_output_split(amount):
@@ -69,7 +87,12 @@ class LedgerAPI:
         for promise, secret, r in zip(promises, secrets, rs):
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(C_, r, self.keys[promise.amount])
-            proof = Proof(amount=promise.amount, C=C.serialize().hex(), secret=secret)
+            proof = Proof(
+                id=self.keyset_id,
+                amount=promise.amount,
+                C=C.serialize().hex(),
+                secret=secret,
+            )
             proofs.append(proof)
         return proofs
 
@@ -78,11 +101,16 @@ class LedgerAPI:
         """Returns base64 encoded random string."""
         return scrts.token_urlsafe(randombits // 8)
 
-    def _load_mint(self):
+    async def _load_mint(self):
         assert len(
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
-        self.keys = self._get_keys(self.url)
+        keyset = self._get_keys(self.url)
+        keyset_local: Keyset = await get_keyset(keyset.id, self.url, db=self.db)
+        if keyset_local is None:
+            await store_keyset(keyset=keyset, db=self.db)
+        self.keys = keyset.keys
+        self.keyset_id = keyset.id
         assert len(self.keys) > 0, "did not receive keys from mint."
 
     def request_mint(self, amount):
@@ -238,8 +266,8 @@ class Wallet(LedgerAPI):
         self.proofs: List[Proof] = []
         self.name = name
 
-    def load_mint(self):
-        super()._load_mint()
+    async def load_mint(self):
+        await super()._load_mint()
 
     async def load_proofs(self):
         self.proofs = await get_proofs(db=self.db)

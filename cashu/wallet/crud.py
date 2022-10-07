@@ -1,7 +1,7 @@
 import time
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 
-from cashu.core.base import P2SHScript, Proof
+from cashu.core.base import P2SHScript, Proof, Keyset
 from cashu.core.db import Connection, Database
 
 
@@ -180,3 +180,50 @@ async def update_p2sh_used(
         f"UPDATE proofs SET {', '.join(clauses)} WHERE address = ?",
         (*values, str(p2sh.address)),
     )
+
+
+async def store_keyset(
+    keyset: Keyset,
+    mint_url: str,
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+
+    await (conn or db).execute(
+        """
+        INSERT INTO keysets
+          (id, mint_url, keys, first_seen, active)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (keyset.id, mint_url, keyset.keys, keyset.first_seen, True),
+    )
+
+
+async def get_keyset(
+    id: str = None,
+    mint_url: str = None,
+    db: Database = None,
+    conn: Optional[Connection] = None,
+):
+    clauses = []
+    values = []
+    clauses.append("active = ?")
+    values.append(True)
+    if id:
+        clauses.append("id = ?")
+        values.append(id)
+    if mint_url:
+        clauses.append("mint_url = ?")
+        values.append(mint_url)
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
+
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT * from keysets
+        {where}
+        """,
+        tuple(values),
+    )
+    return Keyset.from_row(row)

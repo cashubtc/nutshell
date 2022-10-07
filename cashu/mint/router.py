@@ -23,7 +23,7 @@ router: APIRouter = APIRouter()
 @router.get("/keys")
 def keys():
     """Get the public keys of the mint"""
-    return ledger.get_pubkeys()
+    return ledger.get_keyset()
 
 
 @router.get("/mint")

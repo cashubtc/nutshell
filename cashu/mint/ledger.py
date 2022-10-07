@@ -11,6 +11,7 @@ from typing import List, Set
 import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
 from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof
+from cashu.core.crypto import derive_keyset_id
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
 from cashu.core.script import verify_script
@@ -34,6 +35,7 @@ class Ledger:
 
         self.master_key = secret_key
         self.keys = self._derive_keys(self.master_key)
+        self.keyset_id = derive_keyset_id(self.keys)
         self.pub_keys = self._derive_pubkeys(self.keys)
         self.db: Database = Database("mint", db)
 
@@ -41,12 +43,12 @@ class Ledger:
         self.proofs_used = set(await get_proofs_used(db=self.db))
 
     @staticmethod
-    def _derive_keys(master_key: str):
+    def _derive_keys(master_key: str, keyset_id: str = ""):
         """Deterministic derivation of keys for 2^n values."""
         return {
             2
             ** i: PrivateKey(
-                hashlib.sha256((str(master_key) + str(i)).encode("utf-8"))
+                hashlib.sha256((str(master_key) + str(i) + keyset_id).encode("utf-8"))
                 .hexdigest()
                 .encode("utf-8")[:32],
                 raw=True,
@@ -220,6 +222,9 @@ class Ledger:
     def get_pubkeys(self):
         """Returns public keys for possible amounts."""
         return {a: p.serialize().hex() for a, p in self.pub_keys.items()}
+
+    def get_keyset(self):
+        return {"id": self.keyset_id, "keys": self.get_pubkeys()}
 
     async def request_mint(self, amount):
         """Returns Lightning invoice and stores it in the db."""

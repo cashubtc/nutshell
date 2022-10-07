@@ -78,7 +78,7 @@ def coro(f):
 @coro
 async def mint(ctx, amount: int, hash: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     wallet.status()
     if not LIGHTNING:
         r = await wallet.mint(amount)
@@ -122,7 +122,7 @@ async def mint(ctx, amount: int, hash: str):
 @coro
 async def pay(ctx, invoice: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     wallet.status()
     decoded_invoice: Invoice = bolt11.decode(invoice)
     # check if it's an internal payment
@@ -163,7 +163,7 @@ async def send(ctx, amount: int, lock: str):
     if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     wallet.status()
     _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, lock)
     await wallet.set_reserved(send_proofs, reserved=True)
@@ -181,7 +181,7 @@ async def send(ctx, amount: int, lock: str):
 @coro
 async def receive(ctx, coin: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     wallet.status()
     if lock:
         # load the script and signature of this address from the database
@@ -211,7 +211,7 @@ async def receive(ctx, coin: str, lock: str):
 @coro
 async def burn(ctx, coin: str, all: bool, force: bool):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     if not (all or coin or force) or (coin and all):
         print(
             "Error: enter a coin or use --all to burn all pending coins or --force to check all coins."
@@ -238,7 +238,7 @@ async def burn(ctx, coin: str, all: bool, force: bool):
 @coro
 async def pending(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print(f"--------------------------\n")

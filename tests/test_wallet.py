@@ -31,12 +31,12 @@ def assert_amt(proofs, expected):
 async def run_test():
     wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1", "wallet1")
     await migrate_databases(wallet1.db, migrations)
-    wallet1.load_mint()
+    await wallet1.load_mint()
     wallet1.status()
 
     wallet2 = Wallet2(SERVER_ENDPOINT, "data/wallet2", "wallet2")
     await migrate_databases(wallet2.db, migrations)
-    wallet2.load_mint()
+    await wallet2.load_mint()
     wallet2.status()
 
     proofs = []

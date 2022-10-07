@@ -98,3 +98,23 @@ async def m004_p2sh_locks(db: Database):
             );
         """
     )
+
+
+async def m005_mint_keysets(db: Database):
+    """
+    Stores mint keysets from different mints and epochs.
+    """
+    await db.execute(
+        f"""
+            CREATE TABLE IF NOT EXISTS keysets (
+                id TEXT NOT NULL,
+                keys TEXT NOT NULL,
+                mint_url TEXT NOT NULL,
+                first_seen TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                active BOOL NOT NULL DEFAULT TRUE,
+
+                UNIQUE (id, mint_url)
+
+            );
+        """
+    )
