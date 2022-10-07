@@ -4,8 +4,6 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 
 import hashlib
 import math
-from inspect import signature
-from signal import signal
 from typing import List, Set
 
 import cashu.core.b_dhke as b_dhke

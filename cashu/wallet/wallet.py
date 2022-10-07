@@ -27,7 +27,6 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG
 from cashu.core.split import amount_split
 from cashu.wallet.crud import (
     get_proofs,
