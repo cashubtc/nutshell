@@ -208,7 +208,7 @@ class LedgerAPI:
         )
         resp.raise_for_status()
         return_dict = resp.json()
-        
+
         return return_dict
 
     async def check_fees(self, payment_request: str):
@@ -230,7 +230,7 @@ class LedgerAPI:
             json=payload.dict(),
         )
         resp.raise_for_status()
-        
+
         return_dict = resp.json()
         return return_dict
 

@@ -41,7 +41,11 @@ async def request_mint(amount: int = 0):
 
 
 @router.post("/mint")
-async def mint(payloads: MintRequest, payment_hash: Union[str, None] = None):
+async def mint(
+    payloads: MintRequest,
+    bolt11: Union[str, None] = None,
+    payment_hash: Union[str, None] = None,
+):
     """
     Requests the minting of tokens belonging to a paid payment request.
 

@@ -194,7 +194,9 @@ class Ledger:
             raise Exception("tokens already issued for this invoice.")
         total_requested = sum([amount for amount in amounts])
         if total_requested > invoice.amount:
-            raise Exception(f"Requested amount too high: {total_requested}. Invoice amount: {invoice.amount}")
+            raise Exception(
+                f"Requested amount too high: {total_requested}. Invoice amount: {invoice.amount}"
+            )
         status = await WALLET.get_invoice_status(payment_hash)
         if status.paid:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
