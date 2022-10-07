@@ -34,7 +34,7 @@ MINT_PRIVATE_KEY = env.str("MINT_PRIVATE_KEY", default=None)
 MINT_SERVER_HOST = env.str("MINT_SERVER_HOST", default="127.0.0.1")
 MINT_SERVER_PORT = env.int("MINT_SERVER_PORT", default=3338)
 
-MINT_URL = env.str("MINT_URL")
+MINT_URL = env.str("MINT_URL", default=None)
 MINT_HOST = env.str("MINT_HOST", default="8333.space")
 MINT_PORT = env.int("MINT_PORT", default=3338)
 
