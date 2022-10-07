@@ -1,8 +1,7 @@
 import asyncio
 from functools import partial, wraps
 
-from cashu.core.settings import (LIGHTNING_FEE_PERCENT,
-                                 LIGHTNING_RESERVE_FEE_MIN)
+from cashu.core.settings import LIGHTNING_FEE_PERCENT, LIGHTNING_RESERVE_FEE_MIN
 
 
 def async_wrap(func):
@@ -29,8 +28,10 @@ def async_unwrap(to_await):
     return async_response[0]
 
 
-def fee_reserve(amount_msat: int) -> int:
+def fee_reserve(amount_msat: int, internal=False) -> int:
     """Function for calculating the Lightning fee reserve"""
+    if internal:
+        return 0
     return max(
         int(LIGHTNING_RESERVE_FEE_MIN), int(amount_msat * LIGHTNING_FEE_PERCENT / 100.0)
     )

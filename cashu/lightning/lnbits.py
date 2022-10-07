@@ -8,8 +8,13 @@ import requests
 
 from cashu.core.settings import LNBITS_ENDPOINT, LNBITS_KEY
 
-from .base import (InvoiceResponse, PaymentResponse, PaymentStatus,
-                   StatusResponse, Wallet)
+from .base import (
+    InvoiceResponse,
+    PaymentResponse,
+    PaymentStatus,
+    StatusResponse,
+    Wallet,
+)
 
 
 class LNbitsWallet(Wallet):
@@ -82,6 +87,8 @@ class LNbitsWallet(Wallet):
         except:
             error_message = r.json()["detail"]
             return PaymentResponse(None, None, None, None, error_message)
+        if r.status_code > 299:
+            return PaymentResponse(None, None, None, None, f"HTTP status: {r.reason}")
         if "detail" in r.json():
             return PaymentResponse(None, None, None, None, r.json()["detail"])
         ok, checking_id, fee_msat, preimage, error_message = (
@@ -108,6 +115,8 @@ class LNbitsWallet(Wallet):
                 headers=self.key,
             )
         except:
+            return PaymentStatus(None)
+        if r.json().get("detail"):
             return PaymentStatus(None)
         return PaymentStatus(r.json()["paid"])
 

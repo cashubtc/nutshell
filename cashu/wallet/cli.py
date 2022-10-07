@@ -6,8 +6,8 @@ import json
 import math
 import os
 import sys
-from datetime import datetime
 import time
+from datetime import datetime
 from functools import wraps
 from itertools import groupby
 from operator import itemgetter
@@ -17,10 +17,10 @@ from loguru import logger
 
 import cashu.core.bolt11 as bolt11
 from cashu.core.base import Proof
-from cashu.core.bolt11 import Invoice
+from cashu.core.bolt11 import Invoice, decode
 from cashu.core.helpers import fee_reserve
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import CASHU_DIR, DEBUG, LIGHTNING, MINT_URL, VERSION, ENV_FILE
+from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
 from cashu.wallet import migrations
 from cashu.wallet.crud import get_reserved_proofs, get_unused_locks
 from cashu.wallet.wallet import Wallet as Wallet
@@ -125,18 +125,20 @@ async def pay(ctx, invoice: str):
     wallet.load_mint()
     wallet.status()
     decoded_invoice: Invoice = bolt11.decode(invoice)
+    # check if it's an internal payment
+    fees = (await wallet.check_fees(invoice))["fee"]
     amount = math.ceil(
-        (decoded_invoice.amount_msat + fee_reserve(decoded_invoice.amount_msat)) / 1000
+        (decoded_invoice.amount_msat + fees * 1000) / 1000
     )  # 1% fee for Lightning
     print(
-        f"Paying Lightning invoice of {decoded_invoice.amount_msat // 1000} sat ({amount} sat incl. fees)"
+        f"Paying Lightning invoice of {decoded_invoice.amount_msat//1000} sat ({amount} sat incl. fees)"
     )
     assert amount > 0, "amount is not positive"
     if wallet.available_balance < amount:
         print("Error: Balance too low.")
         return
     _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
-    await wallet.pay_lightning(send_proofs, amount, invoice)
+    await wallet.pay_lightning(send_proofs, invoice)
     wallet.status()
 
 
@@ -195,7 +197,7 @@ async def receive(ctx, coin: str, lock: str):
     else:
         script, signature = None, None
     proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(coin))]
-    _, _ = await wallet.redeem(proofs, snd_script=script, snd_siganture=signature)
+    _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
     wallet.status()
 
 

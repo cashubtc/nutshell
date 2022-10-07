@@ -3,11 +3,13 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
 import hashlib
+import math
 from inspect import signature
 from signal import signal
 from typing import List, Set
 
 import cashu.core.b_dhke as b_dhke
+import cashu.core.bolt11 as bolt11
 from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
@@ -124,24 +126,20 @@ class Ledger:
             ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]}!={txin_p2sh_address}."
         return valid
 
-    def _verify_outputs(
-        self, total: int, amount: int, output_data: List[BlindedMessage]
-    ):
+    def _verify_outputs(self, total: int, amount: int, outputs: List[BlindedMessage]):
         """Verifies the expected split was correctly computed"""
-        fst_amt, snd_amt = total - amount, amount  # we have two amounts to split to
-        fst_outputs = amount_split(fst_amt)
-        snd_outputs = amount_split(snd_amt)
-        expected = fst_outputs + snd_outputs
-        given = [o.amount for o in output_data]
+        frst_amt, scnd_amt = total - amount, amount  # we have two amounts to split to
+        frst_outputs = amount_split(frst_amt)
+        scnd_outputs = amount_split(scnd_amt)
+        expected = frst_outputs + scnd_outputs
+        given = [o.amount for o in outputs]
         return given == expected
 
-    def _verify_no_duplicates(
-        self, proofs: List[Proof], output_data: List[BlindedMessage]
-    ):
+    def _verify_no_duplicates(self, proofs: List[Proof], outputs: List[BlindedMessage]):
         secrets = [p.secret for p in proofs]
         if len(secrets) != len(list(set(secrets))):
             return False
-        B_s = [od.B_ for od in output_data]
+        B_s = [od.B_ for od in outputs]
         if len(B_s) != len(list(set(B_s))):
             return False
         return True
@@ -199,13 +197,13 @@ class Ledger:
             await update_lightning_invoice(payment_hash, issued=True, db=self.db)
         return status.paid
 
-    async def _pay_lightning_invoice(self, invoice: str, amount: int):
+    async def _pay_lightning_invoice(self, invoice: str, fees_msat: int):
         """Returns an invoice from the Lightning backend."""
-        error, balance = await WALLET.status()
+        error, _ = await WALLET.status()
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         ok, checking_id, fee_msat, preimage, error_message = await WALLET.pay_invoice(
-            invoice, fee_limit_msat=fee_reserve(amount * 1000)
+            invoice, fee_limit_msat=fees_msat
         )
         return ok, preimage
 
@@ -254,16 +252,21 @@ class Ledger:
         ]
         return promises
 
-    async def melt(self, proofs: List[Proof], amount: int, invoice: str):
+    async def melt(self, proofs: List[Proof], invoice: str):
         """Invalidates proofs and pays a Lightning invoice."""
-        # if not LIGHTNING:
-        total = sum([p["amount"] for p in proofs])
-        # check that lightning fees are included
-        assert total + fee_reserve(amount * 1000) >= amount, Exception(
+        # Verify proofs
+        if not all([self._verify_proof(p) for p in proofs]):
+            raise Exception("could not verify proofs.")
+
+        total_provided = sum([p["amount"] for p in proofs])
+        invoice_obj = bolt11.decode(invoice)
+        amount = math.ceil(invoice_obj.amount_msat / 1000)
+        fees_msat = await self.check_fees(invoice)
+        assert total_provided >= amount + fees_msat / 1000, Exception(
             "provided proofs not enough for Lightning payment."
         )
 
-        status, preimage = await self._pay_lightning_invoice(invoice, amount)
+        status, preimage = await self._pay_lightning_invoice(invoice, fees_msat)
         if status == True:
             await self._invalidate_proofs(proofs)
         return status, preimage
@@ -271,6 +274,17 @@ class Ledger:
     async def check_spendable(self, proofs: List[Proof]):
         """Checks if all provided proofs are valid and still spendable (i.e. have not been spent)."""
         return {i: self._check_spendable(p) for i, p in enumerate(proofs)}
+
+    async def check_fees(self, pr: str):
+        """Returns the fees (in msat) required to pay this pr."""
+        decoded_invoice = bolt11.decode(pr)
+        amount = math.ceil(decoded_invoice.amount_msat / 1000)
+        # hack: check if it's internal, if it exists, it will return paid = False,
+        # if id does not exist (not internal), it returns paid = None
+        paid = await WALLET.get_invoice_status(decoded_invoice.payment_hash)
+        internal = paid.paid == False
+        fees_msat = fee_reserve(amount * 1000, internal)
+        return fees_msat
 
     async def split(
         self, proofs: List[Proof], amount: int, outputs: List[BlindedMessage]

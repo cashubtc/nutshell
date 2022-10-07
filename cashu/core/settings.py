@@ -1,12 +1,13 @@
 import os
 import sys
 from pathlib import Path
+from typing import Union
+
 from environs import Env  # type: ignore
-from loguru import logger
 
 env = Env()
 
-ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
+ENV_FILE: Union[str, None] = os.path.join(str(Path.home()), ".cashu", ".env")
 if not os.path.isfile(ENV_FILE):
     ENV_FILE = os.path.join(os.getcwd(), ".env")
 if os.path.isfile(ENV_FILE):
@@ -45,4 +46,4 @@ LNBITS_ENDPOINT = env.str("LNBITS_ENDPOINT", default=None)
 LNBITS_KEY = env.str("LNBITS_KEY", default=None)
 
 MAX_ORDER = 64
-VERSION = "0.2.1"
+VERSION = "0.2.5"
