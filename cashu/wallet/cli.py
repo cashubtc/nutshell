@@ -105,9 +105,9 @@ async def mint(ctx, amount: int, hash: str):
                 try:
                     await wallet.mint(amount, r["hash"])
                     paid = True
-                    print("Invoice paid.")
+                    print(" Invoice paid.")
                 except Exception as e:
-                    print(str(e))
+                    # TODO: user error codes!
                     if str(e) == "Error: Lightning invoice not paid yet.":
                         print(".", end="", flush=True)
                         continue
