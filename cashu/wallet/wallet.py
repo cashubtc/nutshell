@@ -49,6 +49,7 @@ class LedgerAPI:
     def __init__(self, url):
         self.url = url
 
+<<<<<<< HEAD
     def _get_keys(self, url):
         resp = requests.get(url + "/keys").json()
         keyset_id = resp["id"]
@@ -68,6 +69,17 @@ class LedgerAPI:
         )
         print(resp)
         return Keyset(id=keyset_id, keys=keyset_keys, mint_url=self.url)
+=======
+    @staticmethod
+    def _get_keys(url):
+        resp = requests.get(url + "/keys")
+        resp.raise_for_status()
+        data = resp.json()
+        return {
+            int(amt): PublicKey(bytes.fromhex(val), raw=True)
+            for amt, val in data.items()
+        }
+>>>>>>> main
 
     @staticmethod
     def _get_output_split(amount):
@@ -116,6 +128,7 @@ class LedgerAPI:
     def request_mint(self, amount):
         """Requests a mint from the server and returns Lightning invoice."""
         r = requests.get(self.url + "/mint", params={"amount": amount})
+        r.raise_for_status()
         return r.json()
 
     @staticmethod
@@ -158,13 +171,11 @@ class LedgerAPI:
             json=payloads.dict(),
             params={"payment_hash": payment_hash},
         )
+        resp.raise_for_status()
         try:
             promises_list = resp.json()
         except:
-            if resp.status_code >= 300:
-                raise Exception(f"Error: {f'mint returned {resp.status_code}'}")
-            else:
-                raise Exception("Unkown mint error.")
+            raise Exception("Unkown mint error.")
         if "error" in promises_list:
             raise Exception("Error: {}".format(promises_list["error"]))
 
@@ -208,14 +219,11 @@ class LedgerAPI:
             self.url + "/split",
             json=split_payload.dict(),
         )
-
+        resp.raise_for_status()
         try:
             promises_dict = resp.json()
         except:
-            if resp.status_code >= 300:
-                raise Exception(f"Error: {f'mint returned {resp.status_code}'}")
-            else:
-                raise Exception("Unkown mint error.")
+            raise Exception("Unkown mint error.")
         if "error" in promises_dict:
             raise Exception("Mint Error: {}".format(promises_dict["error"]))
         promises_fst = [BlindedSignature.from_dict(p) for p in promises_dict["fst"]]
@@ -232,28 +240,36 @@ class LedgerAPI:
 
     async def check_spendable(self, proofs: List[Proof]):
         payload = CheckRequest(proofs=proofs)
-        return_dict = requests.post(
+        resp = requests.post(
             self.url + "/check",
             json=payload.dict(),
-        ).json()
+        )
+        resp.raise_for_status()
+        return_dict = resp.json()
 
         return return_dict
 
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
-        return_dict = requests.post(
+        resp = requests.post(
             self.url + "/checkfees",
             json=payload.dict(),
-        ).json()
+        )
+        resp.raise_for_status()
+
+        return_dict = resp.json()
         return return_dict
 
     async def pay_lightning(self, proofs: List[Proof], invoice: str):
         payload = MeltRequest(proofs=proofs, invoice=invoice)
-        return_dict = requests.post(
+        resp = requests.post(
             self.url + "/melt",
             json=payload.dict(),
-        ).json()
+        )
+        resp.raise_for_status()
+
+        return_dict = resp.json()
         return return_dict
 
 
