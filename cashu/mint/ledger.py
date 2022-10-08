@@ -38,10 +38,10 @@ from cashu.mint.crud import (
 
 
 class Ledger:
-    def __init__(self, secret_key: str, db: str):
+    def __init__(self, secret_key: str, db: str, derivation_path=""):
         self.proofs_used: Set[str] = set()
         self.master_key = secret_key
-        self.keyset = MintKeyset(seed=self.master_key, derivation_path="1")
+        self.derivation_path = derivation_path
         self.db: Database = Database("mint", db)
 
     async def load_used_proofs(self):
@@ -49,6 +49,9 @@ class Ledger:
 
     async def init_keysets(self):
         """Loads all past keysets and stores the active one if not already in db"""
+        self.keyset = MintKeyset(
+            seed=self.master_key, derivation_path=self.derivation_path
+        )
         # get all past keysets
         tmp_keysets: List[MintKeyset] = await get_keyset(db=self.db)
         self.keysets = MintKeysets(tmp_keysets)
