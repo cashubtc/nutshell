@@ -2,8 +2,8 @@ import base64
 import json
 import secrets as scrts
 import uuid
-from typing import Dict, List
 from itertools import groupby
+from typing import Dict, List
 
 import requests
 from loguru import logger
