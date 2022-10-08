@@ -49,7 +49,7 @@ class LedgerAPI:
     def __init__(self, url):
         self.url = url
 
-    def _get_keys(self, url):
+    async def _get_keys(self, url):
         resp = requests.get(url + "/keys").json()
         keys = resp
         assert len(keys), Exception("did not receive any keys")
@@ -96,10 +96,13 @@ class LedgerAPI:
         assert len(
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
-        keyset = self._get_keys(self.url)
-        keyset_local: Keyset = await get_keyset(keyset.id, self.url, db=self.db)
+        keyset = await self._get_keys(self.url)
+        keyset_local: Keyset = await get_keyset(keyset.id, db=self.db)
         if keyset_local is None:
             await store_keyset(keyset=keyset, db=self.db)
+        # keyset_local: Keyset = await get_keyset(keyset.id, self.url, db=self.db)
+        # if keyset_local is None:
+        #     await store_keyset(keyset=keyset, db=self.db)
         self.keys = keyset.public_keys
         self.keyset_id = keyset.id
         assert len(self.keys) > 0, "did not receive keys from mint."
@@ -291,6 +294,16 @@ class Wallet(LedgerAPI):
         for proof in proofs:
             await store_proof(proof, db=self.db)
 
+    @staticmethod
+    def _sum_proofs(proofs: List[Proof], available_only=False):
+        if available_only:
+            return sum([p.amount for p in proofs if not p.reserved])
+        return sum([p.amount for p in proofs])
+
+    @staticmethod
+    def _get_proofs_per_keyset(proofs: List[Proof]):
+        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
+
     async def request_mint(self, amount):
         return super().request_mint(amount)
 
@@ -357,7 +370,9 @@ class Wallet(LedgerAPI):
         return token
 
     async def _get_spendable_proofs(self, proofs: List[Proof]):
-        proofs = [p for p in proofs if p.id == self.keyset_id or not p.id]
+        proofs = [
+            p for p in proofs if p.id == self.keyset_id or not p.id
+        ]  # "or not p.id" is for backwards compatibility with proofs without a keyset id
         proofs = [p for p in proofs if not p.reserved]
         return proofs
 
@@ -424,16 +439,6 @@ class Wallet(LedgerAPI):
         print(
             f"Balance: {self.balance} sat (available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
         )
-
-    @staticmethod
-    def _sum_proofs(proofs: List[Proof], available_only=False):
-        if available_only:
-            return sum([p.amount for p in proofs if not p.reserved])
-        return sum([p.amount for p in proofs])
-
-    @staticmethod
-    def _get_proofs_per_keyset(proofs: List[Proof]):
-        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
 
     def balance_per_keyset(self):
         return {

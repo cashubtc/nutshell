@@ -95,11 +95,11 @@ async def m003_mint_keysets(db: Database):
         f"""
             CREATE TABLE IF NOT EXISTS keysets (
                 id TEXT NOT NULL,
-                mint_url TEXT NOT NULL,
-                valid_from TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
-                valid_to TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
-                first_seen TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
-                active BOOL NOT NULL DEFAULT TRUE,
+                mint_url TEXT,
+                valid_from TIMESTAMP DEFAULT {db.timestamp_now},
+                valid_to TIMESTAMP DEFAULT {db.timestamp_now},
+                first_seen TIMESTAMP DEFAULT {db.timestamp_now},
+                active BOOL DEFAULT TRUE,
 
                 UNIQUE (id, mint_url)
 

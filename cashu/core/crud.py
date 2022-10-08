@@ -6,8 +6,8 @@ from cashu.core.db import Connection, Database
 
 async def store_keyset(
     keyset: Keyset,
-    mint_url: str,
-    db: Database,
+    mint_url: str = None,
+    db: Database = None,
     conn: Optional[Connection] = None,
 ):
 
@@ -19,7 +19,7 @@ async def store_keyset(
         """,
         (
             keyset.id,
-            mint_url,
+            mint_url or keyset.mint_url,
             keyset.valid_from,
             keyset.valid_to,
             keyset.first_seen,
@@ -55,7 +55,7 @@ async def get_keyset(
         """,
         tuple(values),
     )
-    return Keyset.from_row(row)
+    return Keyset.from_row(row) if row is not None else None
 
 
 async def store_mint_pubkey(

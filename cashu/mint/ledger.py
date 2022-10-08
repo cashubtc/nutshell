@@ -16,6 +16,7 @@ from cashu.core.secp import PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER
 from cashu.core.split import amount_split
 from cashu.lightning import WALLET
+from cashu.core.crud import get_keyset, store_keyset
 from cashu.mint.crud import (
     get_lightning_invoice,
     get_proofs_used,
@@ -35,6 +36,11 @@ class Ledger:
 
     async def load_used_proofs(self):
         self.proofs_used = set(await get_proofs_used(db=self.db))
+
+    async def store_keyset(self):
+        keyset_local: Keyset = await get_keyset(self.keyset.id, db=self.db)
+        if keyset_local is None:
+            await store_keyset(keyset=self.keyset, db=self.db)
 
     async def _generate_promises(self, amounts: List[int], B_s: List[str]):
         """Generates promises that sum to the given amount."""
