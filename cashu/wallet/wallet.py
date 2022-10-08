@@ -14,14 +14,13 @@ from cashu.core.base import (
     BlindedSignature,
     CheckFeesRequest,
     CheckRequest,
-    Keyset,
+    WalletKeyset,
     MeltRequest,
     MintRequest,
     P2SHScript,
     Proof,
     SplitRequest,
 )
-from cashu.core.crud import get_keyset, store_keyset
 from cashu.core.db import Database
 from cashu.core.script import (
     step0_carol_checksig_redeemscrip,
@@ -39,6 +38,8 @@ from cashu.wallet.crud import (
     store_p2sh,
     store_proof,
     update_proof_reserved,
+    get_keyset,
+    store_keyset,
 )
 
 
@@ -57,8 +58,13 @@ class LedgerAPI:
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.items()
         }
-        keyset = Keyset(pubkeys=keyset_keys)
+        keyset = WalletKeyset(pubkeys=keyset_keys, mint_url=url)
         return keyset
+
+    async def _get_keysets(self, url):
+        keysets = requests.get(url + "/keysets").json()
+        assert len(keysets), Exception("did not receive any keysets")
+        return keysets
 
     @staticmethod
     def _get_output_split(amount):
@@ -97,7 +103,8 @@ class LedgerAPI:
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
         keyset = await self._get_keys(self.url)
-        keyset_local: Keyset = await get_keyset(keyset.id, db=self.db)
+        keysets = await self._get_keysets(self.url)
+        keyset_local: WalletKeyset = await get_keyset(keyset.id, db=self.db)
         if keyset_local is None:
             await store_keyset(keyset=keyset, db=self.db)
         # keyset_local: Keyset = await get_keyset(keyset.id, self.url, db=self.db)
@@ -105,6 +112,7 @@ class LedgerAPI:
         #     await store_keyset(keyset=keyset, db=self.db)
         self.keys = keyset.public_keys
         self.keyset_id = keyset.id
+        self.keysets = keysets["keysets"]
         assert len(self.keys) > 0, "did not receive keys from mint."
 
     def request_mint(self, amount):
@@ -370,8 +378,14 @@ class Wallet(LedgerAPI):
         return token
 
     async def _get_spendable_proofs(self, proofs: List[Proof]):
+        """
+        Selects proofs that can be used with the current mint.
+        Chooses:
+        1) Proofs that are not marked as reserved
+        2) Proofs that have a keyset id that is in self.keysets (active keysets of mint) - !!! optional for backwards compatibility with legacy clients
+        """
         proofs = [
-            p for p in proofs if p.id == self.keyset_id or not p.id
+            p for p in proofs if p.id in self.keysets or not p.id
         ]  # "or not p.id" is for backwards compatibility with proofs without a keyset id
         proofs = [p for p in proofs if not p.reserved]
         return proofs

@@ -3,12 +3,18 @@ Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
 import math
-from typing import List, Set
-
+from typing import List, Set, Dict
+from loguru import logger
 import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
-from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Keyset, Proof
-from cashu.core.crud import get_keyset, store_keyset
+from cashu.core.base import (
+    BlindedMessage,
+    BlindedSignature,
+    Invoice,
+    MintKeyset,
+    MintKeysets,
+    Proof,
+)
 from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
@@ -24,6 +30,8 @@ from cashu.mint.crud import (
     store_lightning_invoice,
     store_promise,
     update_lightning_invoice,
+    get_keyset,
+    store_keyset,
 )
 
 
@@ -31,15 +39,26 @@ class Ledger:
     def __init__(self, secret_key: str, db: str):
         self.proofs_used: Set[str] = set()
         self.master_key = secret_key
-        self.keyset = Keyset(self.master_key)
+        self.keyset = MintKeyset(seed=self.master_key, derivation_path="1")
         self.db: Database = Database("mint", db)
 
     async def load_used_proofs(self):
         self.proofs_used = set(await get_proofs_used(db=self.db))
 
-    async def store_keyset(self):
-        keyset_local: Keyset = await get_keyset(self.keyset.id, db=self.db)
-        if keyset_local is None:
+    async def init_keysets(self):
+        """Loads all past keysets and stores the active one if not already in db"""
+        # get all past keysets
+        tmp_keysets: List[MintKeyset] = await get_keyset(db=self.db)
+        self.keysets = MintKeysets(tmp_keysets)
+        for _, v in self.keysets.keysets.items():
+            v.generate_keys(self.master_key)
+        if len(self.keysets.keysets):
+            logger.debug(f"Loaded {len(self.keysets.keysets)} keysets from db.")
+        current_keyset_local: List[MintKeyset] = await get_keyset(
+            id=self.keyset.id, db=self.db
+        )
+        if not len(current_keyset_local):
+            logger.debug(f"Storing keyset {self.keyset.id}")
             await store_keyset(keyset=self.keyset, db=self.db)
 
     async def _generate_promises(self, amounts: List[int], B_s: List[str]):
@@ -76,9 +95,12 @@ class Ledger:
         """Verifies that the proof of promise was issued by this ledger."""
         if not self._check_spendable(proof):
             raise Exception(f"tokens already spent. Secret: {proof.secret}")
-        secret_key = self.keyset.private_keys[
-            proof.amount
-        ]  # Get the correct key to check against
+        # if no keyset id is given in proof, assume the current one
+        if not proof.id:
+            secret_key = self.keyset.private_keys[proof.amount]
+        else:
+            secret_key = self.keysets.keysets[proof.id].private_keys[proof.amount]
+
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(secret_key, C, proof.secret)
 

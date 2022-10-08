@@ -29,14 +29,8 @@ class KeyBase(BaseModel):
         )
 
 
-from typing import Optional
-
-from cashu.core.db import Connection, Database
-
-
-class Keyset:
+class WalletKeyset:
     id: str
-    private_keys: Dict[int, PrivateKey]
     public_keys: Dict[int, PublicKey]
     mint_url: Union[str, None] = None
     valid_from: Union[str, None] = None
@@ -46,17 +40,24 @@ class Keyset:
 
     def __init__(
         self,
-        seed: Union[None, str] = None,
-        derivation_path: str = "0",
-        pubkeys: Union[None, Dict[int, PublicKey]] = None,
+        pubkeys: Dict[int, PublicKey] = None,
+        mint_url=None,
+        id=None,
+        valid_from=None,
+        valid_to=None,
+        first_seen=None,
+        active=None,
     ):
-        if seed:
-            self.private_keys = derive_keys(seed, derivation_path)
-            self.public_keys = derive_pubkeys(self.private_keys)
+        self.id = id
+        self.valid_from = valid_from
+        self.valid_to = valid_to
+        self.first_seen = first_seen
+        self.active = active
+        self.mint_url = mint_url
         if pubkeys:
             self.public_keys = pubkeys
-        self.id = derive_keyset_id(self.public_keys)
-        logger.debug(f"Mint keyset id: {self.id}")
+            self.id = derive_keyset_id(self.public_keys)
+            logger.debug(f"Wallet keyset id: {self.id}")
 
     @classmethod
     def from_row(cls, row: Row):
@@ -71,11 +72,71 @@ class Keyset:
             active=row[5],
         )
 
+
+class MintKeyset:
+    id: str
+    derivation_path: str
+    private_keys: Dict[int, PrivateKey]
+    public_keys: Dict[int, PublicKey] = None
+    valid_from: Union[str, None] = None
+    valid_to: Union[str, None] = None
+    first_seen: Union[str, None] = None
+    active: bool = True
+
+    def __init__(
+        self,
+        id=None,
+        valid_from=None,
+        valid_to=None,
+        first_seen=None,
+        active=None,
+        seed: Union[None, str] = None,
+        derivation_path: str = "0",
+    ):
+        self.derivation_path = derivation_path
+        self.id = id
+        self.valid_from = valid_from
+        self.valid_to = valid_to
+        self.first_seen = first_seen
+        self.active = active
+        # generate keys from seed
+        if seed:
+            self.generate_keys(seed)
+
+    def generate_keys(self, seed):
+        self.private_keys = derive_keys(seed, self.derivation_path)
+        self.public_keys = derive_pubkeys(self.private_keys)
+        self.id = derive_keyset_id(self.public_keys)
+        logger.debug(f"Mint keyset id: {self.id}")
+
+    @classmethod
+    def from_row(cls, row: Row):
+        if row is None:
+            return cls
+        return cls(
+            id=row[0],
+            derivation_path=row[1],
+            valid_from=row[2],
+            valid_to=row[3],
+            first_seen=row[4],
+            active=row[5],
+        )
+
     def get_keybase(self):
         return {
             k: KeyBase(id=self.id, amount=k, pubkey=v.serialize().hex())
             for k, v in self.public_keys.items()
         }
+
+
+class MintKeysets:
+    keysets: Dict[str, MintKeyset]
+
+    def __init__(self, keysets: List[MintKeyset]):
+        self.keysets: Dict[str, MintKeyset] = {k.id: k for k in keysets}
+
+    def get_ids(self):
+        return [k for k, _ in self.keysets.items()]
 
 
 class P2SHScript(BaseModel):

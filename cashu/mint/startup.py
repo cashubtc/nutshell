@@ -14,7 +14,7 @@ async def load_ledger():
     await migrate_databases(ledger.db, migrations)
     # await asyncio.wait([m001_initial(ledger.db)])
     await ledger.load_used_proofs()
-    await ledger.store_keyset()
+    await ledger.init_keysets()
 
     if LIGHTNING:
         error_message, balance = await WALLET.status()

@@ -26,6 +26,12 @@ def keys():
     return ledger.get_keyset()
 
 
+@router.get("/keysets")
+def keysets():
+    """Get all active keysets of the mint"""
+    return {"keysets": ledger.keysets.get_ids()}
+
+
 @router.get("/mint")
 async def request_mint(amount: int = 0):
     """
