@@ -118,7 +118,7 @@ class LedgerAPI:
             await store_keyset(keyset=keyset, db=self.db)
 
         # store current keyset
-        assert len(self.keys) > 0, "did not receive keys from mint."
+        assert len(keyset.public_keys) > 0, "did not receive keys from mint."
         self.keys = keyset.public_keys
         self.keyset_id = keyset.id
 
