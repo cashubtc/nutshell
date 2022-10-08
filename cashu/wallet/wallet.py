@@ -14,12 +14,12 @@ from cashu.core.base import (
     BlindedSignature,
     CheckFeesRequest,
     CheckRequest,
-    WalletKeyset,
     MeltRequest,
     MintRequest,
     P2SHScript,
     Proof,
     SplitRequest,
+    WalletKeyset,
 )
 from cashu.core.db import Database
 from cashu.core.script import (
@@ -32,14 +32,14 @@ from cashu.core.secp import PublicKey
 from cashu.core.settings import DEBUG
 from cashu.core.split import amount_split
 from cashu.wallet.crud import (
+    get_keyset,
     get_proofs,
     invalidate_proof,
     secret_used,
+    store_keyset,
     store_p2sh,
     store_proof,
     update_proof_reserved,
-    get_keyset,
-    store_keyset,
 )
 
 

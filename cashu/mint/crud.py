@@ -1,6 +1,6 @@
 from typing import Optional
 
-from cashu.core.base import Invoice, Proof, MintKeyset
+from cashu.core.base import Invoice, MintKeyset, Proof
 from cashu.core.db import Connection, Database
 
 

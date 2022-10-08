@@ -1,10 +1,7 @@
 import time
 from typing import Any, List, Optional
 
-from cashu.core.base import P2SHScript, Proof
-from cashu.core.db import Connection, Database
-
-from cashu.core.base import KeyBase, WalletKeyset
+from cashu.core.base import KeyBase, P2SHScript, Proof, WalletKeyset
 from cashu.core.db import Connection, Database
 
 
