@@ -1,7 +1,5 @@
 import re
 
-from loguru import logger
-
 from cashu.core.db import COCKROACH, POSTGRES, SQLITE, Database
 
 

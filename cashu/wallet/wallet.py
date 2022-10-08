@@ -37,9 +37,8 @@ from cashu.wallet.crud import (
     store_p2sh,
     store_proof,
     update_proof_reserved,
-    store_keyset,
-    get_keyset,
 )
+from cashu.core.crud import store_keyset, get_keyset
 
 
 class LedgerAPI:
@@ -49,37 +48,18 @@ class LedgerAPI:
     def __init__(self, url):
         self.url = url
 
-<<<<<<< HEAD
     def _get_keys(self, url):
         resp = requests.get(url + "/keys").json()
         keyset_id = resp["id"]
         keys = resp["keys"]
-        # return {
-        #     "id": keyset_id,
-        # "keys": {
-        #     int(amt): PublicKey(bytes.fromhex(val), raw=True)
-        #     for amt, val in keys.items()
-        # },
-        # }
-        keyset_keys = (
-            {
-                int(amt): PublicKey(bytes.fromhex(val), raw=True)
-                for amt, val in keys.items()
-            },
-        )
-        print(resp)
-        return Keyset(id=keyset_id, keys=keyset_keys, mint_url=self.url)
-=======
-    @staticmethod
-    def _get_keys(url):
-        resp = requests.get(url + "/keys")
-        resp.raise_for_status()
-        data = resp.json()
-        return {
+        assert len(keys), Exception("did not receive any keys")
+        keyset_keys = {
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
-            for amt, val in data.items()
+            for amt, val in keys.items()
         }
->>>>>>> main
+        keyset = Keyset(pubkeys=keyset_keys)
+        assert keyset_id == keyset.id, Exception("mint keyset id not valid.")
+        return keyset
 
     @staticmethod
     def _get_output_split(amount):
@@ -121,7 +101,7 @@ class LedgerAPI:
         keyset_local: Keyset = await get_keyset(keyset.id, self.url, db=self.db)
         if keyset_local is None:
             await store_keyset(keyset=keyset, db=self.db)
-        self.keys = keyset.keys
+        self.keys = keyset.public_keys
         self.keyset_id = keyset.id
         assert len(self.keys) > 0, "did not receive keys from mint."
 
@@ -215,9 +195,19 @@ class LedgerAPI:
         await self._check_used_secrets(secrets)
         payloads, rs = self._construct_outputs(amounts, secrets)
         split_payload = SplitRequest(proofs=proofs, amount=amount, outputs=payloads)
+
+        def _splitrequest_include_fields(proofs):
+            """strips away fields from the model that aren't necessary for the /split"""
+            proofs_include = {"id", "amount", "secret", "C", "script"}
+            return {
+                "amount": ...,
+                "outputs": ...,
+                "proofs": {i: proofs_include for i in range(len(proofs))},
+            }
+
         resp = requests.post(
             self.url + "/split",
-            json=split_payload.dict(),
+            json=split_payload.dict(include=_splitrequest_include_fields(proofs)),
         )
         resp.raise_for_status()
         try:
@@ -263,9 +253,19 @@ class LedgerAPI:
 
     async def pay_lightning(self, proofs: List[Proof], invoice: str):
         payload = MeltRequest(proofs=proofs, invoice=invoice)
+
+        def _meltequest_include_fields(proofs):
+            """strips away fields from the model that aren't necessary for the /melt"""
+            proofs_include = {"id", "amount", "secret", "C", "script"}
+            return {
+                "amount": ...,
+                "invoice": ...,
+                "proofs": {i: proofs_include for i in range(len(proofs))},
+            }
+
         resp = requests.post(
             self.url + "/melt",
-            json=payload.dict(),
+            json=payload.dict(include=_meltequest_include_fields(proofs)),
         )
         resp.raise_for_status()
 
@@ -357,14 +357,22 @@ class Wallet(LedgerAPI):
         ).decode()
         return token
 
+    async def _get_spendable_proofs(self, proofs: List[Proof]):
+        print(f"Debug: only loading proofs with id: {self.keyset_id}")
+        proofs = [p for p in proofs if p.id == self.keyset_id or not p.id]
+        proofs = [p for p in proofs if not p.reserved]
+        return proofs
+
     async def split_to_send(self, proofs: List[Proof], amount, scnd_secret: str = None):
         """Like self.split but only considers non-reserved tokens."""
         if scnd_secret:
             logger.debug(f"Spending conditions: {scnd_secret}")
-        if len([p for p in proofs if not p.reserved]) <= 0:
+        spendable_proofs = await self._get_spendable_proofs(proofs)
+        print(f"Balance: {sum([p.amount for p in spendable_proofs])}")
+        if sum([p.amount for p in spendable_proofs]) < amount:
             raise Exception("balance too low.")
         return await self.split(
-            [p for p in proofs if not p.reserved], amount, scnd_secret
+            [p for p in spendable_proofs if not p.reserved], amount, scnd_secret
         )
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):

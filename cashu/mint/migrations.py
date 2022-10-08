@@ -85,3 +85,36 @@ async def m001_initial(db: Database):
         );
     """
     )
+
+
+async def m003_mint_keysets(db: Database):
+    """
+    Stores mint keysets from different mints and epochs.
+    """
+    await db.execute(
+        f"""
+            CREATE TABLE IF NOT EXISTS keysets (
+                id TEXT NOT NULL,
+                mint_url TEXT NOT NULL,
+                valid_from TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                valid_to TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                first_seen TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                active BOOL NOT NULL DEFAULT TRUE,
+
+                UNIQUE (id, mint_url)
+
+            );
+        """
+    )
+    await db.execute(
+        f"""
+            CREATE TABLE IF NOT EXISTS mint_pubkeys (
+                id TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                pubkey TEXT NOT NULL,
+
+                UNIQUE (id, pubkey)
+
+            );
+        """
+    )

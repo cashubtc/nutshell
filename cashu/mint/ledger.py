@@ -2,20 +2,17 @@
 Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
-import hashlib
 import math
-from inspect import signature
-from signal import signal
 from typing import List, Set
 
 import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
-from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof
-from cashu.core.crypto import derive_keyset_id
+from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof, Keyset
+from cashu.core.crypto import derive_keyset_id, derive_keys, derive_pubkeys
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
 from cashu.core.script import verify_script
-from cashu.core.secp import PrivateKey, PublicKey
+from cashu.core.secp import PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER
 from cashu.core.split import amount_split
 from cashu.lightning import WALLET
@@ -32,33 +29,12 @@ from cashu.mint.crud import (
 class Ledger:
     def __init__(self, secret_key: str, db: str):
         self.proofs_used: Set[str] = set()
-
         self.master_key = secret_key
-        self.keys = self._derive_keys(self.master_key)
-        self.keyset_id = derive_keyset_id(self.keys)
-        self.pub_keys = self._derive_pubkeys(self.keys)
+        self.keyset = Keyset(self.master_key)
         self.db: Database = Database("mint", db)
 
     async def load_used_proofs(self):
         self.proofs_used = set(await get_proofs_used(db=self.db))
-
-    @staticmethod
-    def _derive_keys(master_key: str, keyset_id: str = ""):
-        """Deterministic derivation of keys for 2^n values."""
-        return {
-            2
-            ** i: PrivateKey(
-                hashlib.sha256((str(master_key) + str(i) + keyset_id).encode("utf-8"))
-                .hexdigest()
-                .encode("utf-8")[:32],
-                raw=True,
-            )
-            for i in range(MAX_ORDER)
-        }
-
-    @staticmethod
-    def _derive_pubkeys(keys: List[PrivateKey]):
-        return {amt: keys[amt].pubkey for amt in [2**i for i in range(MAX_ORDER)]}
 
     async def _generate_promises(self, amounts: List[int], B_s: List[str]):
         """Generates promises that sum to the given amount."""
@@ -69,7 +45,7 @@ class Ledger:
 
     async def _generate_promise(self, amount: int, B_: PublicKey):
         """Generates a promise for given amount and returns a pair (amount, C')."""
-        secret_key = self.keys[amount]  # Get the correct key
+        secret_key = self.keyset.private_keys[amount]  # Get the correct key
         C_ = b_dhke.step2_bob(B_, secret_key)
         await store_promise(
             amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
@@ -94,7 +70,9 @@ class Ledger:
         """Verifies that the proof of promise was issued by this ledger."""
         if not self._check_spendable(proof):
             raise Exception(f"tokens already spent. Secret: {proof.secret}")
-        secret_key = self.keys[proof.amount]  # Get the correct key to check against
+        secret_key = self.keyset.private_keys[
+            proof.amount
+        ]  # Get the correct key to check against
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(secret_key, C, proof.secret)
 
@@ -125,7 +103,7 @@ class Ledger:
             assert len(proof.secret.split(":")) == 3, "secret format wrong."
             assert proof.secret.split(":")[1] == str(
                 txin_p2sh_address
-            ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]}!={txin_p2sh_address}."
+            ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]} is not {txin_p2sh_address}."
         return valid
 
     def _verify_outputs(self, total: int, amount: int, outputs: List[BlindedMessage]):
@@ -223,13 +201,13 @@ class Ledger:
         for p in proofs:
             await invalidate_proof(p, db=self.db)
 
-    # Public methods
-    def get_pubkeys(self):
+    def _serialize_pubkeys(self):
         """Returns public keys for possible amounts."""
-        return {a: p.serialize().hex() for a, p in self.pub_keys.items()}
+        return {a: p.serialize().hex() for a, p in self.keyset.public_keys.items()}
 
+    # Public methods
     def get_keyset(self):
-        return {"id": self.keyset_id, "keys": self.get_pubkeys()}
+        return {"id": self.keyset.id, "keys": self._serialize_pubkeys()}
 
     async def request_mint(self, amount):
         """Returns Lightning invoice and stores it in the db."""

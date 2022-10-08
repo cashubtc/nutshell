@@ -108,8 +108,9 @@ async def m005_mint_keysets(db: Database):
         f"""
             CREATE TABLE IF NOT EXISTS keysets (
                 id TEXT NOT NULL,
-                keys TEXT NOT NULL,
                 mint_url TEXT NOT NULL,
+                valid_from TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                valid_to TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
                 first_seen TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
                 active BOOL NOT NULL DEFAULT TRUE,
 
@@ -118,3 +119,18 @@ async def m005_mint_keysets(db: Database):
             );
         """
     )
+    await db.execute(
+        f"""
+            CREATE TABLE IF NOT EXISTS mint_pubkeys (
+                id TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                pubkey TEXT NOT NULL,
+
+                UNIQUE (id, pubkey)
+
+            );
+        """
+    )
+
+    await db.execute("ALTER TABLE proofs ADD COLUMN id TEXT")
+    await db.execute("ALTER TABLE proofs_used ADD COLUMN id TEXT")

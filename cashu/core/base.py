@@ -1,5 +1,9 @@
 from sqlite3 import Row
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Any
+from cashu.core.crypto import derive_keyset_id, derive_keys, derive_pubkeys
+from cashu.core.secp import PrivateKey, PublicKey
+
+from loguru import logger
 
 from pydantic import BaseModel
 
@@ -9,12 +13,10 @@ class CashuError(BaseModel):
     error = "CashuError"
 
 
-class Keyset(BaseModel):
+class KeyBase(BaseModel):
     id: str
-    keys: Dict
-    mint_url: Union[str, None] = None
-    first_seen: Union[str, None] = None
-    active: bool = True
+    amount: int
+    pubkey: str
 
     @classmethod
     def from_row(cls, row: Row):
@@ -22,11 +24,53 @@ class Keyset(BaseModel):
             return cls
         return cls(
             id=row[0],
-            keys=row[1],
-            mint_url=row[2],
-            first_seen=row[3],
-            active=row[4],
+            amount=int(row[1]),
+            pubkey=row[2],
         )
+
+
+class Keyset:
+    id: str
+    private_keys: Dict[int, PrivateKey]
+    public_keys: Dict[int, PublicKey]
+    mint_url: Union[str, None] = None
+    valid_from: Union[str, None] = None
+    valid_to: Union[str, None] = None
+    first_seen: Union[str, None] = None
+    active: bool = True
+
+    def __init__(
+        self,
+        seed: Union[None, str] = None,
+        derivation_path: str = "0",
+        pubkeys: Union[None, Dict[int, PublicKey]] = None,
+    ):
+        if seed:
+            self.private_keys = derive_keys(seed, derivation_path)
+            self.public_keys = derive_pubkeys(self.private_keys)
+        if pubkeys:
+            self.public_keys = pubkeys
+        self.id = derive_keyset_id(self.public_keys)
+        logger.debug(f"Mint keyset id: {self.id}")
+
+    @classmethod
+    def from_row(cls, row: Row):
+        if row is None:
+            return cls
+        return cls(
+            id=row[0],
+            mint_url=row[1],
+            valid_from=row[2],
+            valid_to=row[3],
+            first_seen=row[4],
+            active=row[5],
+        )
+
+    def get_keybase(self):
+        return {
+            k: KeyBase(id=self.id, amount=k, pubkey=v.serialize().hex())
+            for k, v in self.public_keys.items()
+        }
 
 
 class P2SHScript(BaseModel):
@@ -65,6 +109,7 @@ class Proof(BaseModel):
             send_id=row[4] or "",
             time_created=row[5] or "",
             time_reserved=row[6] or "",
+            id=row[7] or "",
         )
 
     @classmethod
@@ -116,17 +161,20 @@ class Invoice(BaseModel):
 
 
 class BlindedMessage(BaseModel):
+    id: str = ""
     amount: int
     B_: str
 
 
 class BlindedSignature(BaseModel):
+    id: str = ""
     amount: int
     C_: str
 
     @classmethod
     def from_dict(cls, d: dict):
         return cls(
+            id=d["id"],
             amount=d["amount"],
             C_=d["C_"],
         )
