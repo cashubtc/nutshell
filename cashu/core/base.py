@@ -30,6 +30,7 @@ class KeyBase(BaseModel):
 
 
 from typing import Optional
+
 from cashu.core.db import Connection, Database
 
 
