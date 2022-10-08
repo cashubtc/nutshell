@@ -3,6 +3,7 @@ import json
 import secrets as scrts
 import uuid
 from typing import Dict, List
+from itertools import groupby
 
 import requests
 from loguru import logger
@@ -50,15 +51,13 @@ class LedgerAPI:
 
     def _get_keys(self, url):
         resp = requests.get(url + "/keys").json()
-        keyset_id = resp["id"]
-        keys = resp["keys"]
+        keys = resp
         assert len(keys), Exception("did not receive any keys")
         keyset_keys = {
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.items()
         }
         keyset = Keyset(pubkeys=keyset_keys)
-        assert keyset_id == keyset.id, Exception("mint keyset id not valid.")
         return keyset
 
     @staticmethod
@@ -358,7 +357,6 @@ class Wallet(LedgerAPI):
         return token
 
     async def _get_spendable_proofs(self, proofs: List[Proof]):
-        print(f"Debug: only loading proofs with id: {self.keyset_id}")
         proofs = [p for p in proofs if p.id == self.keyset_id or not p.id]
         proofs = [p for p in proofs if not p.reserved]
         return proofs
@@ -368,7 +366,6 @@ class Wallet(LedgerAPI):
         if scnd_secret:
             logger.debug(f"Spending conditions: {scnd_secret}")
         spendable_proofs = await self._get_spendable_proofs(proofs)
-        print(f"Balance: {sum([p.amount for p in spendable_proofs])}")
         if sum([p.amount for p in spendable_proofs]) < amount:
             raise Exception("balance too low.")
         return await self.split(
@@ -427,6 +424,25 @@ class Wallet(LedgerAPI):
         print(
             f"Balance: {self.balance} sat (available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
         )
+
+    @staticmethod
+    def _sum_proofs(proofs: List[Proof], available_only=False):
+        if available_only:
+            return sum([p.amount for p in proofs if not p.reserved])
+        return sum([p.amount for p in proofs])
+
+    @staticmethod
+    def _get_proofs_per_keyset(proofs: List[Proof]):
+        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
+
+    def balance_per_keyset(self):
+        return {
+            key: {
+                "balance": self._sum_proofs(proofs),
+                "available": self._sum_proofs(proofs, available_only=True),
+            }
+            for key, proofs in self._get_proofs_per_keyset(self.proofs).items()
+        }
 
     def proof_amounts(self):
         return [p["amount"] for p in sorted(self.proofs, key=lambda p: p["amount"])]

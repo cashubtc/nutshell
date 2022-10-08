@@ -148,7 +148,16 @@ async def pay(ctx, invoice: str):
 @coro
 async def balance(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.status()
+    keyset_balances = wallet.balance_per_keyset()
+    if len(keyset_balances) > 1:
+        for k, v in keyset_balances.items():
+            print(
+                f"Keyset: {k} Balance: {v['balance']} sat (available: {v['available']})"
+            )
+        print("")
+    print(
+        f"Balance: {wallet.balance} sat (available: {wallet.available_balance} sat in {len([p for p in wallet.proofs if not p.reserved])} tokens)"
+    )
 
 
 @cli.command("send", help="Send coins.")
@@ -192,7 +201,7 @@ async def receive(ctx, coin: str, lock: str):
         address_split = lock.split("P2SH:")[1]
 
         p2shscripts = await get_unused_locks(address_split, db=wallet.db)
-        assert len(p2shscripts) == 1
+        assert len(p2shscripts) == 1, Exception("lock not found.")
         script = p2shscripts[0].script
         signature = p2shscripts[0].signature
     else:

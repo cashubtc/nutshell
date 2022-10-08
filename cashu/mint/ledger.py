@@ -207,7 +207,7 @@ class Ledger:
 
     # Public methods
     def get_keyset(self):
-        return {"id": self.keyset.id, "keys": self._serialize_pubkeys()}
+        return self._serialize_pubkeys()
 
     async def request_mint(self, amount):
         """Returns Lightning invoice and stores it in the db."""
