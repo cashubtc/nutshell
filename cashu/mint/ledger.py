@@ -38,7 +38,7 @@ from cashu.mint.crud import (
 
 
 class Ledger:
-    def __init__(self, secret_key: str, db: str, derivation_path="0"):
+    def __init__(self, secret_key: str, db: str, derivation_path=""):
         self.proofs_used: Set[str] = set()
         self.master_key = secret_key
         self.derivation_path = derivation_path
@@ -52,19 +52,21 @@ class Ledger:
         self.keyset = MintKeyset(
             seed=self.master_key, derivation_path=self.derivation_path
         )
-        # get all past keysets
-        tmp_keysets: List[MintKeyset] = await get_keyset(db=self.db)
-        self.keysets = MintKeysets(tmp_keysets)
-        for _, v in self.keysets.keysets.items():
-            v.generate_keys(self.master_key)
-        if len(self.keysets.keysets):
-            logger.debug(f"Loaded {len(self.keysets.keysets)} keysets from db.")
         current_keyset_local: List[MintKeyset] = await get_keyset(
             id=self.keyset.id, db=self.db
         )
         if not len(current_keyset_local):
             logger.debug(f"Storing keyset {self.keyset.id}")
             await store_keyset(keyset=self.keyset, db=self.db)
+
+        # get all past keysets
+        tmp_keysets: List[MintKeyset] = await get_keyset(db=self.db)
+        self.keysets = MintKeysets(tmp_keysets)
+        logger.debug(f"Keysets {self.keysets.keysets}")
+        for _, v in self.keysets.keysets.items():
+            v.generate_keys(self.master_key)
+        if len(self.keysets.keysets):
+            logger.debug(f"Loaded {len(self.keysets.keysets)} keysets from db.")
 
     async def _generate_promises(self, amounts: List[int], B_s: List[str]):
         """Generates promises that sum to the given amount."""
