@@ -150,9 +150,11 @@ async def balance(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
     keyset_balances = wallet.balance_per_keyset()
     if len(keyset_balances) > 1:
+        print(f"You have balances in {len(keyset_balances)} keysets:")
+        print("")
         for k, v in keyset_balances.items():
             print(
-                f"Keyset: {k} Balance: {v['balance']} sat (available: {v['available']})"
+                f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']})"
             )
         print("")
     print(
