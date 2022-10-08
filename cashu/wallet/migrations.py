@@ -109,10 +109,10 @@ async def m005_wallet_keysets(db: Database):
             CREATE TABLE IF NOT EXISTS keysets (
                 id TEXT NOT NULL,
                 mint_url TEXT NOT NULL,
-                valid_from TIMESTAMP  DEFAULT {db.timestamp_now},
-                valid_to TIMESTAMP  DEFAULT {db.timestamp_now},
-                first_seen TIMESTAMP  DEFAULT {db.timestamp_now},
-                active BOOL  DEFAULT TRUE,
+                valid_from TIMESTAMP DEFAULT {db.timestamp_now},
+                valid_to TIMESTAMP DEFAULT {db.timestamp_now},
+                first_seen TIMESTAMP DEFAULT {db.timestamp_now},
+                active BOOL DEFAULT TRUE,
 
                 UNIQUE (id, mint_url)
 
