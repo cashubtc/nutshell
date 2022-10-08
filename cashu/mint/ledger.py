@@ -49,9 +49,11 @@ class Ledger:
 
     async def init_keysets(self):
         """Loads all past keysets and stores the active one if not already in db"""
+        # generate current keyset from seed and current derivation path
         self.keyset = MintKeyset(
             seed=self.master_key, derivation_path=self.derivation_path
         )
+        # check if current keyset is stored in db and store if not
         current_keyset_local: List[MintKeyset] = await get_keyset(
             id=self.keyset.id, db=self.db
         )
@@ -59,12 +61,15 @@ class Ledger:
             logger.debug(f"Storing keyset {self.keyset.id}")
             await store_keyset(keyset=self.keyset, db=self.db)
 
-        # get all past keysets
+        # load all past keysets from db
+        # this needs two steps because the types of tmp_keysets and the argument of MintKeysets() are different
         tmp_keysets: List[MintKeyset] = await get_keyset(db=self.db)
         self.keysets = MintKeysets(tmp_keysets)
         logger.debug(f"Keysets {self.keysets.keysets}")
+        # generate all derived keys from stored derivation paths of past keysets
         for _, v in self.keysets.keysets.items():
             v.generate_keys(self.master_key)
+
         if len(self.keysets.keysets):
             logger.debug(f"Loaded {len(self.keysets.keysets)} keysets from db.")
 
@@ -106,6 +111,7 @@ class Ledger:
         if not proof.id:
             secret_key = self.keyset.private_keys[proof.amount]
         else:
+            # use the appropriate active keyset for this proof.id
             secret_key = self.keysets.keysets[proof.id].private_keys[proof.amount]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
