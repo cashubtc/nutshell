@@ -103,7 +103,9 @@ class LedgerAPI:
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
         keyset = await self._get_keys(self.url)
+        logger.debug(f"Current mint keyset: {keyset.id}")
         keysets = await self._get_keysets(self.url)
+        logger.debug(f"Mint keysets: {keysets}")
         keyset_local: WalletKeyset = await get_keyset(keyset.id, db=self.db)
         if keyset_local is None:
             await store_keyset(keyset=keyset, db=self.db)

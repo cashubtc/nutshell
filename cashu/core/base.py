@@ -1,7 +1,6 @@
 from sqlite3 import Row
 from typing import Any, Dict, List, Union
 
-from loguru import logger
 from pydantic import BaseModel
 
 from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
@@ -57,7 +56,6 @@ class WalletKeyset:
         if pubkeys:
             self.public_keys = pubkeys
             self.id = derive_keyset_id(self.public_keys)
-            logger.debug(f"Wallet keyset id: {self.id}")
 
     @classmethod
     def from_row(cls, row: Row):
@@ -107,7 +105,6 @@ class MintKeyset:
         self.private_keys = derive_keys(seed, self.derivation_path)
         self.public_keys = derive_pubkeys(self.private_keys)
         self.id = derive_keyset_id(self.public_keys)
-        logger.debug(f"Mint keyset id: {self.id}")
 
     @classmethod
     def from_row(cls, row: Row):
