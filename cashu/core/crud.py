@@ -1,6 +1,6 @@
 from typing import Optional
 
-from cashu.core.base import Keyset, KeyBase
+from cashu.core.base import KeyBase, Keyset
 from cashu.core.db import Connection, Database
 
 

@@ -2,7 +2,7 @@ import base64
 import json
 import secrets as scrts
 import uuid
-from typing import List, Dict
+from typing import Dict, List
 
 import requests
 from loguru import logger
@@ -13,13 +13,14 @@ from cashu.core.base import (
     BlindedSignature,
     CheckFeesRequest,
     CheckRequest,
+    Keyset,
     MeltRequest,
     MintRequest,
     P2SHScript,
     Proof,
     SplitRequest,
-    Keyset,
 )
+from cashu.core.crud import get_keyset, store_keyset
 from cashu.core.db import Database
 from cashu.core.script import (
     step0_carol_checksig_redeemscrip,
@@ -38,7 +39,6 @@ from cashu.wallet.crud import (
     store_proof,
     update_proof_reserved,
 )
-from cashu.core.crud import store_keyset, get_keyset
 
 
 class LedgerAPI:

@@ -1,5 +1,6 @@
 import hashlib
 from typing import Dict, List
+
 from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import MAX_ORDER
 
