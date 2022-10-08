@@ -38,7 +38,7 @@ from cashu.mint.crud import (
 
 
 class Ledger:
-    def __init__(self, secret_key: str, db: str, derivation_path=""):
+    def __init__(self, secret_key: str, db: str, derivation_path="0"):
         self.proofs_used: Set[str] = set()
         self.master_key = secret_key
         self.derivation_path = derivation_path
