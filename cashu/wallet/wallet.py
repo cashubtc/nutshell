@@ -99,23 +99,31 @@ class LedgerAPI:
         return scrts.token_urlsafe(randombits // 8)
 
     async def _load_mint(self):
+        """
+        Loads the current keys and the active keyset of the map.
+        """
         assert len(
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
+        # get current keyset
         keyset = await self._get_keys(self.url)
         logger.debug(f"Current mint keyset: {keyset.id}")
+        # get all active keysets
         keysets = await self._get_keysets(self.url)
         logger.debug(f"Mint keysets: {keysets}")
+
+        # check if current keyset is in db
         keyset_local: WalletKeyset = await get_keyset(keyset.id, db=self.db)
         if keyset_local is None:
             await store_keyset(keyset=keyset, db=self.db)
-        # keyset_local: Keyset = await get_keyset(keyset.id, self.url, db=self.db)
-        # if keyset_local is None:
-        #     await store_keyset(keyset=keyset, db=self.db)
+
+        # store current keyset
+        assert len(self.keys) > 0, "did not receive keys from mint."
         self.keys = keyset.public_keys
         self.keyset_id = keyset.id
+
+        # store active keysets
         self.keysets = keysets["keysets"]
-        assert len(self.keys) > 0, "did not receive keys from mint."
 
     def request_mint(self, amount):
         """Requests a mint from the server and returns Lightning invoice."""
