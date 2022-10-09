@@ -3,7 +3,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+<<<<<<< HEAD
 dev-notes.mkdocs
+=======
+# database
+*.sqlite3
+
+>>>>>>> a0b2acac6e1ac93cf96fbb9075e3ed7d24867649
 # C extensions
 *.so
 
