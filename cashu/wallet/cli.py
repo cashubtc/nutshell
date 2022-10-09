@@ -179,8 +179,9 @@ async def send(ctx, amount: int, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, lock)
-    await wallet.set_reserved(send_proofs, reserved=True)
+    _, send_proofs = await wallet.split_to_send(
+        wallet.proofs, amount, lock, set_reserved=True
+    )
     coin = await wallet.serialize_proofs(
         send_proofs, hide_secrets=True if lock and not p2sh else False
     )

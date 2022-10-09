@@ -1,13 +1,18 @@
+from distutils.command.build_scripts import first_line_re
 import time
 from re import S
-
+from typing import List
 import pytest
+import pytest_asyncio
 
 from cashu.core.helpers import async_unwrap
 from cashu.core.migrations import migrate_databases
 from cashu.wallet import migrations
+from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
+from cashu.core.base import Proof
+from cashu.core.helpers import sum_proofs
 
 SERVER_ENDPOINT = "http://localhost:3338"
 
@@ -27,134 +32,203 @@ def assert_amt(proofs, expected):
     assert [p["amount"] for p in proofs] == expected
 
 
-@pytest.mark.asyncio
-async def run_test():
+@pytest_asyncio.fixture(scope="function")
+async def wallet1():
     wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1", "wallet1")
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
     wallet1.status()
+    yield wallet1
 
+
+@pytest_asyncio.fixture(scope="function")
+async def wallet2():
     wallet2 = Wallet2(SERVER_ENDPOINT, "data/wallet2", "wallet2")
     await migrate_databases(wallet2.db, migrations)
     await wallet2.load_mint()
     wallet2.status()
+    yield wallet2
 
-    proofs = []
 
-    # Mint a proof of promise. We obtain a proof for 64 coins
-    proofs += await wallet1.mint(64)
-    print(proofs)
+@pytest.mark.asyncio
+async def test_mint(wallet1: Wallet):
+    await wallet1.mint(64)
     assert wallet1.balance == 64
-    wallet1.status()
 
-    # Mint an odd amount (not in 2^n)
-    proofs += await wallet1.mint(63)
-    assert wallet1.balance == 64 + 63
 
-    w1_frst_proofs, w1_scnd_proofs = await wallet1.split(wallet1.proofs, 65)
-    assert wallet1.balance == 63 + 64
-    wallet1.status()
+@pytest.mark.asyncio
+async def test_split(wallet1: Wallet):
+    await wallet1.mint(64)
+    p1, p2 = await wallet1.split(wallet1.proofs, 20)
+    assert wallet1.balance == 64
+    assert sum_proofs(p1) == 44
+    assert [p.amount for p in p1] == [4, 8, 32]
+    assert sum_proofs(p2) == 20
+    assert [p.amount for p in p2] == [4, 16]
 
-    # Error: We try to double-spend by providing a valid proof twice
-    await assert_err(
-        wallet1.split(wallet1.proofs + proofs, 20),
-        f"Mint Error: tokens already spent. Secret: {proofs[0]['secret']}",
+
+@pytest.mark.asyncio
+async def test_split_to_send(wallet1: Wallet):
+    await wallet1.mint(64)
+    keep_proofs, spendable_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 32, set_reserved=True
     )
-    assert wallet1.balance == 63 + 64
-    wallet1.status()
+    get_spendable = await wallet1._get_spendable_proofs(wallet1.proofs)
+    assert keep_proofs == get_spendable
 
-    w1_frst_proofs, w1_scnd_proofs = await wallet1.split(wallet1.proofs, 20)
-    # we expect 44 and 20 -> [4, 8, 32], [4, 16]
-    print(w1_frst_proofs)
-    print(w1_scnd_proofs)
-    # assert [p["amount"] for p in w1_frst_proofs] == [4, 8, 32]
-    assert [p["amount"] for p in w1_scnd_proofs] == [4, 16]
-    assert wallet1.balance == 63 + 64
-    wallet1.status()
+    assert sum_proofs(spendable_proofs) == 32
+    assert wallet1.balance == 64
+    assert wallet1.available_balance == 32
 
-    # Error: We try to double-spend and it fails
+
+@pytest.mark.asyncio
+async def test_split_more_than_balance(wallet1: Wallet):
+    await wallet1.mint(64)
     await assert_err(
-        wallet1.split([proofs[0]], 10),
-        f"Mint Error: tokens already spent. Secret: {proofs[0]['secret']}",
+        wallet1.split(wallet1.proofs, 128),
+        "Mint Error: split amount is higher than the total sum.",
+    )
+    assert wallet1.balance == 64
+
+
+@pytest.mark.asyncio
+async def test_split_to_send_more_than_balance(wallet1: Wallet):
+    await wallet1.mint(64)
+    await assert_err(
+        wallet1.split_to_send(wallet1.proofs, 128, set_reserved=True),
+        "balance too low.",
+    )
+    assert wallet1.balance == 64
+    assert wallet1.available_balance == 64
+
+
+@pytest.mark.asyncio
+async def test_double_spend(wallet1: Wallet):
+    doublespend = await wallet1.mint(64)
+    await wallet1.split(wallet1.proofs, 20)
+    await assert_err(
+        wallet1.split(doublespend, 20),
+        f"Mint Error: tokens already spent. Secret: {doublespend[0]['secret']}",
+    )
+    assert wallet1.balance == 64
+    assert wallet1.available_balance == 64
+
+
+@pytest.mark.asyncio
+async def test_duplicate_proofs_double_spent(wallet1: Wallet):
+    doublespend = await wallet1.mint(64)
+    await assert_err(
+        wallet1.split(wallet1.proofs + doublespend, 20),
+        "Mint Error: duplicate proofs or promises.",
+    )
+    assert wallet1.balance == 64
+    assert wallet1.available_balance == 64
+
+
+@pytest.mark.asyncio
+async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    _, spendable_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 32, set_reserved=True
+    )
+    await wallet2.redeem(spendable_proofs)
+    assert wallet2.balance == 32
+
+    assert wallet1.balance == 64
+    assert wallet1.available_balance == 32
+    await wallet1.invalidate(spendable_proofs)
+    assert wallet1.balance == 32
+    assert wallet1.available_balance == 32
+
+
+@pytest.mark.asyncio
+async def test_split_invalid_amount(wallet1: Wallet):
+    await wallet1.mint(64)
+    await assert_err(
+        wallet1.split(wallet1.proofs, -1),
+        "Mint Error: invalid split amount: -1",
     )
 
-    assert wallet1.balance == 63 + 64
-    wallet1.status()
 
-    # Redeem the tokens in wallet2
-    w2_frst_proofs, w2_scnd_proofs = await wallet2.redeem(w1_scnd_proofs)
-    print(w2_frst_proofs)
-    print(w2_scnd_proofs)
-    assert wallet1.balance == 63 + 64
-    assert wallet2.balance == 20
-    wallet2.status()
-
-    # wallet1 invalidates his proofs
-    await wallet1.invalidate(w1_scnd_proofs)
-    assert wallet1.balance == 63 + 64 - 20
-    wallet1.status()
-
-    w1_frst_proofs2, w1_scnd_proofs2 = await wallet1.split(w1_frst_proofs, 5)
-    # we expect 15 and 5 -> [1, 2, 4, 8], [1, 4]
-    print(w1_frst_proofs2)
-    print(w1_scnd_proofs2)
-    assert wallet1.balance == 63 + 64 - 20
-    wallet1.status()
-
-    # Error: We try to double-spend and it fails
-    await assert_err(
-        wallet1.split(w1_scnd_proofs, 5),
-        f"Mint Error: tokens already spent. Secret: {w1_scnd_proofs[0]['secret']}",
-    )
-
-    assert wallet1.balance == 63 + 64 - 20
-    wallet1.status()
-
-    assert wallet1.proof_amounts() == [1, 2, 4, 4, 32, 64]
-    assert wallet2.proof_amounts() == [4, 16]
-
-    # manipulate the proof amount
-    # w1_frst_proofs2_manipulated = w1_frst_proofs2.copy()
-    # w1_frst_proofs2_manipulated[0]["amount"] = 123
-    # await assert_err(
-    #     wallet1.split(w1_frst_proofs2_manipulated, 20),
-    #     "Error: 123",
-    # )
-
-    # try to split an invalid amount
-    await assert_err(
-        wallet1.split(w1_scnd_proofs, -500),
-        "Mint Error: invalid split amount: -500",
-    )
-
-    # mint with secrets
+@pytest.mark.asyncio
+async def test_split_with_secret(wallet1: Wallet):
+    await wallet1.mint(64)
     secret = f"asdasd_{time.time()}"
     w1_frst_proofs, w1_scnd_proofs = await wallet1.split(
-        wallet1.proofs, 65, scnd_secret=secret
+        wallet1.proofs, 32, scnd_secret=secret
     )
+    # check if index prefix is in secret
+    assert w1_scnd_proofs[0].secret == "0:" + secret
 
-    # p2sh test
-    p2shscript = await wallet2.create_p2sh_lock()
-    txin_p2sh_address = p2shscript.address
-    lock = f"P2SH:{txin_p2sh_address}"
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
-    _, _ = await wallet2.redeem(
-        send_proofs, scnd_script=p2shscript.script, scnd_siganture=p2shscript.signature
-    )
 
+@pytest.mark.asyncio
+async def test_redeem_without_secret(wallet1: Wallet):
+    await wallet1.mint(64)
     # strip away the secrets
-    w1_scnd_proofs_manipulated = w1_scnd_proofs.copy()
+    w1_scnd_proofs_manipulated = wallet1.proofs.copy()
     for p in w1_scnd_proofs_manipulated:
         p.secret = ""
     await assert_err(
-        wallet2.redeem(w1_scnd_proofs_manipulated),
+        wallet1.redeem(w1_scnd_proofs_manipulated),
         "Mint Error: no secret in proof.",
     )
 
 
-if __name__ == "__main__":
-    async_unwrap(run_test())
+@pytest.mark.asyncio
+async def no_test_p2sh(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    # p2sh test
+    p2shscript = await wallet1.create_p2sh_lock()
+    txin_p2sh_address = p2shscript.address
+    lock = f"P2SH:{txin_p2sh_address}"
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
+
+    assert send_proofs[0].secret.startswith("P2SH:")
+
+    frst_proofs, scnd_proofs = await wallet2.redeem(
+        send_proofs, scnd_script=p2shscript.script, scnd_siganture=p2shscript.signature
+    )
+    assert len(frst_proofs) == 0
+    assert len(scnd_proofs) == 1
+    assert sum_proofs(scnd_proofs) == 8
+    assert wallet2.balance == 8
 
 
-def test():
-    async_unwrap(run_test())
+@pytest.mark.asyncio
+async def test_p2sh_receive_wrong_script(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    # p2sh test
+    p2shscript = await wallet1.create_p2sh_lock()
+    txin_p2sh_address = p2shscript.address
+    lock = f"P2SH:{txin_p2sh_address}"
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
+
+    wrong_script = "asad" + p2shscript.script
+
+    await assert_err(
+        wallet2.redeem(
+            send_proofs, scnd_script=wrong_script, scnd_siganture=p2shscript.signature
+        ),
+        "Mint Error: ('Script verification failed:', VerifyScriptError('scriptPubKey returned false'))",
+    )
+    assert wallet2.balance == 0
+
+
+@pytest.mark.asyncio
+async def test_p2sh_receive_wrong_signature(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    # p2sh test
+    p2shscript = await wallet1.create_p2sh_lock()
+    txin_p2sh_address = p2shscript.address
+    lock = f"P2SH:{txin_p2sh_address}"
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
+
+    wrong_signature = "asda" + p2shscript.signature
+
+    await assert_err(
+        wallet2.redeem(
+            send_proofs, scnd_script=p2shscript.script, scnd_siganture=wrong_signature
+        ),
+        "Mint Error: ('Script evaluation failed:', EvalScriptError('EvalScript: OP_RETURN called'))",
+    )
+    assert wallet2.balance == 0
