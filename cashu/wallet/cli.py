@@ -78,7 +78,7 @@ def coro(f):
 @coro
 async def mint(ctx, amount: int, hash: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     wallet.status()
     if not LIGHTNING:
         r = await wallet.mint(amount)
@@ -123,7 +123,7 @@ async def mint(ctx, amount: int, hash: str):
 @coro
 async def pay(ctx, invoice: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     wallet.status()
     decoded_invoice: Invoice = bolt11.decode(invoice)
     # check if it's an internal payment
@@ -148,7 +148,18 @@ async def pay(ctx, invoice: str):
 @coro
 async def balance(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.status()
+    keyset_balances = wallet.balance_per_keyset()
+    if len(keyset_balances) > 1:
+        print(f"You have balances in {len(keyset_balances)} keysets:")
+        print("")
+        for k, v in keyset_balances.items():
+            print(
+                f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']})"
+            )
+        print("")
+    print(
+        f"Balance: {wallet.balance} sat (available: {wallet.available_balance} sat in {len([p for p in wallet.proofs if not p.reserved])} tokens)"
+    )
 
 
 @cli.command("send", help="Send coins.")
@@ -164,7 +175,7 @@ async def send(ctx, amount: int, lock: str):
     if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     wallet.status()
     _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, lock)
     await wallet.set_reserved(send_proofs, reserved=True)
@@ -182,7 +193,7 @@ async def send(ctx, amount: int, lock: str):
 @coro
 async def receive(ctx, coin: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     wallet.status()
     if lock:
         # load the script and signature of this address from the database
@@ -192,7 +203,7 @@ async def receive(ctx, coin: str, lock: str):
         address_split = lock.split("P2SH:")[1]
 
         p2shscripts = await get_unused_locks(address_split, db=wallet.db)
-        assert len(p2shscripts) == 1
+        assert len(p2shscripts) == 1, Exception("lock not found.")
         script = p2shscripts[0].script
         signature = p2shscripts[0].signature
     else:
@@ -212,7 +223,7 @@ async def receive(ctx, coin: str, lock: str):
 @coro
 async def burn(ctx, coin: str, all: bool, force: bool):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     if not (all or coin or force) or (coin and all):
         print(
             "Error: enter a coin or use --all to burn all pending coins or --force to check all coins."
@@ -239,7 +250,7 @@ async def burn(ctx, coin: str, all: bool, force: bool):
 @coro
 async def pending(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.load_mint()
+    await wallet.load_mint()
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print(f"--------------------------\n")
