@@ -325,7 +325,10 @@ async def locks(ctx):
 async def wallets(ctx):
     # list all directories
     wallets = [d for d in listdir(CASHU_DIR) if isdir(join(CASHU_DIR, d))]
-    wallets.remove("mint")
+    try:
+        wallets.remove("mint")
+    except ValueError:
+        pass
     for w in wallets:
         wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, w))
         try:
