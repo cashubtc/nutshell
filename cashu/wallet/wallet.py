@@ -22,6 +22,7 @@ from cashu.core.base import (
     WalletKeyset,
 )
 from cashu.core.db import Database
+from cashu.core.helpers import sum_proofs
 from cashu.core.script import (
     step0_carol_checksig_redeemscrip,
     step0_carol_privkey,
@@ -190,7 +191,7 @@ class LedgerAPI:
         If scnd_secret is provided, the wallet will create blinded secrets with those to attach a
         predefined spending condition to the tokens they want to send."""
 
-        total = sum([p["amount"] for p in proofs])
+        total = sum_proofs(proofs)
         frst_amt, scnd_amt = total - amount, amount
         frst_outputs = amount_split(frst_amt)
         scnd_outputs = amount_split(scnd_amt)
@@ -313,12 +314,6 @@ class Wallet(LedgerAPI):
             await store_proof(proof, db=self.db)
 
     @staticmethod
-    def _sum_proofs(proofs: List[Proof], available_only=False):
-        if available_only:
-            return sum([p.amount for p in proofs if not p.reserved])
-        return sum([p.amount for p in proofs])
-
-    @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
         return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
 
@@ -345,7 +340,7 @@ class Wallet(LedgerAPI):
             # attach unlock scripts to proofs
             for p in proofs:
                 p.script = P2SHScript(script=scnd_script, signature=scnd_siganture)
-        return await self.split(proofs, sum(p["amount"] for p in proofs))
+        return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
         self,
@@ -405,7 +400,7 @@ class Wallet(LedgerAPI):
         if scnd_secret:
             logger.debug(f"Spending conditions: {scnd_secret}")
         spendable_proofs = await self._get_spendable_proofs(proofs)
-        if sum([p.amount for p in spendable_proofs]) < amount:
+        if sum_proofs(spendable_proofs) < amount:
             raise Exception("balance too low.")
         return await self.split(
             [p for p in spendable_proofs if not p.reserved], amount, scnd_secret
@@ -453,11 +448,11 @@ class Wallet(LedgerAPI):
 
     @property
     def balance(self):
-        return sum(p["amount"] for p in self.proofs)
+        return sum_proofs(self.proofs)
 
     @property
     def available_balance(self):
-        return sum(p["amount"] for p in self.proofs if not p.reserved)
+        return sum_proofs([p for p in self.proofs if not p.reserved])
 
     def status(self):
         print(
@@ -467,8 +462,8 @@ class Wallet(LedgerAPI):
     def balance_per_keyset(self):
         return {
             key: {
-                "balance": self._sum_proofs(proofs),
-                "available": self._sum_proofs(proofs, available_only=True),
+                "balance": sum_proofs(proofs),
+                "available": sum_proofs([p for p in proofs if not p.reserved]),
             }
             for key, proofs in self._get_proofs_per_keyset(self.proofs).items()
         }

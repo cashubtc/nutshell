@@ -18,7 +18,7 @@ from loguru import logger
 import cashu.core.bolt11 as bolt11
 from cashu.core.base import Proof
 from cashu.core.bolt11 import Invoice, decode
-from cashu.core.helpers import fee_reserve
+from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
 from cashu.wallet import migrations
@@ -267,7 +267,7 @@ async def pending(ctx):
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"#{i} Amount: {sum([p['amount'] for p in grouped_proofs])} sat Time: {reserved_date} ID: {key}\n"
+                f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time: {reserved_date} ID: {key}\n"
             )
             print(f"With secret: {coin}\n\nSecretless: {coin_hidden_secret}\n")
             print(f"--------------------------\n")
