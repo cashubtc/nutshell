@@ -19,7 +19,7 @@ from cashu.core.base import (
 )
 from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
 from cashu.core.db import Database
-from cashu.core.helpers import fee_reserve
+from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.script import verify_script
 from cashu.core.secp import PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER
@@ -45,6 +45,7 @@ class Ledger:
         self.db: Database = Database("mint", db)
 
     async def load_used_proofs(self):
+        """Load all used proofs from database."""
         self.proofs_used = set(await get_proofs_used(db=self.db))
 
     async def init_keysets(self):
@@ -93,12 +94,8 @@ class Ledger:
         """Checks whether the proof was already spent."""
         return not proof.secret in self.proofs_used
 
-    def _verify_secret_or_script(self, proof: Proof):
-        if proof.secret and proof.script:
-            raise Exception("secret and script present at the same time.")
-        return True
-
     def _verify_secret_criteria(self, proof: Proof):
+        """Verifies that a secret is present"""
         if proof.secret is None or proof.secret == "":
             raise Exception("no secret in proof.")
         return True
@@ -213,7 +210,7 @@ class Ledger:
         invoice: Invoice = await get_lightning_invoice(payment_hash, db=self.db)
         if invoice.issued:
             raise Exception("tokens already issued for this invoice.")
-        total_requested = sum([amount for amount in amounts])
+        total_requested = sum(amounts)
         if total_requested > invoice.amount:
             raise Exception(
                 f"Requested amount too high: {total_requested}. Invoice amount: {invoice.amount}"
@@ -287,7 +284,7 @@ class Ledger:
         if not all([self._verify_proof(p) for p in proofs]):
             raise Exception("could not verify proofs.")
 
-        total_provided = sum([p["amount"] for p in proofs])
+        total_provided = sum_proofs(proofs)
         invoice_obj = bolt11.decode(invoice)
         amount = math.ceil(invoice_obj.amount_msat / 1000)
         fees_msat = await self.check_fees(invoice)
@@ -319,7 +316,7 @@ class Ledger:
         self, proofs: List[Proof], amount: int, outputs: List[BlindedMessage]
     ):
         """Consumes proofs and prepares new promises based on the amount split."""
-        total = sum([p.amount for p in proofs])
+        total = sum_proofs(proofs)
 
         # verify that amount is kosher
         self._verify_split_amount(amount)

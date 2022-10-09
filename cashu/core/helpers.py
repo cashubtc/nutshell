@@ -1,7 +1,13 @@
 import asyncio
 from functools import partial, wraps
+from typing import List
 
+from cashu.core.base import Proof
 from cashu.core.settings import LIGHTNING_FEE_PERCENT, LIGHTNING_RESERVE_FEE_MIN
+
+
+def sum_proofs(proofs: List[Proof]):
+    return sum([p.amount for p in proofs])
 
 
 def async_wrap(func):
