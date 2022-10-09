@@ -1,6 +1,7 @@
+import base64
 import hashlib
 from typing import Dict, List
-import base64
+
 from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import MAX_ORDER
 
