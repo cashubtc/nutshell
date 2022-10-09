@@ -1,6 +1,6 @@
 import hashlib
 from typing import Dict, List
-
+import base64
 from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import MAX_ORDER
 
@@ -29,4 +29,6 @@ def derive_pubkeys(keys: Dict[int, PrivateKey]):
 def derive_keyset_id(keys: Dict[str, PublicKey]):
     """Deterministic derivation keyset_id from set of public keys."""
     pubkeys_concat = "".join([p.serialize().hex() for _, p in keys.items()])
-    return hashlib.sha256((pubkeys_concat).encode("utf-8")).hexdigest()[:16]
+    return base64.b64encode(hashlib.sha256((pubkeys_concat).encode("utf-8")).digest())[
+        :12
+    ]

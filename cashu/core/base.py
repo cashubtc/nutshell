@@ -7,135 +7,6 @@ from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
 from cashu.core.secp import PrivateKey, PublicKey
 
 
-class CashuError(BaseModel):
-    code = "000"
-    error = "CashuError"
-
-
-class KeyBase(BaseModel):
-    id: str
-    amount: int
-    pubkey: str
-
-    @classmethod
-    def from_row(cls, row: Row):
-        if row is None:
-            return cls
-        return cls(
-            id=row[0],
-            amount=int(row[1]),
-            pubkey=row[2],
-        )
-
-
-class WalletKeyset:
-    id: str
-    public_keys: Dict[int, PublicKey]
-    mint_url: Union[str, None] = None
-    valid_from: Union[str, None] = None
-    valid_to: Union[str, None] = None
-    first_seen: Union[str, None] = None
-    active: bool = True
-
-    def __init__(
-        self,
-        pubkeys: Dict[int, PublicKey] = None,
-        mint_url=None,
-        id=None,
-        valid_from=None,
-        valid_to=None,
-        first_seen=None,
-        active=None,
-    ):
-        self.id = id
-        self.valid_from = valid_from
-        self.valid_to = valid_to
-        self.first_seen = first_seen
-        self.active = active
-        self.mint_url = mint_url
-        if pubkeys:
-            self.public_keys = pubkeys
-            self.id = derive_keyset_id(self.public_keys)
-
-    @classmethod
-    def from_row(cls, row: Row):
-        if row is None:
-            return cls
-        return cls(
-            id=row[0],
-            mint_url=row[1],
-            valid_from=row[2],
-            valid_to=row[3],
-            first_seen=row[4],
-            active=row[5],
-        )
-
-
-class MintKeyset:
-    id: str
-    derivation_path: str
-    private_keys: Dict[int, PrivateKey]
-    public_keys: Dict[int, PublicKey] = None
-    valid_from: Union[str, None] = None
-    valid_to: Union[str, None] = None
-    first_seen: Union[str, None] = None
-    active: bool = True
-
-    def __init__(
-        self,
-        id=None,
-        valid_from=None,
-        valid_to=None,
-        first_seen=None,
-        active=None,
-        seed: Union[None, str] = None,
-        derivation_path: str = "0",
-    ):
-        self.derivation_path = derivation_path
-        self.id = id
-        self.valid_from = valid_from
-        self.valid_to = valid_to
-        self.first_seen = first_seen
-        self.active = active
-        # generate keys from seed
-        if seed:
-            self.generate_keys(seed)
-
-    def generate_keys(self, seed):
-        self.private_keys = derive_keys(seed, self.derivation_path)
-        self.public_keys = derive_pubkeys(self.private_keys)
-        self.id = derive_keyset_id(self.public_keys)
-
-    @classmethod
-    def from_row(cls, row: Row):
-        if row is None:
-            return cls
-        return cls(
-            id=row[0],
-            derivation_path=row[1],
-            valid_from=row[2],
-            valid_to=row[3],
-            first_seen=row[4],
-            active=row[5],
-        )
-
-    def get_keybase(self):
-        return {
-            k: KeyBase(id=self.id, amount=k, pubkey=v.serialize().hex())
-            for k, v in self.public_keys.items()
-        }
-
-
-class MintKeysets:
-    keysets: Dict[str, MintKeyset]
-
-    def __init__(self, keysets: List[MintKeyset]):
-        self.keysets: Dict[str, MintKeyset] = {k.id: k for k in keysets}
-
-    def get_ids(self):
-        return [k for k, _ in self.keysets.items()]
-
-
 class P2SHScript(BaseModel):
     script: str
     signature: str
@@ -297,3 +168,127 @@ class MeltRequest(BaseModel):
     proofs: List[Proof]
     amount: int = None  # deprecated
     invoice: str
+
+
+class KeyBase(BaseModel):
+    id: str
+    amount: int
+    pubkey: str
+
+    @classmethod
+    def from_row(cls, row: Row):
+        if row is None:
+            return cls
+        return cls(
+            id=row[0],
+            amount=int(row[1]),
+            pubkey=row[2],
+        )
+
+
+class WalletKeyset:
+    id: str
+    public_keys: Dict[int, PublicKey]
+    mint_url: Union[str, None] = None
+    valid_from: Union[str, None] = None
+    valid_to: Union[str, None] = None
+    first_seen: Union[str, None] = None
+    active: bool = True
+
+    def __init__(
+        self,
+        pubkeys: Dict[int, PublicKey] = None,
+        mint_url=None,
+        id=None,
+        valid_from=None,
+        valid_to=None,
+        first_seen=None,
+        active=None,
+    ):
+        self.id = id
+        self.valid_from = valid_from
+        self.valid_to = valid_to
+        self.first_seen = first_seen
+        self.active = active
+        self.mint_url = mint_url
+        if pubkeys:
+            self.public_keys = pubkeys
+            self.id = derive_keyset_id(self.public_keys)
+
+    @classmethod
+    def from_row(cls, row: Row):
+        if row is None:
+            return cls
+        return cls(
+            id=row[0],
+            mint_url=row[1],
+            valid_from=row[2],
+            valid_to=row[3],
+            first_seen=row[4],
+            active=row[5],
+        )
+
+
+class MintKeyset:
+    id: str
+    derivation_path: str
+    private_keys: Dict[int, PrivateKey]
+    public_keys: Dict[int, PublicKey] = None
+    valid_from: Union[str, None] = None
+    valid_to: Union[str, None] = None
+    first_seen: Union[str, None] = None
+    active: bool = True
+
+    def __init__(
+        self,
+        id=None,
+        valid_from=None,
+        valid_to=None,
+        first_seen=None,
+        active=None,
+        seed: Union[None, str] = None,
+        derivation_path: str = "0",
+    ):
+        self.derivation_path = derivation_path
+        self.id = id
+        self.valid_from = valid_from
+        self.valid_to = valid_to
+        self.first_seen = first_seen
+        self.active = active
+        # generate keys from seed
+        if seed:
+            self.generate_keys(seed)
+
+    def generate_keys(self, seed):
+        self.private_keys = derive_keys(seed, self.derivation_path)
+        self.public_keys = derive_pubkeys(self.private_keys)
+        self.id = derive_keyset_id(self.public_keys)
+
+    @classmethod
+    def from_row(cls, row: Row):
+        if row is None:
+            return cls
+        return cls(
+            id=row[0],
+            derivation_path=row[1],
+            valid_from=row[2],
+            valid_to=row[3],
+            first_seen=row[4],
+            active=row[5],
+        )
+
+    def get_keybase(self):
+        return {
+            k: KeyBase(id=self.id, amount=k, pubkey=v.serialize().hex())
+            for k, v in self.public_keys.items()
+        }
+
+
+class MintKeysets:
+    keysets: Dict[str, MintKeyset]
+
+    def __init__(self, keysets: List[MintKeyset]):
+        self.keysets: Dict[str, MintKeyset] = {k.id: k for k in keysets}
+
+    def get_ids(self):
+        return [k for k, _ in self.keysets.items()]

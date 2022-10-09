@@ -4,7 +4,6 @@ from fastapi import APIRouter
 from secp256k1 import PublicKey
 
 from cashu.core.base import (
-    CashuError,
     CheckFeesRequest,
     CheckFeesResponse,
     CheckRequest,
@@ -15,6 +14,8 @@ from cashu.core.base import (
     PostSplitResponse,
     SplitRequest,
 )
+from cashu.core.errors import CashuError
+
 from cashu.mint import ledger
 
 router: APIRouter = APIRouter()
