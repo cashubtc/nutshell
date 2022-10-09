@@ -11,6 +11,8 @@ from datetime import datetime
 from functools import wraps
 from itertools import groupby
 from operator import itemgetter
+from os import listdir
+from os.path import isdir, join
 
 import click
 from loguru import logger
@@ -90,7 +92,7 @@ async def mint(ctx, amount: int, hash: str):
             print(f"Invoice: {r['pr']}")
             print("")
             print(
-                f"Execute this command if you abort the check:\ncashu mint {amount} --hash {r['hash']}"
+                f"Execute this command if you abort the check:\ncashu invoice {amount} --hash {r['hash']}"
             )
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
@@ -312,7 +314,31 @@ async def locks(ctx):
             print(f"Receive: cashu receive <coin> --lock P2SH:{l.address}")
             print("")
             print(f"--------------------------\n")
+    else:
+        print("No locks found. Create one using: cashu lock")
     return True
+
+
+@cli.command("wallets", help="List available wallets.")
+@click.pass_context
+@coro
+async def wallets(ctx):
+    # list all directories
+    wallets = [d for d in listdir(CASHU_DIR) if isdir(join(CASHU_DIR, d))]
+    wallets.remove("mint")
+    for w in wallets:
+        wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, w))
+        try:
+            await init_wallet(wallet)
+            if wallet.proofs and len(wallet.proofs):
+                active_wallet = False
+                if w == ctx.obj["WALLET_NAME"]:
+                    active_wallet = True
+                print(
+                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])}){' *' if active_wallet else ''}"
+                )
+        except:
+            pass
 
 
 @cli.command("info", help="Information about Cashu wallet.")
