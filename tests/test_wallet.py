@@ -1,18 +1,18 @@
-from distutils.command.build_scripts import first_line_re
 import time
+from distutils.command.build_scripts import first_line_re
 from re import S
 from typing import List
+
 import pytest
 import pytest_asyncio
 
-from cashu.core.helpers import async_unwrap
+from cashu.core.base import Proof
+from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
-from cashu.core.base import Proof
-from cashu.core.helpers import sum_proofs
 
 SERVER_ENDPOINT = "http://localhost:3338"
 
