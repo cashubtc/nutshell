@@ -156,7 +156,7 @@ async def balance(ctx):
         print("")
         for k, v in keyset_balances.items():
             print(
-                f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']})"
+                f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']} sat)"
             )
         print("")
     print(
@@ -338,7 +338,7 @@ async def wallets(ctx):
                 if w == ctx.obj["WALLET_NAME"]:
                     active_wallet = True
                 print(
-                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])}){' *' if active_wallet else ''}"
+                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
                 )
         except:
             pass
