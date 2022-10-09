@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cashu"
-version = "0.3.0"
+version = "0.3.1"
 description = "Ecash wallet and mint."
 authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
