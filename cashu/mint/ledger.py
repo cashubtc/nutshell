@@ -2,24 +2,35 @@
 Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
 """
 
-import hashlib
 import math
-from typing import List, Set
+from typing import Dict, List, Set
+
+from loguru import logger
 
 import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
-from cashu.core.base import BlindedMessage, BlindedSignature, Invoice, Proof
+from cashu.core.base import (
+    BlindedMessage,
+    BlindedSignature,
+    Invoice,
+    MintKeyset,
+    MintKeysets,
+    Proof,
+)
+from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve
 from cashu.core.script import verify_script
-from cashu.core.secp import PrivateKey, PublicKey
+from cashu.core.secp import PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER
 from cashu.core.split import amount_split
 from cashu.lightning import WALLET
 from cashu.mint.crud import (
+    get_keyset,
     get_lightning_invoice,
     get_proofs_used,
     invalidate_proof,
+    store_keyset,
     store_lightning_invoice,
     store_promise,
     update_lightning_invoice,
@@ -27,34 +38,40 @@ from cashu.mint.crud import (
 
 
 class Ledger:
-    def __init__(self, secret_key: str, db: str):
+    def __init__(self, secret_key: str, db: str, derivation_path=""):
         self.proofs_used: Set[str] = set()
-
         self.master_key = secret_key
-        self.keys = self._derive_keys(self.master_key)
-        self.pub_keys = self._derive_pubkeys(self.keys)
+        self.derivation_path = derivation_path
         self.db: Database = Database("mint", db)
 
     async def load_used_proofs(self):
         self.proofs_used = set(await get_proofs_used(db=self.db))
 
-    @staticmethod
-    def _derive_keys(master_key: str):
-        """Deterministic derivation of keys for 2^n values."""
-        return {
-            2
-            ** i: PrivateKey(
-                hashlib.sha256((str(master_key) + str(i)).encode("utf-8"))
-                .hexdigest()
-                .encode("utf-8")[:32],
-                raw=True,
-            )
-            for i in range(MAX_ORDER)
-        }
+    async def init_keysets(self):
+        """Loads all past keysets and stores the active one if not already in db"""
+        # generate current keyset from seed and current derivation path
+        self.keyset = MintKeyset(
+            seed=self.master_key, derivation_path=self.derivation_path
+        )
+        # check if current keyset is stored in db and store if not
+        current_keyset_local: List[MintKeyset] = await get_keyset(
+            id=self.keyset.id, db=self.db
+        )
+        if not len(current_keyset_local):
+            logger.debug(f"Storing keyset {self.keyset.id}")
+            await store_keyset(keyset=self.keyset, db=self.db)
 
-    @staticmethod
-    def _derive_pubkeys(keys: List[PrivateKey]):
-        return {amt: keys[amt].pubkey for amt in [2**i for i in range(MAX_ORDER)]}
+        # load all past keysets from db
+        # this needs two steps because the types of tmp_keysets and the argument of MintKeysets() are different
+        tmp_keysets: List[MintKeyset] = await get_keyset(db=self.db)
+        self.keysets = MintKeysets(tmp_keysets)
+        logger.debug(f"Keysets {self.keysets.keysets}")
+        # generate all derived keys from stored derivation paths of past keysets
+        for _, v in self.keysets.keysets.items():
+            v.generate_keys(self.master_key)
+
+        if len(self.keysets.keysets):
+            logger.debug(f"Loaded {len(self.keysets.keysets)} keysets from db.")
 
     async def _generate_promises(self, amounts: List[int], B_s: List[str]):
         """Generates promises that sum to the given amount."""
@@ -65,7 +82,7 @@ class Ledger:
 
     async def _generate_promise(self, amount: int, B_: PublicKey):
         """Generates a promise for given amount and returns a pair (amount, C')."""
-        secret_key = self.keys[amount]  # Get the correct key
+        secret_key = self.keyset.private_keys[amount]  # Get the correct key
         C_ = b_dhke.step2_bob(B_, secret_key)
         await store_promise(
             amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
@@ -90,7 +107,13 @@ class Ledger:
         """Verifies that the proof of promise was issued by this ledger."""
         if not self._check_spendable(proof):
             raise Exception(f"tokens already spent. Secret: {proof.secret}")
-        secret_key = self.keys[proof.amount]  # Get the correct key to check against
+        # if no keyset id is given in proof, assume the current one
+        if not proof.id:
+            secret_key = self.keyset.private_keys[proof.amount]
+        else:
+            # use the appropriate active keyset for this proof.id
+            secret_key = self.keysets.keysets[proof.id].private_keys[proof.amount]
+
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(secret_key, C, proof.secret)
 
@@ -121,7 +144,7 @@ class Ledger:
             assert len(proof.secret.split(":")) == 3, "secret format wrong."
             assert proof.secret.split(":")[1] == str(
                 txin_p2sh_address
-            ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]}!={txin_p2sh_address}."
+            ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]} is not {txin_p2sh_address}."
         return valid
 
     def _verify_outputs(self, total: int, amount: int, outputs: List[BlindedMessage]):
@@ -219,10 +242,13 @@ class Ledger:
         for p in proofs:
             await invalidate_proof(p, db=self.db)
 
-    # Public methods
-    def get_pubkeys(self):
+    def _serialize_pubkeys(self):
         """Returns public keys for possible amounts."""
-        return {a: p.serialize().hex() for a, p in self.pub_keys.items()}
+        return {a: p.serialize().hex() for a, p in self.keyset.public_keys.items()}
+
+    # Public methods
+    def get_keyset(self):
+        return self._serialize_pubkeys()
 
     async def request_mint(self, amount):
         """Returns Lightning invoice and stores it in the db."""

@@ -2,16 +2,19 @@ import asyncio
 
 from loguru import logger
 
+from cashu.core.migrations import migrate_databases
 from cashu.core.settings import CASHU_DIR, LIGHTNING
 from cashu.lightning import WALLET
-from cashu.mint.migrations import m001_initial
+from cashu.mint import migrations
 
 from . import ledger
 
 
 async def load_ledger():
-    await asyncio.wait([m001_initial(ledger.db)])
+    await migrate_databases(ledger.db, migrations)
+    # await asyncio.wait([m001_initial(ledger.db)])
     await ledger.load_used_proofs()
+    await ledger.init_keysets()
 
     if LIGHTNING:
         error_message, balance = await WALLET.status()
