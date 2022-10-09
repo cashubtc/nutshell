@@ -319,7 +319,7 @@ async def locks(ctx):
     return True
 
 
-@cli.command("wallets", help="List available wallets.")
+@cli.command("wallets", help="List of all available wallets.")
 @click.pass_context
 @coro
 async def wallets(ctx):
