@@ -269,7 +269,7 @@ class MintKeyset:
         if row is None:
             return cls
         return cls(
-            id=row[0],
+            id=row[0].decode("ascii"),
             derivation_path=row[1],
             valid_from=row[2],
             valid_to=row[3],
