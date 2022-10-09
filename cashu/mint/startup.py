@@ -23,7 +23,7 @@ async def load_ledger():
                 f"The backend for {WALLET.__class__.__name__} isn't working properly: '{error_message}'",
                 RuntimeWarning,
             )
-        logger.info(f"Lightning balance: {balance} sat")
+        logger.info(f"Lightning balance: {balance} msat")
 
     logger.info(f"Data dir: {CASHU_DIR}")
     logger.info("Mint started.")
