@@ -4,7 +4,6 @@ from fastapi import APIRouter
 from secp256k1 import PublicKey
 
 from cashu.core.base import (
-    CashuError,
     CheckFeesRequest,
     CheckFeesResponse,
     CheckRequest,
@@ -15,6 +14,7 @@ from cashu.core.base import (
     PostSplitResponse,
     SplitRequest,
 )
+from cashu.core.errors import CashuError
 from cashu.mint import ledger
 
 router: APIRouter = APIRouter()
@@ -23,7 +23,13 @@ router: APIRouter = APIRouter()
 @router.get("/keys")
 def keys():
     """Get the public keys of the mint"""
-    return ledger.get_pubkeys()
+    return ledger.get_keyset()
+
+
+@router.get("/keysets")
+def keysets():
+    """Get all active keysets of the mint"""
+    return {"keysets": ledger.keysets.get_ids()}
 
 
 @router.get("/mint")

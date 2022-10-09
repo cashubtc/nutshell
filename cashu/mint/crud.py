@@ -1,7 +1,6 @@
-import secrets
 from typing import Optional
 
-from cashu.core.base import Invoice, Proof
+from cashu.core.base import Invoice, MintKeyset, Proof
 from cashu.core.db import Connection, Database
 
 
@@ -111,3 +110,57 @@ async def update_lightning_invoice(
             hash,
         ),
     )
+
+
+async def store_keyset(
+    keyset: MintKeyset,
+    mint_url: str = None,
+    db: Database = None,
+    conn: Optional[Connection] = None,
+):
+
+    await (conn or db).execute(
+        """
+        INSERT INTO keysets
+          (id, derivation_path, valid_from, valid_to, first_seen, active)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            keyset.id,
+            keyset.derivation_path,
+            keyset.valid_from,
+            keyset.valid_to,
+            keyset.first_seen,
+            True,
+        ),
+    )
+
+
+async def get_keyset(
+    id: str = None,
+    derivation_path: str = None,
+    db: Database = None,
+    conn: Optional[Connection] = None,
+):
+    clauses = []
+    values = []
+    clauses.append("active = ?")
+    values.append(True)
+    if id:
+        clauses.append("id = ?")
+        values.append(id)
+    if derivation_path:
+        clauses.append("derivation_path = ?")
+        values.append(derivation_path)
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
+
+    rows = await (conn or db).fetchall(
+        f"""
+        SELECT * from keysets
+        {where}
+        """,
+        tuple(values),
+    )
+    return [MintKeyset.from_row(row) for row in rows]

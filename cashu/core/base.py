@@ -1,12 +1,10 @@
 from sqlite3 import Row
-from typing import List, Union
+from typing import Any, Dict, List, Union
 
 from pydantic import BaseModel
 
-
-class CashuError(BaseModel):
-    code = "000"
-    error = "CashuError"
+from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
+from cashu.core.secp import PrivateKey, PublicKey
 
 
 class P2SHScript(BaseModel):
@@ -25,6 +23,7 @@ class P2SHScript(BaseModel):
 
 
 class Proof(BaseModel):
+    id: str = ""
     amount: int
     secret: str = ""
     C: str
@@ -44,6 +43,7 @@ class Proof(BaseModel):
             send_id=row[4] or "",
             time_created=row[5] or "",
             time_reserved=row[6] or "",
+            id=row[7] or "",
         )
 
     @classmethod
@@ -60,10 +60,10 @@ class Proof(BaseModel):
         )
 
     def to_dict(self):
-        return dict(amount=self.amount, secret=self.secret, C=self.C)
+        return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
     def to_dict_no_secret(self):
-        return dict(amount=self.amount, C=self.C)
+        return dict(id=self.id, amount=self.amount, C=self.C)
 
     def __getitem__(self, key):
         return self.__getattribute__(key)
@@ -95,17 +95,20 @@ class Invoice(BaseModel):
 
 
 class BlindedMessage(BaseModel):
+    id: str = ""
     amount: int
     B_: str
 
 
 class BlindedSignature(BaseModel):
+    id: str = ""
     amount: int
     C_: str
 
     @classmethod
     def from_dict(cls, d: dict):
         return cls(
+            id=d["id"],
             amount=d["amount"],
             C_=d["C_"],
         )
@@ -165,3 +168,129 @@ class MeltRequest(BaseModel):
     proofs: List[Proof]
     amount: int = None  # deprecated
     invoice: str
+
+
+class KeyBase(BaseModel):
+    id: str
+    amount: int
+    pubkey: str
+
+    @classmethod
+    def from_row(cls, row: Row):
+        if row is None:
+            return cls
+        return cls(
+            id=row[0],
+            amount=int(row[1]),
+            pubkey=row[2],
+        )
+
+
+class WalletKeyset:
+    id: str
+    public_keys: Dict[int, PublicKey]
+    mint_url: Union[str, None] = None
+    valid_from: Union[str, None] = None
+    valid_to: Union[str, None] = None
+    first_seen: Union[str, None] = None
+    active: bool = True
+
+    def __init__(
+        self,
+        pubkeys: Dict[int, PublicKey] = None,
+        mint_url=None,
+        id=None,
+        valid_from=None,
+        valid_to=None,
+        first_seen=None,
+        active=None,
+    ):
+        self.id = id
+        self.valid_from = valid_from
+        self.valid_to = valid_to
+        self.first_seen = first_seen
+        self.active = active
+        self.mint_url = mint_url
+        if pubkeys:
+            self.public_keys = pubkeys
+            self.id = derive_keyset_id(self.public_keys)
+
+    @classmethod
+    def from_row(cls, row: Row):
+        if row is None:
+            return cls
+        return cls(
+            id=row[0],
+            mint_url=row[1],
+            valid_from=row[2],
+            valid_to=row[3],
+            first_seen=row[4],
+            active=row[5],
+        )
+
+
+class MintKeyset:
+    id: str
+    derivation_path: str
+    private_keys: Dict[int, PrivateKey]
+    public_keys: Dict[int, PublicKey] = None
+    valid_from: Union[str, None] = None
+    valid_to: Union[str, None] = None
+    first_seen: Union[str, None] = None
+    active: bool = True
+
+    def __init__(
+        self,
+        id=None,
+        valid_from=None,
+        valid_to=None,
+        first_seen=None,
+        active=None,
+        seed: Union[None, str] = None,
+        derivation_path: str = "0",
+    ):
+        self.derivation_path = derivation_path
+        self.id = id
+        self.valid_from = valid_from
+        self.valid_to = valid_to
+        self.first_seen = first_seen
+        self.active = active
+        # generate keys from seed
+        if seed:
+            self.generate_keys(seed)
+
+    def generate_keys(self, seed):
+        self.private_keys = derive_keys(seed, self.derivation_path)
+        self.public_keys = derive_pubkeys(self.private_keys)
+        self.id = derive_keyset_id(self.public_keys)
+
+    @classmethod
+    def from_row(cls, row: Row):
+        if row is None:
+            return cls
+        # fix to convert byte to string, unclear why this is necessary
+        id = row[0].decode("ascii") if type(row[0]) == bytes else row[0]
+        return cls(
+            id=id,
+            derivation_path=row[1],
+            valid_from=row[2],
+            valid_to=row[3],
+            first_seen=row[4],
+            active=row[5],
+        )
+
+    def get_keybase(self):
+        return {
+            k: KeyBase(id=self.id, amount=k, pubkey=v.serialize().hex())
+            for k, v in self.public_keys.items()
+        }
+
+
+class MintKeysets:
+    keysets: Dict[str, MintKeyset]
+
+    def __init__(self, keysets: List[MintKeyset]):
+        self.keysets: Dict[str, MintKeyset] = {k.id: k for k in keysets}
+
+    def get_ids(self):
+        return [k for k, _ in self.keysets.items()]
