@@ -121,21 +121,31 @@ async def mint(ctx, amount: int, hash: str):
 
 @cli.command("pay", help="Pay Lightning invoice.")
 @click.argument("invoice", type=str)
+@click.option(
+    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
+)
 @click.pass_context
 @coro
-async def pay(ctx, invoice: str):
+async def pay(ctx, invoice: str, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
     decoded_invoice: Invoice = bolt11.decode(invoice)
+
     # check if it's an internal payment
     fees = (await wallet.check_fees(invoice))["fee"]
     amount = math.ceil(
         (decoded_invoice.amount_msat + fees * 1000) / 1000
     )  # 1% fee for Lightning
-    print(
-        f"Paying Lightning invoice of {decoded_invoice.amount_msat//1000} sat ({amount} sat incl. fees)"
-    )
+
+    if not yes:
+        click.confirm(
+            f"Pay {decoded_invoice.amount_msat//1000} sat ({amount} sat incl. fees)?",
+            abort=True,
+            default=True,
+        )
+
+    print(f"Paying Lightning invoice ...")
     assert amount > 0, "amount is not positive"
     if wallet.available_balance < amount:
         print("Error: Balance too low.")
