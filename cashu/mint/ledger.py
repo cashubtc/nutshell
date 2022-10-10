@@ -61,6 +61,7 @@ class Ledger:
         current_keyset_local: List[MintKeyset] = await get_keyset(
             id=self.keyset.id, db=self.db
         )
+        logger.debug(f"Local keyset: {current_keyset_local}")
         if not len(current_keyset_local):
             logger.debug(f"Storing keyset {self.keyset.id}")
             await store_keyset(keyset=self.keyset, db=self.db)
