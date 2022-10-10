@@ -117,8 +117,6 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
 
         # backwards compatibility with old hash_to_curve
-        # old clients do not send a version or
-        # new clients will send tokens which have a keyset id without a version
         logger.debug(f"Client version {context.get('client-version')}")
         if self.keysets.keysets.get(proof.id):
             logger.debug(
@@ -135,6 +133,7 @@ class Ledger:
                 return ret
         except:
             pass
+
         return b_dhke.verify(secret_key, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):
