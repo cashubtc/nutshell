@@ -123,6 +123,9 @@ class Ledger:
             not context.get("client-version")
             or not self.keysets.keysets[proof.id].version
         ):
+            logger.debug(
+                f"Using legacy hash_to_curve for proof from keyset {proof.id} or client with version {context.get('client-version')}"
+            )
             return legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
         return b_dhke.verify(secret_key, C, proof.secret)
 
