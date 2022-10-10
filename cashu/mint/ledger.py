@@ -119,6 +119,11 @@ class Ledger:
         # backwards compatibility with old hash_to_curve
         # old clients do not send a version or
         # new clients will send tokens which have a keyset id without a version
+        logger.debug(f"Client version {context.get('client-version')}")
+        if self.keysets.keysets.get(proof.id):
+            logger.debug(
+                f"Token keyset: {self.keysets.keysets.get(proof.id)}, token version: {self.keysets.keysets[proof.id].version}"
+            )
         if not context.get("client-version") or (
             self.keysets.keysets.get(proof.id)
             and not self.keysets.keysets[proof.id].version
