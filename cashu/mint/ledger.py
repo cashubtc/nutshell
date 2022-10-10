@@ -117,7 +117,8 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
 
         # backwards compatibility with old hash_to_curve
-        # old clients do not send a version
+        # old clients do not send a version or
+        # new clients will send tokens which have a keyset id without a version
         if (
             not context.get("client-version")
             or not self.keysets.keysets[proof.id].version
