@@ -24,7 +24,7 @@ from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.script import verify_script
 from cashu.core.secp import PublicKey
-from cashu.core.settings import LIGHTNING, MAX_ORDER
+from cashu.core.settings import LIGHTNING, MAX_ORDER, VERSION
 from cashu.core.split import amount_split
 from cashu.lightning import WALLET
 from cashu.mint.crud import (
@@ -54,7 +54,7 @@ class Ledger:
         """Loads all past keysets and stores the active one if not already in db"""
         # generate current keyset from seed and current derivation path
         self.keyset = MintKeyset(
-            seed=self.master_key, derivation_path=self.derivation_path
+            seed=self.master_key, derivation_path=self.derivation_path, version=VERSION
         )
         # check if current keyset is stored in db and store if not
         logger.debug(f"Loading keyset {self.keyset.id} from db.")
@@ -117,9 +117,23 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
 
         # backwards compatibility with old hash_to_curve
-        # old clients do not send a version
-        if not context.get("client-version"):
-            return legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
+        logger.debug(f"Client version {context.get('client-version')}")
+        if self.keysets.keysets.get(proof.id):
+            logger.debug(
+                f"Token keyset: {self.keysets.keysets.get(proof.id)}, token version: {self.keysets.keysets[proof.id].version}"
+            )
+        # if not context.get("client-version") or (
+        #     self.keysets.keysets.get(proof.id)
+        #     and not self.keysets.keysets[proof.id].version
+        # ):
+        #     return legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
+        try:
+            ret = legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
+            if ret:
+                return ret
+        except:
+            pass
+
         return b_dhke.verify(secret_key, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):

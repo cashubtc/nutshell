@@ -118,3 +118,10 @@ async def m003_mint_keysets(db: Database):
             );
         """
     )
+
+
+async def m004_keysets_add_version(db: Database):
+    """
+    Column that remembers with which version
+    """
+    await db.execute("ALTER TABLE keysets ADD COLUMN version TEXT")
