@@ -1,4 +1,4 @@
-name: formatting
+name: checks
 
 on:
   push:
@@ -48,6 +48,6 @@ jobs:
       - name: Install packages
         run: poetry install --with dev
       - name: Setup mypy
-        run: poetry run mypy --install-types
+        run: poetry run mypy cashu --install-types
       - name: Run mypy
         run: poetry run mypy cashu --ignore-missing
