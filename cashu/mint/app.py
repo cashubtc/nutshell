@@ -3,19 +3,15 @@ import sys
 
 from fastapi import FastAPI
 from loguru import logger
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette_context import context
+from starlette_context.middleware import RawContextMiddleware
 
 from cashu.core.settings import DEBUG, VERSION
 
-from starlette_context.middleware import RawContextMiddleware
-from starlette.middleware import Middleware
-from starlette_context import context
-
-
 from .router import router
 from .startup import load_ledger
-
-
-from starlette.middleware.base import BaseHTTPMiddleware
 
 
 class CustomHeaderMiddleware(BaseHTTPMiddleware):

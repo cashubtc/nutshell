@@ -6,10 +6,11 @@ import math
 from typing import Dict, List, Set
 
 from loguru import logger
+from starlette_context import context
 
-import cashu.core.legacy as legacy
 import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
+import cashu.core.legacy as legacy
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
@@ -36,8 +37,6 @@ from cashu.mint.crud import (
     store_promise,
     update_lightning_invoice,
 )
-
-from starlette_context import context
 
 
 class Ledger:
