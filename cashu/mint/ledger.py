@@ -124,11 +124,11 @@ class Ledger:
             logger.debug(
                 f"Token keyset: {self.keysets.keysets.get(proof.id)}, token version: {self.keysets.keysets[proof.id].version}"
             )
-        if not context.get("client-version") or (
-            self.keysets.keysets.get(proof.id)
-            and not self.keysets.keysets[proof.id].version
-        ):
-            return legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
+        # if not context.get("client-version") or (
+        #     self.keysets.keysets.get(proof.id)
+        #     and not self.keysets.keysets[proof.id].version
+        # ):
+        #     return legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
         try:
             ret = legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
             if ret:
