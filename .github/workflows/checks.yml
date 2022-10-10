@@ -48,6 +48,6 @@ jobs:
       - name: Install packages
         run: poetry install --with dev
       - name: Setup mypy
-        run: poetry run mypy cashu --install-types
+        run: poetry run mypy cashu --install-types -y
       - name: Run mypy
         run: poetry run mypy cashu --ignore-missing
