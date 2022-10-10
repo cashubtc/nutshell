@@ -1,9 +1,10 @@
-from typing import Union, List, Dict
+from typing import Dict, List, Union
 
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
 from cashu.core.base import (
+    BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
     CheckRequest,
@@ -13,7 +14,6 @@ from cashu.core.base import (
     MintRequest,
     PostSplitResponse,
     SplitRequest,
-    BlindedSignature,
 )
 from cashu.core.errors import CashuError
 from cashu.mint import ledger

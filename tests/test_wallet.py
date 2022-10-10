@@ -1,9 +1,9 @@
 import time
+from typing import List
 
 import pytest
 import pytest_asyncio
 
-from typing import List
 from cashu.core.base import Proof
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases

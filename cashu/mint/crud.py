@@ -1,4 +1,4 @@
-from typing import Optional, List, Any
+from typing import Any, List, Optional
 
 from cashu.core.base import Invoice, MintKeyset, Proof
 from cashu.core.db import Connection, Database
