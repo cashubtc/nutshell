@@ -114,7 +114,6 @@ async def update_lightning_invoice(
 
 async def store_keyset(
     keyset: MintKeyset,
-    mint_url: str = None,
     db: Database = None,
     conn: Optional[Connection] = None,
 ):
@@ -122,8 +121,8 @@ async def store_keyset(
     await (conn or db).execute(
         """
         INSERT INTO keysets
-          (id, derivation_path, valid_from, valid_to, first_seen, active)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (id, derivation_path, valid_from, valid_to, first_seen, active, version)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             keyset.id,
@@ -132,6 +131,7 @@ async def store_keyset(
             keyset.valid_to,
             keyset.first_seen,
             True,
+            keyset.version,
         ),
     )
 

@@ -238,6 +238,7 @@ class MintKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: bool = True
+    version: Union[str, None] = None
 
     def __init__(
         self,
@@ -248,6 +249,7 @@ class MintKeyset:
         active=None,
         seed: Union[None, str] = None,
         derivation_path: str = None,
+        version: str = None,
     ):
         self.derivation_path = derivation_path
         self.id = id
@@ -255,6 +257,7 @@ class MintKeyset:
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = active
+        self.version = version
         # generate keys from seed
         if seed:
             self.generate_keys(seed)
@@ -275,6 +278,7 @@ class MintKeyset:
             valid_to=row[3],
             first_seen=row[4],
             active=row[5],
+            version=row[6],
         )
 
     def get_keybase(self):
