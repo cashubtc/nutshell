@@ -79,9 +79,9 @@ class Wallet(ABC):
     ) -> Coroutine[None, None, PaymentStatus]:
         pass
 
-    @abstractmethod
-    def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
-        pass
+    # @abstractmethod
+    # def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+    #     pass
 
 
 class Unsupported(Exception):
