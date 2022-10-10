@@ -77,8 +77,6 @@ async def melt(request: Request, payload: MeltRequest):
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
-    context["version"] = request.headers.get("Client-version")
-    print(context["version"])
     ok, preimage = await ledger.melt(payload.proofs, payload.invoice)
     resp = GetMeltResponse(paid=ok, preimage=preimage)
     return resp
@@ -107,8 +105,6 @@ async def split(request: Request, payload: SplitRequest):
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
     """
-    context["version"] = request.headers.get("Client-version")
-    print(context["version"])
     proofs = payload.proofs
     amount = payload.amount
     outputs = payload.outputs.blinded_messages if payload.outputs else None

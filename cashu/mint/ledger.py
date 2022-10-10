@@ -118,7 +118,7 @@ class Ledger:
 
         # backwards compatibility with old hash_to_curve
         # old clients do not send a version
-        if not context.get("version"):
+        if not context.get("client-version"):
             return legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
         return b_dhke.verify(secret_key, C, proof.secret)
 

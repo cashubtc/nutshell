@@ -8,10 +8,26 @@ from cashu.core.settings import DEBUG, VERSION
 
 from starlette_context.middleware import RawContextMiddleware
 from starlette.middleware import Middleware
+from starlette_context import context
 
 
 from .router import router
 from .startup import load_ledger
+
+
+from starlette.middleware.base import BaseHTTPMiddleware
+
+
+class CustomHeaderMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware for starlette that can set the context from request headers
+    """
+
+    async def dispatch(self, request, call_next):
+        context["version"] = request.headers.get("Client-version")
+        response = await call_next(request)
+        response.headers["Custom"] = "Example"
+        return response
 
 
 def create_app(config_object="core.settings") -> FastAPI:
@@ -53,6 +69,7 @@ def create_app(config_object="core.settings") -> FastAPI:
         Middleware(
             RawContextMiddleware,
         ),
+        Middleware(CustomHeaderMiddleware),
     ]
 
     app = FastAPI(
