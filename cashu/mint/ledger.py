@@ -112,6 +112,7 @@ class Ledger:
             secret_key = self.keysets.keysets[proof.id].private_keys[proof.amount]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
+
         return b_dhke.verify(secret_key, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):

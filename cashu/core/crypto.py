@@ -6,6 +6,20 @@ from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import MAX_ORDER
 
 
+def derivation_path_newer_than(d1: str, d2: str):
+    """
+    Returns whether derivation path d1 is newer (deeper down the derivation tree)
+    than d2. Used for treating tokens with old keysets differently.
+    """
+    # NOTE: Derivation paths are still just simple integers for now. This function needs
+    # to change once we upgrade to BIP32.
+
+    # the very first derivation path was "" (empty string) so anything is newer than itself
+    if d1 == "" and d2 != "":
+        return False
+    return int(d1) > int(d2)
+
+
 def derive_keys(master_key: str, derivation_path: str = ""):
     """
     Deterministic derivation of keys for 2^n values.

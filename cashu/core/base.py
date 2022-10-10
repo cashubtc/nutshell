@@ -247,7 +247,7 @@ class MintKeyset:
         first_seen=None,
         active=None,
         seed: Union[None, str] = None,
-        derivation_path: str = "0",
+        derivation_path: str = None,
     ):
         self.derivation_path = derivation_path
         self.id = id
