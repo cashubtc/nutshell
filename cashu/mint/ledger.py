@@ -63,7 +63,7 @@ class Ledger:
             id=self.keyset.id, db=self.db
         )
         if not len(current_keyset_local):
-            logger.debug(f"Storing keyset {self.keyset.id}")
+            logger.debug(f"Storing keyset {self.keyset.id}.")
             await store_keyset(keyset=self.keyset, db=self.db)
 
         # load all past keysets from db

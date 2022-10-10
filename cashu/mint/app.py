@@ -24,9 +24,8 @@ class CustomHeaderMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request, call_next):
-        context["version"] = request.headers.get("Client-version")
+        context["client-version"] = request.headers.get("Client-version")
         response = await call_next(request)
-        response.headers["Custom"] = "Example"
         return response
 
 
