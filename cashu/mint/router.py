@@ -20,6 +20,10 @@ from cashu.mint import ledger
 router: APIRouter = APIRouter()
 
 
+from starlette.requests import Request
+from starlette_context import context
+
+
 @router.get("/keys")
 def keys():
     """Get the public keys of the mint"""
@@ -49,7 +53,6 @@ async def request_mint(amount: int = 0):
 @router.post("/mint")
 async def mint(
     payloads: MintRequest,
-    bolt11: Union[str, None] = None,
     payment_hash: Union[str, None] = None,
 ):
     """
@@ -70,7 +73,7 @@ async def mint(
 
 
 @router.post("/melt")
-async def melt(payload: MeltRequest):
+async def melt(request: Request, payload: MeltRequest):
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
@@ -97,7 +100,7 @@ async def check_fees(payload: CheckFeesRequest):
 
 
 @router.post("/split")
-async def split(payload: SplitRequest):
+async def split(request: Request, payload: SplitRequest):
     """
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".

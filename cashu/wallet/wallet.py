@@ -30,7 +30,7 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG
+from cashu.core.settings import DEBUG, VERSION
 from cashu.core.split import amount_split
 from cashu.wallet.crud import (
     get_keyset,
@@ -52,7 +52,10 @@ class LedgerAPI:
         self.url = url
 
     async def _get_keys(self, url):
-        resp = requests.get(url + "/keys").json()
+        resp = requests.get(
+            url + "/keys",
+            headers={"Client-version": VERSION},
+        ).json()
         keys = resp
         assert len(keys), Exception("did not receive any keys")
         keyset_keys = {
@@ -63,7 +66,10 @@ class LedgerAPI:
         return keyset
 
     async def _get_keysets(self, url):
-        keysets = requests.get(url + "/keysets").json()
+        keysets = requests.get(
+            url + "/keysets",
+            headers={"Client-version": VERSION},
+        ).json()
         assert len(keysets), Exception("did not receive any keysets")
         return keysets
 
@@ -177,6 +183,7 @@ class LedgerAPI:
             self.url + "/mint",
             json=payloads.dict(),
             params={"payment_hash": payment_hash},
+            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
         try:
@@ -235,6 +242,7 @@ class LedgerAPI:
         resp = requests.post(
             self.url + "/split",
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),
+            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
         try:
@@ -260,6 +268,7 @@ class LedgerAPI:
         resp = requests.post(
             self.url + "/check",
             json=payload.dict(),
+            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
         return_dict = resp.json()
@@ -272,6 +281,7 @@ class LedgerAPI:
         resp = requests.post(
             self.url + "/checkfees",
             json=payload.dict(),
+            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
 
@@ -293,6 +303,7 @@ class LedgerAPI:
         resp = requests.post(
             self.url + "/melt",
             json=payload.dict(include=_meltequest_include_fields(proofs)),
+            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
 

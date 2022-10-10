@@ -6,9 +6,11 @@ import math
 from typing import Dict, List, Set
 
 from loguru import logger
+from starlette_context import context
 
 import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
+import cashu.core.legacy as legacy
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
@@ -55,11 +57,12 @@ class Ledger:
             seed=self.master_key, derivation_path=self.derivation_path
         )
         # check if current keyset is stored in db and store if not
+        logger.debug(f"Loading keyset {self.keyset.id} from db.")
         current_keyset_local: List[MintKeyset] = await get_keyset(
             id=self.keyset.id, db=self.db
         )
         if not len(current_keyset_local):
-            logger.debug(f"Storing keyset {self.keyset.id}")
+            logger.debug(f"Storing keyset {self.keyset.id}.")
             await store_keyset(keyset=self.keyset, db=self.db)
 
         # load all past keysets from db
@@ -112,6 +115,11 @@ class Ledger:
             secret_key = self.keysets.keysets[proof.id].private_keys[proof.amount]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
+
+        # backwards compatibility with old hash_to_curve
+        # old clients do not send a version
+        if not context.get("client-version"):
+            return legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
         return b_dhke.verify(secret_key, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):

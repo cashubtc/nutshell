@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cashu"
-version = "0.3.2"
+version = "0.3.3"
 description = "Ecash wallet and mint."
 authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
@@ -22,6 +22,7 @@ bitstring = "^3.1.9"
 secp256k1 = "^0.14.0"
 sqlalchemy-aio = "^0.17.0"
 python-bitcoinlib = "^0.11.2"
+starlette-context = "^0.3.4"
 
 [tool.poetry.dev-dependencies]
 black = {version = "^22.8.0", allow-prereleases = true}
