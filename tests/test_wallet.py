@@ -1,6 +1,4 @@
 import time
-from distutils.command.build_scripts import first_line_re
-from re import S
 from typing import List
 
 import pytest
@@ -27,9 +25,9 @@ async def assert_err(f, msg):
         )
 
 
-def assert_amt(proofs, expected):
+def assert_amt(proofs: List[Proof], expected: int):
     """Assert amounts the proofs contain."""
-    assert [p["amount"] for p in proofs] == expected
+    assert [p.amount for p in proofs] == expected
 
 
 @pytest_asyncio.fixture(scope="function")

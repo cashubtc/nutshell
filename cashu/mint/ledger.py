@@ -116,17 +116,7 @@ class Ledger:
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
 
-        # backwards compatibility with old hash_to_curve
-        logger.debug(f"Client version {context.get('client-version')}")
-        if self.keysets.keysets.get(proof.id):
-            logger.debug(
-                f"Token keyset: {self.keysets.keysets.get(proof.id)}, token version: {self.keysets.keysets[proof.id].version}"
-            )
-        # if not context.get("client-version") or (
-        #     self.keysets.keysets.get(proof.id)
-        #     and not self.keysets.keysets[proof.id].version
-        # ):
-        #     return legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
+        # backwards compatibility with old hash_to_curve < 0.3.3
         try:
             ret = legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
             if ret:

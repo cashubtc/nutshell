@@ -93,7 +93,7 @@ async def update_proof_reserved(
         clauses.append("time_reserved = ?")
         values.append(int(time.time()))
 
-    await (conn or db).execute(
+    await (conn or db).execute(  # type: ignore
         f"UPDATE proofs SET {', '.join(clauses)} WHERE secret = ?",
         (*values, str(proof.secret)),
     )
@@ -155,7 +155,7 @@ async def get_unused_locks(
     if clause:
         where = f"WHERE {' AND '.join(clause)}"
 
-    rows = await (conn or db).fetchall(
+    rows = await (conn or db).fetchall(  # type: ignore
         f"""
         SELECT * from p2sh
         {where}
@@ -176,7 +176,7 @@ async def update_p2sh_used(
     clauses.append("used = ?")
     values.append(used)
 
-    await (conn or db).execute(
+    await (conn or db).execute(  # type: ignore
         f"UPDATE proofs SET {', '.join(clauses)} WHERE address = ?",
         (*values, str(p2sh.address)),
     )
@@ -189,7 +189,7 @@ async def store_keyset(
     conn: Optional[Connection] = None,
 ):
 
-    await (conn or db).execute(
+    await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
           (id, mint_url, valid_from, valid_to, first_seen, active)
@@ -213,7 +213,7 @@ async def get_keyset(
     conn: Optional[Connection] = None,
 ):
     clauses = []
-    values = []
+    values: List[Any] = []
     clauses.append("active = ?")
     values.append(True)
     if id:
@@ -226,7 +226,7 @@ async def get_keyset(
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
 
-    row = await (conn or db).fetchone(
+    row = await (conn or db).fetchone(  # type: ignore
         f"""
         SELECT * from keysets
         {where}

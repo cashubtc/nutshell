@@ -7,13 +7,13 @@ from environs import Env  # type: ignore
 
 env = Env()
 
-ENV_FILE: Union[str, None] = os.path.join(str(Path.home()), ".cashu", ".env")
+ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
 if not os.path.isfile(ENV_FILE):
     ENV_FILE = os.path.join(os.getcwd(), ".env")
 if os.path.isfile(ENV_FILE):
     env.read_env(ENV_FILE)
 else:
-    ENV_FILE = None
+    ENV_FILE = ""
     env.read_env()
 
 DEBUG = env.bool("DEBUG", default=False)

@@ -37,3 +37,5 @@ jobs:
           MINT_PORT: 3338
         run: |
           poetry run pytest tests
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3

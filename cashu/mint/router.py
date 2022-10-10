@@ -1,9 +1,10 @@
-from typing import Union
+from typing import Dict, List, Union
 
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
 from cashu.core.base import (
+    BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
     CheckRequest,
@@ -20,24 +21,20 @@ from cashu.mint import ledger
 router: APIRouter = APIRouter()
 
 
-from starlette.requests import Request
-from starlette_context import context
-
-
 @router.get("/keys")
-def keys():
+def keys() -> dict[int, str]:
     """Get the public keys of the mint"""
     return ledger.get_keyset()
 
 
 @router.get("/keysets")
-def keysets():
+def keysets() -> dict[str, list[str]]:
     """Get all active keysets of the mint"""
     return {"keysets": ledger.keysets.get_ids()}
 
 
 @router.get("/mint")
-async def request_mint(amount: int = 0):
+async def request_mint(amount: int = 0) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
@@ -54,7 +51,7 @@ async def request_mint(amount: int = 0):
 async def mint(
     payloads: MintRequest,
     payment_hash: Union[str, None] = None,
-):
+) -> Union[List[BlindedSignature], CashuError]:
     """
     Requests the minting of tokens belonging to a paid payment request.
 
@@ -73,7 +70,7 @@ async def mint(
 
 
 @router.post("/melt")
-async def melt(request: Request, payload: MeltRequest):
+async def melt(payload: MeltRequest) -> GetMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
@@ -83,13 +80,13 @@ async def melt(request: Request, payload: MeltRequest):
 
 
 @router.post("/check")
-async def check_spendable(payload: CheckRequest):
+async def check_spendable(payload: CheckRequest) -> Dict[int, bool]:
     """Check whether a secret has been spent already or not."""
     return await ledger.check_spendable(payload.proofs)
 
 
 @router.post("/checkfees")
-async def check_fees(payload: CheckFeesRequest):
+async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     """
     Responds with the fees necessary to pay a Lightning invoice.
     Used by wallets for figuring out the fees they need to supply.
@@ -100,7 +97,9 @@ async def check_fees(payload: CheckFeesRequest):
 
 
 @router.post("/split")
-async def split(request: Request, payload: SplitRequest):
+async def split(
+    payload: SplitRequest,
+) -> Union[CashuError, PostSplitResponse]:
     """
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
@@ -108,12 +107,14 @@ async def split(request: Request, payload: SplitRequest):
     proofs = payload.proofs
     amount = payload.amount
     outputs = payload.outputs.blinded_messages if payload.outputs else None
+    # backwards compatibility with clients < v0.2.2
+    assert outputs, Exception("no outputs provided.")
     try:
         split_return = await ledger.split(proofs, amount, outputs)
     except Exception as exc:
         return CashuError(error=str(exc))
     if not split_return:
-        return {"error": "there was a problem with the split."}
+        return CashuError(error="there was an error with the split")
     frst_promises, scnd_promises = split_return
     resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
     return resp

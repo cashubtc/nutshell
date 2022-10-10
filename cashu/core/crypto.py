@@ -27,7 +27,7 @@ def derive_pubkeys(keys: Dict[int, PrivateKey]):
     return {amt: keys[amt].pubkey for amt in [2**i for i in range(MAX_ORDER)]}
 
 
-def derive_keyset_id(keys: Dict[str, PublicKey]):
+def derive_keyset_id(keys: Dict[int, PublicKey]):
     """Deterministic derivation keyset_id from set of public keys."""
     pubkeys_concat = "".join([p.serialize().hex() for _, p in keys.items()])
     return base64.b64encode(
