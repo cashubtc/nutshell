@@ -2,12 +2,18 @@ import asyncio
 import logging
 import sys
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from loguru import logger
 
 from cashu.core.settings import DEBUG, VERSION
 from cashu.lightning import WALLET
 from cashu.mint.migrations import m001_initial
+
+from starlette_context.middleware import RawContextMiddleware
+from starlette_context import context
+from starlette.middleware import Middleware
+from starlette.requests import Request as StarletteRequest
+
 
 from . import ledger
 from .router import router
@@ -49,6 +55,15 @@ def create_app(config_object="core.settings") -> FastAPI:
 
     configure_logger()
 
+    middleware = [
+        Middleware(
+            RawContextMiddleware,
+        ),
+        Middleware(
+            RawContextMiddleware,
+        ),
+    ]
+
     app = FastAPI(
         title="Cashu Mint",
         description="Ecash wallet and mint with Bitcoin Lightning support.",
@@ -57,8 +72,8 @@ def create_app(config_object="core.settings") -> FastAPI:
             "name": "MIT License",
             "url": "https://raw.githubusercontent.com/callebtc/cashu/main/LICENSE",
         },
+        middleware=middleware,
     )
-
     return app
 
 

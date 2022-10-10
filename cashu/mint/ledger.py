@@ -7,6 +7,7 @@ from typing import Dict, List, Set
 
 from loguru import logger
 
+import cashu.core.legacy as legacy
 import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
 from cashu.core.base import (
@@ -35,6 +36,8 @@ from cashu.mint.crud import (
     store_promise,
     update_lightning_invoice,
 )
+
+from starlette_context import context
 
 
 class Ledger:
@@ -113,6 +116,9 @@ class Ledger:
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
 
+        # backwards compatibility with old hash_to_curve
+        if not context.get("version"):
+            return legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
         return b_dhke.verify(secret_key, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):

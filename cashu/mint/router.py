@@ -20,6 +20,10 @@ from cashu.mint import ledger
 router: APIRouter = APIRouter()
 
 
+from starlette.requests import Request
+from starlette_context import context
+
+
 @router.get("/keys")
 def keys():
     """Get the public keys of the mint"""
@@ -49,7 +53,6 @@ async def request_mint(amount: int = 0):
 @router.post("/mint")
 async def mint(
     payloads: MintRequest,
-    bolt11: Union[str, None] = None,
     payment_hash: Union[str, None] = None,
 ):
     """
@@ -70,10 +73,12 @@ async def mint(
 
 
 @router.post("/melt")
-async def melt(payload: MeltRequest):
+async def melt(request: Request, payload: MeltRequest):
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
+    context["version"] = request.headers.get("Client-version")
+    print(context["version"])
     ok, preimage = await ledger.melt(payload.proofs, payload.invoice)
     resp = GetMeltResponse(paid=ok, preimage=preimage)
     return resp
@@ -97,11 +102,13 @@ async def check_fees(payload: CheckFeesRequest):
 
 
 @router.post("/split")
-async def split(payload: SplitRequest):
+async def split(request: Request, payload: SplitRequest):
     """
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
     """
+    context["version"] = request.headers.get("Client-version")
+    print(context["version"])
     proofs = payload.proofs
     amount = payload.amount
     outputs = payload.outputs.blinded_messages if payload.outputs else None
