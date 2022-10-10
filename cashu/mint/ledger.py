@@ -58,10 +58,10 @@ class Ledger:
             seed=self.master_key, derivation_path=self.derivation_path
         )
         # check if current keyset is stored in db and store if not
+        logger.debug(f"Loading keyset {self.keyset.id} from db.")
         current_keyset_local: List[MintKeyset] = await get_keyset(
             id=self.keyset.id, db=self.db
         )
-        logger.debug(f"Local keyset: {current_keyset_local}")
         if not len(current_keyset_local):
             logger.debug(f"Storing keyset {self.keyset.id}")
             await store_keyset(keyset=self.keyset, db=self.db)
