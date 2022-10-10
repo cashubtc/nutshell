@@ -50,28 +50,8 @@ class LedgerAPI:
 
     def __init__(self, url):
         self.url = url
-
-    async def _get_keys(self, url):
-        resp = requests.get(
-            url + "/keys",
-            headers={"Client-version": VERSION},
-        ).json()
-        keys = resp
-        assert len(keys), Exception("did not receive any keys")
-        keyset_keys = {
-            int(amt): PublicKey(bytes.fromhex(val), raw=True)
-            for amt, val in keys.items()
-        }
-        keyset = WalletKeyset(pubkeys=keyset_keys, mint_url=url)
-        return keyset
-
-    async def _get_keysets(self, url):
-        keysets = requests.get(
-            url + "/keysets",
-            headers={"Client-version": VERSION},
-        ).json()
-        assert len(keysets), Exception("did not receive any keysets")
-        return keysets
+        self.s = requests.Session()
+        self.s.headers.update({"Client-version": VERSION})
 
     @staticmethod
     def _get_output_split(amount):
@@ -99,6 +79,11 @@ class LedgerAPI:
             )
             proofs.append(proof)
         return proofs
+
+    @staticmethod
+    def raise_on_error(resp_dict):
+        if "error" in resp_dict:
+            raise Exception("Mint Error: {}".format(resp_dict["error"]))
 
     @staticmethod
     def _generate_secret(randombits=128):
@@ -138,12 +123,6 @@ class LedgerAPI:
         self.keys = keyset.public_keys
         self.keyset_id = keyset.id
 
-    def request_mint(self, amount):
-        """Requests a mint from the server and returns Lightning invoice."""
-        r = requests.get(self.url + "/mint", params={"amount": amount})
-        r.raise_for_status()
-        return r.json()
-
     @staticmethod
     def _construct_outputs(amounts: List[int], secrets: List[str]):
         """Takes a list of amounts and secrets and returns outputs.
@@ -173,25 +152,55 @@ class LedgerAPI:
             return [f"{secret}:{self._generate_secret()}" for i in range(n)]
         return [f"{i}:{secret}" for i in range(n)]
 
+    """
+    ENDPOINTS
+    """
+
+    async def _get_keys(self, url):
+        resp = self.s.get(
+            url + "/keys",
+        )
+        resp.raise_for_status()
+        keys = resp.json()
+        assert len(keys), Exception("did not receive any keys")
+        keyset_keys = {
+            int(amt): PublicKey(bytes.fromhex(val), raw=True)
+            for amt, val in keys.items()
+        }
+        keyset = WalletKeyset(pubkeys=keyset_keys, mint_url=url)
+        return keyset
+
+    async def _get_keysets(self, url):
+        resp = self.s.get(
+            url + "/keysets",
+        ).json()
+        resp.raise_for_status()
+        keysets = resp.json()
+        assert len(keysets), Exception("did not receive any keysets")
+        return keysets
+
+    def request_mint(self, amount):
+        """Requests a mint from the server and returns Lightning invoice."""
+        resp = self.s.get(self.url + "/mint", params={"amount": amount})
+        resp.raise_for_status()
+        return_dict = resp.json()
+        self.raise_on_error(return_dict)
+        return return_dict
+
     async def mint(self, amounts, payment_hash=None):
         """Mints new coins and returns a proof of promise."""
         secrets = [self._generate_secret() for s in range(len(amounts))]
         await self._check_used_secrets(secrets)
         payloads, rs = self._construct_outputs(amounts, secrets)
 
-        resp = requests.post(
+        resp = self.s.post(
             self.url + "/mint",
             json=payloads.dict(),
             params={"payment_hash": payment_hash},
-            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
-        try:
-            promises_list = resp.json()
-        except:
-            raise Exception("Unkown mint error.")
-        if "error" in promises_list:
-            raise Exception("Error: {}".format(promises_list["error"]))
+        promises_list = resp.json()
+        self.raise_on_error(promises_list)
 
         promises = [BlindedSignature.from_dict(p) for p in promises_list]
         return self._construct_proofs(promises, secrets, rs)
@@ -239,18 +248,14 @@ class LedgerAPI:
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
 
-        resp = requests.post(
+        resp = self.s.post(
             self.url + "/split",
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),
-            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
-        try:
-            promises_dict = resp.json()
-        except:
-            raise Exception("Unkown mint error.")
-        if "error" in promises_dict:
-            raise Exception("Mint Error: {}".format(promises_dict["error"]))
+        promises_dict = resp.json()
+        self.raise_on_error(promises_dict)
+
         promises_fst = [BlindedSignature.from_dict(p) for p in promises_dict["fst"]]
         promises_snd = [BlindedSignature.from_dict(p) for p in promises_dict["snd"]]
         # Construct proofs from promises (i.e., unblind signatures)
@@ -264,31 +269,35 @@ class LedgerAPI:
         return frst_proofs, scnd_proofs
 
     async def check_spendable(self, proofs: List[Proof]):
+        """
+        Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
+        """
         payload = CheckRequest(proofs=proofs)
-        resp = requests.post(
+        resp = self.s.post(
             self.url + "/check",
             json=payload.dict(),
-            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
         return_dict = resp.json()
-
+        self.raise_on_error(return_dict)
         return return_dict
 
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
-        resp = requests.post(
+        resp = self.s.post(
             self.url + "/checkfees",
             json=payload.dict(),
-            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
-
         return_dict = resp.json()
+        self.raise_on_error(return_dict)
         return return_dict
 
     async def pay_lightning(self, proofs: List[Proof], invoice: str):
+        """
+        Accepts proofs and a lightning invoice to pay in exchange.
+        """
         payload = MeltRequest(proofs=proofs, invoice=invoice)
 
         def _meltequest_include_fields(proofs):
@@ -300,14 +309,13 @@ class LedgerAPI:
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
 
-        resp = requests.post(
+        resp = self.s.post(
             self.url + "/melt",
             json=payload.dict(include=_meltequest_include_fields(proofs)),
-            headers={"Client-version": VERSION},
         )
         resp.raise_for_status()
-
         return_dict = resp.json()
+        self.raise_on_error(return_dict)
         return return_dict
 
 
