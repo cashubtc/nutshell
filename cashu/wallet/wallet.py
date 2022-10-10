@@ -401,16 +401,25 @@ class Wallet(LedgerAPI):
         proofs = [p for p in proofs if not p.reserved]
         return proofs
 
-    async def split_to_send(self, proofs: List[Proof], amount, scnd_secret: str = None):
+    async def split_to_send(
+        self,
+        proofs: List[Proof],
+        amount,
+        scnd_secret: str = None,
+        set_reserved: bool = False,
+    ):
         """Like self.split but only considers non-reserved tokens."""
         if scnd_secret:
             logger.debug(f"Spending conditions: {scnd_secret}")
         spendable_proofs = await self._get_spendable_proofs(proofs)
         if sum_proofs(spendable_proofs) < amount:
             raise Exception("balance too low.")
-        return await self.split(
+        keep_proofs, send_proofs = await self.split(
             [p for p in spendable_proofs if not p.reserved], amount, scnd_secret
         )
+        if set_reserved:
+            await self.set_reserved(send_proofs, reserved=True)
+        return keep_proofs, send_proofs
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
         """Mark a proof as reserved to avoid reuse or delete marking."""
