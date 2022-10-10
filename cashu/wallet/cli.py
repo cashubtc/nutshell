@@ -11,6 +11,8 @@ from datetime import datetime
 from functools import wraps
 from itertools import groupby
 from operator import itemgetter
+from os import listdir
+from os.path import isdir, join
 
 import click
 from loguru import logger
@@ -18,7 +20,7 @@ from loguru import logger
 import cashu.core.bolt11 as bolt11
 from cashu.core.base import Proof
 from cashu.core.bolt11 import Invoice, decode
-from cashu.core.helpers import fee_reserve
+from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
 from cashu.wallet import migrations
@@ -90,7 +92,7 @@ async def mint(ctx, amount: int, hash: str):
             print(f"Invoice: {r['pr']}")
             print("")
             print(
-                f"Execute this command if you abort the check:\ncashu mint {amount} --hash {r['hash']}"
+                f"Execute this command if you abort the check:\ncashu invoice {amount} --hash {r['hash']}"
             )
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
@@ -154,7 +156,7 @@ async def balance(ctx):
         print("")
         for k, v in keyset_balances.items():
             print(
-                f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']})"
+                f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']} sat)"
             )
         print("")
     print(
@@ -177,8 +179,9 @@ async def send(ctx, amount: int, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, lock)
-    await wallet.set_reserved(send_proofs, reserved=True)
+    _, send_proofs = await wallet.split_to_send(
+        wallet.proofs, amount, lock, set_reserved=True
+    )
     coin = await wallet.serialize_proofs(
         send_proofs, hide_secrets=True if lock and not p2sh else False
     )
@@ -267,7 +270,7 @@ async def pending(ctx):
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"#{i} Amount: {sum([p['amount'] for p in grouped_proofs])} sat Time: {reserved_date} ID: {key}\n"
+                f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time: {reserved_date} ID: {key}\n"
             )
             print(f"With secret: {coin}\n\nSecretless: {coin_hidden_secret}\n")
             print(f"--------------------------\n")
@@ -312,7 +315,34 @@ async def locks(ctx):
             print(f"Receive: cashu receive <coin> --lock P2SH:{l.address}")
             print("")
             print(f"--------------------------\n")
+    else:
+        print("No locks found. Create one using: cashu lock")
     return True
+
+
+@cli.command("wallets", help="List of all available wallets.")
+@click.pass_context
+@coro
+async def wallets(ctx):
+    # list all directories
+    wallets = [d for d in listdir(CASHU_DIR) if isdir(join(CASHU_DIR, d))]
+    try:
+        wallets.remove("mint")
+    except ValueError:
+        pass
+    for w in wallets:
+        wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, w))
+        try:
+            await init_wallet(wallet)
+            if wallet.proofs and len(wallet.proofs):
+                active_wallet = False
+                if w == ctx.obj["WALLET_NAME"]:
+                    active_wallet = True
+                print(
+                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
+                )
+        except:
+            pass
 
 
 @cli.command("info", help="Information about Cashu wallet.")

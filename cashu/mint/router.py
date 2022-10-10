@@ -81,11 +81,17 @@ async def melt(payload: MeltRequest):
 
 @router.post("/check")
 async def check_spendable(payload: CheckRequest):
+    """Check whether a secret has been spent already or not."""
     return await ledger.check_spendable(payload.proofs)
 
 
 @router.post("/checkfees")
 async def check_fees(payload: CheckFeesRequest):
+    """
+    Responds with the fees necessary to pay a Lightning invoice.
+    Used by wallets for figuring out the fees they need to supply.
+    This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
+    """
     fees_msat = await ledger.check_fees(payload.pr)
     return CheckFeesResponse(fee=fees_msat / 1000)
 

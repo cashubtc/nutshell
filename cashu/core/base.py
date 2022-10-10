@@ -101,14 +101,14 @@ class BlindedMessage(BaseModel):
 
 
 class BlindedSignature(BaseModel):
-    id: str = ""
+    id: Union[str, None] = None
     amount: int
     C_: str
 
     @classmethod
     def from_dict(cls, d: dict):
         return cls(
-            id=d["id"],
+            id=d.get("id"),
             amount=d["amount"],
             C_=d["C_"],
         )
@@ -268,10 +268,8 @@ class MintKeyset:
     def from_row(cls, row: Row):
         if row is None:
             return cls
-        # fix to convert byte to string, unclear why this is necessary
-        id = row[0].decode("ascii") if type(row[0]) == bytes else row[0]
         return cls(
-            id=id,
+            id=row[0],
             derivation_path=row[1],
             valid_from=row[2],
             valid_to=row[3],
