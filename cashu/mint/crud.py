@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List, Any
 
 from cashu.core.base import Invoice, MintKeyset, Proof
 from cashu.core.db import Connection, Database
@@ -118,7 +118,7 @@ async def store_keyset(
     conn: Optional[Connection] = None,
 ):
 
-    await (conn or db).execute(
+    await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
           (id, derivation_path, valid_from, valid_to, first_seen, active, version)
@@ -138,12 +138,12 @@ async def store_keyset(
 
 async def get_keyset(
     id: str = None,
-    derivation_path: str = None,
+    derivation_path: str = "",
     db: Database = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
-    values = []
+    values: List[Any] = []
     clauses.append("active = ?")
     values.append(True)
     if id:
@@ -156,7 +156,7 @@ async def get_keyset(
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
 
-    rows = await (conn or db).fetchall(
+    rows = await (conn or db).fetchall(  # type: ignore
         f"""
         SELECT * from keysets
         {where}

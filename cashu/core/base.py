@@ -166,7 +166,6 @@ class CheckFeesResponse(BaseModel):
 
 class MeltRequest(BaseModel):
     proofs: List[Proof]
-    amount: int = None  # deprecated
     invoice: str
 
 
@@ -233,7 +232,7 @@ class MintKeyset:
     id: str
     derivation_path: str
     private_keys: Dict[int, PrivateKey]
-    public_keys: Dict[int, PublicKey] = None
+    public_keys: Dict[int, PublicKey] = {}
     valid_from: Union[str, None] = None
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
@@ -247,9 +246,9 @@ class MintKeyset:
         valid_to=None,
         first_seen=None,
         active=None,
-        seed: Union[None, str] = None,
-        derivation_path: str = None,
-        version: str = None,
+        seed: str = "",
+        derivation_path: str = "",
+        version: str = "",
     ):
         self.derivation_path = derivation_path
         self.id = id

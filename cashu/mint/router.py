@@ -20,10 +20,6 @@ from cashu.mint import ledger
 router: APIRouter = APIRouter()
 
 
-from starlette.requests import Request
-from starlette_context import context
-
-
 @router.get("/keys")
 def keys():
     """Get the public keys of the mint"""
@@ -73,7 +69,7 @@ async def mint(
 
 
 @router.post("/melt")
-async def melt(request: Request, payload: MeltRequest):
+async def melt(payload: MeltRequest):
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
@@ -100,7 +96,7 @@ async def check_fees(payload: CheckFeesRequest):
 
 
 @router.post("/split")
-async def split(request: Request, payload: SplitRequest):
+async def split(payload: SplitRequest):
     """
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
@@ -108,6 +104,8 @@ async def split(request: Request, payload: SplitRequest):
     proofs = payload.proofs
     amount = payload.amount
     outputs = payload.outputs.blinded_messages if payload.outputs else None
+    # backwards compatibility with clients < v0.2.2
+    assert outputs, Exception("no outputs provided.")
     try:
         split_return = await ledger.split(proofs, amount, outputs)
     except Exception as exc:
