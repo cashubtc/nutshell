@@ -16,21 +16,21 @@ from cashu.core.base import (
     SplitRequest,
 )
 from cashu.core.errors import CashuError
-from cashu.mint import ledger
+from cashu.mint.__main__ import ledger
 
 router: APIRouter = APIRouter()
 
 
 @router.get("/keys")
-def keys() -> dict[int, str]:
+async def keys() -> dict[int, str]:
     """Get the public keys of the mint"""
-    return ledger.get_keyset()
+    return await ledger.get_keyset()
 
 
 @router.get("/keysets")
-def keysets() -> dict[str, list[str]]:
+async def keysets() -> dict[str, list[str]]:
     """Get all active keysets of the mint"""
-    return {"keysets": ledger.keysets.get_ids()}
+    return {"keysets": await ledger.keysets.get_ids()}
 
 
 @router.get("/mint")

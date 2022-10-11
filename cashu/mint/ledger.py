@@ -40,11 +40,11 @@ from cashu.mint.crud import (
 
 
 class Ledger:
-    def __init__(self, secret_key: str, db: str, derivation_path=""):
+    def __init__(self, db: Database, seed: str, derivation_path=""):
         self.proofs_used: Set[str] = set()
-        self.master_key = secret_key
+        self.master_key = seed
         self.derivation_path = derivation_path
-        self.db: Database = Database("mint", db)
+        self.db = db
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""
@@ -86,8 +86,8 @@ class Ledger:
 
     async def _generate_promise(self, amount: int, B_: PublicKey):
         """Generates a promise for given amount and returns a pair (amount, C')."""
-        secret_key = self.keyset.private_keys[amount]  # Get the correct key
-        C_ = b_dhke.step2_bob(B_, secret_key)
+        private_key_amount = self.keyset.private_keys[amount]  # Get the correct key
+        C_ = b_dhke.step2_bob(B_, private_key_amount)
         await store_promise(
             amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
         )
@@ -109,22 +109,24 @@ class Ledger:
             raise Exception(f"tokens already spent. Secret: {proof.secret}")
         # if no keyset id is given in proof, assume the current one
         if not proof.id:
-            secret_key = self.keyset.private_keys[proof.amount]
+            private_key_amount = self.keyset.private_keys[proof.amount]
         else:
             # use the appropriate active keyset for this proof.id
-            secret_key = self.keysets.keysets[proof.id].private_keys[proof.amount]
+            private_key_amount = self.keysets.keysets[proof.id].private_keys[
+                proof.amount
+            ]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
 
         # backwards compatibility with old hash_to_curve < 0.3.3
         try:
-            ret = legacy.verify_pre_0_3_3(secret_key, C, proof.secret)
+            ret = legacy.verify_pre_0_3_3(private_key_amount, C, proof.secret)
             if ret:
                 return ret
         except:
             pass
 
-        return b_dhke.verify(secret_key, C, proof.secret)
+        return b_dhke.verify(private_key_amount, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):
         """

@@ -11,7 +11,7 @@ from starlette_context.middleware import RawContextMiddleware
 from cashu.core.settings import DEBUG, VERSION
 
 from .router import router
-from .startup import load_ledger
+from .startup import start_mint_init
 
 
 class CustomHeaderMiddleware(BaseHTTPMiddleware):
@@ -86,5 +86,5 @@ app.include_router(router=router)
 
 
 @app.on_event("startup")
-async def startup_load_ledger():
-    await load_ledger()
+async def startup_mint():
+    await start_mint_init()
