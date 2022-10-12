@@ -16,7 +16,8 @@ from cashu.core.base import (
     SplitRequest,
 )
 from cashu.core.errors import CashuError
-from cashu.mint import ledger
+
+from cashu.mint.startup import ledger
 
 router: APIRouter = APIRouter()
 
@@ -24,7 +25,7 @@ router: APIRouter = APIRouter()
 @router.get("/keys")
 async def keys() -> dict[int, str]:
     """Get the public keys of the mint"""
-    return await ledger.get_keyset()
+    return ledger.get_keyset()
 
 
 @router.get("/keysets")
