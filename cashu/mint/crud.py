@@ -2,19 +2,60 @@ from typing import Any, List, Optional
 
 from cashu.core.base import Invoice, MintKeyset, Proof
 from cashu.core.db import Connection, Database
+from cashu.core.migrations import table_with_schema
+
+
+class LedgerCrud:
+    """
+    Database interface for Cashu mint.
+
+    This class needs to be overloaded by any app that imports the Cashu mint.
+    """
+
+    async def get_keyset(*args, **kwags):
+
+        return await get_keyset(*args, **kwags)
+
+    async def get_lightning_invoice(*args, **kwags):
+
+        return await get_lightning_invoice(*args, **kwags)
+
+    async def get_proofs_used(*args, **kwags):
+
+        return await get_proofs_used(*args, **kwags)
+
+    async def invalidate_proof(*args, **kwags):
+
+        return await invalidate_proof(*args, **kwags)
+
+    async def store_keyset(*args, **kwags):
+
+        return await store_keyset(*args, **kwags)
+
+    async def store_lightning_invoice(*args, **kwags):
+
+        return await store_lightning_invoice(*args, **kwags)
+
+    async def store_promise(*args, **kwags):
+
+        return await store_promise(*args, **kwags)
+
+    async def update_lightning_invoice(*args, **kwags):
+
+        return await update_lightning_invoice(*args, **kwags)
 
 
 async def store_promise(
+    db: Database,
     amount: int,
     B_: str,
     C_: str,
-    db: Database,
     conn: Optional[Connection] = None,
 ):
 
     await (conn or db).execute(
-        """
-        INSERT INTO promises
+        f"""
+        INSERT INTO {table_with_schema(db, 'promises')}
           (amount, B_b, C_b)
         VALUES (?, ?, ?)
         """,
@@ -32,23 +73,23 @@ async def get_proofs_used(
 ):
 
     rows = await (conn or db).fetchall(
-        """
-        SELECT secret from proofs_used
+        f"""
+        SELECT secret from {table_with_schema(db, 'proofs_used')}
         """
     )
     return [row[0] for row in rows]
 
 
 async def invalidate_proof(
-    proof: Proof,
     db: Database,
+    proof: Proof,
     conn: Optional[Connection] = None,
 ):
 
     # we add the proof and secret to the used list
     await (conn or db).execute(
-        """
-        INSERT INTO proofs_used
+        f"""
+        INSERT INTO {table_with_schema(db, 'proofs_used')}
           (amount, C, secret)
         VALUES (?, ?, ?)
         """,
@@ -61,14 +102,14 @@ async def invalidate_proof(
 
 
 async def store_lightning_invoice(
-    invoice: Invoice,
     db: Database,
+    invoice: Invoice,
     conn: Optional[Connection] = None,
 ):
 
     await (conn or db).execute(
-        """
-        INSERT INTO invoices
+        f"""
+        INSERT INTO {table_with_schema(db, 'invoices')}
           (amount, pr, hash, issued)
         VALUES (?, ?, ?, ?)
         """,
@@ -82,14 +123,14 @@ async def store_lightning_invoice(
 
 
 async def get_lightning_invoice(
-    hash: str,
     db: Database,
+    hash: str,
     conn: Optional[Connection] = None,
 ):
 
     row = await (conn or db).fetchone(
-        """
-        SELECT * from invoices
+        f"""
+        SELECT * from {table_with_schema(db, 'invoices')}
         WHERE hash = ?
         """,
         (hash,),
@@ -98,13 +139,13 @@ async def get_lightning_invoice(
 
 
 async def update_lightning_invoice(
+    db: Database,
     hash: str,
     issued: bool,
-    db: Database,
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
-        "UPDATE invoices SET issued = ? WHERE hash = ?",
+        f"UPDATE {table_with_schema(db, 'invoices')} SET issued = ? WHERE hash = ?",
         (
             issued,
             hash,
@@ -113,23 +154,23 @@ async def update_lightning_invoice(
 
 
 async def store_keyset(
+    db: Database,
     keyset: MintKeyset,
-    db: Database = None,
     conn: Optional[Connection] = None,
 ):
 
     await (conn or db).execute(  # type: ignore
-        """
-        INSERT INTO keysets
+        f"""
+        INSERT INTO {table_with_schema(db, 'keysets')}
           (id, derivation_path, valid_from, valid_to, first_seen, active, version)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             keyset.id,
             keyset.derivation_path,
-            keyset.valid_from,
-            keyset.valid_to,
-            keyset.first_seen,
+            keyset.valid_from or db.timestamp_now,
+            keyset.valid_to or db.timestamp_now,
+            keyset.first_seen or db.timestamp_now,
             True,
             keyset.version,
         ),
@@ -137,9 +178,9 @@ async def store_keyset(
 
 
 async def get_keyset(
+    db: Database,
     id: str = None,
     derivation_path: str = "",
-    db: Database = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -158,7 +199,7 @@ async def get_keyset(
 
     rows = await (conn or db).fetchall(  # type: ignore
         f"""
-        SELECT * from keysets
+        SELECT * from {table_with_schema(db, 'keysets')}
         {where}
         """,
         tuple(values),

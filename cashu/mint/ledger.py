@@ -27,28 +27,32 @@ from cashu.core.secp import PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER, VERSION
 from cashu.core.split import amount_split
 from cashu.lightning import WALLET
-from cashu.mint.crud import (
-    get_keyset,
-    get_lightning_invoice,
-    get_proofs_used,
-    invalidate_proof,
-    store_keyset,
-    store_lightning_invoice,
-    store_promise,
-    update_lightning_invoice,
-)
+from cashu.mint.crud import LedgerCrud
+
+# from cashu.mint.crud import (
+#     get_keyset,
+#     get_lightning_invoice,
+#     get_proofs_used,
+#     invalidate_proof,
+#     store_keyset,
+#     store_lightning_invoice,
+#     store_promise,
+#     update_lightning_invoice,
+# )
 
 
 class Ledger:
-    def __init__(self, db: Database, seed: str, derivation_path=""):
+    def __init__(self, db: Database, seed: str, derivation_path="", crud=LedgerCrud):
         self.proofs_used: Set[str] = set()
         self.master_key = seed
         self.derivation_path = derivation_path
         self.db = db
+        self.crud = crud
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""
-        self.proofs_used = set(await get_proofs_used(db=self.db))
+        proofs_used = await self.crud.get_proofs_used(db=self.db)
+        self.proofs_used = set(proofs_used)
 
     async def init_keysets(self):
         """Loads all past keysets and stores the active one if not already in db"""
@@ -58,16 +62,16 @@ class Ledger:
         )
         # check if current keyset is stored in db and store if not
         logger.debug(f"Loading keyset {self.keyset.id} from db.")
-        current_keyset_local: List[MintKeyset] = await get_keyset(
+        current_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
             id=self.keyset.id, db=self.db
         )
         if not len(current_keyset_local):
             logger.debug(f"Storing keyset {self.keyset.id}.")
-            await store_keyset(keyset=self.keyset, db=self.db)
+            await self.crud.store_keyset(keyset=self.keyset, db=self.db)
 
         # load all past keysets from db
         # this needs two steps because the types of tmp_keysets and the argument of MintKeysets() are different
-        tmp_keysets: List[MintKeyset] = await get_keyset(db=self.db)
+        tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
         self.keysets = MintKeysets(tmp_keysets)
         logger.debug(f"Keysets {self.keysets.keysets}")
         # generate all derived keys from stored derivation paths of past keysets
@@ -88,7 +92,7 @@ class Ledger:
         """Generates a promise for given amount and returns a pair (amount, C')."""
         private_key_amount = self.keyset.private_keys[amount]  # Get the correct key
         C_ = b_dhke.step2_bob(B_, private_key_amount)
-        await store_promise(
+        await self.crud.store_promise(
             amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
         )
         return BlindedSignature(amount=amount, C_=C_.serialize().hex())
@@ -221,7 +225,9 @@ class Ledger:
 
     async def _check_lightning_invoice(self, amounts, payment_hash: str):
         """Checks with the Lightning backend whether an invoice with this payment_hash was paid."""
-        invoice: Invoice = await get_lightning_invoice(payment_hash, db=self.db)
+        invoice: Invoice = await self.crud.get_lightning_invoice(
+            payment_hash, db=self.db
+        )
         if invoice.issued:
             raise Exception("tokens already issued for this invoice.")
         total_requested = sum(amounts)
@@ -231,7 +237,9 @@ class Ledger:
             )
         status = await WALLET.get_invoice_status(payment_hash)
         if status.paid:
-            await update_lightning_invoice(payment_hash, issued=True, db=self.db)
+            await self.crud.update_lightning_invoice(
+                payment_hash, issued=True, db=self.db
+            )
         return status.paid
 
     async def _pay_lightning_invoice(self, invoice: str, fees_msat: int):
@@ -251,7 +259,7 @@ class Ledger:
         self.proofs_used |= proof_msgs
         # store in db
         for p in proofs:
-            await invalidate_proof(p, db=self.db)
+            await self.crud.invalidate_proof(p, db=self.db)
 
     def _serialize_pubkeys(self):
         """Returns public keys for possible amounts."""
@@ -269,7 +277,7 @@ class Ledger:
         )
         if not payment_request or not checking_id:
             raise Exception(f"Could not create Lightning invoice.")
-        await store_lightning_invoice(invoice, db=self.db)
+        await self.crud.store_lightning_invoice(invoice, db=self.db)
         return payment_request, checking_id
 
     async def mint(self, B_s: List[PublicKey], amounts: List[int], payment_hash=None):

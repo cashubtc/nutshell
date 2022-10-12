@@ -3,6 +3,10 @@ import re
 from cashu.core.db import COCKROACH, POSTGRES, SQLITE, Database
 
 
+def table_with_schema(db, table: str):
+    return f"{db.references_schema if db.schema else ''}{table}"
+
+
 async def migrate_databases(db: Database, migrations_module):
     """Creates the necessary databases if they don't exist already; or migrates them."""
 
