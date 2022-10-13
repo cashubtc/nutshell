@@ -11,6 +11,7 @@ from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
+from cashu.core.settings import MAX_ORDER
 
 SERVER_ENDPOINT = "http://localhost:3338"
 
@@ -46,6 +47,23 @@ async def wallet2():
     await wallet2.load_mint()
     wallet2.status()
     yield wallet2
+
+
+@pytest.mark.asyncio
+async def test_get_keys(wallet1: Wallet):
+    assert len(wallet1.keys) == MAX_ORDER
+    keyset = await wallet1._get_keys(wallet1.url)
+    assert type(keyset.id) == str
+    assert len(keyset.id) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_keysets(wallet1: Wallet):
+    keyset = await wallet1._get_keysets(wallet1.url)
+    assert type(keyset) == dict
+    assert type(keyset["keysets"]) == list
+    assert len(keyset["keysets"]) > 0
+    assert keyset["keysets"][0] == wallet1.keyset_id
 
 
 @pytest.mark.asyncio

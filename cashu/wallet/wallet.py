@@ -173,7 +173,7 @@ class LedgerAPI:
     async def _get_keysets(self, url):
         resp = self.s.get(
             url + "/keysets",
-        ).json()
+        )
         resp.raise_for_status()
         keysets = resp.json()
         assert len(keysets), Exception("did not receive any keysets")

@@ -25,13 +25,14 @@ router: APIRouter = APIRouter()
 @router.get("/keys")
 async def keys() -> dict[int, str]:
     """Get the public keys of the mint"""
-    return ledger.get_keyset()
+    keyset = ledger.get_keyset()
+    return keyset
 
 
 @router.get("/keysets")
 async def keysets() -> dict[str, list[str]]:
     """Get all active keysets of the mint"""
-    return {"keysets": await ledger.keysets.get_ids()}
+    return {"keysets": ledger.keysets.get_ids()}
 
 
 @router.get("/mint")
@@ -50,7 +51,7 @@ async def request_mint(amount: int = 0) -> GetMintResponse:
 
 @router.post("/mint")
 async def mint(
-    payloads: MintRequest,
+    mint_request: MintRequest,
     payment_hash: Union[str, None] = None,
 ) -> Union[List[BlindedSignature], CashuError]:
     """
@@ -58,13 +59,10 @@ async def mint(
 
     Call this endpoint after `GET /mint`.
     """
-    amounts = []
-    B_s = []
-    for payload in payloads.blinded_messages:
-        amounts.append(payload.amount)
-        B_s.append(PublicKey(bytes.fromhex(payload.B_), raw=True))
     try:
-        promises = await ledger.mint(B_s, amounts, payment_hash=payment_hash)
+        promises = await ledger.mint(
+            mint_request.blinded_messages, payment_hash=payment_hash
+        )
         return promises
     except Exception as exc:
         return CashuError(error=str(exc))
