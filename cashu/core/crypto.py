@@ -6,6 +6,15 @@ from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import MAX_ORDER
 
 
+# entropy = bytes([random.getrandbits(8) for i in range(16)])
+# mnemonic = bip39.mnemonic_from_bytes(entropy)
+# seed = bip39.mnemonic_to_seed(mnemonic)
+# root = bip32.HDKey.from_seed(seed, version=NETWORKS["main"]["xprv"])
+
+# bip44_xprv = root.derive("m/44h/1h/0h")
+# bip44_xpub = bip44_xprv.to_public()
+
+
 def derive_keys(master_key: str, derivation_path: str = ""):
     """
     Deterministic derivation of keys for 2^n values.

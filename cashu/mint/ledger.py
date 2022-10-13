@@ -29,9 +29,6 @@ from cashu.core.split import amount_split
 from cashu.mint.crud import LedgerCrud
 
 
-from cashu.lightning.lnbits import LNbitsWallet
-
-
 class Ledger:
     def __init__(
         self,
@@ -39,11 +36,12 @@ class Ledger:
         seed: str,
         derivation_path="",
         crud=LedgerCrud,
-        lightning=LNbitsWallet(),
+        lightning=None,
     ):
         self.proofs_used: Set[str] = set()
         self.master_key = seed
         self.derivation_path = derivation_path
+
         self.db = db
         self.crud = crud
         self.lightning = lightning
@@ -53,32 +51,33 @@ class Ledger:
         proofs_used = await self.crud.get_proofs_used(db=self.db)
         self.proofs_used = set(proofs_used)
 
-    async def init_keysets(self):
-        """Loads all past keysets and stores the active one if not already in db"""
-        # generate current keyset from seed and current derivation path
-        self.keyset = MintKeyset(
-            seed=self.master_key, derivation_path=self.derivation_path, version=VERSION
+    async def load_keyset(self, derivation_path):
+        """Load current keyset keyset or generate new one."""
+        keyset = MintKeyset(
+            seed=self.master_key, derivation_path=derivation_path, version=VERSION
         )
         # check if current keyset is stored in db and store if not
-        logger.debug(f"Loading keyset {self.keyset.id} from db.")
-        current_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
-            id=self.keyset.id, db=self.db
+        logger.debug(f"Loading keyset {keyset.id} from db.")
+        tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
+            id=keyset.id, db=self.db
         )
-        if not len(current_keyset_local):
-            logger.debug(f"Storing keyset {self.keyset.id}.")
-            await self.crud.store_keyset(keyset=self.keyset, db=self.db)
+        if not len(tmp_keyset_local):
+            logger.debug(f"Storing keyset {keyset.id}.")
+            await self.crud.store_keyset(keyset=keyset, db=self.db)
+        return keyset
 
+    async def init_keysets(self):
+        """Loads all keysets from db."""
+        self.keyset = await self.load_keyset(self.derivation_path)
         # load all past keysets from db
         # this needs two steps because the types of tmp_keysets and the argument of MintKeysets() are different
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
         self.keysets = MintKeysets(tmp_keysets)
-        logger.debug(f"Keysets {self.keysets.keysets}")
+        logger.debug(f"Loading {len(self.keysets.keysets)} keysets form db.")
         # generate all derived keys from stored derivation paths of past keysets
         for _, v in self.keysets.keysets.items():
+            logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
-
-        if len(self.keysets.keysets):
-            logger.debug(f"Loaded {len(self.keysets.keysets)} keysets from db.")
 
     async def _generate_promises(
         self, B_s: List[BlindedMessage], keyset: MintKeyset = None
@@ -276,13 +275,10 @@ class Ledger:
         for p in proofs:
             await self.crud.invalidate_proof(proof=p, db=self.db)
 
-    def _serialize_pubkeys(self):
-        """Returns public keys for possible amounts."""
-        return {a: p.serialize().hex() for a, p in self.keyset.public_keys.items()}
-
     # Public methods
-    def get_keyset(self):
-        return self._serialize_pubkeys()
+    def get_keyset(self, keyset_id: str = None):
+        keyset = self.keysets[keyset_id] if keyset_id else self.keyset
+        return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
     async def request_mint(self, amount):
         """Returns Lightning invoice and stores it in the db."""
@@ -391,13 +387,16 @@ class Ledger:
         # Mark proofs as used and prepare new promises
         await self._invalidate_proofs(proofs)
 
+        # split outputs according to amount
         outs_fst = amount_split(total - amount)
-        outs_snd = amount_split(amount)
-        B_fst = [od.B_ for od in outputs[: len(outs_fst)]]
-        B_snd = [od.B_ for od in outputs[len(outs_fst) :]]
+        B_fst = [od for od in outputs[: len(outs_fst)]]
+        B_snd = [od for od in outputs[len(outs_fst) :]]
+
+        # generate promises
         prom_fst, prom_snd = await self._generate_promises(
-            outs_fst, B_fst, keyset
-        ), await self._generate_promises(outs_snd, B_snd, keyset)
+            B_fst, keyset
+        ), await self._generate_promises(B_snd, keyset)
+
         # verify amounts in produced proofs
         self._verify_equation_balanced(proofs, prom_fst + prom_snd)
         return prom_fst, prom_snd

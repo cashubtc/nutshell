@@ -262,6 +262,7 @@ class MintKeyset:
             self.generate_keys(seed)
 
     def generate_keys(self, seed):
+        """Generates keys of a keyset from a seed."""
         self.private_keys = derive_keys(seed, self.derivation_path)
         self.public_keys = derive_pubkeys(self.private_keys)
         self.id = derive_keyset_id(self.public_keys)
