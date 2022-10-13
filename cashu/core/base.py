@@ -95,7 +95,6 @@ class Invoice(BaseModel):
 
 
 class BlindedMessage(BaseModel):
-    id: str = ""
     amount: int
     B_: str
 

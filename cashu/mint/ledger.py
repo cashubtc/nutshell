@@ -94,15 +94,13 @@ class Ledger:
         self, amount: int, B_: PublicKey, keyset: MintKeyset = None
     ):
         """Generates a promise for given amount and returns a pair (amount, C')."""
-        if keyset:
-            private_key_amount = keyset.private_keys[amount]
-        else:
-            private_key_amount = self.keyset.private_keys[amount]  # Get the correct key
+        keyset = keyset if keyset else self.keyset
+        private_key_amount = keyset.private_keys[amount]
         C_ = b_dhke.step2_bob(B_, private_key_amount)
         await self.crud.store_promise(
             amount=amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
         )
-        return BlindedSignature(amount=amount, C_=C_.serialize().hex())
+        return BlindedSignature(id=keyset.id, amount=amount, C_=C_.serialize().hex())
 
     def _check_spendable(self, proof: Proof):
         """Checks whether the proof was already spent."""
@@ -277,7 +275,7 @@ class Ledger:
 
     # Public methods
     def get_keyset(self, keyset_id: str = None):
-        keyset = self.keysets[keyset_id] if keyset_id else self.keyset
+        keyset = self.keysets.keysets[keyset_id] if keyset_id else self.keyset
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
     async def request_mint(self, amount):
@@ -332,7 +330,10 @@ class Ledger:
             "provided proofs not enough for Lightning payment."
         )
 
-        status, preimage = await self._pay_lightning_invoice(invoice, fees_msat)
+        if LIGHTNING:
+            status, preimage = await self._pay_lightning_invoice(invoice, fees_msat)
+        else:
+            status, preimage = True, "preimage"
         if status == True:
             await self._invalidate_proofs(proofs)
         return status, preimage
@@ -347,8 +348,11 @@ class Ledger:
         amount = math.ceil(decoded_invoice.amount_msat / 1000)
         # hack: check if it's internal, if it exists, it will return paid = False,
         # if id does not exist (not internal), it returns paid = None
-        paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
-        internal = paid.paid == False
+        if LIGHTNING:
+            paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
+            internal = paid.paid == False
+        else:
+            internal = True
         fees_msat = fee_reserve(amount * 1000, internal)
         return fees_msat
 
