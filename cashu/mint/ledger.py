@@ -310,9 +310,6 @@ class Ledger:
             if amount not in [2**i for i in range(MAX_ORDER)]:
                 raise Exception(f"Can only mint amounts up to {2**MAX_ORDER}.")
 
-        # promises = [
-        #     await self._generate_promise(amount, B_) for B_, amount in zip(B_s, amounts)
-        # ]
         promises = await self._generate_promises(B_s, keyset)
         return promises
 
