@@ -273,9 +273,16 @@ class LedgerAPI:
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
         payload = CheckRequest(proofs=proofs)
+
+        def _check_spendable_include_fields(proofs):
+            """strips away fields from the model that aren't necessary for the /split"""
+            return {
+                "proofs": {i: {"secret"} for i in range(len(proofs))},
+            }
+
         resp = self.s.post(
             self.url + "/check",
-            json=payload.dict(),
+            json=payload.dict(include=_check_spendable_include_fields(proofs)),
         )
         resp.raise_for_status()
         return_dict = resp.json()

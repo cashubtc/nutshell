@@ -24,9 +24,9 @@ class P2SHScript(BaseModel):
 
 class Proof(BaseModel):
     id: str = ""
-    amount: int
+    amount: int = 0
     secret: str = ""
-    C: str
+    C: str = ""
     script: Union[P2SHScript, None] = None
     reserved: bool = False  # whether this proof is reserved for sending
     send_id: str = ""  # unique ID of send attempt

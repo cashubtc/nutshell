@@ -59,7 +59,6 @@ async def mint(
 
     Call this endpoint after `GET /mint`.
     """
-    print(mint_request.dict())
     try:
         promises = await ledger.mint(
             mint_request.blinded_messages, payment_hash=payment_hash
@@ -74,7 +73,6 @@ async def melt(payload: MeltRequest) -> GetMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
-    print(payload)
     ok, preimage = await ledger.melt(payload.proofs, payload.invoice)
     resp = GetMeltResponse(paid=ok, preimage=preimage)
     return resp
@@ -83,7 +81,6 @@ async def melt(payload: MeltRequest) -> GetMeltResponse:
 @router.post("/check")
 async def check_spendable(payload: CheckRequest) -> Dict[int, bool]:
     """Check whether a secret has been spent already or not."""
-    print(payload)
     return await ledger.check_spendable(payload.proofs)
 
 
@@ -94,7 +91,6 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     Used by wallets for figuring out the fees they need to supply.
     This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
     """
-    print(payload)
     fees_msat = await ledger.check_fees(payload.pr)
     return CheckFeesResponse(fee=fees_msat / 1000)
 
