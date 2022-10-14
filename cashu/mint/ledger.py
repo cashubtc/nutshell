@@ -6,7 +6,8 @@ import math
 from typing import Dict, List, Set
 
 from loguru import logger
-from starlette_context import context
+
+# from starlette_context import context
 
 import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
@@ -19,7 +20,6 @@ from cashu.core.base import (
     MintKeysets,
     Proof,
 )
-from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.script import verify_script
@@ -70,7 +70,6 @@ class Ledger:
         """Loads all keysets from db."""
         self.keyset = await self.load_keyset(self.derivation_path)
         # load all past keysets from db
-        # this needs two steps because the types of tmp_keysets and the argument of MintKeysets() are different
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
         self.keysets = MintKeysets(tmp_keysets)
         logger.debug(f"Loading {len(self.keysets.keysets)} keysets form db.")
