@@ -126,7 +126,7 @@ class Ledger:
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
 
-        # backwards compatibility with old hash_to_curve < 0.3.3
+        # backwards compatibility with old hash_to_curve < 0.4.0
         try:
             ret = legacy.verify_pre_0_3_3(private_key_amount, C, proof.secret)
             if ret:
