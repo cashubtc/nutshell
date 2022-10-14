@@ -81,6 +81,8 @@ async def test_split(wallet1: Wallet):
     assert [p.amount for p in p1] == [4, 8, 32]
     assert sum_proofs(p2) == 20
     assert [p.amount for p in p2] == [4, 16]
+    assert all([p.id == wallet1.keyset_id for p in p1])
+    assert all([p.id == wallet1.keyset_id for p in p2])
 
 
 @pytest.mark.asyncio
