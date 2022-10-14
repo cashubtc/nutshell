@@ -16,7 +16,6 @@ from cashu.core.base import (
     SplitRequest,
 )
 from cashu.core.errors import CashuError
-
 from cashu.mint.startup import ledger
 
 router: APIRouter = APIRouter()

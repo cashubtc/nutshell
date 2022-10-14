@@ -5,7 +5,6 @@ from typing import Dict, List
 from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import MAX_ORDER
 
-
 # entropy = bytes([random.getrandbits(8) for i in range(16)])
 # mnemonic = bip39.mnemonic_from_bytes(entropy)
 # seed = bip39.mnemonic_to_seed(mnemonic)

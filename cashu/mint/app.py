@@ -6,13 +6,13 @@ from loguru import logger
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
-# from starlette_context import context
-# from starlette_context.middleware import RawContextMiddleware
-
 from cashu.core.settings import DEBUG, VERSION
 
 from .router import router
 from .startup import start_mint_init
+
+# from starlette_context import context
+# from starlette_context.middleware import RawContextMiddleware
 
 
 # class CustomHeaderMiddleware(BaseHTTPMiddleware):

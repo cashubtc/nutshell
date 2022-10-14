@@ -7,8 +7,6 @@ from typing import Dict, List, Set
 
 from loguru import logger
 
-# from starlette_context import context
-
 import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
 import cashu.core.legacy as legacy
@@ -27,6 +25,8 @@ from cashu.core.secp import PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER, VERSION
 from cashu.core.split import amount_split
 from cashu.mint.crud import LedgerCrud
+
+# from starlette_context import context
 
 
 class Ledger:

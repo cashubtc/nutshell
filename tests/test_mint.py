@@ -10,13 +10,13 @@ from cashu.core.migrations import migrate_databases
 
 SERVER_ENDPOINT = "http://localhost:3338"
 
-from cashu.mint import migrations
-
-from cashu.mint.ledger import Ledger
-from cashu.core.settings import MINT_PRIVATE_KEY, MAX_ORDER
-from cashu.core.db import Database
-from cashu.lightning.lnbits import LNbitsWallet
 import os
+
+from cashu.core.db import Database
+from cashu.core.settings import MAX_ORDER, MINT_PRIVATE_KEY
+from cashu.lightning.lnbits import LNbitsWallet
+from cashu.mint import migrations
+from cashu.mint.ledger import Ledger
 
 
 async def assert_err(f, msg):

@@ -7,11 +7,11 @@ import pytest_asyncio
 from cashu.core.base import Proof
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
+from cashu.core.settings import MAX_ORDER
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
-from cashu.core.settings import MAX_ORDER
 
 SERVER_ENDPOINT = "http://localhost:3338"
 
