@@ -22,7 +22,8 @@ def main(
     ssl_keyfile: str = None,
     ssl_certfile: str = None,
 ):
-    """Launched with `poetry run mint` at root level"""
+    """This routine starts the uvicorn server if the Cashu mint is
+    launched with `poetry run mint` at root level"""
     # this beautiful beast parses all command line arguments and passes them to the uvicorn server
     d = dict()
     for a in ctx.args:

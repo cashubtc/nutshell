@@ -48,4 +48,4 @@ LNBITS_ENDPOINT = env.str("LNBITS_ENDPOINT", default=None)
 LNBITS_KEY = env.str("LNBITS_KEY", default=None)
 
 MAX_ORDER = 64
-VERSION = "0.3.3"
+VERSION = "0.4.0"

@@ -7,6 +7,7 @@ import pytest_asyncio
 from cashu.core.base import Proof
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
+from cashu.core.settings import MAX_ORDER
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -49,6 +50,23 @@ async def wallet2():
 
 
 @pytest.mark.asyncio
+async def test_get_keys(wallet1: Wallet):
+    assert len(wallet1.keys) == MAX_ORDER
+    keyset = await wallet1._get_keys(wallet1.url)
+    assert type(keyset.id) == str
+    assert len(keyset.id) > 0
+
+
+@pytest.mark.asyncio
+async def test_get_keysets(wallet1: Wallet):
+    keyset = await wallet1._get_keysets(wallet1.url)
+    assert type(keyset) == dict
+    assert type(keyset["keysets"]) == list
+    assert len(keyset["keysets"]) > 0
+    assert keyset["keysets"][0] == wallet1.keyset_id
+
+
+@pytest.mark.asyncio
 async def test_mint(wallet1: Wallet):
     await wallet1.mint(64)
     assert wallet1.balance == 64
@@ -63,6 +81,8 @@ async def test_split(wallet1: Wallet):
     assert [p.amount for p in p1] == [4, 8, 32]
     assert sum_proofs(p2) == 20
     assert [p.amount for p in p2] == [4, 16]
+    assert all([p.id == wallet1.keyset_id for p in p1])
+    assert all([p.id == wallet1.keyset_id for p in p2])
 
 
 @pytest.mark.asyncio

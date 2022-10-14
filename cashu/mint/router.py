@@ -16,19 +16,20 @@ from cashu.core.base import (
     SplitRequest,
 )
 from cashu.core.errors import CashuError
-from cashu.mint import ledger
+from cashu.mint.startup import ledger
 
 router: APIRouter = APIRouter()
 
 
 @router.get("/keys")
-def keys() -> dict[int, str]:
+async def keys() -> dict[int, str]:
     """Get the public keys of the mint"""
-    return ledger.get_keyset()
+    keyset = ledger.get_keyset()
+    return keyset
 
 
 @router.get("/keysets")
-def keysets() -> dict[str, list[str]]:
+async def keysets() -> dict[str, list[str]]:
     """Get all active keysets of the mint"""
     return {"keysets": ledger.keysets.get_ids()}
 
@@ -49,7 +50,7 @@ async def request_mint(amount: int = 0) -> GetMintResponse:
 
 @router.post("/mint")
 async def mint(
-    payloads: MintRequest,
+    mint_request: MintRequest,
     payment_hash: Union[str, None] = None,
 ) -> Union[List[BlindedSignature], CashuError]:
     """
@@ -57,13 +58,10 @@ async def mint(
 
     Call this endpoint after `GET /mint`.
     """
-    amounts = []
-    B_s = []
-    for payload in payloads.blinded_messages:
-        amounts.append(payload.amount)
-        B_s.append(PublicKey(bytes.fromhex(payload.B_), raw=True))
     try:
-        promises = await ledger.mint(B_s, amounts, payment_hash=payment_hash)
+        promises = await ledger.mint(
+            mint_request.blinded_messages, payment_hash=payment_hash
+        )
         return promises
     except Exception as exc:
         return CashuError(error=str(exc))
