@@ -38,7 +38,9 @@ def derive_pubkeys(keys: Dict[int, PrivateKey]):
 
 def derive_keyset_id(keys: Dict[int, PublicKey]):
     """Deterministic derivation keyset_id from set of public keys."""
-    pubkeys_concat = "".join([p.serialize().hex() for _, p in keys.items()])
+    # sort public keys by amount
+    sorted_keys = dict(sorted(keys.items()))
+    pubkeys_concat = "".join([p.serialize().hex() for _, p in sorted_keys.items()])
     return base64.b64encode(
         hashlib.sha256((pubkeys_concat).encode("utf-8")).digest()
     ).decode()[:12]

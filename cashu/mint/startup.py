@@ -8,7 +8,6 @@ from loguru import logger
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import CASHU_DIR, LIGHTNING
 
-# from cashu.lightning import WALLET
 from cashu.mint import migrations
 
 from cashu.mint.ledger import Ledger
