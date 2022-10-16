@@ -78,7 +78,7 @@ def coro(f):
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
 @click.pass_context
 @coro
-async def mint(ctx, amount: int, hash: str):
+async def invoice(ctx, amount: int, hash: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
