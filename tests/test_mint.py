@@ -112,8 +112,3 @@ async def test_generate_promises(ledger: Ledger):
         promises[0].C_
         == "032dfadd74bb3abba8170ecbae5401507e384eafd312defda94148fa37314c0ef0"
     )
-
-
-@pytest.mark.asyncio
-async def test_get_output_split(ledger: Ledger):
-    assert ledger._get_output_split(13) == [1, 4, 8]
