@@ -36,6 +36,6 @@ jobs:
           MINT_HOST: localhost
           MINT_PORT: 3338
         run: |
-          poetry run pytest tests --cov cashu
+          poetry run pytest tests --cov-report --cov cashu
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
