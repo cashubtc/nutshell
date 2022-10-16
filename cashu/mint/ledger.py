@@ -207,16 +207,6 @@ class Ledger:
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
         assert sum_outputs - sum_inputs == 0
 
-    def _get_output_split(self, amount: int):
-        """Given an amount returns a list of amounts returned e.g. 13 is [1, 4, 8]."""
-        self._verify_amount(amount)
-        bits_amt = bin(amount)[::-1][:-2]
-        rv = []
-        for (pos, bit) in enumerate(bits_amt):
-            if bit == "1":
-                rv.append(2**pos)
-        return rv
-
     async def _request_lightning_invoice(self, amount: int):
         """Returns an invoice from the Lightning backend."""
         error, balance = await self.lightning.status()
