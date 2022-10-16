@@ -22,7 +22,6 @@ bitstring = "^3.1.9"
 secp256k1 = "^0.14.0"
 sqlalchemy-aio = "^0.17.0"
 python-bitcoinlib = "^0.11.2"
-pytest-cov = "^4.0.0"
 
 [tool.poetry.dev-dependencies]
 black = {version = "^22.8.0", allow-prereleases = true}
@@ -32,6 +31,7 @@ isort = "^5.10.1"
 mypy = "^0.971"
 black = {version = "^22.8.0", allow-prereleases = true}
 isort = "^5.10.1"
+pytest-cov = "^4.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
