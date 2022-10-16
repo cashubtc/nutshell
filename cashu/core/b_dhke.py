@@ -44,9 +44,12 @@ def hash_to_curve(message: bytes):
     return point
 
 
-def step1_alice(secret_msg: str):
+def step1_alice(secret_msg: str, blinding_factor: bytes = None):
     Y = hash_to_curve(secret_msg.encode("utf-8"))
-    r = PrivateKey()
+    if blinding_factor:
+        r = PrivateKey(privkey=blinding_factor, raw=True)
+    else:
+        r = PrivateKey()
     B_ = Y + r.pubkey
     return B_, r
 
