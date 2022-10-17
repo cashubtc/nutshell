@@ -30,7 +30,7 @@ pip install cashu
 
 To update Cashu, use `pip install cashu -U`. 
 
-If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config`. On macOS, you might have to run `pip install wheel`.
+If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config`. On macOS, you might have to run `pip install wheel` and `brew install pkg-config`.
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 
