@@ -3,7 +3,6 @@
 import asyncio
 import base64
 import json
-import math
 import os
 import sys
 import time
@@ -17,10 +16,8 @@ from os.path import isdir, join
 import click
 from loguru import logger
 
-import cashu.core.bolt11 as bolt11
 from cashu.core.base import Proof
-from cashu.core.bolt11 import Invoice, decode
-from cashu.core.helpers import fee_reserve, sum_proofs
+from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
 from cashu.wallet import migrations

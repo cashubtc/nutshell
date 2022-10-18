@@ -1,18 +1,17 @@
 import base64
 import json
+import math
 import secrets as scrts
 import time
 import uuid
-import math
 from itertools import groupby
 from typing import Dict, List
 
 import requests
 from loguru import logger
-import cashu.core.bolt11 as bolt11
-from cashu.core.bolt11 import Invoice as InvoiceBolt11
 
 import cashu.core.b_dhke as b_dhke
+import cashu.core.bolt11 as bolt11
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
@@ -26,6 +25,7 @@ from cashu.core.base import (
     SplitRequest,
     WalletKeyset,
 )
+from cashu.core.bolt11 import Invoice as InvoiceBolt11
 from cashu.core.db import Database
 from cashu.core.helpers import sum_proofs
 from cashu.core.script import (
