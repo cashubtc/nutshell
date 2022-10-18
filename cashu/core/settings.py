@@ -14,7 +14,7 @@ if os.path.isfile(ENV_FILE):
     env.read_env(ENV_FILE)
 else:
     ENV_FILE = ""
-    env.read_env()
+    env.read_env(recurse=False)
 
 DEBUG = env.bool("DEBUG", default=False)
 if not DEBUG:
