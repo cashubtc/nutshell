@@ -25,9 +25,9 @@ from cashu.core.migrations import migrate_databases
 from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
+    get_lightning_invoices,
     get_reserved_proofs,
     get_unused_locks,
-    get_lightning_invoices,
 )
 from cashu.wallet.wallet import Wallet as Wallet
 
