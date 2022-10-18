@@ -24,7 +24,11 @@ from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
 from cashu.wallet import migrations
-from cashu.wallet.crud import get_reserved_proofs, get_unused_locks
+from cashu.wallet.crud import (
+    get_reserved_proofs,
+    get_unused_locks,
+    get_lightning_invoices,
+)
 from cashu.wallet.wallet import Wallet as Wallet
 
 
@@ -326,6 +330,41 @@ async def locks(ctx):
     else:
         print("No locks found. Create one using: cashu lock")
     return True
+
+
+@cli.command("invoices", help="List of all pending invoices.")
+@click.pass_context
+@coro
+async def invoices(ctx):
+    wallet: Wallet = ctx.obj["WALLET"]
+    invoices = await get_lightning_invoices(db=wallet.db)
+    if len(invoices):
+        print("")
+        print(f"--------------------------\n")
+        for invoice in invoices:
+            print(f"Paid: {invoice.paid}")
+            print(f"Incoming: {invoice.amount > 0}")
+            print(f"Amount: {abs(invoice.amount)}")
+            if invoice.hash:
+                print(f"Hash: {invoice.hash}")
+            if invoice.preimage:
+                print(f"Preimage: {invoice.preimage}")
+            if invoice.time_created:
+                d = datetime.utcfromtimestamp(
+                    int(float(invoice.time_created))
+                ).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"Created: {d}")
+            if invoice.time_paid:
+                d = datetime.utcfromtimestamp(int(float(invoice.time_paid))).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+                print(f"Paid: {d}")
+            print("")
+            print(f"Payment request: {invoice.pr}")
+            print("")
+            print(f"--------------------------\n")
+    else:
+        print("No invoices found.")
 
 
 @cli.command("wallets", help="List of all available wallets.")

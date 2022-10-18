@@ -280,9 +280,35 @@ async def get_lightning_invoice(
         SELECT * from invoices
         {where}
         """,
-        (hash,),
+        tuple(values),
     )
     return Invoice(**row)
+
+
+async def get_lightning_invoices(
+    db: Database,
+    paid: bool = None,
+    conn: Optional[Connection] = None,
+):
+    clauses: List[Any] = []
+    values: List[Any] = []
+
+    if paid is not None:
+        clauses.append("paid = ?")
+        values.append(paid)
+
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
+
+    rows = await (conn or db).fetchall(
+        f"""
+        SELECT * from invoices
+        {where}
+        """,
+        tuple(values),
+    )
+    return [Invoice(**r) for r in rows]
 
 
 async def update_lightning_invoice(
