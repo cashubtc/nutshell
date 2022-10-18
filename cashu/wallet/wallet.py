@@ -3,11 +3,14 @@ import json
 import secrets as scrts
 import time
 import uuid
+import math
 from itertools import groupby
 from typing import Dict, List
 
 import requests
 from loguru import logger
+import cashu.core.bolt11 as bolt11
+from cashu.core.bolt11 import Invoice as InvoiceBolt11
 
 import cashu.core.b_dhke as b_dhke
 from cashu.core.base import (
@@ -435,6 +438,25 @@ class Wallet(LedgerAPI):
         ]  # "or not p.id" is for backwards compatibility with proofs without a keyset id
         proofs = [p for p in proofs if not p.reserved]
         return proofs
+
+    async def get_pay_amount_with_fees(self, invoice: str):
+        """
+        Decodes the amount from a Lightning invoice and returns the
+        total amount (amount+fees) to be paid.
+        """
+        decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)
+        # check if it's an internal payment
+        fees = int((await self.check_fees(invoice))["fee"])
+        amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
+        return amount, fees
+
+    async def split_to_pay(self, invoice: str):
+        """
+        Splits proofs such that a Lightning invoice can be paid.
+        """
+        amount, _ = await self.get_pay_amount_with_fees(invoice)
+        _, send_proofs = await self.split_to_send(self.proofs, amount)
+        return send_proofs
 
     async def split_to_send(
         self,

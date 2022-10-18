@@ -134,17 +134,10 @@ async def pay(ctx, invoice: str, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
-    decoded_invoice: Invoice = bolt11.decode(invoice)
-
-    # check if it's an internal payment
-    fees = (await wallet.check_fees(invoice))["fee"]
-    amount = math.ceil(
-        (decoded_invoice.amount_msat + fees * 1000) / 1000
-    )  # 1% fee for Lightning
-
+    amount, fees = await wallet.get_pay_amount_with_fees(invoice)
     if not yes:
         click.confirm(
-            f"Pay {decoded_invoice.amount_msat//1000} sat ({amount} sat incl. fees)?",
+            f"Pay {amount - fees} sat ({amount} sat incl. fees)?",
             abort=True,
             default=True,
         )
