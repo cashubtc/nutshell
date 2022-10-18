@@ -1,7 +1,7 @@
 import time
 from typing import Any, List, Optional
 
-from cashu.core.base import KeyBase, P2SHScript, Proof, WalletKeyset
+from cashu.core.base import Invoice, KeyBase, P2SHScript, Proof, WalletKeyset
 from cashu.core.db import Connection, Database
 
 
@@ -31,7 +31,7 @@ async def get_proofs(
         SELECT * from proofs
         """
     )
-    return [Proof.from_row(r) for r in rows]
+    return [Proof(**dict(r)) for r in rows]
 
 
 async def get_reserved_proofs(
@@ -45,7 +45,7 @@ async def get_reserved_proofs(
         WHERE reserved
         """
     )
-    return [Proof.from_row(r) for r in rows]
+    return [Proof(**r) for r in rows]
 
 
 async def invalidate_proof(
@@ -162,7 +162,7 @@ async def get_unused_locks(
         """,
         tuple(args),
     )
-    return [P2SHScript.from_row(r) for r in rows]
+    return [P2SHScript(**r) for r in rows]
 
 
 async def update_p2sh_used(
@@ -233,4 +233,78 @@ async def get_keyset(
         """,
         tuple(values),
     )
-    return WalletKeyset.from_row(row) if row is not None else None
+    return WalletKeyset(**row) if row is not None else None
+
+
+async def store_lightning_invoice(
+    db: Database,
+    invoice: Invoice,
+    conn: Optional[Connection] = None,
+):
+
+    await (conn or db).execute(
+        f"""
+        INSERT INTO invoices
+          (amount, pr, hash, preimage, paid, time_created, time_paid)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            invoice.amount,
+            invoice.pr,
+            invoice.hash,
+            invoice.preimage,
+            invoice.paid,
+            invoice.time_created,
+            invoice.time_paid,
+        ),
+    )
+
+
+async def get_lightning_invoice(
+    db: Database,
+    hash: str = None,
+    conn: Optional[Connection] = None,
+):
+    clauses = []
+    values: List[Any] = []
+    if hash:
+        clauses.append("hash = ?")
+        values.append(hash)
+
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
+
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT * from invoices
+        {where}
+        """,
+        (hash,),
+    )
+    return Invoice(**row)
+
+
+async def update_lightning_invoice(
+    db: Database,
+    hash: str,
+    paid: bool,
+    time_paid: int = None,
+    conn: Optional[Connection] = None,
+):
+    clauses = []
+    values: List[Any] = []
+    clauses.append("paid = ?")
+    values.append(paid)
+
+    if time_paid:
+        clauses.append("time_paid = ?")
+        values.append(time_paid)
+
+    await (conn or db).execute(
+        f"UPDATE invoices SET {', '.join(clauses)} WHERE hash = ?",
+        (
+            *values,
+            hash,
+        ),
+    )

@@ -1,6 +1,7 @@
 import base64
 import json
 import secrets as scrts
+import time
 import uuid
 from itertools import groupby
 from typing import Dict, List
@@ -14,6 +15,7 @@ from cashu.core.base import (
     BlindedSignature,
     CheckFeesRequest,
     CheckRequest,
+    Invoice,
     MeltRequest,
     MintRequest,
     P2SHScript,
@@ -38,8 +40,10 @@ from cashu.wallet.crud import (
     invalidate_proof,
     secret_used,
     store_keyset,
+    store_lightning_invoice,
     store_p2sh,
     store_proof,
+    update_lightning_invoice,
     update_proof_reserved,
 )
 
@@ -175,7 +179,7 @@ class LedgerAPI:
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
-        return return_dict
+        return Invoice(amount=amount, pr=return_dict["pr"], hash=return_dict["hash"])
 
     async def mint(self, amounts, payment_hash=None):
         """Mints new coins and returns a proof of promise."""
@@ -192,7 +196,7 @@ class LedgerAPI:
         promises_list = resp.json()
         self.raise_on_error(promises_list)
 
-        promises = [BlindedSignature.from_dict(p) for p in promises_list]
+        promises = [BlindedSignature(**p) for p in promises_list]
         return self._construct_proofs(promises, secrets, rs)
 
     async def split(self, proofs, amount, scnd_secret: str = None):
@@ -246,8 +250,8 @@ class LedgerAPI:
         promises_dict = resp.json()
         self.raise_on_error(promises_dict)
 
-        promises_fst = [BlindedSignature.from_dict(p) for p in promises_dict["fst"]]
-        promises_snd = [BlindedSignature.from_dict(p) for p in promises_dict["snd"]]
+        promises_fst = [BlindedSignature(**p) for p in promises_dict["fst"]]
+        promises_snd = [BlindedSignature(**p) for p in promises_dict["snd"]]
         # Construct proofs from promises (i.e., unblind signatures)
         frst_proofs = self._construct_proofs(
             promises_fst, secrets[: len(promises_fst)], rs[: len(promises_fst)]
@@ -340,7 +344,10 @@ class Wallet(LedgerAPI):
         return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
 
     async def request_mint(self, amount):
-        return super().request_mint(amount)
+        invoice = super().request_mint(amount)
+        invoice.time_created = int(time.time())
+        await store_lightning_invoice(db=self.db, invoice=invoice)
+        return invoice
 
     async def mint(self, amount: int, payment_hash: str = None):
         split = amount_split(amount)
@@ -348,6 +355,10 @@ class Wallet(LedgerAPI):
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
+        if payment_hash:
+            await update_lightning_invoice(
+                db=self.db, hash=payment_hash, paid=True, time_paid=int(time.time())
+            )
         self.proofs += proofs
         return proofs
 
@@ -389,6 +400,14 @@ class Wallet(LedgerAPI):
         status = await super().pay_lightning(proofs, invoice)
         if status["paid"] == True:
             await self.invalidate(proofs)
+            invoice_obj = Invoice(
+                amount=-sum_proofs(proofs),
+                pr=invoice,
+                preimage=status.get("preimage"),
+                paid=True,
+                time_paid=time.time(),
+            )
+            await store_lightning_invoice(db=self.db, invoice=invoice_obj)
         else:
             raise Exception("could not pay invoice.")
         return status["paid"]

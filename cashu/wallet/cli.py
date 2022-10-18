@@ -85,14 +85,14 @@ async def invoice(ctx, amount: int, hash: str):
     if not LIGHTNING:
         r = await wallet.mint(amount)
     elif amount and not hash:
-        r = await wallet.request_mint(amount)
-        if "pr" in r:
+        invoice = await wallet.request_mint(amount)
+        if invoice.pr:
             print(f"Pay invoice to mint {amount} sat:")
             print("")
-            print(f"Invoice: {r['pr']}")
+            print(f"Invoice: {invoice.pr}")
             print("")
             print(
-                f"Execute this command if you abort the check:\ncashu invoice {amount} --hash {r['hash']}"
+                f"Execute this command if you abort the check:\ncashu invoice {amount} --hash {invoice.hash}"
             )
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
@@ -105,7 +105,7 @@ async def invoice(ctx, amount: int, hash: str):
             while time.time() < check_until and not paid:
                 time.sleep(3)
                 try:
-                    await wallet.mint(amount, r["hash"])
+                    await wallet.mint(amount, invoice.hash)
                     paid = True
                     print(" Invoice paid.")
                 except Exception as e:
@@ -221,7 +221,7 @@ async def receive(ctx, coin: str, lock: str):
         signature = p2shscripts[0].signature
     else:
         script, signature = None, None
-    proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(coin))]
+    proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(coin))]
     _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
     wallet.status()
 
@@ -250,9 +250,7 @@ async def burn(ctx, coin: str, all: bool, force: bool):
         proofs = wallet.proofs
     else:
         # check only the specified ones
-        proofs = [
-            Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(coin))
-        ]
+        proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(coin))]
     wallet.status()
     await wallet.invalidate(proofs)
     wallet.status()

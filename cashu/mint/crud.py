@@ -135,7 +135,7 @@ async def get_lightning_invoice(
         """,
         (hash,),
     )
-    return Invoice.from_row(row)
+    return Invoice(**row)
 
 
 async def update_lightning_invoice(
@@ -204,4 +204,4 @@ async def get_keyset(
         """,
         tuple(values),
     )
-    return [MintKeyset.from_row(row) for row in rows]
+    return [MintKeyset(**row) for row in rows]
