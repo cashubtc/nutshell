@@ -220,7 +220,7 @@ async def receive(ctx, coin: str, lock: str):
     wallet.status()
 
 
-@cli.command("burn", help="Burn spent coins. After spednding some coins you need to burn them to prevent the wallet to do a double spent."
+@cli.command("burn", help="Burn spent coins. After spending some coins you need to burn them to prevent the wallet to do a double spent."
                           "This will be blocked by the mint, cause it holds the info about all spent coins .")
 @click.argument("coin", required=False, type=str)
 @click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent coins.")
