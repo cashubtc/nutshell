@@ -120,7 +120,7 @@ async def invoice(ctx, amount: int, hash: str):
     return
 
 
-@cli.command("pay", help="Pay a Lightning invoice to send you tokens from the mint into the Lightning Network.")
+@cli.command("pay", help="Pay a Lightning invoice to send you tokens from the mint back into the Lightning Network.")
 @click.argument("invoice", type=str)
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
@@ -221,7 +221,7 @@ async def receive(ctx, coin: str, lock: str):
 
 
 @cli.command("burn", help="Burn spent coins. After spending some coins you need to burn them to prevent the wallet to do a double spent."
-                          "This will be blocked by the mint, cause it holds the info about all spent coins .")
+                          "This will be blocked by the mint, cause it holds the info about all spent coins.")
 @click.argument("coin", required=False, type=str)
 @click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent coins.")
 @click.option(
@@ -251,8 +251,8 @@ async def burn(ctx, coin: str, all: bool, force: bool):
     wallet.status()
 
 
-@cli.command("pending", help="Show pending coins. This shows all the coins that was already used to send but not claimed yet by the receiver."
-                             "If you want to cancel the send ,you can claim the cains again with the receive command")
+@cli.command("pending", help="Show pending coins. This shows all the coins that was already used to send, but not claimed yet by the receiver."
+                             "If you want to cancel the send, you can claim the coins again with the receive command.")
 @click.pass_context
 @coro
 async def pending(ctx):
