@@ -1,7 +1,7 @@
 # Notation
 
-Sending user: `Alice`
-Receivung user: `Carol`
+Sending user: `Alice`<br>
+Receiving user: `Carol`<br>
 Mint: `Bob`
 
 ## Bob (mint)
@@ -15,7 +15,7 @@ Mint: `Bob`
 - `T` blinded message
 - `Z` proof (unblinded signature)
 
-# Blind Diffie-Hellmann key exchange (BDH)
+# Blind Diffie-Hellman key exchange (BDH)
 -   Mint `Bob` publishes `K = kG` 
 -   `Alice` picks secret `x` and computes `Y = hash_to_curve(x)` 
 -   `Alice` sends to `Bob`: `T = Y + rG` with `r` being a random nonce
