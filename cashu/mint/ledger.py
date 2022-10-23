@@ -64,11 +64,13 @@ class Ledger:
         if not len(tmp_keyset_local):
             logger.debug(f"Storing keyset {keyset.id}.")
             await self.crud.store_keyset(keyset=keyset, db=self.db)
+
+        # store the new keyset in the current keysets
+        self.keysets.keysets[keyset.id] = keyset
         return keyset
 
     async def init_keysets(self):
         """Loads all keysets from db."""
-        self.keyset = await self.load_keyset(self.derivation_path)
         # load all past keysets from db
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
         self.keysets = MintKeysets(tmp_keysets)
@@ -77,6 +79,8 @@ class Ledger:
         for _, v in self.keysets.keysets.items():
             logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
+        # load the current keyset
+        self.keyset = await self.load_keyset(self.derivation_path)
 
     async def _generate_promises(
         self, B_s: List[BlindedMessage], keyset: MintKeyset = None
