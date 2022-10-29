@@ -27,8 +27,8 @@ from cashu.core.settings import (
     MINT_URL,
     SOCKS_HOST,
     SOCKS_PORT,
-    VERSION,
     TOR,
+    VERSION,
 )
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
