@@ -43,9 +43,14 @@ class TorProxy:
         cmd = [f"{self.tor_path()}", "--defaults-torrc", f"{self.tor_config_path()}"]
         if self.keep_alive and platform.system() != "Windows":
             cmd = ["timeout", f"{self.keep_alive}"] + cmd
+        env = dict(os.environ)
+        if platform.system() == "Linux":
+            env["LD_LIBRARY_PATH"] = os.path.dirname(self.tor_path())
+        elif platform.system() == "Darwin":
+            env["DYLD_LIBRARY_PATH"] = os.path.dirname(self.tor_path())
         self.tor_proc = subprocess.Popen(
             cmd,
-            cwd=os.path.dirname(self.tor_path()),
+            env=env,
             shell=False,
             close_fds=True,
             stdout=subprocess.PIPE,
