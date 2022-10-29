@@ -19,7 +19,16 @@ from loguru import logger
 from cashu.core.base import Proof
 from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
+from cashu.core.settings import (
+    CASHU_DIR,
+    DEBUG,
+    ENV_FILE,
+    LIGHTNING,
+    MINT_URL,
+    VERSION,
+    SOCKS_HOST,
+    SOCKS_PORT,
+)
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
     get_lightning_invoices,
@@ -387,10 +396,13 @@ async def wallets(ctx):
 @coro
 async def info(ctx):
     print(f"Version: {VERSION}")
-    print(f"Debug: {DEBUG}")
+    print(f"Wallet: {ctx.obj['WALLET_NAME']}")
+    if DEBUG:
+        print(f"Debug: {DEBUG}")
     print(f"Cashu dir: {CASHU_DIR}")
     if ENV_FILE:
         print(f"Settings: {ENV_FILE}")
-    print(f"Wallet: {ctx.obj['WALLET_NAME']}")
+    if SOCKS_HOST:
+        print(f"Socks proxy: {SOCKS_HOST}:{SOCKS_PORT}")
     print(f"Mint URL: {MINT_URL}")
     return

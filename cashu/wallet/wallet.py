@@ -35,7 +35,7 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG, VERSION
+from cashu.core.settings import DEBUG, VERSION, SOCKS_HOST, SOCKS_PORT
 from cashu.core.split import amount_split
 from cashu.wallet.crud import (
     get_keyset,
@@ -57,8 +57,20 @@ class LedgerAPI:
 
     def __init__(self, url):
         self.url = url
-        self.s = requests.Session()
+        self.s = self._set_requests()
         self.s.headers.update({"Client-version": VERSION})
+
+    def _set_requests(self):
+        s = requests.Session()
+        if SOCKS_HOST:
+            proxies = {
+                "http": f"socks5://{SOCKS_HOST}:{SOCKS_PORT}",
+                "https": f"socks5://{SOCKS_HOST}:{SOCKS_PORT}",
+            }
+            s.proxies.update(proxies)
+            s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
+
+        return s
 
     def _construct_proofs(
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[str]
