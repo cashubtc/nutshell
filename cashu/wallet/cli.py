@@ -28,6 +28,7 @@ from cashu.core.settings import (
     SOCKS_HOST,
     SOCKS_PORT,
     VERSION,
+    TOR,
 )
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
@@ -402,6 +403,7 @@ async def info(ctx):
     print(f"Cashu dir: {CASHU_DIR}")
     if ENV_FILE:
         print(f"Settings: {ENV_FILE}")
+    print(f"Tor enabled: {TOR}")
     if SOCKS_HOST:
         print(f"Socks proxy: {SOCKS_HOST}:{SOCKS_PORT}")
     print(f"Mint URL: {MINT_URL}")
