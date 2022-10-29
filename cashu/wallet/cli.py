@@ -160,9 +160,17 @@ async def pay(ctx, invoice: str, yes: bool):
 
 
 @cli.command("balance", help="Balance.")
+@click.option(
+    "--verbose",
+    "-v",
+    default=False,
+    is_flag=True,
+    help="Show pending tokens as well.",
+    type=bool,
+)
 @click.pass_context
 @coro
-async def balance(ctx):
+async def balance(ctx, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
     keyset_balances = wallet.balance_per_keyset()
     if len(keyset_balances) > 1:
@@ -173,9 +181,12 @@ async def balance(ctx):
                 f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']} sat)"
             )
         print("")
-    print(
-        f"Balance: {wallet.balance} sat (available: {wallet.available_balance} sat in {len([p for p in wallet.proofs if not p.reserved])} tokens)"
-    )
+    if verbose:
+        print(
+            f"Balance: {wallet.balance} sat (available: {wallet.available_balance} sat in {len([p for p in wallet.proofs if not p.reserved])} tokens)"
+        )
+    else:
+        print(f"Balance: {wallet.available_balance} sat")
 
 
 @cli.command("send", help="Send coins.")

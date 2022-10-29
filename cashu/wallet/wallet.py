@@ -552,9 +552,10 @@ class Wallet(LedgerAPI):
         return sum_proofs([p for p in self.proofs if not p.reserved])
 
     def status(self):
-        print(
-            f"Balance: {self.balance} sat (available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
-        )
+        # print(
+        #     f"Balance: {self.balance} sat (available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
+        # )
+        print(f"Balance: {self.available_balance} sat")
 
     def balance_per_keyset(self):
         return {
