@@ -91,15 +91,21 @@ class TorProxy:
         # current attached process running
         return self.tor_proc and self.tor_proc.poll() is None
 
-    def wait_until_startup(self):
+    def wait_until_startup(self, verbose=False):
         if self.is_port_open():
             return
         if self.tor_proc is None:
             raise Exception("Tor proxy not attached.")
         if not self.tor_proc.stdout:
             raise Exception("could not get tor stdout.")
+        if verbose:
+            print("Starting Tor...", end="", flush=True)
         for line in self.tor_proc.stdout:
+            if verbose:
+                print(".", end="", flush=True)
             if "Bootstrapped 100%: Done" in str(line):
+                if verbose:
+                    print("done.", flush=True)
                 break
         # tor is ready
         self.startup_finished = True
