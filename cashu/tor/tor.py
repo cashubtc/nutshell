@@ -45,6 +45,7 @@ class TorProxy:
             cmd = ["timeout", f"{self.keep_alive}"] + cmd
         self.tor_proc = subprocess.Popen(
             cmd,
+            cwd=os.path.dirname(self.tor_path()),
             shell=False,
             close_fds=True,
             stdout=subprocess.PIPE,
