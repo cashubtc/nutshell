@@ -23,6 +23,8 @@ jobs:
           poetry-version: ${{ matrix.poetry-version }}
       - name: Set up Chocolately ${{ matrix.os }}
         uses: crazy-max/ghaction-chocolatey@v2
+        with:
+          args: -h
       - name: Install dependencies
         run: |
           if [ '$RUNNER_OS' == 'windows-latest' ]; then
