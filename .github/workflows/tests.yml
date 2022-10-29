@@ -35,6 +35,7 @@ jobs:
           LIGHTNING: False
           MINT_HOST: localhost
           MINT_PORT: 3338
+          TOR: False
         run: |
           poetry run pytest tests --cov-report xml --cov cashu
       - name: Upload coverage to Codecov
