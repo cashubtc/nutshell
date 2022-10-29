@@ -64,8 +64,7 @@ class LedgerAPI:
     def _set_requests(self):
         s = requests.Session()
         if TOR:
-            # overwrite custom settings
-            tor = TorProxy()
+            tor = TorProxy(keep_alive=True)
             tor.wait_until_startup()
             socks_host, socks_port = "localhost", 9050
         else:
@@ -78,7 +77,6 @@ class LedgerAPI:
             }
             s.proxies.update(proxies)
             s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
-        print(s.get(self.url + "/keys").json())
 
         return s
 

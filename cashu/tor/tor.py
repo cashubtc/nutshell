@@ -9,10 +9,10 @@ from loguru import logger
 
 
 class TorProxy:
-    def __init__(self):
+    def __init__(self, keep_alive=False):
         self.base_path = pathlib.Path(__file__).parent.resolve()
         self.platform = platform.system()
-        self.keep_alive = 60 * 60  # seconds
+        self.keep_alive = 60 * 60 if keep_alive else 0  # seconds
         self.tor_proc = None
         self.pid_file = os.path.join(self.base_path, "tor.pid")
         self.tor_pid = None
@@ -32,14 +32,15 @@ class TorProxy:
             self.run_daemon()
 
     def run_daemon(self):
+        cmd = [
+            f"{self.tor_path()}",
+            "--defaults-torrc",
+            f"{self.tor_config_path()}",
+        ]
+        if self.keep_alive and platform.system() != "Windows":
+            cmd = ["timeout", f"{self.keep_alive}"] + cmd
         self.tor_proc = subprocess.Popen(
-            [
-                "timeout",
-                "20",
-                f"{self.tor_path()}",
-                "--defaults-torrc",
-                f"{self.tor_config_path()}",
-            ],
+            cmd,
             shell=False,
             close_fds=True,
             stdout=subprocess.PIPE,
@@ -68,7 +69,7 @@ class TorProxy:
         # make sure that file has correct permissions
         try:
             logger.debug(f"Setting permissions of {PATHS[platform.system()]} to 755")
-            os.chmod(PATHS[platform.system()], 755)
+            os.chmod(PATHS[platform.system()], 0o755)
         except:
             raise Exception("error setting permissions for tor binary.")
         return PATHS[platform.system()]
