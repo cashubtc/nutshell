@@ -7,7 +7,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [windows-latest]
         python-version: ["3.9"]
         poetry-version: ["1.2.1"]
     steps:
@@ -20,8 +20,13 @@ jobs:
         uses: abatilo/actions-poetry@v2
         with:
           poetry-version: ${{ matrix.poetry-version }}
+      - name: Set up Chocolately ${{ matrix.os }}
+        uses: crazy-max/ghaction-chocolatey@v2
+        with:
+          args: -h
       - name: Install dependencies
         run: |
+          choco install pkgconfiglite
           poetry install --with dev
         shell: bash
       - name: Run mint
