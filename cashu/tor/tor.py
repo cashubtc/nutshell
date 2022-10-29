@@ -15,32 +15,30 @@ class TorProxy:
         self.tor_proc = None
         self.pid_file = os.path.join(self.base_path, "tor.pid")
         self.tor_pid = None
-        logger.info(f"Tor running: {self.is_running()}")
-        logger.info(
+        self.startup_finished = True
+        self.tor_running = self.is_running()
+        logger.debug(f"Tor running: {self.tor_running}")
+        logger.debug(
             f"Tor port open: {self.is_port_open()}",
         )
-        logger.info(f"Tor binary path: {self.tor_path()}")
-        logger.info(f"Tor config path: {self.tor_config_path()}")
-        logger.info(f"Tor PID in tor.pid: {self.read_pid()}")
-        logger.info(f"Tor PID running: {self.signal_pid(self.read_pid())}")
-        self.run_daemon()
+        logger.debug(f"Tor binary path: {self.tor_path()}")
+        logger.debug(f"Tor config path: {self.tor_config_path()}")
+        logger.debug(f"Tor PID in tor.pid: {self.read_pid()}")
+        logger.debug(f"Tor PID running: {self.signal_pid(self.read_pid())}")
+
+        if not self.tor_running:
+            logger.debug("Starting")
+            self.run_daemon()
 
     def run_daemon(self):
-        if self.is_port_open() and not self.is_running():
-            raise Exception(
-                "Another Tor instance seems to be already running on port 9050."
-            )
-        if self.is_running():
-            logger.info("Tor proxy already running.")
-            return
-
         self.tor_proc = subprocess.Popen(
             [f"{self.tor_path()}", "--defaults-torrc", f"{self.tor_config_path()}"],
             shell=False,
+            close_fds=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
-        logger.info("Running tor daemon with pid {}".format(self.tor_proc.pid))
+        logger.debug("Running tor daemon with pid {}".format(self.tor_proc.pid))
         with open(self.pid_file, "w", encoding="utf-8") as f:
             f.write(str(self.tor_proc.pid))
 
@@ -71,6 +69,34 @@ class TorProxy:
     def tor_config_path(self):
         return os.path.join(self.base_path, "torrc")
 
+    def is_running(self):
+        # our tor proxy running from a previous session
+        if self.signal_pid(self.read_pid()):
+            logger.debug("Tor proxy already running.")
+            return True
+        # another tor proxy is running
+        if self.is_port_open():
+            logger.debug(
+                "Another Tor instance seems to be already running on port 9050."
+            )
+            return True
+        # current attached process running
+        return self.tor_proc and self.tor_proc.poll() is None
+
+    def wait_until_startup(self):
+        if self.is_port_open():
+            return
+        if self.tor_proc is None:
+            raise Exception("Tor proxy not attached.")
+        if not self.tor_proc.stdout:
+            raise Exception("could not get tor stdout.")
+        for line in self.tor_proc.stdout:
+            if "Bootstrapped 100%: Done" in str(line):
+                break
+        # tor is ready
+        self.startup_finished = True
+        return
+
     def is_port_open(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         location = ("127.0.0.1", 9050)
@@ -80,9 +106,6 @@ class TorProxy:
             return True
         except Exception as e:
             return False
-
-    def is_running(self):
-        return self.tor_proc is not None
 
     def read_pid(self):
         if not os.path.isfile(self.pid_file):
@@ -101,7 +124,6 @@ class TorProxy:
         """
         if not pid:
             return False
-        print(f"running {pid} with signal={signal}")
         if not int(pid) > 0:
             return False
         pid = int(pid)
@@ -115,6 +137,7 @@ class TorProxy:
 
 if __name__ == "__main__":
     tor = TorProxy()
-    time.sleep(5)
-    logger.info("Killing Tor")
-    tor.stop_daemon()
+    tor.wait_until_startup()
+    # time.sleep(5)
+    # logger.debug("Killing Tor")
+    # tor.stop_daemon()

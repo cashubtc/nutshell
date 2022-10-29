@@ -35,7 +35,7 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG, VERSION, SOCKS_HOST, SOCKS_PORT
+from cashu.core.settings import DEBUG, VERSION, TOR, SOCKS_HOST, SOCKS_PORT
 from cashu.core.split import amount_split
 from cashu.wallet.crud import (
     get_keyset,
@@ -50,6 +50,8 @@ from cashu.wallet.crud import (
     update_proof_reserved,
 )
 
+from cashu.tor.tor import TorProxy
+
 
 class LedgerAPI:
     keys: Dict[int, str]
@@ -62,13 +64,22 @@ class LedgerAPI:
 
     def _set_requests(self):
         s = requests.Session()
-        if SOCKS_HOST:
+        if TOR:
+            # overwrite custom settings
+            tor = TorProxy()
+            tor.wait_until_startup()
+            socks_host, socks_port = "localhost", 9050
+        else:
+            socks_host, socks_port = SOCKS_HOST, SOCKS_PORT
+
+        if socks_host and socks_port:
             proxies = {
-                "http": f"socks5://{SOCKS_HOST}:{SOCKS_PORT}",
-                "https": f"socks5://{SOCKS_HOST}:{SOCKS_PORT}",
+                "http": f"socks5://{socks_host}:{socks_port}",
+                "https": f"socks5://{socks_host}:{socks_port}",
             }
             s.proxies.update(proxies)
             s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
+        print(s.get(self.url + "/keys").json())
 
         return s
 
