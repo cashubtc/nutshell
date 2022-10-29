@@ -3,8 +3,9 @@ import pathlib
 import platform
 import socket
 import subprocess
-from loguru import logger
 import time
+
+from loguru import logger
 
 
 class TorProxy:

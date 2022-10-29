@@ -25,9 +25,9 @@ from cashu.core.settings import (
     ENV_FILE,
     LIGHTNING,
     MINT_URL,
-    VERSION,
     SOCKS_HOST,
     SOCKS_PORT,
+    VERSION,
 )
 from cashu.wallet import migrations
 from cashu.wallet.crud import (

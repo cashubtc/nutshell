@@ -35,8 +35,9 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG, VERSION, TOR, SOCKS_HOST, SOCKS_PORT
+from cashu.core.settings import DEBUG, SOCKS_HOST, SOCKS_PORT, TOR, VERSION
 from cashu.core.split import amount_split
+from cashu.tor.tor import TorProxy
 from cashu.wallet.crud import (
     get_keyset,
     get_proofs,
@@ -49,8 +50,6 @@ from cashu.wallet.crud import (
     update_lightning_invoice,
     update_proof_reserved,
 )
-
-from cashu.tor.tor import TorProxy
 
 
 class LedgerAPI:
