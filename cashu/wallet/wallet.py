@@ -62,10 +62,16 @@ class LedgerAPI:
     def _set_requests(self):
         s = requests.Session()
         s.headers.update({"Client-version": VERSION})
+        socks_host, socks_port = None, None
         if TOR:
             tor = TorProxy(keep_alive=True)
-            tor.wait_until_startup(verbose=True)
-            socks_host, socks_port = "localhost", 9050
+            if not tor.check_platform():
+                print(
+                    "WARNING: The built-in Tor bundle is not supported on your System. Please install Tor and set the SOCKS_HOST and SOCKS_PORT variables in your Cashu configuration .env file (recommended) or turn off tor by setting TOR=false (not recommended)."
+                )
+            else:
+                tor.wait_until_startup(verbose=True)
+                socks_host, socks_port = "localhost", 9050
         else:
             socks_host, socks_port = SOCKS_HOST, SOCKS_PORT
 

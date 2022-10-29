@@ -31,7 +31,15 @@ class TorProxy:
             logger.debug("Starting")
             self.run_daemon()
 
+    def check_platform(self):
+        if platform.system() == "Linux":
+            if platform.machine() != "x86_64":
+                return False
+        return True
+
     def run_daemon(self):
+        if not self.check_platform():
+            return
         cmd = [
             f"{self.tor_path()}",
             "--defaults-torrc",
@@ -92,6 +100,8 @@ class TorProxy:
         return self.tor_proc and self.tor_proc.poll() is None
 
     def wait_until_startup(self, verbose=False):
+        if not self.check_platform():
+            return
         if self.is_port_open():
             return
         if self.tor_proc is None:
