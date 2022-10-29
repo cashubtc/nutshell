@@ -1,7 +1,10 @@
 import requests
+import pytest
+
 from cashu.tor.tor import TorProxy
 
 
+@pytest.mark.skip
 def test_tor_setup():
     s = requests.Session()
 
