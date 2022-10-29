@@ -1,5 +1,5 @@
-import requests
 import pytest
+import requests
 
 from cashu.tor.tor import TorProxy
 
