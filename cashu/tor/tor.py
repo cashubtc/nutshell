@@ -40,11 +40,7 @@ class TorProxy:
     def run_daemon(self):
         if not self.check_platform():
             return
-        cmd = [
-            f"{self.tor_path()}",
-            "--defaults-torrc",
-            f"{self.tor_config_path()}",
-        ]
+        cmd = [f"{self.tor_path()}", "--defaults-torrc", f"{self.tor_config_path()}"]
         if self.keep_alive and platform.system() != "Windows":
             cmd = ["timeout", f"{self.keep_alive}"] + cmd
         self.tor_proc = subprocess.Popen(
@@ -53,6 +49,7 @@ class TorProxy:
             close_fds=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
+            start_new_session=True,
         )
         logger.debug("Running tor daemon with pid {}".format(self.tor_proc.pid))
         with open(self.pid_file, "w", encoding="utf-8") as f:
@@ -111,9 +108,10 @@ class TorProxy:
         if verbose:
             print("Starting Tor...", end="", flush=True)
         for line in self.tor_proc.stdout:
+            # print(line)
             if verbose:
                 print(".", end="", flush=True)
-            if "Bootstrapped 100%: Done" in str(line):
+            if "Bootstrapped 100%" in str(line):
                 if verbose:
                     print("done.", flush=True)
                 break
@@ -161,7 +159,7 @@ class TorProxy:
 
 if __name__ == "__main__":
     tor = TorProxy()
-    tor.wait_until_startup()
+    tor.wait_until_startup(verbose=True)
     # time.sleep(5)
     # logger.debug("Killing Tor")
     # tor.stop_daemon()
