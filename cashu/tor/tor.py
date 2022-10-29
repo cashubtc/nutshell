@@ -33,7 +33,13 @@ class TorProxy:
 
     def run_daemon(self):
         self.tor_proc = subprocess.Popen(
-            [f"{self.tor_path()}", "--defaults-torrc", f"{self.tor_config_path()}"],
+            [
+                "timeout",
+                "20",
+                f"{self.tor_path()}",
+                "--defaults-torrc",
+                f"{self.tor_config_path()}",
+            ],
             shell=False,
             close_fds=True,
             stdout=subprocess.PIPE,
@@ -55,7 +61,7 @@ class TorProxy:
 
     def tor_path(self):
         PATHS = {
-            "Windows": os.path.join(self.base_path, "bundle", "win", "tor.exe"),
+            "Windows": os.path.join(self.base_path, "bundle", "win", "Tor", "tor.exe"),
             "Linux": os.path.join(self.base_path, "bundle", "linux", "tor"),
             "Darwin": os.path.join(self.base_path, "bundle", "mac", "tor"),
         }
