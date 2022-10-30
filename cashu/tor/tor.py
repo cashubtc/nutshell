@@ -31,7 +31,8 @@ class TorProxy:
             logger.debug("Starting")
             self.run_daemon()
 
-    def check_platform(self):
+    @classmethod
+    def check_platform(cls):
         if platform.system() == "Linux":
             if platform.machine() != "x86_64":
                 return False
@@ -119,7 +120,7 @@ class TorProxy:
                 print(".", end="", flush=True)
             if "Bootstrapped 100%" in str(line):
                 if verbose:
-                    print("done.", flush=True)
+                    print("done", flush=True)
                 break
         # tor is ready
         self.startup_finished = True
