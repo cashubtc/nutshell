@@ -9,7 +9,7 @@ from loguru import logger
 
 
 class TorProxy:
-    def __init__(self, keep_alive=False):
+    def __init__(self, keep_alive=False, dont_start=False):
         self.base_path = pathlib.Path(__file__).parent.resolve()
         self.platform = platform.system()
         self.keep_alive = 60 * 60 if keep_alive else 0  # seconds
@@ -27,8 +27,7 @@ class TorProxy:
         logger.debug(f"Tor PID in tor.pid: {self.read_pid()}")
         logger.debug(f"Tor PID running: {self.signal_pid(self.read_pid())}")
 
-        if not self.tor_running:
-            logger.debug("Starting")
+        if not self.tor_running and not dont_start:
             self.run_daemon()
 
     @classmethod
@@ -41,6 +40,7 @@ class TorProxy:
     def run_daemon(self):
         if not self.check_platform():
             return
+        logger.debug("Starting Tor")
         cmd = [f"{self.tor_path()}", "--defaults-torrc", f"{self.tor_config_path()}"]
         if self.keep_alive and platform.system() != "Windows":
             cmd = ["timeout", f"{self.keep_alive}"] + cmd
