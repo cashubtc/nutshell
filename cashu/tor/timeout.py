@@ -2,9 +2,9 @@
 import os
 import signal
 import subprocess
-from symbol import except_clause
 import sys
 import time
+from symbol import except_clause
 
 
 def main():
