@@ -2,39 +2,34 @@
 import os
 import signal
 import subprocess
+from symbol import except_clause
 import sys
 import time
 
 
 def main():
     assert len(sys.argv) > 2, "Usage: timeout.py [seconds] [command...]"
-    cmd = " ".join(sys.argv[2:])
+    # cmd = " ".join(sys.argv[2:]) # for with shell=True
+    cmd = sys.argv[2:]
     timeout = int(sys.argv[1])
-    start_time = time.time()
     assert timeout > 0, "timeout (in seconds) must be a positive integer."
+    start_time = time.time()
 
-    pro = subprocess.Popen(cmd, shell=True)
+    pro = subprocess.Popen(cmd, shell=False)
 
-    while time.time() < start_time + timeout:
+    while time.time() < start_time + timeout + 1:
         time.sleep(1)
-        # check if process is still running
-        try:
-            os.getpgid(pro.pid)
-        except ProcessLookupError:
-            break
+    pro.terminate()
+    pro.wait()
+    pro.kill()
+    pro.wait()
 
-    # terminate process
-    try:
-        os.killpg(os.getpgid(pro.pid), signal.SIGTERM)
-    except ProcessLookupError:
-        return
+    # we kill the child processes as well (tor.py and tor) just to be sure
+    os.kill(pro.pid + 1, 15)
+    os.kill(pro.pid + 1, 9)
 
-    # kill process
-    time.sleep(1.0)
-    try:
-        os.killpg(os.getpgid(pro.pid), signal.SIGKILL)
-    except ProcessLookupError:
-        return
+    os.kill(pro.pid + 2, 15)
+    os.kill(pro.pid + 2, 9)
 
 
 if __name__ == "__main__":

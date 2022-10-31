@@ -92,6 +92,35 @@ def coro(f):
     return wrapper
 
 
+@cli.command("pay", help="Pay Lightning invoice.")
+@click.argument("invoice", type=str)
+@click.option(
+    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
+)
+@click.pass_context
+@coro
+async def pay(ctx, invoice: str, yes: bool):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    wallet.status()
+    amount, fees = await wallet.get_pay_amount_with_fees(invoice)
+    if not yes:
+        click.confirm(
+            f"Pay {amount - fees} sat ({amount} sat incl. fees)?",
+            abort=True,
+            default=True,
+        )
+
+    print(f"Paying Lightning invoice ...")
+    assert amount > 0, "amount is not positive"
+    if wallet.available_balance < amount:
+        print("Error: Balance too low.")
+        return
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    await wallet.pay_lightning(send_proofs, invoice)
+    wallet.status()
+
+
 @cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=int)
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
@@ -138,35 +167,6 @@ async def invoice(ctx, amount: int, hash: str):
     return
 
 
-@cli.command("pay", help="Pay Lightning invoice.")
-@click.argument("invoice", type=str)
-@click.option(
-    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
-)
-@click.pass_context
-@coro
-async def pay(ctx, invoice: str, yes: bool):
-    wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_mint()
-    wallet.status()
-    amount, fees = await wallet.get_pay_amount_with_fees(invoice)
-    if not yes:
-        click.confirm(
-            f"Pay {amount - fees} sat ({amount} sat incl. fees)?",
-            abort=True,
-            default=True,
-        )
-
-    print(f"Paying Lightning invoice ...")
-    assert amount > 0, "amount is not positive"
-    if wallet.available_balance < amount:
-        print("Error: Balance too low.")
-        return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
-    await wallet.pay_lightning(send_proofs, invoice)
-    wallet.status()
-
-
 @cli.command("balance", help="Balance.")
 @click.option(
     "--verbose",
@@ -197,9 +197,9 @@ async def balance(ctx, verbose):
         print(f"Balance: {wallet.available_balance} sat")
 
 
-@cli.command("send", help="Send coins.")
+@cli.command("send", help="Send tokens.")
 @click.argument("amount", type=int)
-@click.option("--lock", "-l", default=None, help="Lock coins (P2SH).", type=str)
+@click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
 @click.pass_context
 @coro
 async def send(ctx, amount: int, lock: str):
@@ -215,19 +215,19 @@ async def send(ctx, amount: int, lock: str):
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, amount, lock, set_reserved=True
     )
-    coin = await wallet.serialize_proofs(
+    token = await wallet.serialize_proofs(
         send_proofs, hide_secrets=True if lock and not p2sh else False
     )
-    print(coin)
+    print(token)
     wallet.status()
 
 
-@cli.command("receive", help="Receive coins.")
-@click.argument("coin", type=str)
-@click.option("--lock", "-l", default=None, help="Unlock coins.", type=str)
+@cli.command("receive", help="Receive tokens.")
+@click.argument("token", type=str)
+@click.option("--lock", "-l", default=None, help="Unlock tokens.", type=str)
 @click.pass_context
 @coro
-async def receive(ctx, coin: str, lock: str):
+async def receive(ctx, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -244,25 +244,25 @@ async def receive(ctx, coin: str, lock: str):
         signature = p2shscripts[0].signature
     else:
         script, signature = None, None
-    proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(coin))]
+    proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
     _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
     wallet.status()
 
 
-@cli.command("burn", help="Burn spent coins.")
-@click.argument("coin", required=False, type=str)
-@click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent coins.")
+@cli.command("burn", help="Burn spent tokens.")
+@click.argument("token", required=False, type=str)
+@click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent tokens.")
 @click.option(
-    "--force", "-f", default=False, is_flag=True, help="Force check on all coins."
+    "--force", "-f", default=False, is_flag=True, help="Force check on all tokens."
 )
 @click.pass_context
 @coro
-async def burn(ctx, coin: str, all: bool, force: bool):
+async def burn(ctx, token: str, all: bool, force: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    if not (all or coin or force) or (coin and all):
+    if not (all or token or force) or (token and all):
         print(
-            "Error: enter a coin or use --all to burn all pending coins or --force to check all coins."
+            "Error: enter a token or use --all to burn all pending tokens or --force to check all tokens."
         )
         return
     if all:
@@ -273,13 +273,13 @@ async def burn(ctx, coin: str, all: bool, force: bool):
         proofs = wallet.proofs
     else:
         # check only the specified ones
-        proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(coin))]
+        proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
     wallet.status()
     await wallet.invalidate(proofs)
     wallet.status()
 
 
-@cli.command("pending", help="Show pending coins.")
+@cli.command("pending", help="Show pending tokens.")
 @click.pass_context
 @coro
 async def pending(ctx):
@@ -293,8 +293,8 @@ async def pending(ctx):
             groupby(sorted_proofs, key=itemgetter("send_id"))
         ):
             grouped_proofs = list(value)
-            coin = await wallet.serialize_proofs(grouped_proofs)
-            coin_hidden_secret = await wallet.serialize_proofs(
+            token = await wallet.serialize_proofs(grouped_proofs)
+            token_hidden_secret = await wallet.serialize_proofs(
                 grouped_proofs, hide_secrets=True
             )
             reserved_date = datetime.utcfromtimestamp(
@@ -303,7 +303,7 @@ async def pending(ctx):
             print(
                 f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time: {reserved_date} ID: {key}\n"
             )
-            print(f"With secret: {coin}\n\nSecretless: {coin_hidden_secret}\n")
+            print(f"With secret: {token}\n\nSecretless: {token_hidden_secret}\n")
             print(f"--------------------------\n")
     wallet.status()
 
@@ -316,16 +316,16 @@ async def lock(ctx):
     p2shscript = await wallet.create_p2sh_lock()
     txin_p2sh_address = p2shscript.address
     print("---- Pay to script hash (P2SH) ----\n")
-    print("Use a lock to receive coins that only you can unlock.")
+    print("Use a lock to receive tokens that only you can unlock.")
     print("")
     print(f"Public receiving lock: P2SH:{txin_p2sh_address}")
     print("")
     print(
-        f"Anyone can send coins to this lock:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
+        f"Anyone can send tokens to this lock:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
     )
     print("")
     print(
-        f"Only you can receive coins from this lock:\n\ncashu receive <coin> --lock P2SH:{txin_p2sh_address}\n"
+        f"Only you can receive tokens from this lock:\n\ncashu receive <token> --lock P2SH:{txin_p2sh_address}\n"
     )
 
 
@@ -343,7 +343,7 @@ async def locks(ctx):
             print(f"Script: {l.script}")
             print(f"Signature: {l.signature}")
             print("")
-            print(f"Receive: cashu receive <coin> --lock P2SH:{l.address}")
+            print(f"Receive: cashu receive <token> --lock P2SH:{l.address}")
             print("")
             print(f"--------------------------\n")
     else:

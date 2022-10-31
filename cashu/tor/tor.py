@@ -3,6 +3,7 @@ import pathlib
 import platform
 import socket
 import subprocess
+import sys
 import time
 
 from loguru import logger
@@ -39,6 +40,7 @@ class TorProxy:
 
     def run_daemon(self, verbose=False):
         if not self.check_platform() or self.tor_running:
+            logger.debug("Exiting.")
             return
         self.log_status()
         logger.debug("Starting Tor")
@@ -46,6 +48,7 @@ class TorProxy:
         if self.timeout:
             logger.debug(f"Starting tor with timeout {self.timeout}s")
             cmd = [
+                sys.executable,
                 os.path.join(self.base_path, "timeout.py"),
                 f"{self.timeout}",
             ] + cmd
@@ -97,15 +100,11 @@ class TorProxy:
         return os.path.join(self.base_path, "torrc")
 
     def is_running(self):
+        # another tor proxy is running
+        if not self.is_port_open():
+            return False
         # our tor proxy running from a previous session
         if self.signal_pid(self.read_pid()):
-            # logger.debug("Tor proxy already running.")
-            return True
-        # another tor proxy is running
-        if self.is_port_open():
-            # logger.debug(
-            #     "Another Tor instance seems to be already running on port 9050."
-            # )
             return True
         # current attached process running
         return self.tor_proc and self.tor_proc.poll() is None
