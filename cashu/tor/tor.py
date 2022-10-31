@@ -40,7 +40,6 @@ class TorProxy:
 
     def run_daemon(self, verbose=False):
         if not self.check_platform() or self.tor_running:
-            logger.debug("Exiting.")
             return
         self.log_status()
         logger.debug("Starting Tor")
