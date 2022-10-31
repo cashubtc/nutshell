@@ -90,7 +90,7 @@ class TorProxy:
             logger.debug(f"Setting permissions of {PATHS[platform.system()]} to 755")
             os.chmod(PATHS[platform.system()], 0o755)
         except:
-            raise Exception("error setting permissions for tor binary.")
+            logger.debug("Exception: could not set permissions of Tor binary")
         return PATHS[platform.system()]
 
     def tor_config_path(self):
