@@ -4,12 +4,12 @@ import requests
 from cashu.tor.tor import TorProxy
 
 
-@pytest.mark.skip
+# @pytest.mark.skip
 def test_tor_setup():
     s = requests.Session()
 
-    tor = TorProxy(keep_alive=False)
-    tor.wait_until_startup()
+    tor = TorProxy(timeout=False)
+    tor.run_daemon()
     socks_host, socks_port = "localhost", 9050
 
     proxies = {

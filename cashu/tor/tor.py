@@ -9,41 +9,46 @@ from loguru import logger
 
 
 class TorProxy:
-    def __init__(self, keep_alive=False, dont_start=False):
+    def __init__(self, timeout=False):
         self.base_path = pathlib.Path(__file__).parent.resolve()
         self.platform = platform.system()
-        self.keep_alive = 60 * 60 if keep_alive else 0  # seconds
+        self.timeout = 60 * 60 if timeout else 0  # seconds
         self.tor_proc = None
         self.pid_file = os.path.join(self.base_path, "tor.pid")
         self.tor_pid = None
         self.startup_finished = True
         self.tor_running = self.is_running()
-        logger.debug(f"Tor running: {self.tor_running}")
-        logger.debug(
-            f"Tor port open: {self.is_port_open()}",
-        )
-        logger.debug(f"Tor binary path: {self.tor_path()}")
-        logger.debug(f"Tor config path: {self.tor_config_path()}")
-        logger.debug(f"Tor PID in tor.pid: {self.read_pid()}")
-        logger.debug(f"Tor PID running: {self.signal_pid(self.read_pid())}")
-
-        if not self.tor_running and not dont_start:
-            self.run_daemon()
 
     @classmethod
     def check_platform(cls):
         if platform.system() == "Linux":
             if platform.machine() != "x86_64":
+                logger.debug("Builtin Tor not supported on this platform.")
                 return False
         return True
 
-    def run_daemon(self):
-        if not self.check_platform():
+    def log_status(self):
+        logger.debug(f"Tor binary path: {self.tor_path()}")
+        logger.debug(f"Tor config path: {self.tor_config_path()}")
+        logger.debug(f"Tor running: {self.tor_running}")
+        logger.debug(
+            f"Tor port open: {self.is_port_open()}",
+        )
+        logger.debug(f"Tor PID in tor.pid: {self.read_pid()}")
+        logger.debug(f"Tor PID running: {self.signal_pid(self.read_pid())}")
+
+    def run_daemon(self, verbose=False):
+        if not self.check_platform() or self.tor_running:
             return
+        self.log_status()
         logger.debug("Starting Tor")
         cmd = [f"{self.tor_path()}", "--defaults-torrc", f"{self.tor_config_path()}"]
-        if self.keep_alive and platform.system() != "Windows":
-            cmd = ["timeout", f"{self.keep_alive}"] + cmd
+        if self.timeout:
+            logger.debug(f"Starting tor with timeout {self.timeout}s")
+            cmd = [
+                os.path.join(self.base_path, "timeout.py"),
+                f"{self.timeout}",
+            ] + cmd
         env = dict(os.environ)
         if platform.system() == "Linux":
             env["LD_LIBRARY_PATH"] = os.path.dirname(self.tor_path())
@@ -61,6 +66,8 @@ class TorProxy:
         logger.debug("Running tor daemon with pid {}".format(self.tor_proc.pid))
         with open(self.pid_file, "w", encoding="utf-8") as f:
             f.write(str(self.tor_proc.pid))
+
+        self.wait_until_startup(verbose=verbose)
 
     def stop_daemon(self, pid=None):
         pid = pid or self.tor_proc.pid if self.tor_proc else None
@@ -92,13 +99,13 @@ class TorProxy:
     def is_running(self):
         # our tor proxy running from a previous session
         if self.signal_pid(self.read_pid()):
-            logger.debug("Tor proxy already running.")
+            # logger.debug("Tor proxy already running.")
             return True
         # another tor proxy is running
         if self.is_port_open():
-            logger.debug(
-                "Another Tor instance seems to be already running on port 9050."
-            )
+            # logger.debug(
+            #     "Another Tor instance seems to be already running on port 9050."
+            # )
             return True
         # current attached process running
         return self.tor_proc and self.tor_proc.poll() is None
@@ -165,8 +172,8 @@ class TorProxy:
 
 
 if __name__ == "__main__":
-    tor = TorProxy()
-    tor.wait_until_startup(verbose=True)
+    tor = TorProxy(timeout=True)
+    tor.run_daemon(verbose=True)
     # time.sleep(5)
     # logger.debug("Killing Tor")
     # tor.stop_daemon()

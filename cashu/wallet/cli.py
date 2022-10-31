@@ -72,7 +72,7 @@ def cli(ctx, host: str, walletname: str):
     ctx.obj["WALLET_NAME"] = walletname
     wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, walletname))
 
-    if TOR and not TorProxy(dont_start=True).check_platform():
+    if TOR and not TorProxy().check_platform():
         print(
             "WARNING: Your settings say TOR=true but the built-in Tor bundle is not supported on your system. Your IP will be visible to the mint! Please install Tor manually and set TOR=false and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended) or turn off Tor altogether by setting TOR=false (not recommended)."
         )

@@ -64,9 +64,9 @@ class LedgerAPI:
         s = requests.Session()
         s.headers.update({"Client-version": VERSION})
         socks_host, socks_port = None, None
-        if TOR and TorProxy(dont_start=True).check_platform():
-            self.tor = TorProxy(keep_alive=True)
-            self.tor.wait_until_startup(verbose=True)
+        if TOR and TorProxy().check_platform():
+            self.tor = TorProxy(timeout=True)
+            self.tor.run_daemon(verbose=True)
             socks_host, socks_port = "localhost", 9050
         else:
             socks_host, socks_port = SOCKS_HOST, SOCKS_PORT
