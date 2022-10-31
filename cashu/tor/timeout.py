@@ -1,10 +1,8 @@
 #!/usr/bin/env python
 import os
-import signal
 import subprocess
 import sys
 import time
-from symbol import except_clause
 
 
 def main():
