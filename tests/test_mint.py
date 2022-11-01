@@ -1,11 +1,9 @@
-import time
 from typing import List
 
 import pytest
 import pytest_asyncio
 
 from cashu.core.base import BlindedMessage, Proof
-from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
 
 SERVER_ENDPOINT = "http://localhost:3338"
@@ -13,8 +11,7 @@ SERVER_ENDPOINT = "http://localhost:3338"
 import os
 
 from cashu.core.db import Database
-from cashu.core.settings import MAX_ORDER, MINT_PRIVATE_KEY
-from cashu.lightning.lnbits import LNbitsWallet
+from cashu.core.settings import MAX_ORDER
 from cashu.mint import migrations
 from cashu.mint.ledger import Ledger
 

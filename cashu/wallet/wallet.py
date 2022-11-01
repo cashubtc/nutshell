@@ -35,8 +35,9 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG, VERSION
+from cashu.core.settings import DEBUG, SOCKS_HOST, SOCKS_PORT, TOR, VERSION
 from cashu.core.split import amount_split
+from cashu.tor.tor import TorProxy
 from cashu.wallet.crud import (
     get_keyset,
     get_proofs,
@@ -54,11 +55,30 @@ from cashu.wallet.crud import (
 class LedgerAPI:
     keys: Dict[int, str]
     keyset: str
+    tor: TorProxy
 
     def __init__(self, url):
         self.url = url
-        self.s = requests.Session()
-        self.s.headers.update({"Client-version": VERSION})
+
+    def _set_requests(self):
+        s = requests.Session()
+        s.headers.update({"Client-version": VERSION})
+        socks_host, socks_port = None, None
+        if TOR and TorProxy().check_platform():
+            self.tor = TorProxy(timeout=True)
+            self.tor.run_daemon(verbose=True)
+            socks_host, socks_port = "localhost", 9050
+        else:
+            socks_host, socks_port = SOCKS_HOST, SOCKS_PORT
+
+        if socks_host and socks_port:
+            proxies = {
+                "http": f"socks5://{socks_host}:{socks_port}",
+                "https": f"socks5://{socks_host}:{socks_port}",
+            }
+            s.proxies.update(proxies)
+            s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
+        return s
 
     def _construct_proofs(
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[str]
@@ -154,6 +174,7 @@ class LedgerAPI:
     """
 
     async def _get_keys(self, url):
+        self.s = self._set_requests()
         resp = self.s.get(
             url + "/keys",
         )
@@ -168,6 +189,7 @@ class LedgerAPI:
         return keyset
 
     async def _get_keysets(self, url):
+        self.s = self._set_requests()
         resp = self.s.get(
             url + "/keysets",
         )
@@ -178,6 +200,7 @@ class LedgerAPI:
 
     def request_mint(self, amount):
         """Requests a mint from the server and returns Lightning invoice."""
+        self.s = self._set_requests()
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
         resp.raise_for_status()
         return_dict = resp.json()
@@ -189,7 +212,7 @@ class LedgerAPI:
         secrets = [self._generate_secret() for s in range(len(amounts))]
         await self._check_used_secrets(secrets)
         payloads, rs = self._construct_outputs(amounts, secrets)
-
+        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/mint",
             json=payloads.dict(),
@@ -245,6 +268,7 @@ class LedgerAPI:
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
 
+        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/split",
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),
@@ -277,6 +301,7 @@ class LedgerAPI:
                 "proofs": {i: {"secret"} for i in range(len(proofs))},
             }
 
+        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/check",
             json=payload.dict(include=_check_spendable_include_fields(proofs)),
@@ -289,6 +314,7 @@ class LedgerAPI:
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
+        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/checkfees",
             json=payload.dict(),
@@ -313,6 +339,7 @@ class LedgerAPI:
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
 
+        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/melt",
             json=payload.dict(include=_meltequest_include_fields(proofs)),
@@ -527,9 +554,10 @@ class Wallet(LedgerAPI):
         return sum_proofs([p for p in self.proofs if not p.reserved])
 
     def status(self):
-        print(
-            f"Balance: {self.balance} sat (available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
-        )
+        # print(
+        #     f"Balance: {self.balance} sat (available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
+        # )
+        print(f"Balance: {self.available_balance} sat")
 
     def balance_per_keyset(self):
         return {
