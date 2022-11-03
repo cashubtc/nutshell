@@ -42,14 +42,19 @@ def test_hash_to_curve_iteration():
 def test_step1():
     """"""
     B_, blinding_factor = step1_alice(
-        "test_message", blinding_factor=b"00000000000000000000000000000001"  # 32 bytes
+        "test_message",
+        blinding_factor=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),  # 32 bytes
     )
 
     assert (
         B_.serialize().hex()
-        == "0243379106c73dfc635cd1422f406e83fbfa25be83bb3620aefc08f2b89d02d777"
+        == "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
     )
-    assert blinding_factor.private_key == b"00000000000000000000000000000001"
+    assert blinding_factor.private_key == bytes.fromhex(
+        "0000000000000000000000000000000000000000000000000000000000000001"
+    )
 
 
 def test_step2():
@@ -76,7 +81,7 @@ def test_step3():
     # C = C_ - A.mult(r)
     C_ = PublicKey(
         bytes.fromhex(
-            "02b15f14ae9259c101cdbc437e8877b1ca5d4af3a0c0684866b38d8c8d0b6f6374"
+            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
         ),
         raw=True,
     )
@@ -97,5 +102,5 @@ def test_step3():
 
     assert (
         C.serialize().hex()
-        == "03398f7153b381ce54d57962a5e03ce0a4f3b79755e882c972b788e8488e59b0c9"
+        == "03c724d7e6a5443b39ac8acf11f40420adc4f99a02e7cc1b57703d9391f6d129cd"
     )
