@@ -127,7 +127,7 @@ class Database(Compat):
                 print(f"Creating database directory: {self.db_location}")
                 os.makedirs(self.db_location)
             self.path = os.path.join(self.db_location, f"{self.name}.sqlite3")
-            database_uri = f"sqlite:///{self.path}"
+            self.database_uri = f"sqlite:///{self.path}"
             self.type = SQLITE
 
         self.schema = self.name
@@ -136,14 +136,14 @@ class Database(Compat):
         else:
             self.schema = None
 
-        self.engine = create_engine(database_uri, strategy=ASYNCIO_STRATEGY)
         self.lock = asyncio.Lock()
 
     @asynccontextmanager
     async def connect(self):
         await self.lock.acquire()
         try:
-            async with self.engine.connect() as conn:
+            engine = create_engine(self.database_uri, strategy=ASYNCIO_STRATEGY)
+            async with engine.connect() as conn:
                 async with conn.begin() as txn:
                     wconn = Connection(conn, txn, self.type, self.name, self.schema)
 
