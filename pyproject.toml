@@ -4,6 +4,11 @@ version = "0.5.1"
 description = "Ecash wallet and mint."
 authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
+readme = "README.md"
+packages = [
+    { include = "cashu", from = "." },
+]
+exclude = ["tests", "tests.*"]
 
 [tool.poetry.dependencies]
 python = "^3.7"
@@ -43,3 +48,9 @@ build-backend = "poetry.core.masonry.api"
 mint = "cashu.mint.main:main"
 cashu = "cashu.wallet.cli:cli"
 wallet-test = "tests.test_wallet:test"
+
+[tool.coverage.run]
+source = ["cashu"]
+
+[tool.black]
+line-length = 120
