@@ -14,7 +14,7 @@ class P2SHScript(BaseModel):
 
 
 class Proof(BaseModel):
-    id: str = ""
+    id: Union[None, str] = ""
     amount: int = 0
     secret: str = ""
     C: str = ""
