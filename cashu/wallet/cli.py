@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+import qrcode_terminal
 from datetime import datetime
 from functools import wraps
 from itertools import groupby
@@ -129,9 +130,10 @@ async def pay(ctx, invoice: str, yes: bool):
 @cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=int)
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
+@click.option("--qrcode", default=0, help="--qrcode 1, print QR-Code on the terminal. Zoom out to scan!", type=int)
 @click.pass_context
 @coro
-async def invoice(ctx, amount: int, hash: str):
+async def invoice(ctx, amount: int, hash: str, qrcode: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -144,6 +146,10 @@ async def invoice(ctx, amount: int, hash: str):
             print("")
             print(f"Invoice: {invoice.pr}")
             print("")
+            if qrcode == 1:
+             qrcode_terminal.draw(invoice.pr)
+             print("")
+             print("Zoom out to scan the QR-Code!")
             print(
                 f"Execute this command if you abort the check:\ncashu invoice {amount} --hash {invoice.hash}"
             )
