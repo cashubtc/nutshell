@@ -41,7 +41,7 @@ These steps help you install Python via pyenv and Poetry. If you already have Po
 
 ```bash
 sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev
-# on mac: brew install postgres
+# on mac: brew install postgresql
 
 # install python using pyenv
 curl https://pyenv.run | bash
