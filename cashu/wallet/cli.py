@@ -130,7 +130,7 @@ async def pay(ctx, invoice: str, yes: bool):
 @cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=int)
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
-@click.option("--qrcode", default=0, help="--qrcode 1, print QR-Code on the terminal. Zoom out to scan!", type=int)
+@click.option("--qrcode", default=0, help="--qrcode 1, print invoice as QR-Code on the terminal. Zoom out to scan!", type=int)
 @click.pass_context
 @coro
 async def invoice(ctx, amount: int, hash: str, qrcode: bool):
@@ -211,9 +211,10 @@ async def balance(ctx, verbose):
 @cli.command("send", help="Send tokens.")
 @click.argument("amount", type=int)
 @click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
+@click.option("--qrcode", default=0, help="--qrcode 1, print token adress as QR-Code on the terminal. Zoom out to scan!", type=int)
 @click.pass_context
 @coro
-async def send(ctx, amount: int, lock: str):
+async def send(ctx, amount: int, lock: str, qrcode: bool):
     if lock and len(lock) < 22:
         print("Error: lock has to be at least 22 characters long.")
         return
@@ -229,6 +230,10 @@ async def send(ctx, amount: int, lock: str):
     token = await wallet.serialize_proofs(
         send_proofs, hide_secrets=True if lock and not p2sh else False
     )
+    if qrcode == 1:
+      qrcode_terminal.draw(token)
+      print("")
+      print("Zoom out to scan the QR-Code!")
     print(token)
     wallet.status()
 
