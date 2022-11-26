@@ -3,6 +3,7 @@ import base64
 import logging
 import json
 import os
+from typing import Optional
 from pydantic import BaseModel, PositiveInt, Field, SecretStr
 from fastapi import HTTPException, status, APIRouter, Path, Query
 from pathlib import Path
@@ -102,9 +103,9 @@ async def pay_lightning_invoice(invoice: str):
     return {"amount": amount, "fees": fees}
 
 
-@app.get("/lightning/invoice")
+@app.put("/lightning/invoice")
 async def generate_lightning_invoice(
-    amount: PositiveInt = Query(..., description="Amount to pay"),
+    amount: PositiveInt = Query(..., description="Amount to pay in the mint in satoshis."),
 ):
     """Get a lightning invoice."""
     if not cashu_settings.lightning:
@@ -125,12 +126,13 @@ async def generate_lightning_invoice(
     return {"invoice": invoice, "amount": amount}
 
 
-@app.get("/lightning/receive")
-async def receive(
-    amount: int = Query(..., gt=0, description="Amount to receive in satoshis"),
-    invoice_hash: str = Query(..., description="Hash of the invoice to be paid"),
+@app.put("/lightning/claim")
+async def claim(
+    amount: int = Query(..., gt=0, description="Amount to receive in satoshis."),
+    description_hash: str = Path(..., description="Hash of the paid invoice."),
+    unhashed_description: Optional[str] = Query(None, description="Paid invoice description."),
 ):
-    """Receive a lightning payment."""
+    """Claim tokens for a paid lightning invoice."""
     if not cashu_settings.lightning:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -138,7 +140,7 @@ async def receive(
         )
     logger.info(f"Wallet status: {wallet.wallet.status()}")
     try:
-        proofs = await wallet.wallet.mint(amount=amount, payment_hash=invoice_hash)
+        proofs = await wallet.wallet.mint(amount=amount, payment_hash=description_hash)
     except Exception as e:
         if "Invoice already paid" in str(e):
             raise HTTPException(
@@ -244,7 +246,7 @@ async def burn(
         logger.info("Burn all spent tokens")
         proofs = get_reserved_proofs(wallet.wallet.db)
     elif force:
-        # chekc all proofs in db
+        # check all proofs in db
         logger.info("Force check on all token")
         proofs = wallet.wallet.proofs
     elif token:
