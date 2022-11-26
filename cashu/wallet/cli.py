@@ -284,7 +284,6 @@ async def burn(ctx, token: str, all: bool, force: bool):
     wallet.status()
 
 
-
 @cli.command("pending", help="Show pending tokens.")
 @click.pass_context
 @coro
