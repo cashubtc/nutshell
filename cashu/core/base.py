@@ -14,7 +14,9 @@ class P2SHScript(BaseModel):
 
 
 class Proof(BaseModel):
-    id: str = ""
+    id: Union[
+        None, str
+    ] = ""  # NOTE: None for backwards compatibility of old clients < 0.3
     amount: int = 0
     secret: str = ""
     C: str = ""

@@ -104,8 +104,10 @@ async def split(
     """
     proofs = payload.proofs
     amount = payload.amount
+
+    # NOTE: backwards compatibility with clients < v0.2.2
     outputs = payload.outputs.blinded_messages if payload.outputs else None
-    # backwards compatibility with clients < v0.2.2
+
     assert outputs, Exception("no outputs provided.")
     try:
         split_return = await ledger.split(proofs, amount, outputs)

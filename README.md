@@ -105,7 +105,7 @@ cashu info
 
 Returns:
 ```bash
-Version: 0.4.2
+Version: 0.5.2
 Debug: False
 Cashu dir: /home/user/.cashu
 Wallet: wallet

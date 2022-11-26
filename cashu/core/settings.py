@@ -24,6 +24,11 @@ CASHU_DIR = env.str("CASHU_DIR", default=os.path.join(str(Path.home()), ".cashu"
 CASHU_DIR = CASHU_DIR.replace("~", str(Path.home()))
 assert len(CASHU_DIR), "CASHU_DIR not defined"
 
+TOR = env.bool("TOR", default=True)
+
+SOCKS_HOST = env.str("SOCKS_HOST", default=None)
+SOCKS_PORT = env.int("SOCKS_PORT", default=9050)
+
 LIGHTNING = env.bool("LIGHTNING", default=True)
 LIGHTNING_FEE_PERCENT = env.float("LIGHTNING_FEE_PERCENT", default=1.0)
 assert LIGHTNING_FEE_PERCENT >= 0, "LIGHTNING_FEE_PERCENT must be at least 0"
@@ -48,4 +53,4 @@ LNBITS_ENDPOINT = env.str("LNBITS_ENDPOINT", default=None)
 LNBITS_KEY = env.str("LNBITS_KEY", default=None)
 
 MAX_ORDER = 64
-VERSION = "0.4.2"
+VERSION = "0.5.2"
