@@ -51,7 +51,7 @@ class Ledger:
         proofs_used = await self.crud.get_proofs_used(db=self.db)
         self.proofs_used = set(proofs_used)
 
-    async def load_keyset(self, derivation_path):
+    async def load_keyset(self, derivation_path, autosave=True):
         """Load current keyset keyset or generate new one."""
         keyset = MintKeyset(
             seed=self.master_key, derivation_path=derivation_path, version=VERSION
@@ -61,7 +61,7 @@ class Ledger:
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
             id=keyset.id, db=self.db
         )
-        if not len(tmp_keyset_local):
+        if not len(tmp_keyset_local) and autosave:
             logger.debug(f"Storing keyset {keyset.id}.")
             await self.crud.store_keyset(keyset=keyset, db=self.db)
 
@@ -69,7 +69,7 @@ class Ledger:
         self.keysets.keysets[keyset.id] = keyset
         return keyset
 
-    async def init_keysets(self):
+    async def init_keysets(self, autosave=True):
         """Loads all keysets from db."""
         # load all past keysets from db
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
@@ -80,7 +80,7 @@ class Ledger:
             logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
         # load the current keyset
-        self.keyset = await self.load_keyset(self.derivation_path)
+        self.keyset = await self.load_keyset(self.derivation_path, autosave)
 
     async def _generate_promises(
         self, B_s: List[BlindedMessage], keyset: MintKeyset = None
