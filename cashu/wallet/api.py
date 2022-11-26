@@ -291,7 +291,7 @@ async def get_pending():
     return list_of_pending
 
 
-@app.get("/generate_lock")
+@app.put("/lock")
 async def generate_lock():
     """
     Generate lock to receive tokens.
