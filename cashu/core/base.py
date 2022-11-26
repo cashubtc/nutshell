@@ -12,52 +12,19 @@ class P2SHScript(BaseModel):
     signature: str
     address: Union[str, None] = None
 
-    @classmethod
-    def from_row(cls, row: Row):
-        return cls(
-            address=row[0],
-            script=row[1],
-            signature=row[2],
-            used=row[3],
-        )
-
 
 class Proof(BaseModel):
-    id: str = ""
-    amount: int
+    id: Union[
+        None, str
+    ] = ""  # NOTE: None for backwards compatibility of old clients < 0.3
+    amount: int = 0
     secret: str = ""
-    C: str
+    C: str = ""
     script: Union[P2SHScript, None] = None
-    reserved: bool = False  # whether this proof is reserved for sending
-    send_id: str = ""  # unique ID of send attempt
-    time_created: str = ""
-    time_reserved: str = ""
-
-    @classmethod
-    def from_row(cls, row: Row):
-        return cls(
-            amount=row[0],
-            C=row[1],
-            secret=row[2],
-            reserved=row[3] or False,
-            send_id=row[4] or "",
-            time_created=row[5] or "",
-            time_reserved=row[6] or "",
-            id=row[7] or "",
-        )
-
-    @classmethod
-    def from_dict(cls, d: dict):
-        assert "amount" in d, "no amount in proof"
-        return cls(
-            amount=d.get("amount"),
-            C=d.get("C"),
-            secret=d.get("secret") or "",
-            reserved=d.get("reserved") or False,
-            send_id=d.get("send_id") or "",
-            time_created=d.get("time_created") or "",
-            time_reserved=d.get("time_reserved") or "",
-        )
+    reserved: Union[None, bool] = False  # whether this proof is reserved for sending
+    send_id: Union[None, str] = ""  # unique ID of send attempt
+    time_created: Union[None, str] = ""
+    time_reserved: Union[None, str] = ""
 
     def to_dict(self):
         return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
@@ -81,37 +48,23 @@ class Proofs(BaseModel):
 class Invoice(BaseModel):
     amount: int
     pr: str
-    hash: str
-    issued: bool = False
-
-    @classmethod
-    def from_row(cls, row: Row):
-        return cls(
-            amount=int(row[0]),
-            pr=str(row[1]),
-            hash=str(row[2]),
-            issued=bool(row[3]),
-        )
+    hash: Union[None, str] = None
+    preimage: Union[str, None] = None
+    issued: Union[None, bool] = False
+    paid: Union[None, bool] = False
+    time_created: Union[None, str, int, float] = ""
+    time_paid: Union[None, str, int, float] = ""
 
 
 class BlindedMessage(BaseModel):
-    id: str = ""
     amount: int
     B_: str
 
 
 class BlindedSignature(BaseModel):
-    id: str = ""
+    id: Union[str, None] = None
     amount: int
     C_: str
-
-    @classmethod
-    def from_dict(cls, d: dict):
-        return cls(
-            id=d["id"],
-            amount=d["amount"],
-            C_=d["C_"],
-        )
 
 
 class MintRequest(BaseModel):
@@ -166,7 +119,6 @@ class CheckFeesResponse(BaseModel):
 
 class MeltRequest(BaseModel):
     proofs: List[Proof]
-    amount: int = None  # deprecated
     invoice: str
 
 
@@ -174,16 +126,6 @@ class KeyBase(BaseModel):
     id: str
     amount: int
     pubkey: str
-
-    @classmethod
-    def from_row(cls, row: Row):
-        if row is None:
-            return cls
-        return cls(
-            id=row[0],
-            amount=int(row[1]),
-            pubkey=row[2],
-        )
 
 
 class WalletKeyset:
@@ -215,29 +157,17 @@ class WalletKeyset:
             self.public_keys = pubkeys
             self.id = derive_keyset_id(self.public_keys)
 
-    @classmethod
-    def from_row(cls, row: Row):
-        if row is None:
-            return cls
-        return cls(
-            id=row[0],
-            mint_url=row[1],
-            valid_from=row[2],
-            valid_to=row[3],
-            first_seen=row[4],
-            active=row[5],
-        )
-
 
 class MintKeyset:
     id: str
     derivation_path: str
     private_keys: Dict[int, PrivateKey]
-    public_keys: Dict[int, PublicKey] = None
+    public_keys: Dict[int, PublicKey] = {}
     valid_from: Union[str, None] = None
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: bool = True
+    version: Union[str, None] = None
 
     def __init__(
         self,
@@ -246,8 +176,9 @@ class MintKeyset:
         valid_to=None,
         first_seen=None,
         active=None,
-        seed: Union[None, str] = None,
-        derivation_path: str = "0",
+        seed: str = "",
+        derivation_path: str = "",
+        version: str = "",
     ):
         self.derivation_path = derivation_path
         self.id = id
@@ -255,29 +186,16 @@ class MintKeyset:
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = active
+        self.version = version
         # generate keys from seed
         if seed:
             self.generate_keys(seed)
 
     def generate_keys(self, seed):
+        """Generates keys of a keyset from a seed."""
         self.private_keys = derive_keys(seed, self.derivation_path)
         self.public_keys = derive_pubkeys(self.private_keys)
         self.id = derive_keyset_id(self.public_keys)
-
-    @classmethod
-    def from_row(cls, row: Row):
-        if row is None:
-            return cls
-        # fix to convert byte to string, unclear why this is necessary
-        id = row[0].decode("ascii") if type(row[0]) == bytes else row[0]
-        return cls(
-            id=id,
-            derivation_path=row[1],
-            valid_from=row[2],
-            valid_to=row[3],
-            first_seen=row[4],
-            active=row[5],
-        )
 
     def get_keybase(self):
         return {

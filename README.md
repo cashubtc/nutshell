@@ -2,7 +2,8 @@
 
 **Cashu is a Chaumian Ecash wallet and mint with Bitcoin Lightning support.**
 
-<a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a>
+<a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a> <a href="https://pypi.org/project/cashu/"><img alt="Coverage" src="https://img.shields.io/pypi/dm/cashu"></a> <a href="https://app.codecov.io/gh/callebtc/cashu"><img alt="Coverage" src="https://img.shields.io/codecov/c/gh/callebtc/cashu"></a>
+
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
 
@@ -29,7 +30,7 @@ pip install cashu
 
 To update Cashu, use `pip install cashu -U`. 
 
-If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config`.
+If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config`. On macOS, you might have to run `pip install wheel` and `brew install pkg-config`.
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 
@@ -89,8 +90,7 @@ vim .env
 To use the wallet with the [public test mint](#test-instance), you need to change the appropriate entries in the `.env` file. 
 
 #### Test instance
-*Warning: this instance is just for demonstration only. Currently, only Lightning deposits work but not withdrawals. The server could vanish at any moment so consider any Satoshis you deposit a donation. I will add Lightning withdrawals soon so unless someone comes up with a huge inflation bug, you might be able to claim them back at a later point in time.*
-
+*Warning: this instance is just for demonstration only. The server could vanish at any moment so consider any Satoshis you deposit a donation.*
 
 Change the appropriate `.env` file settings to
 ```bash
@@ -99,39 +99,56 @@ MINT_PORT=3338
 ```
 
 # Using Cashu
+```bash
+cashu info
+```
 
-#### Request a mint
+Returns:
+```bash
+Version: 0.5.3
+Debug: False
+Cashu dir: /home/user/.cashu
+Wallet: wallet
+Mint URL: https://8333.space:3338
+```
 
-This command will return a Lightning invoice and a payment hash. You have to pay the invoice before you can receive the tokens. Note: Minting tokens involves two steps: requesting a mint, and actually minting tokens (see below).
+#### Get Cashu info
+```bash
+cashu balance
+```
+
+#### Check balance
+```bash
+cashu balance
+```
+#### Generate a Lightning invoice 
+
+This command will return a Lightning invoice that you need to pay to mint new ecash tokens.
 
 ```bash
-cashu mint 420
+cashu invoice 420
 ```
 Returns:
 ```bash
 Pay this invoice to mint 420 sat:
 Invoice: lnbc4200n1p3nfk7zsp522g8wlsx9cvmhtyuyuae48nvreew9x9f8kkqhd2v2umrdtwl2ysspp5w2w6jvcnz4ftcwsxtad5kv3yev62pcp5cvq42dqqrmwtr2k6mk8qdq4vdshx6r4ypjx2ur0wd5hgxqyjw5qcqpjrzjqfe5jlwxmwt4sa4s8mqjqp8qtreqant6mqwwkts46dtawvncjwvhczurxgqqvvgqqqqqqqqnqqqqqzgqyg9qyysgqzaus4lsfs3zzk4ehdzrkxzv8ryu2yxppxyjrune3nks2dgrnua6nv7lsztmyjaf96xp569tf7rxdmfud5q45zmr4xue5hjple6xhcrcpfmveag
 
-After paying the invoice, run this command:
-cashu mint 420 --hash 729da933131552bc3a065f5b4b3224cb34a0e034c3015534001edcb1aadadd8e
+Execute this command if you abort the check:
+cashu invoice 420 --hash 729da933131552bc3a065f5b4b3224cb34a0e034c3015534001edcb1aadadd8e
+
+Checking invoice ...
 ```
 
-#### Mint tokens
-After paying the invoice, copy the `hash` value from above and add it to the command
-```bash
-cashu mint 420 --hash 729da933131552bc3a065f5b4b3224cb34a0e034c3015534001edcb1aadadd8e
-```
-You should see your balance update accordingly:
-```bash
-Balance: 0 sat (Available: 0 sat in 0 tokens)
-Balance: 420 sat (Available: 420 sat in 4 tokens)
-```
+The client will check every few seconds if the invoice has been paid. If you abort this step but still pay the invoice, you can use the command `cashu invoice <amount> --hash <hash>` as described above.
 
-Available tokens here means those tokens that have not been reserved for sending.
-
-#### Check balance
+#### Pay a Lightning invoice
 ```bash
-cashu balance
+cashu pay lnbc120n1p3jfmdapp5r9jz...
+```
+Returns:
+```bash
+Balance: 351 sat (Available: 351 sat in 7 tokens)
+Balance: 339 sat (Available: 339 sat in 8 tokens)
 ```
 
 #### Send tokens
@@ -193,16 +210,6 @@ W3siYW1vdW50Ij...
 Balance: 1234 sat (Available: 1234 sat in 7 tokens)
 ```
 You can either burn these tokens manually when the receiver has redeemed them, or you can receive them yourself if you want to cancel a pending payment.
-
-#### Pay a Lightning invoice
-```bash
-cashu pay lnbc120n1p3jfmdapp5r9jz...
-```
-Returns:
-```bash
-Balance: 351 sat (Available: 351 sat in 7 tokens)
-Balance: 339 sat (Available: 339 sat in 8 tokens)
-```
 
 # Running a mint
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.

@@ -3,7 +3,6 @@
 import asyncio
 import base64
 import json
-import math
 import os
 import sys
 import time
@@ -11,18 +10,33 @@ from datetime import datetime
 from functools import wraps
 from itertools import groupby
 from operator import itemgetter
+from os import listdir
+from os.path import isdir, join
 
 import click
 from loguru import logger
 
-import cashu.core.bolt11 as bolt11
 from cashu.core.base import Proof
-from cashu.core.bolt11 import Invoice, decode
-from cashu.core.helpers import fee_reserve
+from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import CASHU_DIR, DEBUG, ENV_FILE, LIGHTNING, MINT_URL, VERSION
+from cashu.core.settings import (
+    CASHU_DIR,
+    DEBUG,
+    ENV_FILE,
+    LIGHTNING,
+    MINT_URL,
+    SOCKS_HOST,
+    SOCKS_PORT,
+    TOR,
+    VERSION,
+)
+from cashu.tor.tor import TorProxy
 from cashu.wallet import migrations
-from cashu.wallet.crud import get_reserved_proofs, get_unused_locks
+from cashu.wallet.crud import (
+    get_lightning_invoices,
+    get_reserved_proofs,
+    get_unused_locks,
+)
 from cashu.wallet.wallet import Wallet as Wallet
 
 
@@ -57,6 +71,18 @@ def cli(ctx, host: str, walletname: str):
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
     wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, walletname))
+
+    if TOR and not TorProxy().check_platform():
+        error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. Please install Tor manually and set TOR=false and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended) or turn off Tor by setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
+        error_str += "\n\n"
+        if ENV_FILE:
+            error_str += f"Edit your Cashu config file here: {ENV_FILE}"
+        else:
+            error_str += (
+                f"Ceate a new Cashu config file here: {os.path.join(CASHU_DIR, '.env')}"
+            )
+        raise Exception(error_str)
+
     ctx.obj["WALLET"] = wallet
     asyncio.run(init_wallet(wallet))
     pass
@@ -71,26 +97,55 @@ def coro(f):
     return wrapper
 
 
+@cli.command("pay", help="Pay Lightning invoice.")
+@click.argument("invoice", type=str)
+@click.option(
+    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
+)
+@click.pass_context
+@coro
+async def pay(ctx, invoice: str, yes: bool):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    wallet.status()
+    amount, fees = await wallet.get_pay_amount_with_fees(invoice)
+    if not yes:
+        click.confirm(
+            f"Pay {amount - fees} sat ({amount} sat incl. fees)?",
+            abort=True,
+            default=True,
+        )
+
+    print(f"Paying Lightning invoice ...")
+    assert amount > 0, "amount is not positive"
+    if wallet.available_balance < amount:
+        print("Error: Balance too low.")
+        return
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    await wallet.pay_lightning(send_proofs, invoice)
+    wallet.status()
+
+
 @cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=int)
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
 @click.pass_context
 @coro
-async def mint(ctx, amount: int, hash: str):
+async def invoice(ctx, amount: int, hash: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
     if not LIGHTNING:
         r = await wallet.mint(amount)
     elif amount and not hash:
-        r = await wallet.request_mint(amount)
-        if "pr" in r:
+        invoice = await wallet.request_mint(amount)
+        if invoice.pr:
             print(f"Pay invoice to mint {amount} sat:")
             print("")
-            print(f"Invoice: {r['pr']}")
+            print(f"Invoice: {invoice.pr}")
             print("")
             print(
-                f"Execute this command if you abort the check:\ncashu mint {amount} --hash {r['hash']}"
+                f"Execute this command if you abort the check:\ncashu invoice {amount} --hash {invoice.hash}"
             )
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
@@ -103,7 +158,7 @@ async def mint(ctx, amount: int, hash: str):
             while time.time() < check_until and not paid:
                 time.sleep(3)
                 try:
-                    await wallet.mint(amount, r["hash"])
+                    await wallet.mint(amount, invoice.hash)
                     paid = True
                     print(" Invoice paid.")
                 except Exception as e:
@@ -117,36 +172,18 @@ async def mint(ctx, amount: int, hash: str):
     return
 
 
-@cli.command("pay", help="Pay Lightning invoice.")
-@click.argument("invoice", type=str)
-@click.pass_context
-@coro
-async def pay(ctx, invoice: str):
-    wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_mint()
-    wallet.status()
-    decoded_invoice: Invoice = bolt11.decode(invoice)
-    # check if it's an internal payment
-    fees = (await wallet.check_fees(invoice))["fee"]
-    amount = math.ceil(
-        (decoded_invoice.amount_msat + fees * 1000) / 1000
-    )  # 1% fee for Lightning
-    print(
-        f"Paying Lightning invoice of {decoded_invoice.amount_msat//1000} sat ({amount} sat incl. fees)"
-    )
-    assert amount > 0, "amount is not positive"
-    if wallet.available_balance < amount:
-        print("Error: Balance too low.")
-        return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
-    await wallet.pay_lightning(send_proofs, invoice)
-    wallet.status()
-
-
 @cli.command("balance", help="Balance.")
+@click.option(
+    "--verbose",
+    "-v",
+    default=False,
+    is_flag=True,
+    help="Show pending tokens as well.",
+    type=bool,
+)
 @click.pass_context
 @coro
-async def balance(ctx):
+async def balance(ctx, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
     keyset_balances = wallet.balance_per_keyset()
     if len(keyset_balances) > 1:
@@ -154,17 +191,20 @@ async def balance(ctx):
         print("")
         for k, v in keyset_balances.items():
             print(
-                f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']})"
+                f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']} sat)"
             )
         print("")
-    print(
-        f"Balance: {wallet.balance} sat (available: {wallet.available_balance} sat in {len([p for p in wallet.proofs if not p.reserved])} tokens)"
-    )
+    if verbose:
+        print(
+            f"Balance: {wallet.balance} sat (available: {wallet.available_balance} sat in {len([p for p in wallet.proofs if not p.reserved])} tokens)"
+        )
+    else:
+        print(f"Balance: {wallet.available_balance} sat")
 
 
-@cli.command("send", help="Send coins.")
+@cli.command("send", help="Send tokens.")
 @click.argument("amount", type=int)
-@click.option("--lock", "-l", default=None, help="Lock coins (P2SH).", type=str)
+@click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
 @click.pass_context
 @coro
 async def send(ctx, amount: int, lock: str):
@@ -177,21 +217,22 @@ async def send(ctx, amount: int, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount, lock)
-    await wallet.set_reserved(send_proofs, reserved=True)
-    coin = await wallet.serialize_proofs(
+    _, send_proofs = await wallet.split_to_send(
+        wallet.proofs, amount, lock, set_reserved=True
+    )
+    token = await wallet.serialize_proofs(
         send_proofs, hide_secrets=True if lock and not p2sh else False
     )
-    print(coin)
+    print(token)
     wallet.status()
 
 
-@cli.command("receive", help="Receive coins.")
-@click.argument("coin", type=str)
-@click.option("--lock", "-l", default=None, help="Unlock coins.", type=str)
+@cli.command("receive", help="Receive tokens.")
+@click.argument("token", type=str)
+@click.option("--lock", "-l", default=None, help="Unlock tokens.", type=str)
 @click.pass_context
 @coro
-async def receive(ctx, coin: str, lock: str):
+async def receive(ctx, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -208,25 +249,25 @@ async def receive(ctx, coin: str, lock: str):
         signature = p2shscripts[0].signature
     else:
         script, signature = None, None
-    proofs = [Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(coin))]
+    proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
     _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
     wallet.status()
 
 
-@cli.command("burn", help="Burn spent coins.")
-@click.argument("coin", required=False, type=str)
-@click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent coins.")
+@cli.command("burn", help="Burn spent tokens.")
+@click.argument("token", required=False, type=str)
+@click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent tokens.")
 @click.option(
-    "--force", "-f", default=False, is_flag=True, help="Force check on all coins."
+    "--force", "-f", default=False, is_flag=True, help="Force check on all tokens."
 )
 @click.pass_context
 @coro
-async def burn(ctx, coin: str, all: bool, force: bool):
+async def burn(ctx, token: str, all: bool, force: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    if not (all or coin or force) or (coin and all):
+    if not (all or token or force) or (token and all):
         print(
-            "Error: enter a coin or use --all to burn all pending coins or --force to check all coins."
+            "Error: enter a token or use --all to burn all pending tokens or --force to check all tokens."
         )
         return
     if all:
@@ -237,15 +278,13 @@ async def burn(ctx, coin: str, all: bool, force: bool):
         proofs = wallet.proofs
     else:
         # check only the specified ones
-        proofs = [
-            Proof.from_dict(p) for p in json.loads(base64.urlsafe_b64decode(coin))
-        ]
+        proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
     wallet.status()
     await wallet.invalidate(proofs)
     wallet.status()
 
 
-@cli.command("pending", help="Show pending coins.")
+@cli.command("pending", help="Show pending tokens.")
 @click.pass_context
 @coro
 async def pending(ctx):
@@ -259,17 +298,17 @@ async def pending(ctx):
             groupby(sorted_proofs, key=itemgetter("send_id"))
         ):
             grouped_proofs = list(value)
-            coin = await wallet.serialize_proofs(grouped_proofs)
-            coin_hidden_secret = await wallet.serialize_proofs(
+            token = await wallet.serialize_proofs(grouped_proofs)
+            token_hidden_secret = await wallet.serialize_proofs(
                 grouped_proofs, hide_secrets=True
             )
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"#{i} Amount: {sum([p['amount'] for p in grouped_proofs])} sat Time: {reserved_date} ID: {key}\n"
+                f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time: {reserved_date} ID: {key}\n"
             )
-            print(f"With secret: {coin}\n\nSecretless: {coin_hidden_secret}\n")
+            print(f"With secret: {token}\n\nSecretless: {token_hidden_secret}\n")
             print(f"--------------------------\n")
     wallet.status()
 
@@ -282,16 +321,16 @@ async def lock(ctx):
     p2shscript = await wallet.create_p2sh_lock()
     txin_p2sh_address = p2shscript.address
     print("---- Pay to script hash (P2SH) ----\n")
-    print("Use a lock to receive coins that only you can unlock.")
+    print("Use a lock to receive tokens that only you can unlock.")
     print("")
     print(f"Public receiving lock: P2SH:{txin_p2sh_address}")
     print("")
     print(
-        f"Anyone can send coins to this lock:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
+        f"Anyone can send tokens to this lock:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
     )
     print("")
     print(
-        f"Only you can receive coins from this lock:\n\ncashu receive <coin> --lock P2SH:{txin_p2sh_address}\n"
+        f"Only you can receive tokens from this lock:\n\ncashu receive <token> --lock P2SH:{txin_p2sh_address}\n"
     )
 
 
@@ -309,10 +348,72 @@ async def locks(ctx):
             print(f"Script: {l.script}")
             print(f"Signature: {l.signature}")
             print("")
-            print(f"Receive: cashu receive <coin> --lock P2SH:{l.address}")
+            print(f"Receive: cashu receive <token> --lock P2SH:{l.address}")
             print("")
             print(f"--------------------------\n")
+    else:
+        print("No locks found. Create one using: cashu lock")
     return True
+
+
+@cli.command("invoices", help="List of all pending invoices.")
+@click.pass_context
+@coro
+async def invoices(ctx):
+    wallet: Wallet = ctx.obj["WALLET"]
+    invoices = await get_lightning_invoices(db=wallet.db)
+    if len(invoices):
+        print("")
+        print(f"--------------------------\n")
+        for invoice in invoices:
+            print(f"Paid: {invoice.paid}")
+            print(f"Incoming: {invoice.amount > 0}")
+            print(f"Amount: {abs(invoice.amount)}")
+            if invoice.hash:
+                print(f"Hash: {invoice.hash}")
+            if invoice.preimage:
+                print(f"Preimage: {invoice.preimage}")
+            if invoice.time_created:
+                d = datetime.utcfromtimestamp(
+                    int(float(invoice.time_created))
+                ).strftime("%Y-%m-%d %H:%M:%S")
+                print(f"Created: {d}")
+            if invoice.time_paid:
+                d = datetime.utcfromtimestamp(int(float(invoice.time_paid))).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+                print(f"Paid: {d}")
+            print("")
+            print(f"Payment request: {invoice.pr}")
+            print("")
+            print(f"--------------------------\n")
+    else:
+        print("No invoices found.")
+
+
+@cli.command("wallets", help="List of all available wallets.")
+@click.pass_context
+@coro
+async def wallets(ctx):
+    # list all directories
+    wallets = [d for d in listdir(CASHU_DIR) if isdir(join(CASHU_DIR, d))]
+    try:
+        wallets.remove("mint")
+    except ValueError:
+        pass
+    for w in wallets:
+        wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, w))
+        try:
+            await init_wallet(wallet)
+            if wallet.proofs and len(wallet.proofs):
+                active_wallet = False
+                if w == ctx.obj["WALLET_NAME"]:
+                    active_wallet = True
+                print(
+                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
+                )
+        except:
+            pass
 
 
 @cli.command("info", help="Information about Cashu wallet.")
@@ -320,10 +421,15 @@ async def locks(ctx):
 @coro
 async def info(ctx):
     print(f"Version: {VERSION}")
-    print(f"Debug: {DEBUG}")
+    print(f"Wallet: {ctx.obj['WALLET_NAME']}")
+    if DEBUG:
+        print(f"Debug: {DEBUG}")
     print(f"Cashu dir: {CASHU_DIR}")
     if ENV_FILE:
         print(f"Settings: {ENV_FILE}")
-    print(f"Wallet: {ctx.obj['WALLET_NAME']}")
+    if TOR:
+        print(f"Tor enabled: {TOR}")
+    if SOCKS_HOST:
+        print(f"Socks proxy: {SOCKS_HOST}:{SOCKS_PORT}")
     print(f"Mint URL: {MINT_URL}")
     return
