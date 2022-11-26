@@ -321,7 +321,7 @@ async def get_wallets() -> Dict[str, List[Tuple[Wallet, bool]]]:
             Tuple contains the wallet and a boolean indicating if the wallet the active wallet.
     """
     wallets = [str(d) for d in os.listdir(CASHU_DIR) if (Path(CASHU_DIR) / str(d)).is_dir()]
-    print(wallets)
+    logger.info(f"Found {len(wallets)} - {wallets=}")
     try:
         wallets.remove("mint")
     except ValueError:
@@ -341,4 +341,5 @@ async def get_wallets() -> Dict[str, List[Tuple[Wallet, bool]]]:
                 wallets_model.append((temp_wallet, active_wallet))
         except Exception as e:
             logger.error(f"Error loading wallet {w}: {e}")
+    logger.info(f"Found {len(wallets_model)} wallets with non-zero balance - {wallets_model=}")
     return {"wallets": wallets_model}
