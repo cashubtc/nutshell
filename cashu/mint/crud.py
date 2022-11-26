@@ -1,3 +1,4 @@
+import time
 from typing import Any, List, Optional
 
 from cashu.core.base import Invoice, MintKeyset, Proof
@@ -168,9 +169,9 @@ async def store_keyset(
         (
             keyset.id,
             keyset.derivation_path,
-            keyset.valid_from or db.timestamp_now,
-            keyset.valid_to or db.timestamp_now,
-            keyset.first_seen or db.timestamp_now,
+            keyset.valid_from or int(time.time()),
+            keyset.valid_to or int(time.time()),
+            keyset.first_seen or int(time.time()),
             True,
             keyset.version,
         ),
