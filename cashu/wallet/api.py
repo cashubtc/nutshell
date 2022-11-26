@@ -20,16 +20,12 @@ from cashu.wallet.crud import (
     get_unused_locks,
 )
 from cashu.wallet.wallet import Wallet as Wallet
-from cashu.wallet.settings import MintSettings, CashuSettings
+from cashu.core.settings import MINT_URL, MINT_HOST, CASHU_DIR, LIGHTNING
 
 
 logger = logging.getLogger(__name__)
 
 app = APIRouter(prefix="/v0/wallet")
-
-mint_settings = MintSettings()
-cashu_settings = CashuSettings()
-
 
 async def init_wallet(wallet_c: Wallet):
     """Performs migrations and loads proofs from db."""
@@ -45,8 +41,8 @@ class WalletModel(BaseModel):
 
     wallet_name: str = "default"
     wallet: Wallet = Wallet(
-        url=mint_settings.mint_url,
-        db=str(Path(cashu_settings.cashu_dir) / wallet_name),
+        url=MINT_URL,
+        db=str(Path(CASHU_DIR) / wallet_name),
     )
     active_wallet: bool
 
@@ -80,7 +76,7 @@ async def health():
 @app.post("/lightning/pay")
 async def pay_lightning_invoice(invoice: str):
     """Pay a lightning invoice."""
-    if not cashu_settings.lightning:
+    if not LIGHTNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Lightning is not enabled.",
@@ -108,7 +104,7 @@ async def generate_lightning_invoice(
     amount: PositiveInt = Query(..., description="Amount to pay in the mint in satoshis."),
 ):
     """Generate a lightning invoice to deposit in satoshis in the mint."""
-    if not cashu_settings.lightning:
+    if not LIGHTNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Lightning is not enabled.",
@@ -133,7 +129,7 @@ async def claim(
     unhashed_description: Optional[str] = Query(None, description="Paid invoice description."),
 ):
     """Claim tokens for a paid lightning invoice."""
-    if not cashu_settings.lightning:
+    if not LIGHTNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Lightning is not enabled.",
@@ -334,7 +330,7 @@ async def get_invoices():
 async def get_wallets():
     """Get all wallets."""
     wallets = [
-        str(d) for d in os.listdir(cashu_settings.cashu_dir) if os.path.isdir(Path(cashu_settings.cashu_dir) / str(d))
+        str(d) for d in os.listdir(CASHU_DIR) if os.path.isdir(Path(CASHU_DIR) / str(d))
     ]
     try:
         wallets.remove("mint")
@@ -345,8 +341,8 @@ async def get_wallets():
         temp_wallet = WalletModel(
             wallet_name=w,
             wallet=Wallet(
-                url=mint_settings.mint_host,
-                db=str(Path(cashu_settings.cashu_dir) / w),
+                url=MINT_HOST,
+                db=str(Path(CASHU_DIR) / w),
                 name=w,
             ),
             active_wallet=False,
