@@ -1,3 +1,8 @@
+"""
+API to interact with the cashu mint and wallet.
+To see the API docs, run the server and go to http://localhost:8000/docs
+To run a local "debugging" server, run `uvicorn cashu.wallet.__api__:app --reload`
+"""
 import asyncio
 import base64
 import logging
