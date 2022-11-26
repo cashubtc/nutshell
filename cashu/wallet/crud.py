@@ -198,9 +198,9 @@ async def store_keyset(
         (
             keyset.id,
             mint_url or keyset.mint_url,
-            keyset.valid_from,
-            keyset.valid_to,
-            keyset.first_seen,
+            keyset.valid_from or int(time.time()),
+            keyset.valid_to or int(time.time()),
+            keyset.first_seen or int(time.time()),
             True,
         ),
     )
