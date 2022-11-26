@@ -103,11 +103,11 @@ async def pay_lightning_invoice(invoice: str):
     return {"amount": amount, "fees": fees}
 
 
-@app.put("/lightning/invoice")
+@app.get("/lightning/invoice")
 async def generate_lightning_invoice(
     amount: PositiveInt = Query(..., description="Amount to pay in the mint in satoshis."),
 ):
-    """Get a lightning invoice."""
+    """Generate a lightning invoice to deposit in satoshis in the mint."""
     if not cashu_settings.lightning:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -129,7 +129,7 @@ async def generate_lightning_invoice(
 @app.put("/lightning/claim")
 async def claim(
     amount: int = Query(..., gt=0, description="Amount to receive in satoshis."),
-    description_hash: str = Path(..., description="Hash of the paid invoice."),
+    description_hash: str = Query(..., description="Hash of the paid invoice."),
     unhashed_description: Optional[str] = Query(None, description="Paid invoice description."),
 ):
     """Claim tokens for a paid lightning invoice."""
