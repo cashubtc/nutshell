@@ -4,8 +4,12 @@ from secp256k1 import PublicKey
 
 
 def hash_to_point_pre_0_3_3(secret_msg):
-    """Generates x coordinate from the message hash and checks if the point lies on the curve.
-    If it does not, it tries computing again a new x coordinate from the hash of the coordinate."""
+    """
+    NOTE: Clients pre 0.3.3 used a different hash_to_curve
+
+    Generates x coordinate from the message hash and checks if the point lies on the curve.
+    If it does not, it tries computing again a new x coordinate from the hash of the coordinate.
+    """
     point = None
     msg = secret_msg
     while point is None:
