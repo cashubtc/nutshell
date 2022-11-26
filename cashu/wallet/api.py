@@ -3,7 +3,7 @@ import base64
 import logging
 import json
 import os
-from typing import Optional
+from typing import Optional, List, Dict, Tuple
 from pydantic import BaseModel, PositiveInt, Field, SecretStr
 from fastapi import HTTPException, status, APIRouter, Path, Query
 from pathlib import Path
@@ -27,43 +27,33 @@ logger = logging.getLogger(__name__)
 
 app = APIRouter(prefix="/v0/wallet")
 
+
 async def init_wallet(wallet_c: Wallet):
     """Performs migrations and loads proofs from db."""
     await migrate_databases(wallet_c.db, migrations)
     await wallet_c.load_proofs()
 
 
-class WalletModel(BaseModel):
-    """Wallet model"""
-
-    class Config:
-        arbitrary_types_allowed = True
-
-    wallet_name: str = "default"
-    wallet: Wallet = Wallet(
-        url=MINT_URL,
-        db=str(Path(CASHU_DIR) / wallet_name),
-    )
-    active_wallet: bool
-
-
-wallet = WalletModel(active_wallet=True)
+wallet: Wallet = Wallet(
+    url=MINT_URL,
+    db=str(Path(CASHU_DIR) / "default"),
+)
 
 
 @app.on_event("startup")
 async def start_wallet():
     """Starts wallet on startup."""
-    await init_wallet(wallet.wallet)
-    await wallet.wallet.load_mint()
+    await init_wallet(wallet)
+    await wallet.load_mint()
     logger.info("Wallet started")
 
 
 @app.on_event("shutdown")
 async def shutdown_tor():
     """Shutdowns wallet on shutdown."""
-    if wallet.wallet.tor.tor_running:
+    if wallet.tor.tor_running:
         logger.info("Stopping Tor")
-        wallet.wallet.tor.stop_daemon()
+        wallet.tor.stop_daemon()
     logger.info("Wallet shutdown")
 
 
@@ -74,28 +64,28 @@ async def health():
 
 
 @app.post("/lightning/pay")
-async def pay_lightning_invoice(invoice: str):
-    """Pay a lightning invoice."""
+async def pay_to_lightning_invoice(invoice: str):
+    """Pay to a lightning invoice using mint tokens."""
     if not LIGHTNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Lightning is not enabled.",
         )
-    logger.info(f"Wallet status: {wallet.wallet.status()}")
-    amount, fees = await wallet.wallet.get_pay_amount_with_fees(invoice)
+    logger.info(f"Wallet status: {wallet.status()}")
+    amount, fees = await wallet.get_pay_amount_with_fees(invoice)
     if amount <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Amount must be greater than 0.",
         )
-    if amount + fees > wallet.wallet.available_balance:
+    if amount + fees > wallet.available_balance:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Insufficient funds.",
         )
-    _, send_proofs = await wallet.wallet.split_to_send(wallet.wallet.proofs, amount)
-    await wallet.wallet.pay_lightning(send_proofs, invoice)
-    logger.info(f"Wallet status: {wallet.wallet.status()}")
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    await wallet.pay_lightning(send_proofs, invoice)
+    logger.info(f"Wallet status: {wallet.status()}")
     return {"amount": amount, "fees": fees}
 
 
@@ -109,8 +99,8 @@ async def generate_lightning_invoice(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Lightning is not enabled.",
         )
-    logger.info(f"Wallet status: {wallet.wallet.status()}")
-    invoice = await wallet.wallet.request_mint(amount=amount)
+    logger.info(f"Wallet status: {wallet.status()}")
+    invoice = await wallet.request_mint(amount=amount)
     if invoice.pr:
         logger.info(f"Invoice created for amount {amount}")
         logger.info(f"Invoice {invoice.pr} - invoice hash {invoice.hash}")
@@ -128,15 +118,15 @@ async def claim(
     description_hash: str = Query(..., description="Hash of the paid invoice."),
     unhashed_description: Optional[str] = Query(None, description="Paid invoice description."),
 ):
-    """Claim tokens for a paid lightning invoice."""
+    """Claim tokens from a paid lightning invoice."""
     if not LIGHTNING:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Lightning is not enabled.",
         )
-    logger.info(f"Wallet status: {wallet.wallet.status()}")
+    logger.info(f"Wallet status: {wallet.status()}")
     try:
-        proofs = await wallet.wallet.mint(amount=amount, payment_hash=description_hash)
+        proofs = await wallet.mint(amount=amount, payment_hash=description_hash)
     except Exception as e:
         if "Invoice already paid" in str(e):
             raise HTTPException(
@@ -153,7 +143,7 @@ async def claim(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Error receiving lightning payment.",
             )
-    logger.info(f"Wallet status: {wallet.wallet.status()}")
+    logger.info(f"Wallet status: {wallet.status()}")
     return {"amount": amount, "proofs": proofs}
 
 
@@ -167,9 +157,9 @@ async def get_balance():
         key_sets_balances: dict[str, float] = Field({}, description="Key sets balances")
 
     balance = Balance()
-    balance.key_sets_balances = wallet.wallet.balance_per_keyset()
-    balance.available_balance = wallet.wallet.available_balance
-    balance.total_balance = wallet.wallet.balance
+    balance.key_sets_balances = wallet.balance_per_keyset()
+    balance.available_balance = wallet.available_balance
+    balance.total_balance = wallet.balance
 
     return balance
 
@@ -180,23 +170,21 @@ async def send(
     lock: str | None = Query(None, description="Destination address", min_length=22),
 ):
     """Send mint tokens."""
-    if amount > wallet.wallet.available_balance:
+    if amount > wallet.available_balance:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Insufficient funds.",
         )
-    logger.info(f"Wallet status: {wallet.wallet.status()}")
+    logger.info(f"Wallet status: {wallet.status()}")
     p2sh = False
     if lock:
         if len(lock.split("P2SH:")) == 2:
             p2sh = True
-    _, send_proofs = await wallet.wallet.split_to_send(
-        proofs=wallet.wallet.proofs, amount=amount, scnd_secret=lock, set_reserved=True
+    _, send_proofs = await wallet.split_to_send(
+        proofs=wallet.proofs, amount=amount, scnd_secret=lock, set_reserved=True
     )
-    mint_token = await wallet.wallet.serialize_proofs(
-        proofs=send_proofs, hide_secrets=True if lock and not p2sh else False
-    )
-    logger.info(f"Wallet status: {wallet.wallet.status()}")
+    mint_token = await wallet.serialize_proofs(proofs=send_proofs, hide_secrets=True if lock and not p2sh else False)
+    logger.info(f"Wallet status: {wallet.status()}")
     return {"amount": amount, "tokens": mint_token}
 
 
@@ -206,11 +194,11 @@ async def receive(
     lock: str | None = Query(None, description="Destination address", min_length=22),
 ):
     """Receive mint tokens."""
-    logger.info(f"Wallet status: {wallet.wallet.status()}")
+    logger.info(f"Wallet status: {wallet.status()}")
     if lock:
         if len(lock.split("P2SH:")) == 2:
             address = lock.split("P2SH:")[1]
-            p2sh_scripts = await get_unused_locks(address=address, db=wallet.wallet.db)
+            p2sh_scripts = await get_unused_locks(address=address, db=wallet.db)
             script = p2sh_scripts[0].script
             signature = p2sh_scripts[0].signature
         else:
@@ -222,9 +210,7 @@ async def receive(
         script = None
         signature = None
     proofs = [Proof(**proof) for proof in json.loads(base64.urlsafe_b64decode(token))]
-    first_proofs, second_proofs = await wallet.wallet.redeem(
-        proofs=proofs, scnd_script=script, scnd_siganture=signature
-    )
+    first_proofs, second_proofs = await wallet.redeem(proofs=proofs, scnd_script=script, scnd_siganture=signature)
     return {
         "proofs": {"first": first_proofs, "second": second_proofs},
     }
@@ -237,14 +223,14 @@ async def burn(
     force: bool = Query(False, description="Force check on all token"),
 ):
     """Burn spent tokens."""
-    logger.info(f"Wallet status: {wallet.wallet.status()}")
+    logger.info(f"Wallet status: {wallet.status()}")
     if all_tokens:
         logger.info("Burn all spent tokens")
-        proofs = get_reserved_proofs(wallet.wallet.db)
+        proofs = get_reserved_proofs(wallet.db)
     elif force:
         # check all proofs in db
         logger.info("Force check on all token")
-        proofs = wallet.wallet.proofs
+        proofs = wallet.proofs
     elif token:
         logger.info(f"Burn token - {token}")
         proofs = [Proof(**proof) for proof in json.loads(base64.urlsafe_b64decode(token))]
@@ -253,7 +239,7 @@ async def burn(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid request. Please provide a token or set all_tokens to True.",
         )
-    await wallet.wallet.invalidate(proofs=proofs)
+    await wallet.invalidate(proofs=proofs)
     return {"proofs": proofs}
 
 
@@ -268,14 +254,14 @@ async def get_pending():
         mint_token_with_secret: SecretStr = Field(..., description="Secret")
         mint_token: str = Field(..., description="Token")
 
-    reserved_proofs = await get_reserved_proofs(wallet.wallet.db)
+    reserved_proofs = await get_reserved_proofs(wallet.db)
     list_of_pending = []
     if len(reserved_proofs) > 0:
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))
         for i, (key, value) in enumerate(groupby(sorted_proofs, key=itemgetter("send_id"))):
             grouped_proofs = list(value)
-            mint_token = await wallet.wallet.serialize_proofs(grouped_proofs)
-            token_hidden_secret = await wallet.wallet.serialize_proofs(grouped_proofs, hide_secrets=True)
+            mint_token = await wallet.serialize_proofs(grouped_proofs)
+            token_hidden_secret = await wallet.serialize_proofs(grouped_proofs, hide_secrets=True)
             reserved_date = datetime.utcfromtimestamp(grouped_proofs[0].reserved_date).strftime("%Y-%m-%d %H:%M:%S")
             list_of_pending.append(
                 Pending(
@@ -298,14 +284,14 @@ async def generate_lock():
         - To spend the tokens, use the /receive endpoint.
         (specify the lock address in the lock parameter)
     """
-    p2shscript = await wallet.wallet.create_p2sh_lock()
+    p2shscript = await wallet.create_p2sh_lock()
     return {"script": p2shscript.script}
 
 
 @app.get("/locks")
 async def get_locks():
     """Get all unused locks."""
-    locks = await get_unused_locks(db=wallet.wallet.db)
+    locks = await get_unused_locks(db=wallet.db)
     if len(locks) > 0:
         logger.info(f"Found {len(locks)} unused locks")
         return {"unused_locks": locks}
@@ -317,7 +303,7 @@ async def get_locks():
 @app.get("/invoices")
 async def get_invoices():
     """Get all pending invoices."""
-    invoices = await get_lightning_invoices(db=wallet.wallet.db)
+    invoices = await get_lightning_invoices(db=wallet.db)
     if len(invoices) > 0:
         logger.info(f"Found {len(invoices)} invoices")
         return {"invoices": invoices}
@@ -327,32 +313,32 @@ async def get_invoices():
 
 
 @app.get("/wallets")
-async def get_wallets():
-    """Get all wallets."""
-    wallets = [
-        str(d) for d in os.listdir(CASHU_DIR) if os.path.isdir(Path(CASHU_DIR) / str(d))
-    ]
+async def get_wallets() -> Dict[str, List[Tuple[Wallet, bool]]]:
+    """Get all wallets with non-zero balance.
+
+    Returns:
+        Dict[str, List[Tuple[Wallet, bool]]]: Dict of wallets with non-zero balance.
+            Tuple contains the wallet and a boolean indicating if the wallet the active wallet.
+    """
+    wallets = [str(d) for d in os.listdir(CASHU_DIR) if (Path(CASHU_DIR) / str(d)).is_dir()]
+    print(wallets)
     try:
         wallets.remove("mint")
     except ValueError:
         pass
     wallets_model = []
     for w in wallets:
-        temp_wallet = WalletModel(
-            wallet_name=w,
-            wallet=Wallet(
-                url=MINT_HOST,
-                db=str(Path(CASHU_DIR) / w),
-                name=w,
-            ),
-            active_wallet=False,
+        active_wallet = False
+        temp_wallet = Wallet(
+            url=MINT_URL,
+            db=str(Path(CASHU_DIR) / w),
         )
         try:
-            await init_wallet(temp_wallet.wallet)
-            if temp_wallet.wallet.proofs and len(temp_wallet.wallet.proofs) > 0:
-                if temp_wallet.wallet == wallet.wallet:
-                    temp_wallet.active_wallet = True
-                wallets_model.append(temp_wallet)
+            await init_wallet(temp_wallet)
+            if temp_wallet.proofs and len(temp_wallet.proofs) > 0:
+                if temp_wallet == wallet:
+                    active_wallet = True
+                wallets_model.append((temp_wallet, active_wallet))
         except Exception as e:
             logger.error(f"Error loading wallet {w}: {e}")
     return {"wallets": wallets_model}
