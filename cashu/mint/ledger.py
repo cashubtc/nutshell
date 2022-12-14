@@ -110,9 +110,11 @@ class Ledger:
         return not proof.secret in self.proofs_used
 
     def _verify_secret_criteria(self, proof: Proof):
-        """Verifies that a secret is present"""
+        """Verifies that a secret is present and is not too long (DOS prevention)."""
         if proof.secret is None or proof.secret == "":
             raise Exception("no secret in proof.")
+        if len(proof.secret) > 64:
+            raise Exception("secret too long.")
         return True
 
     def _verify_proof(self, proof: Proof):
@@ -269,9 +271,6 @@ class Ledger:
         for p in proofs:
             await self.crud.invalidate_proof(proof=p, db=self.db)
 
-        # delete proofs from pending list
-        await self._unset_proofs_pending(proofs)
-
     async def _set_proofs_pending(self, proofs: List[Proof]):
         """
         If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
@@ -280,7 +279,10 @@ class Ledger:
         # first we check whether these proofs are pending aready
         await self._validate_proofs_pending(proofs)
         for p in proofs:
-            await self.crud.set_proof_pending(proof=p, db=self.db)
+            try:
+                await self.crud.set_proof_pending(proof=p, db=self.db)
+            except:
+                raise Exception("proofs already pending.")
 
     async def _unset_proofs_pending(self, proofs: List[Proof]):
         """Deletes proofs from pending table."""
@@ -347,24 +349,31 @@ class Ledger:
         # validate and set proofs as pending
         await self._set_proofs_pending(proofs)
 
-        # Verify proofs
-        if not all([self._verify_proof(p) for p in proofs]):
-            raise Exception("could not verify proofs.")
+        try:
+            # Verify proofs
+            if not all([self._verify_proof(p) for p in proofs]):
+                raise Exception("could not verify proofs.")
 
-        total_provided = sum_proofs(proofs)
-        invoice_obj = bolt11.decode(invoice)
-        amount = math.ceil(invoice_obj.amount_msat / 1000)
-        fees_msat = await self.check_fees(invoice)
-        assert total_provided >= amount + fees_msat / 1000, Exception(
-            "provided proofs not enough for Lightning payment."
-        )
+            total_provided = sum_proofs(proofs)
+            invoice_obj = bolt11.decode(invoice)
+            amount = math.ceil(invoice_obj.amount_msat / 1000)
+            fees_msat = await self.check_fees(invoice)
+            assert total_provided >= amount + fees_msat / 1000, Exception(
+                "provided proofs not enough for Lightning payment."
+            )
 
-        if LIGHTNING:
-            status, preimage = await self._pay_lightning_invoice(invoice, fees_msat)
-        else:
-            status, preimage = True, "preimage"
-        if status == True:
-            await self._invalidate_proofs(proofs)
+            if LIGHTNING:
+                status, preimage = await self._pay_lightning_invoice(invoice, fees_msat)
+            else:
+                status, preimage = True, "preimage"
+            if status == True:
+                await self._invalidate_proofs(proofs)
+        except Exception as e:
+            raise e
+        finally:
+            # delete proofs from pending list
+            await self._unset_proofs_pending(proofs)
+
         return status, preimage
 
     async def check_spendable(self, proofs: List[Proof]):
@@ -399,27 +408,33 @@ class Ledger:
 
         total = sum_proofs(proofs)
 
-        # verify that amount is kosher
-        self._verify_split_amount(amount)
-        # verify overspending attempt
-        if amount > total:
-            raise Exception("split amount is higher than the total sum.")
+        try:
+            # verify that amount is kosher
+            self._verify_split_amount(amount)
+            # verify overspending attempt
+            if amount > total:
+                raise Exception("split amount is higher than the total sum.")
 
-        # Verify scripts
-        if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
-            raise Exception("script verification failed.")
-        # Verify secret criteria
-        if not all([self._verify_secret_criteria(p) for p in proofs]):
-            raise Exception("secrets do not match criteria.")
-        # verify that only unique proofs and outputs were used
-        if not self._verify_no_duplicates(proofs, outputs):
-            raise Exception("duplicate proofs or promises.")
-        # verify that outputs have the correct amount
-        if not self._verify_outputs(total, amount, outputs):
-            raise Exception("split of promises is not as expected.")
-        # Verify proofs
-        if not all([self._verify_proof(p) for p in proofs]):
-            raise Exception("could not verify proofs.")
+            # Verify scripts
+            if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
+                raise Exception("script verification failed.")
+            # Verify secret criteria
+            if not all([self._verify_secret_criteria(p) for p in proofs]):
+                raise Exception("secrets do not match criteria.")
+            # verify that only unique proofs and outputs were used
+            if not self._verify_no_duplicates(proofs, outputs):
+                raise Exception("duplicate proofs or promises.")
+            # verify that outputs have the correct amount
+            if not self._verify_outputs(total, amount, outputs):
+                raise Exception("split of promises is not as expected.")
+            # Verify proofs
+            if not all([self._verify_proof(p) for p in proofs]):
+                raise Exception("could not verify proofs.")
+        except Exception as e:
+            raise e
+        finally:
+            # delete proofs from pending list
+            await self._unset_proofs_pending(proofs)
 
         # Mark proofs as used and prepare new promises
         await self._invalidate_proofs(proofs)
