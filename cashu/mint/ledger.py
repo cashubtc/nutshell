@@ -117,7 +117,7 @@ class Ledger:
             raise Exception("secret too long.")
         return True
 
-    def _verify_proof(self, proof: Proof):
+    def _verify_proof_bdhke(self, proof: Proof):
         """Verifies that the proof of promise was issued by this ledger."""
         if not self._check_spendable(proof):
             raise Exception(f"tokens already spent. Secret: {proof.secret}")
@@ -181,10 +181,13 @@ class Ledger:
         given = [o.amount for o in outputs]
         return given == expected
 
-    def _verify_no_duplicates(self, proofs: List[Proof], outputs: List[BlindedMessage]):
+    def _verify_no_duplicate_proofs(self, proofs: List[Proof]):
         secrets = [p.secret for p in proofs]
         if len(secrets) != len(list(set(secrets))):
             return False
+        return True
+
+    def _verify_no_duplicate_outputs(self, outputs: List[BlindedMessage]):
         B_s = [od.B_ for od in outputs]
         if len(B_s) != len(list(set(B_s))):
             return False
@@ -303,6 +306,21 @@ class Ledger:
                 if p.secret == pp.secret:
                     raise Exception("proofs are pending.")
 
+    async def _verify_proofs(self, proofs: List[Proof]):
+        """Checks a series of criteria for the verification of proofs."""
+        # Verify scripts
+        if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
+            raise Exception("script validation failed.")
+        # Verify secret criteria
+        if not all([self._verify_secret_criteria(p) for p in proofs]):
+            raise Exception("secrets do not match criteria.")
+        # verify that only unique proofs were used
+        if not self._verify_no_duplicate_proofs(proofs):
+            raise Exception("duplicate proofs.")
+        # Verify proofs
+        if not all([self._verify_proof_bdhke(p) for p in proofs]):
+            raise Exception("could not verify proofs.")
+
     # Public methods
     def get_keyset(self, keyset_id: str = None):
         keyset = self.keysets.keysets[keyset_id] if keyset_id else self.keyset
@@ -350,9 +368,7 @@ class Ledger:
         await self._set_proofs_pending(proofs)
 
         try:
-            # Verify proofs
-            if not all([self._verify_proof(p) for p in proofs]):
-                raise Exception("could not verify proofs.")
+            await self._verify_proofs(proofs)
 
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
@@ -415,21 +431,14 @@ class Ledger:
             if amount > total:
                 raise Exception("split amount is higher than the total sum.")
 
-            # Verify scripts
-            if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
-                raise Exception("script verification failed.")
-            # Verify secret criteria
-            if not all([self._verify_secret_criteria(p) for p in proofs]):
-                raise Exception("secrets do not match criteria.")
-            # verify that only unique proofs and outputs were used
-            if not self._verify_no_duplicates(proofs, outputs):
-                raise Exception("duplicate proofs or promises.")
+            await self._verify_proofs(proofs)
+
+            # verify that only unique outputs were used
+            if not self._verify_no_duplicate_outputs(outputs):
+                raise Exception("duplicate promises.")
             # verify that outputs have the correct amount
             if not self._verify_outputs(total, amount, outputs):
                 raise Exception("split of promises is not as expected.")
-            # Verify proofs
-            if not all([self._verify_proof(p) for p in proofs]):
-                raise Exception("could not verify proofs.")
         except Exception as e:
             raise e
         finally:
