@@ -29,6 +29,18 @@ class LedgerCrud:
 
         return await invalidate_proof(*args, **kwags)
 
+    async def get_proofs_pending(*args, **kwags):
+
+        return await get_proofs_pending(*args, **kwags)
+
+    async def set_proof_pending(*args, **kwags):
+
+        return await set_proof_pending(*args, **kwags)
+
+    async def unset_proof_pending(*args, **kwags):
+
+        return await unset_proof_pending(*args, **kwags)
+
     async def store_keyset(*args, **kwags):
 
         return await store_keyset(*args, **kwags)
@@ -99,6 +111,55 @@ async def invalidate_proof(
             str(proof.C),
             str(proof.secret),
         ),
+    )
+
+
+async def get_proofs_pending(
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+
+    rows = await (conn or db).fetchall(
+        f"""
+        SELECT * from {table_with_schema(db, 'proofs_pending')}
+        """
+    )
+    return [Proof(**r) for r in rows]
+
+
+async def set_proof_pending(
+    db: Database,
+    proof: Proof,
+    conn: Optional[Connection] = None,
+):
+
+    # we add the proof and secret to the used list
+    await (conn or db).execute(
+        f"""
+        INSERT INTO {table_with_schema(db, 'proofs_pending')}
+          (amount, C, secret)
+        VALUES (?, ?, ?)
+        """,
+        (
+            proof.amount,
+            str(proof.C),
+            str(proof.secret),
+        ),
+    )
+
+
+async def unset_proof_pending(
+    proof: Proof,
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+
+    await (conn or db).execute(
+        f"""
+        DELETE FROM {table_with_schema(db, 'proofs_pending')}
+        WHERE secret = ?
+        """,
+        (str(proof["secret"]),),
     )
 
 

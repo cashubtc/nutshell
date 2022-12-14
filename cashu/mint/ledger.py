@@ -258,13 +258,48 @@ class Ledger:
         return ok, preimage
 
     async def _invalidate_proofs(self, proofs: List[Proof]):
-        """Adds secrets of proofs to the list of knwon secrets and stores them in the db."""
+        """
+        Adds secrets of proofs to the list of known secrets and stores them in the db.
+        Removes proofs from pending table.
+        """
         # Mark proofs as used and prepare new promises
         proof_msgs = set([p.secret for p in proofs])
         self.proofs_used |= proof_msgs
         # store in db
         for p in proofs:
             await self.crud.invalidate_proof(proof=p, db=self.db)
+
+        # delete proofs from pending list
+        await self._unset_proofs_pending(proofs)
+
+    async def _set_proofs_pending(self, proofs: List[Proof]):
+        """
+        If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
+        the list of pending proofs or removes them. Used as a mutex for proofs.
+        """
+        # first we check whether these proofs are pending aready
+        await self._validate_proofs_pending(proofs)
+        for p in proofs:
+            await self.crud.set_proof_pending(proof=p, db=self.db)
+
+    async def _unset_proofs_pending(self, proofs: List[Proof]):
+        """Deletes proofs from pending table."""
+        # we try: except: this block in order to avoid that any errors here
+        # could block the _invalidate_proofs() call that happens afterwards.
+        try:
+            for p in proofs:
+                await self.crud.unset_proof_pending(proof=p, db=self.db)
+        except Exception as e:
+            print(e)
+            pass
+
+    async def _validate_proofs_pending(self, proofs: List[Proof]):
+        """Checks if any of the provided proofs is in the pending proofs table. Raises exception for at least one match."""
+        proofs_pending = await self.crud.get_proofs_pending(db=self.db)
+        for p in proofs:
+            for pp in proofs_pending:
+                if p.secret == pp.secret:
+                    raise Exception("proofs are pending.")
 
     # Public methods
     def get_keyset(self, keyset_id: str = None):
@@ -308,6 +343,10 @@ class Ledger:
 
     async def melt(self, proofs: List[Proof], invoice: str):
         """Invalidates proofs and pays a Lightning invoice."""
+
+        # validate and set proofs as pending
+        await self._set_proofs_pending(proofs)
+
         # Verify proofs
         if not all([self._verify_proof(p) for p in proofs]):
             raise Exception("could not verify proofs.")
@@ -354,6 +393,10 @@ class Ledger:
         keyset: MintKeyset = None,
     ):
         """Consumes proofs and prepares new promises based on the amount split."""
+
+        # set proofs as pending
+        await self._set_proofs_pending(proofs)
+
         total = sum_proofs(proofs)
 
         # verify that amount is kosher
