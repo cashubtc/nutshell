@@ -128,3 +128,21 @@ async def m004_keysets_add_version(db: Database):
     await db.execute(
         f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN version TEXT"
     )
+
+
+async def m005_pending_proofs_table(db: Database) -> None:
+    """
+    Store pending proofs.
+    """
+    await db.execute(
+        f"""
+            CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_pending')} (
+                amount INTEGER NOT NULL,
+                C TEXT NOT NULL,
+                secret TEXT NOT NULL,
+
+                UNIQUE (secret)
+
+            );
+        """
+    )
