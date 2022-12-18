@@ -39,6 +39,9 @@ from cashu.wallet.crud import (
 )
 from cashu.wallet.wallet import Wallet as Wallet
 
+from nostr.client.client import NostrClient
+from nostr.key import PublicKey
+
 
 async def init_wallet(wallet: Wallet):
     """Performs migrations and loads proofs from db."""
@@ -433,3 +436,70 @@ async def info(ctx):
         print(f"Socks proxy: {SOCKS_HOST}:{SOCKS_PORT}")
     print(f"Mint URL: {MINT_URL}")
     return
+
+
+@cli.command("nostr", help="Receive tokens via nostr.")
+@click.pass_context
+@coro
+async def nostr(ctx):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    client = NostrClient(
+        privatekey_hex="bfc6e7b0b998645d45aa451a3b9a3174bfe696fba78e86a86637a16f43e6c683"
+    )
+    print(f"Your nostr public key: {client.public_key.hex()}")
+    await asyncio.sleep(2)
+
+    def get_token_callback(token):
+        try:
+            proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
+            wallet: Wallet = ctx.obj["WALLET"]
+            asyncio.run(wallet.redeem(proofs))
+            wallet.status()
+        except Exception as e:
+            pass
+
+    import threading
+
+    t = threading.Thread(
+        target=client.get_dm,
+        args=(
+            client.public_key,
+            get_token_callback,
+        ),
+        name="Nostr DM",
+    )
+    t.start()
+
+
+@cli.command("nostrsend", help="Send tokens via nostr.")
+@click.argument("amount", type=int)
+@click.argument(
+    "pubkey",
+    type=str,
+    default="13395e6d975825cb811549b4b6ba6695c7ea8f75e1f3658d6cee2bee243195c3",
+)
+@click.pass_context
+@coro
+async def nostrsend(ctx, amount: int, pubkey: str):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    wallet.status()
+    _, send_proofs = await wallet.split_to_send(
+        wallet.proofs, amount, set_reserved=True
+    )
+    token = await wallet.serialize_proofs(send_proofs)
+
+    from random import randrange
+
+    # token = f"Token {randrange(1000)}"
+    print(token)
+    wallet.status()
+
+    client = NostrClient(
+        privatekey_hex="bfc6e7b0b598645d45aa451a3b9a3174bfe696fba78e86a86637a16f4ee6d683"
+    )
+    await asyncio.sleep(1)
+    client.dm(token, PublicKey(bytes.fromhex(pubkey)))
+    print("Sent")
+    client.close()
