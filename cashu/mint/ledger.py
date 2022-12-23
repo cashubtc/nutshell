@@ -229,24 +229,41 @@ class Ledger:
         ) = await self.lightning.create_invoice(amount, "cashu deposit")
         return payment_request, checking_id
 
-    async def _check_lightning_invoice(self, amounts, payment_hash: str):
-        """Checks with the Lightning backend whether an invoice with this payment_hash was paid."""
+    async def _check_lightning_invoice(self, amount: int, payment_hash: str):
+        """
+        Checks with the Lightning backend whether an invoice with this payment_hash was paid.
+        Raises exception if invoice is unpaid.
+        """
         invoice: Invoice = await self.crud.get_lightning_invoice(
             hash=payment_hash, db=self.db
         )
+        if invoice is None:
+            raise Exception("invoice not found.")
         if invoice.issued:
             raise Exception("tokens already issued for this invoice.")
-        total_requested = sum(amounts)
-        if total_requested > invoice.amount:
-            raise Exception(
-                f"Requested amount too high: {total_requested}. Invoice amount: {invoice.amount}"
-            )
-        status = await self.lightning.get_invoice_status(payment_hash)
-        if status.paid:
+
+        # set this invoice as issued
+        await self.crud.update_lightning_invoice(
+            hash=payment_hash, issued=True, db=self.db
+        )
+
+        try:
+            if amount > invoice.amount:
+                raise Exception(
+                    f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
+                )
+
+            status = await self.lightning.get_invoice_status(payment_hash)
+            if status.paid:
+                return status.paid
+            else:
+                raise Exception("Lightning invoice not paid yet.")
+        except Exception as e:
+            # unset issued
             await self.crud.update_lightning_invoice(
-                hash=payment_hash, issued=True, db=self.db
+                hash=payment_hash, issued=False, db=self.db
             )
-        return status.paid
+            raise e
 
     async def _pay_lightning_invoice(self, invoice: str, fees_msat: int):
         """Returns an invoice from the Lightning backend."""
@@ -345,14 +362,15 @@ class Ledger:
     ):
         """Mints a promise for coins for B_."""
         amounts = [b.amount for b in B_s]
+        amount = sum(amounts)
         # check if lightning invoice was paid
         if LIGHTNING:
+            if not payment_hash:
+                raise Exception("no payment_hash provided.")
             try:
-                paid = await self._check_lightning_invoice(amounts, payment_hash)
+                paid = await self._check_lightning_invoice(amount, payment_hash)
             except Exception as e:
-                raise Exception("could not check invoice: " + str(e))
-            if not paid:
-                raise Exception("Lightning invoice not paid yet.")
+                raise e
 
         for amount in amounts:
             if amount not in [2**i for i in range(MAX_ORDER)]:
