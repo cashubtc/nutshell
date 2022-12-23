@@ -3,7 +3,7 @@ import ssl
 import time
 import json
 import os
-import base64 
+import base64
 
 from nostr.event import Event
 from nostr.relay_manager import RelayManager
@@ -21,8 +21,9 @@ from . import cbc
 
 class NostrClient:
     relays = [
-        "wss://nostr.zebedee.cloud"
-    ]  # ["wss://nostr.oxtr.dev"]  # ["wss://relay.nostr.info"] "wss://nostr-pub.wellorder.net"  "ws://91.237.88.218:2700", "wss://nostrrr.bublina.eu.org", ""wss://nostr-relay.freeberty.net"", , "wss://nostr.oxtr.dev", "wss://relay.nostr.info", "wss://nostr-pub.wellorder.net" , "wss://relayer.fiatjaf.com", "wss://nodestr.fmt.wiz.biz/", "wss://no.str.cr"
+        "wss://nostr.zebedee.cloud",
+        "wss://nostr-relay.digitalmob.ro",
+    ]  # ["wss://nostr.oxtr.dev"]  # ["wss://relay.nostr.info"] "wss://nostr-pub.wellorder.net"  "ws://91.237.88.218:2700", "wss://nostrrr.bublina.eu.org", ""wss://nostr-relay.freeberty.net"", , "wss://nostr.oxtr.dev", "wss://relay.nostr.info", "wss://nostr-pub.wellorder.net" , "wss://relayer.fiatjaf.com", "wss://nodestr.fmt.wiz.biz/", "wss://no.str.cr", "wss://nostr-relay.digitalmob.ro"
     relay_manager = RelayManager()
     private_key: PrivateKey
     public_key: PublicKey
@@ -83,9 +84,7 @@ class NostrClient:
 
     def dm(self, message: str, to_pubkey: PublicKey):
 
-        shared_secret = self.private_key.compute_shared_secret(
-            to_pubkey.hex()
-        )
+        shared_secret = self.private_key.compute_shared_secret(to_pubkey.hex())
 
         # print("shared secret: ", shared_secret.hex())
         # print("plain text:", message)
@@ -93,7 +92,6 @@ class NostrClient:
         iv, enc_text = aes.encrypt(message)
         # print("encrypt iv: ", iv)
         content = f"{base64.b64encode(enc_text).decode('utf-8')}?iv={base64.b64encode(iv).decode('utf-8')}"
-
 
         event = Event(
             self.public_key.hex(),
@@ -131,7 +129,7 @@ class NostrClient:
         while True:
             while self.relay_manager.message_pool.has_events():
                 event_msg = self.relay_manager.message_pool.get_event()
-                
+
                 if "?iv=" in event_msg.event.content:
                     try:
                         shared_secret = self.private_key.compute_shared_secret(
@@ -151,7 +149,7 @@ class NostrClient:
                     except:
                         pass
                 # else:
-                    # print(f"\nFrom {event_msg.event.public_key[:5]}...: {event_msg.event.content}")
+                # print(f"\nFrom {event_msg.event.public_key[:5]}...: {event_msg.event.content}")
                 break
             time.sleep(0.1)
 
@@ -162,4 +160,3 @@ class NostrClient:
                 print(event_msg.event.content)
                 break
             time.sleep(0.1)
-
