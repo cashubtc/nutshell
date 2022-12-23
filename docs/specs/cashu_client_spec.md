@@ -38,7 +38,7 @@ Mint: `Bob`
 - `Alice` pays bolt11 invoice `payment_request` using a Bitcoin Lightning wallet.
 
 ### Step 2: Request tokens
-- To request tokens of value `amount : int`, `Alice` decomposes `amount` into a sum of values of `2^n`, e.g. `13` is `amounts : List[int] = [1, 4, 8]`. This can be easily done by representing `amount` as binary and using each binary digit that is `1` as part of the sum, e.g. `8` would be `1101` wich is `2^0 + 2^2 + 2^3`. In this example, `Alice` will request `N = len(amounts) = 3` tokens.
+- To request tokens of value `amount : int`, `Alice` decomposes `amount` into a sum of values of `2^n`, e.g. `13` is `amounts : List[int] = [1, 4, 8]`. This can be easily done by representing `amount` as binary and using each binary digit that is `1` as part of the sum, e.g. `13` would be `1101` wich is `2^0 + 2^2 + 2^3`. In this example, `Alice` will request `N = len(amounts) = 3` tokens.
 - `Alice` generates a random secret string `x_i` of `128` random bits with `i \in [0,..,N-1]`for each of the `N` requested tokens and encodes them in `base64`. [*TODO: remove index i*]
 - `Alice` remembers `x` for the construction of the proof in Step 5.
 
