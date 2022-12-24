@@ -63,7 +63,7 @@ async def test_get_keysets(wallet1: Wallet):
     assert type(keyset) == dict
     assert type(keyset["keysets"]) == list
     assert len(keyset["keysets"]) > 0
-    assert keyset["keysets"][0] == wallet1.keyset_id
+    assert keyset["keysets"][-1] == wallet1.keyset_id
 
 
 @pytest.mark.asyncio

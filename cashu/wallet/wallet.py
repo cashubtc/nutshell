@@ -5,7 +5,7 @@ import secrets as scrts
 import time
 import uuid
 from itertools import groupby
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import requests
 from loguru import logger
@@ -55,7 +55,7 @@ from cashu.wallet.crud import (
 
 
 class LedgerAPI:
-    keys: Dict[int, str]
+    keys: Dict[int, PublicKey]
     keyset: str
     tor: TorProxy
     db: Database
@@ -133,7 +133,7 @@ class LedgerAPI:
         assert len(keyset.public_keys) > 0, "did not receive keys from mint."
 
         # check if current keyset is in db
-        keyset_local: WalletKeyset = await get_keyset(keyset.id, db=self.db)
+        keyset_local: Optional[WalletKeyset] = await get_keyset(keyset.id, db=self.db)
         if keyset_local is None:
             await store_keyset(keyset=keyset, db=self.db)
 
@@ -257,7 +257,7 @@ class LedgerAPI:
         promises = [BlindedSignature(**p) for p in promises_list]
         return self._construct_proofs(promises, secrets, rs)
 
-    async def split(self, proofs, amount, scnd_secret: str = None):
+    async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
         """Consume proofs and create new promises based on amount split.
         If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
         and the promises to send (scnd_outputs).
@@ -424,7 +424,7 @@ class Wallet(LedgerAPI):
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
-    async def mint(self, amount: int, payment_hash: str = None):
+    async def mint(self, amount: int, payment_hash: Optional[str] = None):
         split = amount_split(amount)
         proofs = await super().mint(split, payment_hash)
         if proofs == []:
@@ -440,8 +440,8 @@ class Wallet(LedgerAPI):
     async def redeem(
         self,
         proofs: List[Proof],
-        scnd_script: str = None,
-        scnd_siganture: str = None,
+        scnd_script: Optional[str] = None,
+        scnd_siganture: Optional[str] = None,
     ):
         if scnd_script and scnd_siganture:
             logger.debug(f"Unlock script: {scnd_script}")
@@ -454,7 +454,7 @@ class Wallet(LedgerAPI):
         self,
         proofs: List[Proof],
         amount: int,
-        scnd_secret: str = None,
+        scnd_secret: Optional[str] = None,
     ):
         assert len(proofs) > 0, ValueError("no proofs provided.")
         frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
@@ -569,7 +569,7 @@ class Wallet(LedgerAPI):
         self,
         proofs: List[Proof],
         amount,
-        scnd_secret: str = None,
+        scnd_secret: Optional[str] = None,
         set_reserved: bool = False,
     ):
         """Like self.split but only considers non-reserved tokens."""
