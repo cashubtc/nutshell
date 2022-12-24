@@ -234,6 +234,16 @@ async def send(ctx, amount: int, lock: str):
         hide_secrets=True if lock and not p2sh else False,
         include_mints=True,
     )
+    print(token)
+
+    # print("")
+    # print("Legacy:")
+    # token = await wallet.serialize_proofs(
+    #     send_proofs,
+    #     hide_secrets=True if lock and not p2sh else False,
+    #     include_mints=False,
+    # )
+    # print(token)
     wallet.status()
 
 
@@ -495,5 +505,5 @@ async def info(ctx):
         print(f"Tor enabled: {TOR}")
     if SOCKS_HOST:
         print(f"Socks proxy: {SOCKS_HOST}:{SOCKS_PORT}")
-    print(f"Mint URL: {MINT_URL}")
+    print(f"Mint URL: {ctx.obj['HOST']}")
     return
