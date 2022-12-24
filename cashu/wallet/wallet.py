@@ -488,7 +488,7 @@ class Wallet(LedgerAPI):
         return status["paid"]
 
     async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=False, legacy=False
+        self, proofs: List[Proof], include_mints=True, legacy=False
     ):
         """
         Produces sharable token with proofs and mint information.
@@ -500,28 +500,30 @@ class Wallet(LedgerAPI):
                 json.dumps(proofs_serialized).encode()
             ).decode()
 
+        # build token
         token = TokenJson(tokens=proofs)
-        # token = dict(tokens=proofs_serialized)
 
         # add mint information to the token, if requested
         if include_mints:
-
+            # hold information about the mint
             mints: Dict[str, TokenMintJson] = dict()
-
             # iterate through all proofs and add their keyset to `mints`
             for proof in proofs:
                 if proof.id:
+                    # load the keyset from the db
                     keyset = await get_keyset(id=proof.id, db=self.db)
                     if keyset and keyset.mint_url:
                         # TODO: replace this with a mint pubkey
                         placeholder_mint_id = keyset.mint_url
                         if placeholder_mint_id not in mints:
+                            # mint information
                             id = TokenMintJson(
                                 url=keyset.mint_url,
                                 ks=[keyset.id],
                             )
                             mints[placeholder_mint_id] = id
                         else:
+                            # if a mint has multiple keysets, append to the existing list
                             if keyset.id not in mints[placeholder_mint_id].ks:
                                 mints[placeholder_mint_id].ks.append(keyset.id)
             if len(mints) > 0:
