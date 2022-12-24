@@ -185,17 +185,21 @@ async def invoice(ctx, amount: int, hash: str):
 @coro
 async def balance(ctx, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
-    # keyset_balances = wallet.balance_per_keyset()
-    # if len(keyset_balances) > 1:
-    #     print(f"You have balances in {len(keyset_balances)} keysets:")
-    #     print("")
-    #     for k, v in keyset_balances.items():
-    #         print(
-    #             f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']} sat)"
-    #         )
-    #     print("")
+    if verbose:
+        # show balances per keyset
+        keyset_balances = wallet.balance_per_keyset()
+        if len(keyset_balances) > 1:
+            print(f"You have balances in {len(keyset_balances)} keysets:")
+            print("")
+            for k, v in keyset_balances.items():
+                print(
+                    f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']} sat)"
+                )
+            print("")
+
     mint_balances = await wallet.balance_per_minturl()
     if len(mint_balances) > 1:
+        # show balances per mint
         print(f"You have balances in {len(mint_balances)} mints:")
         print("")
         for k, v in mint_balances.items():
@@ -203,6 +207,7 @@ async def balance(ctx, verbose):
                 f"Mint: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']} sat)"
             )
         print("")
+
     if verbose:
         print(
             f"Balance: {wallet.balance} sat (available: {wallet.available_balance} sat in {len([p for p in wallet.proofs if not p.reserved])} tokens)"
@@ -214,9 +219,16 @@ async def balance(ctx, verbose):
 @cli.command("send", help="Send tokens.")
 @click.argument("amount", type=int)
 @click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
+@click.option(
+    "--legacy",
+    default=False,
+    is_flag=True,
+    help="Print legacy token without mint information.",
+    type=bool,
+)
 @click.pass_context
 @coro
-async def send(ctx, amount: int, lock: str):
+async def send(ctx, amount: int, lock: str, legacy: bool):
     if lock and len(lock) < 22:
         print("Error: lock has to be at least 22 characters long.")
         return
@@ -236,14 +248,19 @@ async def send(ctx, amount: int, lock: str):
     )
     print(token)
 
-    # print("")
-    # print("Legacy:")
-    # token = await wallet.serialize_proofs(
-    #     send_proofs,
-    #     hide_secrets=True if lock and not p2sh else False,
-    #     include_mints=False,
-    # )
-    # print(token)
+    if legacy:
+        print("")
+        print(
+            "Legacy token without mint information for older clients. This token can only be be received by wallets who use the mint the token is issued from:"
+        )
+        print("")
+        token = await wallet.serialize_proofs(
+            send_proofs,
+            hide_secrets=True if lock and not p2sh else False,
+            legacy=True,
+        )
+        print(token)
+
     wallet.status()
 
 

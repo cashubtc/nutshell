@@ -482,7 +482,7 @@ class Wallet(LedgerAPI):
         return status["paid"]
 
     async def serialize_proofs(
-        self, proofs: List[Proof], hide_secrets=False, include_mints=False
+        self, proofs: List[Proof], hide_secrets=False, include_mints=False, legacy=False
     ):
         """
         Produces sharable token with proofs and mint information.
@@ -492,6 +492,11 @@ class Wallet(LedgerAPI):
             proofs_serialized = [p.to_dict_no_secret() for p in proofs]
         else:
             proofs_serialized = [p.to_dict() for p in proofs]
+
+        if legacy:
+            return base64.urlsafe_b64encode(
+                json.dumps(proofs_serialized).encode()
+            ).decode()
 
         token = dict(tokens=proofs_serialized)
 
