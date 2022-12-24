@@ -16,7 +16,7 @@ ledger = Ledger(
     db=Database("mint", "data/mint"),
     seed=MINT_PRIVATE_KEY,
     # seed="asd",
-    derivation_path="0/0/0/0",
+    derivation_path="0/0/0/1",
     lightning=LNbitsWallet() if LIGHTNING else None,
 )
 

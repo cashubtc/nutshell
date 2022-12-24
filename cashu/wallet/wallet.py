@@ -107,24 +107,22 @@ class LedgerAPI:
         """Returns base64 encoded random string."""
         return scrts.token_urlsafe(randombits // 8)
 
-    async def _load_mint(self):
+    async def _load_mint(self, keyset_id: str = ""):
         """
-        Loads the current keys and the active keyset of the map.
+        Loads the public keys of the mint. Either gets the keys for the specified
+        `keyset_id` or loads the most recent one from the mint.
+        Gets and the active keyset ids of the mint and stores in `self.keysets`.
         """
         assert len(
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
-        # get current keyset
-        keyset = await self._get_keys(self.url)
-        # get all active keysets
-        mint_keysets = []
-        try:
-            keysets_resp = await self._get_keysets(self.url)
-            mint_keysets = keysets_resp["keysets"]
-            # store active keysets
-        except:
-            pass
-        self.keysets = mint_keysets if len(mint_keysets) else [keyset.id]
+
+        if keyset_id:
+            # get requested keyset
+            keyset = await self._get_keyset(self.url, keyset_id)
+        else:
+            # get current keyset
+            keyset = await self._get_keys(self.url)
 
         # store current keyset
         assert len(keyset.public_keys) > 0, "did not receive keys from mint."
@@ -133,6 +131,16 @@ class LedgerAPI:
         keyset_local: WalletKeyset = await get_keyset(keyset.id, db=self.db)
         if keyset_local is None:
             await store_keyset(keyset=keyset, db=self.db)
+
+        # get all active keysets of this mint
+        mint_keysets = []
+        try:
+            keysets_resp = await self._get_keysets(self.url)
+            mint_keysets = keysets_resp["keysets"]
+            # store active keysets
+        except:
+            pass
+        self.keysets = mint_keysets if len(mint_keysets) else [keyset.id]
 
         logger.debug(f"Mint keysets: {self.keysets}")
         logger.debug(f"Current mint keyset: {keyset.id}")
@@ -173,7 +181,7 @@ class LedgerAPI:
     ENDPOINTS
     """
 
-    async def _get_keys(self, url):
+    async def _get_keys(self, url: str):
         self.s = self._set_requests()
         resp = self.s.get(
             url + "/keys",
@@ -188,7 +196,26 @@ class LedgerAPI:
         keyset = WalletKeyset(pubkeys=keyset_keys, mint_url=url)
         return keyset
 
-    async def _get_keysets(self, url):
+    async def _get_keyset(self, url: str, keyset_id: str):
+        """
+        keyset_id is base64, needs to be urlsafe-encoded.
+        """
+        self.s = self._set_requests()
+        keyset_id_urlsafe = keyset_id.replace("-", "+").replace("_", "/")
+        resp = self.s.get(
+            url + f"/keys/{keyset_id_urlsafe}",
+        )
+        resp.raise_for_status()
+        keys = resp.json()
+        assert len(keys), Exception("did not receive any keys")
+        keyset_keys = {
+            int(amt): PublicKey(bytes.fromhex(val), raw=True)
+            for amt, val in keys.items()
+        }
+        keyset = WalletKeyset(pubkeys=keyset_keys, mint_url=url)
+        return keyset
+
+    async def _get_keysets(self, url: str):
         self.s = self._set_requests()
         resp = self.s.get(
             url + "/keysets",
@@ -359,8 +386,8 @@ class Wallet(LedgerAPI):
         self.proofs: List[Proof] = []
         self.name = name
 
-    async def load_mint(self):
-        await super()._load_mint()
+    async def load_mint(self, keyset_id: str = ""):
+        await super()._load_mint(keyset_id)
 
     async def load_proofs(self):
         self.proofs = await get_proofs(db=self.db)
@@ -372,6 +399,16 @@ class Wallet(LedgerAPI):
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
         return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
+
+    async def _get_proofs_per_minturl(self, proofs: List[Proof]):
+        ret = {}
+        for id in set([p.id for p in proofs]):
+            keyset: WalletKeyset = await get_keyset(id=id, db=self.db)
+            if keyset.mint_url not in ret:
+                ret[keyset.mint_url] = [p for p in proofs if p.id == id]
+            else:
+                ret[keyset.mint_url].extend([p for p in proofs if p.id == id])
+        return ret
 
     async def request_mint(self, amount):
         invoice = super().request_mint(amount)
@@ -442,16 +479,47 @@ class Wallet(LedgerAPI):
             raise Exception("could not pay invoice.")
         return status["paid"]
 
-    @staticmethod
-    async def serialize_proofs(proofs: List[Proof], hide_secrets=False):
+    async def serialize_proofs(
+        self, proofs: List[Proof], hide_secrets=False, include_mints=False
+    ):
+        """
+        Produces sharable token with proofs and mint information.
+        """
+        # serialize the list of proofs, either with secrets included or without secrets
         if hide_secrets:
             proofs_serialized = [p.to_dict_no_secret() for p in proofs]
         else:
             proofs_serialized = [p.to_dict() for p in proofs]
-        token = base64.urlsafe_b64encode(
-            json.dumps(proofs_serialized).encode()
-        ).decode()
-        return token
+
+        token = dict(tokens=proofs_serialized)
+
+        # add mint information to the token, if requested
+        if include_mints:
+
+            mints = dict()
+
+            # iterate through all proofs and add their keyset to `mints`
+            for proof in proofs:
+                if proof.id:
+                    keyset = await get_keyset(id=proof.id, db=self.db)
+                    if keyset:
+                        # TODO: replace this with a mint pubkey
+                        placeholder_mint_id = keyset.mint_url
+                        if placeholder_mint_id not in mints:
+                            id = dict(
+                                url=keyset.mint_url,
+                                ks=[keyset.id],
+                            )
+                            mints[placeholder_mint_id] = id
+                        else:
+                            if keyset.id not in mints[placeholder_mint_id]["ks"]:
+                                mints[placeholder_mint_id]["ks"].append(keyset.id)
+            if mints:
+                token["mints"] = mints
+
+        # encode the token as a base64 string
+        token_base64 = base64.urlsafe_b64encode(json.dumps(token).encode()).decode()
+        return token_base64
 
     async def _get_spendable_proofs(self, proofs: List[Proof]):
         """
@@ -566,6 +634,16 @@ class Wallet(LedgerAPI):
                 "available": sum_proofs([p for p in proofs if not p.reserved]),
             }
             for key, proofs in self._get_proofs_per_keyset(self.proofs).items()
+        }
+
+    async def balance_per_minturl(self):
+        balances = await self._get_proofs_per_minturl(self.proofs)
+        return {
+            key: {
+                "balance": sum_proofs(proofs),
+                "available": sum_proofs([p for p in proofs if not p.reserved]),
+            }
+            for key, proofs in balances.items()
         }
 
     def proof_amounts(self):

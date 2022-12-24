@@ -23,8 +23,20 @@ router: APIRouter = APIRouter()
 
 @router.get("/keys")
 async def keys() -> dict[int, str]:
-    """Get the public keys of the mint"""
+    """Get the public keys of the mint of the newest keyset"""
     keyset = ledger.get_keyset()
+    return keyset
+
+
+@router.get("/keys/{idBase64Urlsafe}")
+async def keyset_keys(idBase64Urlsafe: str) -> dict[int, str]:
+    """
+    Get the public keys of the mint of a specificy keyset id.
+    The id is encoded in base64_urlsafe and needs to be converted back to
+    normal base64 before it can be processed.
+    """
+    id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
+    keyset = ledger.get_keyset(keyset_id=id)
     return keyset
 
 
