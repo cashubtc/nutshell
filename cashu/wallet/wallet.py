@@ -291,6 +291,7 @@ class LedgerAPI:
         payloads, rs = self._construct_outputs(amounts, secrets)
         split_payload = SplitRequest(proofs=proofs, amount=amount, outputs=payloads)
 
+        # construct payload
         def _splitrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
