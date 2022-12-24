@@ -23,9 +23,9 @@ from cashu.core.base import (
     P2SHScript,
     Proof,
     SplitRequest,
-    WalletKeyset,
     TokenJson,
     TokenMintJson,
+    WalletKeyset,
 )
 from cashu.core.bolt11 import Invoice as InvoiceBolt11
 from cashu.core.db import Database
@@ -58,6 +58,7 @@ class LedgerAPI:
     keys: Dict[int, str]
     keyset: str
     tor: TorProxy
+    db: Database
 
     def __init__(self, url):
         self.url = url

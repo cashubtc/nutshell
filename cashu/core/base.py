@@ -1,5 +1,5 @@
 from sqlite3 import Row
-from typing import Any, Dict, List, Union, TypedDict, Optional
+from typing import Any, Dict, List, Optional, TypedDict, Union
 
 from pydantic import BaseModel
 

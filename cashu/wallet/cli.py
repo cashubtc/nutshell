@@ -33,10 +33,10 @@ from cashu.core.settings import (
 from cashu.tor.tor import TorProxy
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
+    get_keyset,
     get_lightning_invoices,
     get_reserved_proofs,
     get_unused_locks,
-    get_keyset,
 )
 from cashu.wallet.wallet import Wallet as Wallet
 
