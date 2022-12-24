@@ -243,7 +243,6 @@ async def send(ctx, amount: int, lock: str, legacy: bool):
     )
     token = await wallet.serialize_proofs(
         send_proofs,
-        hide_secrets=True if lock and not p2sh else False,
         include_mints=True,
     )
     print(token)
@@ -256,7 +255,6 @@ async def send(ctx, amount: int, lock: str, legacy: bool):
         print("")
         token = await wallet.serialize_proofs(
             send_proofs,
-            hide_secrets=True if lock and not p2sh else False,
             legacy=True,
         )
         print(token)
@@ -297,7 +295,7 @@ async def receive(ctx, token: str, lock: str):
         # if there is a `mints` field in the token
         # we get the mint information in the token and load the keys of each mint
         # we then redeem the tokens for each keyset individually
-        if "mints" in dtoken:
+        if "mints" in dtoken and dtoken.get("mints") is not None:
             for mint_id in dtoken.get("mints"):
                 for keyset in set(dtoken["mints"][mint_id]["ks"]):
                     mint_url = dtoken["mints"][mint_id]["url"]
@@ -390,16 +388,14 @@ async def pending(ctx):
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
-            token_hidden_secret = await wallet.serialize_proofs(
-                grouped_proofs, hide_secrets=True
-            )
+            token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
                 f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time: {reserved_date} ID: {key}\n"
             )
-            print(f"With secret: {token}\n\nSecretless: {token_hidden_secret}\n")
+            print(f"{token}\n")
             print(f"--------------------------\n")
     wallet.status()
 

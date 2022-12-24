@@ -24,6 +24,8 @@ from cashu.core.base import (
     Proof,
     SplitRequest,
     WalletKeyset,
+    TokenJson,
+    TokenMintJson,
 )
 from cashu.core.bolt11 import Invoice as InvoiceBolt11
 from cashu.core.db import Database
@@ -405,6 +407,8 @@ class Wallet(LedgerAPI):
     async def _get_proofs_per_minturl(self, proofs: List[Proof]):
         ret = {}
         for id in set([p.id for p in proofs]):
+            if id is None:
+                continue
             keyset: WalletKeyset = await get_keyset(id=id, db=self.db)
             if keyset.mint_url not in ret:
                 ret[keyset.mint_url] = [p for p in proofs if p.id == id]
@@ -482,50 +486,49 @@ class Wallet(LedgerAPI):
         return status["paid"]
 
     async def serialize_proofs(
-        self, proofs: List[Proof], hide_secrets=False, include_mints=False, legacy=False
+        self, proofs: List[Proof], include_mints=False, legacy=False
     ):
         """
         Produces sharable token with proofs and mint information.
         """
-        # serialize the list of proofs, either with secrets included or without secrets
-        if hide_secrets:
-            proofs_serialized = [p.to_dict_no_secret() for p in proofs]
-        else:
-            proofs_serialized = [p.to_dict() for p in proofs]
 
         if legacy:
+            proofs_serialized = [p.to_dict() for p in proofs]
             return base64.urlsafe_b64encode(
                 json.dumps(proofs_serialized).encode()
             ).decode()
 
-        token = dict(tokens=proofs_serialized)
+        token = TokenJson(tokens=proofs)
+        # token = dict(tokens=proofs_serialized)
 
         # add mint information to the token, if requested
         if include_mints:
 
-            mints = dict()
+            mints: Dict[str, TokenMintJson] = dict()
 
             # iterate through all proofs and add their keyset to `mints`
             for proof in proofs:
                 if proof.id:
                     keyset = await get_keyset(id=proof.id, db=self.db)
-                    if keyset:
+                    if keyset and keyset.mint_url:
                         # TODO: replace this with a mint pubkey
                         placeholder_mint_id = keyset.mint_url
                         if placeholder_mint_id not in mints:
-                            id = dict(
+                            id = TokenMintJson(
                                 url=keyset.mint_url,
                                 ks=[keyset.id],
                             )
                             mints[placeholder_mint_id] = id
                         else:
-                            if keyset.id not in mints[placeholder_mint_id]["ks"]:
-                                mints[placeholder_mint_id]["ks"].append(keyset.id)
-            if mints:
-                token["mints"] = mints
+                            if keyset.id not in mints[placeholder_mint_id].ks:
+                                mints[placeholder_mint_id].ks.append(keyset.id)
+            if len(mints) > 0:
+                token.mints = mints
 
         # encode the token as a base64 string
-        token_base64 = base64.urlsafe_b64encode(json.dumps(token).encode()).decode()
+        token_base64 = base64.urlsafe_b64encode(
+            json.dumps(token.dict()).encode()
+        ).decode()
         return token_base64
 
     async def _get_spendable_proofs(self, proofs: List[Proof]):
