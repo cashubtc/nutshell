@@ -206,7 +206,7 @@ class LedgerAPI:
         keyset_id is base64, needs to be urlsafe-encoded.
         """
         self.s = self._set_requests()
-        keyset_id_urlsafe = keyset_id.replace("-", "+").replace("_", "/")
+        keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = self.s.get(
             url + f"/keys/{keyset_id_urlsafe}",
         )
