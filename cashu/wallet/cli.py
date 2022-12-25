@@ -40,6 +40,8 @@ from cashu.wallet.crud import (
 )
 from cashu.wallet.wallet import Wallet as Wallet
 
+from .cli_helpers import verify_mints, redeem_multimint
+
 
 async def init_wallet(wallet: Wallet):
     """Performs migrations and loads proofs from db."""
@@ -193,18 +195,28 @@ async def balance(ctx, verbose):
             print("")
             for k, v in keyset_balances.items():
                 print(
-                    f"Keyset: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']} sat)"
+                    f"Keyset: {k or 'undefined'} - Balance: {v['available']} sat (with pending: {v['balance']} sat)"
                 )
             print("")
 
     mint_balances = await wallet.balance_per_minturl()
-    if len(mint_balances) > 1:
-        # show balances per mint
+
+    # if we have a balance on a non-default mint
+    show_mints = False
+    keysets = [k for k, v in wallet.balance_per_keyset().items()]
+    for k in keysets:
+        ks = await get_keyset(id=str(k), db=wallet.db)
+        if ks and ks.mint_url != ctx.obj["HOST"]:
+            show_mints = True
+
+    # or we have a balance on more than one mint
+    # show balances per mint
+    if len(mint_balances) > 1 or show_mints:
         print(f"You have balances in {len(mint_balances)} mints:")
         print("")
         for k, v in mint_balances.items():
             print(
-                f"Mint: {k or 'undefined'} Balance: {v['balance']} sat (available: {v['available']} sat)"
+                f"Mint: {k or 'undefined'} - Balance: {v['available']} sat (with pending: {v['balance']} sat)"
             )
         print("")
 
@@ -271,6 +283,8 @@ async def receive(ctx, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
+
+    # extract script and signature from P2SH lock
     if lock:
         # load the script and signature of this address from the database
         assert len(lock.split("P2SH:")) == 2, Exception(
@@ -285,56 +299,31 @@ async def receive(ctx, token: str, lock: str):
     else:
         script, signature = None, None
 
+    # we support old tokens (< 0.7) without mint information and (W3siaWQ...)
+    # new tokens (>= 0.7) with multiple mint support (eyJ0b2...)
     try:
-        # backwards compatibility < 0.7.0: tokens without mint information
+        # backwards compatibility: tokens without mint information
         proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
         _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
     except:
+        # assume token with mint information
         dtoken = json.loads(base64.urlsafe_b64decode(token))
         assert "tokens" in dtoken, Exception("no proofs in token")
+        includes_mint_info: bool = "mints" in dtoken and dtoken.get("mints") is not None
+
         # if there is a `mints` field in the token
-        # we get the mint information in the token and load the keys of each mint
-        # we then redeem the tokens for each keyset individually
-        if "mints" in dtoken and dtoken.get("mints") is not None:
-            for mint_id in dtoken.get("mints"):
-                for keyset in set(dtoken["mints"][mint_id]["ks"]):
-                    mint_url = dtoken["mints"][mint_id]["url"]
-                    # init a temporary wallet object
-                    keyset_wallet = Wallet(
-                        mint_url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
-                    )
-
-                    # first we check whether we know this mint already and ask the user
-                    mint_keysets = await get_keyset(id=keyset, db=keyset_wallet.db)
-                    if mint_keysets is None:
-                        click.confirm(
-                            f"Do you want to receive tokens from mint {mint_url}?",
-                            abort=True,
-                            default=True,
-                        )
-
-                    # make sure that this mint indeed supports this keyset
-                    mint_keysets = await keyset_wallet._get_keysets(mint_url)
-                    if keyset in mint_keysets["keysets"]:
-                        # load the keys
-                        await keyset_wallet.load_mint(keyset_id=keyset)
-
-                        # redeem proofs of this keyset
-                        redeem_proofs = [
-                            Proof(**p)
-                            for p in dtoken["tokens"]
-                            if Proof(**p).id == keyset
-                        ]
-                        _, _ = await keyset_wallet.redeem(
-                            redeem_proofs, scnd_script=script, scnd_siganture=signature
-                        )
-                        keyset_wallet.db.connect()
-
-                        # reload proofs to update the main wallet's balance
-                        await wallet.load_proofs()
+        # we check whether the token has mints that we don't know yet
+        # and ask the user if they want to trust the new mitns
+        if includes_mint_info:
+            # we ask the user to confirm any new mints the tokens may include
+            await verify_mints(ctx, dtoken)
+            # proceed with redemption
+            await redeem_multimint(ctx, dtoken, script, signature)
+            # reload main wallet so the balance updates
+            await wallet.load_proofs()
 
         else:
-            # no mint information present, assume default mint
+            # no mint information present, use wallet's default mint
             proofs = [Proof(**p) for p in dtoken["tokens"]]
             _, _ = await wallet.redeem(
                 proofs, scnd_script=script, scnd_siganture=signature
