@@ -57,12 +57,12 @@ class Ledger:
             seed=self.master_key, derivation_path=derivation_path, version=VERSION
         )
         # check if current keyset is stored in db and store if not
-        logger.debug(f"Loading keyset {keyset.id} from db.")
+        logger.trace(f"Loading keyset {keyset.id} from db.")
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
             id=keyset.id, db=self.db
         )
         if not len(tmp_keyset_local) and autosave:
-            logger.debug(f"Storing keyset {keyset.id}.")
+            logger.trace(f"Storing keyset {keyset.id}.")
             await self.crud.store_keyset(keyset=keyset, db=self.db)
 
         # store the new keyset in the current keysets
@@ -74,10 +74,10 @@ class Ledger:
         # load all past keysets from db
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
         self.keysets = MintKeysets(tmp_keysets)
-        logger.debug(f"Loading {len(self.keysets.keysets)} keysets form db.")
+        logger.trace(f"Loading {len(self.keysets.keysets)} keysets form db.")
         # generate all derived keys from stored derivation paths of past keysets
         for _, v in self.keysets.keysets.items():
-            logger.debug(f"Generating keys for keyset {v.id}")
+            logger.trace(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
