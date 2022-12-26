@@ -457,17 +457,12 @@ async def nostr(ctx):
     await asyncio.sleep(2)
 
     def get_token_callback(event: Event, decrypted_content):
-        print(
-            f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
-        )
+        # print(
+        #     f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
+        # )
         try:
-            proofs = [
-                Proof(**p)
-                for p in json.loads(base64.urlsafe_b64decode(decrypted_content))
-            ]
-            wallet: Wallet = ctx.obj["WALLET"]
-            asyncio.run(wallet.redeem(proofs))
-            wallet.status()
+            # call the receive method
+            asyncio.run(receive(ctx, decrypted_content))
         except Exception as e:
             pass
 
