@@ -285,12 +285,6 @@ async def send(ctx, amount: int, lock: str, legacy: bool):
 async def receive(ctx, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-<<<<<<< HEAD
-    wallet.status()
-
-    # extract script and signature from P2SH lock
-=======
->>>>>>> main
     if lock:
         # load the script and signature of this address from the database
         assert len(lock.split("P2SH:")) == 2, Exception(
