@@ -52,5 +52,7 @@ if not MINT_URL:
 LNBITS_ENDPOINT = env.str("LNBITS_ENDPOINT", default=None)
 LNBITS_KEY = env.str("LNBITS_KEY", default=None)
 
+NOSTR_PRIVATE_KEY = env.str("NOSTR_PRIVATE_KEY", default=None)
+
 MAX_ORDER = 64
-VERSION = "0.6.0"
+VERSION = "0.7.0"
