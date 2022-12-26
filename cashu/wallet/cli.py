@@ -407,9 +407,17 @@ async def invoices(ctx):
     "pubkey",
     type=str,
 )
+@click.option(
+    "--verbose",
+    "-v",
+    default=False,
+    is_flag=True,
+    help="Show more information.",
+    type=bool,
+)
 @click.pass_context
 @coro
-async def nostrsend(ctx, amount: int, pubkey: str):
+async def nsend(ctx, amount: int, pubkey: str, verbose: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -423,6 +431,8 @@ async def nostrsend(ctx, amount: int, pubkey: str):
 
     # we only use ephemeral private keys for sending
     client = NostrClient()
+    if verbose:
+        print(f"Your ephemeral nostr private key: {client.private_key.hex()}")
     await asyncio.sleep(1)
     client.dm(token, PublicKey(bytes.fromhex(pubkey)))
     print(f"Token sent to {pubkey}")
@@ -430,23 +440,33 @@ async def nostrsend(ctx, amount: int, pubkey: str):
 
 
 @cli.command("nreceive", help="Receive tokens via nostr.")
+@click.option(
+    "--verbose",
+    "-v",
+    help="Display more information.",
+    is_flag=True,
+    default=False,
+    type=bool,
+)
 @click.pass_context
 @coro
-async def nostr(ctx):
-    wallet: Wallet = ctx.obj["WALLET"]
+async def nreceive(ctx, verbose: bool):
     if NOSTR_PRIVATE_KEY is None:
         print(
-            "Warning!\n\nYou don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it. If you lose this key, you will lose access to the DMs you receive on it."
+            "Warning! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it. If you lose this key, you will lose access to the DMs you receive on it."
         )
         print("")
     client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY)
     print(f"Your nostr public key: {client.public_key.hex()}")
+    if verbose:
+        print(f"Your nostr private key (do not share!): {client.private_key.hex()}")
     await asyncio.sleep(2)
 
     def get_token_callback(event: Event, decrypted_content):
-        # print(
-        #     f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
-        # )
+        if verbose:
+            print(
+                f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
+            )
         try:
             # call the receive method
             asyncio.run(receive(ctx, decrypted_content, ""))
