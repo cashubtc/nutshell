@@ -5,6 +5,7 @@ import base64
 import json
 import os
 import sys
+import threading
 import time
 from datetime import datetime
 from functools import wraps
@@ -25,11 +26,15 @@ from cashu.core.settings import (
     ENV_FILE,
     LIGHTNING,
     MINT_URL,
+    NOSTR_PRIVATE_KEY,
     SOCKS_HOST,
     SOCKS_PORT,
     TOR,
     VERSION,
 )
+from cashu.nostr.nostr.client.client import NostrClient
+from cashu.nostr.nostr.event import Event
+from cashu.nostr.nostr.key import PublicKey
 from cashu.tor.tor import TorProxy
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
@@ -77,10 +82,13 @@ def cli(ctx, host: str, walletname: str):
         error_str += "\n\n"
         if ENV_FILE:
             error_str += f"Edit your Cashu config file here: {ENV_FILE}"
+            env_path = ENV_FILE
         else:
             error_str += (
                 f"Ceate a new Cashu config file here: {os.path.join(CASHU_DIR, '.env')}"
             )
+            env_path = os.path.join(CASHU_DIR, ".env")
+        error_str += f'\n\nYou can turn off Tor with this command: echo "TOR=false" >> {env_path}'
         raise Exception(error_str)
 
     ctx.obj["WALLET"] = wallet
@@ -227,15 +235,9 @@ async def send(ctx, amount: int, lock: str):
     wallet.status()
 
 
-@cli.command("receive", help="Receive tokens.")
-@click.argument("token", type=str)
-@click.option("--lock", "-l", default=None, help="Unlock tokens.", type=str)
-@click.pass_context
-@coro
 async def receive(ctx, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    wallet.status()
     if lock:
         # load the script and signature of this address from the database
         assert len(lock.split("P2SH:")) == 2, Exception(
@@ -252,6 +254,17 @@ async def receive(ctx, token: str, lock: str):
     proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
     _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
     wallet.status()
+
+
+@cli.command("receive", help="Receive tokens.")
+@click.argument("token", type=str)
+@click.option("--lock", "-l", default=None, help="Unlock tokens.", type=str)
+@click.pass_context
+@coro
+async def receive_cli(ctx, token: str, lock: str):
+    wallet: Wallet = ctx.obj["WALLET"]
+    wallet.status()
+    await receive(ctx, token, lock)
 
 
 @cli.command("burn", help="Burn spent tokens.")
@@ -391,6 +404,89 @@ async def invoices(ctx):
         print("No invoices found.")
 
 
+@cli.command("nsend", help="Send tokens via nostr.")
+@click.argument("amount", type=int)
+@click.argument(
+    "pubkey",
+    type=str,
+)
+@click.option(
+    "--verbose",
+    "-v",
+    default=False,
+    is_flag=True,
+    help="Show more information.",
+    type=bool,
+)
+@click.pass_context
+@coro
+async def nsend(ctx, amount: int, pubkey: str, verbose: bool):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    wallet.status()
+    _, send_proofs = await wallet.split_to_send(
+        wallet.proofs, amount, set_reserved=True
+    )
+    token = await wallet.serialize_proofs(send_proofs)
+
+    print(token)
+    wallet.status()
+
+    # we only use ephemeral private keys for sending
+    client = NostrClient()
+    if verbose:
+        print(f"Your ephemeral nostr private key: {client.private_key.hex()}")
+    await asyncio.sleep(1)
+    client.dm(token, PublicKey(bytes.fromhex(pubkey)))
+    print(f"Token sent to {pubkey}")
+    client.close()
+
+
+@cli.command("nreceive", help="Receive tokens via nostr.")
+@click.option(
+    "--verbose",
+    "-v",
+    help="Display more information.",
+    is_flag=True,
+    default=False,
+    type=bool,
+)
+@click.pass_context
+@coro
+async def nreceive(ctx, verbose: bool):
+    if NOSTR_PRIVATE_KEY is None:
+        print(
+            "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it."
+        )
+        print("")
+    client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY)
+    print(f"Your nostr public key: {client.public_key.hex()}")
+    if verbose:
+        print(f"Your nostr private key (do not share!): {client.private_key.hex()}")
+    await asyncio.sleep(2)
+
+    def get_token_callback(event: Event, decrypted_content):
+        if verbose:
+            print(
+                f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
+            )
+        try:
+            # call the receive method
+            asyncio.run(receive(ctx, decrypted_content, ""))
+        except Exception as e:
+            pass
+
+    t = threading.Thread(
+        target=client.get_dm,
+        args=(
+            client.public_key,
+            get_token_callback,
+        ),
+        name="Nostr DM",
+    )
+    t.start()
+
+
 @cli.command("wallets", help="List of all available wallets.")
 @click.pass_context
 @coro
@@ -429,6 +525,9 @@ async def info(ctx):
         print(f"Settings: {ENV_FILE}")
     if TOR:
         print(f"Tor enabled: {TOR}")
+    if NOSTR_PRIVATE_KEY:
+        client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY, connect=False)
+        print(f"Nostr public key: {client.public_key.hex()}")
     if SOCKS_HOST:
         print(f"Socks proxy: {SOCKS_HOST}:{SOCKS_PORT}")
     print(f"Mint URL: {MINT_URL}")
