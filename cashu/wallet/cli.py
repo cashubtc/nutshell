@@ -233,11 +233,6 @@ async def send(ctx, amount: int, lock: str):
     wallet.status()
 
 
-@cli.command("receive", help="Receive tokens.")
-@click.argument("token", type=str)
-@click.option("--lock", "-l", default=None, help="Unlock tokens.", type=str)
-@click.pass_context
-@coro
 async def receive(ctx, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
@@ -258,6 +253,15 @@ async def receive(ctx, token: str, lock: str):
     proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
     _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
     wallet.status()
+
+
+@cli.command("receive", help="Receive tokens.")
+@click.argument("token", type=str)
+@click.option("--lock", "-l", default=None, help="Unlock tokens.", type=str)
+@click.pass_context
+@coro
+async def receive_cli(ctx, token: str, lock: str):
+    await receive(ctx, token, lock)
 
 
 @cli.command("burn", help="Burn spent tokens.")
@@ -455,14 +459,15 @@ async def nostr(ctx):
     client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY)
 
     await asyncio.sleep(2)
+    await receive(ctx, "asd", "")
 
     def get_token_callback(event: Event, decrypted_content):
-        # print(
-        #     f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
-        # )
+        print(
+            f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
+        )
         try:
             # call the receive method
-            asyncio.run(receive(ctx, decrypted_content))
+            asyncio.run(receive(ctx, decrypted_content, ""))
         except Exception as e:
             pass
 
