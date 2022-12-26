@@ -48,10 +48,10 @@ from cashu.wallet.crud import (
 from cashu.wallet.wallet import Wallet as Wallet
 
 from .cli_helpers import (
+    get_mint_wallet,
+    print_mint_balances,
     redeem_multimint,
     verify_mints,
-    print_mint_balances,
-    get_mint_wallet,
 )
 
 
