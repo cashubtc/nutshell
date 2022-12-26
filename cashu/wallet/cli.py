@@ -82,10 +82,13 @@ def cli(ctx, host: str, walletname: str):
         error_str += "\n\n"
         if ENV_FILE:
             error_str += f"Edit your Cashu config file here: {ENV_FILE}"
+            env_path = ENV_FILE
         else:
             error_str += (
                 f"Ceate a new Cashu config file here: {os.path.join(CASHU_DIR, '.env')}"
             )
+            env_path = os.path.join(CASHU_DIR, ".env")
+        error_str += f'\n\nYou can turn off Tor with this command: echo "TOR=false" >> {env_path}'
         raise Exception(error_str)
 
     ctx.obj["WALLET"] = wallet
