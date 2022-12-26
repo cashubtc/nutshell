@@ -418,9 +418,12 @@ async def invoices(ctx):
     help="Show more information.",
     type=bool,
 )
+@click.option(
+    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
+)
 @click.pass_context
 @coro
-async def nsend(ctx, amount: int, pubkey: str, verbose: bool):
+async def nsend(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -429,8 +432,16 @@ async def nsend(ctx, amount: int, pubkey: str, verbose: bool):
     )
     token = await wallet.serialize_proofs(send_proofs)
 
+    print("")
     print(token)
-    wallet.status()
+
+    if not yes:
+        print("")
+        click.confirm(
+            f"Send {amount} sat to nostr pubkey {pubkey}?",
+            abort=True,
+            default=True,
+        )
 
     # we only use ephemeral private keys for sending
     client = NostrClient()
