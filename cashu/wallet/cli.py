@@ -459,7 +459,6 @@ async def nostr(ctx):
     client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY)
 
     await asyncio.sleep(2)
-    await receive(ctx, "asd", "")
 
     def get_token_callback(event: Event, decrypted_content):
         print(
