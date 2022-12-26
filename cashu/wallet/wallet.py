@@ -66,8 +66,8 @@ class LedgerAPI:
     def _set_requests(self):
         s = requests.Session()
         s.headers.update({"Client-version": VERSION})
-        if DEBUG:
-            s.verify = False
+        # if DEBUG:
+        # s.verify = False
         socks_host, socks_port = None, None
         if TOR and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)

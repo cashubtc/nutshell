@@ -15,7 +15,7 @@ async def verify_mints(ctx, dtoken):
             keyset_wallet = Wallet(
                 mint_url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
             )
-            # make sure that this mint indeed supports this keyset
+            # make sure that this mint supports this keyset
             mint_keysets = await keyset_wallet._get_keysets(mint_url)
             assert keyset in mint_keysets["keysets"], "mint does not have this keyset."
 
@@ -23,19 +23,21 @@ async def verify_mints(ctx, dtoken):
             mint_keyset = await keyset_wallet._get_keyset(mint_url, keyset)
             assert keyset == mint_keyset.id, Exception("keyset not valid.")
 
-            # we check the db whether we know this keyset already and ask the user
-            mint_keysets = await get_keyset(id=keyset, db=keyset_wallet.db)
+            # we check the db whether we know this mint already and ask the user if not
+            mint_keysets = await get_keyset(mint_url=mint_url, db=keyset_wallet.db)
             if mint_keysets is None:
                 # we encountered a new mint and ask for a user confirmation
                 trust_token_mints = False
                 print("")
-                print("Warning: Tokens are from a mint or keyset you don't know yet.")
+                print(
+                    "Warning: Tokens are from a mint you don't know yet. Make sure that you know this mint."
+                )
                 print("\n")
                 print(f"Mint URL: {mint_url}")
                 print(f"Mint keyset: {keyset}")
                 print("\n")
                 click.confirm(
-                    f"Do you want to trust this mint and receive the tokens?",
+                    f"Do you trust this mint and want to receive the tokens?",
                     abort=True,
                     default=True,
                 )

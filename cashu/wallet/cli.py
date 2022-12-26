@@ -73,7 +73,7 @@ class NaturalOrderGroup(click.Group):
 @click.pass_context
 def cli(ctx, host: str, walletname: str):
     if TOR and not TorProxy().check_platform():
-        error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. Please install Tor manually and set TOR=false and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended) or turn off Tor by setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
+        error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
         error_str += "\n\n"
         if ENV_FILE:
             error_str += f"Edit your Cashu config file here: {ENV_FILE}"
@@ -83,7 +83,7 @@ def cli(ctx, host: str, walletname: str):
                 f"Ceate a new Cashu config file here: {os.path.join(CASHU_DIR, '.env')}"
             )
             env_path = os.path.join(CASHU_DIR, ".env")
-        error_str += f'\n\nYou can turn off Tor with this command: echo "TOR=false" >> {env_path}'
+        error_str += f'\n\nYou can turn off Tor with this command: echo "TOR=FALSE" >> {env_path}'
         raise Exception(error_str)
 
     # configure logger
@@ -203,13 +203,14 @@ async def balance(ctx, verbose):
             print("")
             for k, v in keyset_balances.items():
                 print(
-                    f"Keyset: {k or 'undefined'} - Balance: {v['available']} sat (with pending: {v['balance']} sat)"
+                    f"Keyset: {k} - Balance: {v['available']} sat (pending: {v['balance']-v['available']} sat)"
                 )
             print("")
 
+    # get balances per mint
     mint_balances = await wallet.balance_per_minturl()
 
-    # if we have a balance on a non-default mint
+    # if we have a balance on a non-default mint, we show its URL
     show_mints = False
     keysets = [k for k, v in wallet.balance_per_keyset().items()]
     for k in keysets:
@@ -224,13 +225,13 @@ async def balance(ctx, verbose):
         print("")
         for k, v in mint_balances.items():
             print(
-                f"Mint: {k or 'undefined'} - Balance: {v['available']} sat (with pending: {v['balance']} sat)"
+                f"Mint: {k} - Balance: {v['available']} sat (pending: {v['balance']-v['available']} sat)"
             )
         print("")
 
     if verbose:
         print(
-            f"Balance: {wallet.balance} sat (available: {wallet.available_balance} sat in {len([p for p in wallet.proofs if not p.reserved])} tokens)"
+            f"Balance: {wallet.available_balance} sat (pending: {wallet.balance-wallet.available_balance} sat) in {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
         print(f"Balance: {wallet.available_balance} sat")
