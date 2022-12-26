@@ -409,7 +409,6 @@ async def invoices(ctx):
 @click.argument(
     "pubkey",
     type=str,
-    help="Nostr pubkey to send tokens to.",
 )
 @click.option(
     "--verbose",
