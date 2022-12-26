@@ -97,7 +97,7 @@ async def get_mint_wallet(ctx):
     await wallet.load_mint()
 
     mint_balances = await wallet.balance_per_minturl()
-    print(mint_balances)
+    # if there is only one mint, use it
     if len(mint_balances) == 1:
         return wallet
 
@@ -113,9 +113,10 @@ async def get_mint_wallet(ctx):
 
     mint_url = list(mint_balances.keys())[mint_nr - 1]
 
+    # load this mint_url into a wallet
     mint_wallet = Wallet(mint_url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"]))
     mint_keysets: WalletKeyset = await get_keyset(mint_url=mint_url, db=mint_wallet.db)  # type: ignore
-    print(mint_keysets.id)
+
     # load the keys
     await mint_wallet.load_mint(keyset_id=mint_keysets.id)
 
