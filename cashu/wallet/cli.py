@@ -91,6 +91,7 @@ def cli(ctx, host: str, walletname: str):
     # configure logger
     logger.remove()
     logger.add(sys.stderr, level="DEBUG" if DEBUG else "INFO")
+
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
@@ -349,9 +350,8 @@ async def receive(ctx, token: str, lock: str):
             token_object.mints[url] = TokenMintJson(url=url, ks=keysets)  # type: ignore
             token = await wallet._serialize_token_base64(token_object)
 
-    except Exception as e:
-        print(f"error decoding token: {str(e)}")
-        raise e
+    except:
+        pass
 
     # ----- receive token -----
 
