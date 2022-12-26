@@ -2,7 +2,7 @@ import os
 
 import click
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, WalletKeyset
 from cashu.core.settings import CASHU_DIR
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
@@ -67,3 +67,56 @@ async def redeem_multimint(ctx, dtoken, script, signature):
             _, _ = await keyset_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
             )
+
+
+async def print_mint_balances(ctx, wallet, show_mints=False):
+    # get balances per mint
+    mint_balances = await wallet.balance_per_minturl()
+
+    # if we have a balance on a non-default mint, we show its URL
+    keysets = [k for k, v in wallet.balance_per_keyset().items()]
+    for k in keysets:
+        ks = await get_keyset(id=str(k), db=wallet.db)
+        if ks and ks.mint_url != ctx.obj["HOST"]:
+            show_mints = True
+
+    # or we have a balance on more than one mint
+    # show balances per mint
+    if len(mint_balances) > 1 or show_mints:
+        print(f"You have balances in {len(mint_balances)} mints:")
+        print("")
+        for i, (k, v) in enumerate(mint_balances.items()):
+            print(
+                f"Mint {i+1}: {k} - Balance: {v['available']} sat (pending: {v['balance']-v['available']} sat)"
+            )
+        print("")
+
+
+async def get_mint_wallet(ctx):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+
+    mint_balances = await wallet.balance_per_minturl()
+    print(mint_balances)
+    if len(mint_balances) == 1:
+        return wallet
+
+    await print_mint_balances(ctx, wallet, show_mints=True)
+
+    mint_nr = input(
+        f"Which mint do you want to use? [1-{len(mint_balances)}, default: 1] "
+    )
+    mint_nr = "1" if mint_nr == "" else mint_nr
+    if not mint_nr.isdigit():
+        raise Exception("invalid input.")
+    mint_nr = int(mint_nr)
+
+    mint_url = list(mint_balances.keys())[mint_nr - 1]
+
+    mint_wallet = Wallet(mint_url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"]))
+    mint_keysets: WalletKeyset = await get_keyset(mint_url=mint_url, db=mint_wallet.db)  # type: ignore
+    print(mint_keysets.id)
+    # load the keys
+    await mint_wallet.load_mint(keyset_id=mint_keysets.id)
+
+    return mint_wallet

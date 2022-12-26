@@ -665,13 +665,14 @@ class Wallet(LedgerAPI):
 
     async def balance_per_minturl(self):
         balances = await self._get_proofs_per_minturl(self.proofs)
-        return {
+        balances_return = {
             key: {
                 "balance": sum_proofs(proofs),
                 "available": sum_proofs([p for p in proofs if not p.reserved]),
             }
             for key, proofs in balances.items()
         }
+        return dict(sorted(balances_return.items(), key=lambda item: item[1]["available"], reverse=True))  # type: ignore
 
     def proof_amounts(self):
         return [p["amount"] for p in sorted(self.proofs, key=lambda p: p["amount"])]

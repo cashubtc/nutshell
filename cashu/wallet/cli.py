@@ -47,7 +47,12 @@ from cashu.wallet.crud import (
 )
 from cashu.wallet.wallet import Wallet as Wallet
 
-from .cli_helpers import redeem_multimint, verify_mints
+from .cli_helpers import (
+    redeem_multimint,
+    verify_mints,
+    print_mint_balances,
+    get_mint_wallet,
+)
 
 
 async def init_wallet(wallet: Wallet):
@@ -210,27 +215,7 @@ async def balance(ctx, verbose):
                 )
             print("")
 
-    # get balances per mint
-    mint_balances = await wallet.balance_per_minturl()
-
-    # if we have a balance on a non-default mint, we show its URL
-    show_mints = False
-    keysets = [k for k, v in wallet.balance_per_keyset().items()]
-    for k in keysets:
-        ks = await get_keyset(id=str(k), db=wallet.db)
-        if ks and ks.mint_url != ctx.obj["HOST"]:
-            show_mints = True
-
-    # or we have a balance on more than one mint
-    # show balances per mint
-    if len(mint_balances) > 1 or show_mints:
-        print(f"You have balances in {len(mint_balances)} mints:")
-        print("")
-        for k, v in mint_balances.items():
-            print(
-                f"Mint: {k} - Balance: {v['available']} sat (pending: {v['balance']-v['available']} sat)"
-            )
-        print("")
+    await print_mint_balances(ctx, wallet)
 
     if verbose:
         print(
@@ -259,9 +244,10 @@ async def send(ctx, amount: int, lock: str, legacy: bool):
     p2sh = False
     if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
-    wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_mint()
-    wallet.status()
+
+    wallet = await get_mint_wallet(ctx)
+    await wallet.load_proofs()
+
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, amount, lock, set_reserved=True
     )
@@ -444,6 +430,7 @@ async def pending(ctx):
             )
             print(f"{token}\n")
             print(f"--------------------------\n")
+        print("To remove all spent tokens use: cashu burn -a")
     wallet.status()
 
 
@@ -545,9 +532,8 @@ async def invoices(ctx):
 @click.pass_context
 @coro
 async def nsend(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
-    wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_mint()
-    wallet.status()
+    wallet = await get_mint_wallet(ctx)
+    await wallet.load_proofs()
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, amount, set_reserved=True
     )
