@@ -236,7 +236,6 @@ async def send(ctx, amount: int, lock: str):
 async def receive(ctx, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    wallet.status()
     if lock:
         # load the script and signature of this address from the database
         assert len(lock.split("P2SH:")) == 2, Exception(
@@ -261,6 +260,8 @@ async def receive(ctx, token: str, lock: str):
 @click.pass_context
 @coro
 async def receive_cli(ctx, token: str, lock: str):
+    wallet: Wallet = ctx.obj["WALLET"]
+    wallet.status()
     await receive(ctx, token, lock)
 
 
@@ -450,7 +451,6 @@ async def info(ctx):
 @coro
 async def nostr(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_mint()
     if NOSTR_PRIVATE_KEY is None:
         print(
             "Warning!\n\nYou don't have a private key set in your .env file. I will create a random private key for this session but I will not remember it. If you lose this key, you will lose access to the DMs you receive on it."
@@ -461,9 +461,9 @@ async def nostr(ctx):
     await asyncio.sleep(2)
 
     def get_token_callback(event: Event, decrypted_content):
-        print(
-            f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
-        )
+        # print(
+        #     f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
+        # )
         try:
             # call the receive method
             asyncio.run(receive(ctx, decrypted_content, ""))
