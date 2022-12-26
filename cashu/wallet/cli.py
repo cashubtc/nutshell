@@ -409,6 +409,7 @@ async def invoices(ctx):
 @click.argument(
     "pubkey",
     type=str,
+    help="Nostr pubkey to send tokens to.",
 )
 @click.option(
     "--verbose",
@@ -456,7 +457,7 @@ async def nsend(ctx, amount: int, pubkey: str, verbose: bool):
 async def nreceive(ctx, verbose: bool):
     if NOSTR_PRIVATE_KEY is None:
         print(
-            "Warning! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it. If you lose this key, you will lose access to the DMs you receive on it."
+            "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it."
         )
         print("")
     client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY)
