@@ -1,9 +1,11 @@
-import click
 import os
+
+import click
+
+from cashu.core.base import Proof
 from cashu.core.settings import CASHU_DIR
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
-from cashu.core.base import Proof
 
 
 async def verify_mints(ctx, dtoken):

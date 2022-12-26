@@ -7,17 +7,19 @@ import os
 import sys
 import threading
 import time
+import urllib.parse
 from datetime import datetime
 from functools import wraps
 from itertools import groupby
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
+from typing import Dict, List
 
 import click
 from loguru import logger
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, TokenJson, TokenMintJson
 from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import (
@@ -45,7 +47,7 @@ from cashu.wallet.crud import (
 )
 from cashu.wallet.wallet import Wallet as Wallet
 
-from .cli_helpers import verify_mints, redeem_multimint
+from .cli_helpers import redeem_multimint, verify_mints
 
 
 async def init_wallet(wallet: Wallet):
@@ -302,20 +304,56 @@ async def receive(ctx, token: str, lock: str):
 
     # deserialize token
 
+    # ----- backwards compatibility -----
+
     # we support old tokens (< 0.7) without mint information and (W3siaWQ...)
     # new tokens (>= 0.7) with multiple mint support (eyJ0b2...)
     try:
         # backwards compatibility: tokens without mint information
+        # supports tokens of the form W3siaWQiOiJH
+
+        # LNbits token link parsing
+        # can extract minut URL from LNbits token links like:
+        # https://lnbits.server/cashu/wallet?mint_id=aMintId&recv_token=W3siaWQiOiJHY2...
+        url = None
+        if len(token.split("&recv_token=")) == 2:
+            # extract URL params
+            params = urllib.parse.parse_qs(token.split("?")[1])
+            # extract URL
+            if "mint_id" in params:
+                url = (
+                    token.split("?")[0].split("/wallet")[0]
+                    + "/api/v1/"
+                    + params["mint_id"][0]
+                )
+            # extract token
+            token = params["recv_token"][0]
+
+        # assume W3siaWQiOiJH.. token
         # trows an error if the desirialization with the old format doesn't work
         proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
         token = await wallet.serialize_proofs(
             proofs,
             include_mints=False,
         )
-        # _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
+
+        # if it was an LNbits link
+        # and add url and keyset id to token from link extraction above
+        if url:
+            token_object: TokenJson = await wallet._make_token(
+                proofs, include_mints=False
+            )
+            token_object.mints = {}
+            keysets = list(set([p.id for p in proofs]))
+            assert keysets is not None, "no keysets"
+            token_object.mints[url] = TokenMintJson(url=url, ks=keysets)  # type: ignore
+            token = await wallet._serialize_token_base64(token_object)
+
     except Exception as e:
-        print(e)
-    print(token)
+        print(f"error decoding token: {str(e)}")
+        raise e
+
+    # ----- receive token -----
 
     # deserialize token
     dtoken = json.loads(base64.urlsafe_b64decode(token))
@@ -333,11 +371,10 @@ async def receive(ctx, token: str, lock: str):
         await redeem_multimint(ctx, dtoken, script, signature)
         # reload main wallet so the balance updates
         await wallet.load_proofs()
-
     else:
         # no mint information present, we extract the proofs and use wallet's default mint
         proofs = [Proof(**p) for p in dtoken["tokens"]]
-        _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
+        _, _ = await wallet.redeem(proofs, script, signature)
 
     wallet.status()
 

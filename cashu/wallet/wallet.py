@@ -66,8 +66,8 @@ class LedgerAPI:
     def _set_requests(self):
         s = requests.Session()
         s.headers.update({"Client-version": VERSION})
-        # if DEBUG:
-        # s.verify = False
+        if DEBUG:
+            s.verify = False
         socks_host, socks_port = None, None
         if TOR and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
@@ -487,19 +487,11 @@ class Wallet(LedgerAPI):
             raise Exception("could not pay invoice.")
         return status["paid"]
 
-    async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, legacy=False
-    ):
+    async def _make_token(self, proofs: List[Proof], include_mints=True):
         """
-        Produces sharable token with proofs and mint information.
+        Takes list of proofs and produces a TokenJson by looking up
+        the keyset id and mint URLs from the database.
         """
-
-        if legacy:
-            proofs_serialized = [p.to_dict() for p in proofs]
-            return base64.urlsafe_b64encode(
-                json.dumps(proofs_serialized).encode()
-            ).decode()
-
         # build token
         token = TokenJson(tokens=proofs)
 
@@ -528,12 +520,33 @@ class Wallet(LedgerAPI):
                                 mints[placeholder_mint_id].ks.append(keyset.id)
             if len(mints) > 0:
                 token.mints = mints
+        return token
 
+    async def _serialize_token_base64(self, token: TokenJson):
+        """
+        Takes a TokenJson and serializes it in urlsafe_base64.
+        """
         # encode the token as a base64 string
         token_base64 = base64.urlsafe_b64encode(
             json.dumps(token.dict()).encode()
         ).decode()
         return token_base64
+
+    async def serialize_proofs(
+        self, proofs: List[Proof], include_mints=True, legacy=False
+    ):
+        """
+        Produces sharable token with proofs and mint information.
+        """
+
+        if legacy:
+            proofs_serialized = [p.to_dict() for p in proofs]
+            return base64.urlsafe_b64encode(
+                json.dumps(proofs_serialized).encode()
+            ).decode()
+
+        token = await self._make_token(proofs, include_mints)
+        return await self._serialize_token_base64(token)
 
     async def _get_spendable_proofs(self, proofs: List[Proof]):
         """
