@@ -286,49 +286,58 @@ async def send(ctx, amount: int, lock: str, legacy: bool):
 async def receive(ctx, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
+
+    # check for P2SH locks
     if lock:
         # load the script and signature of this address from the database
         assert len(lock.split("P2SH:")) == 2, Exception(
             "lock has wrong format. Expected P2SH:<address>."
         )
         address_split = lock.split("P2SH:")[1]
-
         p2shscripts = await get_unused_locks(address_split, db=wallet.db)
         assert len(p2shscripts) == 1, Exception("lock not found.")
-        script = p2shscripts[0].script
-        signature = p2shscripts[0].signature
+        script, signature = p2shscripts[0].script, p2shscripts[0].signature
     else:
         script, signature = None, None
+
+    # deserialize token
 
     # we support old tokens (< 0.7) without mint information and (W3siaWQ...)
     # new tokens (>= 0.7) with multiple mint support (eyJ0b2...)
     try:
         # backwards compatibility: tokens without mint information
+        # trows an error if the desirialization with the old format doesn't work
         proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
+        token = await wallet.serialize_proofs(
+            proofs,
+            include_mints=False,
+        )
+        # _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
+    except Exception as e:
+        print(e)
+    print(token)
+
+    # deserialize token
+    dtoken = json.loads(base64.urlsafe_b64decode(token))
+
+    assert "tokens" in dtoken, Exception("no proofs in token")
+    includes_mint_info: bool = "mints" in dtoken and dtoken.get("mints") is not None
+
+    # if there is a `mints` field in the token
+    # we check whether the token has mints that we don't know yet
+    # and ask the user if they want to trust the new mitns
+    if includes_mint_info:
+        # we ask the user to confirm any new mints the tokens may include
+        await verify_mints(ctx, dtoken)
+        # redeem tokens with new wallet instances
+        await redeem_multimint(ctx, dtoken, script, signature)
+        # reload main wallet so the balance updates
+        await wallet.load_proofs()
+
+    else:
+        # no mint information present, we extract the proofs and use wallet's default mint
+        proofs = [Proof(**p) for p in dtoken["tokens"]]
         _, _ = await wallet.redeem(proofs, scnd_script=script, scnd_siganture=signature)
-    except:
-        # assume token with mint information
-        dtoken = json.loads(base64.urlsafe_b64decode(token))
-        assert "tokens" in dtoken, Exception("no proofs in token")
-        includes_mint_info: bool = "mints" in dtoken and dtoken.get("mints") is not None
-
-        # if there is a `mints` field in the token
-        # we check whether the token has mints that we don't know yet
-        # and ask the user if they want to trust the new mitns
-        if includes_mint_info:
-            # we ask the user to confirm any new mints the tokens may include
-            await verify_mints(ctx, dtoken)
-            # proceed with redemption
-            await redeem_multimint(ctx, dtoken, script, signature)
-            # reload main wallet so the balance updates
-            await wallet.load_proofs()
-
-        else:
-            # no mint information present, use wallet's default mint
-            proofs = [Proof(**p) for p in dtoken["tokens"]]
-            _, _ = await wallet.redeem(
-                proofs, scnd_script=script, scnd_siganture=signature
-            )
 
     wallet.status()
 
