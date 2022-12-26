@@ -31,9 +31,7 @@ async def verify_mints(ctx, dtoken):
                 # we encountered a new mint and ask for a user confirmation
                 trust_token_mints = False
                 print("")
-                print(
-                    "Warning: Tokens are from a mint you don't know yet. Make sure that you know this mint."
-                )
+                print("Warning: Tokens are from a mint you don't know yet.")
                 print("\n")
                 print(f"Mint URL: {mint_url}")
                 print(f"Mint keyset: {keyset}")
