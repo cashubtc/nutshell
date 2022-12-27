@@ -7,9 +7,10 @@ from environs import Env  # type: ignore
 
 env = Env()
 
-ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
+# env file: default to current dir, else home dir
+ENV_FILE = os.path.join(os.getcwd(), ".env")
 if not os.path.isfile(ENV_FILE):
-    ENV_FILE = os.path.join(os.getcwd(), ".env")
+    ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
 if os.path.isfile(ENV_FILE):
     env.read_env(ENV_FILE)
 else:
@@ -53,6 +54,7 @@ LNBITS_ENDPOINT = env.str("LNBITS_ENDPOINT", default=None)
 LNBITS_KEY = env.str("LNBITS_KEY", default=None)
 
 NOSTR_PRIVATE_KEY = env.str("NOSTR_PRIVATE_KEY", default=None)
+NOSTR_RELAYS = env.list("NOSTR_RELAYS", default=["wss://nostr-pub.wellorder.net"])
 
 MAX_ORDER = 64
 VERSION = "0.7.0"

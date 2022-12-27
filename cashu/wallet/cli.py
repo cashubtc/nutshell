@@ -29,6 +29,7 @@ from cashu.core.settings import (
     LIGHTNING,
     MINT_URL,
     NOSTR_PRIVATE_KEY,
+    NOSTR_RELAYS,
     SOCKS_HOST,
     SOCKS_PORT,
     TOR,
@@ -551,7 +552,7 @@ async def nsend(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
         )
 
     # we only use ephemeral private keys for sending
-    client = NostrClient()
+    client = NostrClient(relays=NOSTR_RELAYS)
     if verbose:
         print(f"Your ephemeral nostr private key: {client.private_key.hex()}")
     await asyncio.sleep(1)
@@ -577,7 +578,7 @@ async def nreceive(ctx, verbose: bool):
             "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it."
         )
         print("")
-    client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY)
+    client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY, relays=NOSTR_RELAYS)
     print(f"Your nostr public key: {client.public_key.hex()}")
     if verbose:
         print(f"Your nostr private key (do not share!): {client.private_key.hex()}")
@@ -646,6 +647,7 @@ async def info(ctx):
     if NOSTR_PRIVATE_KEY:
         client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY, connect=False)
         print(f"Nostr public key: {client.public_key.hex()}")
+        print(f"Nostr relays: {NOSTR_RELAYS}")
     if SOCKS_HOST:
         print(f"Socks proxy: {SOCKS_HOST}:{SOCKS_PORT}")
     print(f"Mint URL: {ctx.obj['HOST']}")
