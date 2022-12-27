@@ -303,19 +303,26 @@ async def receive(ctx, token: str, lock: str):
         # LNbits token link parsing
         # can extract minut URL from LNbits token links like:
         # https://lnbits.server/cashu/wallet?mint_id=aMintId&recv_token=W3siaWQiOiJHY2...
-        url = None
-        if len(token.split("&recv_token=")) == 2:
-            # extract URL params
-            params = urllib.parse.parse_qs(token.split("?")[1])
-            # extract URL
-            if "mint_id" in params:
-                url = (
-                    token.split("?")[0].split("/wallet")[0]
-                    + "/api/v1/"
-                    + params["mint_id"][0]
-                )
-            # extract token
-            token = params["recv_token"][0]
+
+        def parse_lnbits_link(token):
+            url = None
+            if len(token.split("&recv_token=")) == 2:
+                # extract URL params
+                params = urllib.parse.parse_qs(token.split("?")[1])
+                # extract URL
+                if "mint_id" in params:
+                    url = (
+                        token.split("?")[0].split("/wallet")[0]
+                        + "/api/v1/"
+                        + params["mint_id"][0]
+                    )
+                # extract token
+                token = params["recv_token"][0]
+                return token, url
+            else:
+                return token, None
+
+        token, url = parse_lnbits_link(token)
 
         # assume W3siaWQiOiJH.. token
         # trows an error if the desirialization with the old format doesn't work
@@ -325,7 +332,12 @@ async def receive(ctx, token: str, lock: str):
             include_mints=False,
         )
 
-        # if it was an LNbits link
+        # if it was not an lnbits link
+        if url is None:
+            url = input(f"Enter mint URL (default: {MINT_URL}: ")
+            if url == "":
+                url = MINT_URL
+
         # and add url and keyset id to token from link extraction above
         if url:
             token_object: TokenJson = await wallet._make_token(
