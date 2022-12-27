@@ -333,11 +333,9 @@ async def receive(ctx, token: str, lock: str):
         )
 
         # if it was not an lnbits link
-        if not url:
-            url = (
-                input(f"Enter mint URL (press enter for default {MINT_URL}): ")
-                or MINT_URL
-            )
+        url = url or (
+            input(f"Enter mint URL (press enter for default {MINT_URL}): ") or MINT_URL
+        )
 
         # and add url and keyset id to token
         token_object: TokenJson = await wallet._make_token(proofs, include_mints=False)
