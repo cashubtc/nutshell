@@ -521,6 +521,31 @@ async def invoices(ctx):
         print("No invoices found.")
 
 
+@cli.command("wallets", help="List of all available wallets.")
+@click.pass_context
+@coro
+async def wallets(ctx):
+    # list all directories
+    wallets = [d for d in listdir(CASHU_DIR) if isdir(join(CASHU_DIR, d))]
+    try:
+        wallets.remove("mint")
+    except ValueError:
+        pass
+    for w in wallets:
+        wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, w))
+        try:
+            await init_wallet(wallet)
+            if wallet.proofs and len(wallet.proofs):
+                active_wallet = False
+                if w == ctx.obj["WALLET_NAME"]:
+                    active_wallet = True
+                print(
+                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
+                )
+        except:
+            pass
+
+
 @cli.command("nsend", help="Send tokens via nostr.")
 @click.argument("amount", type=int)
 @click.argument(
@@ -612,31 +637,6 @@ async def nreceive(ctx, verbose: bool):
         name="Nostr DM",
     )
     t.start()
-
-
-@cli.command("wallets", help="List of all available wallets.")
-@click.pass_context
-@coro
-async def wallets(ctx):
-    # list all directories
-    wallets = [d for d in listdir(CASHU_DIR) if isdir(join(CASHU_DIR, d))]
-    try:
-        wallets.remove("mint")
-    except ValueError:
-        pass
-    for w in wallets:
-        wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, w))
-        try:
-            await init_wallet(wallet)
-            if wallet.proofs and len(wallet.proofs):
-                active_wallet = False
-                if w == ctx.obj["WALLET_NAME"]:
-                    active_wallet = True
-                print(
-                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
-                )
-        except:
-            pass
 
 
 @cli.command("info", help="Information about Cashu wallet.")
