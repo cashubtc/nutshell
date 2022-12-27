@@ -207,8 +207,8 @@ async def store_keyset(
 
 
 async def get_keyset(
-    id: str = None,
-    mint_url: str = None,
+    id: str = "",
+    mint_url: str = "",
     db: Database = None,
     conn: Optional[Connection] = None,
 ):

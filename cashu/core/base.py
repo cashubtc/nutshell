@@ -1,5 +1,5 @@
 from sqlite3 import Row
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, TypedDict, Union
 
 from pydantic import BaseModel
 
@@ -212,3 +212,13 @@ class MintKeysets:
 
     def get_ids(self):
         return [k for k, _ in self.keysets.items()]
+
+
+class TokenMintJson(BaseModel):
+    url: str
+    ks: List[str]
+
+
+class TokenJson(BaseModel):
+    tokens: List[Proof]
+    mints: Optional[Dict[str, TokenMintJson]] = None

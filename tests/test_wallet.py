@@ -58,12 +58,22 @@ async def test_get_keys(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_get_keyset(wallet1: Wallet):
+    assert len(wallet1.keys) == MAX_ORDER
+    # ket's get the keys first so we can get a keyset ID that we use later
+    keys1 = await wallet1._get_keys(wallet1.url)
+    # gets the keys of a specific keyset
+    keys2 = await wallet1._get_keyset(wallet1.url, keys1.id)
+    assert len(keys1.public_keys) == len(keys2.public_keys)
+
+
+@pytest.mark.asyncio
 async def test_get_keysets(wallet1: Wallet):
     keyset = await wallet1._get_keysets(wallet1.url)
     assert type(keyset) == dict
     assert type(keyset["keysets"]) == list
     assert len(keyset["keysets"]) > 0
-    assert keyset["keysets"][0] == wallet1.keyset_id
+    assert keyset["keysets"][-1] == wallet1.keyset_id
 
 
 @pytest.mark.asyncio
