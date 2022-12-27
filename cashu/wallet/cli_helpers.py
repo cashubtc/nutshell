@@ -87,7 +87,7 @@ async def print_mint_balances(ctx, wallet, show_mints=False):
         print("")
         for i, (k, v) in enumerate(mint_balances.items()):
             print(
-                f"Mint {i+1}: {k} - Balance: {v['available']} sat (pending: {v['balance']-v['available']} sat)"
+                f"Mint {i+1}: Balance: {v['available']} sat (pending: {v['balance']-v['available']} sat) URL: {k}"
             )
         print("")
 
@@ -103,10 +103,10 @@ async def get_mint_wallet(ctx):
 
     await print_mint_balances(ctx, wallet, show_mints=True)
 
-    mint_nr = input(
-        f"Which mint do you want to use? [1-{len(mint_balances)}, default: 1] "
+    mint_nr = (
+        input(f"Select mint [1-{len(mint_balances)}, press enter for default 1]: ")
+        or "1"
     )
-    mint_nr = "1" if mint_nr == "" else mint_nr
     if not mint_nr.isdigit():
         raise Exception("invalid input.")
     mint_nr = int(mint_nr)

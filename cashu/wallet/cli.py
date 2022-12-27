@@ -334,7 +334,10 @@ async def receive(ctx, token: str, lock: str):
 
         # if it was not an lnbits link
         if url is None:
-            url = input(f"Enter mint URL (default: {MINT_URL}: ") or MINT_URL
+            url = (
+                input(f"Enter mint URL (or press enter for default: {MINT_URL}: ")
+                or MINT_URL
+            )
 
         # and add url and keyset id to token from link extraction above
         if url:
