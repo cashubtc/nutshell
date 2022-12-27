@@ -304,15 +304,15 @@ async def receive(ctx, token: str, lock: str):
         # can extract minut URL from LNbits token links like:
         # https://lnbits.server/cashu/wallet?mint_id=aMintId&recv_token=W3siaWQiOiJHY2...
 
-        def parse_lnbits_link(token):
-            url = None
-            if len(token.split("&recv_token=")) == 2:
+        def parse_lnbits_link(link):
+            url, token = "", ""
+            if len(link.split("&recv_token=")) == 2:
                 # extract URL params
-                params = urllib.parse.parse_qs(token.split("?")[1])
+                params = urllib.parse.parse_qs(link.split("?")[1])
                 # extract URL
                 if "mint_id" in params:
                     url = (
-                        token.split("?")[0].split("/wallet")[0]
+                        link.split("?")[0].split("/wallet")[0]
                         + "/api/v1/"
                         + params["mint_id"][0]
                     )
@@ -320,7 +320,7 @@ async def receive(ctx, token: str, lock: str):
                 token = params["recv_token"][0]
                 return token, url
             else:
-                return token, None
+                return link, ""
 
         token, url = parse_lnbits_link(token)
 
@@ -333,22 +333,19 @@ async def receive(ctx, token: str, lock: str):
         )
 
         # if it was not an lnbits link
-        if url is None:
+        if not url:
             url = (
                 input(f"Enter mint URL (press enter for default {MINT_URL}): ")
                 or MINT_URL
             )
 
-        # and add url and keyset id to token from link extraction above
-        if url:
-            token_object: TokenJson = await wallet._make_token(
-                proofs, include_mints=False
-            )
-            token_object.mints = {}
-            keysets = list(set([p.id for p in proofs]))
-            assert keysets is not None, "no keysets"
-            token_object.mints[url] = TokenMintJson(url=url, ks=keysets)  # type: ignore
-            token = await wallet._serialize_token_base64(token_object)
+        # and add url and keyset id to token
+        token_object: TokenJson = await wallet._make_token(proofs, include_mints=False)
+        token_object.mints = {}
+        keysets = list(set([p.id for p in proofs]))
+        assert keysets is not None, "no keysets"
+        token_object.mints[url] = TokenMintJson(url=url, ks=keysets)  # type: ignore
+        token = await wallet._serialize_token_base64(token_object)
 
     except:
         pass
