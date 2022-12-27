@@ -303,19 +303,26 @@ async def receive(ctx, token: str, lock: str):
         # LNbits token link parsing
         # can extract minut URL from LNbits token links like:
         # https://lnbits.server/cashu/wallet?mint_id=aMintId&recv_token=W3siaWQiOiJHY2...
-        url = None
-        if len(token.split("&recv_token=")) == 2:
-            # extract URL params
-            params = urllib.parse.parse_qs(token.split("?")[1])
-            # extract URL
-            if "mint_id" in params:
-                url = (
-                    token.split("?")[0].split("/wallet")[0]
-                    + "/api/v1/"
-                    + params["mint_id"][0]
-                )
-            # extract token
-            token = params["recv_token"][0]
+
+        def parse_lnbits_link(link):
+            url, token = "", ""
+            if len(link.split("&recv_token=")) == 2:
+                # extract URL params
+                params = urllib.parse.parse_qs(link.split("?")[1])
+                # extract URL
+                if "mint_id" in params:
+                    url = (
+                        link.split("?")[0].split("/wallet")[0]
+                        + "/api/v1/"
+                        + params["mint_id"][0]
+                    )
+                # extract token
+                token = params["recv_token"][0]
+                return token, url
+            else:
+                return link, ""
+
+        token, url = parse_lnbits_link(token)
 
         # assume W3siaWQiOiJH.. token
         # trows an error if the desirialization with the old format doesn't work
@@ -325,17 +332,18 @@ async def receive(ctx, token: str, lock: str):
             include_mints=False,
         )
 
-        # if it was an LNbits link
-        # and add url and keyset id to token from link extraction above
-        if url:
-            token_object: TokenJson = await wallet._make_token(
-                proofs, include_mints=False
-            )
-            token_object.mints = {}
-            keysets = list(set([p.id for p in proofs]))
-            assert keysets is not None, "no keysets"
-            token_object.mints[url] = TokenMintJson(url=url, ks=keysets)  # type: ignore
-            token = await wallet._serialize_token_base64(token_object)
+        # if it was not an lnbits link
+        url = url or (
+            input(f"Enter mint URL (press enter for default {MINT_URL}): ") or MINT_URL
+        )
+
+        # and add url and keyset id to token
+        token_object: TokenJson = await wallet._make_token(proofs, include_mints=False)
+        token_object.mints = {}
+        keysets = list(set([p.id for p in proofs]))
+        assert keysets is not None, "no keysets"
+        token_object.mints[url] = TokenMintJson(url=url, ks=keysets)  # type: ignore
+        token = await wallet._serialize_token_base64(token_object)
 
     except:
         pass
@@ -513,6 +521,31 @@ async def invoices(ctx):
         print("No invoices found.")
 
 
+@cli.command("wallets", help="List of all available wallets.")
+@click.pass_context
+@coro
+async def wallets(ctx):
+    # list all directories
+    wallets = [d for d in listdir(CASHU_DIR) if isdir(join(CASHU_DIR, d))]
+    try:
+        wallets.remove("mint")
+    except ValueError:
+        pass
+    for w in wallets:
+        wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, w))
+        try:
+            await init_wallet(wallet)
+            if wallet.proofs and len(wallet.proofs):
+                active_wallet = False
+                if w == ctx.obj["WALLET_NAME"]:
+                    active_wallet = True
+                print(
+                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
+                )
+        except:
+            pass
+
+
 @cli.command("nsend", help="Send tokens via nostr.")
 @click.argument("amount", type=int)
 @click.argument(
@@ -604,31 +637,6 @@ async def nreceive(ctx, verbose: bool):
         name="Nostr DM",
     )
     t.start()
-
-
-@cli.command("wallets", help="List of all available wallets.")
-@click.pass_context
-@coro
-async def wallets(ctx):
-    # list all directories
-    wallets = [d for d in listdir(CASHU_DIR) if isdir(join(CASHU_DIR, d))]
-    try:
-        wallets.remove("mint")
-    except ValueError:
-        pass
-    for w in wallets:
-        wallet = Wallet(ctx.obj["HOST"], os.path.join(CASHU_DIR, w))
-        try:
-            await init_wallet(wallet)
-            if wallet.proofs and len(wallet.proofs):
-                active_wallet = False
-                if w == ctx.obj["WALLET_NAME"]:
-                    active_wallet = True
-                print(
-                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
-                )
-        except:
-            pass
 
 
 @cli.command("info", help="Information about Cashu wallet.")
