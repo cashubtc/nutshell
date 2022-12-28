@@ -229,6 +229,9 @@ async def balance(ctx, verbose):
 
 
 async def nostr_send(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
+    """
+    Sends tokens via nostr.
+    """
     wallet = await get_mint_wallet(ctx)
     await wallet.load_proofs()
     _, send_proofs = await wallet.split_to_send(
@@ -258,6 +261,9 @@ async def nostr_send(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
 
 
 async def send(ctx, amount: int, lock: str, legacy: bool):
+    """
+    Prints token to send to stdout.
+    """
     if lock and len(lock) < 22:
         print("Error: lock has to be at least 22 characters long.")
         return
@@ -460,7 +466,7 @@ async def receive_cli(ctx, token: str, lock: str, nostr: bool, verbose: bool):
     elif nostr:
         await receive_nostr(ctx, verbose)
     else:
-        print("Error: specify token or use --nostr.")
+        print("Error: enter token or use the flag --nostr.")
 
 
 @cli.command("burn", help="Burn spent tokens.")
@@ -622,54 +628,6 @@ async def wallets(ctx):
                 )
         except:
             pass
-
-
-# @cli.command("nsend", help="Send tokens via nostr.")
-# @click.argument("amount", type=int)
-# @click.argument(
-#     "pubkey",
-#     type=str,
-# )
-# @click.option(
-#     "--verbose",
-#     "-v",
-#     default=False,
-#     is_flag=True,
-#     help="Show more information.",
-#     type=bool,
-# )
-# @click.option(
-#     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
-# )
-# @click.pass_context
-# @coro
-# async def nsend(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
-#     wallet = await get_mint_wallet(ctx)
-#     await wallet.load_proofs()
-#     _, send_proofs = await wallet.split_to_send(
-#         wallet.proofs, amount, set_reserved=True
-#     )
-#     token = await wallet.serialize_proofs(send_proofs)
-
-#     print("")
-#     print(token)
-
-#     if not yes:
-#         print("")
-#         click.confirm(
-#             f"Send {amount} sat to nostr pubkey {pubkey}?",
-#             abort=True,
-#             default=True,
-#         )
-
-#     # we only use ephemeral private keys for sending
-#     client = NostrClient(relays=NOSTR_RELAYS)
-#     if verbose:
-#         print(f"Your ephemeral nostr private key: {client.private_key.hex()}")
-#     await asyncio.sleep(1)
-#     client.dm(token, PublicKey(bytes.fromhex(pubkey)))
-#     print(f"Token sent to {pubkey}")
-#     client.close()
 
 
 @cli.command("info", help="Information about Cashu wallet.")
