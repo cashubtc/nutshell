@@ -222,3 +222,9 @@ class TokenMintJson(BaseModel):
 class TokenJson(BaseModel):
     tokens: List[Proof]
     mints: Optional[Dict[str, TokenMintJson]] = None
+
+    def to_dict(self):
+        return dict(
+            tokens=[p.to_dict() for p in self.tokens],
+            mints={k: v.dict() for k, v in self.mints.items()},  # type: ignore
+        )

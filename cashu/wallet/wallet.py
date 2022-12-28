@@ -528,7 +528,7 @@ class Wallet(LedgerAPI):
         """
         # encode the token as a base64 string
         token_base64 = base64.urlsafe_b64encode(
-            json.dumps(token.dict()).encode()
+            json.dumps(token.to_dict()).encode()
         ).decode()
         return token_base64
 
