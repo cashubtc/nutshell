@@ -1,15 +1,12 @@
 import os
+import urllib.parse
 
 import click
 
-from cashu.core.base import Proof, WalletKeyset, TokenJson, TokenMintJson
-from cashu.core.settings import CASHU_DIR
+from cashu.core.base import Proof, TokenJson, TokenMintJson, WalletKeyset
+from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
-import urllib.parse
-from cashu.core.settings import (
-    MINT_URL,
-)
 
 
 async def verify_mints(ctx, dtoken):

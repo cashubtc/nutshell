@@ -51,10 +51,10 @@ from cashu.wallet.wallet import Wallet as Wallet
 from .cli_helpers import (
     get_mint_wallet,
     print_mint_balances,
-    redeem_multimint,
-    verify_mints,
-    token_from_lnbits_link,
     proofs_to_token,
+    redeem_multimint,
+    token_from_lnbits_link,
+    verify_mints,
 )
 
 
