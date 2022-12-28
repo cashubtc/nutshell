@@ -228,18 +228,35 @@ async def balance(ctx, verbose):
         print(f"Balance: {wallet.available_balance} sat")
 
 
-@cli.command("send", help="Send tokens.")
-@click.argument("amount", type=int)
-@click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
-@click.option(
-    "--legacy",
-    default=False,
-    is_flag=True,
-    help="Print legacy token without mint information.",
-    type=bool,
-)
-@click.pass_context
-@coro
+async def nostr_send(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
+    wallet = await get_mint_wallet(ctx)
+    await wallet.load_proofs()
+    _, send_proofs = await wallet.split_to_send(
+        wallet.proofs, amount, set_reserved=True
+    )
+    token = await wallet.serialize_proofs(send_proofs)
+
+    print("")
+    print(token)
+
+    if not yes:
+        print("")
+        click.confirm(
+            f"Send {amount} sat to nostr pubkey {pubkey}?",
+            abort=True,
+            default=True,
+        )
+
+    # we only use ephemeral private keys for sending
+    client = NostrClient(relays=NOSTR_RELAYS)
+    if verbose:
+        print(f"Your ephemeral nostr private key: {client.private_key.hex()}")
+    await asyncio.sleep(1)
+    client.dm(token, PublicKey(bytes.fromhex(pubkey)))
+    print(f"Token sent to {pubkey}")
+    client.close()
+
+
 async def send(ctx, amount: int, lock: str, legacy: bool):
     if lock and len(lock) < 22:
         print("Error: lock has to be at least 22 characters long.")
@@ -273,6 +290,50 @@ async def send(ctx, amount: int, lock: str, legacy: bool):
         print(token)
 
     wallet.status()
+
+
+@cli.command("send", help="Send tokens.")
+@click.argument("amount", type=int)
+@click.option(
+    "--nostr",
+    "-n",
+    help="Send to nostr pubkey",
+    type=str,
+)
+@click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
+@click.option(
+    "--legacy",
+    default=False,
+    is_flag=True,
+    help="Print legacy token without mint information.",
+    type=bool,
+)
+@click.option(
+    "--verbose",
+    "-v",
+    default=False,
+    is_flag=True,
+    help="Show more information.",
+    type=bool,
+)
+@click.option(
+    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
+)
+@click.pass_context
+@coro
+async def send_command(
+    ctx,
+    amount: int,
+    nostr: str,
+    lock: str,
+    legacy: bool,
+    verbose: bool,
+    yes: bool,
+):
+    if nostr is None:
+        await send(ctx, amount, lock, legacy)
+    else:
+        await nostr_send(ctx, amount, nostr, verbose, yes)
 
 
 async def receive(ctx, token: str, lock: str):
@@ -341,15 +402,65 @@ async def receive(ctx, token: str, lock: str):
     wallet.status()
 
 
+async def receive_nostr(ctx, verbose: bool):
+    if NOSTR_PRIVATE_KEY is None:
+        print(
+            "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it."
+        )
+        print("")
+    client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY, relays=NOSTR_RELAYS)
+    print(f"Your nostr public key: {client.public_key.hex()}")
+    if verbose:
+        print(f"Your nostr private key (do not share!): {client.private_key.hex()}")
+    await asyncio.sleep(2)
+
+    def get_token_callback(event: Event, decrypted_content):
+        if verbose:
+            print(
+                f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
+            )
+        try:
+            # call the receive method
+            asyncio.run(receive(ctx, decrypted_content, ""))
+        except Exception as e:
+            pass
+
+    t = threading.Thread(
+        target=client.get_dm,
+        args=(
+            client.public_key,
+            get_token_callback,
+        ),
+        name="Nostr DM",
+    )
+    t.start()
+
+
 @cli.command("receive", help="Receive tokens.")
-@click.argument("token", type=str)
+@click.argument("token", type=str, default="")
 @click.option("--lock", "-l", default=None, help="Unlock tokens.", type=str)
+@click.option(
+    "--nostr", "-n", default=False, is_flag=True, help="Receive tokens via nostr."
+)
+@click.option(
+    "--verbose",
+    "-v",
+    help="Display more information.",
+    is_flag=True,
+    default=False,
+    type=bool,
+)
 @click.pass_context
 @coro
-async def receive_cli(ctx, token: str, lock: str):
+async def receive_cli(ctx, token: str, lock: str, nostr: bool, verbose: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()
-    await receive(ctx, token, lock)
+    if token:
+        await receive(ctx, token, lock)
+    elif nostr:
+        await receive_nostr(ctx, verbose)
+    else:
+        print("Error: specify token or use --nostr.")
 
 
 @cli.command("burn", help="Burn spent tokens.")
@@ -513,97 +624,52 @@ async def wallets(ctx):
             pass
 
 
-@cli.command("nsend", help="Send tokens via nostr.")
-@click.argument("amount", type=int)
-@click.argument(
-    "pubkey",
-    type=str,
-)
-@click.option(
-    "--verbose",
-    "-v",
-    default=False,
-    is_flag=True,
-    help="Show more information.",
-    type=bool,
-)
-@click.option(
-    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
-)
-@click.pass_context
-@coro
-async def nsend(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
-    wallet = await get_mint_wallet(ctx)
-    await wallet.load_proofs()
-    _, send_proofs = await wallet.split_to_send(
-        wallet.proofs, amount, set_reserved=True
-    )
-    token = await wallet.serialize_proofs(send_proofs)
+# @cli.command("nsend", help="Send tokens via nostr.")
+# @click.argument("amount", type=int)
+# @click.argument(
+#     "pubkey",
+#     type=str,
+# )
+# @click.option(
+#     "--verbose",
+#     "-v",
+#     default=False,
+#     is_flag=True,
+#     help="Show more information.",
+#     type=bool,
+# )
+# @click.option(
+#     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
+# )
+# @click.pass_context
+# @coro
+# async def nsend(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
+#     wallet = await get_mint_wallet(ctx)
+#     await wallet.load_proofs()
+#     _, send_proofs = await wallet.split_to_send(
+#         wallet.proofs, amount, set_reserved=True
+#     )
+#     token = await wallet.serialize_proofs(send_proofs)
 
-    print("")
-    print(token)
+#     print("")
+#     print(token)
 
-    if not yes:
-        print("")
-        click.confirm(
-            f"Send {amount} sat to nostr pubkey {pubkey}?",
-            abort=True,
-            default=True,
-        )
+#     if not yes:
+#         print("")
+#         click.confirm(
+#             f"Send {amount} sat to nostr pubkey {pubkey}?",
+#             abort=True,
+#             default=True,
+#         )
 
-    # we only use ephemeral private keys for sending
-    client = NostrClient(relays=NOSTR_RELAYS)
-    if verbose:
-        print(f"Your ephemeral nostr private key: {client.private_key.hex()}")
-    await asyncio.sleep(1)
-    client.dm(token, PublicKey(bytes.fromhex(pubkey)))
-    print(f"Token sent to {pubkey}")
-    client.close()
-
-
-@cli.command("nreceive", help="Receive tokens via nostr.")
-@click.option(
-    "--verbose",
-    "-v",
-    help="Display more information.",
-    is_flag=True,
-    default=False,
-    type=bool,
-)
-@click.pass_context
-@coro
-async def nreceive(ctx, verbose: bool):
-    if NOSTR_PRIVATE_KEY is None:
-        print(
-            "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it."
-        )
-        print("")
-    client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY, relays=NOSTR_RELAYS)
-    print(f"Your nostr public key: {client.public_key.hex()}")
-    if verbose:
-        print(f"Your nostr private key (do not share!): {client.private_key.hex()}")
-    await asyncio.sleep(2)
-
-    def get_token_callback(event: Event, decrypted_content):
-        if verbose:
-            print(
-                f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
-            )
-        try:
-            # call the receive method
-            asyncio.run(receive(ctx, decrypted_content, ""))
-        except Exception as e:
-            pass
-
-    t = threading.Thread(
-        target=client.get_dm,
-        args=(
-            client.public_key,
-            get_token_callback,
-        ),
-        name="Nostr DM",
-    )
-    t.start()
+#     # we only use ephemeral private keys for sending
+#     client = NostrClient(relays=NOSTR_RELAYS)
+#     if verbose:
+#         print(f"Your ephemeral nostr private key: {client.private_key.hex()}")
+#     await asyncio.sleep(1)
+#     client.dm(token, PublicKey(bytes.fromhex(pubkey)))
+#     print(f"Token sent to {pubkey}")
+#     client.close()
 
 
 @cli.command("info", help="Information about Cashu wallet.")
