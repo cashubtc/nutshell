@@ -5,7 +5,7 @@ import secrets as scrts
 import time
 import uuid
 from itertools import groupby
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import requests
 from loguru import logger
@@ -198,10 +198,13 @@ class LedgerAPI:
         assert len(keysets), Exception("did not receive any keysets")
         return keysets
 
-    def request_mint(self, amount):
+    def request_mint(self, amount,description_hash: Optional[bytes] = None):
         """Requests a mint from the server and returns Lightning invoice."""
+        if description_hash != None:
+            description_hash = description_hash.decode("utf-8")
+
         self.s = self._set_requests()
-        resp = self.s.get(self.url + "/mint", params={"amount": amount})
+        resp = self.s.get(self.url + "/mint", params={"amount": amount, "description_hash": description_hash})
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
@@ -373,8 +376,8 @@ class Wallet(LedgerAPI):
     def _get_proofs_per_keyset(proofs: List[Proof]):
         return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
 
-    async def request_mint(self, amount):
-        invoice = super().request_mint(amount)
+    async def request_mint(self, amount, description_hash: Optional[bytes] = None):
+        invoice = super().request_mint(amount,description_hash)
         invoice.time_created = int(time.time())
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice

@@ -2,6 +2,7 @@ from typing import Dict, List, Union
 
 from fastapi import APIRouter
 from secp256k1 import PublicKey
+from urllib.parse import unquote
 
 from cashu.core.base import (
     BlindedSignature,
@@ -47,14 +48,16 @@ async def keysets() -> dict[str, list[str]]:
 
 
 @router.get("/mint")
-async def request_mint(amount: int = 0) -> GetMintResponse:
+async def request_mint(amount: int = 0, description_hash: bytes|None = None) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
 
     Call `POST /mint` after paying the invoice.
     """
-    payment_request, payment_hash = await ledger.request_mint(amount)
+    if description_hash != None:
+            description_hash = unquote(description_hash).encode()
+    payment_request, payment_hash = await ledger.request_mint(amount,description_hash)
     print(f"Lightning invoice: {payment_request}")
     resp = GetMintResponse(pr=payment_request, hash=payment_hash)
     return resp
