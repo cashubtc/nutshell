@@ -3,28 +3,28 @@
 """
 Implementation of https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406
 
-Alice (Client):
+Bob (Mint):
 A = a*G
 return A
 
-Bob (Mint):
+Alice (Client):
 Y = hash_to_curve(secret_message)
 r = random blinding factor
 B'= Y + r*G
 return B'
 
-Alice:
+Bob:
 C' = a*B'
   (= a*Y + a*r*G)
 return C'
 
-Bob:
+Alice:
 C = C' - r*A
  (= C' - a*r*G)
  (= a*Y)
 return C, secret_message
 
-Alice:
+Bob:
 Y = hash_to_curve(secret_message)
 C == a*Y
 If true, C must have originated from Alice
