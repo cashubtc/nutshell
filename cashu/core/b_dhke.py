@@ -27,7 +27,7 @@ return C, secret_message
 Bob:
 Y = hash_to_curve(secret_message)
 C == a*Y
-If true, C must have originated from Alice
+If true, C must have originated from Bob
 """
 
 import hashlib
