@@ -40,7 +40,7 @@ pip install cashu
 
 To update Cashu, use `pip install cashu -U`. 
 
-If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config`. On macOS, you might have to run `pip install wheel` and `brew install pkg-config`.
+If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config` and `pip install wheel`. On macOS, you might have to run `pip install wheel` and `brew install pkg-config`.
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 
@@ -51,8 +51,7 @@ These steps help you install Python via pyenv and Poetry. If you already have Po
 
 ```bash
 # on ubuntu:
-sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev libsqlite3-dev
-# on mac: brew install postgres
+sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev libsqlite3-dev ncurses-dev libbz2-dev libreadline-dev lzma-dev
 
 # install python using pyenv
 curl https://pyenv.run | bash
@@ -71,7 +70,7 @@ source ~/.bashrc
 #### Poetry: Install Cashu
 ```bash
 # install cashu
-git clone https://github.com/callebtc/cashu.git
+git clone https://github.com/callebtc/cashu.git --recurse-submodules
 cd cashu
 pyenv local 3.9.13
 poetry install
