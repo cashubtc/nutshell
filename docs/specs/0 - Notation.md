@@ -1,3 +1,5 @@
+# NUT-0 - Notation and Models
+
 Sending user: `Alice`
 Receiving user: `Carol`
 Mint: `Bob`

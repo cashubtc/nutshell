@@ -1,3 +1,5 @@
+# NUT-5 - Melting tokens
+
 Melting tokens is the opposite of minting them (see #4): the wallet `Alice` sends `Proofs` to the mint `Bob` together with a bolt11 Lightning invoice that `Alice` wants to be paid. To melt tokens, `Alice` sends a `POST /melt` request with a JSON body to the mint. The `Proofs` included in the request will be burned by the mint and the mint will pay the invoice in exchange.
 
 `Alice`'s request **MUST** include a `MeltRequest` ([TODO: Link MeltRequest]) JSON body with `Proofs` that have at least the amount of the invoice to be paid.
