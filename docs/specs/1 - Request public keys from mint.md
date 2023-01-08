@@ -6,7 +6,7 @@ This describes the basic exchange of the public mint keys that the wallet user `
 
 Wallet user `Alice` receives public keys from mint `Bob` via `GET /keys` and stores them in a key-value store like a dictionary. The set of all public keys for each supported amount is called a *keyset*.
 
-Mint `Bob` responds with his *active* keyset [TODO: Link #2]. The active keyset is the keyset a mint currently uses to sign promises with. The active keyset can change over time, for example due to key rotation. A mint MAY support older keysets indefinetely. Note that a mint can support multiple keysets at the same time but will only respond with the active keyset on the endpoint `GET /keys`. A wallet can ask for the keys of a specific (non-active) keyset by using the endpint `GET /keys/{keyset_id}` (see #2 [TODO: Link #2]).
+Mint `Bob` responds with his *active* keyset [2 - Keysets and keyset IDs]. The active keyset is the keyset a mint currently uses to sign promises with. The active keyset can change over time, for example due to key rotation. A mint MAY support older keysets indefinetely. Note that a mint can support multiple keysets at the same time but will only respond with the active keyset on the endpoint `GET /keys`. A wallet can ask for the keys of a specific (non-active) keyset by using the endpint `GET /keys/{keyset_id}` (see #2 [TODO: Link #2]).
 
 See [TODO: Link #2] for how a wallet deals with multiple keysets.
 
