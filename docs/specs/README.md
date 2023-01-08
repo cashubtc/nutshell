@@ -1,9 +1,17 @@
 Cashu NUTs (Notation, Usage, and Terminology)
 
 
-| Number   | Description                                                 | Wallets (in alphabetical order) |
+| Number   | Description                                                 | Wallets |
 |----------|-------------------------------------------------------------|---------|
-| [00][00] | Notation                           | , Feni, LNbits
+| [00][00] | Notation                           | Python-CLI, Feni, LNbits
+| [01][01] | Mint keys                           | Python-CLI, Feni, LNbits
+| [02][02] | Keysets and keyset IDs                           | Python-CLI, Feni, LNbits
+| [03][03] | Requesting a mint                           | Python-CLI, Feni, LNbits
+| [04][04] | Mint tokens                           | Python-CLI, Feni, LNbits
+| [05][05] | Melt tokens                           | Python-CLI, Feni, LNbits
+| [06][06] | Split tokens                           | Python-CLI, Feni, LNbits
+
+
 
 [00]: 00.md
 [01]: 02.md
