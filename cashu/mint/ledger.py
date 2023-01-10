@@ -218,10 +218,7 @@ class Ledger:
 
     async def _request_lightning_invoice(self, amount: int, description_hash: Optional[bytes] = None):
         """Returns an invoice from the Lightning backend."""
-        print("description_hash:", description_hash)
-        # description_hash = None
-        # description_hash = description_hash.decode()
-        print("request lightning invoice")
+
         error, balance = await self.lightning.status()
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
