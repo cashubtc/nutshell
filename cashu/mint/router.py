@@ -59,10 +59,11 @@ async def request_mint(amount: int = 0, description_hash: Optional[bytes] = None
     if description_hash != None:
             # description_hash = unquote(description_hash).encode()            
             pass
-    # print("description_hash unquoted decoded: ", description_hash)
-    payment_request, payment_hash = await ledger.request_mint(amount)
+    print("description_hash unquoted decoded: ", description_hash)
+    payment_request, payment_hash = await ledger.request_mint(amount, description_hash)
     print(f"Lightning invoice: {payment_request}")
     resp = GetMintResponse(pr=payment_request, hash=payment_hash)
+    # resp = {"msg":amount, "description_hash": description_hash}
     return resp
 
 
