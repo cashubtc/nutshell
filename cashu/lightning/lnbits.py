@@ -60,18 +60,14 @@ class LNbitsWallet(Wallet):
         
         # description_hash = None
         if description_hash:
-
-             
-            data["description_hash"] = description_hash.decode()
-            print("description_hash bytes", description_hash.decode())            
-            # description_hash = None
-
+            # This the fix - the decription_hash needs to be decoded
+            data["description_hash"] = description_hash.decode() 
         if unhashed_description:
             data["unhashed_description"] = unhashed_description.hex()
         
         data["memo"] = memo or ""
 
-        print('before try:', self.endpoint, data)
+        
         try:
             r = self.s.post(url=f"{self.endpoint}/api/v1/payments", json=data)
         except:
@@ -82,11 +78,11 @@ class LNbitsWallet(Wallet):
             None,
             None,
         )
-        print("after try")
+        
         data = r.json()
-        print("after json", data)
+        
         checking_id, payment_request = data["checking_id"], data["payment_request"]
-        print("after checking")
+        
 
         return InvoiceResponse(ok, checking_id, payment_request, error_message)
 
