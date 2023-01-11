@@ -1,3 +1,5 @@
+# NUT-6 - Split tokens
+
 The split operation is the most important component of the Cashu system. The wallet `Alice` can use it to redeem tokens (i.e. receive new ones in return) that she received from `Carol`, or she can split her own tokens to a target amount she needs to send to `Carol`, if she does not have the necessary amounts to compose the target amount in her wallet already.
 
 The basic idea is that `Alice` sends `Bob` a set of  `Proof`'s and a set of `BlindedMessage`'s with an equal amount. Additionally, she specifies the `amount` at which she would like to have the split. 

@@ -1,3 +1,5 @@
+# NUT-4 - Mint tokens
+
 After requesting a mint (see #3 [TODO: Link]) and paying the invoice that was returned by the mint, a wallet proceeds with requesting tokens from the mint in return for paying the invoice. 
 
 For that, a wallet sends a `POST /mint&payment_hash=<hash>` request with a JSON body to the mint. The body **MUST** include `BlindedMessages` that are worth a maximum of `<amount_sat>` [TODO: Refer to BlindedMessages]. If successful (i.e. the invoice has been previously paid and the `BlindedMessages` are valid), the mint responds with `Promises` [TODO: Link Promises].
