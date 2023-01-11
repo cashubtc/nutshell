@@ -548,18 +548,29 @@ class Wallet(LedgerAPI):
         token = await self._make_token(proofs, include_mints)
         return await self._serialize_token_base64(token)
 
-    async def _get_spendable_proofs(self, proofs: List[Proof]):
+    async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
         """
         Selects proofs that can be used with the current mint.
         Chooses:
         1) Proofs that are not marked as reserved
         2) Proofs that have a keyset id that is in self.keysets (active keysets of mint) - !!! optional for backwards compatibility with legacy clients
         """
+        # select proofs that are in the active keysets of the mint
         proofs = [
             p for p in proofs if p.id in self.keysets or not p.id
         ]  # "or not p.id" is for backwards compatibility with proofs without a keyset id
+        # select proofs that are not reserved
         proofs = [p for p in proofs if not p.reserved]
-        return proofs
+        # check that enough spendable proofs exist
+        if sum_proofs(proofs) < amount_to_send:
+            raise Exception("balance too low.")
+
+        # coinselect based on amount to send
+        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
+        send_proofs: List[Proof] = []
+        while sum_proofs(send_proofs) < amount_to_send:
+            send_proofs.append(sorted_proofs[len(send_proofs)])
+        return send_proofs
 
     async def get_pay_amount_with_fees(self, invoice: str):
         """
@@ -590,9 +601,8 @@ class Wallet(LedgerAPI):
         """Like self.split but only considers non-reserved tokens."""
         if scnd_secret:
             logger.debug(f"Spending conditions: {scnd_secret}")
-        spendable_proofs = await self._get_spendable_proofs(proofs)
-        if sum_proofs(spendable_proofs) < amount:
-            raise Exception("balance too low.")
+        spendable_proofs = await self._select_proofs_to_send(proofs, amount)
+
         keep_proofs, send_proofs = await self.split(
             [p for p in spendable_proofs if not p.reserved], amount, scnd_secret
         )
