@@ -563,7 +563,7 @@ class Wallet(LedgerAPI):
         proofs = [p for p in proofs if not p.reserved]
         # select proofs based on amount to send
         sorted_proofs = sorted(proofs, key=lambda p: p.amount)
-        send_proofs = []
+        send_proofs: List[Proof] = []
         while sum_proofs(send_proofs) < amount_to_send:
             send_proofs.append(sorted_proofs[len(send_proofs)])
         return send_proofs
