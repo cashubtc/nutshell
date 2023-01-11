@@ -4,9 +4,10 @@ on: [push, pull_request]
 
 jobs:
   poetry:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.9"]
         poetry-version: ["1.2.1"]
     steps:
@@ -22,6 +23,7 @@ jobs:
       - name: Install dependencies
         run: |
           poetry install --with dev
+        shell: bash
       - name: Run mint
         env:
           LIGHTNING: False
@@ -35,5 +37,8 @@ jobs:
           LIGHTNING: False
           MINT_HOST: localhost
           MINT_PORT: 3338
+          TOR: False
         run: |
-          poetry run pytest tests
+          poetry run pytest tests --cov-report xml --cov cashu
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3

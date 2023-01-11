@@ -1,3 +1,3 @@
 import sys
 
-sys.tracebacklimit = None
+sys.tracebacklimit = None  # type: ignore

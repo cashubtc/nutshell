@@ -1,7 +1,7 @@
 import time
 from typing import Any, List, Optional
 
-from cashu.core.base import KeyBase, P2SHScript, Proof, WalletKeyset
+from cashu.core.base import Invoice, KeyBase, P2SHScript, Proof, WalletKeyset
 from cashu.core.db import Connection, Database
 
 
@@ -31,7 +31,7 @@ async def get_proofs(
         SELECT * from proofs
         """
     )
-    return [Proof.from_row(r) for r in rows]
+    return [Proof(**dict(r)) for r in rows]
 
 
 async def get_reserved_proofs(
@@ -45,7 +45,7 @@ async def get_reserved_proofs(
         WHERE reserved
         """
     )
-    return [Proof.from_row(r) for r in rows]
+    return [Proof(**r) for r in rows]
 
 
 async def invalidate_proof(
@@ -93,7 +93,7 @@ async def update_proof_reserved(
         clauses.append("time_reserved = ?")
         values.append(int(time.time()))
 
-    await (conn or db).execute(
+    await (conn or db).execute(  # type: ignore
         f"UPDATE proofs SET {', '.join(clauses)} WHERE secret = ?",
         (*values, str(proof.secret)),
     )
@@ -155,14 +155,14 @@ async def get_unused_locks(
     if clause:
         where = f"WHERE {' AND '.join(clause)}"
 
-    rows = await (conn or db).fetchall(
+    rows = await (conn or db).fetchall(  # type: ignore
         f"""
         SELECT * from p2sh
         {where}
         """,
         tuple(args),
     )
-    return [P2SHScript.from_row(r) for r in rows]
+    return [P2SHScript(**r) for r in rows]
 
 
 async def update_p2sh_used(
@@ -176,7 +176,7 @@ async def update_p2sh_used(
     clauses.append("used = ?")
     values.append(used)
 
-    await (conn or db).execute(
+    await (conn or db).execute(  # type: ignore
         f"UPDATE proofs SET {', '.join(clauses)} WHERE address = ?",
         (*values, str(p2sh.address)),
     )
@@ -189,7 +189,7 @@ async def store_keyset(
     conn: Optional[Connection] = None,
 ):
 
-    await (conn or db).execute(
+    await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
           (id, mint_url, valid_from, valid_to, first_seen, active)
@@ -198,22 +198,22 @@ async def store_keyset(
         (
             keyset.id,
             mint_url or keyset.mint_url,
-            keyset.valid_from,
-            keyset.valid_to,
-            keyset.first_seen,
+            keyset.valid_from or int(time.time()),
+            keyset.valid_to or int(time.time()),
+            keyset.first_seen or int(time.time()),
             True,
         ),
     )
 
 
 async def get_keyset(
-    id: str = None,
-    mint_url: str = None,
+    id: str = "",
+    mint_url: str = "",
     db: Database = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
-    values = []
+    values: List[Any] = []
     clauses.append("active = ?")
     values.append(True)
     if id:
@@ -226,11 +226,111 @@ async def get_keyset(
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
 
-    row = await (conn or db).fetchone(
+    row = await (conn or db).fetchone(  # type: ignore
         f"""
         SELECT * from keysets
         {where}
         """,
         tuple(values),
     )
-    return WalletKeyset.from_row(row) if row is not None else None
+    return WalletKeyset(**row) if row is not None else None
+
+
+async def store_lightning_invoice(
+    db: Database,
+    invoice: Invoice,
+    conn: Optional[Connection] = None,
+):
+
+    await (conn or db).execute(
+        f"""
+        INSERT INTO invoices
+          (amount, pr, hash, preimage, paid, time_created, time_paid)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            invoice.amount,
+            invoice.pr,
+            invoice.hash,
+            invoice.preimage,
+            invoice.paid,
+            invoice.time_created,
+            invoice.time_paid,
+        ),
+    )
+
+
+async def get_lightning_invoice(
+    db: Database,
+    hash: str = None,
+    conn: Optional[Connection] = None,
+):
+    clauses = []
+    values: List[Any] = []
+    if hash:
+        clauses.append("hash = ?")
+        values.append(hash)
+
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
+
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT * from invoices
+        {where}
+        """,
+        tuple(values),
+    )
+    return Invoice(**row)
+
+
+async def get_lightning_invoices(
+    db: Database,
+    paid: bool = None,
+    conn: Optional[Connection] = None,
+):
+    clauses: List[Any] = []
+    values: List[Any] = []
+
+    if paid is not None:
+        clauses.append("paid = ?")
+        values.append(paid)
+
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
+
+    rows = await (conn or db).fetchall(
+        f"""
+        SELECT * from invoices
+        {where}
+        """,
+        tuple(values),
+    )
+    return [Invoice(**r) for r in rows]
+
+
+async def update_lightning_invoice(
+    db: Database,
+    hash: str,
+    paid: bool,
+    time_paid: int = None,
+    conn: Optional[Connection] = None,
+):
+    clauses = []
+    values: List[Any] = []
+    clauses.append("paid = ?")
+    values.append(paid)
+
+    if time_paid:
+        clauses.append("time_paid = ?")
+        values.append(time_paid)
+
+    await (conn or db).execute(
+        f"UPDATE invoices SET {', '.join(clauses)} WHERE hash = ?",
+        (
+            *values,
+            hash,
+        ),
+    )

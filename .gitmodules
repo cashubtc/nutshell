@@ -1,0 +1,3 @@
+[submodule "cashu/nostr"]
+	path = cashu/nostr
+	url = https://github.com/callebtc/python-nostr/

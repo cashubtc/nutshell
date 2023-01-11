@@ -107,8 +107,8 @@ async def m005_wallet_keysets(db: Database):
     await db.execute(
         f"""
             CREATE TABLE IF NOT EXISTS keysets (
-                id TEXT NOT NULL,
-                mint_url TEXT NOT NULL,
+                id TEXT,
+                mint_url TEXT,
                 valid_from TIMESTAMP DEFAULT {db.timestamp_now},
                 valid_to TIMESTAMP DEFAULT {db.timestamp_now},
                 first_seen TIMESTAMP DEFAULT {db.timestamp_now},
@@ -119,18 +119,28 @@ async def m005_wallet_keysets(db: Database):
             );
         """
     )
-    # await db.execute(
-    #     f"""
-    #         CREATE TABLE IF NOT EXISTS mint_pubkeys (
-    #             id TEXT NOT NULL,
-    #             amount INTEGER NOT NULL,
-    #             pubkey TEXT NOT NULL,
-
-    #             UNIQUE (id, pubkey)
-
-    #         );
-    #     """
-    # )
 
     await db.execute("ALTER TABLE proofs ADD COLUMN id TEXT")
     await db.execute("ALTER TABLE proofs_used ADD COLUMN id TEXT")
+
+
+async def m006_invoices(db: Database):
+    """
+    Stores Lightning invoices.
+    """
+    await db.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS invoices (
+            amount INTEGER NOT NULL,
+            pr TEXT NOT NULL,
+            hash TEXT,
+            preimage TEXT,
+            paid BOOL DEFAULT FALSE,
+            time_created TIMESTAMP DEFAULT {db.timestamp_now},
+            time_paid TIMESTAMP DEFAULT {db.timestamp_now},
+
+            UNIQUE (hash)
+
+        );
+    """
+    )
