@@ -561,11 +561,11 @@ class Wallet(LedgerAPI):
         ]  # "or not p.id" is for backwards compatibility with proofs without a keyset id
         # select proofs that are not reserved
         proofs = [p for p in proofs if not p.reserved]
-
+        # check that enough spendable proofs exist
         if sum_proofs(proofs) < amount_to_send:
             raise Exception("balance too low.")
 
-        # select proofs based on amount to send
+        # coinselect based on amount to send
         sorted_proofs = sorted(proofs, key=lambda p: p.amount)
         send_proofs: List[Proof] = []
         while sum_proofs(send_proofs) < amount_to_send:
