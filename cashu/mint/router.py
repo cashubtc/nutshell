@@ -48,7 +48,6 @@ async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
 @router.get("/keysets")
 async def keysets() -> KeysetsResponse:
     """Get all active keyset ids of the mint"""
-    # keysets = {"keysets": ledger.keysets.get_ids()}
     keysets = KeysetsResponse(keysets=ledger.keysets.get_ids())
     return keysets
 
