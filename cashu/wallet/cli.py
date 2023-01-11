@@ -508,7 +508,7 @@ async def pending(ctx):
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print(f"--------------------------\n")
-        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))
+        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))  # type: ignore
         for i, (key, value) in enumerate(
             groupby(sorted_proofs, key=itemgetter("send_id"))
         ):
