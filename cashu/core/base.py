@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
 from cashu.core.secp import PrivateKey, PublicKey
 
+# ------- PROOFS -------
+
 
 class P2SHScript(BaseModel):
     script: str
@@ -40,7 +42,11 @@ class Proof(BaseModel):
 
 
 class Proofs(BaseModel):
+    # NOTE: not used in Pydantic validation
     __root__: List[Proof]
+
+
+# ------- LIGHTNING INVOICE -------
 
 
 class Invoice(BaseModel):
@@ -54,15 +60,10 @@ class Invoice(BaseModel):
     time_paid: Union[None, str, int, float] = ""
 
 
-class BlindedMessage(BaseModel):
-    amount: int
-    B_: str
+# ------- API -------
 
 
-class BlindedSignature(BaseModel):
-    id: Union[str, None] = None
-    amount: int
-    C_: str
+# ------- API: KEYS -------
 
 
 class KeysResponse(BaseModel):
@@ -73,8 +74,13 @@ class KeysetsResponse(BaseModel):
     keysets: list[str]
 
 
-class BlindedMessages(BaseModel):
-    blinded_messages: List[BlindedMessage] = []
+# ------- API: MINT -------
+
+
+class BlindedSignature(BaseModel):
+    id: Union[str, None] = None
+    amount: int
+    C_: str
 
 
 class PostMintResponseLegacy(BaseModel):
@@ -91,9 +97,29 @@ class GetMintResponse(BaseModel):
     hash: str
 
 
+# ------- API: MELT -------
+
+
+class MeltRequest(BaseModel):
+    proofs: List[Proof]
+    invoice: str
+
+
 class GetMeltResponse(BaseModel):
     paid: Union[bool, None]
     preimage: Union[str, None]
+
+
+# ------- API: SPLIT -------
+
+
+class BlindedMessage(BaseModel):
+    amount: int
+    B_: str
+
+
+class BlindedMessages(BaseModel):
+    blinded_messages: List[BlindedMessage] = []
 
 
 class SplitRequest(BaseModel):
@@ -120,6 +146,9 @@ class PostSplitResponse(BaseModel):
     snd: List[BlindedSignature]
 
 
+# ------- API: CHECK -------
+
+
 class CheckRequest(BaseModel):
     proofs: List[Proof]
 
@@ -132,18 +161,24 @@ class CheckFeesResponse(BaseModel):
     fee: Union[int, None]
 
 
-class MeltRequest(BaseModel):
-    proofs: List[Proof]
-    invoice: str
+# ------- KEYSETS -------
 
 
 class KeyBase(BaseModel):
+    """
+    Public key from a keyset id for a given amount.
+    """
+
     id: str
     amount: int
     pubkey: str
 
 
 class WalletKeyset:
+    """
+    Contains the keyset from the wallets's perspective.
+    """
+
     id: Union[str, None]
     public_keys: Union[Dict[int, PublicKey], None]
     mint_url: Union[str, None] = None
@@ -174,6 +209,10 @@ class WalletKeyset:
 
 
 class MintKeyset:
+    """
+    Contains the keyset from the mint's perspective.
+    """
+
     id: Union[str, None]
     derivation_path: str
     private_keys: Dict[int, PrivateKey]
@@ -221,6 +260,10 @@ class MintKeyset:
 
 
 class MintKeysets:
+    """
+    Collection of keyset IDs and the corresponding keyset of the mint.
+    """
+
     keysets: Dict[str, MintKeyset]
 
     def __init__(self, keysets: List[MintKeyset]):
@@ -228,6 +271,9 @@ class MintKeysets:
 
     def get_ids(self):
         return [k for k, _ in self.keysets.items()]
+
+
+# ------- TOKEN -------
 
 
 class TokenMintJson(BaseModel):
