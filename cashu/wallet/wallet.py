@@ -262,6 +262,7 @@ class LedgerAPI:
         reponse_dict = resp.json()
         self.raise_on_error(reponse_dict)
         try:
+            # backwards compatibility: parse promises < 0.7.1 with no "promises" field
             promises = PostMintResponseLegacy.parse_obj(reponse_dict)
             return self._construct_proofs(promises, secrets, rs)
         except:
