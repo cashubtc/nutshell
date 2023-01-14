@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from secp256k1 import PublicKey
 
 from cashu.core.base import (
-    BlindedMessages,
+    BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
@@ -14,6 +14,7 @@ from cashu.core.base import (
     KeysetsResponse,
     KeysResponse,
     MeltRequest,
+    PostMintRequest,
     PostMintResponse,
     PostSplitResponse,
     SplitRequest,
@@ -68,7 +69,7 @@ async def request_mint(amount: int = 0) -> GetMintResponse:
 
 @router.post("/mint")
 async def mint(
-    mint_request: BlindedMessages,
+    payload: PostMintRequest,
     payment_hash: Union[str, None] = None,
 ) -> Union[PostMintResponse, CashuError]:
     """
@@ -77,9 +78,7 @@ async def mint(
     Call this endpoint after `GET /mint`.
     """
     try:
-        promises = await ledger.mint(
-            mint_request.blinded_messages, payment_hash=payment_hash
-        )
+        promises = await ledger.mint(payload.outputs, payment_hash=payment_hash)
         blinded_signatures = PostMintResponse(promises=promises)
         return blinded_signatures
     except Exception as exc:
@@ -124,8 +123,7 @@ async def split(
     proofs = payload.proofs
     amount = payload.amount
 
-    # NOTE: backwards compatibility with clients < v0.2.2
-    outputs = payload.outputs.blinded_messages if payload.outputs else None
+    outputs = payload.outputs or None
 
     assert outputs, Exception("no outputs provided.")
     try:

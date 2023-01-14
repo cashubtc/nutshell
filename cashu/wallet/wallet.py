@@ -14,7 +14,6 @@ import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
 from cashu.core.base import (
     BlindedMessage,
-    BlindedMessages,
     BlindedSignature,
     CheckFeesRequest,
     CheckRequest,
@@ -23,6 +22,7 @@ from cashu.core.base import (
     KeysetsResponse,
     MeltRequest,
     P2SHScript,
+    PostMintRequest,
     PostMintResponse,
     PostMintResponseLegacy,
     Proof,
@@ -162,20 +162,20 @@ class LedgerAPI:
     @staticmethod
     def _construct_outputs(amounts: List[int], secrets: List[str]):
         """Takes a list of amounts and secrets and returns outputs.
-        Outputs are blinded messages `payloads` and blinding factors `rs`"""
+        Outputs are blinded messages `outputs` and blinding factors `rs`"""
         assert len(amounts) == len(
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
-        payloads: BlindedMessages = BlindedMessages()
+        outputs: List[BlindedMessage] = []
         rs = []
         for secret, amount in zip(secrets, amounts):
             B_, r = b_dhke.step1_alice(secret)
             rs.append(r)
-            payload: BlindedMessage = BlindedMessage(
+            output: BlindedMessage = BlindedMessage(
                 amount=amount, B_=B_.serialize().hex()
             )
-            payloads.blinded_messages.append(payload)
-        return payloads, rs
+            outputs.append(output)
+        return outputs, rs
 
     async def _check_used_secrets(self, secrets):
         for s in secrets:
@@ -251,11 +251,12 @@ class LedgerAPI:
         """Mints new coins and returns a proof of promise."""
         secrets = [self._generate_secret() for s in range(len(amounts))]
         await self._check_used_secrets(secrets)
-        payloads, rs = self._construct_outputs(amounts, secrets)
+        outputs, rs = self._construct_outputs(amounts, secrets)
+        outputs_payload = PostMintRequest(outputs=outputs)
         self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/mint",
-            json=payloads.dict(),
+            json=outputs_payload.dict(),
             params={"payment_hash": payment_hash},
         )
         resp.raise_for_status()
@@ -303,8 +304,8 @@ class LedgerAPI:
             amounts
         ), "number of secrets does not match number of outputs"
         await self._check_used_secrets(secrets)
-        payloads, rs = self._construct_outputs(amounts, secrets)
-        split_payload = SplitRequest(proofs=proofs, amount=amount, outputs=payloads)
+        outputs, rs = self._construct_outputs(amounts, secrets)
+        split_payload = SplitRequest(proofs=proofs, amount=amount, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs):

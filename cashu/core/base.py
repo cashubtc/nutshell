@@ -41,6 +41,27 @@ class Proof(BaseModel):
         self.__setattr__(key, val)
 
 
+class Proofs(BaseModel):
+    # NOTE: not used in Pydantic validation
+    __root__: List[Proof]
+
+
+class BlindedMessage(BaseModel):
+    amount: int
+    B_: str
+
+
+class BlindedSignature(BaseModel):
+    id: Union[str, None] = None
+    amount: int
+    C_: str
+
+
+class BlindedMessages(BaseModel):
+    # NOTE: not used in Pydantic validation
+    __root__: List[BlindedMessage] = []
+
+
 # ------- LIGHTNING INVOICE -------
 
 
@@ -72,10 +93,8 @@ class KeysetsResponse(BaseModel):
 # ------- API: MINT -------
 
 
-class BlindedSignature(BaseModel):
-    id: Union[str, None] = None
-    amount: int
-    C_: str
+class PostMintRequest(BaseModel):
+    outputs: List[BlindedMessage]
 
 
 class PostMintResponseLegacy(BaseModel):
@@ -108,32 +127,10 @@ class GetMeltResponse(BaseModel):
 # ------- API: SPLIT -------
 
 
-class BlindedMessage(BaseModel):
-    amount: int
-    B_: str
-
-
-class BlindedMessages(BaseModel):
-    blinded_messages: List[BlindedMessage] = []
-
-
 class SplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
-    output_data: Union[
-        BlindedMessages, None
-    ] = None  # backwards compatibility with clients that called this output_data and not outputs < v0.2.2
-    outputs: Union[BlindedMessages, None] = None
-
-    def __init__(self, **data):
-        super().__init__(**data)
-        self.backwards_compatibility_v021()
-
-    def backwards_compatibility_v021(self):
-        # before v0.2.2: output_data, after: outputs
-        if self.output_data:
-            self.outputs = self.output_data
-            self.output_data = None
+    outputs: Union[List[BlindedMessage], None] = None
 
 
 class PostSplitResponse(BaseModel):
