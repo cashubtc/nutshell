@@ -130,7 +130,7 @@ class GetMeltResponse(BaseModel):
 class SplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
-    outputs: Union[List[BlindedMessage], None] = None
+    outputs: List[BlindedMessage]
 
 
 class PostSplitResponse(BaseModel):

@@ -120,14 +120,11 @@ async def split(
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
     """
-    proofs = payload.proofs
-    amount = payload.amount
-
-    outputs = payload.outputs or None
-
-    assert outputs, Exception("no outputs provided.")
+    assert payload.outputs, Exception("no outputs provided.")
     try:
-        split_return = await ledger.split(proofs, amount, outputs)
+        split_return = await ledger.split(
+            payload.proofs, payload.amount, payload.outputs
+        )
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
     if not split_return:
