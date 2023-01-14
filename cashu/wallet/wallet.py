@@ -27,8 +27,8 @@ from cashu.core.base import (
     PostMintResponseLegacy,
     Proof,
     SplitRequest,
-    TokenV2,
     TokenMintJson,
+    TokenV2,
     WalletKeyset,
 )
 from cashu.core.bolt11 import Invoice as InvoiceBolt11

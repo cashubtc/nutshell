@@ -3,7 +3,7 @@ import urllib.parse
 
 import click
 
-from cashu.core.base import Proof, TokenV2, TokenMintJson, WalletKeyset
+from cashu.core.base import Proof, TokenMintJson, TokenV2, WalletKeyset
 from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
