@@ -499,7 +499,7 @@ async def burn(ctx, token: str, all: bool, force: bool):
     else:
         # check only the specified ones
         proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
-    wallet.status()
+
     await wallet.invalidate(proofs)
     wallet.status()
 
@@ -543,7 +543,6 @@ async def pending(ctx, legacy):
                 print(f"{token_legacy}\n")
             print(f"--------------------------\n")
         print("To remove all spent tokens use: cashu burn -a")
-    wallet.status()
 
 
 @cli.command("lock", help="Generate receiving lock.")
