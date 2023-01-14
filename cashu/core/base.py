@@ -40,9 +40,7 @@ class Proof(BaseModel):
 
 
 class Proofs(BaseModel):
-    """TODO: Use this model"""
-
-    proofs: List[Proof]
+    __root__: List[Proof]
 
 
 class Invoice(BaseModel):
@@ -77,6 +75,11 @@ class KeysetsResponse(BaseModel):
 
 class BlindedMessages(BaseModel):
     blinded_messages: List[BlindedMessage] = []
+
+
+class PostMintResponseLegacy(BaseModel):
+    # NOTE: Backwards compability for < 0.7.1 where we used a simple list and not a key-value dictionary
+    __root__: List[BlindedSignature] = []
 
 
 class PostMintResponse(BaseModel):

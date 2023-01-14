@@ -24,6 +24,7 @@ from cashu.core.base import (
     MeltRequest,
     P2SHScript,
     PostMintResponse,
+    PostMintResponseLegacy,
     Proof,
     SplitRequest,
     TokenV2,
@@ -260,8 +261,12 @@ class LedgerAPI:
         resp.raise_for_status()
         reponse_dict = resp.json()
         self.raise_on_error(reponse_dict)
-        promises = PostMintResponse.parse_obj(reponse_dict)
-        return self._construct_proofs(promises.promises, secrets, rs)
+        try:
+            promises = PostMintResponseLegacy.parse_obj(reponse_dict)
+            return self._construct_proofs(promises, secrets, rs)
+        except:
+            promises = PostMintResponse.parse_obj(reponse_dict)
+            return self._construct_proofs(promises.promises, secrets, rs)
 
     async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
         """Consume proofs and create new promises based on amount split.
