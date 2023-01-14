@@ -387,7 +387,7 @@ async def receive(ctx, token: str, lock: str):
     # deserialize token
     dtoken = json.loads(base64.urlsafe_b64decode(token))
 
-    assert "tokens" in dtoken, Exception("no proofs in token")
+    assert "proofs" in dtoken, Exception("no proofs in token")
     includes_mint_info: bool = "mints" in dtoken and dtoken.get("mints") is not None
 
     # if there is a `mints` field in the token
@@ -402,7 +402,7 @@ async def receive(ctx, token: str, lock: str):
         await wallet.load_proofs()
     else:
         # no mint information present, we extract the proofs and use wallet's default mint
-        proofs = [Proof(**p) for p in dtoken["tokens"]]
+        proofs = [Proof(**p) for p in dtoken["proofs"]]
         _, _ = await wallet.redeem(proofs, script, signature)
 
     wallet.status()

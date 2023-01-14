@@ -63,7 +63,7 @@ async def redeem_multimint(ctx, dtoken, script, signature):
 
             # redeem proofs of this keyset
             redeem_proofs = [
-                Proof(**p) for p in dtoken["tokens"] if Proof(**p).id == keyset
+                Proof(**p) for p in dtoken["proofs"] if Proof(**p).id == keyset
             ]
             _, _ = await keyset_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
