@@ -514,7 +514,7 @@ class Wallet(LedgerAPI):
 
         # add mint information to the token, if requested
         if include_mints:
-            # hold information about the mint
+            # dummy object to hold information about the mint
             mints: Dict[str, TokenMintV2] = dict()
             # iterate through all proofs and add their keyset to `mints`
             for proof in proofs:
@@ -535,7 +535,9 @@ class Wallet(LedgerAPI):
                             # if a mint has multiple keysets, append to the existing list
                             if keyset.id not in mints[placeholder_mint_id].ks:
                                 mints[placeholder_mint_id].ks.append(keyset.id)
+
             if len(mints) > 0:
+                # add dummy object to token
                 token.mints = mints
         return token
 

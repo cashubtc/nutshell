@@ -388,7 +388,7 @@ async def receive(ctx, token: str, lock: str):
     # deserialize token
     dtoken = json.loads(base64.urlsafe_b64decode(token))
 
-    # backwards compatibility < 0.8: V2 tokens with "tokens" field instead of "proofs" field
+    # backwards compatibility wallet to wallet < 0.8: V2 tokens renamed "tokens" field to "proofs"
     if "tokens" in dtoken:
         dtoken["proofs"] = dtoken.pop("tokens")
 

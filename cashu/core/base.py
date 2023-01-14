@@ -41,11 +41,6 @@ class Proof(BaseModel):
         self.__setattr__(key, val)
 
 
-class Proofs(BaseModel):
-    # NOTE: not used in Pydantic validation
-    __root__: List[Proof]
-
-
 # ------- LIGHTNING INVOICE -------
 
 
@@ -274,6 +269,11 @@ class MintKeysets:
 
 
 # ------- TOKEN -------
+
+
+class TokenV1(BaseModel):
+    # NOTE: not used in Pydantic validation
+    __root__: List[Proof]
 
 
 class TokenMintV2(BaseModel):
