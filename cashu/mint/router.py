@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from secp256k1 import PublicKey
 
 from cashu.core.base import (
-    BlindedMessages,
+    BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
@@ -14,6 +14,7 @@ from cashu.core.base import (
     KeysetsResponse,
     KeysResponse,
     MeltRequest,
+    PostMintRequest,
     PostMintResponse,
     PostSplitResponse,
     SplitRequest,
@@ -68,7 +69,7 @@ async def request_mint(amount: int = 0) -> GetMintResponse:
 
 @router.post("/mint")
 async def mint(
-    mint_request: BlindedMessages,
+    payload: PostMintRequest,
     payment_hash: Union[str, None] = None,
 ) -> Union[PostMintResponse, CashuError]:
     """
@@ -77,9 +78,7 @@ async def mint(
     Call this endpoint after `GET /mint`.
     """
     try:
-        promises = await ledger.mint(
-            mint_request.blinded_messages, payment_hash=payment_hash
-        )
+        promises = await ledger.mint(payload.outputs, payment_hash=payment_hash)
         blinded_signatures = PostMintResponse(promises=promises)
         return blinded_signatures
     except Exception as exc:
@@ -121,15 +120,11 @@ async def split(
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
     """
-    proofs = payload.proofs
-    amount = payload.amount
-
-    # NOTE: backwards compatibility with clients < v0.2.2
-    outputs = payload.outputs.blinded_messages if payload.outputs else None
-
-    assert outputs, Exception("no outputs provided.")
+    assert payload.outputs, Exception("no outputs provided.")
     try:
-        split_return = await ledger.split(proofs, amount, outputs)
+        split_return = await ledger.split(
+            payload.proofs, payload.amount, payload.outputs
+        )
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
     if not split_return:
