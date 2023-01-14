@@ -3,7 +3,7 @@ import urllib.parse
 
 import click
 
-from cashu.core.base import Proof, TokenMintJson, TokenV2, WalletKeyset
+from cashu.core.base import Proof, TokenMintV2, TokenV2, WalletKeyset
 from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
@@ -168,6 +168,6 @@ async def proofs_to_token(wallet, proofs, url: str):
         input(f"Enter mint URL (press enter for default {MINT_URL}): ") or MINT_URL
     )
 
-    token.mints[url] = TokenMintJson(url=url, ks=keysets)  # type: ignore
+    token.mints[url] = TokenMintV2(url=url, ks=keysets)  # type: ignore
     token_serialized = await wallet._serialize_token_base64(token)
     return token_serialized

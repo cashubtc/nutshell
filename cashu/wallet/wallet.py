@@ -27,7 +27,7 @@ from cashu.core.base import (
     PostMintResponseLegacy,
     Proof,
     SplitRequest,
-    TokenMintJson,
+    TokenMintV2,
     TokenV2,
     WalletKeyset,
 )
@@ -515,7 +515,7 @@ class Wallet(LedgerAPI):
         # add mint information to the token, if requested
         if include_mints:
             # hold information about the mint
-            mints: Dict[str, TokenMintJson] = dict()
+            mints: Dict[str, TokenMintV2] = dict()
             # iterate through all proofs and add their keyset to `mints`
             for proof in proofs:
                 if proof.id:
@@ -526,7 +526,7 @@ class Wallet(LedgerAPI):
                         placeholder_mint_id = keyset.mint_url
                         if placeholder_mint_id not in mints:
                             # mint information
-                            id = TokenMintJson(
+                            id = TokenMintV2(
                                 url=keyset.mint_url,
                                 ks=[keyset.id],
                             )

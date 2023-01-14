@@ -276,14 +276,14 @@ class MintKeysets:
 # ------- TOKEN -------
 
 
-class TokenMintJson(BaseModel):
+class TokenMintV2(BaseModel):
     url: str
     ks: List[str]
 
 
 class TokenV2(BaseModel):
     proofs: List[Proof]
-    mints: Optional[Dict[str, TokenMintJson]] = None
+    mints: Optional[Dict[str, TokenMintV2]] = None
 
     def to_dict(self):
         return dict(
