@@ -48,7 +48,7 @@ from cashu.wallet.crud import (
 )
 from cashu.wallet.wallet import Wallet as Wallet
 
-from .cli_helpers import (
+from .clihelpers import (
     get_mint_wallet,
     print_mint_balances,
     proofs_to_token,
@@ -309,6 +309,7 @@ async def send(ctx, amount: int, lock: str, legacy: bool):
 @click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
 @click.option(
     "--legacy",
+    "-l",
     default=False,
     is_flag=True,
     help="Print legacy token without mint information.",
@@ -387,7 +388,11 @@ async def receive(ctx, token: str, lock: str):
     # deserialize token
     dtoken = json.loads(base64.urlsafe_b64decode(token))
 
-    assert "tokens" in dtoken, Exception("no proofs in token")
+    # backwards compatibility wallet to wallet < 0.8: V2 tokens renamed "tokens" field to "proofs"
+    if "tokens" in dtoken:
+        dtoken["proofs"] = dtoken.pop("tokens")
+
+    assert "proofs" in dtoken, Exception("no proofs in token")
     includes_mint_info: bool = "mints" in dtoken and dtoken.get("mints") is not None
 
     # if there is a `mints` field in the token
@@ -402,7 +407,7 @@ async def receive(ctx, token: str, lock: str):
         await wallet.load_proofs()
     else:
         # no mint information present, we extract the proofs and use wallet's default mint
-        proofs = [Proof(**p) for p in dtoken["tokens"]]
+        proofs = [Proof(**p) for p in dtoken["proofs"]]
         _, _ = await wallet.redeem(proofs, script, signature)
 
     wallet.status()
@@ -494,15 +499,23 @@ async def burn(ctx, token: str, all: bool, force: bool):
     else:
         # check only the specified ones
         proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
-    wallet.status()
+
     await wallet.invalidate(proofs)
     wallet.status()
 
 
 @cli.command("pending", help="Show pending tokens.")
+@click.option(
+    "--legacy",
+    "-l",
+    default=False,
+    is_flag=True,
+    help="Print legacy token without mint information.",
+    type=bool,
+)
 @click.pass_context
 @coro
-async def pending(ctx):
+async def pending(ctx, legacy):
     wallet: Wallet = ctx.obj["WALLET"]
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
@@ -513,7 +526,7 @@ async def pending(ctx):
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
-            token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
+            # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
@@ -521,9 +534,15 @@ async def pending(ctx):
                 f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time: {reserved_date} ID: {key}\n"
             )
             print(f"{token}\n")
+
+            if legacy:
+                token_legacy = await wallet.serialize_proofs(
+                    grouped_proofs,
+                    legacy=True,
+                )
+                print(f"{token_legacy}\n")
             print(f"--------------------------\n")
         print("To remove all spent tokens use: cashu burn -a")
-    wallet.status()
 
 
 @cli.command("lock", help="Generate receiving lock.")

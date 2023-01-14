@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
 from cashu.core.secp import PrivateKey, PublicKey
 
+# ------- PROOFS -------
+
 
 class P2SHScript(BaseModel):
     script: str
@@ -16,7 +18,7 @@ class P2SHScript(BaseModel):
 class Proof(BaseModel):
     id: Union[
         None, str
-    ] = ""  # NOTE: None for backwards compatibility of old clients < 0.3
+    ] = ""  # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
     amount: int = 0
     secret: str = ""
     C: str = ""
@@ -39,10 +41,7 @@ class Proof(BaseModel):
         self.__setattr__(key, val)
 
 
-class Proofs(BaseModel):
-    """TODO: Use this model"""
-
-    proofs: List[Proof]
+# ------- LIGHTNING INVOICE -------
 
 
 class Invoice(BaseModel):
@@ -56,9 +55,21 @@ class Invoice(BaseModel):
     time_paid: Union[None, str, int, float] = ""
 
 
-class BlindedMessage(BaseModel):
-    amount: int
-    B_: str
+# ------- API -------
+
+
+# ------- API: KEYS -------
+
+
+class KeysResponse(BaseModel):
+    __root__: Dict[str, str]
+
+
+class KeysetsResponse(BaseModel):
+    keysets: list[str]
+
+
+# ------- API: MINT -------
 
 
 class BlindedSignature(BaseModel):
@@ -67,8 +78,13 @@ class BlindedSignature(BaseModel):
     C_: str
 
 
-class MintRequest(BaseModel):
-    blinded_messages: List[BlindedMessage] = []
+class PostMintResponseLegacy(BaseModel):
+    # NOTE: Backwards compability for < 0.8 where we used a simple list and not a key-value dictionary
+    __root__: List[BlindedSignature] = []
+
+
+class PostMintResponse(BaseModel):
+    promises: List[BlindedSignature] = []
 
 
 class GetMintResponse(BaseModel):
@@ -76,18 +92,38 @@ class GetMintResponse(BaseModel):
     hash: str
 
 
+# ------- API: MELT -------
+
+
+class MeltRequest(BaseModel):
+    proofs: List[Proof]
+    invoice: str
+
+
 class GetMeltResponse(BaseModel):
     paid: Union[bool, None]
     preimage: Union[str, None]
+
+
+# ------- API: SPLIT -------
+
+
+class BlindedMessage(BaseModel):
+    amount: int
+    B_: str
+
+
+class BlindedMessages(BaseModel):
+    blinded_messages: List[BlindedMessage] = []
 
 
 class SplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
     output_data: Union[
-        MintRequest, None
-    ] = None  # backwards compatibility with clients < v0.2.2
-    outputs: Union[MintRequest, None] = None
+        BlindedMessages, None
+    ] = None  # backwards compatibility with clients that called this output_data and not outputs < v0.2.2
+    outputs: Union[BlindedMessages, None] = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -105,6 +141,9 @@ class PostSplitResponse(BaseModel):
     snd: List[BlindedSignature]
 
 
+# ------- API: CHECK -------
+
+
 class CheckRequest(BaseModel):
     proofs: List[Proof]
 
@@ -117,29 +156,35 @@ class CheckFeesResponse(BaseModel):
     fee: Union[int, None]
 
 
-class MeltRequest(BaseModel):
-    proofs: List[Proof]
-    invoice: str
+# ------- KEYSETS -------
 
 
 class KeyBase(BaseModel):
+    """
+    Public key from a keyset id for a given amount.
+    """
+
     id: str
     amount: int
     pubkey: str
 
 
 class WalletKeyset:
-    id: str
-    public_keys: Dict[int, PublicKey]
+    """
+    Contains the keyset from the wallets's perspective.
+    """
+
+    id: Union[str, None]
+    public_keys: Union[Dict[int, PublicKey], None]
     mint_url: Union[str, None] = None
     valid_from: Union[str, None] = None
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
-    active: bool = True
+    active: Union[bool, None] = True
 
     def __init__(
         self,
-        pubkeys: Dict[int, PublicKey] = None,
+        public_keys=None,
         mint_url=None,
         id=None,
         valid_from=None,
@@ -153,20 +198,24 @@ class WalletKeyset:
         self.first_seen = first_seen
         self.active = active
         self.mint_url = mint_url
-        if pubkeys:
-            self.public_keys = pubkeys
+        if public_keys:
+            self.public_keys = public_keys
             self.id = derive_keyset_id(self.public_keys)
 
 
 class MintKeyset:
-    id: str
+    """
+    Contains the keyset from the mint's perspective.
+    """
+
+    id: Union[str, None]
     derivation_path: str
     private_keys: Dict[int, PrivateKey]
-    public_keys: Dict[int, PublicKey] = {}
+    public_keys: Union[Dict[int, PublicKey], None] = None
     valid_from: Union[str, None] = None
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
-    active: bool = True
+    active: Union[bool, None] = True
     version: Union[str, None] = None
 
     def __init__(
@@ -194,37 +243,50 @@ class MintKeyset:
     def generate_keys(self, seed):
         """Generates keys of a keyset from a seed."""
         self.private_keys = derive_keys(seed, self.derivation_path)
-        self.public_keys = derive_pubkeys(self.private_keys)
-        self.id = derive_keyset_id(self.public_keys)
+        self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+        self.id = derive_keyset_id(self.public_keys)  # type: ignore
 
     def get_keybase(self):
+        assert self.id is not None
         return {
             k: KeyBase(id=self.id, amount=k, pubkey=v.serialize().hex())
-            for k, v in self.public_keys.items()
+            for k, v in self.public_keys.items()  # type: ignore
         }
 
 
 class MintKeysets:
+    """
+    Collection of keyset IDs and the corresponding keyset of the mint.
+    """
+
     keysets: Dict[str, MintKeyset]
 
     def __init__(self, keysets: List[MintKeyset]):
-        self.keysets: Dict[str, MintKeyset] = {k.id: k for k in keysets}
+        self.keysets = {k.id: k for k in keysets}  # type: ignore
 
     def get_ids(self):
         return [k for k, _ in self.keysets.items()]
 
 
-class TokenMintJson(BaseModel):
+# ------- TOKEN -------
+
+
+class TokenV1(BaseModel):
+    # NOTE: not used in Pydantic validation
+    __root__: List[Proof]
+
+
+class TokenMintV2(BaseModel):
     url: str
     ks: List[str]
 
 
-class TokenJson(BaseModel):
-    tokens: List[Proof]
-    mints: Optional[Dict[str, TokenMintJson]] = None
+class TokenV2(BaseModel):
+    proofs: List[Proof]
+    mints: Optional[Dict[str, TokenMintV2]] = None
 
     def to_dict(self):
         return dict(
-            tokens=[p.to_dict() for p in self.tokens],
+            proofs=[p.to_dict() for p in self.proofs],
             mints={k: v.dict() for k, v in self.mints.items()},  # type: ignore
         )
