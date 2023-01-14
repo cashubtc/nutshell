@@ -16,7 +16,7 @@ class P2SHScript(BaseModel):
 class Proof(BaseModel):
     id: Union[
         None, str
-    ] = ""  # NOTE: None for backwards compatibility of old clients < 0.3
+    ] = ""  # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
     amount: int = 0
     secret: str = ""
     C: str = ""
@@ -78,7 +78,7 @@ class BlindedMessages(BaseModel):
 
 
 class PostMintResponseLegacy(BaseModel):
-    # NOTE: Backwards compability for < 0.7.1 where we used a simple list and not a key-value dictionary
+    # NOTE: Backwards compability for < 0.8 where we used a simple list and not a key-value dictionary
     __root__: List[BlindedSignature] = []
 
 
@@ -101,7 +101,7 @@ class SplitRequest(BaseModel):
     amount: int
     output_data: Union[
         BlindedMessages, None
-    ] = None  # backwards compatibility with clients < v0.2.2
+    ] = None  # backwards compatibility with clients that called this output_data and not outputs < v0.2.2
     outputs: Union[BlindedMessages, None] = None
 
     def __init__(self, **data):

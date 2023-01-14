@@ -262,12 +262,15 @@ class LedgerAPI:
         reponse_dict = resp.json()
         self.raise_on_error(reponse_dict)
         try:
-            # backwards compatibility: parse promises < 0.7.1 with no "promises" field
-            promises = PostMintResponseLegacy.parse_obj(reponse_dict)
-            return self._construct_proofs(promises, secrets, rs)
+            # backwards compatibility: parse promises < 0.8 with no "promises" field
+            promises = PostMintResponseLegacy.parse_obj(reponse_dict).__root__
+            logger.warning(
+                "Parsing token with no promises field. Please upgrade mint to 0.8"
+            )
         except:
-            promises = PostMintResponse.parse_obj(reponse_dict)
-            return self._construct_proofs(promises.promises, secrets, rs)
+            promises = PostMintResponse.parse_obj(reponse_dict).promises
+
+        return self._construct_proofs(promises, secrets, rs)
 
     async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
         """Consume proofs and create new promises based on amount split.
