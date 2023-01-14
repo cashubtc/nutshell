@@ -3,7 +3,7 @@ import urllib.parse
 
 import click
 
-from cashu.core.base import Proof, TokenJson, TokenMintJson, WalletKeyset
+from cashu.core.base import Proof, TokenV2, TokenMintJson, WalletKeyset
 from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
@@ -152,7 +152,7 @@ async def proofs_to_token(wallet, proofs, url: str):
     Ingests proofs and
     """
     # and add url and keyset id to token
-    token: TokenJson = await wallet._make_token(proofs, include_mints=False)
+    token: TokenV2 = await wallet._make_token(proofs, include_mints=False)
     token.mints = {}
 
     # get keysets of proofs

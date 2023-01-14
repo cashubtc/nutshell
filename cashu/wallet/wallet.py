@@ -26,7 +26,7 @@ from cashu.core.base import (
     PostMintResponse,
     Proof,
     SplitRequest,
-    TokenJson,
+    TokenV2,
     TokenMintJson,
     WalletKeyset,
 )
@@ -497,11 +497,11 @@ class Wallet(LedgerAPI):
 
     async def _make_token(self, proofs: List[Proof], include_mints=True):
         """
-        Takes list of proofs and produces a TokenJson by looking up
+        Takes list of proofs and produces a TokenV2 by looking up
         the keyset id and mint URLs from the database.
         """
         # build token
-        token = TokenJson(tokens=proofs)
+        token = TokenV2(proofs=proofs)
 
         # add mint information to the token, if requested
         if include_mints:
@@ -530,9 +530,9 @@ class Wallet(LedgerAPI):
                 token.mints = mints
         return token
 
-    async def _serialize_token_base64(self, token: TokenJson):
+    async def _serialize_token_base64(self, token: TokenV2):
         """
-        Takes a TokenJson and serializes it in urlsafe_base64.
+        Takes a TokenV2 and serializes it in urlsafe_base64.
         """
         # encode the token as a base64 string
         token_base64 = base64.urlsafe_b64encode(
