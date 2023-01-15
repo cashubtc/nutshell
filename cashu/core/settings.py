@@ -57,4 +57,4 @@ NOSTR_PRIVATE_KEY = env.str("NOSTR_PRIVATE_KEY", default=None)
 NOSTR_RELAYS = env.list("NOSTR_RELAYS", default=["wss://nostr-pub.wellorder.net"])
 
 MAX_ORDER = 64
-VERSION = "0.8.1"
+VERSION = "0.8.2"
