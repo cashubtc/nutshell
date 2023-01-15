@@ -68,8 +68,8 @@ async def test_get_keyset(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
-async def test_get_keysets(wallet1: Wallet):
-    keyset = await wallet1._get_keysets(wallet1.url)
+async def test_get_keyset_ids(wallet1: Wallet):
+    keyset = await wallet1._get_keyset_ids(wallet1.url)
     assert type(keyset) == dict
     assert type(keyset["keysets"]) == list
     assert len(keyset["keysets"]) > 0
@@ -101,7 +101,7 @@ async def test_split_to_send(wallet1: Wallet):
     keep_proofs, spendable_proofs = await wallet1.split_to_send(
         wallet1.proofs, 32, set_reserved=True
     )
-    get_spendable = await wallet1._get_spendable_proofs(wallet1.proofs)
+    get_spendable = await wallet1._select_proofs_to_send(wallet1.proofs, 32)
     assert keep_proofs == get_spendable
 
     assert sum_proofs(spendable_proofs) == 32

@@ -3,7 +3,7 @@ import urllib.parse
 
 import click
 
-from cashu.core.base import Proof, TokenJson, TokenMintJson, WalletKeyset
+from cashu.core.base import Proof, TokenMintV2, TokenV2, WalletKeyset
 from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
@@ -19,7 +19,7 @@ async def verify_mints(ctx, dtoken):
                 mint_url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
             )
             # make sure that this mint supports this keyset
-            mint_keysets = await keyset_wallet._get_keysets(mint_url)
+            mint_keysets = await keyset_wallet._get_keyset_ids(mint_url)
             assert keyset in mint_keysets["keysets"], "mint does not have this keyset."
 
             # we validate the keyset id by fetching the keys from the mint
@@ -63,7 +63,7 @@ async def redeem_multimint(ctx, dtoken, script, signature):
 
             # redeem proofs of this keyset
             redeem_proofs = [
-                Proof(**p) for p in dtoken["tokens"] if Proof(**p).id == keyset
+                Proof(**p) for p in dtoken["proofs"] if Proof(**p).id == keyset
             ]
             _, _ = await keyset_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
@@ -119,6 +119,7 @@ async def get_mint_wallet(ctx):
     mint_keysets: WalletKeyset = await get_keyset(mint_url=mint_url, db=mint_wallet.db)  # type: ignore
 
     # load the keys
+    assert mint_keysets.id
     await mint_wallet.load_mint(keyset_id=mint_keysets.id)
 
     return mint_wallet
@@ -151,7 +152,7 @@ async def proofs_to_token(wallet, proofs, url: str):
     Ingests proofs and
     """
     # and add url and keyset id to token
-    token: TokenJson = await wallet._make_token(proofs, include_mints=False)
+    token: TokenV2 = await wallet._make_token(proofs, include_mints=False)
     token.mints = {}
 
     # get keysets of proofs
@@ -161,12 +162,12 @@ async def proofs_to_token(wallet, proofs, url: str):
     # check whether we know the mint urls for these proofs
     for k in keysets:
         ks = await get_keyset(id=k, db=wallet.db)
-        url = ks.mint_url if ks is not None else None
+        url = ks.mint_url if ks and ks.mint_url else ""
 
     url = url or (
         input(f"Enter mint URL (press enter for default {MINT_URL}): ") or MINT_URL
     )
 
-    token.mints[url] = TokenMintJson(url=url, ks=keysets)  # type: ignore
+    token.mints[url] = TokenMintV2(url=url, ks=keysets)  # type: ignore
     token_serialized = await wallet._serialize_token_base64(token)
     return token_serialized

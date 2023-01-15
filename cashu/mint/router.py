@@ -5,14 +5,18 @@ from secp256k1 import PublicKey
 from urllib.parse import unquote
 
 from cashu.core.base import (
+    BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
     CheckRequest,
     GetMeltResponse,
     GetMintResponse,
+    KeysetsResponse,
+    KeysResponse,
     MeltRequest,
-    MintRequest,
+    PostMintRequest,
+    PostMintResponse,
     PostSplitResponse,
     SplitRequest,
 )
@@ -23,28 +27,31 @@ router: APIRouter = APIRouter()
 
 
 @router.get("/keys")
-async def keys() -> dict[int, str]:
+async def keys() -> KeysResponse:
     """Get the public keys of the mint of the newest keyset"""
     keyset = ledger.get_keyset()
-    return keyset
+    keys = KeysResponse.parse_obj(keyset)
+    return keys
 
 
 @router.get("/keys/{idBase64Urlsafe}")
-async def keyset_keys(idBase64Urlsafe: str) -> dict[int, str]:
+async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
     """
-    Get the public keys of the mint of a specificy keyset id.
-    The id is encoded in base64_urlsafe and needs to be converted back to
+    Get the public keys of the mint of a specific keyset id.
+    The id is encoded in idBase64Urlsafe and needs to be converted back to
     normal base64 before it can be processed.
     """
     id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
     keyset = ledger.get_keyset(keyset_id=id)
-    return keyset
+    keys = KeysResponse.parse_obj(keyset)
+    return keys
 
 
 @router.get("/keysets")
-async def keysets() -> dict[str, list[str]]:
-    """Get all active keysets of the mint"""
-    return {"keysets": ledger.keysets.get_ids()}
+async def keysets() -> KeysetsResponse:
+    """Get all active keyset ids of the mint"""
+    keysets = KeysetsResponse(keysets=ledger.keysets.get_ids())
+    return keysets
 
 
 @router.get("/mint")
@@ -69,21 +76,20 @@ async def request_mint(amount: int = 0, description_hash: Optional[bytes] = None
 
 @router.post("/mint")
 async def mint(
-    mint_request: MintRequest,
+    payload: PostMintRequest,
     payment_hash: Union[str, None] = None,
-) -> Union[List[BlindedSignature], CashuError]:
+) -> Union[PostMintResponse, CashuError]:
     """
     Requests the minting of tokens belonging to a paid payment request.
 
     Call this endpoint after `GET /mint`.
     """
     try:
-        promises = await ledger.mint(
-            mint_request.blinded_messages, payment_hash=payment_hash
-        )
-        return promises
+        promises = await ledger.mint(payload.outputs, payment_hash=payment_hash)
+        blinded_signatures = PostMintResponse(promises=promises)
+        return blinded_signatures
     except Exception as exc:
-        return CashuError(error=str(exc))
+        return CashuError(code=0, error=str(exc))
 
 
 @router.post("/melt")
@@ -110,7 +116,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
     """
     fees_msat = await ledger.check_fees(payload.pr)
-    return CheckFeesResponse(fee=fees_msat / 1000)
+    return CheckFeesResponse(fee=fees_msat // 1000)
 
 
 @router.post("/split")
@@ -121,19 +127,15 @@ async def split(
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
     """
-    proofs = payload.proofs
-    amount = payload.amount
-
-    # NOTE: backwards compatibility with clients < v0.2.2
-    outputs = payload.outputs.blinded_messages if payload.outputs else None
-
-    assert outputs, Exception("no outputs provided.")
+    assert payload.outputs, Exception("no outputs provided.")
     try:
-        split_return = await ledger.split(proofs, amount, outputs)
+        split_return = await ledger.split(
+            payload.proofs, payload.amount, payload.outputs
+        )
     except Exception as exc:
-        return CashuError(error=str(exc))
+        return CashuError(code=0, error=str(exc))
     if not split_return:
-        return CashuError(error="there was an error with the split")
+        return CashuError(code=0, error="there was an error with the split")
     frst_promises, scnd_promises = split_return
     resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
     return resp
