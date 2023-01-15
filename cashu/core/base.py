@@ -98,7 +98,7 @@ class PostMintRequest(BaseModel):
 
 
 class PostMintResponseLegacy(BaseModel):
-    # NOTE: Backwards compability for < 0.8 where we used a simple list and not a key-value dictionary
+    # NOTE: Backwards compability for < 0.8.0 where we used a simple list and not a key-value dictionary
     __root__: List[BlindedSignature] = []
 
 
