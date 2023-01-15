@@ -265,9 +265,6 @@ class LedgerAPI:
         try:
             # backwards compatibility: parse promises < 0.8 with no "promises" field
             promises = PostMintResponseLegacy.parse_obj(reponse_dict).__root__
-            logger.warning(
-                "Parsing token with no promises field. Please upgrade mint to 0.8"
-            )
         except:
             promises = PostMintResponse.parse_obj(reponse_dict).promises
 
