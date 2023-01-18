@@ -406,9 +406,9 @@ async def receive(ctx, token: str, lock: str):
     # and ask the user if they want to trust the new mitns
     if includes_mint_info:
         # we ask the user to confirm any new mints the tokens may include
-        await verify_mints(ctx, dtoken)
+        await verify_mints(ctx, tokenObj)
         # redeem tokens with new wallet instances
-        await redeem_multimint(ctx, dtoken, script, signature)
+        await redeem_multimint(ctx, tokenObj, script, signature)
         # reload main wallet so the balance updates
         await wallet.load_proofs()
     else:

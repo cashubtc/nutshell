@@ -404,6 +404,7 @@ class Wallet(LedgerAPI):
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
+        logger.debug(f"Wallet initalized with mint URL {url}")
 
     # ---------- API ----------
 

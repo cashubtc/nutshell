@@ -8,6 +8,7 @@ from cashu.core.base import Proof, TokenV2, TokenV2Mint, WalletKeyset
 from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
+from loguru import logger
 
 
 async def verify_mints(ctx, token: TokenV2):
@@ -21,7 +22,7 @@ async def verify_mints(ctx, token: TokenV2):
 
     if token.mints is None:
         return
-
+    logger.debug(f"Verifying mints")
     trust_token_mints = True
     for mint in token.mints:
         for keyset in set(mint.ids):
@@ -54,6 +55,8 @@ async def verify_mints(ctx, token: TokenV2):
                     default=True,
                 )
                 trust_token_mints = True
+            else:
+                logger.debug(f"We know keyset {mint_keysets.id} already")
     assert trust_token_mints, Exception("Aborted!")
 
 
@@ -66,8 +69,10 @@ async def redeem_multimint(ctx, token: TokenV2, script, signature):
     # we then redeem the tokens for each keyset individually
     if token.mints is None:
         return
+
     for mint in token.mints:
         for keyset in set(mint.ids):
+            logger.debug(f"Redeeming tokens from keyset {keyset}")
             # init a temporary wallet object
             keyset_wallet = Wallet(
                 mint.url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
