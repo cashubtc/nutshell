@@ -3,7 +3,7 @@ import urllib.parse
 
 import click
 
-from cashu.core.base import Proof, TokenMintV2, TokenV2, WalletKeyset
+from cashu.core.base import Proof, TokenV2, TokenV2Mint, WalletKeyset
 from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
@@ -12,7 +12,7 @@ from cashu.wallet.wallet import Wallet as Wallet
 async def verify_mints(ctx, dtoken):
     trust_token_mints = True
     for mint_id in dtoken.get("mints"):
-        for keyset in set(dtoken["mints"][mint_id]["ks"]):
+        for keyset in set(dtoken["mints"][mint_id]["ids"]):
             mint_url = dtoken["mints"][mint_id]["url"]
             # init a temporary wallet object
             keyset_wallet = Wallet(
@@ -51,7 +51,7 @@ async def redeem_multimint(ctx, dtoken, script, signature):
     # we get the mint information in the token and load the keys of each mint
     # we then redeem the tokens for each keyset individually
     for mint_id in dtoken.get("mints"):
-        for keyset in set(dtoken["mints"][mint_id]["ks"]):
+        for keyset in set(dtoken["mints"][mint_id]["ids"]):
             mint_url = dtoken["mints"][mint_id]["url"]
             # init a temporary wallet object
             keyset_wallet = Wallet(
@@ -153,7 +153,7 @@ async def proofs_to_token(wallet, proofs, url: str):
     """
     # and add url and keyset id to token
     token: TokenV2 = await wallet._make_token(proofs, include_mints=False)
-    token.mints = {}
+    token.mints = []
 
     # get keysets of proofs
     keysets = list(set([p.id for p in proofs]))
@@ -168,6 +168,6 @@ async def proofs_to_token(wallet, proofs, url: str):
         input(f"Enter mint URL (press enter for default {MINT_URL}): ") or MINT_URL
     )
 
-    token.mints[url] = TokenMintV2(url=url, ks=keysets)  # type: ignore
+    token.mints.append(TokenV2Mint(url=url, ks=keysets))
     token_serialized = await wallet._serialize_token_base64(token)
     return token_serialized

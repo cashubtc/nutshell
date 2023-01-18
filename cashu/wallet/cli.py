@@ -392,6 +392,10 @@ async def receive(ctx, token: str, lock: str):
     if "tokens" in dtoken:
         dtoken["proofs"] = dtoken.pop("tokens")
 
+    # backwards compatibility wallet to wallet < 0.8.3: V2 tokens got rid of the "MINT_NAME" key in "mints"
+    if "mints" in dtoken and isinstance(dtoken["mints"], dict):
+        dtoken["mints"] = list(dtoken["mints"].values())
+
     assert "proofs" in dtoken, Exception("no proofs in token")
     includes_mint_info: bool = "mints" in dtoken and dtoken.get("mints") is not None
 

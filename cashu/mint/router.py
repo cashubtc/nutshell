@@ -6,18 +6,18 @@ from secp256k1 import PublicKey
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckFeesRequest,
     CheckFeesResponse,
-    CheckRequest,
+    GetCheckFeesRequest,
+    GetCheckSpendableRequest,
     GetMeltResponse,
     GetMintResponse,
     KeysetsResponse,
     KeysResponse,
-    MeltRequest,
+    PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
+    PostSplitRequest,
     PostSplitResponse,
-    SplitRequest,
 )
 from cashu.core.errors import CashuError
 from cashu.mint.startup import ledger
@@ -25,20 +25,28 @@ from cashu.mint.startup import ledger
 router: APIRouter = APIRouter()
 
 
-@router.get("/keys")
+@router.get(
+    "/keys",
+    name="Mint public keys",
+    summary="Get the public keys of the newest mint keyset",
+)
 async def keys() -> KeysResponse:
-    """Get the public keys of the mint of the newest keyset"""
+    """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
     keyset = ledger.get_keyset()
     keys = KeysResponse.parse_obj(keyset)
     return keys
 
 
-@router.get("/keys/{idBase64Urlsafe}")
+@router.get(
+    "/keys/{idBase64Urlsafe}",
+    name="Keyset public keys",
+    summary="Public keys of a specific keyset",
+)
 async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
     """
-    Get the public keys of the mint of a specific keyset id.
-    The id is encoded in idBase64Urlsafe and needs to be converted back to
-    normal base64 before it can be processed.
+    Get the public keys of the mint from a specific keyset id.
+    The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
+    normal base64 before it can be processed (by the mint).
     """
     id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
     keyset = ledger.get_keyset(keyset_id=id)
@@ -46,14 +54,16 @@ async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
     return keys
 
 
-@router.get("/keysets")
+@router.get(
+    "/keysets", name="Active keysets", summary="Get all active keyset id of the mind"
+)
 async def keysets() -> KeysetsResponse:
-    """Get all active keyset ids of the mint"""
+    """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
     keysets = KeysetsResponse(keysets=ledger.keysets.get_ids())
     return keysets
 
 
-@router.get("/mint")
+@router.get("/mint", name="Request mint", summary="Request minting of new tokens")
 async def request_mint(amount: int = 0) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
@@ -67,7 +77,11 @@ async def request_mint(amount: int = 0) -> GetMintResponse:
     return resp
 
 
-@router.post("/mint")
+@router.post(
+    "/mint",
+    name="Mint tokens",
+    summary="Mint tokens in exchange for a Bitcoin paymemt that the user has made",
+)
 async def mint(
     payload: PostMintRequest,
     payment_hash: Union[str, None] = None,
@@ -85,8 +99,12 @@ async def mint(
         return CashuError(code=0, error=str(exc))
 
 
-@router.post("/melt")
-async def melt(payload: MeltRequest) -> GetMeltResponse:
+@router.post(
+    "/melt",
+    name="Melt tokens",
+    summary="Melt tokens for a Bitcoin payment that the mint will make for the user in exchange",
+)
+async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
@@ -95,30 +113,41 @@ async def melt(payload: MeltRequest) -> GetMeltResponse:
     return resp
 
 
-@router.post("/check")
-async def check_spendable(payload: CheckRequest) -> Dict[int, bool]:
+@router.post(
+    "/check",
+    name="Check spendable",
+    summary="Check whether a proof has already been spent",
+)
+async def check_spendable(payload: GetCheckSpendableRequest) -> Dict[int, bool]:
     """Check whether a secret has been spent already or not."""
     return await ledger.check_spendable(payload.proofs)
 
 
-@router.post("/checkfees")
-async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
+@router.post(
+    "/checkfees",
+    name="Check fees",
+    summary="Check fee reserve for a Lightning payment",
+)
+async def check_fees(payload: GetCheckFeesRequest) -> CheckFeesResponse:
     """
     Responds with the fees necessary to pay a Lightning invoice.
-    Used by wallets for figuring out the fees they need to supply.
+    Used by wallets for figuring out the fees they need to supply together with the payment amount.
     This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
     """
     fees_msat = await ledger.check_fees(payload.pr)
     return CheckFeesResponse(fee=fees_msat // 1000)
 
 
-@router.post("/split")
+@router.post("/split", name="Split", summary="Split proofs at a specified amount")
 async def split(
-    payload: SplitRequest,
+    payload: PostSplitRequest,
 ) -> Union[CashuError, PostSplitResponse]:
     """
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
+
+    This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
+    It is then used by Carol (by setting split=total) to redeem the tokens.
     """
     assert payload.outputs, Exception("no outputs provided.")
     try:

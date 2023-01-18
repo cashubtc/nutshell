@@ -15,20 +15,20 @@ import cashu.core.bolt11 as bolt11
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckFeesRequest,
-    CheckRequest,
+    GetCheckFeesRequest,
+    GetCheckSpendableRequest,
     GetMintResponse,
     Invoice,
     KeysetsResponse,
-    MeltRequest,
     P2SHScript,
+    PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
     PostMintResponseLegacy,
+    PostSplitRequest,
     Proof,
-    SplitRequest,
-    TokenMintV2,
     TokenV2,
+    TokenV2Mint,
     WalletKeyset,
 )
 from cashu.core.bolt11 import Invoice as InvoiceBolt11
@@ -302,7 +302,7 @@ class LedgerAPI:
         ), "number of secrets does not match number of outputs"
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets)
-        split_payload = SplitRequest(proofs=proofs, amount=amount, outputs=outputs)
+        split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs):
@@ -339,7 +339,7 @@ class LedgerAPI:
         """
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
-        payload = CheckRequest(proofs=proofs)
+        payload = GetCheckSpendableRequest(proofs=proofs)
 
         def _check_spendable_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
@@ -359,7 +359,7 @@ class LedgerAPI:
 
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
-        payload = CheckFeesRequest(pr=payment_request)
+        payload = GetCheckFeesRequest(pr=payment_request)
         self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/checkfees",
@@ -374,7 +374,7 @@ class LedgerAPI:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
-        payload = MeltRequest(proofs=proofs, invoice=invoice)
+        payload = PostMeltRequest(proofs=proofs, invoice=invoice)
 
         def _meltequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /melt"""
@@ -509,34 +509,33 @@ class Wallet(LedgerAPI):
         """
         # build token
         token = TokenV2(proofs=proofs)
-
         # add mint information to the token, if requested
         if include_mints:
             # dummy object to hold information about the mint
-            mints: Dict[str, TokenMintV2] = dict()
-            # iterate through all proofs and add their keyset to `mints`
+            mints: Dict[str, TokenV2Mint] = {}
+            # dummy object to hold all keyset id's we need to fetch from the db later
+            keysets: List[str] = []
+            # iterate through all proofs and remember their keyset ids for the next step
             for proof in proofs:
                 if proof.id:
-                    # load the keyset from the db
-                    keyset = await get_keyset(id=proof.id, db=self.db)
-                    if keyset and keyset.mint_url and keyset.id:
-                        # TODO: replace this with a mint pubkey
-                        placeholder_mint_id = keyset.mint_url
-                        if placeholder_mint_id not in mints:
-                            # mint information
-                            id = TokenMintV2(
-                                url=keyset.mint_url,
-                                ks=[keyset.id],
-                            )
-                            mints[placeholder_mint_id] = id
-                        else:
-                            # if a mint has multiple keysets, append to the existing list
-                            if keyset.id not in mints[placeholder_mint_id].ks:
-                                mints[placeholder_mint_id].ks.append(keyset.id)
-
+                    keysets.append(proof.id)
+            # iterate through unique keyset ids
+            for id in set(keysets):
+                # load the keyset from the db
+                keyset = await get_keyset(id=id, db=self.db)
+                if keyset and keyset.mint_url and keyset.id:
+                    # we group all mints according to URL
+                    if keyset.mint_url not in mints:
+                        mints[keyset.mint_url] = TokenV2Mint(
+                            url=keyset.mint_url,
+                            ids=[keyset.id],
+                        )
+                    else:
+                        # if a mint URL has multiple keysets, append to the already existing list
+                        mints[keyset.mint_url].ids.append(keyset.id)
             if len(mints) > 0:
-                # add dummy object to token
-                token.mints = mints
+                # add mints grouped by url to the token
+                token.mints = list(mints.values())
         return token
 
     async def _serialize_token_base64(self, token: TokenV2):
