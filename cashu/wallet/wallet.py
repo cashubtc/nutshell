@@ -376,7 +376,7 @@ class LedgerAPI:
         """
         payload = PostMeltRequest(proofs=proofs, invoice=invoice)
 
-        def _meltequest_include_fields(proofs):
+        def _meltrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
@@ -388,7 +388,7 @@ class LedgerAPI:
         self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/melt",
-            json=payload.dict(include=_meltequest_include_fields(proofs)),  # type: ignore
+            json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
         )
         resp.raise_for_status()
         return_dict = resp.json()
