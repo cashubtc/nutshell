@@ -3,12 +3,12 @@ import urllib.parse
 from typing import List
 
 import click
+from loguru import logger
 
 from cashu.core.base import Proof, TokenV2, TokenV2Mint, WalletKeyset
 from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
-from loguru import logger
 
 
 async def verify_mints(ctx, token: TokenV2):
