@@ -1,11 +1,10 @@
 import os
 import urllib.parse
+from typing import List
 
 import click
 
-from typing import List
-
-from cashu.core.base import Proof, TokenV2Mint, TokenV2, WalletKeyset
+from cashu.core.base import Proof, TokenV2, TokenV2Mint, WalletKeyset
 from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
