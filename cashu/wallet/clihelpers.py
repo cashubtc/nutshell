@@ -3,41 +3,50 @@ import urllib.parse
 
 import click
 
+from typing import List
+
 from cashu.core.base import Proof, TokenV2Mint, TokenV2, WalletKeyset
 from cashu.core.settings import CASHU_DIR, MINT_URL
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
 
 
-async def verify_mints(ctx, dtoken):
+async def verify_mints(ctx, token: TokenV2):
     """
-    A helper function that takes a deserialized TokenV2 `dtoken`
+    A helper function that iterates through all mints in the token and if it has
+    not been encountered before, asks the user to confirm.
+
+    It will instantiate a Wallet with each keyset and check whether the mint supports it.
+    It will then get the keys for that keyset from the mint and check whether the keyset id is correct.
     """
+
+    if token.mints is None:
+        return
+
     trust_token_mints = True
-    for mint in dtoken.get("mints"):
-        for keyset in set(mint["ids"]):
-            mint_url = mint["url"]
+    for mint in token.mints:
+        for keyset in set(mint.ids):
             # init a temporary wallet object
             keyset_wallet = Wallet(
-                mint_url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
+                mint.url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
             )
             # make sure that this mint supports this keyset
-            mint_keysets = await keyset_wallet._get_keyset_ids(mint_url)
+            mint_keysets = await keyset_wallet._get_keyset_ids(mint.url)
             assert keyset in mint_keysets["keysets"], "mint does not have this keyset."
 
-            # we validate the keyset id by fetching the keys from the mint
-            mint_keyset = await keyset_wallet._get_keyset(mint_url, keyset)
+            # we validate the keyset id by fetching the keys from the mint and computing the id locally
+            mint_keyset = await keyset_wallet._get_keyset(mint.url, keyset)
             assert keyset == mint_keyset.id, Exception("keyset not valid.")
 
             # we check the db whether we know this mint already and ask the user if not
-            mint_keysets = await get_keyset(mint_url=mint_url, db=keyset_wallet.db)
+            mint_keysets = await get_keyset(mint_url=mint.url, db=keyset_wallet.db)
             if mint_keysets is None:
                 # we encountered a new mint and ask for a user confirmation
                 trust_token_mints = False
                 print("")
                 print("Warning: Tokens are from a mint you don't know yet.")
                 print("\n")
-                print(f"Mint URL: {mint_url}")
+                print(f"Mint URL: {mint.url}")
                 print(f"Mint keyset: {keyset}")
                 print("\n")
                 click.confirm(
@@ -46,34 +55,39 @@ async def verify_mints(ctx, dtoken):
                     default=True,
                 )
                 trust_token_mints = True
-
     assert trust_token_mints, Exception("Aborted!")
 
 
-async def redeem_multimint(ctx, dtoken, script, signature):
+async def redeem_multimint(ctx, token: TokenV2, script, signature):
+    """
+    Helper function to iterate thruogh a token with multiple mints and redeem them from
+    these mints one keyset at a time.
+    """
     # we get the mint information in the token and load the keys of each mint
     # we then redeem the tokens for each keyset individually
-    for mint in dtoken.get("mints"):
-        for keyset in set(mint["ids"]):
-            mint_url = mint["url"]
+    if token.mints is None:
+        return
+    for mint in token.mints:
+        for keyset in set(mint.ids):
             # init a temporary wallet object
             keyset_wallet = Wallet(
-                mint_url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
+                mint.url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
             )
 
             # load the keys
             await keyset_wallet.load_mint(keyset_id=keyset)
 
             # redeem proofs of this keyset
-            redeem_proofs = [
-                Proof(**p) for p in dtoken["proofs"] if Proof(**p).id == keyset
-            ]
+            redeem_proofs = [p for p in token.proofs if p.id == keyset]
             _, _ = await keyset_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
             )
 
 
 async def print_mint_balances(ctx, wallet, show_mints=False):
+    """
+    Helper function that prints the balances for each mint URL that we have tokens from.
+    """
     # get balances per mint
     mint_balances = await wallet.balance_per_minturl()
 
@@ -97,6 +111,10 @@ async def print_mint_balances(ctx, wallet, show_mints=False):
 
 
 async def get_mint_wallet(ctx):
+    """
+    Helper function that asks the user for an input to select which mint they want to load.
+    Useful for selecting the mint that the user wants to send tokens from.
+    """
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
 
@@ -150,17 +168,16 @@ def token_from_lnbits_link(link):
         return link, ""
 
 
-async def proofs_to_token(wallet, proofs, url: str):
+async def proofs_to_serialized_tokenv2(wallet, proofs: List[Proof], url: str):
     """
-    Ingests proofs and
+    Ingests list of proofs and produces a serialized TokenV2
     """
     # and add url and keyset id to token
     token: TokenV2 = await wallet._make_token(proofs, include_mints=False)
     token.mints = []
 
     # get keysets of proofs
-    keysets = list(set([p.id for p in proofs]))
-    assert keysets is not None, "no keysets"
+    keysets = list(set([p.id for p in proofs if p.id is not None]))
 
     # check whether we know the mint urls for these proofs
     for k in keysets:
@@ -171,6 +188,6 @@ async def proofs_to_token(wallet, proofs, url: str):
         input(f"Enter mint URL (press enter for default {MINT_URL}): ") or MINT_URL
     )
 
-    token.mints.append(TokenV2Mint(url=url, ks=keysets))
+    token.mints.append(TokenV2Mint(url=url, ids=keysets))
     token_serialized = await wallet._serialize_token_base64(token)
     return token_serialized
