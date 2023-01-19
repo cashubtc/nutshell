@@ -77,10 +77,10 @@ def test_invoice():
 
 
 @pytest.mark.asyncio
-def test_send(mint, cli_context):
+def test_send(mint):
     runner = CliRunner()
     result = runner.invoke(
-        cli_context,
+        cli,
         [*cli_prefix, "send", "10"],
     )
     print("SEND")
