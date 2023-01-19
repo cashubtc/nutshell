@@ -31,7 +31,7 @@ def assert_amt(proofs: List[Proof], expected: int):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1():
+async def wallet1(mint):
     wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1", "wallet1")
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
@@ -40,7 +40,7 @@ async def wallet1():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2():
+async def wallet2(mint):
     wallet2 = Wallet2(SERVER_ENDPOINT, "data/wallet2", "wallet2")
     await migrate_databases(wallet2.db, migrations)
     await wallet2.load_mint()
