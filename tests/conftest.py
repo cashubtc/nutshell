@@ -26,7 +26,7 @@ class UvicornServer(multiprocessing.Process):
         self.server.run()
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True, scope="module")
 def mint():
 
     config = uvicorn.Config(
