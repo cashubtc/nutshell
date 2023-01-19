@@ -7,7 +7,6 @@ import os
 import sys
 import threading
 import time
-import urllib.parse
 from datetime import datetime
 from functools import wraps
 from itertools import groupby
@@ -19,7 +18,7 @@ from typing import Dict, List
 import click
 from loguru import logger
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, TokenV2
 from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import (
@@ -51,7 +50,7 @@ from cashu.wallet.wallet import Wallet as Wallet
 from .clihelpers import (
     get_mint_wallet,
     print_mint_balances,
-    proofs_to_token,
+    proofs_to_serialized_tokenv2,
     redeem_multimint,
     token_from_lnbits_link,
     verify_mints,
@@ -379,7 +378,7 @@ async def receive(ctx, token: str, lock: str):
         proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
 
         # we take the proofs parsed from the old format token and produce a new format token with it
-        token = await proofs_to_token(wallet, proofs, url)
+        token = await proofs_to_serialized_tokenv2(wallet, proofs, url)
     except:
         pass
 
@@ -392,17 +391,24 @@ async def receive(ctx, token: str, lock: str):
     if "tokens" in dtoken:
         dtoken["proofs"] = dtoken.pop("tokens")
 
-    assert "proofs" in dtoken, Exception("no proofs in token")
-    includes_mint_info: bool = "mints" in dtoken and dtoken.get("mints") is not None
+    # backwards compatibility wallet to wallet < 0.8.3: V2 tokens got rid of the "MINT_NAME" key in "mints" and renamed "ks" to "ids"
+    if "mints" in dtoken and isinstance(dtoken["mints"], dict):
+        dtoken["mints"] = list(dtoken["mints"].values())
+        for m in dtoken["mints"]:
+            m["ids"] = m.pop("ks")
+
+    tokenObj = TokenV2.parse_obj(dtoken)
+    assert len(tokenObj.proofs), Exception("no proofs in token")
+    includes_mint_info: bool = tokenObj.mints is not None and len(tokenObj.mints) > 0
 
     # if there is a `mints` field in the token
     # we check whether the token has mints that we don't know yet
     # and ask the user if they want to trust the new mitns
     if includes_mint_info:
         # we ask the user to confirm any new mints the tokens may include
-        await verify_mints(ctx, dtoken)
+        await verify_mints(ctx, tokenObj)
         # redeem tokens with new wallet instances
-        await redeem_multimint(ctx, dtoken, script, signature)
+        await redeem_multimint(ctx, tokenObj, script, signature)
         # reload main wallet so the balance updates
         await wallet.load_proofs()
     else:
