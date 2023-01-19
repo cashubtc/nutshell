@@ -38,6 +38,7 @@ jobs:
       - name: Run tests
         env:
           LIGHTNING: False
+          WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
           TOR: False
