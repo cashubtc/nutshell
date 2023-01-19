@@ -64,10 +64,8 @@ async def keysets() -> KeysetsResponse:
     return keysets
 
 
-@router.get("/mint")
-async def request_mint(amount: int = 0, description_hash: Optional[bytes] = None) -> GetMintResponse:
 @router.get("/mint", name="Request mint", summary="Request minting of new tokens")
-async def request_mint(amount: int = 0) -> GetMintResponse:
+async def request_mint(amount: int = 0,  description_hash: Optional[bytes] = None) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
