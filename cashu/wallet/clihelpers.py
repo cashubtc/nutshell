@@ -3,6 +3,7 @@ import urllib.parse
 from typing import List
 
 import click
+from click import Context
 from loguru import logger
 
 from cashu.core.base import Proof, TokenV2, TokenV2Mint, WalletKeyset
@@ -11,7 +12,7 @@ from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
 
 
-async def verify_mints(ctx, token: TokenV2):
+async def verify_mints(ctx: Context, token: TokenV2):
     """
     A helper function that iterates through all mints in the token and if it has
     not been encountered before, asks the user to confirm.
@@ -60,7 +61,7 @@ async def verify_mints(ctx, token: TokenV2):
     assert trust_token_mints, Exception("Aborted!")
 
 
-async def redeem_multimint(ctx, token: TokenV2, script, signature):
+async def redeem_multimint(ctx: Context, token: TokenV2, script, signature):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
@@ -88,7 +89,7 @@ async def redeem_multimint(ctx, token: TokenV2, script, signature):
             )
 
 
-async def print_mint_balances(ctx, wallet, show_mints=False):
+async def print_mint_balances(ctx: Context, wallet, show_mints=False):
     """
     Helper function that prints the balances for each mint URL that we have tokens from.
     """
@@ -114,7 +115,7 @@ async def print_mint_balances(ctx, wallet, show_mints=False):
         print("")
 
 
-async def get_mint_wallet(ctx):
+async def get_mint_wallet(ctx: Context):
     """
     Helper function that asks the user for an input to select which mint they want to load.
     Useful for selecting the mint that the user wants to send tokens from.

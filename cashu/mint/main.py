@@ -1,5 +1,8 @@
+from typing import Optional
+
 import click
 import uvicorn
+from click import Context
 
 from cashu.core.settings import MINT_SERVER_HOST, MINT_SERVER_PORT
 
@@ -16,11 +19,11 @@ from cashu.core.settings import MINT_SERVER_HOST, MINT_SERVER_PORT
 @click.option("--ssl-certfile", default=None, help="Path to SSL certificate")
 @click.pass_context
 def main(
-    ctx,
+    ctx: Context,
     port: int = MINT_SERVER_PORT,
     host: str = MINT_SERVER_HOST,
-    ssl_keyfile: str = None,
-    ssl_certfile: str = None,
+    ssl_keyfile: Optional[str] = None,
+    ssl_certfile: Optional[str] = None,
 ):
     """This routine starts the uvicorn server if the Cashu mint is
     launched with `poetry run mint` at root level"""
