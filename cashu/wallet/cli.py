@@ -16,6 +16,7 @@ from os.path import isdir, join
 from typing import Dict, List
 
 import click
+from click import Context
 from loguru import logger
 
 from cashu.core.base import Proof, TokenV2
@@ -80,7 +81,7 @@ class NaturalOrderGroup(click.Group):
     help="Wallet name (default: wallet).",
 )
 @click.pass_context
-def cli(ctx, host: str, walletname: str):
+def cli(ctx: Context, host: str, walletname: str):
     if TOR and not TorProxy().check_platform():
         error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
         error_str += "\n\n"
@@ -124,7 +125,7 @@ def coro(f):
 )
 @click.pass_context
 @coro
-async def pay(ctx, invoice: str, yes: bool):
+async def pay(ctx: Context, invoice: str, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -151,7 +152,7 @@ async def pay(ctx, invoice: str, yes: bool):
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
 @click.pass_context
 @coro
-async def invoice(ctx, amount: int, hash: str):
+async def invoice(ctx: Context, amount: int, hash: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -203,7 +204,7 @@ async def invoice(ctx, amount: int, hash: str):
 )
 @click.pass_context
 @coro
-async def balance(ctx, verbose):
+async def balance(ctx: Context, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
     if verbose:
         # show balances per keyset
@@ -227,7 +228,7 @@ async def balance(ctx, verbose):
         print(f"Balance: {wallet.available_balance} sat")
 
 
-async def nostr_send(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
+async def nostr_send(ctx: Context, amount: int, pubkey: str, verbose: bool, yes: bool):
     """
     Sends tokens via nostr.
     """
@@ -259,7 +260,7 @@ async def nostr_send(ctx, amount: int, pubkey: str, verbose: bool, yes: bool):
     client.close()
 
 
-async def send(ctx, amount: int, lock: str, legacy: bool):
+async def send(ctx: Context, amount: int, lock: str, legacy: bool):
     """
     Prints token to send to stdout.
     """
@@ -342,7 +343,7 @@ async def send_command(
         await nostr_send(ctx, amount, nostr, verbose, yes)
 
 
-async def receive(ctx, token: str, lock: str):
+async def receive(ctx: Context, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
 
@@ -419,7 +420,7 @@ async def receive(ctx, token: str, lock: str):
     wallet.status()
 
 
-async def receive_nostr(ctx, verbose: bool):
+async def receive_nostr(ctx: Context, verbose: bool):
     if NOSTR_PRIVATE_KEY is None:
         print(
             "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it."
@@ -469,7 +470,7 @@ async def receive_nostr(ctx, verbose: bool):
 )
 @click.pass_context
 @coro
-async def receive_cli(ctx, token: str, lock: str, nostr: bool, verbose: bool):
+async def receive_cli(ctx: Context, token: str, lock: str, nostr: bool, verbose: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()
     if token:
@@ -488,7 +489,7 @@ async def receive_cli(ctx, token: str, lock: str, nostr: bool, verbose: bool):
 )
 @click.pass_context
 @coro
-async def burn(ctx, token: str, all: bool, force: bool):
+async def burn(ctx: Context, token: str, all: bool, force: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     if not (all or token or force) or (token and all):
@@ -521,7 +522,7 @@ async def burn(ctx, token: str, all: bool, force: bool):
 )
 @click.pass_context
 @coro
-async def pending(ctx, legacy):
+async def pending(ctx: Context, legacy):
     wallet: Wallet = ctx.obj["WALLET"]
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
@@ -657,7 +658,7 @@ async def wallets(ctx):
 @cli.command("info", help="Information about Cashu wallet.")
 @click.pass_context
 @coro
-async def info(ctx):
+async def info(ctx: Context):
     print(f"Version: {VERSION}")
     print(f"Wallet: {ctx.obj['WALLET_NAME']}")
     if DEBUG:
