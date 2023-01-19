@@ -1,16 +1,14 @@
 import asyncio
+
 import pytest
 from click.testing import CliRunner
 
-from cashu.core.settings import VERSION
-from cashu.wallet.cli import cli
-
-
-from cashu.wallet.wallet import Wallet
 from cashu.core.migrations import migrate_databases
+from cashu.core.settings import VERSION
 from cashu.wallet import migrations
-
-from tests.conftest import mint, SERVER_ENDPOINT
+from cashu.wallet.cli import cli
+from cashu.wallet.wallet import Wallet
+from tests.conftest import SERVER_ENDPOINT, mint
 
 cli_prefix = ["--wallet", "test_wallet", "--host", SERVER_ENDPOINT]
 
