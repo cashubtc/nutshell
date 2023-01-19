@@ -10,28 +10,42 @@ from cashu.core.secp import PrivateKey, PublicKey
 
 
 class P2SHScript(BaseModel):
+    """
+    Describes spending condition of a Proof
+    """
+
     script: str
     signature: str
     address: Union[str, None] = None
 
 
 class Proof(BaseModel):
+    """
+    Value token
+    """
+
     id: Union[
         None, str
     ] = ""  # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
     amount: int = 0
-    secret: str = ""
-    C: str = ""
-    script: Union[P2SHScript, None] = None
-    reserved: Union[None, bool] = False  # whether this proof is reserved for sending
-    send_id: Union[None, str] = ""  # unique ID of send attempt
+    secret: str = ""  # secret or message to be blinded and signed
+    C: str = ""  # signature on secret, unblinded by wallet
+    script: Union[P2SHScript, None] = None  # P2SH spending condition
+    reserved: Union[
+        None, bool
+    ] = False  # whether this proof is reserved for sending, used for coin management in the wallet
+    send_id: Union[
+        None, str
+    ] = ""  # unique ID of send attempt, used for grouping pending tokens in the wallet
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
 
     def to_dict(self):
+        # dictionary without the fields that don't need to be send to Carol
         return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
     def to_dict_no_secret(self):
+        # dictionary but without the secret itself
         return dict(id=self.id, amount=self.amount, C=self.C)
 
     def __getitem__(self, key):
@@ -47,14 +61,22 @@ class Proofs(BaseModel):
 
 
 class BlindedMessage(BaseModel):
+    """
+    Blinded message or blinded secret or "output" which is to be signed by the mint
+    """
+
     amount: int
-    B_: str
+    B_: str  # Hex-encoded blinded message
 
 
 class BlindedSignature(BaseModel):
+    """
+    Blinded signature or "promise" which is the signature on a `BlindedMessage`
+    """
+
     id: Union[str, None] = None
     amount: int
-    C_: str
+    C_: str  # Hex-encoded signature
 
 
 class BlindedMessages(BaseModel):
@@ -114,7 +136,7 @@ class GetMintResponse(BaseModel):
 # ------- API: MELT -------
 
 
-class MeltRequest(BaseModel):
+class PostMeltRequest(BaseModel):
     proofs: List[Proof]
     invoice: str
 
@@ -127,7 +149,7 @@ class GetMeltResponse(BaseModel):
 # ------- API: SPLIT -------
 
 
-class SplitRequest(BaseModel):
+class PostSplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
     outputs: List[BlindedMessage]
@@ -141,11 +163,11 @@ class PostSplitResponse(BaseModel):
 # ------- API: CHECK -------
 
 
-class CheckRequest(BaseModel):
+class GetCheckSpendableRequest(BaseModel):
     proofs: List[Proof]
 
 
-class CheckFeesRequest(BaseModel):
+class GetCheckFeesRequest(BaseModel):
     pr: str
 
 
@@ -269,21 +291,37 @@ class MintKeysets:
 
 
 class TokenV1(BaseModel):
+    """
+    A (legacy) Cashu token that includes proofs. This can only be received if the receiver knows the mint associated with the
+    keyset ids of the proofs.
+    """
+
     # NOTE: not used in Pydantic validation
     __root__: List[Proof]
 
 
-class TokenMintV2(BaseModel):
-    url: str
-    ks: List[str]
+class TokenV2Mint(BaseModel):
+    """
+    Object that describes how to reach the mints associated with the proofs in a TokenV2 object.
+    """
+
+    url: str  # mint URL
+    ids: List[str]  # List of keyset id's that are from this mint
 
 
 class TokenV2(BaseModel):
+    """
+    A Cashu token that includes proofs and their respective mints. Can include proofs from multiple different mints and keysets.
+    """
+
     proofs: List[Proof]
-    mints: Optional[Dict[str, TokenMintV2]] = None
+    mints: Optional[List[TokenV2Mint]] = None
 
     def to_dict(self):
-        return dict(
-            proofs=[p.to_dict() for p in self.proofs],
-            mints={k: v.dict() for k, v in self.mints.items()},  # type: ignore
-        )
+        if self.mints:
+            return dict(
+                proofs=[p.to_dict() for p in self.proofs],
+                mints=[m.dict() for m in self.mints],
+            )
+        else:
+            return dict(proofs=[p.to_dict() for p in self.proofs])

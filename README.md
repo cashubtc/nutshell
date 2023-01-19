@@ -2,7 +2,7 @@
 
 **Cashu is a Chaumian Ecash wallet and mint for Bitcoin Lightning.**
 
-<a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a> <a href="https://pepy.tech/project/cashu"> <img alt="Downloads" src="https://pepy.tech/badge/cashu"></a> <a href="https://app.codecov.io/gh/callebtc/cashu"><img alt="Coverage" src="https://img.shields.io/codecov/c/gh/callebtc/cashu"></a>
+<a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a> <a href="https://pepy.tech/project/cashu"> <img alt="Downloads" src="https://pepy.tech/badge/cashu"></a> <a href="https://app.codecov.io/gh/cashubtc/cashu"><img alt="Coverage" src="https://img.shields.io/codecov/c/gh/cashubtc/cashu"></a>
 
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
@@ -115,7 +115,7 @@ cashu info
 
 Returns:
 ```bash
-Version: 0.8.2
+Version: 0.8.3
 Debug: False
 Cashu dir: /home/user/.cashu
 Wallet: wallet

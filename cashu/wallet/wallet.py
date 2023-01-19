@@ -15,20 +15,20 @@ import cashu.core.bolt11 as bolt11
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckFeesRequest,
-    CheckRequest,
+    GetCheckFeesRequest,
+    GetCheckSpendableRequest,
     GetMintResponse,
     Invoice,
     KeysetsResponse,
-    MeltRequest,
     P2SHScript,
+    PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
     PostMintResponseLegacy,
+    PostSplitRequest,
     Proof,
-    SplitRequest,
-    TokenMintV2,
     TokenV2,
+    TokenV2Mint,
     WalletKeyset,
 )
 from cashu.core.bolt11 import Invoice as InvoiceBolt11
@@ -305,7 +305,7 @@ class LedgerAPI:
         ), "number of secrets does not match number of outputs"
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets)
-        split_payload = SplitRequest(proofs=proofs, amount=amount, outputs=outputs)
+        split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs):
@@ -342,7 +342,7 @@ class LedgerAPI:
         """
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
-        payload = CheckRequest(proofs=proofs)
+        payload = GetCheckSpendableRequest(proofs=proofs)
 
         def _check_spendable_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
@@ -362,7 +362,7 @@ class LedgerAPI:
 
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
-        payload = CheckFeesRequest(pr=payment_request)
+        payload = GetCheckFeesRequest(pr=payment_request)
         self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/checkfees",
@@ -377,9 +377,9 @@ class LedgerAPI:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
-        payload = MeltRequest(proofs=proofs, invoice=invoice)
+        payload = PostMeltRequest(proofs=proofs, invoice=invoice)
 
-        def _meltequest_include_fields(proofs):
+        def _meltrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
@@ -391,7 +391,7 @@ class LedgerAPI:
         self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/melt",
-            json=payload.dict(include=_meltequest_include_fields(proofs)),  # type: ignore
+            json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
         )
         resp.raise_for_status()
         return_dict = resp.json()
@@ -407,6 +407,9 @@ class Wallet(LedgerAPI):
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
+        logger.debug(f"Wallet initalized with mint URL {url}")
+
+    # ---------- API ----------
 
     async def load_mint(self, keyset_id: str = ""):
         await super()._load_mint(keyset_id)
@@ -427,7 +430,9 @@ class Wallet(LedgerAPI):
         for id in set([p.id for p in proofs]):
             if id is None:
                 continue
-            keyset: WalletKeyset = await get_keyset(id=id, db=self.db)
+            keyset_crud = await get_keyset(id=id, db=self.db)
+            assert keyset_crud is not None, "keyset not found"
+            keyset: WalletKeyset = keyset_crud
             if keyset.mint_url not in ret:
                 ret[keyset.mint_url] = [p for p in proofs if p.id == id]
             else:
@@ -503,6 +508,33 @@ class Wallet(LedgerAPI):
             raise Exception("could not pay invoice.")
         return status["paid"]
 
+    async def check_spendable(self, proofs):
+        return await super().check_spendable(proofs)
+
+    # ---------- TOKEN MECHANIS ----------
+
+    async def _store_proofs(self, proofs):
+        for proof in proofs:
+            await store_proof(proof, db=self.db)
+
+    @staticmethod
+    def _get_proofs_per_keyset(proofs: List[Proof]):
+        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
+
+    async def _get_proofs_per_minturl(self, proofs: List[Proof]):
+        ret = {}
+        for id in set([p.id for p in proofs]):
+            if id is None:
+                continue
+            keyset_crud = await get_keyset(id=id, db=self.db)
+            assert keyset_crud is not None, "keyset not found"
+            keyset: WalletKeyset = keyset_crud
+            if keyset.mint_url not in ret:
+                ret[keyset.mint_url] = [p for p in proofs if p.id == id]
+            else:
+                ret[keyset.mint_url].extend([p for p in proofs if p.id == id])
+        return ret
+
     async def _make_token(self, proofs: List[Proof], include_mints=True):
         """
         Takes list of proofs and produces a TokenV2 by looking up
@@ -510,34 +542,33 @@ class Wallet(LedgerAPI):
         """
         # build token
         token = TokenV2(proofs=proofs)
-
         # add mint information to the token, if requested
         if include_mints:
             # dummy object to hold information about the mint
-            mints: Dict[str, TokenMintV2] = dict()
-            # iterate through all proofs and add their keyset to `mints`
+            mints: Dict[str, TokenV2Mint] = {}
+            # dummy object to hold all keyset id's we need to fetch from the db later
+            keysets: List[str] = []
+            # iterate through all proofs and remember their keyset ids for the next step
             for proof in proofs:
                 if proof.id:
-                    # load the keyset from the db
-                    keyset = await get_keyset(id=proof.id, db=self.db)
-                    if keyset and keyset.mint_url and keyset.id:
-                        # TODO: replace this with a mint pubkey
-                        placeholder_mint_id = keyset.mint_url
-                        if placeholder_mint_id not in mints:
-                            # mint information
-                            id = TokenMintV2(
-                                url=keyset.mint_url,
-                                ks=[keyset.id],
-                            )
-                            mints[placeholder_mint_id] = id
-                        else:
-                            # if a mint has multiple keysets, append to the existing list
-                            if keyset.id not in mints[placeholder_mint_id].ks:
-                                mints[placeholder_mint_id].ks.append(keyset.id)
-
+                    keysets.append(proof.id)
+            # iterate through unique keyset ids
+            for id in set(keysets):
+                # load the keyset from the db
+                keyset = await get_keyset(id=id, db=self.db)
+                if keyset and keyset.mint_url and keyset.id:
+                    # we group all mints according to URL
+                    if keyset.mint_url not in mints:
+                        mints[keyset.mint_url] = TokenV2Mint(
+                            url=keyset.mint_url,
+                            ids=[keyset.id],
+                        )
+                    else:
+                        # if a mint URL has multiple keysets, append to the already existing list
+                        mints[keyset.mint_url].ids.append(keyset.id)
             if len(mints) > 0:
-                # add dummy object to token
-                token.mints = mints
+                # add mints grouped by url to the token
+                token.mints = list(mints.values())
         return token
 
     async def _serialize_token_base64(self, token: TokenV2):
@@ -590,6 +621,30 @@ class Wallet(LedgerAPI):
             send_proofs.append(sorted_proofs[len(send_proofs)])
         return send_proofs
 
+    async def set_reserved(self, proofs: List[Proof], reserved: bool):
+        """Mark a proof as reserved to avoid reuse or delete marking."""
+        uuid_str = str(uuid.uuid1())
+        for proof in proofs:
+            proof.reserved = True
+            await update_proof_reserved(
+                proof, reserved=reserved, send_id=uuid_str, db=self.db
+            )
+
+    async def invalidate(self, proofs):
+        """Invalidates all spendable tokens supplied in proofs."""
+        spendables = await self.check_spendable(proofs)
+        invalidated_proofs = []
+        for idx, spendable in spendables.items():
+            if not spendable:
+                invalidated_proofs.append(proofs[int(idx)])
+                await invalidate_proof(proofs[int(idx)], db=self.db)
+        invalidate_secrets = [p["secret"] for p in invalidated_proofs]
+        self.proofs = list(
+            filter(lambda p: p["secret"] not in invalidate_secrets, self.proofs)
+        )
+
+    # ---------- TRANSACTION HELPERS ----------
+
     async def get_pay_amount_with_fees(self, invoice: str):
         """
         Decodes the amount from a Lightning invoice and returns the
@@ -629,30 +684,7 @@ class Wallet(LedgerAPI):
             await self.set_reserved(send_proofs, reserved=True)
         return keep_proofs, send_proofs
 
-    async def set_reserved(self, proofs: List[Proof], reserved: bool):
-        """Mark a proof as reserved to avoid reuse or delete marking."""
-        uuid_str = str(uuid.uuid1())
-        for proof in proofs:
-            proof.reserved = True
-            await update_proof_reserved(
-                proof, reserved=reserved, send_id=uuid_str, db=self.db
-            )
-
-    async def check_spendable(self, proofs):
-        return await super().check_spendable(proofs)
-
-    async def invalidate(self, proofs):
-        """Invalidates all spendable tokens supplied in proofs."""
-        spendables = await self.check_spendable(proofs)
-        invalidated_proofs = []
-        for idx, spendable in spendables.items():
-            if not spendable:
-                invalidated_proofs.append(proofs[int(idx)])
-                await invalidate_proof(proofs[int(idx)], db=self.db)
-        invalidate_secrets = [p["secret"] for p in invalidated_proofs]
-        self.proofs = list(
-            filter(lambda p: p["secret"] not in invalidate_secrets, self.proofs)
-        )
+    # ---------- P2SH ----------
 
     async def create_p2sh_lock(self):
         alice_privkey = step0_carol_privkey()
@@ -668,6 +700,8 @@ class Wallet(LedgerAPI):
         )
         await store_p2sh(p2shScript, db=self.db)
         return p2shScript
+
+    # ---------- BALANCE CHECKS ----------
 
     @property
     def balance(self):
