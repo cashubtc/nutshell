@@ -12,8 +12,7 @@ from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
-
-SERVER_ENDPOINT = "http://localhost:3338"
+from tests.conftest import SERVER_ENDPOINT, mint
 
 
 async def assert_err(f, msg):
@@ -32,7 +31,7 @@ def assert_amt(proofs: List[Proof], expected: int):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1():
+async def wallet1(mint):
     wallet1 = Wallet1(SERVER_ENDPOINT, "data/wallet1", "wallet1")
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
@@ -41,7 +40,7 @@ async def wallet1():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2():
+async def wallet2(mint):
     wallet2 = Wallet2(SERVER_ENDPOINT, "data/wallet2", "wallet2")
     await migrate_databases(wallet2.db, migrations)
     await wallet2.load_mint()
@@ -53,6 +52,7 @@ async def wallet2():
 async def test_get_keys(wallet1: Wallet):
     assert len(wallet1.keys) == MAX_ORDER
     keyset = await wallet1._get_keys(wallet1.url)
+    assert keyset.id is not None
     assert type(keyset.id) == str
     assert len(keyset.id) > 0
 
@@ -63,7 +63,10 @@ async def test_get_keyset(wallet1: Wallet):
     # ket's get the keys first so we can get a keyset ID that we use later
     keys1 = await wallet1._get_keys(wallet1.url)
     # gets the keys of a specific keyset
+    assert keys1.id is not None
+    assert keys1.public_keys is not None
     keys2 = await wallet1._get_keyset(wallet1.url, keys1.id)
+    assert keys2.public_keys is not None
     assert len(keys1.public_keys) == len(keys2.public_keys)
 
 
@@ -156,7 +159,7 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    _, spendable_proofs = await wallet1.split_to_send(
+    _, spendable_proofs = await wallet1.split_to_send(  # type: ignore
         wallet1.proofs, 32, set_reserved=True
     )
     await wallet2.redeem(spendable_proofs)
@@ -229,7 +232,7 @@ async def test_p2sh_receive_wrong_script(wallet1: Wallet, wallet2: Wallet):
     p2shscript = await wallet1.create_p2sh_lock()
     txin_p2sh_address = p2shscript.address
     lock = f"P2SH:{txin_p2sh_address}"
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)  # type: ignore
 
     wrong_script = "asad" + p2shscript.script
 
@@ -249,7 +252,7 @@ async def test_p2sh_receive_wrong_signature(wallet1: Wallet, wallet2: Wallet):
     p2shscript = await wallet1.create_p2sh_lock()
     txin_p2sh_address = p2shscript.address
     lock = f"P2SH:{txin_p2sh_address}"
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)  # type: ignore
 
     wrong_signature = "asda" + p2shscript.signature
 

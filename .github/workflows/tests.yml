@@ -11,7 +11,10 @@ jobs:
         python-version: ["3.9"]
         poetry-version: ["1.3.1"]
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2
         with:
@@ -29,14 +32,15 @@ jobs:
           LIGHTNING: False
           MINT_PRIVATE_KEY: "testingkey"
           MINT_SERVER_HOST: 0.0.0.0
-          MINT_SERVER_PORT: 3338
+          MINT_SERVER_PORT: 3337
         run: |
           nohup poetry run mint &
       - name: Run tests
         env:
           LIGHTNING: False
+          WALLET_NAME: test_wallet
           MINT_HOST: localhost
-          MINT_PORT: 3338
+          MINT_PORT: 3337
           TOR: False
         run: |
           poetry run pytest tests --cov-report xml --cov cashu
