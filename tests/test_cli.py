@@ -10,6 +10,7 @@ from cashu.wallet.cli import cli
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT, mint
 
+
 cli_prefix = ["--wallet", "test_wallet", "--host", SERVER_ENDPOINT]
 
 

@@ -32,7 +32,7 @@ jobs:
           LIGHTNING: False
           MINT_PRIVATE_KEY: "testingkey"
           MINT_SERVER_HOST: 0.0.0.0
-          MINT_SERVER_PORT: 3338
+          MINT_SERVER_PORT: 3337
         run: |
           nohup poetry run mint &
       - name: Run tests

@@ -13,9 +13,7 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 
-# from tests.conftest import SERVER_ENDPOINT, mint
-
-SERVER_ENDPOINT = "http://localhost:3338"
+from tests.conftest import SERVER_ENDPOINT, mint
 
 
 async def assert_err(f, msg):
