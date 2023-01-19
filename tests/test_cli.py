@@ -1,8 +1,8 @@
 import asyncio
 
+import click
 import pytest
 from click.testing import CliRunner
-import click
 
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import VERSION
