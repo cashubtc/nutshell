@@ -439,8 +439,8 @@ class Wallet(LedgerAPI):
                 ret[keyset.mint_url].extend([p for p in proofs if p.id == id])
         return ret
 
-    async def request_mint(self, amount):
-        invoice = super().request_mint(amount)
+    async def request_mint(self, amount, description_hash: Optional[bytes] = None):
+        invoice = super().request_mint(amount,description_hash)
         invoice.time_created = int(time.time())
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
