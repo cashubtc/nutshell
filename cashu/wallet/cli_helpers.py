@@ -1,4 +1,6 @@
+import asyncio
 import os
+import threading
 import urllib.parse
 from typing import List
 
@@ -7,7 +9,11 @@ from click import Context
 from loguru import logger
 
 from cashu.core.base import Proof, TokenV2, TokenV2Mint, WalletKeyset
-from cashu.core.settings import CASHU_DIR, MINT_URL
+from cashu.core.helpers import sum_proofs
+from cashu.core.settings import CASHU_DIR, MINT_URL, NOSTR_PRIVATE_KEY, NOSTR_RELAYS
+from cashu.nostr.nostr.client.client import NostrClient
+from cashu.nostr.nostr.event import Event
+from cashu.nostr.nostr.key import PublicKey
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
 
@@ -87,6 +93,7 @@ async def redeem_multimint(ctx: Context, token: TokenV2, script, signature):
             _, _ = await keyset_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
             )
+            print(f"Received {sum_proofs(redeem_proofs)} sats")
 
 
 async def print_mint_balances(ctx: Context, wallet, show_mints=False):
@@ -196,3 +203,72 @@ async def proofs_to_serialized_tokenv2(wallet, proofs: List[Proof], url: str):
     token.mints.append(TokenV2Mint(url=url, ids=keysets))
     token_serialized = await wallet._serialize_token_base64(token)
     return token_serialized
+
+
+async def send_nostr(ctx: Context, amount: int, pubkey: str, verbose: bool, yes: bool):
+    """
+    Sends tokens via nostr.
+    """
+    # load a wallet for the chosen mint
+    wallet = await get_mint_wallet(ctx)
+    await wallet.load_proofs()
+    _, send_proofs = await wallet.split_to_send(
+        wallet.proofs, amount, set_reserved=True
+    )
+    token = await wallet.serialize_proofs(send_proofs)
+
+    print("")
+    print(token)
+
+    if not yes:
+        print("")
+        click.confirm(
+            f"Send {amount} sat to nostr pubkey {pubkey}?",
+            abort=True,
+            default=True,
+        )
+
+    # we only use ephemeral private keys for sending
+    client = NostrClient(relays=NOSTR_RELAYS)
+    if verbose:
+        print(f"Your ephemeral nostr private key: {client.private_key.hex()}")
+    await asyncio.sleep(1)
+    client.dm(token, PublicKey(bytes.fromhex(pubkey)))
+    print(f"Token sent to {pubkey}")
+    client.close()
+
+
+async def receive_nostr(ctx: Context, verbose: bool):
+    if NOSTR_PRIVATE_KEY is None:
+        print(
+            "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it."
+        )
+        print("")
+    client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY, relays=NOSTR_RELAYS)
+    print(f"Your nostr public key: {client.public_key.hex()}")
+    if verbose:
+        print(f"Your nostr private key (do not share!): {client.private_key.hex()}")
+    await asyncio.sleep(2)
+
+    def get_token_callback(event: Event, decrypted_content):
+        if verbose:
+            print(
+                f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
+            )
+        try:
+            # call the receive method
+            from cashu.wallet.cli import receive
+
+            asyncio.run(receive(ctx, decrypted_content, ""))
+        except Exception as e:
+            pass
+
+    t = threading.Thread(
+        target=client.get_dm,
+        args=(
+            client.public_key,
+            get_token_callback,
+        ),
+        name="Nostr DM",
+    )
+    t.start()
