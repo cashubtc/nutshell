@@ -50,11 +50,11 @@ from .cli_helpers import (
     get_mint_wallet,
     print_mint_balances,
     proofs_to_serialized_tokenv2,
+    receive_nostr,
     redeem_multimint,
+    send_nostr,
     token_from_lnbits_link,
     verify_mints,
-    send_nostr,
-    receive_nostr,
 )
 
 
