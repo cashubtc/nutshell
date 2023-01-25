@@ -61,8 +61,9 @@ NOSTR_RELAYS = env.list(
         "wss://relay.damus.io",
         "wss://nostr.zebedee.cloud",
         "wss://relay.snort.social",
+        "wss://nostr.fmt.wiz.biz",
     ],
 )
 
 MAX_ORDER = 64
-VERSION = "0.8.3"
+VERSION = "0.8.4"
