@@ -54,7 +54,16 @@ LNBITS_ENDPOINT = env.str("LNBITS_ENDPOINT", default=None)
 LNBITS_KEY = env.str("LNBITS_KEY", default=None)
 
 NOSTR_PRIVATE_KEY = env.str("NOSTR_PRIVATE_KEY", default=None)
-NOSTR_RELAYS = env.list("NOSTR_RELAYS", default=["wss://nostr-pub.wellorder.net"])
+NOSTR_RELAYS = env.list(
+    "NOSTR_RELAYS",
+    default=[
+        "wss://nostr-pub.wellorder.net",
+        "wss://relay.damus.io",
+        "wss://nostr.zebedee.cloud",
+        "wss://relay.snort.social",
+        "wss://nostr.fmt.wiz.biz",
+    ],
+)
 
 MAX_ORDER = 64
-VERSION = "0.8.3"
+VERSION = "0.8.4"
