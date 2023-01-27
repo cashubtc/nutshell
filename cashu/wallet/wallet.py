@@ -348,7 +348,7 @@ class LedgerAPI:
             }
 
         self.s = self._set_requests()
-        resp = self.s.post(
+        resp = self.s.get(
             self.url + "/check",
             json=payload.dict(include=_check_spendable_include_fields(proofs)),  # type: ignore
         )

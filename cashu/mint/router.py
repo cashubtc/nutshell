@@ -113,7 +113,7 @@ async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     return resp
 
 
-@router.post(
+@router.get(
     "/check",
     name="Check spendable",
     summary="Check whether a proof has already been spent",
