@@ -13,7 +13,7 @@ from cashu.mint import migrations
 from cashu.mint.ledger import Ledger
 
 ledger = Ledger(
-    db=Database("mint", MINT_DATABASE_URL),
+    db=Database("mint", MINT_DATABASE),
     seed=MINT_PRIVATE_KEY,
     # seed="asd",
     derivation_path="0/0/0/0",
