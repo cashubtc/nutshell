@@ -7,7 +7,7 @@
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
 
-Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding. Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down by Ruben Somsen [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
+Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding ([protocol specs](https://github.com/cashubtc/nuts)). Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
 
 <p align="center">
 <a href="#cashu-client-protocol">Cashu client protocol</a> ·
@@ -29,7 +29,7 @@ Cashu is an Ecash implementation based on David Wagner's variant of Chaumian bli
 - Send tokens to nostr pubkeys
 
 ## Cashu client protocol
-There are ongoing efforts to implement alternative Cashu clients that use the same protocol such as a [Cashu Javascript wallet](https://github.com/motorina0/cashu-js-wallet). If you are interested in helping with Cashu development, please see the [docs](docs/) for the notation and conventions used. 
+There are ongoing efforts to implement alternative Cashu clients that use the same protocol. If you are interested in helping with Cashu development, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts). 
 
 ## Easy Install
 
@@ -149,7 +149,7 @@ cashu send 69
 ```
 You should see the encoded token. Copy the token and send it to another user such as via email or a messenger. The token looks like this:
 ```bash
-W3siYW1vdW50IjogMSwgIkMiOiB7IngiOi...
+eyJwcm9vZnMiOiBbey...
 ```
 
 You can now see that your available balance has dropped by the amount that you reserved for sending if you enter `cashu balance`:
@@ -160,7 +160,7 @@ Balance: 420 sat
 #### Receive tokens
 To receive tokens, another user enters:
 ```bash
-cashu receive W3siYW1vdW50IjogMSwgIkMiOi...
+cashu receive eyJwcm9vZnMiOiBbey...
 ```
 You should see the balance increase:
 ```bash
