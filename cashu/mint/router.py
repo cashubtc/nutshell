@@ -108,7 +108,7 @@ async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
-    ok, preimage = await ledger.melt(payload.proofs, payload.invoice)
+    ok, preimage = await ledger.melt(payload.proofs, payload.pr)
     resp = GetMeltResponse(paid=ok, preimage=preimage)
     return resp
 
@@ -123,7 +123,7 @@ async def check_spendable(payload: GetCheckSpendableRequest) -> Dict[int, bool]:
     return await ledger.check_spendable(payload.proofs)
 
 
-@router.post(
+@router.get(
     "/checkfees",
     name="Check fees",
     summary="Check fee reserve for a Lightning payment",

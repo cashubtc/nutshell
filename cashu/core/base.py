@@ -138,7 +138,7 @@ class GetMintResponse(BaseModel):
 
 class PostMeltRequest(BaseModel):
     proofs: List[Proof]
-    invoice: str
+    pr: str
 
 
 class GetMeltResponse(BaseModel):

@@ -109,7 +109,7 @@ Here we describe how `Alice` can request from `Bob` to make a Lightning payment 
 - `Alice` asks `Bob` for the Lightning fee via `GET /checkfee` with the body `CheckFeeRequest` being the json `{pr : <invoice>}`
 - `Alice` receives the `CheckFeeResponse` in the form of the json `{"fee" : <fee>}` resulting in `<total> = <invoice_amount> + <fee>`.
 - `Alice` now performs the same set of instructions as in Step 3.1 and 3.2 and splits her spendable tokens into a set `<keep_proofs>` that she keeps and and a set `<send_proofs>` with a sum of at least `<total>` that she can send for making the Lightning payment.
-- `Alice` constructs the JSON `PostMeltRequest` of the form `{"proofs" : <List[Proof]>, "invoice" : <invoice>}` [*NOTE: Maybe use notation List[Proof] everywhere. Used PostMeltRequest here, maybe define each payload at the beginning of each section.*]
+- `Alice` constructs the JSON `PostMeltRequest` of the form `{"proofs" : <List[Proof]>, "pr" : <invoice>}` [*NOTE: Maybe use notation List[Proof] everywhere. Used PostMeltRequest here, maybe define each payload at the beginning of each section.*]
 - `Alice` requests a payment from `Bob` via the endpoint `POST /melt` with the JSON as the body of the request.
 - `Alice` receives a JSON of the form `{"paid" :  <status:bool>}` with `<status>` being `True` if the payment was successful and `False` otherwise.
 - If `<status> == True`, `Alice` removes `<send_proofs>` from her database of spendable tokens [*NOTE: called it tokens again*]

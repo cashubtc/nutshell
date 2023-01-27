@@ -361,7 +361,7 @@ class LedgerAPI:
         """Checks whether the Lightning payment is internal."""
         payload = GetCheckFeesRequest(pr=payment_request)
         self.s = self._set_requests()
-        resp = self.s.post(
+        resp = self.s.get(
             self.url + "/checkfees",
             json=payload.dict(),
         )
@@ -374,14 +374,14 @@ class LedgerAPI:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
-        payload = PostMeltRequest(proofs=proofs, invoice=invoice)
+        payload = PostMeltRequest(proofs=proofs, pr=invoice)
 
         def _meltrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
                 "amount": ...,
-                "invoice": ...,
+                "pr": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
 
