@@ -43,7 +43,7 @@ MINT_SERVER_PORT = env.int("MINT_SERVER_PORT", default=3338)
 MINT_URL = env.str("MINT_URL", default=None)
 MINT_HOST = env.str("MINT_HOST", default="8333.space")
 MINT_PORT = env.int("MINT_PORT", default=3338)
-MINT_DATABASE_URL = env.str("MINT_DATABASE_URL", default="data/mint")
+MINT_DATABASE = env.str("MINT_DATABASE_URL", default="data/mint")
 
 if not MINT_URL:
     if MINT_HOST in ["localhost", "127.0.0.1"]:
