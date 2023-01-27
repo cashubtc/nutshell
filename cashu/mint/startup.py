@@ -7,7 +7,7 @@ from loguru import logger
 
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import CASHU_DIR, LIGHTNING, MINT_PRIVATE_KEY, MINT_DATABASE_URL
+from cashu.core.settings import CASHU_DIR, LIGHTNING, MINT_PRIVATE_KEY, MINT_DATABASE
 from cashu.lightning.lnbits import LNbitsWallet
 from cashu.mint import migrations
 from cashu.mint.ledger import Ledger
