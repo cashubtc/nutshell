@@ -28,6 +28,26 @@ Bob:
 Y = hash_to_curve(secret_message)
 C == a*Y
 If true, C must have originated from Bob
+
+
+# DLEQ Proof
+
+(These steps occur once Bob returns C')
+
+Bob:
+ r = random nonce
+R1 = r*G
+R2 = r*B'
+ e = hash(R1,R2,A,C')
+ s = r + e*a
+return e, s
+
+Alice:
+R1 = e*A - s*G
+R2 = e*C'- s*B'
+e == hash(R1,R2,A,C')
+
+If true, a in A = a*G must be equal to a in C' = a*B'
 """
 
 import hashlib
@@ -59,20 +79,52 @@ def step1_alice(secret_msg: str, blinding_factor: bytes = None):
     return B_, r
 
 
-def step2_bob(B_, a):
+def step2_bob(B_: PublicKey, a: PrivateKey):
     C_ = B_.mult(a)
-    return C_
+
+    # produce dleq proof
+    e, s = step2_bob_dleq(B_, a)
+    return C_, e, s
 
 
 def step3_alice(C_, r, A):
     C = C_ - A.mult(r)
     return C
 
-
-def verify(a, C, secret_msg):
+def bob_verify(a, C, secret_msg):
     Y = hash_to_curve(secret_msg.encode("utf-8"))
     return C == Y.mult(a)
 
+
+# DLEQ
+
+# Bob:
+#  r = random nonce
+# R1 = r*G
+# R2 = r*B'
+#  e = hash(R1,R2,A,C')
+#  s = r + e*a
+# return e, s
+
+# Alice:
+# R1 = e*A - s*G
+# R2 = e*C'- s*B'
+# e == hash(R1,R2,A,C')
+
+def step2_bob_dleq(B_: PublicKey, a: PrivateKey):
+    r = PrivateKey()  # generate random value
+    R1 = PrivateKey(privkey=r.private_key, raw=True)
+    R2 = B_.mult(r)
+    e = hashlib.sha256(
+        R1.serialize().encode()
+        + PrivateKey(R2.serialize()[1:], raw=True).serialize().encode()
+        + r.serialize().encode()
+        + a.serialize().encode()
+    ).digest()
+    s = r.pubkey + a.pubkey.mult(PrivateKey(privkey=e, raw=True))
+    return e, s
+
+def alice_verify_dleq():
 
 ### Below is a test of a simple positive and negative case
 

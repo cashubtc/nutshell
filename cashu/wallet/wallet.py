@@ -102,6 +102,7 @@ class LedgerAPI:
                 amount=promise.amount,
                 C=C.serialize().hex(),
                 secret=secret,
+                dleq=promise.dleq,
             )
             proofs.append(proof)
         return proofs
@@ -517,6 +518,7 @@ class Wallet(LedgerAPI):
         """
         # build token
         token = TokenV2(proofs=proofs)
+        
         # add mint information to the token, if requested
         if include_mints:
             # dummy object to hold information about the mint

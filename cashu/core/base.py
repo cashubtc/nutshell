@@ -19,6 +19,15 @@ class P2SHScript(BaseModel):
     address: Union[str, None] = None
 
 
+class DLEQ(BaseModel):
+    """
+    Discrete Log Equality (DLEQ) Proof
+    """
+
+    e: str
+    s: str
+
+
 class Proof(BaseModel):
     """
     Value token
@@ -31,6 +40,7 @@ class Proof(BaseModel):
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
     script: Union[P2SHScript, None] = None  # P2SH spending condition
+    dleq: Union[DLEQ, None] = None  # DLEQ proof
     reserved: Union[
         None, bool
     ] = False  # whether this proof is reserved for sending, used for coin management in the wallet
@@ -41,6 +51,16 @@ class Proof(BaseModel):
     time_reserved: Union[None, str] = ""
 
     def to_dict(self):
+        # dictionary without the fields that don't need to be send to Carol
+        return dict(
+            id=self.id,
+            amount=self.amount,
+            secret=self.secret,
+            C=self.C,
+            dleq=self.dleq.dict(),
+        )
+
+    def to_dict_no_dleq(self):
         # dictionary without the fields that don't need to be send to Carol
         return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
@@ -77,6 +97,7 @@ class BlindedSignature(BaseModel):
     id: Union[str, None] = None
     amount: int
     C_: str  # Hex-encoded signature
+    dleq: DLEQ
 
 
 class BlindedMessages(BaseModel):

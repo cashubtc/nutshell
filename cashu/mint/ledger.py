@@ -17,6 +17,7 @@ from cashu.core.base import (
     MintKeyset,
     MintKeysets,
     Proof,
+    DLEQ,
 )
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve, sum_proofs
@@ -99,11 +100,16 @@ class Ledger:
         """Generates a promise for given amount and returns a pair (amount, C')."""
         keyset = keyset if keyset else self.keyset
         private_key_amount = keyset.private_keys[amount]
-        C_ = b_dhke.step2_bob(B_, private_key_amount)
+        C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
         await self.crud.store_promise(
             amount=amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
         )
-        return BlindedSignature(id=keyset.id, amount=amount, C_=C_.serialize().hex())
+        return BlindedSignature(
+            id=keyset.id,
+            amount=amount,
+            C_=C_.serialize().hex(),
+            dleq=DLEQ(e=e.hex(), s=s.serialize().hex()),
+        )
 
     def _check_spendable(self, proof: Proof):
         """Checks whether the proof was already spent."""
@@ -140,7 +146,7 @@ class Ledger:
         except:
             pass
 
-        return b_dhke.verify(private_key_amount, C, proof.secret)
+        return b_dhke.bob_verify(private_key_amount, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):
         """
