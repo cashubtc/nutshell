@@ -91,6 +91,7 @@ def step3_alice(C_, r, A):
     C = C_ - A.mult(r)
     return C
 
+
 def bob_verify(a, C, secret_msg):
     Y = hash_to_curve(secret_msg.encode("utf-8"))
     return C == Y.mult(a)
@@ -111,6 +112,7 @@ def bob_verify(a, C, secret_msg):
 # R2 = e*C'- s*B'
 # e == hash(R1,R2,A,C')
 
+
 def step2_bob_dleq(B_: PublicKey, a: PrivateKey):
     r = PrivateKey()  # generate random value
     R1 = PrivateKey(privkey=r.private_key, raw=True)
@@ -124,7 +126,15 @@ def step2_bob_dleq(B_: PublicKey, a: PrivateKey):
     s = r.pubkey + a.pubkey.mult(PrivateKey(privkey=e, raw=True))
     return e, s
 
-def alice_verify_dleq():
+
+def alice_verify_dleq(e, s, A, C_, B_):
+    print(len(s))
+    # return True
+    R1 = A.mult(
+        PrivateKey(privkey=e, raw=True)
+    )  # - PrivateKey(privkey=s[:1], raw=True)
+    return True
+
 
 ### Below is a test of a simple positive and negative case
 

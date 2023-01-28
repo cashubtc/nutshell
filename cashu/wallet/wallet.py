@@ -90,11 +90,15 @@ class LedgerAPI:
         return s
 
     def _construct_proofs(
-        self, promises: List[BlindedSignature], secrets: List[str], rs: List[str]
+        self,
+        promises: List[BlindedSignature],
+        secrets: List[str],
+        rs: List[str],
+        outputs: List[BlindedMessage],
     ):
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
         proofs = []
-        for promise, secret, r in zip(promises, secrets, rs):
+        for promise, secret, r, output in zip(promises, secrets, rs, outputs):
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(C_, r, self.keys[promise.amount])
             proof = Proof(
@@ -104,6 +108,8 @@ class LedgerAPI:
                 secret=secret,
                 dleq=promise.dleq,
             )
+            proof.dleq.B_ = output.B_
+            proof.dleq.C_ = promise.C_
             proofs.append(proof)
         return proofs
 
@@ -269,7 +275,7 @@ class LedgerAPI:
         except:
             promises = PostMintResponse.parse_obj(reponse_dict).promises
 
-        return self._construct_proofs(promises, secrets, rs)
+        return self._construct_proofs(promises, secrets, rs, outputs)
 
     async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
         """Consume proofs and create new promises based on amount split.
@@ -328,10 +334,16 @@ class LedgerAPI:
         promises_snd = [BlindedSignature(**p) for p in promises_dict["snd"]]
         # Construct proofs from promises (i.e., unblind signatures)
         frst_proofs = self._construct_proofs(
-            promises_fst, secrets[: len(promises_fst)], rs[: len(promises_fst)]
+            promises_fst,
+            secrets[: len(promises_fst)],
+            rs[: len(promises_fst)],
+            outputs[: len(promises_fst)],
         )
         scnd_proofs = self._construct_proofs(
-            promises_snd, secrets[len(promises_fst) :], rs[len(promises_fst) :]
+            promises_snd,
+            secrets[len(promises_fst) :],
+            rs[len(promises_fst) :],
+            outputs[len(promises_fst) :],
         )
 
         return frst_proofs, scnd_proofs
@@ -457,6 +469,10 @@ class Wallet(LedgerAPI):
         frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
+        # DLEQ verify
+        self.verify_proofs_dleq(frst_proofs)
+        self.verify_proofs_dleq(scnd_proofs)
+
         used_secrets = [p["secret"] for p in proofs]
         self.proofs = list(
             filter(lambda p: p["secret"] not in used_secrets, self.proofs)
@@ -518,7 +534,7 @@ class Wallet(LedgerAPI):
         """
         # build token
         token = TokenV2(proofs=proofs)
-        
+
         # add mint information to the token, if requested
         if include_mints:
             # dummy object to hold information about the mint
@@ -548,6 +564,30 @@ class Wallet(LedgerAPI):
                 token.mints = list(mints.values())
         return token
 
+    async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
+        """
+        Selects proofs that can be used with the current mint.
+        Chooses:
+        1) Proofs that are not marked as reserved
+        2) Proofs that have a keyset id that is in self.keysets (active keysets of mint) - !!! optional for backwards compatibility with legacy clients
+        """
+        # select proofs that are in the active keysets of the mint
+        proofs = [
+            p for p in proofs if p.id in self.keysets or not p.id
+        ]  # "or not p.id" is for backwards compatibility with proofs without a keyset id
+        # select proofs that are not reserved
+        proofs = [p for p in proofs if not p.reserved]
+        # check that enough spendable proofs exist
+        if sum_proofs(proofs) < amount_to_send:
+            raise Exception("balance too low.")
+
+        # coinselect based on amount to send
+        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
+        send_proofs: List[Proof] = []
+        while sum_proofs(send_proofs) < amount_to_send:
+            send_proofs.append(sorted_proofs[len(send_proofs)])
+        return send_proofs
+
     async def _serialize_token_base64(self, token: TokenV2):
         """
         Takes a TokenV2 and serializes it in urlsafe_base64.
@@ -573,30 +613,6 @@ class Wallet(LedgerAPI):
 
         token = await self._make_token(proofs, include_mints)
         return await self._serialize_token_base64(token)
-
-    async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
-        """
-        Selects proofs that can be used with the current mint.
-        Chooses:
-        1) Proofs that are not marked as reserved
-        2) Proofs that have a keyset id that is in self.keysets (active keysets of mint) - !!! optional for backwards compatibility with legacy clients
-        """
-        # select proofs that are in the active keysets of the mint
-        proofs = [
-            p for p in proofs if p.id in self.keysets or not p.id
-        ]  # "or not p.id" is for backwards compatibility with proofs without a keyset id
-        # select proofs that are not reserved
-        proofs = [p for p in proofs if not p.reserved]
-        # check that enough spendable proofs exist
-        if sum_proofs(proofs) < amount_to_send:
-            raise Exception("balance too low.")
-
-        # coinselect based on amount to send
-        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
-        send_proofs: List[Proof] = []
-        while sum_proofs(send_proofs) < amount_to_send:
-            send_proofs.append(sorted_proofs[len(send_proofs)])
-        return send_proofs
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
         """Mark a proof as reserved to avoid reuse or delete marking."""
@@ -677,6 +693,17 @@ class Wallet(LedgerAPI):
         )
         await store_p2sh(p2shScript, db=self.db)
         return p2shScript
+
+    # ---------- DLEQ PROOFS ----------
+
+    def verify_proofs_dleq(self, proofs: List[Proof]):
+        for proof in proofs:
+            dleq = proof.dleq
+            assert dleq, "no DLEQ proof"
+            if not b_dhke.alice_verify_dleq(
+                dleq.e, dleq.s, self.keys[proof.amount], dleq.C_, dleq.B_
+            ):
+                raise Exception("DLEQ proof invalid.")
 
     # ---------- BALANCE CHECKS ----------
 

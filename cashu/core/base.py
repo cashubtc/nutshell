@@ -26,6 +26,8 @@ class DLEQ(BaseModel):
 
     e: str
     s: str
+    B_: Union[str, None] = None
+    C_: Union[str, None] = None
 
 
 class Proof(BaseModel):
