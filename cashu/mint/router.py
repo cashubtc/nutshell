@@ -111,12 +111,15 @@ async def mint(
     name="Melt tokens",
     summary="Melt tokens for a Bitcoin payment that the mint will make for the user in exchange",
 )
-async def melt(payload: PostMeltRequest) -> GetMeltResponse:
+async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
-    ok, preimage = await ledger.melt(payload.proofs, payload.invoice)
-    resp = GetMeltResponse(paid=ok, preimage=preimage)
+    try:
+        ok, preimage = await ledger.melt(payload.proofs, payload.invoice)
+        resp = GetMeltResponse(paid=ok, preimage=preimage)
+    except Exception as exc:
+        return CashuError(code=0, error=str(exc))
     return resp
 
 
