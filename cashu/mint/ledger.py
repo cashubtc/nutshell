@@ -416,14 +416,15 @@ class Ledger:
 
     async def check_fees(self, pr: str):
         """Returns the fees (in msat) required to pay this pr."""
-        decoded_invoice = bolt11.decode(pr)
-        amount = math.ceil(decoded_invoice.amount_msat / 1000)
         # hack: check if it's internal, if it exists, it will return paid = False,
         # if id does not exist (not internal), it returns paid = None
         if LIGHTNING:
+            decoded_invoice = bolt11.decode(pr)
+            amount = math.ceil(decoded_invoice.amount_msat / 1000)
             paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
             internal = paid.paid == False
         else:
+            amount = 0
             internal = True
         fees_msat = fee_reserve(amount * 1000, internal)
         return fees_msat
