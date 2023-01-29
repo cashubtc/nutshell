@@ -9,6 +9,7 @@ from cashu.core.base import (
     CheckFeesResponse,
     GetCheckFeesRequest,
     GetCheckSpendableRequest,
+    GetCheckSpendableResponse,
     GetMeltResponse,
     GetMintResponse,
     KeysetsResponse,
@@ -118,9 +119,12 @@ async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     name="Check spendable",
     summary="Check whether a proof has already been spent",
 )
-async def check_spendable(payload: GetCheckSpendableRequest) -> Dict[int, bool]:
+async def check_spendable(
+    payload: GetCheckSpendableRequest,
+) -> GetCheckSpendableResponse:
     """Check whether a secret has been spent already or not."""
-    return await ledger.check_spendable(payload.proofs)
+    spendableList = await ledger.check_spendable(payload.proofs)
+    return GetCheckSpendableResponse(spendable=spendableList)
 
 
 @router.get(

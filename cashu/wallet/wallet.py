@@ -17,6 +17,7 @@ from cashu.core.base import (
     BlindedSignature,
     GetCheckFeesRequest,
     GetCheckSpendableRequest,
+    GetCheckSpendableResponse,
     GetMintResponse,
     Invoice,
     KeysetsResponse,
@@ -355,7 +356,8 @@ class LedgerAPI:
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
-        return return_dict
+        spendable = GetCheckSpendableResponse.parse_obj(return_dict)
+        return spendable
 
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
@@ -609,10 +611,10 @@ class Wallet(LedgerAPI):
         """Invalidates all spendable tokens supplied in proofs."""
         spendables = await self.check_spendable(proofs)
         invalidated_proofs = []
-        for idx, spendable in spendables.items():
+        for i, spendable in enumerate(spendables.spendable):
             if not spendable:
-                invalidated_proofs.append(proofs[int(idx)])
-                await invalidate_proof(proofs[int(idx)], db=self.db)
+                invalidated_proofs.append(proofs[i])
+                await invalidate_proof(proofs[i], db=self.db)
         invalidate_secrets = [p["secret"] for p in invalidated_proofs]
         self.proofs = list(
             filter(lambda p: p["secret"] not in invalidate_secrets, self.proofs)

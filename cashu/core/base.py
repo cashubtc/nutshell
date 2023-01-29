@@ -167,6 +167,10 @@ class GetCheckSpendableRequest(BaseModel):
     proofs: List[Proof]
 
 
+class GetCheckSpendableResponse(BaseModel):
+    spendable: List[bool]
+
+
 class GetCheckFeesRequest(BaseModel):
     pr: str
 
