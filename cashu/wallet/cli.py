@@ -166,7 +166,7 @@ async def invoice(ctx: Context, amount: int, hash: str):
             print(f"Invoice: {invoice.pr}")
             print("")
             print(
-                f"Execute this command if you abort the check:\ncashu invoice {amount} --hash {invoice.hash}"
+                f"If you abort this you can use this command to recheck the invoice:\ncashu invoice {amount} --hash {invoice.hash}"
             )
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
@@ -187,6 +187,11 @@ async def invoice(ctx: Context, amount: int, hash: str):
                     if str(e) == "Error: Lightning invoice not paid yet.":
                         print(".", end="", flush=True)
                         continue
+            if not paid:
+                print("\n")
+                print(
+                    "Invoice is not paid yet, stopping check. Use the command above to recheck after the invoice has been paid."
+                )
     elif amount and hash:
         await wallet.mint(amount, hash)
     wallet.status()
