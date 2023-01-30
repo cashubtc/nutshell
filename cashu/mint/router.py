@@ -6,9 +6,10 @@ from secp256k1 import PublicKey
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
+    CheckFeesRequest,
     CheckFeesResponse,
-    GetCheckFeesRequest,
-    GetCheckSpendableRequest,
+    CheckSpendableRequest,
+    CheckSpendableResponse,
     GetMeltResponse,
     GetMintResponse,
     KeysetsResponse,
@@ -109,7 +110,7 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     Requests tokens to be destroyed and sent out via Lightning.
     """
     try:
-        ok, preimage = await ledger.melt(payload.proofs, payload.invoice)
+        ok, preimage = await ledger.melt(payload.proofs, payload.pr)
         resp = GetMeltResponse(paid=ok, preimage=preimage)
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
@@ -121,9 +122,12 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     name="Check spendable",
     summary="Check whether a proof has already been spent",
 )
-async def check_spendable(payload: GetCheckSpendableRequest) -> Dict[int, bool]:
+async def check_spendable(
+    payload: CheckSpendableRequest,
+) -> CheckSpendableResponse:
     """Check whether a secret has been spent already or not."""
-    return await ledger.check_spendable(payload.proofs)
+    spendableList = await ledger.check_spendable(payload.proofs)
+    return CheckSpendableResponse(spendable=spendableList)
 
 
 @router.post(
@@ -131,7 +135,7 @@ async def check_spendable(payload: GetCheckSpendableRequest) -> Dict[int, bool]:
     name="Check fees",
     summary="Check fee reserve for a Lightning payment",
 )
-async def check_fees(payload: GetCheckFeesRequest) -> CheckFeesResponse:
+async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     """
     Responds with the fees necessary to pay a Lightning invoice.
     Used by wallets for figuring out the fees they need to supply together with the payment amount.

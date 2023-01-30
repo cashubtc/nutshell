@@ -138,7 +138,7 @@ class GetMintResponse(BaseModel):
 
 class PostMeltRequest(BaseModel):
     proofs: List[Proof]
-    invoice: str
+    pr: str
 
 
 class GetMeltResponse(BaseModel):
@@ -163,11 +163,15 @@ class PostSplitResponse(BaseModel):
 # ------- API: CHECK -------
 
 
-class GetCheckSpendableRequest(BaseModel):
+class CheckSpendableRequest(BaseModel):
     proofs: List[Proof]
 
 
-class GetCheckFeesRequest(BaseModel):
+class CheckSpendableResponse(BaseModel):
+    spendable: List[bool]
+
+
+class CheckFeesRequest(BaseModel):
     pr: str
 
 

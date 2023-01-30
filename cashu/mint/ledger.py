@@ -412,7 +412,7 @@ class Ledger:
 
     async def check_spendable(self, proofs: List[Proof]):
         """Checks if all provided proofs are valid and still spendable (i.e. have not been spent)."""
-        return {i: self._check_spendable(p) for i, p in enumerate(proofs)}
+        return [self._check_spendable(p) for p in proofs]
 
     async def check_fees(self, pr: str):
         """Returns the fees (in msat) required to pay this pr."""
