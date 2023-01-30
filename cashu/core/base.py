@@ -163,15 +163,15 @@ class PostSplitResponse(BaseModel):
 # ------- API: CHECK -------
 
 
-class GetCheckSpendableRequest(BaseModel):
+class CheckSpendableRequest(BaseModel):
     proofs: List[Proof]
 
 
-class GetCheckSpendableResponse(BaseModel):
+class CheckSpendableResponse(BaseModel):
     spendable: List[bool]
 
 
-class GetCheckFeesRequest(BaseModel):
+class CheckFeesRequest(BaseModel):
     pr: str
 
 

@@ -7,9 +7,9 @@ from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
     CheckFeesResponse,
-    GetCheckFeesRequest,
-    GetCheckSpendableRequest,
-    GetCheckSpendableResponse,
+    CheckFeesRequest,
+    CheckSpendableRequest,
+    CheckSpendableResponse,
     GetMeltResponse,
     GetMintResponse,
     KeysetsResponse,
@@ -123,11 +123,11 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     summary="Check whether a proof has already been spent",
 )
 async def check_spendable(
-    payload: GetCheckSpendableRequest,
-) -> GetCheckSpendableResponse:
+    payload: CheckSpendableRequest,
+) -> CheckSpendableResponse:
     """Check whether a secret has been spent already or not."""
     spendableList = await ledger.check_spendable(payload.proofs)
-    return GetCheckSpendableResponse(spendable=spendableList)
+    return CheckSpendableResponse(spendable=spendableList)
 
 
 @router.get(
@@ -135,7 +135,7 @@ async def check_spendable(
     name="Check fees",
     summary="Check fee reserve for a Lightning payment",
 )
-async def check_fees(payload: GetCheckFeesRequest) -> CheckFeesResponse:
+async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     """
     Responds with the fees necessary to pay a Lightning invoice.
     Used by wallets for figuring out the fees they need to supply together with the payment amount.

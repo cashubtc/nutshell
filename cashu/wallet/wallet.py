@@ -15,9 +15,9 @@ import cashu.core.bolt11 as bolt11
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
-    GetCheckFeesRequest,
-    GetCheckSpendableRequest,
-    GetCheckSpendableResponse,
+    CheckFeesRequest,
+    CheckSpendableRequest,
+    CheckSpendableResponse,
     GetMintResponse,
     Invoice,
     KeysetsResponse,
@@ -340,7 +340,7 @@ class LedgerAPI:
         """
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
-        payload = GetCheckSpendableRequest(proofs=proofs)
+        payload = CheckSpendableRequest(proofs=proofs)
 
         def _check_spendable_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
@@ -356,12 +356,12 @@ class LedgerAPI:
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
-        spendable = GetCheckSpendableResponse.parse_obj(return_dict)
+        spendable = CheckSpendableResponse.parse_obj(return_dict)
         return spendable
 
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
-        payload = GetCheckFeesRequest(pr=payment_request)
+        payload = CheckFeesRequest(pr=payment_request)
         self.s = self._set_requests()
         resp = self.s.get(
             self.url + "/checkfees",
