@@ -117,7 +117,7 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     return resp
 
 
-@router.get(
+@router.post(
     "/check",
     name="Check spendable",
     summary="Check whether a proof has already been spent",
@@ -130,7 +130,7 @@ async def check_spendable(
     return CheckSpendableResponse(spendable=spendableList)
 
 
-@router.get(
+@router.post(
     "/checkfees",
     name="Check fees",
     summary="Check fee reserve for a Lightning payment",

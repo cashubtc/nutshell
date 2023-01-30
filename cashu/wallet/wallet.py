@@ -349,7 +349,7 @@ class LedgerAPI:
             }
 
         self.s = self._set_requests()
-        resp = self.s.get(
+        resp = self.s.post(
             self.url + "/check",
             json=payload.dict(include=_check_spendable_include_fields(proofs)),  # type: ignore
         )
@@ -363,7 +363,7 @@ class LedgerAPI:
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
         self.s = self._set_requests()
-        resp = self.s.get(
+        resp = self.s.post(
             self.url + "/checkfees",
             json=payload.dict(),
         )
