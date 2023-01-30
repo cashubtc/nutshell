@@ -6,8 +6,8 @@ from secp256k1 import PublicKey
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckFeesResponse,
     CheckFeesRequest,
+    CheckFeesResponse,
     CheckSpendableRequest,
     CheckSpendableResponse,
     GetMeltResponse,
