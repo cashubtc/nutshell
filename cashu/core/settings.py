@@ -33,7 +33,7 @@ SOCKS_PORT = env.int("SOCKS_PORT", default=9050)
 LIGHTNING = env.bool("LIGHTNING", default=True)
 LIGHTNING_FEE_PERCENT = env.float("LIGHTNING_FEE_PERCENT", default=1.0)
 assert LIGHTNING_FEE_PERCENT >= 0, "LIGHTNING_FEE_PERCENT must be at least 0"
-LIGHTNING_RESERVE_FEE_MIN = env.float("LIGHTNING_RESERVE_FEE_MIN", default=4000)
+LIGHTNING_RESERVE_FEE_MIN = env.float("LIGHTNING_RESERVE_FEE_MIN", default=2000)
 
 MINT_PRIVATE_KEY = env.str("MINT_PRIVATE_KEY", default=None)
 
@@ -67,4 +67,4 @@ NOSTR_RELAYS = env.list(
 )
 
 MAX_ORDER = 64
-VERSION = "0.8.4"
+VERSION = "0.9.0"

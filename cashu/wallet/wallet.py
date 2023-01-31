@@ -15,8 +15,9 @@ import cashu.core.bolt11 as bolt11
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
-    GetCheckFeesRequest,
-    GetCheckSpendableRequest,
+    CheckFeesRequest,
+    CheckSpendableRequest,
+    CheckSpendableResponse,
     GetMintResponse,
     Invoice,
     KeysetsResponse,
@@ -339,7 +340,7 @@ class LedgerAPI:
         """
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
-        payload = GetCheckSpendableRequest(proofs=proofs)
+        payload = CheckSpendableRequest(proofs=proofs)
 
         def _check_spendable_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
@@ -355,11 +356,12 @@ class LedgerAPI:
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
-        return return_dict
+        spendable = CheckSpendableResponse.parse_obj(return_dict)
+        return spendable
 
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
-        payload = GetCheckFeesRequest(pr=payment_request)
+        payload = CheckFeesRequest(pr=payment_request)
         self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/checkfees",
@@ -374,14 +376,14 @@ class LedgerAPI:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
-        payload = PostMeltRequest(proofs=proofs, invoice=invoice)
+        payload = PostMeltRequest(proofs=proofs, pr=invoice)
 
         def _meltrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
                 "amount": ...,
-                "invoice": ...,
+                "pr": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
 
@@ -609,10 +611,10 @@ class Wallet(LedgerAPI):
         """Invalidates all spendable tokens supplied in proofs."""
         spendables = await self.check_spendable(proofs)
         invalidated_proofs = []
-        for idx, spendable in spendables.items():
+        for i, spendable in enumerate(spendables.spendable):
             if not spendable:
-                invalidated_proofs.append(proofs[int(idx)])
-                await invalidate_proof(proofs[int(idx)], db=self.db)
+                invalidated_proofs.append(proofs[i])
+                await invalidate_proof(proofs[i], db=self.db)
         invalidate_secrets = [p["secret"] for p in invalidated_proofs]
         self.proofs = list(
             filter(lambda p: p["secret"] not in invalidate_secrets, self.proofs)
