@@ -25,6 +25,7 @@ CASHU_DIR = env.str("CASHU_DIR", default=os.path.join(str(Path.home()), ".cashu"
 CASHU_DIR = CASHU_DIR.replace("~", str(Path.home()))
 assert len(CASHU_DIR), "CASHU_DIR not defined"
 
+WALLET_PRIVATE_KEY = env.str("WALLET_PRIVATE_KEY", default=None)
 TOR = env.bool("TOR", default=True)
 
 SOCKS_HOST = env.str("SOCKS_HOST", default=None)

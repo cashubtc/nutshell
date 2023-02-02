@@ -132,14 +132,6 @@ class Ledger:
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
 
-        # backwards compatibility with old hash_to_curve < 0.4.0
-        try:
-            ret = legacy.verify_pre_0_3_3(private_key_amount, C, proof.secret)
-            if ret:
-                return ret
-        except:
-            pass
-
         return b_dhke.verify(private_key_amount, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):
@@ -480,3 +472,11 @@ class Ledger:
         # verify amounts in produced proofs
         self._verify_equation_balanced(proofs, prom_fst + prom_snd)
         return prom_fst, prom_snd
+
+    async def restore(self, outputs: List[BlindedMessage]) -> list[BlindedSignature]:
+        promises: List[BlindedSignature] = []
+        for output in outputs:
+            promise = await self.crud.get_promise(B_=output.B_, db=self.db)
+            if promise is not None:
+                promises.append(promise)
+        return promises

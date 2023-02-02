@@ -168,3 +168,15 @@ async def split(
     frst_promises, scnd_promises = split_return
     resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
     return resp
+
+
+@router.post(
+    "/restore", name="Restore", summary="Restores a blinded signature from a secret"
+)
+async def restore(payload: PostMintRequest) -> Union[CashuError, PostMintResponse]:
+    assert payload.outputs, Exception("no outputs provided.")
+    try:
+        promises = await ledger.restore(payload.outputs)
+    except Exception as exc:
+        return CashuError(code=0, error=str(exc))
+    return PostMintResponse(promises=promises)

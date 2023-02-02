@@ -1,7 +1,7 @@
 import time
 from typing import Any, List, Optional
 
-from cashu.core.base import Invoice, MintKeyset, Proof
+from cashu.core.base import Invoice, MintKeyset, Proof, BlindedSignature
 from cashu.core.db import Connection, Database
 from cashu.core.migrations import table_with_schema
 
@@ -53,6 +53,10 @@ class LedgerCrud:
 
         return await store_promise(*args, **kwags)
 
+    async def get_promise(*args, **kwags):
+
+        return await get_promise(*args, **kwags)
+
     async def update_lightning_invoice(*args, **kwags):
 
         return await update_lightning_invoice(*args, **kwags)
@@ -78,6 +82,22 @@ async def store_promise(
             str(C_),
         ),
     )
+
+
+async def get_promise(
+    db: Database,
+    B_: str,
+    conn: Optional[Connection] = None,
+):
+
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT * from {table_with_schema(db, 'promises')}
+        WHERE B_b = ?
+        """,
+        (str(B_),),
+    )
+    return BlindedSignature(amount=row[0], C_=row[2]) if row else None
 
 
 async def get_proofs_used(

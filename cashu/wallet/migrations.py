@@ -144,3 +144,14 @@ async def m006_invoices(db: Database):
         );
     """
     )
+
+
+async def m007_crypto(db: Database):
+    await db.execute(
+        """
+            CREATE TABLE IF NOT EXISTS secret_derivation (
+                counter INTEGER DEFAULT 0
+            );
+        """
+    )
+    await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")

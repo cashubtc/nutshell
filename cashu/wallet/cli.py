@@ -43,6 +43,7 @@ from cashu.wallet.crud import (
     get_lightning_invoices,
     get_reserved_proofs,
     get_unused_locks,
+    bump_secret_derivation,
 )
 from cashu.wallet.wallet import Wallet as Wallet
 
@@ -448,6 +449,16 @@ async def burn(ctx: Context, token: str, all: bool, force: bool):
         proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
 
     await wallet.invalidate(proofs)
+    wallet.status()
+
+
+@cli.command("restore", help="Restore backups.")
+@click.pass_context
+@coro
+async def restore(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    await wallet.restore_promises(0, 1000)
     wallet.status()
 
 

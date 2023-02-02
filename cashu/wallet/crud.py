@@ -334,3 +334,21 @@ async def update_lightning_invoice(
             hash,
         ),
     )
+
+
+async def bump_secret_derivation(
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+    rows = await (conn or db).fetchone("SELECT counter from secret_derivation")
+    counter = int(rows[0])
+    await (conn or db).execute("UPDATE secret_derivation SET counter = counter + 1")
+    return counter
+
+
+async def set_secret_derivation(
+    db: Database,
+    counter: int,
+    conn: Optional[Connection] = None,
+):
+    await (conn or db).execute("UPDATE secret_derivation SET counter = ?", (counter,))
