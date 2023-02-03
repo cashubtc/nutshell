@@ -77,8 +77,10 @@ async def redeem_multimint(ctx: Context, token: TokenV2, script, signature):
     if token.mints is None:
         return
 
+    proofs_keysets = set([p.id for p in token.proofs])
+
     for mint in token.mints:
-        for keyset in set(mint.ids):
+        for keyset in set([id for id in mint.ids if id in proofs_keysets]):
             logger.debug(f"Redeeming tokens from keyset {keyset}")
             # init a temporary wallet object
             keyset_wallet = Wallet(
