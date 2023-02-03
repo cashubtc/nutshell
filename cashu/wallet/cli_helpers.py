@@ -29,10 +29,12 @@ async def verify_mints(ctx: Context, token: TokenV2):
 
     if token.mints is None:
         return
+    proofs_keysets = set([p.id for p in token.proofs])
+
     logger.debug(f"Verifying mints")
     trust_token_mints = True
     for mint in token.mints:
-        for keyset in set(mint.ids):
+        for keyset in set([id for id in mint.ids if id in proofs_keysets]):
             # init a temporary wallet object
             keyset_wallet = Wallet(
                 mint.url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
