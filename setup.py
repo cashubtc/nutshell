@@ -13,7 +13,7 @@ entry_points = {"console_scripts": ["cashu = cashu.wallet.cli:cli"]}
 
 setuptools.setup(
     name="cashu",
-    version="0.9.0",
+    version="0.9.1",
     description="Ecash wallet and mint for Bitcoin Lightning",
     long_description=long_description,
     long_description_content_type="text/markdown",
