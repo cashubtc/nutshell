@@ -144,3 +144,28 @@ async def m006_invoices(db: Database):
         );
     """
     )
+
+
+async def m007_nostr(db: Database):
+    """
+    Stores timestamps of nostr operations.
+    """
+    await db.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS nostr (
+            type TEXT NOT NULL,
+            last TIMESTAMP DEFAULT NULL
+        )
+        """
+    )
+    await db.execute(
+        f"""
+        INSERT INTO nostr
+            (type, last)
+        VALUES (?, ?)
+        """,
+        (
+            "dm",
+            None,
+        ),
+    )
