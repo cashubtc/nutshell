@@ -41,9 +41,9 @@ from cashu.wallet import migrations
 from cashu.wallet.crud import (
     get_keyset,
     get_lightning_invoices,
+    get_nostr_last_check_timestamp,
     get_reserved_proofs,
     get_unused_locks,
-    get_nostr_last_check_timestamp,
     set_nostr_last_check_timestamp,
 )
 from cashu.wallet.wallet import Wallet as Wallet
