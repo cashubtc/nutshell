@@ -1,6 +1,7 @@
 import asyncio
 import os
 import threading
+import time
 import urllib.parse
 from typing import List
 
@@ -14,7 +15,11 @@ from cashu.core.settings import CASHU_DIR, MINT_URL, NOSTR_PRIVATE_KEY, NOSTR_RE
 from cashu.nostr.nostr.client.client import NostrClient
 from cashu.nostr.nostr.event import Event
 from cashu.nostr.nostr.key import PublicKey
-from cashu.wallet.crud import get_keyset
+from cashu.wallet.crud import (
+    get_keyset,
+    get_nostr_last_check_timestamp,
+    set_nostr_last_check_timestamp,
+)
 from cashu.wallet.wallet import Wallet as Wallet
 
 
@@ -29,10 +34,12 @@ async def verify_mints(ctx: Context, token: TokenV2):
 
     if token.mints is None:
         return
+    proofs_keysets = set([p.id for p in token.proofs])
+
     logger.debug(f"Verifying mints")
     trust_token_mints = True
     for mint in token.mints:
-        for keyset in set(mint.ids):
+        for keyset in set([id for id in mint.ids if id in proofs_keysets]):
             # init a temporary wallet object
             keyset_wallet = Wallet(
                 mint.url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
@@ -77,8 +84,10 @@ async def redeem_multimint(ctx: Context, token: TokenV2, script, signature):
     if token.mints is None:
         return
 
+    proofs_keysets = set([p.id for p in token.proofs])
+
     for mint in token.mints:
-        for keyset in set(mint.ids):
+        for keyset in set([id for id in mint.ids if id in proofs_keysets]):
             logger.debug(f"Redeeming tokens from keyset {keyset}")
             # init a temporary wallet object
             keyset_wallet = Wallet(
@@ -231,9 +240,14 @@ async def send_nostr(ctx: Context, amount: int, pubkey: str, verbose: bool, yes:
     # we only use ephemeral private keys for sending
     client = NostrClient(relays=NOSTR_RELAYS)
     if verbose:
-        print(f"Your ephemeral nostr private key: {client.private_key.hex()}")
-    await asyncio.sleep(1)
-    client.dm(token, PublicKey(bytes.fromhex(pubkey)))
+        print(f"Your ephemeral nostr private key: {client.private_key.bech32()}")
+
+    if pubkey.startswith("npub"):
+        pubkey_to = PublicKey().from_npub(pubkey)
+    else:
+        pubkey_to = PublicKey(bytes.fromhex(pubkey))
+
+    client.dm(token, pubkey_to)
     print(f"Token sent to {pubkey}")
     client.close()
 
@@ -244,10 +258,10 @@ async def receive_nostr(ctx: Context, verbose: bool):
             "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it."
         )
         print("")
-    client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY, relays=NOSTR_RELAYS)
-    print(f"Your nostr public key: {client.public_key.hex()}")
+    client = NostrClient(private_key=NOSTR_PRIVATE_KEY, relays=NOSTR_RELAYS)
+    print(f"Your nostr public key: {client.public_key.bech32()}")
     if verbose:
-        print(f"Your nostr private key (do not share!): {client.private_key.hex()}")
+        print(f"Your nostr private key (do not share!): {client.private_key.bech32()}")
     await asyncio.sleep(2)
 
     def get_token_callback(event: Event, decrypted_content):
@@ -263,12 +277,16 @@ async def receive_nostr(ctx: Context, verbose: bool):
         except Exception as e:
             pass
 
+    # determine timestamp of last check so we don't scan all historical DMs
+    wallet: Wallet = ctx.obj["WALLET"]
+    last_check = await get_nostr_last_check_timestamp(db=wallet.db)
+    if last_check:
+        last_check -= 60 * 60  # 1 hour tolerance
+    await set_nostr_last_check_timestamp(timestamp=int(time.time()), db=wallet.db)
+
     t = threading.Thread(
         target=client.get_dm,
-        args=(
-            client.public_key,
-            get_token_callback,
-        ),
+        args=(client.public_key, get_token_callback, {"since": last_check}),
         name="Nostr DM",
     )
     t.start()

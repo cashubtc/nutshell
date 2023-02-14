@@ -334,3 +334,27 @@ async def update_lightning_invoice(
             hash,
         ),
     )
+
+
+async def set_nostr_last_check_timestamp(
+    db: Database,
+    timestamp: int,
+    conn: Optional[Connection] = None,
+):
+    await (conn or db).execute(
+        f"UPDATE nostr SET last = ? WHERE type = ?",
+        (timestamp, "dm"),
+    )
+
+
+async def get_nostr_last_check_timestamp(
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT last from nostr WHERE type = ?
+        """,
+        ("dm",),
+    )
+    return row[0] if row else None
