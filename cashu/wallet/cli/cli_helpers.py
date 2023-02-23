@@ -271,7 +271,7 @@ async def receive_nostr(ctx: Context, verbose: bool):
             )
         try:
             # call the receive method
-            from cashu.wallet.cli import receive
+            from cashu.wallet.cli.cli import receive
 
             asyncio.run(receive(ctx, decrypted_content, ""))
         except Exception as e:
