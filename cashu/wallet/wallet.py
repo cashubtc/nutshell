@@ -59,10 +59,10 @@ from cashu.wallet.crud import (
 )
 
 
-def set_requests(func):
+def async_set_requests(func):
     """
-    Decorator that wraps around any function that makes API calls.
-    Sets some HTTP headers and starts a Tor instance if none is
+    Decorator that wraps around any async class method of LedgerAPI that makes
+    API calls. Sets some HTTP headers and starts a Tor instance if none is
     already running and  and sets local proxy to use it.
     """
 
@@ -85,7 +85,7 @@ def set_requests(func):
             }
             self.s.proxies.update(proxies)
             self.s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
-        await func(self, *args, **kwargs)
+        return await func(self, *args, **kwargs)
 
     return wrapper
 
@@ -100,6 +100,11 @@ class LedgerAPI:
     def __init__(self, url):
         self.url = url
         self.s = requests.Session()
+
+    @async_set_requests
+    async def _init_s(self):
+        """Dummy function that can be called from outside to use LedgerAPI.s"""
+        return
 
     def _construct_proofs(
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[str]
@@ -204,7 +209,7 @@ class LedgerAPI:
     ENDPOINTS
     """
 
-    @set_requests
+    @async_set_requests
     async def _get_keys(self, url: str):
         resp = self.s.get(
             url + "/keys",
@@ -219,7 +224,7 @@ class LedgerAPI:
         keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
         return keyset
 
-    @set_requests
+    @async_set_requests
     async def _get_keyset(self, url: str, keyset_id: str):
         """
         keyset_id is base64, needs to be urlsafe-encoded.
@@ -238,7 +243,7 @@ class LedgerAPI:
         keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
         return keyset
 
-    @set_requests
+    @async_set_requests
     async def _get_keyset_ids(self, url: str):
         resp = self.s.get(
             url + "/keysets",
@@ -249,7 +254,7 @@ class LedgerAPI:
         assert len(keysets.keysets), Exception("did not receive any keysets")
         return keysets.dict()
 
-    @set_requests
+    @async_set_requests
     def request_mint(self, amount):
         """Requests a mint from the server and returns Lightning invoice."""
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
@@ -259,7 +264,7 @@ class LedgerAPI:
         mint_response = GetMintResponse.parse_obj(return_dict)
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
-    @set_requests
+    @async_set_requests
     async def mint(self, amounts, payment_hash=None):
         """Mints new coins and returns a proof of promise."""
         secrets = [self._generate_secret() for s in range(len(amounts))]
@@ -282,7 +287,7 @@ class LedgerAPI:
 
         return self._construct_proofs(promises, secrets, rs)
 
-    @set_requests
+    @async_set_requests
     async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
         """Consume proofs and create new promises based on amount split.
         If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
@@ -347,7 +352,7 @@ class LedgerAPI:
 
         return frst_proofs, scnd_proofs
 
-    @set_requests
+    @async_set_requests
     async def check_spendable(self, proofs: List[Proof]):
         """
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
@@ -370,7 +375,7 @@ class LedgerAPI:
         spendable = CheckSpendableResponse.parse_obj(return_dict)
         return spendable
 
-    @set_requests
+    @async_set_requests
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
@@ -383,7 +388,7 @@ class LedgerAPI:
         self.raise_on_error(return_dict)
         return return_dict
 
-    @set_requests
+    @async_set_requests
     async def pay_lightning(self, proofs: List[Proof], invoice: str):
         """
         Accepts proofs and a lightning invoice to pay in exchange.
