@@ -54,7 +54,7 @@ async def send_nostr(ctx: Context, amount: int, pubkey: str, verbose: bool, yes:
     wallet = await get_mint_wallet(ctx)
 
     if "@" in pubkey or "." in pubkey:
-        # parses user@domain.com and domain.com (which is _@domain.com)
+        # matches user@domain.com and domain.com (which is _@domain.com)
         pubkey = await nip5_to_pubkey(wallet, pubkey)
 
     await wallet.load_proofs()
