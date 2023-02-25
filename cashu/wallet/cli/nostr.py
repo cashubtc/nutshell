@@ -82,6 +82,7 @@ async def send_nostr(ctx: Context, amount: int, pubkey: str, verbose: bool, yes:
 
     client.dm(token, pubkey_to)
     print(f"Token sent to {pubkey_to.bech32()}")
+    await asyncio.sleep(5)
     client.close()
 
 
