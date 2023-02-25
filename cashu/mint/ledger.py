@@ -1,9 +1,5 @@
-"""
-Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
-"""
-
 import math
-from typing import Dict, List, Set, Optional
+from typing import Dict, List, Optional, Set
 
 from loguru import logger
 
@@ -18,13 +14,13 @@ from cashu.core.base import (
     MintKeysets,
     Proof,
 )
-from cashu.lightning.base import Wallet
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.script import verify_script
 from cashu.core.secp import PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER, VERSION
 from cashu.core.split import amount_split
+from cashu.lightning.base import Wallet
 from cashu.mint.crud import LedgerCrud
 
 # from starlette_context import context
