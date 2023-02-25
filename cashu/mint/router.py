@@ -110,11 +110,11 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     Requests tokens to be destroyed and sent out via Lightning.
     """
     try:
-        ok, preimage = await ledger.melt(payload.proofs, payload.pr)
+        ok, preimage = await ledger.melt(payload.proofs, payload.pr, payload.outputs)
         resp = GetMeltResponse(paid=ok, preimage=preimage)
+        return resp
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
-    return resp
 
 
 @router.post(

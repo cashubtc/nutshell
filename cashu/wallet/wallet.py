@@ -19,6 +19,7 @@ from cashu.core.base import (
     CheckSpendableRequest,
     CheckSpendableResponse,
     GetMintResponse,
+    GetMeltResponse,
     Invoice,
     KeysetsResponse,
     P2SHScript,
@@ -389,19 +390,22 @@ class LedgerAPI:
         return return_dict
 
     @async_set_requests
-    async def pay_lightning(self, proofs: List[Proof], invoice: str):
+    async def pay_lightning(
+        self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
+    ):
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
-        payload = PostMeltRequest(proofs=proofs, pr=invoice)
+
+        payload = PostMeltRequest(proofs=proofs, pr=invoice, outputs=outputs)
 
         def _meltrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
-                "amount": ...,
-                "pr": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
+                "pr": ...,
+                "outputs": ...,
             }
 
         resp = self.s.post(
@@ -411,7 +415,7 @@ class LedgerAPI:
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
-        return return_dict
+        return GetMeltResponse.parse_obj(return_dict)
 
 
 class Wallet(LedgerAPI):
@@ -484,22 +488,36 @@ class Wallet(LedgerAPI):
             await invalidate_proof(proof, db=self.db)
         return frst_proofs, scnd_proofs
 
-    async def pay_lightning(self, proofs: List[Proof], invoice: str):
+    async def pay_lightning(
+        self, proofs: List[Proof], invoice: str, fee_reserve_sat: int
+    ):
         """Pays a lightning invoice"""
-        status = await super().pay_lightning(proofs, invoice)
-        if status["paid"] == True:
+
+        # generate outputs for the change for overpaid fees
+        # first we get the fees
+        outputs_amounts = amount_split(fee_reserve_sat)
+        secrets = [self._generate_secret() for _ in range(len(outputs_amounts))]
+        # we send the mint n blanket outputs
+        outputs, rs = self._construct_outputs(outputs_amounts, secrets)
+
+        status = await super().pay_lightning(proofs, invoice, outputs)
+        if status.paid == True:
             await self.invalidate(proofs)
             invoice_obj = Invoice(
                 amount=-sum_proofs(proofs),
                 pr=invoice,
-                preimage=status.get("preimage"),
+                preimage=status.preimage,
                 paid=True,
                 time_paid=time.time(),
             )
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
+
+            # produce proofs from change
+            if status.change:
+                status.change
         else:
             raise Exception("could not pay invoice.")
-        return status["paid"]
+        return status.paid
 
     async def check_spendable(self, proofs):
         return await super().check_spendable(proofs)

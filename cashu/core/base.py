@@ -139,11 +139,13 @@ class GetMintResponse(BaseModel):
 class PostMeltRequest(BaseModel):
     proofs: List[Proof]
     pr: str
+    outputs: Union[List[BlindedMessage], None]
 
 
 class GetMeltResponse(BaseModel):
     paid: Union[bool, None]
     preimage: Union[str, None]
+    change: Union[List[BlindedSignature], None] = None
 
 
 # ------- API: SPLIT -------

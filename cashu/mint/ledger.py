@@ -275,7 +275,7 @@ class Ledger:
             preimage,
             error_message,
         ) = await self.lightning.pay_invoice(invoice, fee_limit_msat=fee_limit_msat)
-        return ok, preimage
+        return ok, preimage, fee_msat
 
     async def _invalidate_proofs(self, proofs: List[Proof]):
         """
@@ -381,7 +381,9 @@ class Ledger:
         promises = await self._generate_promises(B_s, keyset)
         return promises
 
-    async def melt(self, proofs: List[Proof], invoice: str):
+    async def melt(
+        self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
+    ):
         """Invalidates proofs and pays a Lightning invoice."""
 
         # validate and set proofs as pending
@@ -399,11 +401,14 @@ class Ledger:
             )
 
             if LIGHTNING:
-                status, preimage = await self._pay_lightning_invoice(invoice, fees_msat)
+                status, preimage, fee_msat = await self._pay_lightning_invoice(
+                    invoice, fees_msat
+                )
             else:
                 status, preimage = True, "preimage"
             if status == True:
                 await self._invalidate_proofs(proofs)
+                # prepare change
         except Exception as e:
             raise e
         finally:
