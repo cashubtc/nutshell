@@ -24,6 +24,9 @@ async def nip5_to_pubkey(wallet: Wallet, address: str):
     """
     # we will be using the requests session from the wallet
     await wallet._init_s()
+    # if no username is given, use default _ (NIP-05 stuff)
+    if "@" not in address:
+        address = "_@" + address
     # now we can use it
     user, host = address.split("@")
     resp_dict = {}
@@ -50,7 +53,8 @@ async def send_nostr(ctx: Context, amount: int, pubkey: str, verbose: bool, yes:
     # load a wallet for the chosen mint
     wallet = await get_mint_wallet(ctx)
 
-    if "@" in pubkey:
+    if "@" in pubkey or "." in pubkey:
+        # parses user@domain.com and domain.com (which is _@domain.com)
         pubkey = await nip5_to_pubkey(wallet, pubkey)
 
     await wallet.load_proofs()
