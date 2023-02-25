@@ -5,7 +5,6 @@ import base64
 import json
 import os
 import sys
-import threading
 import time
 from datetime import datetime
 from functools import wraps
@@ -39,12 +38,9 @@ from cashu.nostr.nostr.client.client import NostrClient
 from cashu.tor.tor import TorProxy
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
-    get_keyset,
     get_lightning_invoices,
-    get_nostr_last_check_timestamp,
     get_reserved_proofs,
     get_unused_locks,
-    set_nostr_last_check_timestamp,
 )
 from cashu.wallet.wallet import Wallet as Wallet
 
@@ -52,12 +48,11 @@ from .cli_helpers import (
     get_mint_wallet,
     print_mint_balances,
     proofs_to_serialized_tokenv2,
-    receive_nostr,
     redeem_multimint,
-    send_nostr,
     token_from_lnbits_link,
     verify_mints,
 )
+from .nostr import receive_nostr, send_nostr
 
 
 async def init_wallet(wallet: Wallet):
@@ -144,7 +139,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     if wallet.available_balance < amount:
         print("Error: Balance too low.")
         return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)  # type: ignore
     await wallet.pay_lightning(send_proofs, invoice)
     wallet.status()
 
