@@ -1,3 +1,4 @@
+# type: ignore
 from os import getenv
 from typing import Dict, Optional
 
