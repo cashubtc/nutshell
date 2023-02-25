@@ -14,6 +14,7 @@ from cashu.wallet.crud import (
 )
 from cashu.wallet.cli.cli_helpers import get_mint_wallet
 from cashu.core.settings import NOSTR_PRIVATE_KEY, NOSTR_RELAYS
+from requests.exceptions import ConnectionError
 
 
 async def nip5_to_pubkey(wallet: Wallet, address: str):
@@ -24,13 +25,19 @@ async def nip5_to_pubkey(wallet: Wallet, address: str):
     await wallet._init_s()
     # now we can use it
     user, host = address.split("@")
-    resp = wallet.s.get(
-        f"https://{host}/.well-known/nostr.json?name={user}",
-    )
-    resp.raise_for_status()
+    resp_dict = {}
+    try:
+        resp = wallet.s.get(
+            f"https://{host}/.well-known/nostr.json?name={user}",
+        )
+        resp.raise_for_status()
+    except ConnectionError:
+        raise Exception(f"Could not connect to {host}")
+    except Exception as e:
+        raise e
     resp_dict = resp.json()
-    assert "names" in resp_dict, Exception("did not receive any names")
-    assert user in resp_dict["names"]
+    assert "names" in resp_dict, Exception(f"did not receive any names from {host}")
+    assert user in resp_dict["names"], Exception(f"{user}@{host} not found")
     pubkey = resp_dict["names"][user]
     return pubkey
 
@@ -62,18 +69,18 @@ async def send_nostr(ctx: Context, amount: int, pubkey: str, verbose: bool, yes:
     if not yes:
         print("")
         click.confirm(
-            f"Send {amount} sat to nostr pubkey {pubkey_to.bech32()}?",
+            f"Send {amount} sat to {pubkey_to.bech32()}?",
             abort=True,
             default=True,
         )
 
-    # we only use ephemeral private keys for sending
-    client = NostrClient(relays=NOSTR_RELAYS)
-    if verbose:
-        print(f"Your ephemeral nostr private key: {client.private_key.bech32()}")
+    client = NostrClient(private_key=NOSTR_PRIVATE_KEY, relays=NOSTR_RELAYS)
+    if verbose and not NOSTR_PRIVATE_KEY:
+        # we generated a random key if none was present
+        print(f"Your nostr private key: {client.private_key.bech32()}")
 
     client.dm(token, pubkey_to)
-    print(f"Token sent to {pubkey}")
+    print(f"Token sent to {pubkey_to.bech32()}")
     client.close()
 
 
