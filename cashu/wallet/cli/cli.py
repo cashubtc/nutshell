@@ -270,10 +270,12 @@ async def send(ctx: Context, amount: int, lock: str, legacy: bool):
 
 @cli.command("send", help="Send tokens.")
 @click.argument("amount", type=int)
+@click.argument("nostr", type=str, required=False)
 @click.option(
     "--nostr",
     "-n",
-    help="Send to nostr pubkey",
+    "nopt",
+    help="Send to nostr pubkey.",
     type=str,
 )
 @click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
@@ -302,15 +304,16 @@ async def send_command(
     ctx,
     amount: int,
     nostr: str,
+    nopt: str,
     lock: str,
     legacy: bool,
     verbose: bool,
     yes: bool,
 ):
-    if nostr is None:
+    if not nostr and not nopt:
         await send(ctx, amount, lock, legacy)
     else:
-        await send_nostr(ctx, amount, nostr, verbose, yes)
+        await send_nostr(ctx, amount, nostr or nopt, verbose, yes)
 
 
 async def receive(ctx: Context, token: str, lock: str):
