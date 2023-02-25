@@ -140,7 +140,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     if wallet.available_balance < amount:
         print("Error: Balance too low.")
         return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)  # type: ignore
     await wallet.pay_lightning(send_proofs, invoice)
     wallet.status()
 
