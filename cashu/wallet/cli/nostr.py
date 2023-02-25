@@ -1,20 +1,21 @@
 import asyncio
 import threading
 import time
-import click
 
+import click
+from click import Context
+from requests.exceptions import ConnectionError
+
+from cashu.core.settings import NOSTR_PRIVATE_KEY, NOSTR_RELAYS
 from cashu.nostr.nostr.client.client import NostrClient
 from cashu.nostr.nostr.event import Event
 from cashu.nostr.nostr.key import PublicKey
-from cashu.wallet.wallet import Wallet
-from click import Context
+from cashu.wallet.cli.cli_helpers import get_mint_wallet
 from cashu.wallet.crud import (
     get_nostr_last_check_timestamp,
     set_nostr_last_check_timestamp,
 )
-from cashu.wallet.cli.cli_helpers import get_mint_wallet
-from cashu.core.settings import NOSTR_PRIVATE_KEY, NOSTR_RELAYS
-from requests.exceptions import ConnectionError
+from cashu.wallet.wallet import Wallet
 
 
 async def nip5_to_pubkey(wallet: Wallet, address: str):

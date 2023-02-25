@@ -52,7 +52,6 @@ from .cli_helpers import (
     token_from_lnbits_link,
     verify_mints,
 )
-
 from .nostr import receive_nostr, send_nostr
 
 
