@@ -17,7 +17,7 @@ ledger = Ledger(
     seed=MINT_PRIVATE_KEY,
     # seed="asd",
     derivation_path="0/0/0/0",
-    lightning=LNbitsWallet() if LIGHTNING else None,
+    lightning=LNbitsWallet(),
 )
 
 

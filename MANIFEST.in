@@ -3,4 +3,4 @@ recursive-include cashu/tor *
 recursive-include cashu/wallet *
 exclude tests/*
 global-exclude *.py[cod]
-prune tests */__pycache__/*
+prune tests/* */__pycache__/*
