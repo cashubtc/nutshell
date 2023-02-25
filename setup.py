@@ -9,7 +9,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 with open("requirements.txt") as f:
     requirements = f.read().splitlines()
 
-entry_points = {"console_scripts": ["cashu = cashu.wallet.cli:cli"]}
+entry_points = {"console_scripts": ["cashu = cashu.wallet.cli.cli:cli"]}
 
 setuptools.setup(
     name="cashu",
@@ -21,7 +21,7 @@ setuptools.setup(
     author="Calle",
     author_email="calle@protonmail.com",
     license="MIT",
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_namespace_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

@@ -75,7 +75,7 @@ async def send_nostr(ctx: Context, amount: int, pubkey: str, verbose: bool, yes:
             default=True,
         )
 
-    client = NostrClient(private_key=NOSTR_PRIVATE_KEY, relays=NOSTR_RELAYS)
+    client = NostrClient(private_key=NOSTR_PRIVATE_KEY or "", relays=NOSTR_RELAYS)
     if verbose and not NOSTR_PRIVATE_KEY:
         # we generated a random key if none was present
         print(f"Your nostr private key: {client.private_key.bech32()}")
