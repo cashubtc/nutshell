@@ -343,6 +343,16 @@ class Ledger:
         ln_fee_msat: int,
         outputs: List[BlindedMessage],
     ):
+        """
+        Generates a set of new promises (blinded signatures) from a set of blank outputs
+        (outputs with no or ignored amount) by looking at the difference between the Lightning
+        fee reserve provided by the wallet and the actual Lightning fee paid by the mint.
+
+        If there is a positive difference, produces maximum `n_return_outputs` new outputs
+        with values close or equal to the fee difference. We can't be sure that we hit the
+        fee perfectly because we can only work with a limited set of blanket outputs and
+        their values are limited to 2^n.
+        """
         # we make sure that the fee is positive
         ln_fee_msat = abs(ln_fee_msat)
         # maximum number of change outputs (must be in consensus with wallet)
@@ -376,6 +386,7 @@ class Ledger:
 
     # Public methods
     def get_keyset(self, keyset_id: Optional[str] = None):
+        """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
         keyset = self.keysets.keysets[keyset_id] if keyset_id else self.keyset
         assert keyset.public_keys, Exception("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
