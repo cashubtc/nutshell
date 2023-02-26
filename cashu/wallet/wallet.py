@@ -18,8 +18,8 @@ from cashu.core.base import (
     CheckFeesRequest,
     CheckSpendableRequest,
     CheckSpendableResponse,
-    GetMintResponse,
     GetMeltResponse,
+    GetMintResponse,
     Invoice,
     KeysetsResponse,
     P2SHScript,
@@ -478,30 +478,28 @@ class Wallet(LedgerAPI):
         frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
-        used_secrets = [p["secret"] for p in proofs]
-        self.proofs = list(
-            filter(lambda p: p["secret"] not in used_secrets, self.proofs)
-        )
+        used_secrets = [p.secret for p in proofs]
+        self.proofs = list(filter(lambda p: p.secret not in used_secrets, self.proofs))
         self.proofs += frst_proofs + scnd_proofs
         await self._store_proofs(frst_proofs + scnd_proofs)
         for proof in proofs:
             await invalidate_proof(proof, db=self.db)
         return frst_proofs, scnd_proofs
 
-    async def pay_lightning(
-        self, proofs: List[Proof], invoice: str, fee_reserve_sat: int
-    ):
+    async def pay_lightning(self, proofs: List[Proof], invoice: str):
         """Pays a lightning invoice"""
 
         # generate outputs for the change for overpaid fees
-        # first we get the fees
-        outputs_amounts = amount_split(fee_reserve_sat)
-        secrets = [self._generate_secret() for _ in range(len(outputs_amounts))]
-        # we send the mint n blanket outputs
-        outputs, rs = self._construct_outputs(outputs_amounts, secrets)
+        # we will generate four blanked outputs that the mint will
+        # imprint with value depending on the fees we overpaid
+        n_return_outputs = 4
+        secrets = [self._generate_secret() for _ in range(n_return_outputs)]
+        outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets)
 
         status = await super().pay_lightning(proofs, invoice, outputs)
+
         if status.paid == True:
+            # the payment was successful
             await self.invalidate(proofs)
             invoice_obj = Invoice(
                 amount=-sum_proofs(proofs),
@@ -512,9 +510,16 @@ class Wallet(LedgerAPI):
             )
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
-            # produce proofs from change
+            # handle change and produce proofs
             if status.change:
-                status.change
+                change_proofs = self._construct_proofs(
+                    status.change,
+                    secrets[: len(status.change)],
+                    rs[: len(status.change)],
+                )
+                logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
+                await self._store_proofs(change_proofs)
+
         else:
             raise Exception("could not pay invoice.")
         return status.paid
@@ -664,6 +669,7 @@ class Wallet(LedgerAPI):
         decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)
         # check if it's an internal payment
         fees = int((await self.check_fees(invoice))["fee"])
+        logger.debug(f"Mint wants {fees} sat as fee reserve.")
         amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
         return amount, fees
 

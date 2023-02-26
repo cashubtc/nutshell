@@ -110,8 +110,10 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     Requests tokens to be destroyed and sent out via Lightning.
     """
     try:
-        ok, preimage = await ledger.melt(payload.proofs, payload.pr, payload.outputs)
-        resp = GetMeltResponse(paid=ok, preimage=preimage)
+        ok, preimage, change_promises = await ledger.melt(
+            payload.proofs, payload.pr, payload.outputs
+        )
+        resp = GetMeltResponse(paid=ok, preimage=preimage, change=change_promises)
         return resp
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
@@ -141,8 +143,8 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     Used by wallets for figuring out the fees they need to supply together with the payment amount.
     This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
     """
-    fees_msat = await ledger.check_fees(payload.pr)
-    return CheckFeesResponse(fee=fees_msat // 1000)
+    fees_sat = await ledger.check_fees(payload.pr)
+    return CheckFeesResponse(fee=fees_sat)
 
 
 @router.post("/split", name="Split", summary="Split proofs at a specified amount")

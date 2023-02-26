@@ -23,8 +23,6 @@ from cashu.core.split import amount_split
 from cashu.lightning.base import Wallet
 from cashu.mint.crud import LedgerCrud
 
-# from starlette_context import context
-
 
 class Ledger:
     def __init__(
@@ -275,6 +273,8 @@ class Ledger:
             preimage,
             error_message,
         ) = await self.lightning.pay_invoice(invoice, fee_limit_msat=fee_limit_msat)
+        # make sure that fee is positive
+        fee_msat = abs(fee_msat) if fee_msat else fee_msat
         return ok, preimage, fee_msat
 
     async def _invalidate_proofs(self, proofs: List[Proof]):
@@ -336,6 +336,44 @@ class Ledger:
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
             raise Exception("could not verify proofs.")
 
+    async def _generate_change_promises(
+        self,
+        total_provided: int,
+        invoice_amount: int,
+        ln_fee_msat: int,
+        outputs: List[BlindedMessage],
+    ):
+        # we make sure that the fee is positive
+        ln_fee_msat = abs(ln_fee_msat)
+        # maximum number of change outputs (must be in consensus with wallet)
+        n_return_outputs = 4
+        ln_fee_sat = math.ceil(ln_fee_msat / 1000)
+        user_paid_fee_sat = total_provided - invoice_amount
+        logger.debug(
+            f"Lightning fee was: {ln_fee_sat}. User paid: {user_paid_fee_sat}. Returning difference."
+        )
+        if user_paid_fee_sat - ln_fee_sat > 0 and outputs is not None:
+            # we will only accept at maximum n_return_outputs outputs
+            assert len(outputs) <= n_return_outputs, Exception(
+                "too many change outputs provided"
+            )
+
+            return_amounts = amount_split(user_paid_fee_sat - ln_fee_sat)
+            # we only need as many outputs as we have change to return
+            outputs = outputs[: len(return_amounts)]
+            # we sort the return_amounts in descending order so we only
+            # take the largest values in the next step
+            return_amounts_sorted = sorted(return_amounts, reverse=True)
+            # we need to imprint these amounts into the blanket outputs
+            for i in range(len(outputs)):
+                outputs[i].amount = return_amounts_sorted[i]
+            if not self._verify_no_duplicate_outputs(outputs):
+                raise Exception("duplicate promises.")
+            return_promises = await self._generate_promises(outputs)
+            return return_promises
+        else:
+            return []
+
     # Public methods
     def get_keyset(self, keyset_id: Optional[str] = None):
         keyset = self.keysets.keysets[keyset_id] if keyset_id else self.keyset
@@ -394,35 +432,49 @@ class Ledger:
 
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
-            amount = math.ceil(invoice_obj.amount_msat / 1000)
+            invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
             fees_msat = await self.check_fees(invoice)
-            assert total_provided >= amount + fees_msat / 1000, Exception(
+            assert total_provided >= invoice_amount + fees_msat / 1000, Exception(
                 "provided proofs not enough for Lightning payment."
             )
+
+            # promises to return for overpaid fees
+            return_promises: List[BlindedSignature] = []
 
             if LIGHTNING:
                 status, preimage, fee_msat = await self._pay_lightning_invoice(
                     invoice, fees_msat
                 )
             else:
-                status, preimage = True, "preimage"
+                status, preimage, fee_msat = True, "preimage", 0
+
             if status == True:
                 await self._invalidate_proofs(proofs)
-                # prepare change
+
+                # prepare change to compensate wallet for overpaid fees
+                assert fee_msat is not None, Exception("fees not valid")
+                if outputs:
+                    return_promises = await self._generate_change_promises(
+                        total_provided=total_provided,
+                        invoice_amount=invoice_amount,
+                        ln_fee_msat=fee_msat,
+                        outputs=outputs,
+                    )
+
         except Exception as e:
             raise e
         finally:
             # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
 
-        return status, preimage
+        return status, preimage, return_promises
 
     async def check_spendable(self, proofs: List[Proof]):
         """Checks if all provided proofs are valid and still spendable (i.e. have not been spent)."""
         return [self._check_spendable(p) for p in proofs]
 
     async def check_fees(self, pr: str):
-        """Returns the fees (in msat) required to pay this pr."""
+        """Returns the fees (in sat) required to pay this pr."""
         # hack: check if it's internal, if it exists, it will return paid = False,
         # if id does not exist (not internal), it returns paid = None
         if LIGHTNING:
@@ -434,7 +486,8 @@ class Ledger:
             amount = 0
             internal = True
         fees_msat = fee_reserve(amount * 1000, internal)
-        return fees_msat
+        fee_sat = math.ceil(fees_msat / 1000)
+        return fee_sat
 
     async def split(
         self,

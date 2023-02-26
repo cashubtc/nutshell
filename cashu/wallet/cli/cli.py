@@ -129,7 +129,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
     if not yes:
         click.confirm(
-            f"Pay {total_amount - fee_reserve_sat} sat ({total_amount} sat incl. fees)?",
+            f"Pay {total_amount - fee_reserve_sat} sat ({total_amount} sat with potential fees)?",
             abort=True,
             default=True,
         )
@@ -140,7 +140,8 @@ async def pay(ctx: Context, invoice: str, yes: bool):
         print("Error: Balance too low.")
         return
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)  # type: ignore
-    await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
+    await wallet.pay_lightning(send_proofs, invoice)
+    await wallet.load_proofs()
     wallet.status()
 
 
