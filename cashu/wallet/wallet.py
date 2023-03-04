@@ -59,20 +59,17 @@ from cashu.wallet.crud import (
 )
 
 
-class LedgerAPI:
-    keys: Dict[int, PublicKey]
-    keyset: str
-    tor: TorProxy
-    db: Database
+def async_set_requests(func):
+    """
+    Decorator that wraps around any async class method of LedgerAPI that makes
+    API calls. Sets some HTTP headers and starts a Tor instance if none is
+    already running and  and sets local proxy to use it.
+    """
 
-    def __init__(self, url):
-        self.url = url
-
-    def _set_requests(self):
-        s = requests.Session()
-        s.headers.update({"Client-version": VERSION})
+    async def wrapper(self, *args, **kwargs):
+        self.s.headers.update({"Client-version": VERSION})
         if DEBUG:
-            s.verify = False
+            self.s.verify = False
         socks_host, socks_port = None, None
         if TOR and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
@@ -86,9 +83,28 @@ class LedgerAPI:
                 "http": f"socks5://{socks_host}:{socks_port}",
                 "https": f"socks5://{socks_host}:{socks_port}",
             }
-            s.proxies.update(proxies)
-            s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
-        return s
+            self.s.proxies.update(proxies)
+            self.s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
+        return await func(self, *args, **kwargs)
+
+    return wrapper
+
+
+class LedgerAPI:
+    keys: Dict[int, PublicKey]
+    keyset: str
+    tor: TorProxy
+    db: Database
+    s: requests.Session
+
+    def __init__(self, url):
+        self.url = url
+        self.s = requests.Session()
+
+    @async_set_requests
+    async def _init_s(self):
+        """Dummy function that can be called from outside to use LedgerAPI.s"""
+        return
 
     def _construct_proofs(
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[str]
@@ -193,8 +209,8 @@ class LedgerAPI:
     ENDPOINTS
     """
 
+    @async_set_requests
     async def _get_keys(self, url: str):
-        self.s = self._set_requests()
         resp = self.s.get(
             url + "/keys",
         )
@@ -208,11 +224,11 @@ class LedgerAPI:
         keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
         return keyset
 
+    @async_set_requests
     async def _get_keyset(self, url: str, keyset_id: str):
         """
         keyset_id is base64, needs to be urlsafe-encoded.
         """
-        self.s = self._set_requests()
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = self.s.get(
             url + f"/keys/{keyset_id_urlsafe}",
@@ -227,8 +243,8 @@ class LedgerAPI:
         keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
         return keyset
 
+    @async_set_requests
     async def _get_keyset_ids(self, url: str):
-        self.s = self._set_requests()
         resp = self.s.get(
             url + "/keysets",
         )
@@ -238,9 +254,9 @@ class LedgerAPI:
         assert len(keysets.keysets), Exception("did not receive any keysets")
         return keysets.dict()
 
-    def request_mint(self, amount):
+    @async_set_requests
+    async def request_mint(self, amount):
         """Requests a mint from the server and returns Lightning invoice."""
-        self.s = self._set_requests()
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
         resp.raise_for_status()
         return_dict = resp.json()
@@ -248,13 +264,13 @@ class LedgerAPI:
         mint_response = GetMintResponse.parse_obj(return_dict)
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
+    @async_set_requests
     async def mint(self, amounts, payment_hash=None):
         """Mints new coins and returns a proof of promise."""
         secrets = [self._generate_secret() for s in range(len(amounts))]
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets)
         outputs_payload = PostMintRequest(outputs=outputs)
-        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
@@ -271,6 +287,7 @@ class LedgerAPI:
 
         return self._construct_proofs(promises, secrets, rs)
 
+    @async_set_requests
     async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
         """Consume proofs and create new promises based on amount split.
         If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
@@ -315,7 +332,6 @@ class LedgerAPI:
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
 
-        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/split",
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
@@ -336,6 +352,7 @@ class LedgerAPI:
 
         return frst_proofs, scnd_proofs
 
+    @async_set_requests
     async def check_spendable(self, proofs: List[Proof]):
         """
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
@@ -348,7 +365,6 @@ class LedgerAPI:
                 "proofs": {i: {"secret"} for i in range(len(proofs))},
             }
 
-        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/check",
             json=payload.dict(include=_check_spendable_include_fields(proofs)),  # type: ignore
@@ -359,10 +375,10 @@ class LedgerAPI:
         spendable = CheckSpendableResponse.parse_obj(return_dict)
         return spendable
 
+    @async_set_requests
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
-        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/checkfees",
             json=payload.dict(),
@@ -372,6 +388,7 @@ class LedgerAPI:
         self.raise_on_error(return_dict)
         return return_dict
 
+    @async_set_requests
     async def pay_lightning(self, proofs: List[Proof], invoice: str):
         """
         Accepts proofs and a lightning invoice to pay in exchange.
@@ -387,7 +404,6 @@ class LedgerAPI:
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
 
-        self.s = self._set_requests()
         resp = self.s.post(
             self.url + "/melt",
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
@@ -417,7 +433,7 @@ class Wallet(LedgerAPI):
         self.proofs = await get_proofs(db=self.db)
 
     async def request_mint(self, amount):
-        invoice = super().request_mint(amount)
+        invoice = await super().request_mint(amount)
         invoice.time_created = int(time.time())
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice

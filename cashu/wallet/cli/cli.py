@@ -5,7 +5,6 @@ import base64
 import json
 import os
 import sys
-import threading
 import time
 from datetime import datetime
 from functools import wraps
@@ -39,7 +38,6 @@ from cashu.nostr.nostr.client.client import NostrClient
 from cashu.tor.tor import TorProxy
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
-    get_keyset,
     get_lightning_invoices,
     get_reserved_proofs,
     get_unused_locks,
@@ -50,12 +48,11 @@ from .cli_helpers import (
     get_mint_wallet,
     print_mint_balances,
     proofs_to_serialized_tokenv2,
-    receive_nostr,
     redeem_multimint,
-    send_nostr,
     token_from_lnbits_link,
     verify_mints,
 )
+from .nostr import receive_nostr, send_nostr
 
 
 async def init_wallet(wallet: Wallet):
@@ -142,7 +139,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     if wallet.available_balance < amount:
         print("Error: Balance too low.")
         return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, amount)  # type: ignore
     await wallet.pay_lightning(send_proofs, invoice)
     wallet.status()
 
@@ -273,10 +270,12 @@ async def send(ctx: Context, amount: int, lock: str, legacy: bool):
 
 @cli.command("send", help="Send tokens.")
 @click.argument("amount", type=int)
+@click.argument("nostr", type=str, required=False)
 @click.option(
     "--nostr",
     "-n",
-    help="Send to nostr pubkey",
+    "nopt",
+    help="Send to nostr pubkey.",
     type=str,
 )
 @click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
@@ -305,15 +304,16 @@ async def send_command(
     ctx,
     amount: int,
     nostr: str,
+    nopt: str,
     lock: str,
     legacy: bool,
     verbose: bool,
     yes: bool,
 ):
-    if nostr is None:
+    if not nostr and not nopt:
         await send(ctx, amount, lock, legacy)
     else:
-        await send_nostr(ctx, amount, nostr, verbose, yes)
+        await send_nostr(ctx, amount, nostr or nopt, verbose, yes)
 
 
 async def receive(ctx: Context, token: str, lock: str):
@@ -609,8 +609,8 @@ async def info(ctx: Context):
     if TOR:
         print(f"Tor enabled: {TOR}")
     if NOSTR_PRIVATE_KEY:
-        client = NostrClient(privatekey_hex=NOSTR_PRIVATE_KEY, connect=False)
-        print(f"Nostr public key: {client.public_key.hex()}")
+        client = NostrClient(private_key=NOSTR_PRIVATE_KEY, connect=False)
+        print(f"Nostr public key: {client.public_key.bech32()}")
         print(f"Nostr relays: {NOSTR_RELAYS}")
     if SOCKS_HOST:
         print(f"Socks proxy: {SOCKS_HOST}:{SOCKS_PORT}")

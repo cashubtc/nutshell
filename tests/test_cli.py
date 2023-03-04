@@ -1,13 +1,12 @@
 import asyncio
 
-import click
 import pytest
 from click.testing import CliRunner
 
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import VERSION
 from cashu.wallet import migrations
-from cashu.wallet.cli import cli
+from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT, mint
 
@@ -117,7 +116,6 @@ def test_receive_tokenv1(mint):
     print(result.output)
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio()
 def test_nostr_send(mint):
     runner = CliRunner()

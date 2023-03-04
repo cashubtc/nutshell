@@ -1,9 +1,5 @@
-"""
-Implementation of https://gist.github.com/phyro/935badc682057f418842c72961cf096c
-"""
-
 import math
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
 from loguru import logger
 
@@ -24,6 +20,7 @@ from cashu.core.script import verify_script
 from cashu.core.secp import PublicKey
 from cashu.core.settings import LIGHTNING, MAX_ORDER, VERSION
 from cashu.core.split import amount_split
+from cashu.lightning.base import Wallet
 from cashu.mint.crud import LedgerCrud
 
 # from starlette_context import context
@@ -34,9 +31,9 @@ class Ledger:
         self,
         db: Database,
         seed: str,
+        lightning: Wallet,
         derivation_path="",
         crud=LedgerCrud,
-        lightning=None,
     ):
         self.proofs_used: Set[str] = set()
         self.master_key = seed
@@ -66,7 +63,8 @@ class Ledger:
             await self.crud.store_keyset(keyset=keyset, db=self.db)
 
         # store the new keyset in the current keysets
-        self.keysets.keysets[keyset.id] = keyset
+        if keyset.id:
+            self.keysets.keysets[keyset.id] = keyset
         return keyset
 
     async def init_keysets(self, autosave=True):
@@ -83,7 +81,7 @@ class Ledger:
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
 
     async def _generate_promises(
-        self, B_s: List[BlindedMessage], keyset: MintKeyset = None
+        self, B_s: List[BlindedMessage], keyset: Optional[MintKeyset] = None
     ):
         """Generates promises that sum to the given amount."""
         return [
@@ -94,7 +92,7 @@ class Ledger:
         ]
 
     async def _generate_promise(
-        self, amount: int, B_: PublicKey, keyset: MintKeyset = None
+        self, amount: int, B_: PublicKey, keyset: Optional[MintKeyset] = None
     ):
         """Generates a promise for given amount and returns a pair (amount, C')."""
         keyset = keyset if keyset else self.keyset
@@ -265,7 +263,7 @@ class Ledger:
             )
             raise e
 
-    async def _pay_lightning_invoice(self, invoice: str, fees_msat: int):
+    async def _pay_lightning_invoice(self, invoice: str, fee_limit_msat: int):
         """Returns an invoice from the Lightning backend."""
         error, _ = await self.lightning.status()
         if error:
@@ -276,7 +274,7 @@ class Ledger:
             fee_msat,
             preimage,
             error_message,
-        ) = await self.lightning.pay_invoice(invoice, fee_limit_msat=fees_msat)
+        ) = await self.lightning.pay_invoice(invoice, fee_limit_msat=fee_limit_msat)
         return ok, preimage
 
     async def _invalidate_proofs(self, proofs: List[Proof]):
@@ -339,13 +337,17 @@ class Ledger:
             raise Exception("could not verify proofs.")
 
     # Public methods
-    def get_keyset(self, keyset_id: str = None):
+    def get_keyset(self, keyset_id: Optional[str] = None):
         keyset = self.keysets.keysets[keyset_id] if keyset_id else self.keyset
+        assert keyset.public_keys, Exception("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
     async def request_mint(self, amount):
         """Returns Lightning invoice and stores it in the db."""
         payment_request, checking_id = await self._request_lightning_invoice(amount)
+        assert payment_request, Exception(
+            "could not fetch invoice from Lightning backend"
+        )
         invoice = Invoice(
             amount=amount, pr=payment_request, hash=checking_id, issued=False
         )
@@ -358,7 +360,7 @@ class Ledger:
         self,
         B_s: List[BlindedMessage],
         payment_hash=None,
-        keyset: MintKeyset = None,
+        keyset: Optional[MintKeyset] = None,
     ):
         """Mints a promise for coins for B_."""
         amounts = [b.amount for b in B_s]
@@ -434,7 +436,7 @@ class Ledger:
         proofs: List[Proof],
         amount: int,
         outputs: List[BlindedMessage],
-        keyset: MintKeyset = None,
+        keyset: Optional[MintKeyset] = None,
     ):
         """Consumes proofs and prepares new promises based on the amount split."""
 

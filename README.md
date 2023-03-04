@@ -26,7 +26,7 @@ Cashu is an Ecash implementation based on David Wagner's variant of Chaumian bli
 - PostgreSQL and SQLite database support
 - Builtin Tor for hiding IPs for wallet and mint interactions
 - Multimint wallet for tokens from different mints
-- Send tokens to nostr pubkeys
+- Send and receive tokens on nostr
 
 ## Cashu client protocol
 There are ongoing efforts to implement alternative Cashu clients that use the same protocol. If you are interested in helping with Cashu development, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts). 
@@ -115,7 +115,7 @@ cashu info
 
 Returns:
 ```bash
-Version: 0.9.0
+Version: 0.9.3
 Debug: False
 Cashu dir: /home/user/.cashu
 Wallet: wallet
