@@ -190,6 +190,22 @@ async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_invalidate_unspent_proofs(wallet1: Wallet):
+    """Try to invalidate proofs that have not been spent yet. Should not work!"""
+    await wallet1.mint(64)
+    await wallet1.invalidate(wallet1.proofs)
+    assert wallet1.balance == 64
+
+
+@pytest.mark.asyncio
+async def test_invalidate_unspent_proofs_without_checking(wallet1: Wallet):
+    """Try to invalidate proofs that have not been spent yet but force no check."""
+    await wallet1.mint(64)
+    await wallet1.invalidate(wallet1.proofs, check_spendable=False)
+    assert wallet1.balance == 0
+
+
+@pytest.mark.asyncio
 async def test_split_invalid_amount(wallet1: Wallet):
     await wallet1.mint(64)
     await assert_err(
