@@ -1,5 +1,5 @@
 import math
-from typing import Dict, List, Optional, Set, Literal
+from typing import Dict, List, Optional, Set, Literal, Union
 
 from loguru import logger
 
@@ -286,7 +286,7 @@ class Ledger:
         Returns:
             bool: True if invoice has been paid, else False
         """
-        invoice: Invoice = await self.crud.get_lightning_invoice(
+        invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
             hash=payment_hash, db=self.db
         )
         if invoice is None:
