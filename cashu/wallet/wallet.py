@@ -42,7 +42,7 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG, SOCKS_HOST, SOCKS_PORT, TOR, VERSION
+from cashu.core.settings import DEBUG, MAX_ORDER, SOCKS_HOST, SOCKS_PORT, TOR, VERSION
 from cashu.core.split import amount_split
 from cashu.tor.tor import TorProxy
 from cashu.wallet.crud import (
@@ -110,7 +110,7 @@ class LedgerAPI:
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[str]
     ):
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
-        proofs = []
+        proofs: List[Proof] = []
         for promise, secret, r in zip(promises, secrets, rs):
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(C_, r, self.keys[promise.amount])
@@ -439,8 +439,49 @@ class Wallet(LedgerAPI):
         return invoice
 
     async def mint(self, amount: int, payment_hash: Optional[str] = None):
+        """Mint tokens of a specific amount after an invoice has been paid.
+
+        Args:
+            amount (int): Total amount of tokens to be minted
+            payment_hash (Optional[str], optional): Hash of the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+
+        Raises:
+            Exception: Raises exception if no proofs have been provided
+
+        Returns:
+            List[Proof]: Newly minted proofs.
+        """
         split = amount_split(amount)
         proofs = await super().mint(split, payment_hash)
+        if proofs == []:
+            raise Exception("received no proofs.")
+        await self._store_proofs(proofs)
+        if payment_hash:
+            await update_lightning_invoice(
+                db=self.db, hash=payment_hash, paid=True, time_paid=int(time.time())
+            )
+        self.proofs += proofs
+        return proofs
+
+    async def mint_amounts(
+        self, amounts: List[int], payment_hash: Optional[str] = None
+    ):
+        """Similar to wallet.mint() but accepts a predefined list of amount to be minted.
+
+        Args:
+            amounts (List[int]): List of amounts requested
+            payment_hash (Optional[str], optional): Hash of the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+
+        Raises:
+            Exception: Newly minted proofs.
+
+        Returns:
+            List[Proof]: Newly minted proofs.
+        """
+        for amount in amounts:
+            if amount not in [2**i for i in range(MAX_ORDER)]:
+                raise Exception(f"Can only mint amounts with 2^n up to {2**MAX_ORDER}.")
+        proofs = await super().mint(amounts, payment_hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
@@ -704,10 +745,12 @@ class Wallet(LedgerAPI):
     def available_balance(self):
         return sum_proofs([p for p in self.proofs if not p.reserved])
 
+    @property
+    def proof_amounts(self):
+        """Returns a sorted list of amounts of all proofs"""
+        return [p.amount for p in sorted(self.proofs, key=lambda p: p.amount)]
+
     def status(self):
-        # print(
-        #     f"Balance: {self.balance} sat (available: {self.available_balance} sat in {len([p for p in self.proofs if not p.reserved])} tokens)"
-        # )
         print(f"Balance: {self.available_balance} sat")
 
     def balance_per_keyset(self):
@@ -729,6 +772,3 @@ class Wallet(LedgerAPI):
             for key, proofs in balances.items()
         }
         return dict(sorted(balances_return.items(), key=lambda item: item[1]["available"], reverse=True))  # type: ignore
-
-    def proof_amounts(self):
-        return [p["amount"] for p in sorted(self.proofs, key=lambda p: p["amount"])]
