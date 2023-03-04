@@ -664,17 +664,27 @@ class Wallet(LedgerAPI):
                 proof, reserved=reserved, send_id=uuid_str, db=self.db
             )
 
-    async def invalidate(self, proofs):
-        """Invalidates all spendable tokens supplied in proofs."""
-        spendables = await self.check_spendable(proofs)
-        invalidated_proofs = []
-        for i, spendable in enumerate(spendables.spendable):
-            if not spendable:
-                invalidated_proofs.append(proofs[i])
-                await invalidate_proof(proofs[i], db=self.db)
-        invalidate_secrets = [p["secret"] for p in invalidated_proofs]
+    async def invalidate(self, proofs: List[Proof], check_spendable=True):
+        """Invalidates all spendable tokens supplied in proofs.
+
+        Args:
+            proofs (List[Proof]): Which proofs to delete
+            check_spendable (bool, optional): Asks the mint to check whether proofs are already spent before deleting them. Defaults to True.
+        """
+        invalidated_proofs: List[Proof] = []
+        if check_spendable:
+            spendables = await self.check_spendable(proofs)
+            for i, spendable in enumerate(spendables.spendable):
+                if not spendable:
+                    invalidated_proofs.append(proofs[i])
+        else:
+            invalidated_proofs = proofs
+
+        for p in invalidated_proofs:
+            await invalidate_proof(p, db=self.db)
+        invalidate_secrets = [p.secret for p in invalidated_proofs]
         self.proofs = list(
-            filter(lambda p: p["secret"] not in invalidate_secrets, self.proofs)
+            filter(lambda p: p.secret not in invalidate_secrets, self.proofs)
         )
 
     # ---------- TRANSACTION HELPERS ----------
