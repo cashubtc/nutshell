@@ -42,7 +42,7 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG, SOCKS_HOST, SOCKS_PORT, TOR, VERSION, MAX_ORDER
+from cashu.core.settings import DEBUG, MAX_ORDER, SOCKS_HOST, SOCKS_PORT, TOR, VERSION
 from cashu.core.split import amount_split
 from cashu.tor.tor import TorProxy
 from cashu.wallet.crud import (
