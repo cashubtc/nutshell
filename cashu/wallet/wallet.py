@@ -157,6 +157,10 @@ class LedgerAPI:
             await store_keyset(keyset=keyset, db=self.db)
 
         self.keys = keyset
+        assert self.keys.public_keys
+        self.public_keys = self.keys.public_keys
+        assert self.keys.id
+        self.keyset_id = self.keys.id
         logger.debug(f"Current mint keyset: {self.keys.id}")
         return self.keys
 
@@ -183,11 +187,6 @@ class LedgerAPI:
 
         if keyset_id:
             assert keyset_id in self.keysets, f"keyset {keyset_id} not active on mint"
-
-        assert self.keys.public_keys
-        self.public_keys = self.keys.public_keys
-        assert self.keys.id
-        self.keyset_id = self.keys.id
 
     @staticmethod
     def _construct_outputs(amounts: List[int], secrets: List[str]):
