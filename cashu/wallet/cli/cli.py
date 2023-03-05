@@ -93,10 +93,6 @@ def cli(ctx: Context, host: str, walletname: str):
         error_str += f'\n\nYou can turn off Tor with this command: echo "TOR=FALSE" >> {env_path}'
         raise Exception(error_str)
 
-    # configure logger
-    logger.remove()
-    logger.add(sys.stderr, level="DEBUG" if DEBUG else "INFO")
-
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
