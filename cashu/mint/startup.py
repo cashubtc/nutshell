@@ -7,13 +7,13 @@ from loguru import logger
 
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import CASHU_DIR, LIGHTNING, MINT_PRIVATE_KEY
+from cashu.core.settings import CASHU_DIR, LIGHTNING, MINT_DATABASE, MINT_PRIVATE_KEY
 from cashu.lightning.lnbits import LNbitsWallet  # type: ignore
 from cashu.mint import migrations
 from cashu.mint.ledger import Ledger
 
 ledger = Ledger(
-    db=Database("mint", "data/mint"),
+    db=Database("mint", MINT_DATABASE),
     seed=MINT_PRIVATE_KEY,
     derivation_path="0/0/0/0",
     lightning=LNbitsWallet(),
