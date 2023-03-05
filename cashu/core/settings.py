@@ -68,4 +68,4 @@ NOSTR_RELAYS = env.list(
 )
 
 MAX_ORDER = 64
-VERSION = "0.9.4"
+VERSION = "0.9.5"
