@@ -43,16 +43,19 @@ async def keys() -> KeysResponse:
     name="Keyset public keys",
     summary="Public keys of a specific keyset",
 )
-async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
+async def keyset_keys(idBase64Urlsafe: str) -> Union[KeysResponse, CashuError]:
     """
     Get the public keys of the mint from a specific keyset id.
     The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
     normal base64 before it can be processed (by the mint).
     """
-    id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
-    keyset = ledger.get_keyset(keyset_id=id)
-    keys = KeysResponse.parse_obj(keyset)
-    return keys
+    try:
+        id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
+        keyset = ledger.get_keyset(keyset_id=id)
+        keys = KeysResponse.parse_obj(keyset)
+        return keys
+    except Exception as exc:
+        return CashuError(code=0, error=str(exc))
 
 
 @router.get(

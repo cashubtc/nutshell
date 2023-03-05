@@ -338,6 +338,8 @@ class Ledger:
 
     # Public methods
     def get_keyset(self, keyset_id: Optional[str] = None):
+        if keyset_id and keyset_id not in self.keysets.keysets:
+            raise Exception("keyset does not exist")
         keyset = self.keysets.keysets[keyset_id] if keyset_id else self.keyset
         assert keyset.public_keys, Exception("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
