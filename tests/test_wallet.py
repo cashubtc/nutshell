@@ -50,7 +50,8 @@ async def wallet2(mint):
 
 @pytest.mark.asyncio
 async def test_get_keys(wallet1: Wallet):
-    assert len(wallet1.keys) == MAX_ORDER
+    assert wallet1.keys.public_keys
+    assert len(wallet1.keys.public_keys) == MAX_ORDER
     keyset = await wallet1._get_keys(wallet1.url)
     assert keyset.id is not None
     assert type(keyset.id) == str
@@ -59,24 +60,32 @@ async def test_get_keys(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_get_keyset(wallet1: Wallet):
-    assert len(wallet1.keys) == MAX_ORDER
-    # ket's get the keys first so we can get a keyset ID that we use later
+    assert wallet1.keys.public_keys
+    assert len(wallet1.keys.public_keys) == MAX_ORDER
+    # let's get the keys first so we can get a keyset ID that we use later
     keys1 = await wallet1._get_keys(wallet1.url)
     # gets the keys of a specific keyset
     assert keys1.id is not None
     assert keys1.public_keys is not None
-    keys2 = await wallet1._get_keyset(wallet1.url, keys1.id)
+    keys2 = await wallet1._get_keys_of_keyset(wallet1.url, keys1.id)
     assert keys2.public_keys is not None
     assert len(keys1.public_keys) == len(keys2.public_keys)
 
 
 @pytest.mark.asyncio
+async def test_get_nonexistent_keyset(wallet1: Wallet):
+    await assert_err(
+        wallet1._get_keys_of_keyset(wallet1.url, "nonexistent"),
+        "Mint Error: keyset does not exist",
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_keyset_ids(wallet1: Wallet):
     keyset = await wallet1._get_keyset_ids(wallet1.url)
-    assert type(keyset) == dict
-    assert type(keyset["keysets"]) == list
-    assert len(keyset["keysets"]) > 0
-    assert keyset["keysets"][-1] == wallet1.keyset_id
+    assert type(keyset) == list
+    assert len(keyset) > 0
+    assert keyset[-1] == wallet1.keyset_id
 
 
 @pytest.mark.asyncio
