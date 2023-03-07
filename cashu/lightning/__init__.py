@@ -1,3 +1,3 @@
-# from cashu.lightning.lnbits import LNbitsWallet
-
-# WALLET = LNbitsWallet()
+# type: ignore
+from .fake import FakeWallet
+from .lnbits import LNbitsWallet
