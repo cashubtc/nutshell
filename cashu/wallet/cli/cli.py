@@ -8,7 +8,7 @@ import sys
 import time
 from datetime import datetime
 from functools import wraps
-from itertools import groupby
+from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
@@ -456,16 +456,20 @@ async def burn(ctx: Context, token: str, all: bool, force: bool):
     help="Print legacy token without mint information.",
     type=bool,
 )
+@click.option("--number", "-n", default=None, help='Show only n pending tokens.', type=int)
+@click.option("--offset", default=0, help='Show pending tokens only starting from offset.', type=int)
 @click.pass_context
 @coro
-async def pending(ctx: Context, legacy):
+async def pending(ctx: Context, legacy, number: int, offset: int):
     wallet: Wallet = ctx.obj["WALLET"]
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print(f"--------------------------\n")
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))  # type: ignore
-        for i, (key, value) in enumerate(
-            groupby(sorted_proofs, key=itemgetter("send_id"))
+        if number:
+            number += offset
+        for i, (key, value) in islice(enumerate(
+            groupby(sorted_proofs, key=itemgetter("send_id"),)), offset, number
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
