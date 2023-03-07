@@ -1,3 +1,2 @@
-# from cashu.lightning.lnbits import LNbitsWallet
-
-# WALLET = LNbitsWallet()
+from .lnbits import LNbitsWallet
+from .fake import FakeWallet

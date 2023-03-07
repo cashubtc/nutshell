@@ -4,8 +4,6 @@ import random
 from datetime import datetime
 from typing import AsyncGenerator, Dict, Optional, Set
 
-from loguru import logger
-
 from cashu.core.bolt11 import Invoice, decode, encode
 
 from .base import (
@@ -18,6 +16,8 @@ from .base import (
 
 
 class FakeWallet(Wallet):
+    """https://github.com/lnbits/lnbits"""
+
     queue: asyncio.Queue = asyncio.Queue(0)
     paid_invoices: Set[str] = set()
     secret: str = "FAKEWALLET SECRET"
@@ -30,10 +30,7 @@ class FakeWallet(Wallet):
     ).hex()
 
     async def status(self) -> StatusResponse:
-        logger.info(
-            "FakeWallet funding source is for using LNbits as a centralised, stand-alone payment system with brrrrrr."
-        )
-        return StatusResponse(None, 1000000000)
+        return StatusResponse(None, 1337)
 
     async def create_invoice(
         self,
