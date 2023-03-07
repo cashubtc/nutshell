@@ -1,16 +1,16 @@
-# cashu  
+# Cashu Nutshell
 
-**Cashu is a Chaumian Ecash wallet and mint for Bitcoin Lightning.**
+**Cashu is a Chaumian Ecash wallet and mint for Bitcoin Lightning. Cashu Nutshell is the reference implementation in Python**
 
 <a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a> <a href="https://pepy.tech/project/cashu"> <img alt="Downloads" src="https://pepy.tech/badge/cashu"></a> <a href="https://app.codecov.io/gh/cashubtc/cashu"><img alt="Coverage" src="https://img.shields.io/codecov/c/gh/cashubtc/cashu"></a>
 
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
 
-Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding ([protocol specs](https://github.com/cashubtc/nuts)). Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
+Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding ([protocol specs](https://github.com/cashubtc/nuts)). Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics in Cashu Nutshell and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
 
 <p align="center">
-<a href="#cashu-client-protocol">Cashu client protocol</a> ·
+<a href="#cashu-client-protocol">Cashu protocol</a> ·
 <a href="#easy-install">Quick Install</a> ·
 <a href="#hard-install-poetry">Manual install</a> ·
 <a href="#configuration">Configuration</a> ·
@@ -18,7 +18,7 @@ Cashu is an Ecash implementation based on David Wagner's variant of Chaumian bli
 <a href="#running-a-mint">Run a mint</a>
 </p>
 
-### Feature overview
+### Feature overview of Nutshell
 
 - Full Bitcoin Lightning support
 - Standalone CLI wallet and mint server
@@ -28,8 +28,8 @@ Cashu is an Ecash implementation based on David Wagner's variant of Chaumian bli
 - Multimint wallet for tokens from different mints
 - Send and receive tokens on nostr
 
-## Cashu client protocol
-There are ongoing efforts to implement alternative Cashu clients that use the same protocol. If you are interested in helping with Cashu development, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts). 
+## The Cashu protocol
+There are ongoing efforts to implement alternative Cashu clients that use the same protocol. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in helping with Cashu development, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts). 
 
 ## Easy Install
 
@@ -177,3 +177,19 @@ python -m cashu.mint
 
 You can turn off Lightning support and mint as many tokens as you like by setting `LIGHTNING=FALSE` in the `.env` file.
 
+
+# Running tests
+To run the tests in this repository, first install the dev dependencies with 
+```bash
+poetry install --with dev
+```
+
+Then, make sure to set up your `.env` file to use your local mint and disable Lightning and Tor:
+```bash
+LIGHTNING=FALSE
+TOR=FALSE
+```
+You can run the tests with
+```bash
+poetry run pytest tests
+```
