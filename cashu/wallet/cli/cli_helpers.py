@@ -8,7 +8,7 @@ from loguru import logger
 
 from cashu.core.base import Proof, TokenV2, TokenV2Mint, WalletKeyset
 from cashu.core.helpers import sum_proofs
-from cashu.core.settings import CASHU_DIR, MINT_URL, NOSTR_PRIVATE_KEY, NOSTR_RELAYS
+from cashu.core.settings import settings
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
 
@@ -32,7 +32,7 @@ async def verify_mints(ctx: Context, token: TokenV2):
         for keyset in set([id for id in mint.ids if id in proofs_keysets]):
             # init a temporary wallet object
             keyset_wallet = Wallet(
-                mint.url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
+                mint.url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"])
             )
             # make sure that this mint supports this keyset
             mint_keysets = await keyset_wallet._get_keyset_ids(mint.url)
@@ -81,7 +81,7 @@ async def redeem_multimint(ctx: Context, token: TokenV2, script, signature):
             logger.debug(f"Redeeming tokens from keyset {keyset}")
             # init a temporary wallet object
             keyset_wallet = Wallet(
-                mint.url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"])
+                mint.url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"])
             )
 
             # load the keys
@@ -147,7 +147,9 @@ async def get_mint_wallet(ctx: Context):
     mint_url = list(mint_balances.keys())[mint_nr - 1]
 
     # load this mint_url into a wallet
-    mint_wallet = Wallet(mint_url, os.path.join(CASHU_DIR, ctx.obj["WALLET_NAME"]))
+    mint_wallet = Wallet(
+        mint_url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"])
+    )
     mint_keysets: WalletKeyset = await get_keyset(mint_url=mint_url, db=mint_wallet.db)  # type: ignore
 
     # load the keys
@@ -196,7 +198,8 @@ async def proofs_to_serialized_tokenv2(wallet, proofs: List[Proof], url: str):
         url = ks.mint_url if ks and ks.mint_url else ""
 
     url = url or (
-        input(f"Enter mint URL (press enter for default {MINT_URL}): ") or MINT_URL
+        input(f"Enter mint URL (press enter for default {settings.mint_url}): ")
+        or settings.mint_url
     )
 
     token.mints.append(TokenV2Mint(url=url, ids=keysets))

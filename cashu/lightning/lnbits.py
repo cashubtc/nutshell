@@ -3,7 +3,7 @@ from typing import Dict, Optional
 
 import requests
 
-from cashu.core.settings import DEBUG, LNBITS_ENDPOINT, LNBITS_KEY
+from cashu.core.settings import settings
 
 from .base import (
     InvoiceResponse,
@@ -18,14 +18,14 @@ class LNbitsWallet(Wallet):
     """https://github.com/lnbits/lnbits"""
 
     def __init__(self):
-        self.endpoint = LNBITS_ENDPOINT
+        self.endpoint = settings.mint_lnbits_endpoint
 
-        key = LNBITS_KEY
+        key = settings.mint_lnbits_key
         self.key = {"X-Api-Key": key}
         self.s = requests.Session()
         self.s.auth = ("user", "pass")
         self.s.headers.update({"X-Api-Key": key})
-        self.s.verify = not DEBUG
+        self.s.verify = not settings.debug
 
     async def status(self) -> StatusResponse:
         try:
