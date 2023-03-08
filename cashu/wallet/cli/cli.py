@@ -387,7 +387,9 @@ async def receive(ctx: Context, token: str, lock: str):
 @click.option(
     "--nostr", "-n", default=False, is_flag=True, help="Receive tokens via nostr."
 )
-@click.option("--all", "-a", default=False, is_flag=True, help="Receive all pending tokens.")
+@click.option(
+    "--all", "-a", default=False, is_flag=True, help="Receive all pending tokens."
+)
 @click.option(
     "--verbose",
     "-v",
@@ -398,7 +400,9 @@ async def receive(ctx: Context, token: str, lock: str):
 )
 @click.pass_context
 @coro
-async def receive_cli(ctx: Context, token: str, lock: str, nostr: bool, all: bool, verbose: bool):
+async def receive_cli(
+    ctx: Context, token: str, lock: str, nostr: bool, all: bool, verbose: bool
+):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()
     if token:
@@ -455,8 +459,15 @@ async def burn(ctx: Context, token: str, all: bool, force: bool):
     help="Print legacy token without mint information.",
     type=bool,
 )
-@click.option("--number", "-n", default=None, help='Show only n pending tokens.', type=int)
-@click.option("--offset", default=0, help='Show pending tokens only starting from offset.', type=int)
+@click.option(
+    "--number", "-n", default=None, help="Show only n pending tokens.", type=int
+)
+@click.option(
+    "--offset",
+    default=0,
+    help="Show pending tokens only starting from offset.",
+    type=int,
+)
 @click.pass_context
 @coro
 async def pending(ctx: Context, legacy, number: int, offset: int):
@@ -467,8 +478,15 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))  # type: ignore
         if number:
             number += offset
-        for i, (key, value) in islice(enumerate(
-            groupby(sorted_proofs, key=itemgetter("send_id"),)), offset, number
+        for i, (key, value) in islice(
+            enumerate(
+                groupby(
+                    sorted_proofs,
+                    key=itemgetter("send_id"),
+                )
+            ),
+            offset,
+            number,
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)

@@ -516,7 +516,9 @@ class Wallet(LedgerAPI):
         """
         for amount in amounts:
             if amount not in [2**i for i in range(settings.max_order)]:
-                raise Exception(f"Can only mint amounts with 2^n up to {2**settings.max_order}.")
+                raise Exception(
+                    f"Can only mint amounts with 2^n up to {2**settings.max_order}."
+                )
         proofs = await super().mint(amounts, payment_hash)
         if proofs == []:
             raise Exception("received no proofs.")
