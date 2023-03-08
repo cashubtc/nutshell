@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Union, List
+from typing import List, Union
 
 from environs import Env  # type: ignore
 
