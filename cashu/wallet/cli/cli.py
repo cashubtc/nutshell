@@ -396,6 +396,7 @@ async def receive(ctx: Context, token: str, lock: str):
 @click.option(
     "--nostr", "-n", default=False, is_flag=True, help="Receive tokens via nostr."
 )
+@click.option("--all", "-a", default=False, is_flag=True, help="Receive all pending tokens.")
 @click.option(
     "--verbose",
     "-v",
@@ -406,15 +407,22 @@ async def receive(ctx: Context, token: str, lock: str):
 )
 @click.pass_context
 @coro
-async def receive_cli(ctx: Context, token: str, lock: str, nostr: bool, verbose: bool):
+async def receive_cli(ctx: Context, token: str, lock: str, nostr: bool, all: bool, verbose: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()
     if token:
         await receive(ctx, token, lock)
     elif nostr:
         await receive_nostr(ctx, verbose)
+    elif all:
+        reserved_proofs = await get_reserved_proofs(wallet.db)
+        if len(reserved_proofs):
+            for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):
+                proofs = list(value)
+                token = await wallet.serialize_proofs(proofs)
+                await receive(ctx, token, lock)
     else:
-        print("Error: enter token or use the flag --nostr.")
+        print("Error: enter token or use either flag --nostr or --all.")
 
 
 @cli.command("burn", help="Burn spent tokens.")
