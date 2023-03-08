@@ -1,0 +1,220 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    // {
+    //   "name": "Python: Attach using Process Id",
+    //   "type": "python",
+    //   "request": "attach",
+    //   "processId": "${command:pickProcess}",
+    //   "justMyCode": true
+    // },
+    // {
+    //   "name": "Python: Current File",
+    //   "type": "python",
+    //   "request": "launch",
+    //   "program": "${file}",
+    //   "console": "integratedTerminal"
+    // },
+    // {
+    //   "name": "Wallet balance",
+    //   "type": "python",
+    //   "request": "launch",
+    //   "cwd": "${workspaceFolder}",
+    //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    //   "args": ["balance"],
+    //   "console": "integratedTerminal",
+    //   "justMyCode": true
+    // },
+    // // {
+    // //   "name": "Wallet info",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": ["info"],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet send",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": ["send", "10"],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet send to P2SH",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": [
+    // //     "send",
+    // //     "10",
+    // //     "-l",
+    // //     "P2SH:3H7PCxRD3kuSD4GuayPfvVamw3Te324Qr5+${lineNumber}"
+    // //   ],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet send with secret",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": ["send", "8", "-s", "${lineNumber}"],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet invoice",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": ["invoice", "420"],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet burn",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": [
+    // //     "burn",
+    // //     "W3siaWQiOiAiRFNBbDludnZ5ZnZhIiwgImFtb3VudCI6IDIsICJzZWNyZXQiOiAiUjFJOEg1SV8xZERMbjVoOE5sbG1jQSIsICJDIjogIjAyNjU5ZmUwZDYxZjdhYTAxNGM3YjE1NGEzMWJmODNhNzAyOGE4ZjE0NzMwYWQzMDFkN2E4ZTdiNTkyNTZhZjdiZCJ9LCB7ImlkIjogIkRTQWw5bnZ2eWZ2YSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogIk9kMTl0NUpzWlJwZGRXVUJCbUJFNmciLCAiQyI6ICIwM2E2OTlmMzVlNmFhOGMyMjU5MjdlNDhjNjUzYTZlZjhlMzRkZjhjMjZiNTc2ZWQzMzQ1YTA1NjIxN2UyNTZmYWUifV0="
+    // //   ],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet burn all",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": ["burn", "-a"],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet pay invoice",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": [
+    // //     "pay",
+    // //     "lnbc120n1p3jfmeypp5ah359mcs8d8ztysz6pezewmttwekq9zquf0r0j3keycsg94jphpqdq2f38xy6t5wvyj3wgvrxn38um5esnqs7dkracc636qhrj9lmj6knjedstar3d0hh5l0pmd8yrfhvd927anj98dlc4qpevkunemlhdn07ywkgfq2gf8qprftlf4"
+    // //   ],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet pending",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": ["pending"],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet receive LNbits URL",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": [
+    // //     "receive",
+    // //     "https://legend.lnbits.com/cashu/wallet?mint_id=GsAL2UKczDnkS5SWW65GZE&recv_token=W3siaWQiOiJLRDZBSlZFNDdTNXMiLCJhbW91bnQiOjEsIkMiOiIwMjc3Y2FjMWY5NGY1OWFkN2RhYmFkNDFmMTM1NzMzZWMzOTU3MzE1MjNlNzE1NmQzMzRiODYwYmEwM2Y3ZGExNjEiLCJzZWNyZXQiOiJqQ1puQzlFMHZqNnBJYnJwWVg5R0RiU3FvRzNqUnBiWlZHKzJpeFYyejNNPSJ9XQ=="
+    // //   ],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // {
+    // //   "name": "Wallet receive P2SH",
+    // //   "type": "python",
+    // //   "request": "launch",
+    // //   "cwd": "${workspaceFolder}",
+    // //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    // //   "args": [
+    // //     "receive",
+    // //     "W3siYW1vdW50IjogMiwgIkMiOiAiMDI5MGVkMTA5NWJlNzg0YjdhZWVhODNjNjU2ZjNkOGIwMDk4YWJlNmM2ZTczZjc0MDZmOTk3NjA1ZjBmYWU1NGZhIn0sIHsiYW1vdW50IjogOCwgIkMiOiAiMDJiYWM4OWQ0MDM0ZGFiYjc1YjQ5NmZjN2I3ZTE0ZDY1MjYwYWViOGU2NzA5MzM5MDVlYzQwNGY2N2QwZWFmYjM1In1d",
+    // //     "--script",
+    // //     "IQPtNsiN5bDaIBfoVv4Qc6vTG1vKf-57liqe8c9LzoCmeaw=",
+    // //     "--signature",
+    // //     "RzBEAiBN1ytORlRDxi6Q-CxbdAv8NLubftniMt2BSppIDDGcXgIgFVzOPJRT-iNRtpMLsiDUhrYqZMkjpSgesg6twvru9DoBIyED7TbIjeWw2iAX6Fb-EHOr0xtbyn_ue5YqnvHPS86Apnms"
+    // //   ],
+    // //   "console": "integratedTerminal",
+    // //   "justMyCode": true
+    // // },
+    // // receive W3siYW1vdW50IjogMiwgIkMiOiAiMDI5MGVkMTA5NWJlNzg0YjdhZWVhODNjNjU2ZjNkOGIwMDk4YWJlNmM2ZTczZjc0MDZmOTk3NjA1ZjBmYWU1NGZhIn0sIHsiYW1vdW50IjogOCwgIkMiOiAiMDJiYWM4OWQ0MDM0ZGFiYjc1YjQ5NmZjN2I3ZTE0ZDY1MjYwYWViOGU2NzA5MzM5MDVlYzQwNGY2N2QwZWFmYjM1In1d --script IQPtNsiN5bDaIBfoVv4Qc6vTG1vKf-57liqe8c9LzoCmeaw= --signature RzBEAiBN1ytORlRDxi6Q-CxbdAv8NLubftniMt2BSppIDDGcXgIgFVzOPJRT-iNRtpMLsiDUhrYqZMkjpSgesg6twvru9DoBIyED7TbIjeWw2iAX6Fb-EHOr0xtbyn_ue5YqnvHPS86Apnms
+    // {
+    //   "name": "Test wallet",
+    //   "type": "python",
+    //   "request": "launch",
+    //   "cwd": "${workspaceFolder}",
+    //   "program": "tests/test_wallet.py",
+    //   "console": "integratedTerminal",
+    //   "justMyCode": true,
+    //   "env": {
+    //     "LIGHTNING": "False"
+    //   }
+    // },
+    // {
+    //   "name": "Mint",
+    //   "type": "python",
+    //   "request": "launch",
+    //   "cwd": "${workspaceFolder}",
+    //   "program": "cashu/mint/app.py",
+    //   "args": ["--port", "3338"],
+    //   "jinja": true
+    // },
+    // {
+    //   "name": "Pytest",
+    //   "type": "python",
+    //   "request": "launch",
+    //   "module": "pytest",
+    //   "args": ["-s", "tests"],
+    //   // "justMyCode": true,
+    //   "env": {
+    //     "CASHU_DIR": "${workspaceFolder}/tests/data",
+    //     "MINT_PRIVATE_KEY": "supersecretprivatekey",
+    //     "MINT_SERVER_HOST": "127.0.0.1",
+    //     "MINT_SERVER_PORT": "3338",
+    //     "LIGHTNING": "False"
+    //   }
+    // },
+    // {
+    //   "name": "Mint Standalone",
+    //   "type": "python",
+    //   "request": "launch",
+    //   "cwd": "${workspaceFolder}",
+    //   "module": "cashu.mint",
+    //   "args": ["--port", "3338"],
+    //   "jinja": true,
+    //   "justMyCode": false
+    // },
+    // {
+    //   "name": "Wallet nostr",
+    //   "type": "python",
+    //   "request": "launch",
+    //   "cwd": "${workspaceFolder}",
+    //   "program": "/Users/cc/Library/Caches/pypoetry/virtualenvs/cashu-XGAe3fbA-py3.9/bin/cashu",
+    //   "args": ["nostr"],
+    //   "console": "integratedTerminal",
+    //   "justMyCode": true
+    // }
+  ]
+}
