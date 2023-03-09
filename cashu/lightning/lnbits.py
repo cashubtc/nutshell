@@ -24,7 +24,6 @@ class LNbitsWallet(Wallet):
         self.key = {"X-Api-Key": key}
         self.s = requests.Session()
         self.s.auth = ("user", "pass")
-        self.s.verify = not DEBUG
         self.s.headers.update({"X-Api-Key": key})
         self.s.verify = not DEBUG
 
