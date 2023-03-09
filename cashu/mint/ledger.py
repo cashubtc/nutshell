@@ -129,15 +129,6 @@ class Ledger:
             ]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
-
-        # backwards compatibility with old hash_to_curve < 0.4.0
-        try:
-            ret = legacy.verify_pre_0_3_3(private_key_amount, C, proof.secret)
-            if ret:
-                return ret
-        except:
-            pass
-
         return b_dhke.verify(private_key_amount, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof):
