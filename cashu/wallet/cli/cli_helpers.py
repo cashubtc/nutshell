@@ -36,10 +36,10 @@ async def verify_mints(ctx: Context, token: TokenV2):
             )
             # make sure that this mint supports this keyset
             mint_keysets = await keyset_wallet._get_keyset_ids(mint.url)
-            assert keyset in mint_keysets["keysets"], "mint does not have this keyset."
+            assert keyset in mint_keysets, "mint does not have this keyset."
 
             # we validate the keyset id by fetching the keys from the mint and computing the id locally
-            mint_keyset = await keyset_wallet._get_keyset(mint.url, keyset)
+            mint_keyset = await keyset_wallet._get_keys_of_keyset(mint.url, keyset)
             assert keyset == mint_keyset.id, Exception("keyset not valid.")
 
             # we check the db whether we know this mint already and ask the user if not

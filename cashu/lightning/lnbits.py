@@ -1,5 +1,4 @@
 # type: ignore
-from os import getenv
 from typing import Dict, Optional
 
 import requests
@@ -27,10 +26,12 @@ class LNbitsWallet(Wallet):
         self.s.auth = ("user", "pass")
         self.s.verify = not DEBUG
         self.s.headers.update({"X-Api-Key": key})
+        self.s.verify = not DEBUG
 
     async def status(self) -> StatusResponse:
         try:
             r = self.s.get(url=f"{self.endpoint}/api/v1/wallet", timeout=15)
+            r.raise_for_status()
         except Exception as exc:
             return StatusResponse(
                 f"Failed to connect to {self.endpoint} due to: {exc}", 0
@@ -62,6 +63,7 @@ class LNbitsWallet(Wallet):
         data["memo"] = memo or ""
         try:
             r = self.s.post(url=f"{self.endpoint}/api/v1/payments", json=data)
+            r.raise_for_status()
         except:
             return InvoiceResponse(False, None, None, r.json()["detail"])
         ok, checking_id, payment_request, error_message = (
@@ -83,6 +85,7 @@ class LNbitsWallet(Wallet):
                 json={"out": True, "bolt11": bolt11},
                 timeout=None,
             )
+            r.raise_for_status()
         except:
             error_message = r.json()["detail"]
             return PaymentResponse(None, None, None, None, error_message)
@@ -113,6 +116,7 @@ class LNbitsWallet(Wallet):
                 url=f"{self.endpoint}/api/v1/payments/{checking_id}",
                 headers=self.key,
             )
+            r.raise_for_status()
         except:
             return PaymentStatus(None)
         if r.json().get("detail"):
@@ -124,6 +128,7 @@ class LNbitsWallet(Wallet):
             r = self.s.get(
                 url=f"{self.endpoint}/api/v1/payments/{checking_id}", headers=self.key
             )
+            r.raise_for_status()
         except:
             return PaymentStatus(None)
         data = r.json()

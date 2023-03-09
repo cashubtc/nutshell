@@ -157,15 +157,6 @@ class Ledger:
             ]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
-
-        # backwards compatibility with old hash_to_curve < 0.4.0
-        try:
-            ret = legacy.verify_pre_0_3_3(private_key_amount, C, proof.secret)
-            if ret:
-                return ret
-        except:
-            pass
-
         return b_dhke.verify(private_key_amount, C, proof.secret)
 
     def _verify_script(self, idx: int, proof: Proof) -> bool:
@@ -493,6 +484,8 @@ class Ledger:
     # Public methods
     def get_keyset(self, keyset_id: Optional[str] = None):
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
+        if keyset_id and keyset_id not in self.keysets.keysets:
+            raise Exception("keyset does not exist")
         keyset = self.keysets.keysets[keyset_id] if keyset_id else self.keyset
         assert keyset.public_keys, Exception("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
@@ -555,7 +548,7 @@ class Ledger:
 
         for amount in amounts:
             if amount not in [2**i for i in range(MAX_ORDER)]:
-                raise Exception(f"Can only mint amounts up to {2**MAX_ORDER}.")
+                raise Exception(f"Can only mint amounts with 2^n up to {2**MAX_ORDER}.")
 
         promises = await self._generate_promises(B_s, keyset)
         return promises
