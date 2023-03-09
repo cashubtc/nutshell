@@ -3,7 +3,7 @@ from typing import Dict, Optional
 
 import requests
 
-from cashu.core.settings import LNBITS_ENDPOINT, LNBITS_KEY, DEBUG
+from cashu.core.settings import DEBUG, LNBITS_ENDPOINT, LNBITS_KEY
 
 from .base import (
     InvoiceResponse,

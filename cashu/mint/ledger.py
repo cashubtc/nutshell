@@ -1,5 +1,5 @@
 import math
-from typing import Dict, List, Optional, Set, Literal, Union
+from typing import Dict, List, Literal, Optional, Set, Union
 
 from loguru import logger
 
