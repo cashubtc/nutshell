@@ -259,9 +259,6 @@ class Ledger:
         error, _ = await self.lightning.status()
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
-        import asyncio
-
-        await asyncio.sleep(10)
         (
             ok,
             checking_id,
