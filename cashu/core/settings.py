@@ -44,6 +44,9 @@ MINT_URL = env.str("MINT_URL", default=None)
 MINT_HOST = env.str("MINT_HOST", default="8333.space")
 MINT_PORT = env.int("MINT_PORT", default=3338)
 
+MINT_LIGHTNING_BACKEND = env.str("MINT_LIGHTNING_BACKEND", default="FakeWallet")
+MINT_DATABASE = env.str("MINT_DATABASE", default="data/mint")
+
 if not MINT_URL:
     if MINT_HOST in ["localhost", "127.0.0.1"]:
         MINT_URL = f"http://{MINT_HOST}:{MINT_PORT}"
@@ -66,4 +69,4 @@ NOSTR_RELAYS = env.list(
 )
 
 MAX_ORDER = 64
-VERSION = "0.9.3"
+VERSION = "0.9.4"

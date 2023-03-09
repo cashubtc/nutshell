@@ -8,7 +8,7 @@ import sys
 import time
 from datetime import datetime
 from functools import wraps
-from itertools import groupby
+from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
@@ -92,10 +92,6 @@ def cli(ctx: Context, host: str, walletname: str):
             env_path = os.path.join(CASHU_DIR, ".env")
         error_str += f'\n\nYou can turn off Tor with this command: echo "TOR=FALSE" >> {env_path}'
         raise Exception(error_str)
-
-    # configure logger
-    logger.remove()
-    logger.add(sys.stderr, level="DEBUG" if DEBUG else "INFO")
 
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
@@ -402,6 +398,9 @@ async def receive(ctx: Context, token: str, lock: str):
     "--nostr", "-n", default=False, is_flag=True, help="Receive tokens via nostr."
 )
 @click.option(
+    "--all", "-a", default=False, is_flag=True, help="Receive all pending tokens."
+)
+@click.option(
     "--verbose",
     "-v",
     help="Display more information.",
@@ -411,15 +410,24 @@ async def receive(ctx: Context, token: str, lock: str):
 )
 @click.pass_context
 @coro
-async def receive_cli(ctx: Context, token: str, lock: str, nostr: bool, verbose: bool):
+async def receive_cli(
+    ctx: Context, token: str, lock: str, nostr: bool, all: bool, verbose: bool
+):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()
     if token:
         await receive(ctx, token, lock)
     elif nostr:
         await receive_nostr(ctx, verbose)
+    elif all:
+        reserved_proofs = await get_reserved_proofs(wallet.db)
+        if len(reserved_proofs):
+            for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):
+                proofs = list(value)
+                token = await wallet.serialize_proofs(proofs)
+                await receive(ctx, token, lock)
     else:
-        print("Error: enter token or use the flag --nostr.")
+        print("Error: enter token or use either flag --nostr or --all.")
 
 
 @cli.command("burn", help="Burn spent tokens.")
@@ -461,16 +469,34 @@ async def burn(ctx: Context, token: str, all: bool, force: bool):
     help="Print legacy token without mint information.",
     type=bool,
 )
+@click.option(
+    "--number", "-n", default=None, help="Show only n pending tokens.", type=int
+)
+@click.option(
+    "--offset",
+    default=0,
+    help="Show pending tokens only starting from offset.",
+    type=int,
+)
 @click.pass_context
 @coro
-async def pending(ctx: Context, legacy):
+async def pending(ctx: Context, legacy, number: int, offset: int):
     wallet: Wallet = ctx.obj["WALLET"]
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print(f"--------------------------\n")
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))  # type: ignore
-        for i, (key, value) in enumerate(
-            groupby(sorted_proofs, key=itemgetter("send_id"))
+        if number:
+            number += offset
+        for i, (key, value) in islice(
+            enumerate(
+                groupby(
+                    sorted_proofs,
+                    key=itemgetter("send_id"),
+                )
+            ),
+            offset,
+            number,
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
