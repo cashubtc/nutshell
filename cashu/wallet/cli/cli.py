@@ -642,39 +642,3 @@ async def info(ctx: Context):
         print(f"Socks proxy: {SOCKS_HOST}:{SOCKS_PORT}")
     print(f"Mint URL: {ctx.obj['HOST']}")
     return
-
-
-@cli.command("stress")
-@click.pass_context
-@coro
-async def stress(ctx: Context):
-    wallet = await get_mint_wallet(ctx)
-    await wallet.load_proofs()
-    import random
-
-    for i in range(100):
-        _, send_proofs = await wallet.split_to_send(
-            wallet.proofs, random.randint(1, 100), None, set_reserved=True
-        )
-        token = await wallet.serialize_proofs(
-            send_proofs,
-            include_mints=True,
-        )
-        print(token)
-        # deserialize token
-        dtoken = json.loads(base64.urlsafe_b64decode(token))
-
-        tokenObj = TokenV2.parse_obj(dtoken)
-        assert len(tokenObj.proofs), Exception("no proofs in token")
-        includes_mint_info: bool = (
-            tokenObj.mints is not None and len(tokenObj.mints) > 0
-        )
-
-        # if there is a `mints` field in the token
-        # we check whether the token has mints that we don't know yet
-        # and ask the user if they want to trust the new mitns
-        if includes_mint_info:
-            # redeem tokens with new wallet instances
-            await redeem_multimint(ctx, tokenObj, None, None)
-            # reload main wallet so the balance updates
-            await wallet.load_proofs()
