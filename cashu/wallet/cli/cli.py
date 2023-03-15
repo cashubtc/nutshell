@@ -432,8 +432,12 @@ async def receive_cli(
 @cli.command("burn", help="Burn spent tokens.")
 @click.argument("token", required=False, type=str)
 @click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent tokens.")
-@click.option("--delete", "-d", default=None,
-              help="Forcefully delete pending token by send ID if mint is unavailable.")
+@click.option(
+    "--delete",
+    "-d",
+    default=None,
+    help="Forcefully delete pending token by send ID if mint is unavailable.",
+)
 @click.option(
     "--force", "-f", default=False, is_flag=True, help="Force check on all tokens."
 )
@@ -457,7 +461,7 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         proofs = wallet.proofs
     elif delete:
         reserved_proofs = await get_reserved_proofs(wallet.db)
-        proofs = [proof for proof in reserved_proofs if proof['send_id'] == delete]
+        proofs = [proof for proof in reserved_proofs if proof["send_id"] == delete]
     else:
         # check only the specified ones
         proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
