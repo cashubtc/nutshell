@@ -18,7 +18,7 @@ from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.script import verify_script
 from cashu.core.secp import PublicKey
-from cashu.core.settings import LIGHTNING, MAX_ORDER, VERSION
+from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.lightning.base import Wallet
 from cashu.mint.crud import LedgerCrud
@@ -51,7 +51,9 @@ class Ledger:
     async def load_keyset(self, derivation_path, autosave=True):
         """Load current keyset keyset or generate new one."""
         keyset = MintKeyset(
-            seed=self.master_key, derivation_path=derivation_path, version=VERSION
+            seed=self.master_key,
+            derivation_path=derivation_path,
+            version=settings.version,
         )
         # check if current keyset is stored in db and store if not
         logger.trace(f"Loading keyset {keyset.id} from db.")
@@ -192,7 +194,9 @@ class Ledger:
 
     def _verify_amount(self, amount: int):
         """Any amount used should be a positive integer not larger than 2^MAX_ORDER."""
-        valid = isinstance(amount, int) and amount > 0 and amount < 2**MAX_ORDER
+        valid = (
+            isinstance(amount, int) and amount > 0 and amount < 2**settings.max_order
+        )
         if not valid:
             raise Exception("invalid amount: " + str(amount))
         return amount
@@ -359,7 +363,7 @@ class Ledger:
         amounts = [b.amount for b in B_s]
         amount = sum(amounts)
         # check if lightning invoice was paid
-        if LIGHTNING:
+        if settings.lightning:
             if not payment_hash:
                 raise Exception("no payment_hash provided.")
             try:
@@ -368,8 +372,10 @@ class Ledger:
                 raise e
 
         for amount in amounts:
-            if amount not in [2**i for i in range(MAX_ORDER)]:
-                raise Exception(f"Can only mint amounts with 2^n up to {2**MAX_ORDER}.")
+            if amount not in [2**i for i in range(settings.max_order)]:
+                raise Exception(
+                    f"Can only mint amounts with 2^n up to {2**settings.max_order}."
+                )
 
         promises = await self._generate_promises(B_s, keyset)
         return promises
@@ -391,7 +397,7 @@ class Ledger:
                 "provided proofs not enough for Lightning payment."
             )
 
-            if LIGHTNING:
+            if settings.lightning:
                 status, preimage = await self._pay_lightning_invoice(invoice, fees_msat)
             else:
                 status, preimage = True, "preimage"
@@ -413,7 +419,7 @@ class Ledger:
         """Returns the fees (in msat) required to pay this pr."""
         # hack: check if it's internal, if it exists, it will return paid = False,
         # if id does not exist (not internal), it returns paid = None
-        if LIGHTNING:
+        if settings.lightning:
             decoded_invoice = bolt11.decode(pr)
             amount = math.ceil(decoded_invoice.amount_msat / 1000)
             paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)

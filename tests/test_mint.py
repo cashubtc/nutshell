@@ -11,7 +11,7 @@ SERVER_ENDPOINT = "http://localhost:3338"
 import os
 
 from cashu.core.db import Database
-from cashu.core.settings import MAX_ORDER
+from cashu.core.settings import settings
 from cashu.mint import migrations
 from cashu.mint.ledger import Ledger
 
@@ -63,7 +63,7 @@ async def test_keysets(ledger: Ledger):
 async def test_get_keyset(ledger: Ledger):
     keyset = ledger.get_keyset()
     assert type(keyset) == dict
-    assert len(keyset) == MAX_ORDER
+    assert len(keyset) == settings.max_order
 
 
 @pytest.mark.asyncio

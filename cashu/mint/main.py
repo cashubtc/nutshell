@@ -4,7 +4,7 @@ import click
 import uvicorn
 from click import Context
 
-from cashu.core.settings import MINT_SERVER_HOST, MINT_SERVER_PORT
+from cashu.core.settings import settings
 
 
 @click.command(
@@ -13,15 +13,15 @@ from cashu.core.settings import MINT_SERVER_HOST, MINT_SERVER_PORT
         allow_extra_args=True,
     )
 )
-@click.option("--port", default=MINT_SERVER_PORT, help="Port to listen on")
-@click.option("--host", default=MINT_SERVER_HOST, help="Host to run mint on")
+@click.option("--port", default=settings.mint_listen_port, help="Port to listen on")
+@click.option("--host", default=settings.mint_listen_host, help="Host to run mint on")
 @click.option("--ssl-keyfile", default=None, help="Path to SSL keyfile")
 @click.option("--ssl-certfile", default=None, help="Path to SSL certificate")
 @click.pass_context
 def main(
     ctx: Context,
-    port: int = MINT_SERVER_PORT,
-    host: str = MINT_SERVER_HOST,
+    port: int = settings.mint_listen_port,
+    host: str = settings.mint_listen_host,
     ssl_keyfile: Optional[str] = None,
     ssl_certfile: Optional[str] = None,
 ):

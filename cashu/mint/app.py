@@ -7,7 +7,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
-from cashu.core.settings import DEBUG, VERSION
+from cashu.core.settings import settings
 
 from .router import router
 from .startup import start_mint_init
@@ -33,7 +33,7 @@ def create_app(config_object="core.settings") -> FastAPI:
             def __init__(self):
                 self.padding = 0
                 self.minimal_fmt: str = "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level}</level> | <level>{message}</level>\n"
-                if DEBUG:
+                if settings.debug:
                     self.fmt: str = "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level: <4}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>\n"
                 else:
                     self.fmt: str = self.minimal_fmt
@@ -53,7 +53,7 @@ def create_app(config_object="core.settings") -> FastAPI:
                 logger.log(level, record.getMessage())
 
         logger.remove()
-        log_level: str = "DEBUG" if DEBUG else "INFO"
+        log_level: str = "DEBUG" if settings.debug else "INFO"
         formatter = Formatter()
         logger.add(sys.stderr, level=log_level, format=formatter.format)
 
@@ -82,7 +82,7 @@ def create_app(config_object="core.settings") -> FastAPI:
     app = FastAPI(
         title="Cashu Python Mint",
         description="Ecash wallet and mint for Bitcoin",
-        version=VERSION,
+        version=settings.version,
         license_info={
             "name": "MIT License",
             "url": "https://raw.githubusercontent.com/cashubtc/cashu/main/LICENSE",

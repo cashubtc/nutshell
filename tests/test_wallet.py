@@ -7,7 +7,7 @@ import pytest_asyncio
 from cashu.core.base import Proof
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import MAX_ORDER
+from cashu.core.settings import settings
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -51,7 +51,7 @@ async def wallet2(mint):
 @pytest.mark.asyncio
 async def test_get_keys(wallet1: Wallet):
     assert wallet1.keys.public_keys
-    assert len(wallet1.keys.public_keys) == MAX_ORDER
+    assert len(wallet1.keys.public_keys) == settings.max_order
     keyset = await wallet1._get_keys(wallet1.url)
     assert keyset.id is not None
     assert type(keyset.id) == str
@@ -61,7 +61,7 @@ async def test_get_keys(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_get_keyset(wallet1: Wallet):
     assert wallet1.keys.public_keys
-    assert len(wallet1.keys.public_keys) == MAX_ORDER
+    assert len(wallet1.keys.public_keys) == settings.max_order
     # let's get the keys first so we can get a keyset ID that we use later
     keys1 = await wallet1._get_keys(wallet1.url)
     # gets the keys of a specific keyset
@@ -107,7 +107,7 @@ async def test_mint_amounts_wrong_order(wallet1: Wallet):
     """Mint amount that is not part in 2^n"""
     await assert_err(
         wallet1.mint_amounts([1, 2, 3]),
-        f"Can only mint amounts with 2^n up to {2**MAX_ORDER}.",
+        f"Can only mint amounts with 2^n up to {2**settings.max_order}.",
     )
 
 

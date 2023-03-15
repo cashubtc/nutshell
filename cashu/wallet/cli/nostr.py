@@ -6,7 +6,7 @@ import click
 from click import Context
 from requests.exceptions import ConnectionError
 
-from cashu.core.settings import NOSTR_PRIVATE_KEY, NOSTR_RELAYS
+from cashu.core.settings import settings
 from cashu.nostr.nostr.client.client import NostrClient
 from cashu.nostr.nostr.event import Event
 from cashu.nostr.nostr.key import PublicKey
@@ -79,8 +79,10 @@ async def send_nostr(ctx: Context, amount: int, pubkey: str, verbose: bool, yes:
             default=True,
         )
 
-    client = NostrClient(private_key=NOSTR_PRIVATE_KEY or "", relays=NOSTR_RELAYS)
-    if verbose and not NOSTR_PRIVATE_KEY:
+    client = NostrClient(
+        private_key=settings.nostr_private_key or "", relays=settings.nostr_relays
+    )
+    if verbose and not settings.nostr_private_key:
         # we generated a random key if none was present
         print(f"Your nostr private key: {client.private_key.bech32()}")
 
@@ -91,12 +93,14 @@ async def send_nostr(ctx: Context, amount: int, pubkey: str, verbose: bool, yes:
 
 
 async def receive_nostr(ctx: Context, verbose: bool):
-    if NOSTR_PRIVATE_KEY is None:
+    if settings.nostr_private_key is None:
         print(
             "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. I will create a random private key for this session but I will not remember it."
         )
         print("")
-    client = NostrClient(private_key=NOSTR_PRIVATE_KEY, relays=NOSTR_RELAYS)
+    client = NostrClient(
+        private_key=settings.nostr_private_key, relays=settings.nostr_relays
+    )
     print(f"Your nostr public key: {client.public_key.bech32()}")
     if verbose:
         print(f"Your nostr private key (do not share!): {client.private_key.bech32()}")
