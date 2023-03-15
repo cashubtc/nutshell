@@ -635,7 +635,7 @@ async def info(ctx: Context):
     if TOR:
         print(f"Tor enabled: {TOR}")
     if NOSTR_PRIVATE_KEY:
-        try :
+        try:
             client = NostrClient(private_key=NOSTR_PRIVATE_KEY, connect=False)
             print(f"Nostr public key: {client.public_key.bech32()}")
             print(f"Nostr relays: {NOSTR_RELAYS}")
