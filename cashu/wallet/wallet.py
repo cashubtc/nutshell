@@ -817,4 +817,4 @@ class Wallet(LedgerAPI):
             }
             for key, proofs in balances.items()
         }
-        return dict(sorted(balances_return.items(), key=lambda item: item[1]["available"], reverse=True))  # type: ignore
+        return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
