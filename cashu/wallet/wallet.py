@@ -43,7 +43,7 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG, MAX_ORDER, SOCKS_HOST, SOCKS_PORT, TOR, VERSION
+from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.tor.tor import TorProxy
 from cashu.wallet.crud import (
@@ -68,16 +68,16 @@ def async_set_requests(func):
     """
 
     async def wrapper(self, *args, **kwargs):
-        self.s.headers.update({"Client-version": VERSION})
-        if DEBUG:
+        self.s.headers.update({"Client-version": settings.version})
+        if settings.debug:
             self.s.verify = False
         socks_host, socks_port = None, None
-        if TOR and TorProxy().check_platform():
+        if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
             self.tor.run_daemon(verbose=True)
             socks_host, socks_port = "localhost", 9050
         else:
-            socks_host, socks_port = SOCKS_HOST, SOCKS_PORT
+            socks_host, socks_port = settings.socks_host, settings.socks_port
 
         if socks_host and socks_port:
             proxies = {
@@ -519,8 +519,10 @@ class Wallet(LedgerAPI):
             List[Proof]: Newly minted proofs.
         """
         for amount in amounts:
-            if amount not in [2**i for i in range(MAX_ORDER)]:
-                raise Exception(f"Can only mint amounts with 2^n up to {2**MAX_ORDER}.")
+            if amount not in [2**i for i in range(settings.max_order)]:
+                raise Exception(
+                    f"Can only mint amounts with 2^n up to {2**settings.max_order}."
+                )
         proofs = await super().mint(amounts, payment_hash)
         if proofs == []:
             raise Exception("received no proofs.")

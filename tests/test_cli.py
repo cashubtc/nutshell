@@ -4,7 +4,7 @@ import pytest
 from click.testing import CliRunner
 
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import VERSION
+from cashu.core.settings import settings
 from cashu.wallet import migrations
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
@@ -29,7 +29,7 @@ def test_info():
     )
     print("INFO")
     print(result.output)
-    result.output.startswith(f"Version: {VERSION}")
+    result.output.startswith(f"Version: {settings.version}")
     assert result.exit_code == 0
 
 
