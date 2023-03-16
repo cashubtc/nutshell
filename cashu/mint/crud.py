@@ -197,7 +197,7 @@ async def get_lightning_invoice(
         """,
         (hash,),
     )
-    return Invoice(**row)
+    return Invoice(**row) if row else None
 
 
 async def update_lightning_invoice(
