@@ -643,9 +643,12 @@ async def info(ctx: Context):
     if settings.tor:
         print(f"Tor enabled: {settings.tor}")
     if settings.nostr_private_key:
-        client = NostrClient(private_key=settings.nostr_private_key, connect=False)
-        print(f"Nostr public key: {client.public_key.bech32()}")
-        print(f"Nostr relays: {settings.nostr_relays}")
+        try:
+            client = NostrClient(private_key=settings.nostr_private_key, connect=False)
+            print(f"Nostr public key: {client.public_key.bech32()}")
+            print(f"Nostr relays: {settings.nostr_relays}")
+        except:
+            print(f"Nostr: Error. Invalid key.")
     if settings.socks_host:
         print(f"Socks proxy: {settings.socks_host}:{settings.socks_port}")
     print(f"Mint URL: {ctx.obj['HOST']}")
