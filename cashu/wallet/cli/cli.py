@@ -424,16 +424,24 @@ async def receive_cli(
 @click.argument("token", required=False, type=str)
 @click.option("--all", "-a", default=False, is_flag=True, help="Burn all spent tokens.")
 @click.option(
+    "--delete",
+    "-d",
+    default=None,
+    help="Forcefully delete pending token by send ID if mint is unavailable.",
+)
+@click.option(
     "--force", "-f", default=False, is_flag=True, help="Force check on all tokens."
 )
 @click.pass_context
 @coro
-async def burn(ctx: Context, token: str, all: bool, force: bool):
+async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_mint()
-    if not (all or token or force) or (token and all):
+    if not delete:
+        await wallet.load_mint()
+    if not (all or token or force or delete) or (token and all):
         print(
-            "Error: enter a token or use --all to burn all pending tokens or --force to check all tokens."
+            "Error: enter a token or use --all to burn all pending tokens, --force to check all tokens or"
+            "or --delete with send ID to force-delete pending token from list if mint is unavailable."
         )
         return
     if all:
@@ -442,11 +450,17 @@ async def burn(ctx: Context, token: str, all: bool, force: bool):
     elif force:
         # check all proofs in db
         proofs = wallet.proofs
+    elif delete:
+        reserved_proofs = await get_reserved_proofs(wallet.db)
+        proofs = [proof for proof in reserved_proofs if proof["send_id"] == delete]
     else:
         # check only the specified ones
         proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
 
-    await wallet.invalidate(proofs)
+    if delete:
+        await wallet.invalidate(proofs, check_spendable=False)
+    else:
+        await wallet.invalidate(proofs)
     wallet.status()
 
 
