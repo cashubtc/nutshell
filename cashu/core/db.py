@@ -85,43 +85,43 @@ class Database(Compat):
         self.db_location_is_url = "://" in self.db_location
         if self.db_location_is_url:
             raise Exception("Remote databases not supported. Use SQLite.")
-            # database_uri = self.db_location
+            database_uri = self.db_location
 
-            # if database_uri.startswith("cockroachdb://"):
-            #     self.type = COCKROACH
-            # else:
-            #     self.type = POSTGRES
+            if database_uri.startswith("cockroachdb://"):
+                self.type = COCKROACH
+            else:
+                self.type = POSTGRES
 
-            # import psycopg2  # type: ignore
+            import psycopg2  # type: ignore
 
-            # def _parse_timestamp(value, _):
-            #     f = "%Y-%m-%d %H:%M:%S.%f"
-            #     if not "." in value:
-            #         f = "%Y-%m-%d %H:%M:%S"
-            #     return time.mktime(datetime.datetime.strptime(value, f).timetuple())
+            def _parse_timestamp(value, _):
+                f = "%Y-%m-%d %H:%M:%S.%f"
+                if not "." in value:
+                    f = "%Y-%m-%d %H:%M:%S"
+                return time.mktime(datetime.datetime.strptime(value, f).timetuple())
 
-            # psycopg2.extensions.register_type(
-            #     psycopg2.extensions.new_type(
-            #         psycopg2.extensions.DECIMAL.values,
-            #         "DEC2FLOAT",
-            #         lambda value, curs: float(value) if value is not None else None,
-            #     )
-            # )
-            # psycopg2.extensions.register_type(
-            #     psycopg2.extensions.new_type(
-            #         (1082, 1083, 1266),
-            #         "DATE2INT",
-            #         lambda value, curs: time.mktime(value.timetuple())
-            #         if value is not None
-            #         else None,
-            #     )
-            # )
+            psycopg2.extensions.register_type(
+                psycopg2.extensions.new_type(
+                    psycopg2.extensions.DECIMAL.values,
+                    "DEC2FLOAT",
+                    lambda value, curs: float(value) if value is not None else None,
+                )
+            )
+            psycopg2.extensions.register_type(
+                psycopg2.extensions.new_type(
+                    (1082, 1083, 1266),
+                    "DATE2INT",
+                    lambda value, curs: time.mktime(value.timetuple())
+                    if value is not None
+                    else None,
+                )
+            )
 
-            # psycopg2.extensions.register_type(
-            #     psycopg2.extensions.new_type(
-            #         (1184, 1114), "TIMESTAMP2INT", _parse_timestamp
-            #     )
-            # )
+            psycopg2.extensions.register_type(
+                psycopg2.extensions.new_type(
+                    (1184, 1114), "TIMESTAMP2INT", _parse_timestamp
+                )
+            )
         else:
             if not os.path.exists(self.db_location):
                 print(f"Creating database directory: {self.db_location}")
