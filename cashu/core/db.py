@@ -84,7 +84,7 @@ class Database(Compat):
         self.db_location = db_location
         self.db_location_is_url = "://" in self.db_location
         if self.db_location_is_url:
-            raise Exception("Remote databases not supported. Use SQLite.")
+            # raise Exception("Remote databases not supported. Use SQLite.")
             database_uri = self.db_location
 
             if database_uri.startswith("cockroachdb://"):
