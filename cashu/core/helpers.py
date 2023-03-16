@@ -3,7 +3,7 @@ from functools import partial, wraps
 from typing import List
 
 from cashu.core.base import Proof
-from cashu.core.settings import LIGHTNING_FEE_PERCENT, LIGHTNING_RESERVE_FEE_MIN
+from cashu.core.settings import settings
 
 
 def sum_proofs(proofs: List[Proof]):
@@ -39,5 +39,6 @@ def fee_reserve(amount_msat: int, internal=False) -> int:
     if internal:
         return 0
     return max(
-        int(LIGHTNING_RESERVE_FEE_MIN), int(amount_msat * LIGHTNING_FEE_PERCENT / 100.0)
+        int(settings.lightning_reserve_fee_min),
+        int(amount_msat * settings.lightning_fee_percent / 100.0),
     )

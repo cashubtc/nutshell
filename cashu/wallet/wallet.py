@@ -18,6 +18,7 @@ from cashu.core.base import (
     CheckFeesRequest,
     CheckSpendableRequest,
     CheckSpendableResponse,
+    GetMeltResponse,
     GetMintResponse,
     Invoice,
     KeysetsResponse,
@@ -42,7 +43,7 @@ from cashu.core.script import (
     step2_carol_sign_tx,
 )
 from cashu.core.secp import PublicKey
-from cashu.core.settings import DEBUG, MAX_ORDER, SOCKS_HOST, SOCKS_PORT, TOR, VERSION
+from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.tor.tor import TorProxy
 from cashu.wallet.crud import (
@@ -67,16 +68,16 @@ def async_set_requests(func):
     """
 
     async def wrapper(self, *args, **kwargs):
-        self.s.headers.update({"Client-version": VERSION})
-        if DEBUG:
+        self.s.headers.update({"Client-version": settings.version})
+        if settings.debug:
             self.s.verify = False
         socks_host, socks_port = None, None
-        if TOR and TorProxy().check_platform():
+        if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
             self.tor.run_daemon(verbose=True)
             socks_host, socks_port = "localhost", 9050
         else:
-            socks_host, socks_port = SOCKS_HOST, SOCKS_PORT
+            socks_host, socks_port = settings.socks_host, settings.socks_port
 
         if socks_host and socks_port:
             proxies = {
@@ -425,19 +426,22 @@ class LedgerAPI:
         return return_dict
 
     @async_set_requests
-    async def pay_lightning(self, proofs: List[Proof], invoice: str):
+    async def pay_lightning(
+        self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
+    ):
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
-        payload = PostMeltRequest(proofs=proofs, pr=invoice)
+
+        payload = PostMeltRequest(proofs=proofs, pr=invoice, outputs=outputs)
 
         def _meltrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
-                "amount": ...,
-                "pr": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
+                "pr": ...,
+                "outputs": ...,
             }
 
         resp = self.s.post(
@@ -447,7 +451,7 @@ class LedgerAPI:
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
-        return return_dict
+        return GetMeltResponse.parse_obj(return_dict)
 
 
 class Wallet(LedgerAPI):
@@ -515,8 +519,10 @@ class Wallet(LedgerAPI):
             List[Proof]: Newly minted proofs.
         """
         for amount in amounts:
-            if amount not in [2**i for i in range(MAX_ORDER)]:
-                raise Exception(f"Can only mint amounts with 2^n up to {2**MAX_ORDER}.")
+            if amount not in [2**i for i in range(settings.max_order)]:
+                raise Exception(
+                    f"Can only mint amounts with 2^n up to {2**settings.max_order}."
+                )
         proofs = await super().mint(amounts, payment_hash)
         if proofs == []:
             raise Exception("received no proofs.")
@@ -551,10 +557,8 @@ class Wallet(LedgerAPI):
         frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
-        used_secrets = [p["secret"] for p in proofs]
-        self.proofs = list(
-            filter(lambda p: p["secret"] not in used_secrets, self.proofs)
-        )
+        used_secrets = [p.secret for p in proofs]
+        self.proofs = list(filter(lambda p: p.secret not in used_secrets, self.proofs))
         self.proofs += frst_proofs + scnd_proofs
         await self._store_proofs(frst_proofs + scnd_proofs)
         for proof in proofs:
@@ -563,20 +567,41 @@ class Wallet(LedgerAPI):
 
     async def pay_lightning(self, proofs: List[Proof], invoice: str):
         """Pays a lightning invoice"""
-        status = await super().pay_lightning(proofs, invoice)
-        if status["paid"] == True:
+
+        # generate outputs for the change for overpaid fees
+        # we will generate four blanked outputs that the mint will
+        # imprint with value depending on the fees we overpaid
+        n_return_outputs = 4
+        secrets = [self._generate_secret() for _ in range(n_return_outputs)]
+        outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets)
+
+        status = await super().pay_lightning(proofs, invoice, outputs)
+
+        if status.paid == True:
+            # the payment was successful
             await self.invalidate(proofs)
             invoice_obj = Invoice(
                 amount=-sum_proofs(proofs),
                 pr=invoice,
-                preimage=status.get("preimage"),
+                preimage=status.preimage,
                 paid=True,
                 time_paid=time.time(),
             )
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
+
+            # handle change and produce proofs
+            if status.change:
+                change_proofs = self._construct_proofs(
+                    status.change,
+                    secrets[: len(status.change)],
+                    rs[: len(status.change)],
+                )
+                logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
+                await self._store_proofs(change_proofs)
+
         else:
             raise Exception("could not pay invoice.")
-        return status["paid"]
+        return status.paid
 
     async def check_spendable(self, proofs):
         return await super().check_spendable(proofs)
@@ -733,6 +758,7 @@ class Wallet(LedgerAPI):
         decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)
         # check if it's an internal payment
         fees = int((await self.check_fees(invoice))["fee"])
+        logger.debug(f"Mint wants {fees} sat as fee reserve.")
         amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
         return amount, fees
 

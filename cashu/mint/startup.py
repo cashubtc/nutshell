@@ -7,26 +7,24 @@ from loguru import logger
 
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import (
-    CASHU_DIR,
-    LIGHTNING,
-    MINT_DATABASE,
-    MINT_LIGHTNING_BACKEND,
-    MINT_PRIVATE_KEY,
-)
+from cashu.core.settings import settings
 from cashu.lightning.fake import FakeWallet  # type: ignore
 from cashu.lightning.lnbits import LNbitsWallet  # type: ignore
 from cashu.mint import migrations
 from cashu.mint.ledger import Ledger
 
+logger.debug("Enviroment Settings:")
+for key, value in settings.dict().items():
+    logger.debug(f"{key}: {value}")
+
 wallets_module = importlib.import_module("cashu.lightning")
-LIGHTNING_BACKEND = getattr(wallets_module, MINT_LIGHTNING_BACKEND)()
+lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
 
 ledger = Ledger(
-    db=Database("mint", MINT_DATABASE),
-    seed=MINT_PRIVATE_KEY,
+    db=Database("mint", settings.mint_database),
+    seed=settings.mint_private_key,
     derivation_path="0/0/0/0",
-    lightning=LIGHTNING_BACKEND,
+    lightning=lightning_backend,
 )
 
 
@@ -36,8 +34,8 @@ async def start_mint_init():
     await ledger.load_used_proofs()
     await ledger.init_keysets()
 
-    if LIGHTNING:
-        logger.info(f"Using backend: {MINT_LIGHTNING_BACKEND}")
+    if settings.lightning:
+        logger.info(f"Using backend: {settings.mint_lightning_backend}")
         error_message, balance = await ledger.lightning.status()
         if error_message:
             logger.warning(
@@ -46,5 +44,5 @@ async def start_mint_init():
             )
         logger.info(f"Lightning balance: {balance} msat")
 
-    logger.info(f"Data dir: {CASHU_DIR}")
+    logger.info(f"Data dir: {settings.cashu_dir}")
     logger.info("Mint started.")
