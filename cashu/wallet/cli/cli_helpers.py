@@ -6,14 +6,48 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.base import Proof, TokenV2, TokenV2Mint, WalletKeyset
+from cashu.core.base import (
+    Proof,
+    TokenV2,
+    TokenV2Mint,
+    WalletKeyset,
+    TokenV3,
+    TokenV3Token,
+)
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
 from cashu.wallet.crud import get_keyset
 from cashu.wallet.wallet import Wallet as Wallet
 
 
-async def verify_mints(ctx: Context, token: TokenV2):
+async def verify_mint(mint_wallet: Wallet, url: str):
+    """A helper function that asks the user if they trust the mint if the user
+    has not encountered the mint before (there is no entry in the database).
+
+    Throws an Exception if the user chooses to not trust the mint.
+    """
+    logger.debug(f"Verifying mint {url}")
+    # dummy Wallet to check the database later
+    # mint_wallet = Wallet(url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]))
+    # we check the db whether we know this mint already and ask the user if not
+    mint_keysets = await get_keyset(mint_url=url, db=mint_wallet.db)
+    if mint_keysets is None:
+        # we encountered a new mint and ask for a user confirmation
+        print("")
+        print("Warning: Tokens are from a mint you don't know yet.")
+        print("\n")
+        print(f"Mint URL: {url}")
+        print("\n")
+        click.confirm(
+            f"Do you trust this mint and want to receive the tokens?",
+            abort=True,
+            default=True,
+        )
+    else:
+        logger.debug(f"We know keyset {mint_keysets.id} already")
+
+
+async def verify_mints_tokenv2(ctx: Context, token: TokenV2):
     """
     A helper function that iterates through all mints in the token and if it has
     not been encountered before, asks the user to confirm.
@@ -64,7 +98,7 @@ async def verify_mints(ctx: Context, token: TokenV2):
     assert trust_token_mints, Exception("Aborted!")
 
 
-async def redeem_multimint(ctx: Context, token: TokenV2, script, signature):
+async def redeem_TokenV2_multimint(ctx: Context, token: TokenV2, script, signature):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
@@ -90,6 +124,30 @@ async def redeem_multimint(ctx: Context, token: TokenV2, script, signature):
             # redeem proofs of this keyset
             redeem_proofs = [p for p in token.proofs if p.id == keyset]
             _, _ = await keyset_wallet.redeem(
+                redeem_proofs, scnd_script=script, scnd_siganture=signature
+            )
+            print(f"Received {sum_proofs(redeem_proofs)} sats")
+
+
+async def redeem_TokenV3_multimint(ctx: Context, token: TokenV3, script, signature):
+    """
+    Helper function to iterate thruogh a token with multiple mints and redeem them from
+    these mints one keyset at a time.
+    """
+    for t in token.token:
+        assert t.mint, Exception("Multimint redeem without URL")
+        mint_wallet = Wallet(
+            t.mint, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"])
+        )
+        await verify_mint(mint_wallet, t.mint)
+        keysets = mint_wallet._get_proofs_keysets(t.proofs)
+        # logger.debug(f"Keysets in tokens: {keysets}")
+        # loop over all keysets
+        for keyset in set(keysets):
+            await mint_wallet.load_mint(keyset_id=keyset)
+            # redeem proofs of this keyset
+            redeem_proofs = [p for p in t.proofs if p.id == keyset]
+            _, _ = await mint_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
             )
             print(f"Received {sum_proofs(redeem_proofs)} sats")
@@ -165,49 +223,65 @@ async def get_mint_wallet(ctx: Context):
     return mint_wallet
 
 
-# LNbits token link parsing
-# can extract minut URL from LNbits token links like:
-# https://lnbits.server/cashu/wallet?mint_id=aMintId&recv_token=W3siaWQiOiJHY2...
-def token_from_lnbits_link(link):
-    url, token = "", ""
-    if len(link.split("&recv_token=")) == 2:
-        # extract URL params
-        params = urllib.parse.parse_qs(link.split("?")[1])
-        # extract URL
-        if "mint_id" in params:
-            url = (
-                link.split("?")[0].split("/wallet")[0]
-                + "/api/v1/"
-                + params["mint_id"][0]
-            )
-        # extract token
-        token = params["recv_token"][0]
-        return token, url
-    else:
-        return link, ""
+async def serialize_TokenV2_to_TokenV3(wallet: Wallet, tokenv2: TokenV2):
+    """Helper function for the CLI to receive legacy TokenV2 tokens.
+    Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
+    the ordinary path.
 
-
-async def proofs_to_serialized_tokenv2(wallet, proofs: List[Proof], url: str):
+    Returns:
+        TokenV3: TokenV3
     """
-    Ingests list of proofs and produces a serialized TokenV2
-    """
-    # and add url and keyset id to token
-    token: TokenV2 = await wallet._make_token(proofs, include_mints=False)
-    token.mints = []
-
-    # get keysets of proofs
-    keysets = list(set([p.id for p in proofs if p.id is not None]))
-
-    # check whether we know the mint urls for these proofs
-    for k in keysets:
-        ks = await get_keyset(id=k, db=wallet.db)
-        url = ks.mint_url if ks and ks.mint_url else ""
-
-    url = url or (
-        input(f"Enter mint URL (press enter for default {settings.mint_url}): ")
-        or settings.mint_url
-    )
-
-    token.mints.append(TokenV2Mint(url=url, ids=keysets))
-    token_serialized = await wallet._serialize_token_base64(token)
+    tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv2.proofs)])
+    if tokenv2.mints:
+        tokenv3.token[0].mint = tokenv2.mints[0].url
+    token_serialized = await wallet._serialize_token_V3(tokenv3)
     return token_serialized
+
+
+# # LNbits token link parsing
+# # can extract minut URL from LNbits token links like:
+# # https://lnbits.server/cashu/wallet?mint_id=aMintId&recv_token=W3siaWQiOiJHY2...
+# def token_from_lnbits_link(link):
+#     url, token = "", ""
+#     if len(link.split("&recv_token=")) == 2:
+#         # extract URL params
+#         params = urllib.parse.parse_qs(link.split("?")[1])
+#         # extract URL
+#         if "mint_id" in params:
+#             url = (
+#                 link.split("?")[0].split("/wallet")[0]
+#                 + "/api/v1/"
+#                 + params["mint_id"][0]
+#             )
+#         # extract token
+#         token = params["recv_token"][0]
+#         return token, url
+#     else:
+#         return link, ""
+
+
+# async def proofs_to_serialized_tokenv2(wallet: Wallet, proofs: List[Proof], url: str):
+#     """
+#     Ingests list of proofs and produces a serialized TokenV2.
+#     Used for receiving legacy V1 tokens in the CLI.
+#     """
+#     # and add url and keyset id to token
+#     token: TokenV2 = await wallet._make_token_v2(proofs, include_mints=False)
+#     token.mints = []
+
+#     # get keysets of proofs
+#     keysets = list(set([p.id for p in proofs if p.id is not None]))
+
+#     # check whether we know the mint urls for these proofs
+#     for k in keysets:
+#         ks = await get_keyset(id=k, db=wallet.db)
+#         url = ks.mint_url if ks and ks.mint_url else ""
+
+#     url = url or (
+#         input(f"Enter mint URL (press enter for default {settings.mint_url}): ")
+#         or settings.mint_url
+#     )
+
+#     token.mints.append(TokenV2Mint(url=url, ids=keysets))
+#     token_serialized = await wallet._serialize_token_base64_tokenv2(token)
+#     return token_serialized
