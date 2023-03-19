@@ -10,9 +10,9 @@ from cashu.core.base import (
     Proof,
     TokenV2,
     TokenV2Mint,
-    WalletKeyset,
     TokenV3,
     TokenV3Token,
+    WalletKeyset,
 )
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings

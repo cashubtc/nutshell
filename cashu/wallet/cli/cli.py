@@ -35,8 +35,8 @@ from cashu.wallet.wallet import Wallet as Wallet
 from .cli_helpers import (
     get_mint_wallet,
     print_mint_balances,
-    serialize_TokenV2_to_TokenV3,
     redeem_TokenV3_multimint,
+    serialize_TokenV2_to_TokenV3,
 )
 from .nostr import receive_nostr, send_nostr
 
