@@ -239,7 +239,7 @@ class Ledger:
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
         assert sum_outputs - sum_inputs == 0
 
-    async def _request_lightning_invoice(self, amount: int):
+    async def _request_lightning_invoice(self, amount: int,  description_hash: Optional[bytes] = None):
         """Generate a Lightning invoice using the funding source backend.
 
         Args:
@@ -259,7 +259,7 @@ class Ledger:
             checking_id,
             payment_request,
             error_message,
-        ) = await self.lightning.create_invoice(amount, "cashu deposit")
+        ) = await self.lightning.create_invoice(amount, "cashu deposit", description_hash)
         return payment_request, checking_id
 
     async def _check_lightning_invoice(
@@ -494,7 +494,7 @@ class Ledger:
         assert keyset.public_keys, Exception("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
-    async def request_mint(self, amount: int):
+    async def request_mint(self, amount: int, description_hash: Optional[bytes] = None):
         """Returns Lightning invoice and stores it in the db.
 
         Args:
@@ -506,7 +506,7 @@ class Ledger:
         Returns:
             Tuple[str, str]: Bolt11 invoice and payment hash (for looking it up later)
         """
-        payment_request, checking_id = await self._request_lightning_invoice(amount)
+        payment_request, checking_id = await self._request_lightning_invoice(amount, description_hash)
         assert payment_request, Exception(
             "could not fetch invoice from Lightning backend"
         )
