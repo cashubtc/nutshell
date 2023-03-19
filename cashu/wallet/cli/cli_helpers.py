@@ -134,17 +134,23 @@ async def get_mint_wallet(ctx: Context):
     if len(mint_balances) > 1:
         await print_mint_balances(ctx, wallet, show_mints=True)
 
-        mint_nr_str = (
-            input(f"Select mint [1-{len(mint_balances)}, press enter for default 1]: ")
-            or "1"
-        )
-        if not mint_nr_str.isdigit():
-            raise Exception("invalid input.")
-        mint_nr = int(mint_nr_str)
-    else:
-        mint_nr = 1
+        url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])
+        nr_max = list(mint_balances).index(url_max) + 1
 
-    mint_url = list(mint_balances.keys())[mint_nr - 1]
+        mint_nr_str = input(
+            f"Select mint [1-{len(mint_balances)}] or "
+            f"press enter for mint with largest balance (Mint {nr_max}): "
+        )
+        if not mint_nr_str:  # largest balance
+            mint_url = url_max
+        elif mint_nr_str.isdigit() and int(mint_nr_str) <= len(
+            mint_balances
+        ):  # specific mint
+            mint_url = list(mint_balances.keys())[int(mint_nr_str) - 1]
+        else:
+            raise Exception("invalid input.")
+    else:
+        mint_url = list(mint_balances.keys())[0]
 
     # load this mint_url into a wallet
     mint_wallet = Wallet(
