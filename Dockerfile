@@ -1,6 +1,7 @@
 FROM python:3.9-slim
 RUN apt-get update
 RUN apt-get install -y curl python3-dev autoconf g++
+RUN apt-get install -y libpq-dev
 RUN curl -sSL https://install.python-poetry.org | python3 -
 ENV PATH="/root/.local/bin:$PATH"
 WORKDIR /app
