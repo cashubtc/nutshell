@@ -55,7 +55,7 @@ class LNbitsWallet(Wallet):
     ) -> InvoiceResponse:
         data: Dict = {"out": False, "amount": amount}
         if description_hash:
-            data["description_hash"] = description_hash.hex()
+            data["description_hash"] = description_hash.decode()            
         if unhashed_description:
             data["unhashed_description"] = unhashed_description.hex()
 
