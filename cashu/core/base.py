@@ -161,12 +161,14 @@ class GetMintResponse(BaseModel):
 
 class PostMeltRequest(BaseModel):
     proofs: List[Proof]
-    invoice: str
+    pr: str
+    outputs: Union[List[BlindedMessage], None]
 
 
 class GetMeltResponse(BaseModel):
     paid: Union[bool, None]
     preimage: Union[str, None]
+    change: Union[List[BlindedSignature], None] = None
 
 
 # ------- API: SPLIT -------
@@ -186,11 +188,15 @@ class PostSplitResponse(BaseModel):
 # ------- API: CHECK -------
 
 
-class GetCheckSpendableRequest(BaseModel):
+class CheckSpendableRequest(BaseModel):
     proofs: List[Proof]
 
 
-class GetCheckFeesRequest(BaseModel):
+class CheckSpendableResponse(BaseModel):
+    spendable: List[bool]
+
+
+class CheckFeesRequest(BaseModel):
     pr: str
 
 

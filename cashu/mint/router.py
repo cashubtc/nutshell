@@ -6,9 +6,10 @@ from secp256k1 import PublicKey
 from cashu.core.base import (
     BlindedMessage,
     BlindedSignature,
+    CheckFeesRequest,
     CheckFeesResponse,
-    GetCheckFeesRequest,
-    GetCheckSpendableRequest,
+    CheckSpendableRequest,
+    CheckSpendableResponse,
     GetMeltResponse,
     GetMintResponse,
     KeysetsResponse,
@@ -42,16 +43,19 @@ async def keys() -> KeysResponse:
     name="Keyset public keys",
     summary="Public keys of a specific keyset",
 )
-async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
+async def keyset_keys(idBase64Urlsafe: str) -> Union[KeysResponse, CashuError]:
     """
     Get the public keys of the mint from a specific keyset id.
     The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
     normal base64 before it can be processed (by the mint).
     """
-    id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
-    keyset = ledger.get_keyset(keyset_id=id)
-    keys = KeysResponse.parse_obj(keyset)
-    return keys
+    try:
+        id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
+        keyset = ledger.get_keyset(keyset_id=id)
+        keys = KeysResponse.parse_obj(keyset)
+        return keys
+    except Exception as exc:
+        return CashuError(code=0, error=str(exc))
 
 
 @router.get(
@@ -109,11 +113,13 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     Requests tokens to be destroyed and sent out via Lightning.
     """
     try:
-        ok, preimage = await ledger.melt(payload.proofs, payload.invoice)
-        resp = GetMeltResponse(paid=ok, preimage=preimage)
+        ok, preimage, change_promises = await ledger.melt(
+            payload.proofs, payload.pr, payload.outputs
+        )
+        resp = GetMeltResponse(paid=ok, preimage=preimage, change=change_promises)
+        return resp
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
-    return resp
 
 
 @router.post(
@@ -121,9 +127,12 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     name="Check spendable",
     summary="Check whether a proof has already been spent",
 )
-async def check_spendable(payload: GetCheckSpendableRequest) -> Dict[int, bool]:
+async def check_spendable(
+    payload: CheckSpendableRequest,
+) -> CheckSpendableResponse:
     """Check whether a secret has been spent already or not."""
-    return await ledger.check_spendable(payload.proofs)
+    spendableList = await ledger.check_spendable(payload.proofs)
+    return CheckSpendableResponse(spendable=spendableList)
 
 
 @router.post(
@@ -131,14 +140,14 @@ async def check_spendable(payload: GetCheckSpendableRequest) -> Dict[int, bool]:
     name="Check fees",
     summary="Check fee reserve for a Lightning payment",
 )
-async def check_fees(payload: GetCheckFeesRequest) -> CheckFeesResponse:
+async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     """
     Responds with the fees necessary to pay a Lightning invoice.
     Used by wallets for figuring out the fees they need to supply together with the payment amount.
     This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
     """
-    fees_msat = await ledger.check_fees(payload.pr)
-    return CheckFeesResponse(fee=fees_msat // 1000)
+    fees_sat = await ledger.check_fees(payload.pr)
+    return CheckFeesResponse(fee=fees_sat)
 
 
 @router.post("/split", name="Split", summary="Split proofs at a specified amount")
