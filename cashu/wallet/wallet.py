@@ -116,13 +116,8 @@ class LedgerAPI:
         outputs: List[BlindedMessage],
     ):
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
-<<<<<<< HEAD
-        proofs = []
-        for promise, secret, r, output in zip(promises, secrets, rs, outputs):
-=======
         proofs: List[Proof] = []
-        for promise, secret, r in zip(promises, secrets, rs):
->>>>>>> main
+        for promise, secret, r, output in zip(promises, secrets, rs, outputs):
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
             proof = Proof(
@@ -132,7 +127,6 @@ class LedgerAPI:
                 secret=secret,
                 dleq=promise.dleq,
             )
-            proof.dleq.B_ = output.B_
             proof.dleq.C_ = promise.C_
             proofs.append(proof)
         return proofs
@@ -511,6 +505,7 @@ class Wallet(LedgerAPI):
         """
         split = amount_split(amount)
         proofs = await super().mint(split, payment_hash)
+        print(proofs)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
@@ -575,8 +570,11 @@ class Wallet(LedgerAPI):
         frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
-        
+
         # DLEQ verify
+        print(f"before:{scnd_proofs[0].C}")
+        scnd_proofs[0].C = "1" + scnd_proofs[0].C[1:]
+        print(f"after: {scnd_proofs[0].C}")
         self.verify_proofs_dleq(frst_proofs)
         self.verify_proofs_dleq(scnd_proofs)
 
@@ -837,8 +835,14 @@ class Wallet(LedgerAPI):
         for proof in proofs:
             dleq = proof.dleq
             assert dleq, "no DLEQ proof"
+            assert self.keys.public_keys
             if not b_dhke.alice_verify_dleq(
-                dleq.e, dleq.s, self.keys[proof.amount], dleq.C_, dleq.B_
+                bytes.fromhex(dleq.e),
+                bytes.fromhex(dleq.s),
+                self.keys.public_keys[proof.amount],
+                bytes.fromhex(proof.C),
+                bytes.fromhex(dleq.r),
+                bytes.fromhex(dleq.B_),
             ):
                 raise Exception("DLEQ proof invalid.")
 

@@ -115,27 +115,43 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
 # e == hash(R1,R2,A,C')
 
 
+def hash_e(R1: PublicKey, R2: PublicKey, K: PublicKey, C_: PublicKey):
+    _R1 = R1.serialize(compressed=False).hex()
+    _R2 = R2.serialize(compressed=False).hex()
+    _K = K.serialize(compressed=False).hex()
+    _C_ = C_.serialize(compressed=False).hex()
+    e_ = f"{_R1}{_R2}{_K}{_C_}"
+    e = hashlib.sha256(e_.encode("utf-8")).digest()
+    return e
+
+
 def step2_bob_dleq(B_: PublicKey, a: PrivateKey):
-    r = PrivateKey()  # generate random value
-    R1 = PrivateKey(privkey=r.private_key, raw=True)
-    R2 = B_.mult(r)
-    e = hashlib.sha256(
-        R1.serialize().encode()
-        + PrivateKey(R2.serialize()[1:], raw=True).serialize().encode()
-        + r.serialize().encode()
-        + a.serialize().encode()
-    ).digest()
-    s = r.pubkey + a.pubkey.mult(PrivateKey(privkey=e, raw=True))
+    p = PrivateKey()  # generate random value
+    R1 = p.pubkey  # R1 = pG
+    R2 = B_.mult(p)  # R2 = pB_
+    print(f"R1 is: {R1.serialize().hex()}")
+    print(f"R2 is: {R2.serialize().hex()}")
+    C_ = B_.mult(a)  # C_ = aB_
+    K = a.pubkey
+    e = hash_e(R1, R2, K, C_)  # e = hash(R1, R2, K, C_)
+    s = p.tweak_add(a.tweak_mul(e))  # s = p + ek
     return e, s
 
 
-def alice_verify_dleq(e, s, A, C_, B_):
-    print(len(s))
-    # return True
-    R1 = A.mult(
-        PrivateKey(privkey=e, raw=True)
-    )  # - PrivateKey(privkey=s[:1], raw=True)
-    return True
+def alice_verify_dleq(e: bytes, s: bytes, A: PublicKey, C: bytes, r: bytes, B_: bytes):
+    epk = PrivateKey(e, raw=True)
+    spk = PrivateKey(s, raw=True)
+    ck = PublicKey(C, raw=True)
+    bk = PublicKey(B_, raw=True)
+    R1 = spk.pubkey - A.mult(epk)
+    R2 = bk.mult(spk) - ck.mult(epk)
+    print(f"R1 is: {R1.serialize().hex()}")
+    print(f"R2 is: {R2.serialize().hex()}")
+    if e == hash_e(R1, R2, A, ck):
+        print("DLEQ proof ok!")
+    else:
+        print("DLEQ proof broken")
+    return e == hash_e(R1, R2, A, ck)
 
 
 ### Below is a test of a simple positive and negative case
