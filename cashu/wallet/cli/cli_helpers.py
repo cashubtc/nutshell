@@ -8,6 +8,7 @@ from loguru import logger
 
 from cashu.core.base import (
     Proof,
+    TokenV1,
     TokenV2,
     TokenV2Mint,
     TokenV3,
@@ -238,50 +239,14 @@ async def serialize_TokenV2_to_TokenV3(wallet: Wallet, tokenv2: TokenV2):
     return token_serialized
 
 
-# # LNbits token link parsing
-# # can extract minut URL from LNbits token links like:
-# # https://lnbits.server/cashu/wallet?mint_id=aMintId&recv_token=W3siaWQiOiJHY2...
-# def token_from_lnbits_link(link):
-#     url, token = "", ""
-#     if len(link.split("&recv_token=")) == 2:
-#         # extract URL params
-#         params = urllib.parse.parse_qs(link.split("?")[1])
-#         # extract URL
-#         if "mint_id" in params:
-#             url = (
-#                 link.split("?")[0].split("/wallet")[0]
-#                 + "/api/v1/"
-#                 + params["mint_id"][0]
-#             )
-#         # extract token
-#         token = params["recv_token"][0]
-#         return token, url
-#     else:
-#         return link, ""
+async def serialize_TokenV1_to_TokenV3(wallet: Wallet, tokenv1: TokenV1):
+    """Helper function for the CLI to receive legacy TokenV1 tokens.
+    Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
+    the ordinary path.
 
-
-# async def proofs_to_serialized_tokenv2(wallet: Wallet, proofs: List[Proof], url: str):
-#     """
-#     Ingests list of proofs and produces a serialized TokenV2.
-#     Used for receiving legacy V1 tokens in the CLI.
-#     """
-#     # and add url and keyset id to token
-#     token: TokenV2 = await wallet._make_token_v2(proofs, include_mints=False)
-#     token.mints = []
-
-#     # get keysets of proofs
-#     keysets = list(set([p.id for p in proofs if p.id is not None]))
-
-#     # check whether we know the mint urls for these proofs
-#     for k in keysets:
-#         ks = await get_keyset(id=k, db=wallet.db)
-#         url = ks.mint_url if ks and ks.mint_url else ""
-
-#     url = url or (
-#         input(f"Enter mint URL (press enter for default {settings.mint_url}): ")
-#         or settings.mint_url
-#     )
-
-#     token.mints.append(TokenV2Mint(url=url, ids=keysets))
-#     token_serialized = await wallet._serialize_token_base64_tokenv2(token)
-#     return token_serialized
+    Returns:
+        TokenV3: TokenV3
+    """
+    tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv1.__root__)])
+    token_serialized = await wallet._serialize_token_V3(tokenv3)
+    return token_serialized

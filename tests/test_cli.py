@@ -166,11 +166,10 @@ def test_receive_tokenv3_no_mint(mint, cli_prefix):
 #     print(result.output)
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio
 def test_receive_tokenv2(mint, cli_prefix):
     runner = CliRunner()
-    token = "eyJwcm9vZnMiOiBbeyJpZCI6ICJEU0FsOW52dnlmdmEiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICJ3MEs4dE9OcFJOdVFvUzQ1Y2g1NkJ3IiwgIkMiOiAiMDI3NzcxODY4NWQ0MDgxNmQ0MTdmZGE1NWUzN2YxOTFkN2E5ODA0N2QyYWE2YzFlNDRhMWZjNTM1ZmViZDdjZDQ5In0sIHsiaWQiOiAiRFNBbDludnZ5ZnZhIiwgImFtb3VudCI6IDgsICJzZWNyZXQiOiAiX2J4cDVHeG1JQUVaRFB5Sm5qaFUxdyIsICJDIjogIjAzZTY2M2UzOWYyNTZlZTAzOTBiNGFiMThkZDA2OTc0NjRjZjIzYTM4OTc1MDlmZDFlYzQ1MzMxMTRlMTcwMDQ2NCJ9XSwgIm1pbnRzIjogW3sidXJsIjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzNyIsICJpZHMiOiBbIkRTQWw5bnZ2eWZ2YSJdfV19"
+    token = "eyJwcm9vZnMiOiBbeyJpZCI6ICJheU1VYmU5ODVVc3oiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICJ5WWxWR2lmSmJQbGRJZmp5YUxYSnNBIiwgIkMiOiAiMDJlNDE5ZjExNGFlNTFiMzI1MGVkYjE5YTI4NzQ0MjgwMjAwMGE3NTFhZmEwZGZmZDM2N2QxYTI0NTI3NjY2NmIwIn0sIHsiaWQiOiAiYXlNVWJlOTg1VXN6IiwgImFtb3VudCI6IDgsICJzZWNyZXQiOiAiVlZraDZGTW5sUVZ2WlZOR2Z6emUwQSIsICJDIjogIjAyZGMxZDhjZmFiNDA2NGI4MWFhZThiZWEzNTBjNjIzNWM1NDIzOGNiN2E5ZmYxNTJjNjMxMTAwN2FlNDEzZmFlNyJ9XSwgIm1pbnRzIjogW3sidXJsIjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzNyIsICJpZHMiOiBbImF5TVViZTk4NVVzeiJdfV19"
     result = runner.invoke(
         cli,
         [*cli_prefix, "receive", token],
@@ -180,11 +179,10 @@ def test_receive_tokenv2(mint, cli_prefix):
     print(result.output)
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio
 def test_receive_tokenv1(mint, cli_prefix):
     runner = CliRunner()
-    token = "3siaWQiOiAiRFNBbDludnZ5ZnZhIiwgImFtb3VudCI6IDIsICJzZWNyZXQiOiAiX3VOV1ZNeDRhQndieWszRDZoLWREZyIsICJDIjogIjAyMmEzMzRmZTIzYTA1OTJhZmM3OTk3OWQyZDJmMmUwOTgxMGNkZTRlNDY5ZGYwYzZhMGE4ZDg0ZmY1MmIxOTZhNyJ9LCB7ImlkIjogIkRTQWw5bnZ2eWZ2YSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogIk9VUUxnRE90WXhHOXJUMzZKdHFwbWciLCAiQyI6ICIwMzVmMGM2NTNhNTEzMGY4ZmQwNjY5NDg5YzEwMDY3N2Q5NGU0MGFlZjhkYWE0OWZiZDIyZTgzZjhjNThkZjczMTUifV0"
+    token = "W3siaWQiOiAiYXlNVWJlOTg1VXN6IiwgImFtb3VudCI6IDIsICJzZWNyZXQiOiAicTR6WFdzYl84cGlBRHRQSzB1MFAwdyIsICJDIjogIjAyNDVlYjFmY2E1ODhlYWM0Y2M3OGJkZTJiYmMzOGQwMmY4YTIyZTEyMjcyMjQ2M2RiNDk5ZjA0ZWQ2ZDMzNjZkZCJ9LCB7ImlkIjogImF5TVViZTk4NVVzeiIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogInBsaTNKX0QwNkxQZ3RmaW5EZkFWckEiLCAiQyI6ICIwMmU0MDFlMTBhYjI3ODJlYzQzYjMxZmZmMGMxZjc4N2FlYjgyODViNjkxMTAyMzlmYTJiN2VkNzA2MzdhMTliNzUifV0="
     result = runner.invoke(
         cli,
         [*cli_prefix, "receive", token],

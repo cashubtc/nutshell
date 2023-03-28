@@ -18,7 +18,7 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.base import Proof, TokenV2
+from cashu.core.base import Proof, TokenV1, TokenV2
 from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
@@ -37,6 +37,7 @@ from .cli_helpers import (
     get_mint_wallet,
     print_mint_balances,
     redeem_TokenV3_multimint,
+    serialize_TokenV1_to_TokenV3,
     serialize_TokenV2_to_TokenV3,
 )
 from .nostr import receive_nostr, send_nostr
@@ -330,6 +331,14 @@ async def receive(ctx: Context, token: str, lock: str):
         except:
             pass
 
+    # V1Tokens (<0.7) (W3siaWQ...)
+    if token.startswith("W3siaWQ"):
+        try:
+            tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
+            token = await serialize_TokenV1_to_TokenV3(wallet, tokenv1)
+            print(token)
+        except:
+            pass
     # ----- receive token -----
 
     # deserialize token
