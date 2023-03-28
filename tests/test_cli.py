@@ -122,6 +122,8 @@ def test_receive_tokenv3(mint, cli_prefix):
 
 @pytest.mark.asyncio
 def test_receive_tokenv3_no_mint(mint, cli_prefix):
+    # this test works only if the previous test succeeds because we simulate the case where the mint URL is not in the token
+    # therefore, we need to know the mint keyset already and have the mint URL in the db
     runner = CliRunner()
     token = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogImF5TVViZTk4NVVzeiIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIkw4XzlBc3d0Rzh1UENmZ29xWnRVRFEiLCAiQyI6ICIwMmE1ZWMzYmY0Nzk2ZTg1NjJhNGRjYjM2YWRkOWYwNDhmZTU3ZGU0ZjEyMjgxMzA3N2FlZjBlM2Y2ZGIwY2U3ZGQifSwgeyJpZCI6ICJheU1VYmU5ODVVc3oiLCAiYW1vdW50IjogOCwgInNlY3JldCI6ICJ2WWJKZXNhS3BMTnNwaXl3cXd3ejFRIiwgIkMiOiAiMDJjNWVkNDc4YjZjOWU0MTExYjhlOGU1MjBlNThhMTVhYzQzMjUwMGM1MTU2ZmFjNDkyN2Q0ODVhNzM3ZTdlYzA4In1dfV19"
     result = runner.invoke(
