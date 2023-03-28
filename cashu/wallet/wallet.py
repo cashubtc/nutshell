@@ -294,9 +294,12 @@ class LedgerAPI:
         return keysets.keysets
 
     @async_set_requests
-    async def request_mint(self, amount):
+    async def request_mint(self, amount, description_hash: Optional[bytes] = None):
         """Requests a mint from the server and returns Lightning invoice."""
-        resp = self.s.get(self.url + "/mint", params={"amount": amount})
+        if description_hash != None:
+            description_hash = description_hash.decode("utf-8")
+
+        resp = self.s.get(self.url + "/mint", params={"amount": amount, "description_hash": description_hash})
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
@@ -474,8 +477,8 @@ class Wallet(LedgerAPI):
     async def load_proofs(self):
         self.proofs = await get_proofs(db=self.db)
 
-    async def request_mint(self, amount):
-        invoice = await super().request_mint(amount)
+    async def request_mint(self, amount, description_hash: Optional[bytes] = None):
+        invoice = await super().request_mint(amount,description_hash)
         invoice.time_created = int(time.time())
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice

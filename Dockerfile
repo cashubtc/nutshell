@@ -9,4 +9,5 @@ COPY . .
 RUN poetry config virtualenvs.create false
 RUN poetry install --no-dev --no-root
 EXPOSE 3338
-CMD ["poetry", "run", "mint", "--port", "3338", "--host", "0.0.0.0"]
+# CMD ["poetry", "run", "mint", "--port", "3338", "--host", "0.0.0.0"]
+CMD ["poetry", "run", "python", "-u", "-m", "cashu.mint", "--port", "3338", "--host", "0.0.0.0"]

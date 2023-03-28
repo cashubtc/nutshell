@@ -1,4 +1,4 @@
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional
 
 from fastapi import APIRouter
 from secp256k1 import PublicKey
@@ -68,14 +68,14 @@ async def keysets() -> KeysetsResponse:
 
 
 @router.get("/mint", name="Request mint", summary="Request minting of new tokens")
-async def request_mint(amount: int = 0) -> GetMintResponse:
+async def request_mint(amount: int = 0, description_hash: Optional[bytes] = None) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
 
     Call `POST /mint` after paying the invoice.
     """
-    payment_request, payment_hash = await ledger.request_mint(amount)
+    payment_request, payment_hash = await ledger.request_mint(amount,description_hash)
     print(f"Lightning invoice: {payment_request}")
     resp = GetMintResponse(pr=payment_request, hash=payment_hash)
     return resp
