@@ -684,6 +684,52 @@ class Wallet(LedgerAPI):
             token.token.append(token_proofs)
         return token
 
+    async def _serialize_token_V3(self, token: TokenV3):
+        """
+        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
+        """
+        prefix = "cashuA"
+        tokenv3_serialized = prefix
+        # encode the token as a base64 string
+        tokenv3_serialized += base64.urlsafe_b64encode(
+            json.dumps(token.to_dict()).encode()
+        ).decode()
+        return tokenv3_serialized
+
+    def _deserialize_token_V3(self, tokenv3_serialized: str) -> TokenV3:
+        """
+        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
+        """
+        prefix = "cashuA"
+        assert tokenv3_serialized.startswith(prefix), Exception(
+            f"Token prefix not valid. Expected {prefix}."
+        )
+        token_base64 = tokenv3_serialized[len(prefix) :]
+        token = json.loads(base64.urlsafe_b64decode(token_base64))
+        return TokenV3.parse_obj(token)
+
+    async def serialize_proofs(
+        self, proofs: List[Proof], include_mints=True, legacy=False
+    ):
+        """
+        Produces sharable token with proofs and mint information.
+        """
+
+        if legacy:
+            # V2 tokens
+            token = await self._make_token_v2(proofs, include_mints)
+            return await self._serialize_token_base64_tokenv2(token)
+
+            # # deprecated code for V1 tokens
+            # proofs_serialized = [p.to_dict() for p in proofs]
+            # return base64.urlsafe_b64encode(
+            #     json.dumps(proofs_serialized).encode()
+            # ).decode()
+
+        # V3 tokens
+        token = await self._make_token(proofs, include_mints)
+        return await self._serialize_token_V3(token)
+
     async def _make_token_v2(self, proofs: List[Proof], include_mints=True):
         """
         Takes list of proofs and produces a TokenV2 by looking up
@@ -725,46 +771,6 @@ class Wallet(LedgerAPI):
             json.dumps(token.to_dict()).encode()
         ).decode()
         return token_base64
-
-    async def _serialize_token_V3(self, token: TokenV3):
-        """
-        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
-        """
-        prefix = "cashuA"
-        tokenv3_serialized = prefix
-        # encode the token as a base64 string
-        tokenv3_serialized += base64.urlsafe_b64encode(
-            json.dumps(token.to_dict()).encode()
-        ).decode()
-        return tokenv3_serialized
-
-    def _deserialize_token_V3(self, tokenv3_serialized: str) -> TokenV3:
-        """
-        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
-        """
-        prefix = "cashuA"
-        assert tokenv3_serialized.startswith(prefix), Exception(
-            f"Token prefix not valid. Expected {prefix}."
-        )
-        token_base64 = tokenv3_serialized[len(prefix) :]
-        token = json.loads(base64.urlsafe_b64decode(token_base64))
-        return TokenV3.parse_obj(token)
-
-    async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, legacy=False
-    ):
-        """
-        Produces sharable token with proofs and mint information.
-        """
-
-        if legacy:
-            proofs_serialized = [p.to_dict() for p in proofs]
-            return base64.urlsafe_b64encode(
-                json.dumps(proofs_serialized).encode()
-            ).decode()
-
-        token = await self._make_token(proofs, include_mints)
-        return await self._serialize_token_V3(token)
 
     async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
         """

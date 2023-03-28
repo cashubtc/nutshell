@@ -241,9 +241,7 @@ async def send(ctx: Context, amount: int, lock: str, legacy: bool):
 
     if legacy:
         print("")
-        print(
-            "Legacy token without mint information for older clients. This token can only be be received by wallets who use the mint the token is issued from:"
-        )
+        print("Old token format:")
         print("")
         token = await wallet.serialize_proofs(
             send_proofs,
