@@ -120,7 +120,6 @@ def test_receive_tokenv3(mint, cli_prefix):
     print(result.output)
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio
 def test_receive_tokenv3_no_mint(mint, cli_prefix):
     runner = CliRunner()

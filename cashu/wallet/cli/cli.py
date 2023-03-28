@@ -26,6 +26,7 @@ from cashu.nostr.nostr.client.client import NostrClient
 from cashu.tor.tor import TorProxy
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
+    get_keyset,
     get_lightning_invoices,
     get_reserved_proofs,
     get_unused_locks,
@@ -350,9 +351,22 @@ async def receive(ctx: Context, token: str, lock: str):
         await redeem_TokenV3_multimint(ctx, tokenObj, script, signature)
     else:
         # no mint information present, we extract the proofs and use wallet's default mint
-        # proofs = [Proof(**p) for p in dtoken["proofs"]]
+
         proofs = [p for t in tokenObj.token for p in t.proofs]
-        _, _ = await wallet.redeem(proofs, script, signature)
+        # first we load the mint URL from the DB
+        keyset_in_token = proofs[0].id
+        assert keyset_in_token
+        # we get the keyset from the db
+        mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
+        assert mint_keysets, Exception("we don't know this keyset")
+        assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
+        # now we have the URL
+        mint_wallet = Wallet(
+            mint_keysets.mint_url,
+            os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
+        )
+        await mint_wallet.load_mint(keyset_in_token)
+        _, _ = await mint_wallet.redeem(proofs, script, signature)
         print(f"Received {sum_proofs(proofs)} sats")
 
     # reload main wallet so the balance updates
