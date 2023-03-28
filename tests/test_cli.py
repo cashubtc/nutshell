@@ -138,9 +138,6 @@ def test_receive_tokenv3_no_mint(mint, wallet, cli_prefix):
     print(result.output)
 
 
-# eyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjBwY3JpVWE5QTEvaiIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogImRkRUtudHdrU2ZMeFdWcFUtaHBjM0EiLCAiQyI6ICIwMzAzNjI2YzM4YzczZTcwZGZjYzUwMDBjZmI5OTYyNTM4MWQyYmM2MzExMmM2YzE5MzM5ZDU4Y2UzOWIyODNhNzkifSwgeyJpZCI6ICIwcGNyaVVhOUExL2oiLCAiYW1vdW50IjogOCwgInNlY3JldCI6ICJwcXRZMGh2MXlmS2R6a0dCLUU5TGJnIiwgIkMiOiAiMDM4MzFkYmNhODIzMDdkOTVjYWY2MDI2ZDZlZmI2YzMyYjQ3MTQ1MWVhMmJjNDY5ZWE2YTE5ZDc0MjM1M2Y2MTk1In1dfV19
-
-
 # @pytest.mark.asyncio
 # def test_receive_tokenv3(mint):
 #     wallet = asyncio.run(init_wallet())
