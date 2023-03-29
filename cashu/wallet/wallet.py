@@ -150,8 +150,9 @@ class LedgerAPI:
         seed_secret = settings.wallet_private_key + "x" + str(secret_counter)
         # blinding factor
         r_secret = settings.wallet_private_key + "r" + str(secret_counter)
+        logger.debug(f"generating sercret {secret_counter}: {seed_secret} {r_secret}")
         secred = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
-        r = base64.b64encode(hashlib.sha256(r_secret.encode("utf-8")).digest())
+        r = base64.b64encode(hashlib.sha256(r_secret.encode("utf-8")).digest())[:32]
         return secred, r
 
     async def generate_n_secrets(self, n: int = 1):
@@ -372,7 +373,6 @@ class LedgerAPI:
         self.raise_on_error(reponse_dict)
 
         promises = PostMintResponse.parse_obj(reponse_dict).promises
-
         return self._construct_proofs(promises, secrets, rs)
 
     @async_set_requests

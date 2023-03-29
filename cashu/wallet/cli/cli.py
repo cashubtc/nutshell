@@ -30,7 +30,6 @@ from cashu.wallet.crud import (
     get_lightning_invoices,
     get_reserved_proofs,
     get_unused_locks,
-    bump_secret_derivation,
 )
 from cashu.wallet.wallet import Wallet as Wallet
 

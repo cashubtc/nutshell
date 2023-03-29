@@ -1,5 +1,5 @@
 import re
-
+from loguru import logger
 from cashu.core.db import COCKROACH, POSTGRES, SQLITE, Database
 
 
@@ -26,6 +26,7 @@ async def migrate_databases(db: Database, migrations_module):
             if match:
                 version = int(match.group(1))
                 if version > current_versions.get(db_name, 0):
+                    logger.debug(f"Migration: Running migration {db_name}:{key}.")
                     await migrate(db)
 
                     if db.schema == None:
@@ -45,6 +46,7 @@ async def migrate_databases(db: Database, migrations_module):
             )
 
         if not exists:
+            logger.debug("Migration: creating migrations table.")
             await migrations_module.m000_create_migrations_table(conn)
 
         rows = await (
