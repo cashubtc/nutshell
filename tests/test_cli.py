@@ -139,33 +139,6 @@ def test_receive_tokenv3_no_mint(mint, cli_prefix):
     print(result.output)
 
 
-# @pytest.mark.asyncio
-# def test_receive_tokenv3(mint):
-#     wallet = asyncio.run(init_wallet())
-#     runner = CliRunner()
-#     token = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjVXRWJoUzJiOXZrTyIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogInpINEM3OXpwZWJYaDIxTDBEWk1qb1EiLCAiQyI6ICIwMmI4ZDZjYzA3NjliMWNiZmQyNzkwN2U2YTQ5YmY2MGMyYzUwYmUwNzhmOGNjMWU1YWE1NTY2NjE1Y2QwOGZmM2YifSwgeyJpZCI6ICI1V0ViaFMyYjl2a08iLCAiYW1vdW50IjogOCwgInNlY3JldCI6ICJSYW1aZEJ4a01ybWtmdXh6SjFIOU9RIiwgIkMiOiAiMDI2ZGU2ZDNjZDlmNDY4MDYzMTJkYTczZDE2YzQ2ZDc3NGNkODlhZTk2NzUwMWI3MzA1MmQwNTVmODZkNmJmMmMwIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzcifV19"
-#     result = runner.invoke(
-#         cli,
-#         [*cli_prefix, "receive", token],
-#     )
-#     assert result.exception is None
-#     print("RECEIVE")
-#     print(result.output)
-
-
-# @pytest.mark.asyncio
-# def test_receive_tokenv3_no_mint(mint):
-#     runner = CliRunner()
-#     token = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjVXRWJoUzJiOXZrTyIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogInpINEM3OXpwZWJYaDIxTDBEWk1qb1EiLCAiQyI6ICIwMmI4ZDZjYzA3NjliMWNiZmQyNzkwN2U2YTQ5YmY2MGMyYzUwYmUwNzhmOGNjMWU1YWE1NTY2NjE1Y2QwOGZmM2YifSwgeyJpZCI6ICI1V0ViaFMyYjl2a08iLCAiYW1vdW50IjogOCwgInNlY3JldCI6ICJSYW1aZEJ4a01ybWtmdXh6SjFIOU9RIiwgIkMiOiAiMDI2ZGU2ZDNjZDlmNDY4MDYzMTJkYTczZDE2YzQ2ZDc3NGNkODlhZTk2NzUwMWI3MzA1MmQwNTVmODZkNmJmMmMwIn1dfV19"
-#     result = runner.invoke(
-#         cli,
-#         [*cli_prefix, "receive", token],
-#     )
-#     assert result.exception is None
-#     print("RECEIVE")
-#     print(result.output)
-
-
 @pytest.mark.asyncio
 def test_receive_tokenv2(mint, cli_prefix):
     runner = CliRunner()
