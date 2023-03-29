@@ -32,6 +32,7 @@ If true, C must have originated from Bob
 
 import hashlib
 from typing import Optional
+
 from secp256k1 import PrivateKey, PublicKey
 
 

@@ -1,10 +1,10 @@
 import base64
+import hashlib
 import json
 import math
 import secrets as scrts
 import time
 import uuid
-import hashlib
 from itertools import groupby
 from typing import Dict, List, Optional, Union
 
@@ -45,23 +45,23 @@ from cashu.core.script import (
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
 )
-from cashu.core.secp import PublicKey, PrivateKey
+from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.tor.tor import TorProxy
 from cashu.wallet.crud import (
+    bump_secret_derivation,
     get_keyset,
     get_proofs,
     invalidate_proof,
     secret_used,
+    set_secret_derivation,
     store_keyset,
     store_lightning_invoice,
     store_p2sh,
     store_proof,
     update_lightning_invoice,
     update_proof_reserved,
-    bump_secret_derivation,
-    set_secret_derivation,
 )
 
 

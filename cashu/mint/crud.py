@@ -1,7 +1,7 @@
 import time
 from typing import Any, List, Optional
 
-from cashu.core.base import Invoice, MintKeyset, Proof, BlindedSignature
+from cashu.core.base import BlindedSignature, Invoice, MintKeyset, Proof
 from cashu.core.db import Connection, Database
 from cashu.core.migrations import table_with_schema
 
