@@ -139,11 +139,13 @@ class GetMintResponse(BaseModel):
 class PostMeltRequest(BaseModel):
     proofs: List[Proof]
     pr: str
+    outputs: Union[List[BlindedMessage], None]
 
 
 class GetMeltResponse(BaseModel):
     paid: Union[bool, None]
     preimage: Union[str, None]
+    change: Union[List[BlindedSignature], None] = None
 
 
 # ------- API: SPLIT -------
@@ -329,3 +331,29 @@ class TokenV2(BaseModel):
             )
         else:
             return dict(proofs=[p.to_dict() for p in self.proofs])
+
+
+class TokenV3Token(BaseModel):
+    mint: Optional[str] = None
+    proofs: List[Proof]
+
+    def to_dict(self):
+        return_dict = dict(proofs=[p.to_dict() for p in self.proofs])
+        if self.mint:
+            return_dict.update(dict(mint=self.mint))  # type: ignore
+        return return_dict
+
+
+class TokenV3(BaseModel):
+    """
+    A Cashu token that includes proofs and their respective mints. Can include proofs from multiple different mints and keysets.
+    """
+
+    token: List[TokenV3Token] = []
+    memo: Optional[str] = None
+
+    def to_dict(self):
+        return_dict = dict(token=[t.to_dict() for t in self.token])
+        if self.memo:
+            return_dict.update(dict(memo=self.memo))  # type: ignore
+        return return_dict

@@ -146,7 +146,32 @@ async def m006_invoices(db: Database):
     )
 
 
-async def m007_crypto(db: Database):
+async def m007_nostr(db: Database):
+    """
+    Stores timestamps of nostr operations.
+    """
+    await db.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS nostr (
+            type TEXT NOT NULL,
+            last TIMESTAMP DEFAULT NULL
+        )
+        """
+    )
+    await db.execute(
+        f"""
+        INSERT INTO nostr
+            (type, last)
+        VALUES (?, ?)
+        """,
+        (
+            "dm",
+            None,
+        ),
+    )
+
+
+async def m008_secret_derivation_counter(db: Database):
     await db.execute(
         """
             CREATE TABLE IF NOT EXISTS secret_derivation (

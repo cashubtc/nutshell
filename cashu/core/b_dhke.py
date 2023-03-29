@@ -31,11 +31,11 @@ If true, C must have originated from Bob
 """
 
 import hashlib
-
+from typing import Optional
 from secp256k1 import PrivateKey, PublicKey
 
 
-def hash_to_curve(message: bytes):
+def hash_to_curve(message: bytes) -> PublicKey:
     """Generates a point from the message hash and checks if the point lies on the curve.
     If it does not, it tries computing a new point from the hash."""
     point = None
@@ -49,29 +49,27 @@ def hash_to_curve(message: bytes):
     return point
 
 
-def step1_alice(secret_msg: str, blinding_factor: bytes = None):
-    Y = hash_to_curve(secret_msg.encode("utf-8"))
-    if blinding_factor:
-        r = PrivateKey(privkey=blinding_factor[:32], raw=True)
-    else:
-        r = PrivateKey()
-    B_ = Y + r.pubkey
+def step1_alice(
+    secret_msg: str, r: Optional[PrivateKey] = None
+) -> tuple[PublicKey, PrivateKey]:
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    r = r or PrivateKey()
+    B_: PublicKey = Y + r.pubkey
     return B_, r
 
 
-def step2_bob(B_, a):
-    C_ = B_.mult(a)
+def step2_bob(B_: PublicKey, a: PrivateKey) -> PublicKey:
+    C_: PublicKey = B_.mult(a)
     return C_
 
 
-def step3_alice(C_, r, A):
-    r_pk = PrivateKey(privkey=r[:32], raw=True)
-    C = C_ - A.mult(r_pk)
+def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
+    C: PublicKey = C_ - A.mult(r)
     return C
 
 
-def verify(a, C, secret_msg):
-    Y = hash_to_curve(secret_msg.encode("utf-8"))
+def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     return C == Y.mult(a)
 
 

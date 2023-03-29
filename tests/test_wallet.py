@@ -7,7 +7,7 @@ import pytest_asyncio
 from cashu.core.base import Proof
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import MAX_ORDER
+from cashu.core.settings import settings
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -50,7 +50,8 @@ async def wallet2(mint):
 
 @pytest.mark.asyncio
 async def test_get_keys(wallet1: Wallet):
-    assert len(wallet1.keys) == MAX_ORDER
+    assert wallet1.keys.public_keys
+    assert len(wallet1.keys.public_keys) == settings.max_order
     keyset = await wallet1._get_keys(wallet1.url)
     assert keyset.id is not None
     assert type(keyset.id) == str
@@ -59,30 +60,55 @@ async def test_get_keys(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_get_keyset(wallet1: Wallet):
-    assert len(wallet1.keys) == MAX_ORDER
-    # ket's get the keys first so we can get a keyset ID that we use later
+    assert wallet1.keys.public_keys
+    assert len(wallet1.keys.public_keys) == settings.max_order
+    # let's get the keys first so we can get a keyset ID that we use later
     keys1 = await wallet1._get_keys(wallet1.url)
     # gets the keys of a specific keyset
     assert keys1.id is not None
     assert keys1.public_keys is not None
-    keys2 = await wallet1._get_keyset(wallet1.url, keys1.id)
+    keys2 = await wallet1._get_keys_of_keyset(wallet1.url, keys1.id)
     assert keys2.public_keys is not None
     assert len(keys1.public_keys) == len(keys2.public_keys)
 
 
 @pytest.mark.asyncio
+async def test_get_nonexistent_keyset(wallet1: Wallet):
+    await assert_err(
+        wallet1._get_keys_of_keyset(wallet1.url, "nonexistent"),
+        "Mint Error: keyset does not exist",
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_keyset_ids(wallet1: Wallet):
     keyset = await wallet1._get_keyset_ids(wallet1.url)
-    assert type(keyset) == dict
-    assert type(keyset["keysets"]) == list
-    assert len(keyset["keysets"]) > 0
-    assert keyset["keysets"][-1] == wallet1.keyset_id
+    assert type(keyset) == list
+    assert len(keyset) > 0
+    assert keyset[-1] == wallet1.keyset_id
 
 
 @pytest.mark.asyncio
 async def test_mint(wallet1: Wallet):
     await wallet1.mint(64)
     assert wallet1.balance == 64
+
+
+@pytest.mark.asyncio
+async def test_mint_amounts(wallet1: Wallet):
+    """Mint predefined amounts"""
+    await wallet1.mint_amounts([1, 1, 1, 2, 2, 4, 16])
+    assert wallet1.balance == 27
+    assert wallet1.proof_amounts == [1, 1, 1, 2, 2, 4, 16]
+
+
+@pytest.mark.asyncio
+async def test_mint_amounts_wrong_order(wallet1: Wallet):
+    """Mint amount that is not part in 2^n"""
+    await assert_err(
+        wallet1.mint_amounts([1, 2, 3]),
+        f"Can only mint amounts with 2^n up to {2**settings.max_order}.",
+    )
 
 
 @pytest.mark.asyncio
@@ -170,6 +196,22 @@ async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
     await wallet1.invalidate(spendable_proofs)
     assert wallet1.balance == 32
     assert wallet1.available_balance == 32
+
+
+@pytest.mark.asyncio
+async def test_invalidate_unspent_proofs(wallet1: Wallet):
+    """Try to invalidate proofs that have not been spent yet. Should not work!"""
+    await wallet1.mint(64)
+    await wallet1.invalidate(wallet1.proofs)
+    assert wallet1.balance == 64
+
+
+@pytest.mark.asyncio
+async def test_invalidate_unspent_proofs_without_checking(wallet1: Wallet):
+    """Try to invalidate proofs that have not been spent yet but force no check."""
+    await wallet1.mint(64)
+    await wallet1.invalidate(wallet1.proofs, check_spendable=False)
+    assert wallet1.balance == 0
 
 
 @pytest.mark.asyncio
