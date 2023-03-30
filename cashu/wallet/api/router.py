@@ -17,7 +17,7 @@ from cashu.nostr.nostr.client.client import NostrClient
 from cashu.tor.tor import TorProxy
 from cashu.wallet import migrations
 from cashu.wallet.api.helpers import receive, send
-from cashu.wallet.api.nostr import receive_nostr, send_nostr
+from cashu.wallet.api.nostr_api import receive_nostr, send_nostr
 from cashu.wallet.crud import (
     get_lightning_invoices,
     get_reserved_proofs,
