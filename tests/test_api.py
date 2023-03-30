@@ -2,7 +2,6 @@ from fastapi.testclient import TestClient
 
 from cashu.core.settings import settings
 from cashu.wallet.api.app import app
-
 from tests.conftest import mint
 
 # uses wallet as defined in Cashu settings

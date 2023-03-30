@@ -334,12 +334,10 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
         # tokenObj = TokenV2.parse_obj(dtoken)
         if is_api:
             assert len(tokenObj.token), HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="no proofs in token."
+                status_code=status.HTTP_400_BAD_REQUEST, detail="no proofs in token."
             )
             assert len(tokenObj.token[0].proofs), HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="no proofs in token"
+                status_code=status.HTTP_400_BAD_REQUEST, detail="no proofs in token"
             )
         else:
             assert len(tokenObj.token), Exception("no proofs in token")
