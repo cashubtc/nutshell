@@ -27,14 +27,6 @@ jobs:
         run: |
           poetry install --with dev
         shell: bash
-      - name: Run mint
-        env:
-          LIGHTNING: False
-          MINT_PRIVATE_KEY: "testingkey"
-          MINT_LISTEN_HOST: 0.0.0.0
-          MINT_LISTEN_PORT: 3337
-        run: |
-          nohup poetry run mint &
       - name: Run tests
         env:
           LIGHTNING: False

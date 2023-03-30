@@ -31,6 +31,8 @@ from cashu.core.base import (
     Proof,
     TokenV2,
     TokenV2Mint,
+    TokenV3,
+    TokenV3Token,
     WalletKeyset,
 )
 from cashu.core.bolt11 import Invoice as InvoiceBolt11
@@ -630,7 +632,105 @@ class Wallet(LedgerAPI):
                 ret[keyset.mint_url].extend([p for p in proofs if p.id == id])
         return ret
 
+    def _get_proofs_keysets(self, proofs: List[Proof]):
+        """Extracts all keyset ids from a list of proofs.
+
+        Args:
+            proofs (List[Proof]): List of proofs to get the keyset id's of
+        """
+        keysets: List[str] = [proof.id for proof in proofs if proof.id]
+        return keysets
+
+    async def _get_keyset_urls(self, keysets: List[str]):
+        """Retrieves the mint URLs for a list of keyset id's from the wallet's database.
+        Returns a dictionary from URL to keyset ID
+
+        Args:
+            keysets (List[str]): List of keysets.
+        """
+        mint_urls: Dict[str, List[str]] = {}
+        for ks in set(keysets):
+            keyset_db = await get_keyset(id=ks, db=self.db)
+            if keyset_db and keyset_db.mint_url:
+                mint_urls[keyset_db.mint_url] = (
+                    mint_urls[keyset_db.mint_url] + [ks]
+                    if mint_urls.get(keyset_db.mint_url)
+                    else [ks]
+                )
+        return mint_urls
+
     async def _make_token(self, proofs: List[Proof], include_mints=True):
+        """
+        Takes list of proofs and produces a TokenV3 by looking up
+        the mint URLs by the keyset id from the database.
+        """
+        token = TokenV3()
+
+        if include_mints:
+            # we create a map from mint url to keyset id and then group
+            # all proofs with their mint url to build a tokenv3
+
+            # extract all keysets from proofs
+            keysets = self._get_proofs_keysets(proofs)
+            # get all mint URLs for all unique keysets from db
+            mint_urls = await self._get_keyset_urls(keysets)
+
+            # append all url-grouped proofs to token
+            for url, ids in mint_urls.items():
+                mint_proofs = [p for p in proofs if p.id in ids]
+                token.token.append(TokenV3Token(mint=url, proofs=mint_proofs))
+        else:
+            token_proofs = TokenV3Token(proofs=proofs)
+            token.token.append(token_proofs)
+        return token
+
+    async def _serialize_token_V3(self, token: TokenV3):
+        """
+        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
+        """
+        prefix = "cashuA"
+        tokenv3_serialized = prefix
+        # encode the token as a base64 string
+        tokenv3_serialized += base64.urlsafe_b64encode(
+            json.dumps(token.to_dict()).encode()
+        ).decode()
+        return tokenv3_serialized
+
+    def _deserialize_token_V3(self, tokenv3_serialized: str) -> TokenV3:
+        """
+        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
+        """
+        prefix = "cashuA"
+        assert tokenv3_serialized.startswith(prefix), Exception(
+            f"Token prefix not valid. Expected {prefix}."
+        )
+        token_base64 = tokenv3_serialized[len(prefix) :]
+        token = json.loads(base64.urlsafe_b64decode(token_base64))
+        return TokenV3.parse_obj(token)
+
+    async def serialize_proofs(
+        self, proofs: List[Proof], include_mints=True, legacy=False
+    ):
+        """
+        Produces sharable token with proofs and mint information.
+        """
+
+        if legacy:
+            # V2 tokens
+            token = await self._make_token_v2(proofs, include_mints)
+            return await self._serialize_token_base64_tokenv2(token)
+
+            # # deprecated code for V1 tokens
+            # proofs_serialized = [p.to_dict() for p in proofs]
+            # return base64.urlsafe_b64encode(
+            #     json.dumps(proofs_serialized).encode()
+            # ).decode()
+
+        # V3 tokens
+        token = await self._make_token(proofs, include_mints)
+        return await self._serialize_token_V3(token)
+
+    async def _make_token_v2(self, proofs: List[Proof], include_mints=True):
         """
         Takes list of proofs and produces a TokenV2 by looking up
         the keyset id and mint URLs from the database.
@@ -642,31 +742,27 @@ class Wallet(LedgerAPI):
             # dummy object to hold information about the mint
             mints: Dict[str, TokenV2Mint] = {}
             # dummy object to hold all keyset id's we need to fetch from the db later
-            keysets: List[str] = []
-            # iterate through all proofs and remember their keyset ids for the next step
-            for proof in proofs:
-                if proof.id:
-                    keysets.append(proof.id)
+            keysets: List[str] = [proof.id for proof in proofs if proof.id]
             # iterate through unique keyset ids
             for id in set(keysets):
                 # load the keyset from the db
-                keyset = await get_keyset(id=id, db=self.db)
-                if keyset and keyset.mint_url and keyset.id:
+                keyset_db = await get_keyset(id=id, db=self.db)
+                if keyset_db and keyset_db.mint_url and keyset_db.id:
                     # we group all mints according to URL
-                    if keyset.mint_url not in mints:
-                        mints[keyset.mint_url] = TokenV2Mint(
-                            url=keyset.mint_url,
-                            ids=[keyset.id],
+                    if keyset_db.mint_url not in mints:
+                        mints[keyset_db.mint_url] = TokenV2Mint(
+                            url=keyset_db.mint_url,
+                            ids=[keyset_db.id],
                         )
                     else:
                         # if a mint URL has multiple keysets, append to the already existing list
-                        mints[keyset.mint_url].ids.append(keyset.id)
+                        mints[keyset_db.mint_url].ids.append(keyset_db.id)
             if len(mints) > 0:
                 # add mints grouped by url to the token
                 token.mints = list(mints.values())
         return token
 
-    async def _serialize_token_base64(self, token: TokenV2):
+    async def _serialize_token_base64_tokenv2(self, token: TokenV2):
         """
         Takes a TokenV2 and serializes it in urlsafe_base64.
         """
@@ -675,22 +771,6 @@ class Wallet(LedgerAPI):
             json.dumps(token.to_dict()).encode()
         ).decode()
         return token_base64
-
-    async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, legacy=False
-    ):
-        """
-        Produces sharable token with proofs and mint information.
-        """
-
-        if legacy:
-            proofs_serialized = [p.to_dict() for p in proofs]
-            return base64.urlsafe_b64encode(
-                json.dumps(proofs_serialized).encode()
-            ).decode()
-
-        token = await self._make_token(proofs, include_mints)
-        return await self._serialize_token_base64(token)
 
     async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
         """

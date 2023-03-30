@@ -18,7 +18,7 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.base import Proof, TokenV2
+from cashu.core.base import Proof, TokenV1, TokenV2
 from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
@@ -26,6 +26,7 @@ from cashu.nostr.nostr.client.client import NostrClient
 from cashu.tor.tor import TorProxy
 from cashu.wallet import migrations
 from cashu.wallet.crud import (
+    get_keyset,
     get_lightning_invoices,
     get_reserved_proofs,
     get_unused_locks,
@@ -35,10 +36,9 @@ from cashu.wallet.wallet import Wallet as Wallet
 from .cli_helpers import (
     get_mint_wallet,
     print_mint_balances,
-    proofs_to_serialized_tokenv2,
-    redeem_multimint,
-    token_from_lnbits_link,
-    verify_mints,
+    redeem_TokenV3_multimint,
+    serialize_TokenV1_to_TokenV3,
+    serialize_TokenV2_to_TokenV3,
 )
 from .nostr import receive_nostr, send_nostr
 
@@ -243,9 +243,7 @@ async def send(ctx: Context, amount: int, lock: str, legacy: bool):
 
     if legacy:
         print("")
-        print(
-            "Legacy token without mint information for older clients. This token can only be be received by wallets who use the mint the token is issued from:"
-        )
+        print("Old token format:")
         print("")
         token = await wallet.serialize_proofs(
             send_proofs,
@@ -306,7 +304,7 @@ async def send_command(
 
 async def receive(ctx: Context, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_mint()
+    # await wallet.load_mint()
 
     # check for P2SH locks
     if lock:
@@ -325,60 +323,63 @@ async def receive(ctx: Context, token: str, lock: str):
 
     # ----- backwards compatibility -----
 
-    # we support old tokens (< 0.7) without mint information and (W3siaWQ...)
-    # new tokens (>= 0.7) with multiple mint support (eyJ0b2...)
-    try:
-        # backwards compatibility: tokens without mint information
-        # supports tokens of the form W3siaWQiOiJH
+    # V2Tokens (0.7-0.11.0) (eyJwcm9...)
+    if token.startswith("eyJwcm9"):
+        try:
+            tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
+            token = await serialize_TokenV2_to_TokenV3(wallet, tokenv2)
+        except:
+            pass
 
-        # if it's an lnbits https:// link with a token as an argument, speacial treatment
-        token, url = token_from_lnbits_link(token)
-
-        # assume W3siaWQiOiJH.. token
-        # next line trows an error if the desirialization with the old format doesn't
-        # work and we can assume it's the new format
-        proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
-
-        # we take the proofs parsed from the old format token and produce a new format token with it
-        token = await proofs_to_serialized_tokenv2(wallet, proofs, url)
-    except:
-        pass
-
+    # V1Tokens (<0.7) (W3siaWQ...)
+    if token.startswith("W3siaWQ"):
+        try:
+            tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
+            token = await serialize_TokenV1_to_TokenV3(wallet, tokenv1)
+            print(token)
+        except:
+            pass
     # ----- receive token -----
 
     # deserialize token
-    dtoken = json.loads(base64.urlsafe_b64decode(token))
+    # dtoken = json.loads(base64.urlsafe_b64decode(token))
+    tokenObj = wallet._deserialize_token_V3(token)
 
-    # backwards compatibility wallet to wallet < 0.8.0: V2 tokens renamed "tokens" field to "proofs"
-    if "tokens" in dtoken:
-        dtoken["proofs"] = dtoken.pop("tokens")
-
-    # backwards compatibility wallet to wallet < 0.8.3: V2 tokens got rid of the "MINT_NAME" key in "mints" and renamed "ks" to "ids"
-    if "mints" in dtoken and isinstance(dtoken["mints"], dict):
-        dtoken["mints"] = list(dtoken["mints"].values())
-        for m in dtoken["mints"]:
-            m["ids"] = m.pop("ks")
-
-    tokenObj = TokenV2.parse_obj(dtoken)
-    assert len(tokenObj.proofs), Exception("no proofs in token")
-    includes_mint_info: bool = tokenObj.mints is not None and len(tokenObj.mints) > 0
+    # tokenObj = TokenV2.parse_obj(dtoken)
+    assert len(tokenObj.token), Exception("no proofs in token")
+    assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
+    includes_mint_info: bool = any([t.mint for t in tokenObj.token])
 
     # if there is a `mints` field in the token
     # we check whether the token has mints that we don't know yet
     # and ask the user if they want to trust the new mitns
     if includes_mint_info:
         # we ask the user to confirm any new mints the tokens may include
-        await verify_mints(ctx, tokenObj)
+        # await verify_mints(ctx, tokenObj)
         # redeem tokens with new wallet instances
-        await redeem_multimint(ctx, tokenObj, script, signature)
-        # reload main wallet so the balance updates
-        await wallet.load_proofs()
+        await redeem_TokenV3_multimint(ctx, tokenObj, script, signature)
     else:
         # no mint information present, we extract the proofs and use wallet's default mint
-        proofs = [Proof(**p) for p in dtoken["proofs"]]
-        _, _ = await wallet.redeem(proofs, script, signature)
+
+        proofs = [p for t in tokenObj.token for p in t.proofs]
+        # first we load the mint URL from the DB
+        keyset_in_token = proofs[0].id
+        assert keyset_in_token
+        # we get the keyset from the db
+        mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
+        assert mint_keysets, Exception("we don't know this keyset")
+        assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
+        # now we have the URL
+        mint_wallet = Wallet(
+            mint_keysets.mint_url,
+            os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
+        )
+        await mint_wallet.load_mint(keyset_in_token)
+        _, _ = await mint_wallet.redeem(proofs, script, signature)
         print(f"Received {sum_proofs(proofs)} sats")
 
+    # reload main wallet so the balance updates
+    await wallet.load_proofs()
     wallet.status()
 
 
@@ -413,7 +414,7 @@ async def receive_cli(
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
-            for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):
+            for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 await receive(ctx, token, lock)
