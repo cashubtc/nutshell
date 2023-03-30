@@ -184,7 +184,7 @@ async def receive_command(
         reserved_proofs = await get_reserved_proofs(wallet.db)
         balance = None
         if len(reserved_proofs):
-            for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):
+            for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 balance = await receive(wallet, token, lock, is_api=True)
@@ -271,7 +271,7 @@ async def pending(
             result.update(
                 {
                     f"{i}": {
-                        "amount [sat]": sum_proofs(grouped_proofs),
+                        "amount": sum_proofs(grouped_proofs),
                         "time": reserved_date,
                         "ID": key,
                         "token": token,

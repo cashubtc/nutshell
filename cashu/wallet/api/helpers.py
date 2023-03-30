@@ -1,21 +1,47 @@
 import base64
 import json
 import os
-import urllib.parse
-from typing import List
 
 import click
 from fastapi import HTTPException, status
 from loguru import logger
 
-from cashu.core.base import Proof, TokenV2, TokenV2Mint
+from cashu.core.base import TokenV1, TokenV2, TokenV3, TokenV3Token, WalletKeyset
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
 from cashu.wallet.crud import get_keyset, get_unused_locks
 from cashu.wallet.wallet import Wallet as Wallet
 
 
-async def verify_mints(wallet: Wallet, token: TokenV2, is_api: bool = False):
+async def verify_mint(mint_wallet: Wallet, url: str, is_api: bool = False):
+    """A helper function that asks the user if they trust the mint if the user
+    has not encountered the mint before (there is no entry in the database).
+
+    Throws an Exception if the user chooses to not trust the mint.
+    """
+    logger.debug(f"Verifying mint {url}")
+    # dummy Wallet to check the database later
+    # mint_wallet = Wallet(url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]))
+    # we check the db whether we know this mint already and ask the user if not
+    mint_keysets = await get_keyset(mint_url=url, db=mint_wallet.db)
+    if mint_keysets is None:
+        if not is_api:
+            # we encountered a new mint and ask for a user confirmation
+            print("")
+            print("Warning: Tokens are from a mint you don't know yet.")
+            print("\n")
+            print(f"Mint URL: {url}")
+            print("\n")
+            click.confirm(
+                f"Do you trust this mint and want to receive the tokens?",
+                abort=True,
+                default=True,
+            )
+    else:
+        logger.debug(f"We know keyset {mint_keysets.id} already")
+
+
+async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2, is_api: bool = False):
     """
     A helper function that iterates through all mints in the token and if it has
     not been encountered before, asks the user to confirm.
@@ -82,7 +108,7 @@ async def verify_mints(wallet: Wallet, token: TokenV2, is_api: bool = False):
         assert trust_token_mints, Exception("Aborted!")
 
 
-async def redeem_multimint(
+async def redeem_TokenV2_multimint(
     wallet: Wallet, token: TokenV2, script, signature, is_api: bool = False
 ):
     """
@@ -110,6 +136,37 @@ async def redeem_multimint(
             # redeem proofs of this keyset
             redeem_proofs = [p for p in token.proofs if p.id == keyset]
             _, _ = await keyset_wallet.redeem(
+                redeem_proofs, scnd_script=script, scnd_siganture=signature
+            )
+            if not is_api:
+                print(f"Received {sum_proofs(redeem_proofs)} sats")
+
+
+async def redeem_TokenV3_multimint(
+    wallet: Wallet, token: TokenV3, script, signature, is_api: bool = False
+):
+    """
+    Helper function to iterate thruogh a token with multiple mints and redeem them from
+    these mints one keyset at a time.
+    """
+    for t in token.token:
+        if is_api:
+            assert t.mint, HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Multimint redeem without URL",
+            )
+        else:
+            assert t.mint, Exception("Multimint redeem without URL")
+        mint_wallet = Wallet(t.mint, os.path.join(settings.cashu_dir, wallet.name))
+        await verify_mint(mint_wallet, t.mint)
+        keysets = mint_wallet._get_proofs_keysets(t.proofs)
+        # logger.debug(f"Keysets in tokens: {keysets}")
+        # loop over all keysets
+        for keyset in set(keysets):
+            await mint_wallet.load_mint(keyset_id=keyset)
+            # redeem proofs of this keyset
+            redeem_proofs = [p for p in t.proofs if p.id == keyset]
+            _, _ = await mint_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
             )
             if not is_api:
@@ -192,61 +249,36 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
     return mint_wallet
 
 
-# LNbits token link parsing
-# can extract minut URL from LNbits token links like:
-# https://lnbits.server/cashu/wallet?mint_id=aMintId&recv_token=W3siaWQiOiJHY2...
-def token_from_lnbits_link(link):
-    url, token = "", ""
-    if len(link.split("&recv_token=")) == 2:
-        # extract URL params
-        params = urllib.parse.parse_qs(link.split("?")[1])
-        # extract URL
-        if "mint_id" in params:
-            url = (
-                link.split("?")[0].split("/wallet")[0]
-                + "/api/v1/"
-                + params["mint_id"][0]
-            )
-        # extract token
-        token = params["recv_token"][0]
-        return token, url
-    else:
-        return link, ""
+async def serialize_TokenV2_to_TokenV3(wallet: Wallet, tokenv2: TokenV2):
+    """Helper function for the CLI to receive legacy TokenV2 tokens.
+    Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
+    the ordinary path.
 
-
-async def proofs_to_serialized_tokenv2(
-    wallet, proofs: List[Proof], url: str, is_api: bool = False
-):
+    Returns:
+        TokenV3: TokenV3
     """
-    Ingests list of proofs and produces a serialized TokenV2
+    tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv2.proofs)])
+    if tokenv2.mints:
+        tokenv3.token[0].mint = tokenv2.mints[0].url
+    token_serialized = await wallet._serialize_token_V3(tokenv3)
+    return token_serialized
+
+
+async def serialize_TokenV1_to_TokenV3(wallet: Wallet, tokenv1: TokenV1):
+    """Helper function for the CLI to receive legacy TokenV1 tokens.
+    Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
+    the ordinary path.
+
+    Returns:
+        TokenV3: TokenV3
     """
-    # and add url and keyset id to token
-    token: TokenV2 = await wallet._make_token(proofs, include_mints=False)
-    token.mints = []
-
-    # get keysets of proofs
-    keysets = list(set([p.id for p in proofs if p.id is not None]))
-
-    # check whether we know the mint urls for these proofs
-    for k in keysets:
-        ks = await get_keyset(id=k, db=wallet.db)
-        url = ks.mint_url if ks and ks.mint_url else ""
-
-    if is_api:
-        url = settings.mint_url
-    else:
-        url = url or (
-            input(f"Enter mint URL (press enter for default {settings.mint_url}): ")
-            or settings.mint_url
-        )
-
-    token.mints.append(TokenV2Mint(url=url, ids=keysets))
-    token_serialized = await wallet._serialize_token_base64(token)
+    tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv1.__root__)])
+    token_serialized = await wallet._serialize_token_V3(tokenv3)
     return token_serialized
 
 
 async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
-    await wallet.load_mint()
+    # await wallet.load_mint()
 
     # check for P2SH locks
     if lock:
@@ -276,70 +308,87 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
 
         # ----- backwards compatibility -----
 
-        # we support old tokens (< 0.7) without mint information and (W3siaWQ...)
-        # new tokens (>= 0.7) with multiple mint support (eyJ0b2...)
-        try:
-            # backwards compatibility: tokens without mint information
-            # supports tokens of the form W3siaWQiOiJH
+        # V2Tokens (0.7-0.11.0) (eyJwcm9...)
+        if token.startswith("eyJwcm9"):
+            try:
+                tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
+                token = await serialize_TokenV2_to_TokenV3(wallet, tokenv2)
+            except:
+                pass
 
-            # if it's an lnbits https:// link with a token as an argument, speacial treatment
-            token, url = token_from_lnbits_link(token)
-
-            # assume W3siaWQiOiJH.. token
-            # next line trows an error if the desirialization with the old format doesn't
-            # work and we can assume it's the new format
-            proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
-
-            # we take the proofs parsed from the old format token and produce a new format token with it
-            token = await proofs_to_serialized_tokenv2(
-                wallet, proofs, url, is_api=is_api
-            )
-        except:
-            pass
+        # V1Tokens (<0.7) (W3siaWQ...)
+        if token.startswith("W3siaWQ"):
+            try:
+                tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
+                token = await serialize_TokenV1_to_TokenV3(wallet, tokenv1)
+                print(token)
+            except:
+                pass
 
         # ----- receive token -----
 
         # deserialize token
-        dtoken = json.loads(base64.urlsafe_b64decode(token))
+        # dtoken = json.loads(base64.urlsafe_b64decode(token))
+        tokenObj = wallet._deserialize_token_V3(token)
 
-        # backwards compatibility wallet to wallet < 0.8.0: V2 tokens renamed "tokens" field to "proofs"
-        if "tokens" in dtoken:
-            dtoken["proofs"] = dtoken.pop("tokens")
-
-        # backwards compatibility wallet to wallet < 0.8.3: V2 tokens got rid of the "MINT_NAME" key in "mints" and renamed "ks" to "ids"
-        if "mints" in dtoken and isinstance(dtoken["mints"], dict):
-            dtoken["mints"] = list(dtoken["mints"].values())
-            for m in dtoken["mints"]:
-                m["ids"] = m.pop("ks")
-
-        tokenObj = TokenV2.parse_obj(dtoken)
+        # tokenObj = TokenV2.parse_obj(dtoken)
         if is_api:
-            assert len(tokenObj.proofs), HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="no proofs in token."
+            assert len(tokenObj.token), HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="no proofs in token."
+            )
+            assert len(tokenObj.token[0].proofs), HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="no proofs in token"
             )
         else:
-            assert len(tokenObj.proofs), Exception("no proofs in token")
-        includes_mint_info: bool = (
-            tokenObj.mints is not None and len(tokenObj.mints) > 0
-        )
+            assert len(tokenObj.token), Exception("no proofs in token")
+            assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
+        includes_mint_info: bool = any([t.mint for t in tokenObj.token])
 
         # if there is a `mints` field in the token
         # we check whether the token has mints that we don't know yet
         # and ask the user if they want to trust the new mints
         if includes_mint_info:
             # we ask the user to confirm any new mints the tokens may include
-            await verify_mints(wallet, tokenObj, is_api=is_api)
+            # await verify_mints(ctx, tokenObj)
             # redeem tokens with new wallet instances
-            await redeem_multimint(wallet, tokenObj, script, signature, is_api=is_api)
-            # reload main wallet so the balance updates
-            await wallet.load_proofs()
+            await redeem_TokenV3_multimint(
+                wallet, tokenObj, script, signature, is_api=is_api
+            )
         else:
             # no mint information present, we extract the proofs and use wallet's default mint
-            proofs = [Proof(**p) for p in dtoken["proofs"]]
-            _, _ = await wallet.redeem(proofs, script, signature)
+
+            proofs = [p for t in tokenObj.token for p in t.proofs]
+            # first we load the mint URL from the DB
+            keyset_in_token = proofs[0].id
+            assert keyset_in_token
+            # we get the keyset from the db
+            mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
+            if is_api:
+                assert mint_keysets, HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="we don't know this keyset",
+                )
+                assert mint_keysets.mint_url, HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="we don't know this mint's URL",
+                )
+            else:
+                assert mint_keysets, Exception("we don't know this keyset")
+                assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
+            # now we have the URL
+            mint_wallet = Wallet(
+                mint_keysets.mint_url,
+                os.path.join(settings.cashu_dir, wallet.name),
+            )
+            await mint_wallet.load_mint(keyset_in_token)
+            _, _ = await mint_wallet.redeem(proofs, script, signature)
             if not is_api:
                 print(f"Received {sum_proofs(proofs)} sats")
 
+    # reload main wallet so the balance updates
+    await wallet.load_proofs()
     return wallet.available_balance
 
 
@@ -378,10 +427,7 @@ async def send(
     if legacy:
         if not is_api:
             print("")
-            print(
-                "Legacy token without mint information for older clients. "
-                "This token can only be be received by wallets who use the mint the token is issued from:"
-            )
+            print("Old token format:")
             print("")
         token = await wallet.serialize_proofs(
             send_proofs,
