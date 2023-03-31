@@ -457,9 +457,8 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         proofs = [proof for proof in reserved_proofs if proof["send_id"] == delete]
     else:
         # check only the specified ones
-        proofs = [
-            Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))["proofs"]
-        ]
+        tokenObj = wallet._deserialize_token_V3(token)
+        proofs = [proof for token in tokenObj.token for proof in token.proofs]
 
     if delete:
         await wallet.invalidate(proofs, check_spendable=False)
