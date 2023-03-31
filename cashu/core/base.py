@@ -364,7 +364,7 @@ class TokenV3(BaseModel):
         return [proof for token in self.token for proof in token.proofs]
 
     def get_amount(self):
-        return [p.amount for p in self.get_proofs()]
+        return sum([p.amount for p in self.get_proofs()])
 
     def get_keysets(self):
         return list(set([p.id for p in self.get_proofs()]))
