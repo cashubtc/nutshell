@@ -4,13 +4,13 @@ from fastapi import APIRouter
 from secp256k1 import PublicKey
 
 from cashu.core.base import (
-    GetInfoResponse,
     BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
     CheckSpendableRequest,
     CheckSpendableResponse,
+    GetInfoResponse,
     GetMeltResponse,
     GetMintResponse,
     KeysetsResponse,
@@ -22,8 +22,8 @@ from cashu.core.base import (
     PostSplitResponse,
 )
 from cashu.core.errors import CashuError
-from cashu.mint.startup import ledger
 from cashu.core.settings import settings
+from cashu.mint.startup import ledger
 
 router: APIRouter = APIRouter()
 

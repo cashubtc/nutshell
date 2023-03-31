@@ -14,6 +14,7 @@ from cashu.core.base import (
     MintKeysets,
     Proof,
 )
+from cashu.core.crypto import derive_pubkey
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.script import verify_script
@@ -22,7 +23,6 @@ from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.lightning.base import Wallet
 from cashu.mint.crud import LedgerCrud
-from cashu.core.crypto import derive_pubkey
 
 
 class Ledger:
