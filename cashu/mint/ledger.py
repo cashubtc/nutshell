@@ -22,6 +22,7 @@ from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.lightning.base import Wallet
 from cashu.mint.crud import LedgerCrud
+from cashu.core.crypto import derive_pubkey
 
 
 class Ledger:
@@ -40,6 +41,7 @@ class Ledger:
         self.db = db
         self.crud = crud
         self.lightning = lightning
+        self.pubkey = derive_pubkey(self.master_key)
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""

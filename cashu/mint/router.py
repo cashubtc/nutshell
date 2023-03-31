@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from secp256k1 import PublicKey
 
 from cashu.core.base import (
+    GetInfoResponse,
     BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
@@ -22,8 +23,29 @@ from cashu.core.base import (
 )
 from cashu.core.errors import CashuError
 from cashu.mint.startup import ledger
+from cashu.core.settings import settings
 
 router: APIRouter = APIRouter()
+
+
+@router.get(
+    "/info",
+    name="Mint information",
+    summary="Mint information, operator contact information, and other info.",
+    response_model=GetInfoResponse,
+    response_model_exclude_none=True,
+)
+async def info():
+    return GetInfoResponse(
+        name=settings.mint_info_name,
+        pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
+        version=f"Nutshell/{settings.version}",
+        description=settings.mint_info_description,
+        description_long=settings.mint_info_description_long,
+        contact=settings.mint_info_contact,
+        nuts=settings.mint_info_nuts,
+        motd=settings.mint_info_motd,
+    )
 
 
 @router.get(
