@@ -18,7 +18,7 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.base import Proof, TokenV1, TokenV2
+from cashu.core.base import Proof, TokenV1, TokenV2, TokenV3
 from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
@@ -342,8 +342,7 @@ async def receive(ctx: Context, token: str, lock: str):
     # ----- receive token -----
 
     # deserialize token
-    # dtoken = json.loads(base64.urlsafe_b64decode(token))
-    tokenObj = wallet._deserialize_token_V3(token)
+    tokenObj = TokenV3.deserialize(token)
 
     # tokenObj = TokenV2.parse_obj(dtoken)
     assert len(tokenObj.token), Exception("no proofs in token")
@@ -457,8 +456,8 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         proofs = [proof for proof in reserved_proofs if proof["send_id"] == delete]
     else:
         # check only the specified ones
-        tokenObj = wallet._deserialize_token_V3(token)
-        proofs = [proof for token in tokenObj.token for proof in token.proofs]
+        tokenObj = TokenV3.deserialize(token)
+        proofs = tokenObj.get_proofs()
 
     if delete:
         await wallet.invalidate(proofs, check_spendable=False)
