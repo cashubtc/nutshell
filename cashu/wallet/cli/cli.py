@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 
 import asyncio
-import base64
-import json
 import os
 import sys
 import time
@@ -18,35 +16,19 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.base import Proof, TokenV1, TokenV2, TokenV3
+from cashu.core.base import TokenV3
 from cashu.core.helpers import sum_proofs
-from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
 from cashu.nostr.nostr.client.client import NostrClient
 from cashu.tor.tor import TorProxy
-from cashu.wallet import migrations
 from cashu.wallet.crud import (
-    get_keyset,
     get_lightning_invoices,
     get_reserved_proofs,
     get_unused_locks,
 )
 from cashu.wallet.wallet import Wallet as Wallet
-
-from .cli_helpers import (
-    get_mint_wallet,
-    print_mint_balances,
-    redeem_TokenV3_multimint,
-    serialize_TokenV1_to_TokenV3,
-    serialize_TokenV2_to_TokenV3,
-)
-from .nostr import receive_nostr, send_nostr
-
-
-async def init_wallet(wallet: Wallet):
-    """Performs migrations and loads proofs from db."""
-    await migrate_databases(wallet.db, migrations)
-    await wallet.load_proofs()
+from cashu.wallet.helpers import send, receive, print_mint_balances, init_wallet
+from cashu.wallet.nostr import send_nostr, receive_nostr
 
 
 class NaturalOrderGroup(click.Group):
@@ -87,7 +69,7 @@ def cli(ctx: Context, host: str, walletname: str):
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
-    wallet = Wallet(ctx.obj["HOST"], os.path.join(settings.cashu_dir, walletname))
+    wallet = Wallet(ctx.obj["HOST"], os.path.join(settings.cashu_dir, walletname), name=walletname)
     ctx.obj["WALLET"] = wallet
     asyncio.run(init_wallet(wallet))
     pass
@@ -208,7 +190,7 @@ async def balance(ctx: Context, verbose):
                 )
             print("")
 
-    await print_mint_balances(ctx, wallet)
+    await print_mint_balances(wallet)
 
     if verbose:
         print(
@@ -216,42 +198,6 @@ async def balance(ctx: Context, verbose):
         )
     else:
         print(f"Balance: {wallet.available_balance} sat")
-
-
-async def send(ctx: Context, amount: int, lock: str, legacy: bool):
-    """
-    Prints token to send to stdout.
-    """
-    if lock and len(lock) < 22:
-        print("Error: lock has to be at least 22 characters long.")
-        return
-    p2sh = False
-    if lock and len(lock.split("P2SH:")) == 2:
-        p2sh = True
-
-    wallet = await get_mint_wallet(ctx)
-    await wallet.load_proofs()
-
-    _, send_proofs = await wallet.split_to_send(
-        wallet.proofs, amount, lock, set_reserved=True
-    )
-    token = await wallet.serialize_proofs(
-        send_proofs,
-        include_mints=True,
-    )
-    print(token)
-
-    if legacy:
-        print("")
-        print("Old token format:")
-        print("")
-        token = await wallet.serialize_proofs(
-            send_proofs,
-            legacy=True,
-        )
-        print(token)
-
-    wallet.status()
 
 
 @cli.command("send", help="Send tokens.")
@@ -296,90 +242,11 @@ async def send_command(
     verbose: bool,
     yes: bool,
 ):
-    if not nostr and not nopt:
-        await send(ctx, amount, lock, legacy)
-    else:
-        await send_nostr(ctx, amount, nostr or nopt, verbose, yes)
-
-
-async def receive(ctx: Context, token: str, lock: str):
     wallet: Wallet = ctx.obj["WALLET"]
-    # await wallet.load_mint()
-
-    # check for P2SH locks
-    if lock:
-        # load the script and signature of this address from the database
-        assert len(lock.split("P2SH:")) == 2, Exception(
-            "lock has wrong format. Expected P2SH:<address>."
-        )
-        address_split = lock.split("P2SH:")[1]
-        p2shscripts = await get_unused_locks(address_split, db=wallet.db)
-        assert len(p2shscripts) == 1, Exception("lock not found.")
-        script, signature = p2shscripts[0].script, p2shscripts[0].signature
+    if not nostr and not nopt:
+        await send(wallet, amount, lock, legacy)
     else:
-        script, signature = None, None
-
-    # deserialize token
-
-    # ----- backwards compatibility -----
-
-    # V2Tokens (0.7-0.11.0) (eyJwcm9...)
-    if token.startswith("eyJwcm9"):
-        try:
-            tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-            token = await serialize_TokenV2_to_TokenV3(wallet, tokenv2)
-        except:
-            pass
-
-    # V1Tokens (<0.7) (W3siaWQ...)
-    if token.startswith("W3siaWQ"):
-        try:
-            tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-            token = await serialize_TokenV1_to_TokenV3(wallet, tokenv1)
-            print(token)
-        except:
-            pass
-    # ----- receive token -----
-
-    # deserialize token
-    tokenObj = TokenV3.deserialize(token)
-
-    # tokenObj = TokenV2.parse_obj(dtoken)
-    assert len(tokenObj.token), Exception("no proofs in token")
-    assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
-    includes_mint_info: bool = any([t.mint for t in tokenObj.token])
-
-    # if there is a `mints` field in the token
-    # we check whether the token has mints that we don't know yet
-    # and ask the user if they want to trust the new mitns
-    if includes_mint_info:
-        # we ask the user to confirm any new mints the tokens may include
-        # await verify_mints(ctx, tokenObj)
-        # redeem tokens with new wallet instances
-        await redeem_TokenV3_multimint(ctx, tokenObj, script, signature)
-    else:
-        # no mint information present, we extract the proofs and use wallet's default mint
-
-        proofs = [p for t in tokenObj.token for p in t.proofs]
-        # first we load the mint URL from the DB
-        keyset_in_token = proofs[0].id
-        assert keyset_in_token
-        # we get the keyset from the db
-        mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
-        assert mint_keysets, Exception("we don't know this keyset")
-        assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
-        # now we have the URL
-        mint_wallet = Wallet(
-            mint_keysets.mint_url,
-            os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
-        )
-        await mint_wallet.load_mint(keyset_in_token)
-        _, _ = await mint_wallet.redeem(proofs, script, signature)
-        print(f"Received {sum_proofs(proofs)} sats")
-
-    # reload main wallet so the balance updates
-    await wallet.load_proofs()
-    wallet.status()
+        await send_nostr(wallet, amount, nostr or nopt, verbose, yes)
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -407,16 +274,16 @@ async def receive_cli(
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()
     if token:
-        await receive(ctx, token, lock)
+        await receive(wallet, token, lock)
     elif nostr:
-        await receive_nostr(ctx, verbose)
+        await receive_nostr(wallet, verbose)
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
             for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
-                await receive(ctx, token, lock)
+                await receive(wallet, token, lock)
     else:
         print("Error: enter token or use either flag --nostr or --all.")
 

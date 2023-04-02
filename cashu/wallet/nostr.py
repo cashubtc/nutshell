@@ -3,7 +3,6 @@ import threading
 import time
 
 import click
-from click import Context
 from fastapi import HTTPException, status
 from requests.exceptions import ConnectionError
 
@@ -11,7 +10,7 @@ from cashu.core.settings import settings
 from cashu.nostr.nostr.client.client import NostrClient
 from cashu.nostr.nostr.event import Event
 from cashu.nostr.nostr.key import PublicKey
-from cashu.wallet.api.helpers import get_mint_wallet
+from cashu.wallet.helpers import get_mint_wallet
 from cashu.wallet.crud import (
     get_nostr_last_check_timestamp,
     set_nostr_last_check_timestamp,
@@ -59,7 +58,7 @@ async def send_nostr(
     Sends tokens via nostr.
     """
     # load a wallet for the chosen mint
-    wallet = await get_mint_wallet(wallet, is_api=True)
+    wallet = await get_mint_wallet(wallet, is_api=is_api)
 
     if "@" in pubkey or "." in pubkey:
         # matches user@domain.com and domain.com (which is _@domain.com)
@@ -134,7 +133,7 @@ async def receive_nostr(wallet: Wallet, verbose: bool = False, is_api: bool = Fa
             )
         try:
             # call the receive method
-            from cashu.wallet.api.helpers import receive
+            from cashu.wallet.helpers import receive
 
             asyncio.run(receive(wallet, decrypted_content, "", is_api=is_api))
         except Exception as e:

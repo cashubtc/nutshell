@@ -1,5 +1,3 @@
-import base64
-import json
 import os
 from datetime import datetime
 from itertools import groupby, islice
@@ -9,15 +7,13 @@ from os.path import isdir, join
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from cashu.core.base import Proof
+from cashu.core.base import TokenV3
 from cashu.core.helpers import sum_proofs
-from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
 from cashu.nostr.nostr.client.client import NostrClient
 from cashu.tor.tor import TorProxy
-from cashu.wallet import migrations
-from cashu.wallet.api.helpers import receive, send
-from cashu.wallet.api.nostr_api import receive_nostr, send_nostr
+from cashu.wallet.helpers import receive, send, init_wallet
+from cashu.wallet.nostr import receive_nostr, send_nostr
 from cashu.wallet.crud import (
     get_lightning_invoices,
     get_reserved_proofs,
@@ -33,12 +29,6 @@ def create_wallet(url=settings.mint_url, dir=settings.cashu_dir, name="wallet"):
 
 
 wallet = create_wallet()
-
-
-async def init_wallet(wallet: Wallet):
-    """Performs migrations and loads proofs from db."""
-    await migrate_databases(wallet.db, migrations)
-    await wallet.load_proofs()
 
 
 @router.on_event("startup")
@@ -226,9 +216,8 @@ async def burn(
         proofs = [proof for proof in reserved_proofs if proof["send_id"] == delete]
     else:
         # check only the specified ones
-        proofs = [
-            Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))["proofs"]
-        ]
+        tokenObj = TokenV3.deserialize(token)
+        proofs = tokenObj.get_proofs()
 
     if delete:
         await wallet.invalidate(proofs, check_spendable=False)

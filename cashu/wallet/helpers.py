@@ -7,10 +7,18 @@ from fastapi import HTTPException, status
 from loguru import logger
 
 from cashu.core.base import TokenV1, TokenV2, TokenV3, TokenV3Token, WalletKeyset
+from cashu.core.migrations import migrate_databases
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
+from cashu.wallet import migrations
 from cashu.wallet.crud import get_keyset, get_unused_locks
 from cashu.wallet.wallet import Wallet as Wallet
+
+
+async def init_wallet(wallet: Wallet):
+    """Performs migrations and loads proofs from db."""
+    await migrate_databases(wallet.db, migrations)
+    await wallet.load_proofs()
 
 
 async def verify_mint(mint_wallet: Wallet, url: str, is_api: bool = False):
@@ -237,11 +245,13 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
                 raise Exception("invalid input.")
     else:
         mint_url = list(mint_balances.keys())[0]
-
+    print(mint_url)
+    print(wallet.name)
     # load this mint_url into a wallet
     mint_wallet = Wallet(mint_url, os.path.join(settings.cashu_dir, wallet.name))
     mint_keysets: WalletKeyset = await get_keyset(mint_url=mint_url, db=mint_wallet.db)  # type: ignore
-
+    print(mint_keysets)
+    print(mint_wallet)
     # load the keys
     assert mint_keysets.id
     await mint_wallet.load_mint(keyset_id=mint_keysets.id)
@@ -249,8 +259,8 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
     return mint_wallet
 
 
-async def serialize_TokenV2_to_TokenV3(wallet: Wallet, tokenv2: TokenV2):
-    """Helper function for the CLI to receive legacy TokenV2 tokens.
+async def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
+    """Helper function to receive legacy TokenV2 tokens.
     Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
     the ordinary path.
 
@@ -260,12 +270,12 @@ async def serialize_TokenV2_to_TokenV3(wallet: Wallet, tokenv2: TokenV2):
     tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv2.proofs)])
     if tokenv2.mints:
         tokenv3.token[0].mint = tokenv2.mints[0].url
-    token_serialized = await wallet._serialize_token_V3(tokenv3)
+    token_serialized = tokenv3.serialize()
     return token_serialized
 
 
-async def serialize_TokenV1_to_TokenV3(wallet: Wallet, tokenv1: TokenV1):
-    """Helper function for the CLI to receive legacy TokenV1 tokens.
+async def serialize_TokenV1_to_TokenV3(tokenv1: TokenV1):
+    """Helper function to receive legacy TokenV1 tokens.
     Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
     the ordinary path.
 
@@ -273,7 +283,7 @@ async def serialize_TokenV1_to_TokenV3(wallet: Wallet, tokenv1: TokenV1):
         TokenV3: TokenV3
     """
     tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv1.__root__)])
-    token_serialized = await wallet._serialize_token_V3(tokenv3)
+    token_serialized = tokenv3.serialize()
     return token_serialized
 
 
@@ -312,16 +322,16 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
         if token.startswith("eyJwcm9"):
             try:
                 tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-                token = await serialize_TokenV2_to_TokenV3(wallet, tokenv2)
+                token = await serialize_TokenV2_to_TokenV3(tokenv2)
             except:
                 pass
 
         # V1Tokens (<0.7) (W3siaWQ...)
         if token.startswith("W3siaWQ"):
             try:
+
                 tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-                token = await serialize_TokenV1_to_TokenV3(wallet, tokenv1)
-                print(token)
+                token = await serialize_TokenV1_to_TokenV3(tokenv1)
             except:
                 pass
 
@@ -329,7 +339,7 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
 
         # deserialize token
         # dtoken = json.loads(base64.urlsafe_b64decode(token))
-        tokenObj = wallet._deserialize_token_V3(token)
+        tokenObj = TokenV3.deserialize(token)
 
         # tokenObj = TokenV2.parse_obj(dtoken)
         if is_api:
@@ -387,7 +397,10 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
 
     # reload main wallet so the balance updates
     await wallet.load_proofs()
-    return wallet.available_balance
+    if is_api:
+        return wallet.available_balance
+    else:
+        wallet.status()
 
 
 async def send(
@@ -434,4 +447,7 @@ async def send(
         if not is_api:
             print(token)
 
-    return wallet.available_balance, token
+    if is_api:
+        return wallet.available_balance, token
+    else:
+        wallet.status()
