@@ -235,7 +235,7 @@ async def serialize_TokenV2_to_TokenV3(wallet: Wallet, tokenv2: TokenV2):
     tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv2.proofs)])
     if tokenv2.mints:
         tokenv3.token[0].mint = tokenv2.mints[0].url
-    token_serialized = await wallet._serialize_token_V3(tokenv3)
+    token_serialized = tokenv3.serialize()
     return token_serialized
 
 
@@ -248,5 +248,5 @@ async def serialize_TokenV1_to_TokenV3(wallet: Wallet, tokenv1: TokenV1):
         TokenV3: TokenV3
     """
     tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv1.__root__)])
-    token_serialized = await wallet._serialize_token_V3(tokenv3)
+    token_serialized = tokenv3.serialize()
     return token_serialized

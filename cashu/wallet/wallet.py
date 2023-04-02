@@ -44,7 +44,7 @@ from cashu.core.script import (
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
 )
-from cashu.core.secp import PublicKey
+from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.tor.tor import TorProxy
@@ -111,7 +111,7 @@ class LedgerAPI:
         return
 
     def _construct_proofs(
-        self, promises: List[BlindedSignature], secrets: List[str], rs: List[str]
+        self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
     ):
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
         proofs: List[Proof] = []
@@ -199,7 +199,7 @@ class LedgerAPI:
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
         outputs: List[BlindedMessage] = []
-        rs = []
+        rs: List[PrivateKey] = []
         for secret, amount in zip(secrets, amounts):
             B_, r = b_dhke.step1_alice(secret)
             rs.append(r)
@@ -684,30 +684,6 @@ class Wallet(LedgerAPI):
             token.token.append(token_proofs)
         return token
 
-    async def _serialize_token_V3(self, token: TokenV3):
-        """
-        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
-        """
-        prefix = "cashuA"
-        tokenv3_serialized = prefix
-        # encode the token as a base64 string
-        tokenv3_serialized += base64.urlsafe_b64encode(
-            json.dumps(token.to_dict()).encode()
-        ).decode()
-        return tokenv3_serialized
-
-    def _deserialize_token_V3(self, tokenv3_serialized: str) -> TokenV3:
-        """
-        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
-        """
-        prefix = "cashuA"
-        assert tokenv3_serialized.startswith(prefix), Exception(
-            f"Token prefix not valid. Expected {prefix}."
-        )
-        token_base64 = tokenv3_serialized[len(prefix) :]
-        token = json.loads(base64.urlsafe_b64decode(token_base64))
-        return TokenV3.parse_obj(token)
-
     async def serialize_proofs(
         self, proofs: List[Proof], include_mints=True, legacy=False
     ):
@@ -728,7 +704,7 @@ class Wallet(LedgerAPI):
 
         # V3 tokens
         token = await self._make_token(proofs, include_mints)
-        return await self._serialize_token_V3(token)
+        return token.serialize()
 
     async def _make_token_v2(self, proofs: List[Proof], include_mints=True):
         """
