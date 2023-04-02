@@ -10,11 +10,11 @@ from cashu.core.settings import settings
 from cashu.nostr.nostr.client.client import NostrClient
 from cashu.nostr.nostr.event import Event
 from cashu.nostr.nostr.key import PublicKey
-from cashu.wallet.helpers import get_mint_wallet
 from cashu.wallet.crud import (
     get_nostr_last_check_timestamp,
     set_nostr_last_check_timestamp,
 )
+from cashu.wallet.helpers import get_mint_wallet
 from cashu.wallet.wallet import Wallet
 
 

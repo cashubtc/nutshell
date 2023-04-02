@@ -26,9 +26,9 @@ from cashu.wallet.crud import (
     get_reserved_proofs,
     get_unused_locks,
 )
+from cashu.wallet.helpers import init_wallet, print_mint_balances, receive, send
+from cashu.wallet.nostr import receive_nostr, send_nostr
 from cashu.wallet.wallet import Wallet as Wallet
-from cashu.wallet.helpers import send, receive, print_mint_balances, init_wallet
-from cashu.wallet.nostr import send_nostr, receive_nostr
 
 
 class NaturalOrderGroup(click.Group):
@@ -69,7 +69,9 @@ def cli(ctx: Context, host: str, walletname: str):
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host
     ctx.obj["WALLET_NAME"] = walletname
-    wallet = Wallet(ctx.obj["HOST"], os.path.join(settings.cashu_dir, walletname), name=walletname)
+    wallet = Wallet(
+        ctx.obj["HOST"], os.path.join(settings.cashu_dir, walletname), name=walletname
+    )
     ctx.obj["WALLET"] = wallet
     asyncio.run(init_wallet(wallet))
     pass

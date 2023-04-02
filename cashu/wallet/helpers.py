@@ -7,8 +7,8 @@ from fastapi import HTTPException, status
 from loguru import logger
 
 from cashu.core.base import TokenV1, TokenV2, TokenV3, TokenV3Token, WalletKeyset
-from cashu.core.migrations import migrate_databases
 from cashu.core.helpers import sum_proofs
+from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
 from cashu.wallet import migrations
 from cashu.wallet.crud import get_keyset, get_unused_locks
