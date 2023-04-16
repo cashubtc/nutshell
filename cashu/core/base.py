@@ -225,6 +225,7 @@ class WalletKeyset:
     def __init__(
         self,
         public_keys: Dict[int, PublicKey],
+        id=None,
         mint_url=None,
         valid_from=None,
         valid_to=None,
@@ -238,11 +239,30 @@ class WalletKeyset:
         self.mint_url = mint_url
 
         self.public_keys = public_keys
+        # overwrite id by deriving it from the public keys
         self.id = derive_keyset_id(self.public_keys)
 
     def serialize(self):
         return json.dumps(
             {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
+
+    @classmethod
+    def from_row(cls, row: Row):
+        def deserialize(serialized: str):
+            return {
+                amount: PublicKey(bytes.fromhex(hex_key), raw=True)
+                for amount, hex_key in dict(json.loads(serialized)).items()
+            }
+
+        return cls(
+            id=row["id"],
+            public_keys=deserialize(str(row["public_keys"])),
+            mint_url=row["mint_url"],
+            valid_from=row["valid_from"],
+            valid_to=row["valid_to"],
+            first_seen=row["first_seen"],
+            active=row["active"],
         )
 
 

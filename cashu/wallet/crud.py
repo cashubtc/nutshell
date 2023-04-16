@@ -227,7 +227,7 @@ async def get_keyset(
         """,
         tuple(values),
     )
-    return WalletKeyset(**row) if row is not None else None
+    return WalletKeyset.from_row(row) if row is not None else None
 
 
 async def store_lightning_invoice(
