@@ -126,7 +126,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     if wallet.available_balance < total_amount:
         print("Error: Balance too low.")
         return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)  # type: ignore
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice)
     await wallet.load_proofs()
     wallet.status()
@@ -413,7 +413,7 @@ async def receive_cli(
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
-            for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
+            for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 await receive(ctx, token, lock)

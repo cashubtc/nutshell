@@ -29,7 +29,6 @@ ledger = Ledger(
 
 
 async def start_mint_init():
-
     await migrate_databases(ledger.db, migrations)
     await ledger.load_used_proofs()
     await ledger.init_keysets()
