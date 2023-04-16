@@ -99,11 +99,10 @@ async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
     """
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
-    else:
-        payment_request, payment_hash = await ledger.request_mint(amount)
-        print(f"Lightning invoice: {payment_request}")
-        resp = GetMintResponse(pr=payment_request, hash=payment_hash)
-        return resp
+    payment_request, payment_hash = await ledger.request_mint(amount)
+    print(f"Lightning invoice: {payment_request}")
+    resp = GetMintResponse(pr=payment_request, hash=payment_hash)
+    return resp
 
 
 @router.post(
