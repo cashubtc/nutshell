@@ -169,3 +169,10 @@ async def m007_nostr(db: Database):
             None,
         ),
     )
+
+
+async def m008_keysets_public_keys(db: Database):
+    """
+    Stores public keys of keysets.
+    """
+    await db.execute("ALTER TABLE keysets ADD COLUMN public_keys TEXT")

@@ -1,3 +1,4 @@
+import json
 import time
 from typing import Any, List, Optional
 
@@ -10,7 +11,6 @@ async def store_proof(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         """
         INSERT INTO proofs
@@ -25,7 +25,6 @@ async def get_proofs(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     rows = await (conn or db).fetchall(
         """
         SELECT * from proofs
@@ -38,7 +37,6 @@ async def get_reserved_proofs(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     rows = await (conn or db).fetchall(
         """
         SELECT * from proofs
@@ -53,7 +51,6 @@ async def invalidate_proof(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         f"""
         DELETE FROM proofs
@@ -104,7 +101,6 @@ async def secret_used(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     rows = await (conn or db).fetchone(
         """
         SELECT * from proofs
@@ -120,7 +116,6 @@ async def store_p2sh(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         """
         INSERT INTO p2sh
@@ -141,7 +136,6 @@ async def get_unused_locks(
     db: Database = None,
     conn: Optional[Connection] = None,
 ):
-
     clause: List[str] = []
     args: List[str] = []
 
@@ -188,12 +182,11 @@ async def store_keyset(
     db: Database = None,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
-          (id, mint_url, valid_from, valid_to, first_seen, active)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (id, mint_url, valid_from, valid_to, first_seen, active, public_keys)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             keyset.id,
@@ -202,6 +195,7 @@ async def store_keyset(
             keyset.valid_to or int(time.time()),
             keyset.first_seen or int(time.time()),
             True,
+            keyset.serialize(),
         ),
     )
 
@@ -241,7 +235,6 @@ async def store_lightning_invoice(
     invoice: Invoice,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         f"""
         INSERT INTO invoices
