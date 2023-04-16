@@ -786,11 +786,13 @@ class Wallet(LedgerAPI):
             raise Exception("balance too low.")
 
         # add all proofs that have an older keyset than the current keyset of the mint
-        send_proofs += [p for p in proofs if p.id and p.id != self.keys.id]
+        proofs_old_epochs = [p for p in proofs if p.id != self.keys.id]
+        send_proofs += proofs_old_epochs
 
         # coinselect based on amount to send only from the current keyset
+        proofs_current_epoch = [p for p in proofs if p.id == self.keys.id]
         sorted_proofs_of_current_keyset = sorted(
-            [p for p in proofs if p.id == self.keys.id], key=lambda p: p.amount
+            proofs_current_epoch, key=lambda p: p.amount
         )
 
         while sum_proofs(send_proofs) < amount_to_send:
