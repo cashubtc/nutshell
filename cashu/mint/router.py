@@ -121,13 +121,12 @@ async def mint(
     """
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
-    else:
-        try:
-            promises = await ledger.mint(payload.outputs, payment_hash=payment_hash)
-            blinded_signatures = PostMintResponse(promises=promises)
-            return blinded_signatures
-        except Exception as exc:
-            return CashuError(code=0, error=str(exc))
+    try:
+        promises = await ledger.mint(payload.outputs, payment_hash=payment_hash)
+        blinded_signatures = PostMintResponse(promises=promises)
+        return blinded_signatures
+    except Exception as exc:
+        return CashuError(code=0, error=str(exc))
 
 
 @router.post(
