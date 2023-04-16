@@ -795,11 +795,7 @@ class Wallet(LedgerAPI):
 
         while sum_proofs(send_proofs) < amount_to_send:
             proof_to_add = sorted_proofs_of_current_keyset.pop()
-            logger.debug(
-                f"adding proof {proof_to_add.id} with amount {proof_to_add.amount}"
-            )
             send_proofs.append(proof_to_add)
-        logger.debug(f"sum of proofs to send: {sum_proofs(send_proofs)}")
         return send_proofs
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
