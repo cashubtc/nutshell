@@ -762,11 +762,19 @@ class Wallet(LedgerAPI):
 
     async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
         """
-        Selects proofs that can be used with the current mint.
-        Chooses:
+        Selects proofs that can be used with the current mint. Implements a simple coin selection algorithm.
+
+        The algorithm has two objectives: Get rid of all tokens from old epochs and include additional proofs from
+        the current epoch starting from the proofs with the largest amount.
+
+        Rules:
         1) Proofs that are not marked as reserved
-        2) Proofs that have a keyset id that is in self.keysets (active keysets of mint) - !!! optional for backwards compatibility with legacy clients
+        2) Proofs that have a keyset id that is in self.keysets (all active keysets of mint)
+        3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
+        4) If the target amount is not reached, add proofs of the current keyset until it is.
         """
+        send_proofs: List[Proof] = []
+
         # select proofs that are not reserved
         proofs = [p for p in proofs if not p.reserved]
 
@@ -777,12 +785,21 @@ class Wallet(LedgerAPI):
         if sum_proofs(proofs) < amount_to_send:
             raise Exception("balance too low.")
 
-        # coinselect based on amount to send
-        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
-        send_proofs: List[Proof] = []
+        # add all proofs that have an older keyset than the current keyset of the mint
+        send_proofs += [p for p in proofs if p.id and p.id != self.keys.id]
+
+        # coinselect based on amount to send only from the current keyset
+        sorted_proofs_of_current_keyset = sorted(
+            [p for p in proofs if p.id == self.keys.id], key=lambda p: p.amount
+        )
+
         while sum_proofs(send_proofs) < amount_to_send:
-            proof_to_add = sorted_proofs[len(send_proofs)]
+            proof_to_add = sorted_proofs_of_current_keyset.pop()
+            logger.debug(
+                f"adding proof {proof_to_add.id} with amount {proof_to_add.amount}"
+            )
             send_proofs.append(proof_to_add)
+        logger.debug(f"sum of proofs to send: {sum_proofs(send_proofs)}")
         return send_proofs
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
