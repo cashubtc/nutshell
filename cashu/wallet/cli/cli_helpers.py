@@ -119,8 +119,7 @@ async def redeem_TokenV2_multimint(ctx: Context, token: TokenV2, script, signatu
                 mint.url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"])
             )
 
-            # load the keys
-            await keyset_wallet.load_mint(keyset_id=keyset)
+            await keyset_wallet.load_mint()
 
             # redeem proofs of this keyset
             redeem_proofs = [p for p in token.proofs if p.id == keyset]
@@ -142,10 +141,10 @@ async def redeem_TokenV3_multimint(ctx: Context, token: TokenV3, script, signatu
         )
         await verify_mint(mint_wallet, t.mint)
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
-        # logger.debug(f"Keysets in tokens: {keysets}")
+        logger.debug(f"Keysets in tokens: {keysets}")
         # loop over all keysets
         for keyset in set(keysets):
-            await mint_wallet.load_mint(keyset_id=keyset)
+            await mint_wallet.load_mint()
             # redeem proofs of this keyset
             redeem_proofs = [p for p in t.proofs if p.id == keyset]
             _, _ = await mint_wallet.redeem(
