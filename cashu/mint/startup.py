@@ -38,7 +38,7 @@ async def rotate_keys():
         await ledger.load_keyset(ledger.derivation_path)
         await ledger.init_keysets()
         print(f"Keyset: {ledger.keyset.id}")
-        await asyncio.sleep(5)
+        await asyncio.sleep(10)
 
 
 async def start_mint_init():
