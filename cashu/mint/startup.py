@@ -2,6 +2,7 @@
 # to be taken by external apps importing the cashu mint.
 
 import importlib
+import asyncio
 
 from loguru import logger
 
@@ -28,6 +29,18 @@ ledger = Ledger(
 )
 
 
+async def rotate_keys():
+    i = 0
+    while True:
+        i += 1
+        print("rotating keys")
+        ledger.derivation_path = f"0/0/0/{i}"
+        await ledger.load_keyset(ledger.derivation_path)
+        await ledger.init_keysets()
+        print(f"Keyset: {ledger.keyset.id}")
+        await asyncio.sleep(5)
+
+
 async def start_mint_init():
     await migrate_databases(ledger.db, migrations)
     await ledger.load_used_proofs()
@@ -45,3 +58,4 @@ async def start_mint_init():
 
     logger.info(f"Data dir: {settings.cashu_dir}")
     logger.info("Mint started.")
+    asyncio.create_task(rotate_keys())
