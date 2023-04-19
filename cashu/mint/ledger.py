@@ -42,6 +42,7 @@ class Ledger:
         self.crud = crud
         self.lightning = lightning
         self.pubkey = derive_pubkey(self.master_key)
+        self.keysets = MintKeysets([])
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""
@@ -86,11 +87,19 @@ class Ledger:
         """
         # load all past keysets from db
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
-        self.keysets = MintKeysets(tmp_keysets)
-        logger.trace(f"Loading {len(self.keysets.keysets)} keysets form db.")
-        # generate all derived keys from stored derivation paths of past keysets
+        # add keysets from db to current keysets
+        for k in tmp_keysets:
+            if k.id and k.id not in self.keysets.keysets:
+                self.keysets.keysets[k.id] = k
+
+        logger.debug(f"Currently {len(self.keysets.keysets)} keysets are active.")
+
+        # generate all private keys, public keys, and keyset id from the derivation path for all keysets that are not yet generated
         for _, v in self.keysets.keysets.items():
-            logger.trace(f"Generating keys for keyset {v.id}")
+            # we already generated the keys for this keyset
+            if v.id and v.public_keys and len(v.public_keys):
+                continue
+            logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
