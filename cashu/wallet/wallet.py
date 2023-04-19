@@ -116,10 +116,16 @@ class LedgerAPI:
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
         proofs: List[Proof] = []
         for promise, secret, r in zip(promises, secrets, rs):
+            logger.trace(f"Creating proof with keyset {self.keyset_id} =+ {promise.id}")
+            assert (
+                self.keyset_id == promise.id
+            ), "our keyset id does not match promise id."
+
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
+
             proof = Proof(
-                id=self.keyset_id,
+                id=promise.id,
                 amount=promise.amount,
                 C=C.serialize().hex(),
                 secret=secret,
