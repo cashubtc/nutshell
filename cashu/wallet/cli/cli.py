@@ -441,7 +441,7 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         await wallet.load_mint()
     if not (all or token or force or delete) or (token and all):
         print(
-            "Error: enter a token or use --all to burn all pending tokens, --force to check all tokens or"
+            "Error: enter a token or use --all to burn all pending tokens, --force to check all tokens "
             "or --delete with send ID to force-delete pending token from list if mint is unavailable."
         )
         return
