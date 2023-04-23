@@ -104,7 +104,7 @@ async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2, is_api: bool = Fa
 
 
 async def redeem_TokenV2_multimint(
-    wallet: Wallet, token: TokenV2, script, signature, is_api: bool = False
+    wallet: Wallet, token: TokenV2, script, signature
 ):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
@@ -133,12 +133,11 @@ async def redeem_TokenV2_multimint(
             _, _ = await keyset_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
             )
-            if not is_api:
-                print(f"Received {sum_proofs(redeem_proofs)} sats")
+            print(f"Received {sum_proofs(redeem_proofs)} sats")
 
 
 async def redeem_TokenV3_multimint(
-    wallet: Wallet, token: TokenV3, script, signature, is_api: bool = False
+    wallet: Wallet, token: TokenV3, script, signature
 ):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
@@ -158,8 +157,7 @@ async def redeem_TokenV3_multimint(
             _, _ = await mint_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
             )
-            if not is_api:
-                print(f"Received {sum_proofs(redeem_proofs)} sats")
+            print(f"Received {sum_proofs(redeem_proofs)} sats")
 
 
 async def print_mint_balances(wallet, show_mints=False):
@@ -198,8 +196,7 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
 
     # if we have balances on more than one mint, we ask the user to select one
     if len(mint_balances) > 1:
-        if not is_api:
-            await print_mint_balances(wallet, show_mints=True)
+        await print_mint_balances(wallet, show_mints=True)
 
         url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])
         nr_max = list(mint_balances).index(url_max) + 1
@@ -257,7 +254,7 @@ async def serialize_TokenV1_to_TokenV3(tokenv1: TokenV1):
     return token_serialized
 
 
-async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
+async def receive(wallet: Wallet, token: str, lock: str):
     # await wallet.load_mint()
 
     # check for P2SH locks
@@ -313,7 +310,7 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
             # await verify_mints(ctx, tokenObj)
             # redeem tokens with new wallet instances
             await redeem_TokenV3_multimint(
-                wallet, tokenObj, script, signature, is_api=is_api
+                wallet, tokenObj, script, signature
             )
         else:
             # no mint information present, we extract the proofs and use wallet's default mint
@@ -333,15 +330,12 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
             )
             await mint_wallet.load_mint(keyset_in_token)
             _, _ = await mint_wallet.redeem(proofs, script, signature)
-            if not is_api:
-                print(f"Received {sum_proofs(proofs)} sats")
+            print(f"Received {sum_proofs(proofs)} sats")
 
     # reload main wallet so the balance updates
     await wallet.load_proofs()
-    if is_api:
-        return wallet.available_balance
-    else:
-        wallet.status()
+    wallet.status()
+    return wallet.available_balance
 
 
 async def send(
@@ -366,22 +360,18 @@ async def send(
         send_proofs,
         include_mints=True,
     )
-    if not is_api:
-        print(token)
+    print(token)
 
     if legacy:
-        if not is_api:
-            print("")
-            print("Old token format:")
-            print("")
+        print("")
+        print("Old token format:")
+        print("")
         token = await wallet.serialize_proofs(
             send_proofs,
             legacy=True,
         )
-        if not is_api:
-            print(token)
+        print(token)
 
-    if is_api:
-        return wallet.available_balance, token
-    else:
-        wallet.status()
+    wallet.status()
+    return wallet.available_balance, token
+

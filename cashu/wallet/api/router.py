@@ -172,7 +172,7 @@ async def receive_command(
     result = {"initial balance": wallet.available_balance}
     if token:
         try:
-            balance = await receive(wallet, token, lock, is_api=True)
+            balance = await receive(wallet, token, lock)
         except AssertionError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="AssertionError."
@@ -188,7 +188,7 @@ async def receive_command(
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 try:
-                    balance = await receive(wallet, token, lock, is_api=True)
+                    balance = await receive(wallet, token, lock)
                 except AssertionError:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST, detail="AssertionError."
