@@ -218,7 +218,7 @@ async def burn(
     if not (all or token or force or delete) or (token and all):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="enter a token or use --all to burn all pending tokens, --force to check all tokens or"
+            detail="enter a token or use --all to burn all pending tokens, --force to check all tokens"
             "or --delete with send ID to force-delete pending token from list if mint is unavailable.",
         )
     if all:
