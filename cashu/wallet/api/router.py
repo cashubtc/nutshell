@@ -60,7 +60,7 @@ async def pay(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="balance is too low."
         )
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)  # type: ignore
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice)
     await wallet.load_proofs()
     return {
@@ -174,7 +174,7 @@ async def receive_command(
         reserved_proofs = await get_reserved_proofs(wallet.db)
         balance = None
         if len(reserved_proofs):
-            for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
+            for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 balance = await receive(wallet, token, lock, is_api=True)

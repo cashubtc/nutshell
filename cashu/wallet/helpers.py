@@ -139,7 +139,7 @@ async def redeem_TokenV2_multimint(
             )
 
             # load the keys
-            await keyset_wallet.load_mint(keyset_id=keyset)
+            await keyset_wallet.load_mint()
 
             # redeem proofs of this keyset
             redeem_proofs = [p for p in token.proofs if p.id == keyset]
@@ -168,10 +168,10 @@ async def redeem_TokenV3_multimint(
         mint_wallet = Wallet(t.mint, os.path.join(settings.cashu_dir, wallet.name))
         await verify_mint(mint_wallet, t.mint)
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
-        # logger.debug(f"Keysets in tokens: {keysets}")
+        logger.debug(f"Keysets in tokens: {keysets}")
         # loop over all keysets
         for keyset in set(keysets):
-            await mint_wallet.load_mint(keyset_id=keyset)
+            await mint_wallet.load_mint()
             # redeem proofs of this keyset
             redeem_proofs = [p for p in t.proofs if p.id == keyset]
             _, _ = await mint_wallet.redeem(
@@ -212,10 +212,10 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
     Helper function that asks the user for an input to select which mint they want to load.
     Useful for selecting the mint that the user wants to send tokens from.
     """
-    await wallet.load_mint()
 
     mint_balances = await wallet.balance_per_minturl()
 
+    # if we have balances on more than one mint, we ask the user to select one
     if len(mint_balances) > 1:
         if not is_api:
             await print_mint_balances(wallet, show_mints=True)
@@ -245,16 +245,10 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
                 raise Exception("invalid input.")
     else:
         mint_url = list(mint_balances.keys())[0]
-    print(mint_url)
-    print(wallet.name)
+
     # load this mint_url into a wallet
     mint_wallet = Wallet(mint_url, os.path.join(settings.cashu_dir, wallet.name))
-    mint_keysets: WalletKeyset = await get_keyset(mint_url=mint_url, db=mint_wallet.db)  # type: ignore
-    print(mint_keysets)
-    print(mint_wallet)
-    # load the keys
-    assert mint_keysets.id
-    await mint_wallet.load_mint(keyset_id=mint_keysets.id)
+    await mint_wallet.load_mint()
 
     return mint_wallet
 

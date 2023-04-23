@@ -614,6 +614,8 @@ class Ledger:
                         ln_fee_msat=fee_msat,
                         outputs=outputs,
                     )
+            else:
+                raise Exception("Lightning payment unsuccessful.")
 
         except Exception as e:
             raise e
