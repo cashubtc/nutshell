@@ -14,7 +14,7 @@ from cashu.wallet.crud import (
     get_nostr_last_check_timestamp,
     set_nostr_last_check_timestamp,
 )
-from cashu.wallet.helpers import get_mint_wallet
+from cashu.wallet.helpers import get_mint_wallet, receive
 from cashu.wallet.wallet import Wallet
 
 
@@ -133,9 +133,7 @@ async def receive_nostr(wallet: Wallet, verbose: bool = False, is_api: bool = Fa
             )
         try:
             # call the receive method
-            from cashu.wallet.helpers import receive
-
-            asyncio.run(receive(wallet, decrypted_content, "", is_api=is_api))
+            asyncio.run(receive(wallet, decrypted_content, ""))
         except Exception as e:
             pass
 

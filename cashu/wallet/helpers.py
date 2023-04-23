@@ -32,7 +32,7 @@ async def verify_mint(mint_wallet: Wallet, url: str, is_api: bool = False):
     # we check the db whether we know this mint already and ask the user if not
     mint_keysets = await get_keyset(mint_url=url, db=mint_wallet.db)
     if mint_keysets is None:
-        if not is_api:
+        if not is_api:  # via API new mint is trusted
             # we encountered a new mint and ask for a user confirmation
             print("")
             print("Warning: Tokens are from a mint you don't know yet.")
@@ -103,9 +103,7 @@ async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2, is_api: bool = Fa
     assert trust_token_mints, Exception("Aborted!")
 
 
-async def redeem_TokenV2_multimint(
-    wallet: Wallet, token: TokenV2, script, signature
-):
+async def redeem_TokenV2_multimint(wallet: Wallet, token: TokenV2, script, signature):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
@@ -136,9 +134,7 @@ async def redeem_TokenV2_multimint(
             print(f"Received {sum_proofs(redeem_proofs)} sats")
 
 
-async def redeem_TokenV3_multimint(
-    wallet: Wallet, token: TokenV3, script, signature
-):
+async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3, script, signature):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
@@ -201,7 +197,7 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
         url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])
         nr_max = list(mint_balances).index(url_max) + 1
 
-        if is_api:
+        if is_api:  # via API mint with largest balance is selected
             mint_nr_str = None
         else:
             mint_nr_str = input(
@@ -261,8 +257,8 @@ async def receive(wallet: Wallet, token: str, lock: str):
     if lock:
         # load the script and signature of this address from the database
         assert len(lock.split("P2SH:")) == 2, Exception(
-                "lock has wrong format. Expected P2SH:<address>."
-            )
+            "lock has wrong format. Expected P2SH:<address>."
+        )
         address_split = lock.split("P2SH:")[1]
         p2shscripts = await get_unused_locks(address_split, db=wallet.db)
         assert len(p2shscripts) == 1, Exception("lock not found.")
@@ -309,9 +305,7 @@ async def receive(wallet: Wallet, token: str, lock: str):
             # we ask the user to confirm any new mints the tokens may include
             # await verify_mints(ctx, tokenObj)
             # redeem tokens with new wallet instances
-            await redeem_TokenV3_multimint(
-                wallet, tokenObj, script, signature
-            )
+            await redeem_TokenV3_multimint(wallet, tokenObj, script, signature)
         else:
             # no mint information present, we extract the proofs and use wallet's default mint
 
@@ -345,7 +339,9 @@ async def send(
     Prints token to send to stdout.
     """
     if lock:
-        assert len(lock) > 21, Exception("Error: lock has to be at least 22 characters long.")
+        assert len(lock) > 21, Exception(
+            "Error: lock has to be at least 22 characters long."
+        )
     p2sh = False
     if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
@@ -374,4 +370,3 @@ async def send(
 
     wallet.status()
     return wallet.available_balance, token
-

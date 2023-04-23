@@ -191,7 +191,8 @@ async def receive_command(
                     balance = await receive(wallet, token, lock)
                 except AssertionError:
                     raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST, detail="AssertionError."
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="AssertionError.",
                     )
     else:
         raise HTTPException(
