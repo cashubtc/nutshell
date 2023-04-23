@@ -70,7 +70,7 @@ def test_step2():
         ),
         raw=True,
     )
-    C_ = B_.mult(a)
+    C_ = step2_bob(B_, a)
     assert (
         C_.serialize().hex()
         == "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
