@@ -3,7 +3,6 @@ import json
 import os
 
 import click
-from fastapi import HTTPException, status
 from loguru import logger
 
 from cashu.core.base import TokenV1, TokenV2, TokenV3, TokenV3Token, WalletKeyset
@@ -72,22 +71,11 @@ async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2, is_api: bool = Fa
             )
             # make sure that this mint supports this keyset
             mint_keysets = await keyset_wallet._get_keyset_ids(mint.url)
-            if is_api:
-                assert keyset in mint_keysets, HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="mint does not have this keyset.",
-                )
-            else:
-                assert keyset in mint_keysets, "mint does not have this keyset."
+            assert keyset in mint_keysets, "mint does not have this keyset."
 
             # we validate the keyset id by fetching the keys from the mint and computing the id locally
             mint_keyset = await keyset_wallet._get_keys_of_keyset(mint.url, keyset)
-            if is_api:
-                assert keyset == mint_keyset.id, HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail="keyset not valid."
-                )
-            else:
-                assert keyset == mint_keyset.id, Exception("keyset not valid.")
+            assert keyset == mint_keyset.id, Exception("keyset not valid.")
 
             # we check the db whether we know this mint already and ask the user if not
             mint_keysets = await get_keyset(mint_url=mint.url, db=keyset_wallet.db)
@@ -112,8 +100,7 @@ async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2, is_api: bool = Fa
                     trust_token_mints = True
             else:
                 logger.debug(f"We know keyset {mint_keysets.id} already")
-    if not is_api:
-        assert trust_token_mints, Exception("Aborted!")
+    assert trust_token_mints, Exception("Aborted!")
 
 
 async def redeem_TokenV2_multimint(
@@ -158,13 +145,7 @@ async def redeem_TokenV3_multimint(
     these mints one keyset at a time.
     """
     for t in token.token:
-        if is_api:
-            assert t.mint, HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Multimint redeem without URL",
-            )
-        else:
-            assert t.mint, Exception("Multimint redeem without URL")
+        assert t.mint, Exception("Multimint redeem without URL")
         mint_wallet = Wallet(t.mint, os.path.join(settings.cashu_dir, wallet.name))
         await verify_mint(mint_wallet, t.mint)
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
@@ -237,12 +218,7 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
         ):  # specific mint
             mint_url = list(mint_balances.keys())[int(mint_nr_str) - 1]
         else:
-            if is_api:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail="invalid input."
-                )
-            else:
-                raise Exception("invalid input.")
+            raise Exception("invalid input.")
     else:
         mint_url = list(mint_balances.keys())[0]
 
@@ -287,23 +263,12 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
     # check for P2SH locks
     if lock:
         # load the script and signature of this address from the database
-        if is_api:
-            assert len(lock.split("P2SH:")) == 2, HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="lock has wrong format. Expected P2SH:<address>.",
-            )
-        else:
-            assert len(lock.split("P2SH:")) == 2, Exception(
+        assert len(lock.split("P2SH:")) == 2, Exception(
                 "lock has wrong format. Expected P2SH:<address>."
             )
         address_split = lock.split("P2SH:")[1]
         p2shscripts = await get_unused_locks(address_split, db=wallet.db)
-        if is_api:
-            assert len(p2shscripts) == 1, HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="lock not found."
-            )
-        else:
-            assert len(p2shscripts) == 1, Exception("lock not found.")
+        assert len(p2shscripts) == 1, Exception("lock not found.")
         script, signature = p2shscripts[0].script, p2shscripts[0].signature
     else:
         script, signature = None, None
@@ -336,16 +301,8 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
         tokenObj = TokenV3.deserialize(token)
 
         # tokenObj = TokenV2.parse_obj(dtoken)
-        if is_api:
-            assert len(tokenObj.token), HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="no proofs in token."
-            )
-            assert len(tokenObj.token[0].proofs), HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="no proofs in token"
-            )
-        else:
-            assert len(tokenObj.token), Exception("no proofs in token")
-            assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
+        assert len(tokenObj.token), Exception("no proofs in token")
+        assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
         includes_mint_info: bool = any([t.mint for t in tokenObj.token])
 
         # if there is a `mints` field in the token
@@ -367,18 +324,8 @@ async def receive(wallet: Wallet, token: str, lock: str, is_api: bool = False):
             assert keyset_in_token
             # we get the keyset from the db
             mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
-            if is_api:
-                assert mint_keysets, HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="we don't know this keyset",
-                )
-                assert mint_keysets.mint_url, HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="we don't know this mint's URL",
-                )
-            else:
-                assert mint_keysets, Exception("we don't know this keyset")
-                assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
+            assert mint_keysets, Exception("we don't know this keyset")
+            assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
             # now we have the URL
             mint_wallet = Wallet(
                 mint_keysets.mint_url,
@@ -403,15 +350,8 @@ async def send(
     """
     Prints token to send to stdout.
     """
-    if lock and len(lock) < 22:
-        if is_api:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="lock has to be at least 22 characters long.",
-            )
-        else:
-            print("Error: lock has to be at least 22 characters long.")
-            return
+    if lock:
+        assert len(lock) > 21, Exception("Error: lock has to be at least 22 characters long.")
     p2sh = False
     if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
