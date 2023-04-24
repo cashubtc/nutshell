@@ -164,13 +164,15 @@ async def receive_command(
     lock: str = Query(default=None, description="Unlock tokens"),
     nostr: bool = Query(default=False, description="Receive tokens via nostr"),
     all: bool = Query(default=False, description="Receive all pending tokens"),
+    trust: bool = Query(default=False, description="Trust unknown mint"),
 ):
-    await wallet.load_mint()
     await wallet.load_proofs()
     result = {"initial balance": wallet.available_balance}
     if token:
         try:
-            balance = await receive(wallet, token, lock)
+            balance = await receive(
+                wallet, token, lock, is_api=True, trust_new_mint=trust
+            )
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     elif nostr:
@@ -184,7 +186,9 @@ async def receive_command(
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 try:
-                    balance = await receive(wallet, token, lock)
+                    balance = await receive(
+                        wallet, token, lock, is_api=True, trust_new_mint=trust
+                    )
                 except Exception as e:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)

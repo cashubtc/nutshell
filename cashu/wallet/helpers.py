@@ -20,7 +20,9 @@ async def init_wallet(wallet: Wallet):
     await wallet.load_proofs()
 
 
-async def verify_mint(mint_wallet: Wallet, url: str, is_api: bool = False):
+async def verify_mint(
+    mint_wallet: Wallet, url: str, is_api: bool = False, trust_new_mint: bool = False
+):
     """A helper function that asks the user if they trust the mint if the user
     has not encountered the mint before (there is no entry in the database).
 
@@ -31,8 +33,14 @@ async def verify_mint(mint_wallet: Wallet, url: str, is_api: bool = False):
     # mint_wallet = Wallet(url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]))
     # we check the db whether we know this mint already and ask the user if not
     mint_keysets = await get_keyset(mint_url=url, db=mint_wallet.db)
-    if mint_keysets is None:
-        if not is_api:  # via API new mint is trusted
+    if mint_keysets is None and not trust_new_mint:
+        if is_api:
+            raise Exception(
+                "Tokens are from a mint you don't know yet. "
+                f"Mint URL: {url}. "
+                "To continue call receive with trust_new_mint=True."
+            )
+        else:
             # we encountered a new mint and ask for a user confirmation
             print("")
             print("Warning: Tokens are from a mint you don't know yet.")
@@ -44,6 +52,8 @@ async def verify_mint(mint_wallet: Wallet, url: str, is_api: bool = False):
                 abort=True,
                 default=True,
             )
+    elif mint_keysets is None and trust_new_mint:
+        logger.debug(f"We automatically trusted new mint with URL {url}")
     else:
         logger.debug(f"We know keyset {mint_keysets.id} already")
 
@@ -134,7 +144,14 @@ async def redeem_TokenV2_multimint(wallet: Wallet, token: TokenV2, script, signa
             print(f"Received {sum_proofs(redeem_proofs)} sats")
 
 
-async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3, script, signature):
+async def redeem_TokenV3_multimint(
+    wallet: Wallet,
+    token: TokenV3,
+    script,
+    signature,
+    is_api: bool = False,
+    trust_new_mint: bool = False,
+):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
@@ -142,7 +159,9 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3, script, signa
     for t in token.token:
         assert t.mint, Exception("Multimint redeem without URL")
         mint_wallet = Wallet(t.mint, os.path.join(settings.cashu_dir, wallet.name))
-        await verify_mint(mint_wallet, t.mint)
+        await verify_mint(
+            mint_wallet, t.mint, is_api=is_api, trust_new_mint=trust_new_mint
+        )
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
         logger.debug(f"Keysets in tokens: {keysets}")
         # loop over all keysets
@@ -250,7 +269,13 @@ async def serialize_TokenV1_to_TokenV3(tokenv1: TokenV1):
     return token_serialized
 
 
-async def receive(wallet: Wallet, token: str, lock: str):
+async def receive(
+    wallet: Wallet,
+    token: str,
+    lock: str,
+    is_api: bool = False,
+    trust_new_mint: bool = False,
+):
     # await wallet.load_mint()
 
     # check for P2SH locks
@@ -305,7 +330,14 @@ async def receive(wallet: Wallet, token: str, lock: str):
             # we ask the user to confirm any new mints the tokens may include
             # await verify_mints(ctx, tokenObj)
             # redeem tokens with new wallet instances
-            await redeem_TokenV3_multimint(wallet, tokenObj, script, signature)
+            await redeem_TokenV3_multimint(
+                wallet,
+                tokenObj,
+                script,
+                signature,
+                is_api=is_api,
+                trust_new_mint=trust_new_mint,
+            )
         else:
             # no mint information present, we extract the proofs and use wallet's default mint
 
