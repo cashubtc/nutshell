@@ -219,19 +219,23 @@ async def get_mint_wallet(
         nr_max = list(mint_balances).index(url_max) + 1
 
         if is_api:
-            mint_nr_str = specific_mint
+            mint_nr = specific_mint
         else:
             mint_nr_str = input(
                 f"Select mint [1-{len(mint_balances)}] or "
                 f"press enter for mint with largest balance (Mint {nr_max}): "
             )
-            if mint_nr_str and not mint_nr_str.isdigit():
+            if not mint_nr_str:
+                mint_nr = None
+            elif not mint_nr_str.isdigit():
                 raise Exception("invalid input.")
+            else:
+                mint_nr = int(mint_nr_str)
 
-        if not mint_nr_str:  # largest balance
+        if not mint_nr:  # largest balance
             mint_url = url_max
-        elif int(mint_nr_str) <= len(mint_balances):  # specific mint
-            mint_url = list(mint_balances.keys())[int(mint_nr_str) - 1]
+        elif mint_nr <= len(mint_balances):  # specific mint
+            mint_url = list(mint_balances.keys())[mint_nr - 1]
         else:
             raise Exception("invalid input.")
     else:
