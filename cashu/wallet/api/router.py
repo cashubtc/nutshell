@@ -146,10 +146,8 @@ async def send_command(
     if not nostr:
         try:
             balance, token = await send(wallet, amount, lock, legacy, is_api=True)
-        except AssertionError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="AssertionError."
-            )
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return {"balance": balance, "token sent": token}
     else:
         token, pubkey = await send_nostr(wallet, amount, nostr, is_api=True)
@@ -173,10 +171,8 @@ async def receive_command(
     if token:
         try:
             balance = await receive(wallet, token, lock)
-        except AssertionError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="AssertionError."
-            )
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     elif nostr:
         await receive_nostr(wallet, is_api=True)
         balance = wallet.available_balance
@@ -189,10 +185,9 @@ async def receive_command(
                 token = await wallet.serialize_proofs(proofs)
                 try:
                     balance = await receive(wallet, token, lock)
-                except AssertionError:
+                except Exception as e:
                     raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="AssertionError.",
+                        status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
                     )
     else:
         raise HTTPException(
