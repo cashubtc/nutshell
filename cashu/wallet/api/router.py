@@ -125,6 +125,7 @@ async def balance():
         result.update(
             {
                 f"mint {i+1}": {
+                    "url": k,
                     "available": v["available"],
                     "pending": v["balance"] - v["available"],
                 }
@@ -142,10 +143,17 @@ async def send_command(
     legacy: bool = Query(
         default=False, description="Legacy token without mint information"
     ),
+    mint: int = Query(
+        default=None,
+        description="Select mint to send from (None for mint with maximum balance, "
+        "integer for specific mint)",
+    ),
 ):
     if not nostr:
         try:
-            balance, token = await send(wallet, amount, lock, legacy, is_api=True)
+            balance, token = await send(
+                wallet, amount, lock, legacy, is_api=True, specific_mint=mint
+            )
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return {"balance": balance, "token sent": token}

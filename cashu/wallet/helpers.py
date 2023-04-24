@@ -201,7 +201,9 @@ async def print_mint_balances(wallet, show_mints=False):
         print("")
 
 
-async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
+async def get_mint_wallet(
+    wallet: Wallet, is_api: bool = False, specific_mint: int = None
+):
     """
     Helper function that asks the user for an input to select which mint they want to load.
     Useful for selecting the mint that the user wants to send tokens from.
@@ -216,8 +218,8 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False):
         url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])
         nr_max = list(mint_balances).index(url_max) + 1
 
-        if is_api:  # via API mint with largest balance is selected
-            mint_nr_str = None
+        if is_api:
+            mint_nr_str = specific_mint
         else:
             mint_nr_str = input(
                 f"Select mint [1-{len(mint_balances)}] or "
@@ -365,7 +367,12 @@ async def receive(
 
 
 async def send(
-    wallet: Wallet, amount: int, lock: str, legacy: bool, is_api: bool = False
+    wallet: Wallet,
+    amount: int,
+    lock: str,
+    legacy: bool,
+    is_api: bool = False,
+    specific_mint: int = None,
 ):
     """
     Prints token to send to stdout.
@@ -378,7 +385,7 @@ async def send(
     if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
 
-    wallet = await get_mint_wallet(wallet, is_api=is_api)
+    wallet = await get_mint_wallet(wallet, is_api=is_api, specific_mint=specific_mint)
     await wallet.load_proofs()
 
     _, send_proofs = await wallet.split_to_send(
