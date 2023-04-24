@@ -225,7 +225,7 @@ async def get_mint_wallet(
                 f"Select mint [1-{len(mint_balances)}] or "
                 f"press enter for mint with largest balance (Mint {nr_max}): "
             )
-            if not mint_nr_str.isdigit():
+            if mint_nr_str and not mint_nr_str.isdigit():
                 raise Exception("invalid input.")
 
         if not mint_nr_str:  # largest balance
