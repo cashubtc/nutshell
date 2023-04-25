@@ -119,8 +119,7 @@ async def redeem_TokenV2_multimint(ctx: Context, token: TokenV2, script, signatu
                 mint.url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"])
             )
 
-            # load the keys
-            await keyset_wallet.load_mint(keyset_id=keyset)
+            await keyset_wallet.load_mint()
 
             # redeem proofs of this keyset
             redeem_proofs = [p for p in token.proofs if p.id == keyset]
@@ -142,10 +141,10 @@ async def redeem_TokenV3_multimint(ctx: Context, token: TokenV3, script, signatu
         )
         await verify_mint(mint_wallet, t.mint)
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
-        # logger.debug(f"Keysets in tokens: {keysets}")
+        logger.debug(f"Keysets in tokens: {keysets}")
         # loop over all keysets
         for keyset in set(keysets):
-            await mint_wallet.load_mint(keyset_id=keyset)
+            await mint_wallet.load_mint()
             # redeem proofs of this keyset
             redeem_proofs = [p for p in t.proofs if p.id == keyset]
             _, _ = await mint_wallet.redeem(
@@ -185,11 +184,11 @@ async def get_mint_wallet(ctx: Context):
     Helper function that asks the user for an input to select which mint they want to load.
     Useful for selecting the mint that the user wants to send tokens from.
     """
+    # we load a dummy wallet so we can check the balance per mint
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_mint()
-
     mint_balances = await wallet.balance_per_minturl()
 
+    # if we have balances on more than one mint, we ask the user to select one
     if len(mint_balances) > 1:
         await print_mint_balances(ctx, wallet, show_mints=True)
 
@@ -215,11 +214,7 @@ async def get_mint_wallet(ctx: Context):
     mint_wallet = Wallet(
         mint_url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"])
     )
-    mint_keysets: WalletKeyset = await get_keyset(mint_url=mint_url, db=mint_wallet.db)  # type: ignore
-
-    # load the keys
-    assert mint_keysets.id
-    await mint_wallet.load_mint(keyset_id=mint_keysets.id)
+    await mint_wallet.load_mint()
 
     return mint_wallet
 
@@ -235,7 +230,7 @@ async def serialize_TokenV2_to_TokenV3(wallet: Wallet, tokenv2: TokenV2):
     tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv2.proofs)])
     if tokenv2.mints:
         tokenv3.token[0].mint = tokenv2.mints[0].url
-    token_serialized = await wallet._serialize_token_V3(tokenv3)
+    token_serialized = tokenv3.serialize()
     return token_serialized
 
 
@@ -248,5 +243,5 @@ async def serialize_TokenV1_to_TokenV3(wallet: Wallet, tokenv1: TokenV1):
         TokenV3: TokenV3
     """
     tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv1.__root__)])
-    token_serialized = await wallet._serialize_token_V3(tokenv3)
+    token_serialized = tokenv3.serialize()
     return token_serialized

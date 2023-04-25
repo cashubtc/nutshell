@@ -10,6 +10,7 @@ from cashu.core.base import (
     CheckFeesResponse,
     CheckSpendableRequest,
     CheckSpendableResponse,
+    GetInfoResponse,
     GetMeltResponse,
     GetMintResponse,
     KeysetsResponse,
@@ -21,9 +22,30 @@ from cashu.core.base import (
     PostSplitResponse,
 )
 from cashu.core.errors import CashuError
+from cashu.core.settings import settings
 from cashu.mint.startup import ledger
 
 router: APIRouter = APIRouter()
+
+
+@router.get(
+    "/info",
+    name="Mint information",
+    summary="Mint information, operator contact information, and other info.",
+    response_model=GetInfoResponse,
+    response_model_exclude_none=True,
+)
+async def info():
+    return GetInfoResponse(
+        name=settings.mint_info_name,
+        pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
+        version=f"Nutshell/{settings.version}",
+        description=settings.mint_info_description,
+        description_long=settings.mint_info_description_long,
+        contact=settings.mint_info_contact,
+        nuts=settings.mint_info_nuts,
+        motd=settings.mint_info_motd,
+    )
 
 
 @router.get(
@@ -68,14 +90,14 @@ async def keysets() -> KeysetsResponse:
 
 
 @router.get("/mint", name="Request mint", summary="Request minting of new tokens")
-async def request_mint(amount: int = 0, description_hash: Optional[bytes] = None) -> GetMintResponse:
+async def request_mint(amount: int = 0, description_hash: Optional[bytes] = None) -> Union[GetMintResponse, CashuError]:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
 
     Call `POST /mint` after paying the invoice.
     """
-    payment_request, payment_hash = await ledger.request_mint(amount,description_hash)
+    payment_request, payment_hash = await ledger.request_mint(amount)
     print(f"Lightning invoice: {payment_request}")
     resp = GetMintResponse(pr=payment_request, hash=payment_hash)
     return resp
@@ -95,6 +117,8 @@ async def mint(
 
     Call this endpoint after `GET /mint`.
     """
+    if settings.mint_peg_out_only:
+        return CashuError(code=0, error="Mint does not allow minting new tokens.")
     try:
         promises = await ledger.mint(payload.outputs, payment_hash=payment_hash)
         blinded_signatures = PostMintResponse(promises=promises)

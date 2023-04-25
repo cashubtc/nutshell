@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field, validator
 
 env = Env()
 
-VERSION = "0.10.0"
+VERSION = "0.11.2"
 
 
 def find_env_file():
@@ -53,9 +53,19 @@ class MintSettings(CashuSettings):
     mint_listen_port: int = Field(default=3338)
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
+    mint_peg_out_only: bool = Field(default=False)
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
+
+
+class MintInformation(CashuSettings):
+    mint_info_name: str = Field(default="Cashu mint")
+    mint_info_description: str = Field(default=None)
+    mint_info_description_long: str = Field(default=None)
+    mint_info_contact: List[str] = Field(default=[])
+    mint_info_nuts: List[str] = Field(default=["NUT-07", "NUT-08"])
+    mint_info_motd: str = Field(default=None)
 
 
 class WalletSettings(CashuSettings):
@@ -79,7 +89,9 @@ class WalletSettings(CashuSettings):
     )
 
 
-class Settings(EnvSettings, MintSettings, WalletSettings, CashuSettings):
+class Settings(
+    EnvSettings, MintSettings, MintInformation, WalletSettings, CashuSettings
+):
     version: str = Field(default=VERSION)
 
     # def __init__(self, env_file=None):

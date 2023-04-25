@@ -23,13 +23,12 @@ lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
     seed=settings.mint_private_key,
-    derivation_path="0/0/0/1",
+    derivation_path="0/0/0/0",
     lightning=lightning_backend,
 )
 
 
 async def start_mint_init():
-
     await migrate_databases(ledger.db, migrations)
     await ledger.load_used_proofs()
     await ledger.init_keysets()

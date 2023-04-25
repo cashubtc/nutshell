@@ -14,6 +14,7 @@ from cashu.core.base import (
     MintKeysets,
     Proof,
 )
+from cashu.core.crypto import derive_pubkey
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.script import verify_script
@@ -40,6 +41,7 @@ class Ledger:
         self.db = db
         self.crud = crud
         self.lightning = lightning
+        self.pubkey = derive_pubkey(self.master_key)
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""
@@ -612,6 +614,8 @@ class Ledger:
                         ln_fee_msat=fee_msat,
                         outputs=outputs,
                     )
+            else:
+                raise Exception("Lightning payment unsuccessful.")
 
         except Exception as e:
             raise e

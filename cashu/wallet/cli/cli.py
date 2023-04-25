@@ -18,7 +18,7 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.base import Proof, TokenV1, TokenV2
+from cashu.core.base import Proof, TokenV1, TokenV2, TokenV3
 from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
@@ -126,7 +126,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     if wallet.available_balance < total_amount:
         print("Error: Balance too low.")
         return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)  # type: ignore
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice)
     await wallet.load_proofs()
     wallet.status()
@@ -342,8 +342,7 @@ async def receive(ctx: Context, token: str, lock: str):
     # ----- receive token -----
 
     # deserialize token
-    # dtoken = json.loads(base64.urlsafe_b64decode(token))
-    tokenObj = wallet._deserialize_token_V3(token)
+    tokenObj = TokenV3.deserialize(token)
 
     # tokenObj = TokenV2.parse_obj(dtoken)
     assert len(tokenObj.token), Exception("no proofs in token")
@@ -414,7 +413,7 @@ async def receive_cli(
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
-            for (key, value) in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
+            for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 await receive(ctx, token, lock)
@@ -442,7 +441,7 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         await wallet.load_mint()
     if not (all or token or force or delete) or (token and all):
         print(
-            "Error: enter a token or use --all to burn all pending tokens, --force to check all tokens or"
+            "Error: enter a token or use --all to burn all pending tokens, --force to check all tokens "
             "or --delete with send ID to force-delete pending token from list if mint is unavailable."
         )
         return
@@ -457,7 +456,8 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         proofs = [proof for proof in reserved_proofs if proof["send_id"] == delete]
     else:
         # check only the specified ones
-        proofs = [Proof(**p) for p in json.loads(base64.urlsafe_b64decode(token))]
+        tokenObj = TokenV3.deserialize(token)
+        proofs = tokenObj.get_proofs()
 
     if delete:
         await wallet.invalidate(proofs, check_spendable=False)
