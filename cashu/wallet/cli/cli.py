@@ -273,15 +273,23 @@ async def send_command(
     default=False,
     type=bool,
 )
+@click.option(
+    "--trust",
+    "-t",
+    help="Trust unknown mint",
+    is_flag=True,
+    default=False,
+    type=bool
+)
 @click.pass_context
 @coro
 async def receive_cli(
-    ctx: Context, token: str, lock: str, nostr: bool, all: bool, verbose: bool
+    ctx: Context, token: str, lock: str, nostr: bool, all: bool, verbose: bool, trust: bool
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()
     if token:
-        await receive(wallet, token, lock)
+        await receive(wallet, token, lock, trust_new_mint=trust)
     elif nostr:
         await receive_nostr(wallet, verbose)
     elif all:
@@ -290,7 +298,7 @@ async def receive_cli(
             for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
-                await receive(wallet, token, lock)
+                await receive(wallet, token, lock, trust_new_mint=trust)
     else:
         print("Error: enter token or use either flag --nostr or --all.")
 
