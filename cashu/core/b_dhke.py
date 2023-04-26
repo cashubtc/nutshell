@@ -43,8 +43,8 @@ R2 = r*B'
 return e, s
 
 Alice:
-R1 = e*A - s*G
-R2 = e*C'- s*B'
+R1 = s*G - e*A
+R2 = s*B' - e*C'
 e == hash(R1,R2,A,C')
 
 If true, a in A = a*G must be equal to a in C' = a*B'
@@ -110,8 +110,8 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
 # return e, s
 
 # Alice:
-# R1 = e*A - s*G
-# R2 = e*C'- s*B'
+# R1 = s*G - e*A
+# R2 = s*B' - e*C'
 # e == hash(R1,R2,A,C')
 
 
@@ -138,11 +138,11 @@ def step2_bob_dleq(B_: PublicKey, a: PrivateKey):
     return e, s
 
 
-def alice_verify_dleq(e: bytes, s: bytes, A: PublicKey, C: bytes, r: bytes, B_: bytes):
+def alice_verify_dleq(e: bytes, s: bytes, A: PublicKey, B_: bytes, C_: bytes):
     epk = PrivateKey(e, raw=True)
     spk = PrivateKey(s, raw=True)
-    ck = PublicKey(C, raw=True)
     bk = PublicKey(B_, raw=True)
+    ck = PublicKey(C_, raw=True)
     R1 = spk.pubkey - A.mult(epk)
     R2 = bk.mult(spk) - ck.mult(epk)
     print(f"R1 is: {R1.serialize().hex()}")
