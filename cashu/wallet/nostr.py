@@ -58,7 +58,7 @@ async def send_nostr(
     Sends tokens via nostr.
     """
     # load a wallet for the chosen mint
-    wallet = await get_mint_wallet(wallet, is_api=is_api, specific_mint=specific_mint)
+    wallet = await get_mint_wallet(wallet, is_api=is_api, mint_nr=specific_mint)
 
     if "@" in pubkey or "." in pubkey:
         # matches user@domain.com and domain.com (which is _@domain.com)
