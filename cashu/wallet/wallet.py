@@ -840,9 +840,8 @@ class Wallet(LedgerAPI):
                 bytes.fromhex(dleq.e),
                 bytes.fromhex(dleq.s),
                 self.keys.public_keys[proof.amount],
-                bytes.fromhex(proof.C),
-                bytes.fromhex(dleq.r),
                 bytes.fromhex(dleq.B_),
+                bytes.fromhex(dleq.C_),
             ):
                 raise Exception("DLEQ proof invalid.")
 
