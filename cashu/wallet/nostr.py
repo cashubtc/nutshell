@@ -3,7 +3,6 @@ import threading
 import time
 
 import click
-from fastapi import HTTPException, status
 from requests.exceptions import ConnectionError
 
 from cashu.core.settings import settings
@@ -103,17 +102,11 @@ async def send_nostr(
 
 async def receive_nostr(wallet: Wallet, verbose: bool = False, is_api: bool = False):
     if settings.nostr_private_key is None:
-        if is_api:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="nostr private key is missing.",
-            )
-        else:
-            print(
-                "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. "
-                "I will create a random private key for this session but I will not remember it."
-            )
-            print("")
+        print(
+            "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. "
+            "I will create a random private key for this session but I will not remember it."
+        )
+        print("")
     client = NostrClient(
         private_key=settings.nostr_private_key, relays=settings.nostr_relays
     )
