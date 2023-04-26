@@ -100,7 +100,12 @@ async def send_nostr(
     return token, pubkey_to.bech32()
 
 
-async def receive_nostr(wallet: Wallet, verbose: bool = False, is_api: bool = False):
+async def receive_nostr(
+    wallet: Wallet,
+    verbose: bool = False,
+    is_api: bool = False,
+    trust_new_mint: bool = False,
+):
     if settings.nostr_private_key is None:
         print(
             "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. "
@@ -122,7 +127,15 @@ async def receive_nostr(wallet: Wallet, verbose: bool = False, is_api: bool = Fa
             )
         try:
             # call the receive method
-            asyncio.run(receive(wallet, decrypted_content, ""))
+            asyncio.run(
+                receive(
+                    wallet,
+                    decrypted_content,
+                    "",
+                    is_api=is_api,
+                    trust_new_mint=trust_new_mint,
+                )
+            )
         except Exception as e:
             pass
 

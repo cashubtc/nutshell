@@ -186,7 +186,7 @@ async def receive_command(
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     elif nostr:
-        await receive_nostr(wallet, is_api=True)
+        await receive_nostr(wallet, is_api=True, trust_new_mint=trust)
         balance = wallet.available_balance
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)

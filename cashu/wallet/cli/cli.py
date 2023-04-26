@@ -298,7 +298,7 @@ async def receive_cli(
     if token:
         await receive(wallet, token, lock, trust_new_mint=trust)
     elif nostr:
-        await receive_nostr(wallet, verbose)
+        await receive_nostr(wallet, verbose, trust_new_mint=trust)
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
