@@ -14,6 +14,8 @@ from .base import (
     Wallet,
 )
 
+BRR = True
+
 
 class FakeWallet(Wallet):
     """https://github.com/lnbits/lnbits"""
@@ -77,7 +79,7 @@ class FakeWallet(Wallet):
     async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
         invoice = decode(bolt11)
 
-        if invoice.payment_hash[:6] == self.privkey[:6]:
+        if invoice.payment_hash[:6] == self.privkey[:6] or BRR:
             await self.queue.put(invoice)
             self.paid_invoices.add(invoice.payment_hash)
             return PaymentResponse(True, invoice.payment_hash, 0)
@@ -87,8 +89,7 @@ class FakeWallet(Wallet):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-
-        paid = checking_id in self.paid_invoices
+        paid = checking_id in self.paid_invoices or BRR
         return PaymentStatus(paid or None)
 
     async def get_payment_status(self, _: str) -> PaymentStatus:
