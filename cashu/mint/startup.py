@@ -1,8 +1,8 @@
 # startup routine of the standalone app. These are the steps that need
 # to be taken by external apps importing the cashu mint.
 
-import importlib
 import asyncio
+import importlib
 
 from loguru import logger
 
