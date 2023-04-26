@@ -76,17 +76,16 @@ async def send_nostr(
     else:
         pubkey_to = PublicKey(bytes.fromhex(pubkey))
 
-    if not is_api:
-        print("")
-        print(token)
+    print("")
+    print(token)
 
-        if not yes:
-            print("")
-            click.confirm(
-                f"Send {amount} sat to {pubkey_to.bech32()}?",
-                abort=True,
-                default=True,
-            )
+    if not yes:
+        print("")
+        click.confirm(
+            f"Send {amount} sat to {pubkey_to.bech32()}?",
+            abort=True,
+            default=True,
+        )
 
     client = NostrClient(
         private_key=settings.nostr_private_key or "", relays=settings.nostr_relays
@@ -96,8 +95,7 @@ async def send_nostr(
         print(f"Your nostr private key: {client.private_key.bech32()}")
 
     client.dm(token, pubkey_to)
-    if not is_api:
-        print(f"Token sent to {pubkey_to.bech32()}")
+    print(f"Token sent to {pubkey_to.bech32()}")
     await asyncio.sleep(5)
     client.close()
     return token, pubkey_to.bech32()
@@ -119,16 +117,15 @@ async def receive_nostr(wallet: Wallet, verbose: bool = False, is_api: bool = Fa
     client = NostrClient(
         private_key=settings.nostr_private_key, relays=settings.nostr_relays
     )
-    if not is_api:
-        print(f"Your nostr public key: {client.public_key.bech32()}")
-        if verbose:
-            print(
-                f"Your nostr private key (do not share!): {client.private_key.bech32()}"
-            )
-        await asyncio.sleep(2)
+    print(f"Your nostr public key: {client.public_key.bech32()}")
+    if verbose:
+        print(
+            f"Your nostr private key (do not share!): {client.private_key.bech32()}"
+        )
+    await asyncio.sleep(2)
 
     def get_token_callback(event: Event, decrypted_content):
-        if verbose and not is_api:
+        if verbose:
             print(
                 f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
             )
