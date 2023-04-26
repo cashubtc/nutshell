@@ -233,8 +233,12 @@ async def balance(ctx: Context, verbose):
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
 @click.option(
-    "--mint", "-m", default=None, help="Select mint to send from (None for mint with maximum balance, "
-        "integer for specific mint)", type=int
+    "--mint",
+    "-m",
+    default=None,
+    help="Select mint to send from (None for mint with maximum balance, "
+    "integer for specific mint)",
+    type=int,
 )
 @click.pass_context
 @coro
@@ -247,13 +251,15 @@ async def send_command(
     legacy: bool,
     verbose: bool,
     yes: bool,
-    mint: int
+    mint: int,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     if not nostr and not nopt:
         await send(wallet, amount, lock, legacy, specific_mint=mint)
     else:
-        await send_nostr(wallet, amount, nostr or nopt, verbose, yes, specific_mint=mint)
+        await send_nostr(
+            wallet, amount, nostr or nopt, verbose, yes, specific_mint=mint
+        )
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -274,17 +280,18 @@ async def send_command(
     type=bool,
 )
 @click.option(
-    "--trust",
-    "-t",
-    help="Trust unknown mint",
-    is_flag=True,
-    default=False,
-    type=bool
+    "--trust", "-t", help="Trust unknown mint", is_flag=True, default=False, type=bool
 )
 @click.pass_context
 @coro
 async def receive_cli(
-    ctx: Context, token: str, lock: str, nostr: bool, all: bool, verbose: bool, trust: bool
+    ctx: Context,
+    token: str,
+    lock: str,
+    nostr: bool,
+    all: bool,
+    verbose: bool,
+    trust: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()

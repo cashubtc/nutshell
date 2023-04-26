@@ -201,9 +201,7 @@ async def print_mint_balances(wallet, show_mints=False):
         print("")
 
 
-async def get_mint_wallet(
-    wallet: Wallet, is_api: bool = False, mint_nr: int = None
-):
+async def get_mint_wallet(wallet: Wallet, is_api: bool = False, mint_nr: int = None):
     """
     Helper function that asks the user for an input to select which mint they want to load.
     Useful for selecting the mint that the user wants to send tokens from.

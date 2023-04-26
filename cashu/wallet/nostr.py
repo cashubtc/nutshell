@@ -52,7 +52,7 @@ async def send_nostr(
     verbose: bool = False,
     yes: bool = True,
     is_api: bool = False,
-    specific_mint: int = None
+    specific_mint: int = None,
 ):
     """
     Sends tokens via nostr.
@@ -112,9 +112,7 @@ async def receive_nostr(wallet: Wallet, verbose: bool = False, is_api: bool = Fa
     )
     print(f"Your nostr public key: {client.public_key.bech32()}")
     if verbose:
-        print(
-            f"Your nostr private key (do not share!): {client.private_key.bech32()}"
-        )
+        print(f"Your nostr private key (do not share!): {client.private_key.bech32()}")
     await asyncio.sleep(2)
 
     def get_token_callback(event: Event, decrypted_content):
