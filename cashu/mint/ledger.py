@@ -92,7 +92,9 @@ class Ledger:
             if k.id and k.id not in self.keysets.keysets:
                 self.keysets.keysets[k.id] = k
 
-        logger.debug(f"Currently {len(self.keysets.keysets)} keysets are active.")
+        logger.debug(
+            f"Currently, there are {len(self.keysets.keysets)} active keysets."
+        )
 
         # generate all private keys, public keys, and keyset id from the derivation path for all keysets that are not yet generated
         for _, v in self.keysets.keysets.items():
