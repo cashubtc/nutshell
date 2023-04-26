@@ -137,7 +137,7 @@ class Ledger:
             BlindedSignature: Generated promise.
         """
         keyset = keyset if keyset else self.keyset
-        logger.debug(f"Generating promise with keyset {keyset.id}.")
+        logger.trace(f"Generating promise with keyset {keyset.id}.")
         private_key_amount = keyset.private_keys[amount]
         C_ = b_dhke.step2_bob(B_, private_key_amount)
         await self.crud.store_promise(
@@ -165,7 +165,7 @@ class Ledger:
         if not proof.id:
             private_key_amount = self.keyset.private_keys[proof.amount]
         else:
-            logger.debug(
+            logger.trace(
                 f"Validating proof with keyset {self.keysets.keysets[proof.id].id}."
             )
             # use the appropriate active keyset for this proof.id
