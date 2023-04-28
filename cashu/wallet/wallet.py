@@ -572,9 +572,6 @@ class Wallet(LedgerAPI):
             raise Exception("received no splits.")
 
         # DLEQ verify
-        print(f"before:{scnd_proofs[0].C}")
-        scnd_proofs[0].C = "1" + scnd_proofs[0].C[1:]
-        print(f"after: {scnd_proofs[0].C}")
         self.verify_proofs_dleq(frst_proofs)
         self.verify_proofs_dleq(scnd_proofs)
 
