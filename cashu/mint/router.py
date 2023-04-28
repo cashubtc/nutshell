@@ -97,7 +97,7 @@ async def request_mint(amount: int = 0, description_hash: Optional[bytes] = None
 
     Call `POST /mint` after paying the invoice.
     """
-    payment_request, payment_hash = await ledger.request_mint(amount)
+    payment_request, payment_hash = await ledger.request_mint(amount, description_hash)
     print(f"Lightning invoice: {payment_request}")
     resp = GetMintResponse(pr=payment_request, hash=payment_hash)
     return resp
