@@ -99,20 +99,6 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     return C == Y.mult(a)
 
 
-# DLEQ
-
-# Bob:
-#  r = random nonce
-# R1 = r*G
-# R2 = r*B'
-#  e = hash(R1,R2,A,C')
-#  s = r + e*a
-# return e, s
-
-# Alice:
-# R1 = s*G - e*A
-# R2 = s*B' - e*C'
-# e == hash(R1,R2,A,C')
 
 
 def hash_e(R1: PublicKey, R2: PublicKey, K: PublicKey, C_: PublicKey):
