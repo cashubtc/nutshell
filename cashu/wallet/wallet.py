@@ -572,9 +572,14 @@ class Wallet(LedgerAPI):
             raise Exception("received no splits.")
 
         # DLEQ verify
-        print(f"before:{scnd_proofs[0].C}")
-        scnd_proofs[0].C = "1" + scnd_proofs[0].C[1:]
-        print(f"after: {scnd_proofs[0].C}")
+        # the below lines break the format of C and result in 'invalid public key'
+        # error when the mint tries to verify it's blind signature.
+        # unclear what the purpose of this exercise was, it's not fit for negative
+        # test in the DLEQ proofs, so i commented them out - moonsettler
+        #
+        # print(f"before:{scnd_proofs[0].C}")
+        # scnd_proofs[0].C = "1" + scnd_proofs[0].C[1:]
+        # print(f"after: {scnd_proofs[0].C}")
         self.verify_proofs_dleq(frst_proofs)
         self.verify_proofs_dleq(scnd_proofs)
 
