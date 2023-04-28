@@ -116,7 +116,6 @@ def test_receive_tokenv1(mint):
     print(result.output)
 
 
-@pytest.mark.skip
 @pytest.mark.asyncio()
 def test_nostr_send(mint):
     runner = CliRunner()
