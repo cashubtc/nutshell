@@ -31,6 +31,8 @@ from cashu.core.base import (
     Proof,
     TokenV2,
     TokenV2Mint,
+    TokenV3,
+    TokenV3Token,
     WalletKeyset,
 )
 from cashu.core.bolt11 import Invoice as InvoiceBolt11
@@ -42,7 +44,7 @@ from cashu.core.script import (
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
 )
-from cashu.core.secp import PublicKey
+from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.tor.tor import TorProxy
@@ -109,19 +111,21 @@ class LedgerAPI:
         return
 
     def _construct_proofs(
-        self,
-        promises: List[BlindedSignature],
-        secrets: List[str],
-        rs: List[str],
-        outputs: List[BlindedMessage],
+        self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
     ):
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
         proofs: List[Proof] = []
-        for promise, secret, r, output in zip(promises, secrets, rs, outputs):
+        for promise, secret, r in zip(promises, secrets, rs):
+            logger.trace(f"Creating proof with keyset {self.keyset_id} =+ {promise.id}")
+            assert (
+                self.keyset_id == promise.id
+            ), "our keyset id does not match promise id."
+
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
+
             proof = Proof(
-                id=self.keyset_id,
+                id=promise.id,
                 amount=promise.amount,
                 C=C.serialize().hex(),
                 secret=secret,
@@ -161,6 +165,7 @@ class LedgerAPI:
         keyset_local: Optional[WalletKeyset] = await get_keyset(keyset.id, db=self.db)
         # if not, store it
         if keyset_local is None:
+            logger.debug(f"Storing new mint keyset: {keyset.id}")
             await store_keyset(keyset=keyset, db=self.db)
 
         self.keys = keyset
@@ -203,7 +208,7 @@ class LedgerAPI:
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
         outputs: List[BlindedMessage] = []
-        rs = []
+        rs: List[PrivateKey] = []
         for secret, amount in zip(secrets, amounts):
             B_, r = b_dhke.step1_alice(secret)
             rs.append(r)
@@ -333,6 +338,7 @@ class LedgerAPI:
     @async_set_requests
     async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
         """Consume proofs and create new promises based on amount split.
+
         If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
         and the promises to send (scnd_outputs).
 
@@ -479,6 +485,13 @@ class Wallet(LedgerAPI):
     # ---------- API ----------
 
     async def load_mint(self, keyset_id: str = ""):
+        """Load a mint's keys with a given keyset_id if specified or else
+        loads the active keyset of the mint into self.keys.
+        Also loads all keyset ids into self.keysets.
+
+        Args:
+            keyset_id (str, optional): _description_. Defaults to "".
+        """
         await super()._load_mint(keyset_id)
 
     async def load_proofs(self):
@@ -575,10 +588,12 @@ class Wallet(LedgerAPI):
         self.verify_proofs_dleq(frst_proofs)
         self.verify_proofs_dleq(scnd_proofs)
 
+        # remove used proofs from wallet and add new ones
         used_secrets = [p.secret for p in proofs]
         self.proofs = list(filter(lambda p: p.secret not in used_secrets, self.proofs))
         self.proofs += frst_proofs + scnd_proofs
         await self._store_proofs(frst_proofs + scnd_proofs)
+        # invalidate used proofs
         for proof in proofs:
             await invalidate_proof(proof, db=self.db)
         return frst_proofs, scnd_proofs
@@ -648,7 +663,81 @@ class Wallet(LedgerAPI):
                 ret[keyset.mint_url].extend([p for p in proofs if p.id == id])
         return ret
 
+    def _get_proofs_keysets(self, proofs: List[Proof]):
+        """Extracts all keyset ids from a list of proofs.
+
+        Args:
+            proofs (List[Proof]): List of proofs to get the keyset id's of
+        """
+        keysets: List[str] = [proof.id for proof in proofs if proof.id]
+        return keysets
+
+    async def _get_keyset_urls(self, keysets: List[str]):
+        """Retrieves the mint URLs for a list of keyset id's from the wallet's database.
+        Returns a dictionary from URL to keyset ID
+
+        Args:
+            keysets (List[str]): List of keysets.
+        """
+        mint_urls: Dict[str, List[str]] = {}
+        for ks in set(keysets):
+            keyset_db = await get_keyset(id=ks, db=self.db)
+            if keyset_db and keyset_db.mint_url:
+                mint_urls[keyset_db.mint_url] = (
+                    mint_urls[keyset_db.mint_url] + [ks]
+                    if mint_urls.get(keyset_db.mint_url)
+                    else [ks]
+                )
+        return mint_urls
+
     async def _make_token(self, proofs: List[Proof], include_mints=True):
+        """
+        Takes list of proofs and produces a TokenV3 by looking up
+        the mint URLs by the keyset id from the database.
+        """
+        token = TokenV3()
+
+        if include_mints:
+            # we create a map from mint url to keyset id and then group
+            # all proofs with their mint url to build a tokenv3
+
+            # extract all keysets from proofs
+            keysets = self._get_proofs_keysets(proofs)
+            # get all mint URLs for all unique keysets from db
+            mint_urls = await self._get_keyset_urls(keysets)
+
+            # append all url-grouped proofs to token
+            for url, ids in mint_urls.items():
+                mint_proofs = [p for p in proofs if p.id in ids]
+                token.token.append(TokenV3Token(mint=url, proofs=mint_proofs))
+        else:
+            token_proofs = TokenV3Token(proofs=proofs)
+            token.token.append(token_proofs)
+        return token
+
+    async def serialize_proofs(
+        self, proofs: List[Proof], include_mints=True, legacy=False
+    ):
+        """
+        Produces sharable token with proofs and mint information.
+        """
+
+        if legacy:
+            # V2 tokens
+            token = await self._make_token_v2(proofs, include_mints)
+            return await self._serialize_token_base64_tokenv2(token)
+
+            # # deprecated code for V1 tokens
+            # proofs_serialized = [p.to_dict() for p in proofs]
+            # return base64.urlsafe_b64encode(
+            #     json.dumps(proofs_serialized).encode()
+            # ).decode()
+
+        # V3 tokens
+        token = await self._make_token(proofs, include_mints)
+        return token.serialize()
+
+    async def _make_token_v2(self, proofs: List[Proof], include_mints=True):
         """
         Takes list of proofs and produces a TokenV2 by looking up
         the keyset id and mint URLs from the database.
@@ -661,55 +750,27 @@ class Wallet(LedgerAPI):
             # dummy object to hold information about the mint
             mints: Dict[str, TokenV2Mint] = {}
             # dummy object to hold all keyset id's we need to fetch from the db later
-            keysets: List[str] = []
-            # iterate through all proofs and remember their keyset ids for the next step
-            for proof in proofs:
-                if proof.id:
-                    keysets.append(proof.id)
+            keysets: List[str] = [proof.id for proof in proofs if proof.id]
             # iterate through unique keyset ids
             for id in set(keysets):
                 # load the keyset from the db
-                keyset = await get_keyset(id=id, db=self.db)
-                if keyset and keyset.mint_url and keyset.id:
+                keyset_db = await get_keyset(id=id, db=self.db)
+                if keyset_db and keyset_db.mint_url and keyset_db.id:
                     # we group all mints according to URL
-                    if keyset.mint_url not in mints:
-                        mints[keyset.mint_url] = TokenV2Mint(
-                            url=keyset.mint_url,
-                            ids=[keyset.id],
+                    if keyset_db.mint_url not in mints:
+                        mints[keyset_db.mint_url] = TokenV2Mint(
+                            url=keyset_db.mint_url,
+                            ids=[keyset_db.id],
                         )
                     else:
                         # if a mint URL has multiple keysets, append to the already existing list
-                        mints[keyset.mint_url].ids.append(keyset.id)
+                        mints[keyset_db.mint_url].ids.append(keyset_db.id)
             if len(mints) > 0:
                 # add mints grouped by url to the token
                 token.mints = list(mints.values())
         return token
 
-    async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
-        """
-        Selects proofs that can be used with the current mint.
-        Chooses:
-        1) Proofs that are not marked as reserved
-        2) Proofs that have a keyset id that is in self.keysets (active keysets of mint) - !!! optional for backwards compatibility with legacy clients
-        """
-        # select proofs that are in the active keysets of the mint
-        proofs = [
-            p for p in proofs if p.id in self.keysets or not p.id
-        ]  # "or not p.id" is for backwards compatibility with proofs without a keyset id
-        # select proofs that are not reserved
-        proofs = [p for p in proofs if not p.reserved]
-        # check that enough spendable proofs exist
-        if sum_proofs(proofs) < amount_to_send:
-            raise Exception("balance too low.")
-
-        # coinselect based on amount to send
-        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
-        send_proofs: List[Proof] = []
-        while sum_proofs(send_proofs) < amount_to_send:
-            send_proofs.append(sorted_proofs[len(send_proofs)])
-        return send_proofs
-
-    async def _serialize_token_base64(self, token: TokenV2):
+    async def _serialize_token_base64_tokenv2(self, token: TokenV2):
         """
         Takes a TokenV2 and serializes it in urlsafe_base64.
         """
@@ -719,21 +780,30 @@ class Wallet(LedgerAPI):
         ).decode()
         return token_base64
 
-    async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, legacy=False
-    ):
+    async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
         """
-        Produces sharable token with proofs and mint information.
+        Selects proofs that can be used with the current mint.
+        Chooses:
+        1) Proofs that are not marked as reserved
+        2) Proofs that have a keyset id that is in self.keysets (active keysets of mint) - !!! optional for backwards compatibility with legacy clients
         """
+        # select proofs that are not reserved
+        proofs = [p for p in proofs if not p.reserved]
 
-        if legacy:
-            proofs_serialized = [p.to_dict() for p in proofs]
-            return base64.urlsafe_b64encode(
-                json.dumps(proofs_serialized).encode()
-            ).decode()
+        # select proofs that are in the active keysets of the mint
+        proofs = [p for p in proofs if p.id in self.keysets or not p.id]
 
-        token = await self._make_token(proofs, include_mints)
-        return await self._serialize_token_base64(token)
+        # check that enough spendable proofs exist
+        if sum_proofs(proofs) < amount_to_send:
+            raise Exception("balance too low.")
+
+        # coinselect based on amount to send
+        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
+        send_proofs: List[Proof] = []
+        while sum_proofs(send_proofs) < amount_to_send:
+            proof_to_add = sorted_proofs[len(send_proofs)]
+            send_proofs.append(proof_to_add)
+        return send_proofs
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
         """Mark a proof as reserved to avoid reuse or delete marking."""
@@ -786,24 +856,33 @@ class Wallet(LedgerAPI):
         Splits proofs such that a Lightning invoice can be paid.
         """
         amount, _ = await self.get_pay_amount_with_fees(invoice)
-        # TODO: fix mypy asyncio return multiple values
-        _, send_proofs = await self.split_to_send(self.proofs, amount)  # type: ignore
+        _, send_proofs = await self.split_to_send(self.proofs, amount)
         return send_proofs
 
     async def split_to_send(
         self,
         proofs: List[Proof],
-        amount,
+        amount: int,
         scnd_secret: Optional[str] = None,
         set_reserved: bool = False,
     ):
-        """Like self.split but only considers non-reserved tokens."""
+        """
+        Splits proofs such that a certain amount can be sent.
+
+        Args:
+            proofs (List[Proof]): Proofs to split
+            amount (int): Amount to split to
+            scnd_secret (Optional[str], optional): If set, a custom secret is used to lock new outputs. Defaults to None.
+            set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
+            is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
+            displayed to the user to be then sent to someone else. Defaults to False.
+        """
         if scnd_secret:
             logger.debug(f"Spending conditions: {scnd_secret}")
         spendable_proofs = await self._select_proofs_to_send(proofs, amount)
 
         keep_proofs, send_proofs = await self.split(
-            [p for p in spendable_proofs if not p.reserved], amount, scnd_secret
+            spendable_proofs, amount, scnd_secret
         )
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)

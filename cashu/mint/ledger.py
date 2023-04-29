@@ -15,6 +15,7 @@ from cashu.core.base import (
     Proof,
     DLEQ,
 )
+from cashu.core.crypto import derive_pubkey
 from cashu.core.db import Database
 from cashu.core.helpers import fee_reserve, sum_proofs
 from cashu.core.script import verify_script
@@ -41,6 +42,8 @@ class Ledger:
         self.db = db
         self.crud = crud
         self.lightning = lightning
+        self.pubkey = derive_pubkey(self.master_key)
+        self.keysets = MintKeysets([])
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""
@@ -85,11 +88,21 @@ class Ledger:
         """
         # load all past keysets from db
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
-        self.keysets = MintKeysets(tmp_keysets)
-        logger.trace(f"Loading {len(self.keysets.keysets)} keysets form db.")
-        # generate all derived keys from stored derivation paths of past keysets
+        # add keysets from db to current keysets
+        for k in tmp_keysets:
+            if k.id and k.id not in self.keysets.keysets:
+                self.keysets.keysets[k.id] = k
+
+        logger.debug(
+            f"Currently, there are {len(self.keysets.keysets)} active keysets."
+        )
+
+        # generate all private keys, public keys, and keyset id from the derivation path for all keysets that are not yet generated
         for _, v in self.keysets.keysets.items():
-            logger.trace(f"Generating keys for keyset {v.id}")
+            # we already generated the keys for this keyset
+            if v.id and v.public_keys and len(v.public_keys):
+                continue
+            logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
@@ -127,6 +140,7 @@ class Ledger:
             BlindedSignature: Generated promise.
         """
         keyset = keyset if keyset else self.keyset
+        logger.trace(f"Generating promise with keyset {keyset.id}.")
         private_key_amount = keyset.private_keys[amount]
         C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
         await self.crud.store_promise(
@@ -159,6 +173,9 @@ class Ledger:
         if not proof.id:
             private_key_amount = self.keyset.private_keys[proof.amount]
         else:
+            logger.trace(
+                f"Validating proof with keyset {self.keysets.keysets[proof.id].id}."
+            )
             # use the appropriate active keyset for this proof.id
             private_key_amount = self.keysets.keysets[proof.id].private_keys[
                 proof.amount
@@ -618,6 +635,8 @@ class Ledger:
                         ln_fee_msat=fee_msat,
                         outputs=outputs,
                     )
+            else:
+                raise Exception("Lightning payment unsuccessful.")
 
         except Exception as e:
             raise e

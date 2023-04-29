@@ -1,3 +1,5 @@
+import base64
+import json
 from sqlite3 import Row
 from typing import Any, Dict, List, Optional, TypedDict, Union
 
@@ -123,6 +125,19 @@ class Invoice(BaseModel):
 
 
 # ------- API -------
+
+# ------- API: INFO -------
+
+
+class GetInfoResponse(BaseModel):
+    name: Optional[str] = None
+    pubkey: Optional[str] = None
+    version: Optional[str] = None
+    description: Optional[str] = None
+    description_long: Optional[str] = None
+    contact: Optional[List[str]] = None
+    nuts: Optional[List[str]] = None
+    motd: Optional[str] = None
 
 
 # ------- API: KEYS -------
@@ -355,3 +370,63 @@ class TokenV2(BaseModel):
             )
         else:
             return dict(proofs=[p.to_dict() for p in self.proofs])
+
+
+class TokenV3Token(BaseModel):
+    mint: Optional[str] = None
+    proofs: List[Proof]
+
+    def to_dict(self):
+        return_dict = dict(proofs=[p.to_dict() for p in self.proofs])
+        if self.mint:
+            return_dict.update(dict(mint=self.mint))  # type: ignore
+        return return_dict
+
+
+class TokenV3(BaseModel):
+    """
+    A Cashu token that includes proofs and their respective mints. Can include proofs from multiple different mints and keysets.
+    """
+
+    token: List[TokenV3Token] = []
+    memo: Optional[str] = None
+
+    def to_dict(self):
+        return_dict = dict(token=[t.to_dict() for t in self.token])
+        if self.memo:
+            return_dict.update(dict(memo=self.memo))  # type: ignore
+        return return_dict
+
+    def get_proofs(self):
+        return [proof for token in self.token for proof in token.proofs]
+
+    def get_amount(self):
+        return sum([p.amount for p in self.get_proofs()])
+
+    def get_keysets(self):
+        return list(set([p.id for p in self.get_proofs()]))
+
+    @classmethod
+    def deserialize(cls, tokenv3_serialized: str):
+        """
+        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
+        """
+        prefix = "cashuA"
+        assert tokenv3_serialized.startswith(prefix), Exception(
+            f"Token prefix not valid. Expected {prefix}."
+        )
+        token_base64 = tokenv3_serialized[len(prefix) :]
+        token = json.loads(base64.urlsafe_b64decode(token_base64))
+        return cls.parse_obj(token)
+
+    def serialize(self):
+        """
+        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
+        """
+        prefix = "cashuA"
+        tokenv3_serialized = prefix
+        # encode the token as a base64 string
+        tokenv3_serialized += base64.urlsafe_b64encode(
+            json.dumps(self.to_dict()).encode()
+        ).decode()
+        return tokenv3_serialized
