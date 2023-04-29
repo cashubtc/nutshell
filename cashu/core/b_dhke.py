@@ -112,11 +112,11 @@ def hash_e(R1: PublicKey, R2: PublicKey, K: PublicKey, C_: PublicKey):
 def step2_bob_dleq(B_: PublicKey, a: PrivateKey):
     p = PrivateKey()  # generate random value
     R1 = p.pubkey  # R1 = pG
-    R2 = B_.mult(p)  # R2 = pB_
-    print(f"R1 is: {R1.serialize().hex()}")
-    print(f"R2 is: {R2.serialize().hex()}")
-    C_ = B_.mult(a)  # C_ = aB_
+    assert R1
+    R2 = B_.mult(p)  # R2 = pB_ # type: ignore
+    C_ = B_.mult(a)  # C_ = aB_ # type: ignore
     K = a.pubkey
+    assert K
     e = hash_e(R1, R2, K, C_)  # e = hash(R1, R2, K, C_)
     s = p.tweak_add(a.tweak_mul(e))  # s = p + ek
     return e, s
@@ -127,10 +127,8 @@ def alice_verify_dleq(e: bytes, s: bytes, A: PublicKey, B_: bytes, C_: bytes):
     spk = PrivateKey(s, raw=True)
     bk = PublicKey(B_, raw=True)
     ck = PublicKey(C_, raw=True)
-    R1 = spk.pubkey - A.mult(epk)
-    R2 = bk.mult(spk) - ck.mult(epk)
-    print(f"R1 is: {R1.serialize().hex()}")
-    print(f"R2 is: {R2.serialize().hex()}")
+    R1 = spk.pubkey - A.mult(epk)  # type: ignore
+    R2 = bk.mult(spk) - ck.mult(epk)  # type: ignore
     if e == hash_e(R1, R2, A, ck):
         print("DLEQ proof ok!")
     else:
