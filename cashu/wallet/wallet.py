@@ -110,6 +110,22 @@ class LedgerAPI:
         """Dummy function that can be called from outside to use LedgerAPI.s"""
         return
 
+        # ---------- DLEQ PROOFS ----------
+
+    def verify_proofs_dleq(self, proofs: List[Proof]):
+        for proof in proofs:
+            dleq = proof.dleq
+            assert dleq, "no DLEQ proof"
+            assert self.keys.public_keys
+            if not b_dhke.alice_verify_dleq(
+                bytes.fromhex(dleq.e),
+                bytes.fromhex(dleq.s),
+                self.keys.public_keys[proof.amount],
+                bytes.fromhex(dleq.B_),
+                bytes.fromhex(dleq.C_),
+            ):
+                raise Exception("DLEQ proof invalid.")
+
     def _construct_proofs(
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
     ):
@@ -131,8 +147,12 @@ class LedgerAPI:
                 secret=secret,
                 dleq=promise.dleq,
             )
-            proof.dleq.C_ = promise.C_
+            if proof.dleq:
+                proof.dleq.C_ = promise.C_
             proofs.append(proof)
+
+        # DLEQ verify
+        self.verify_proofs_dleq(proofs)
         return proofs
 
     @staticmethod
@@ -333,7 +353,7 @@ class LedgerAPI:
         except:
             promises = PostMintResponse.parse_obj(reponse_dict).promises
 
-        return self._construct_proofs(promises, secrets, rs, outputs)
+        return self._construct_proofs(promises, secrets, rs)
 
     @async_set_requests
     async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
@@ -396,13 +416,11 @@ class LedgerAPI:
             promises_fst,
             secrets[: len(promises_fst)],
             rs[: len(promises_fst)],
-            outputs[: len(promises_fst)],
         )
         scnd_proofs = self._construct_proofs(
             promises_snd,
             secrets[len(promises_fst) :],
             rs[len(promises_fst) :],
-            outputs[len(promises_fst) :],
         )
 
         return frst_proofs, scnd_proofs
@@ -583,10 +601,6 @@ class Wallet(LedgerAPI):
         frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
-
-        # DLEQ verify
-        self.verify_proofs_dleq(frst_proofs)
-        self.verify_proofs_dleq(scnd_proofs)
 
         # remove used proofs from wallet and add new ones
         used_secrets = [p.secret for p in proofs]
@@ -904,22 +918,6 @@ class Wallet(LedgerAPI):
         )
         await store_p2sh(p2shScript, db=self.db)
         return p2shScript
-
-    # ---------- DLEQ PROOFS ----------
-
-    def verify_proofs_dleq(self, proofs: List[Proof]):
-        for proof in proofs:
-            dleq = proof.dleq
-            assert dleq, "no DLEQ proof"
-            assert self.keys.public_keys
-            if not b_dhke.alice_verify_dleq(
-                bytes.fromhex(dleq.e),
-                bytes.fromhex(dleq.s),
-                self.keys.public_keys[proof.amount],
-                bytes.fromhex(dleq.B_),
-                bytes.fromhex(dleq.C_),
-            ):
-                raise Exception("DLEQ proof invalid.")
 
     # ---------- BALANCE CHECKS ----------
 
