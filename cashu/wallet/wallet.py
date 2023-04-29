@@ -584,6 +584,9 @@ class Wallet(LedgerAPI):
         scnd_script: Optional[str] = None,
         scnd_siganture: Optional[str] = None,
     ):
+        # DLEQ verify
+        self.verify_proofs_dleq(proofs)
+
         if scnd_script and scnd_siganture:
             logger.debug(f"Unlock script: {scnd_script}")
             # attach unlock scripts to proofs
