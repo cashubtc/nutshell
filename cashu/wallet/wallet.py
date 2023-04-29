@@ -538,7 +538,6 @@ class Wallet(LedgerAPI):
         """
         split = amount_split(amount)
         proofs = await super().mint(split, payment_hash)
-        print(proofs)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
