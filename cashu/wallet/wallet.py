@@ -115,14 +115,16 @@ class LedgerAPI:
     def verify_proofs_dleq(self, proofs: List[Proof]):
         for proof in proofs:
             dleq = proof.dleq
-            assert dleq, "no DLEQ proof"
+            if not proof.dleq:
+                logger.warning("no DLEQ proof")
+                return
             assert self.keys.public_keys
             if not b_dhke.alice_verify_dleq(
-                bytes.fromhex(dleq.e),
-                bytes.fromhex(dleq.s),
+                bytes.fromhex(proof.dleq.e),
+                bytes.fromhex(proof.dleq.s),
                 self.keys.public_keys[proof.amount],
-                bytes.fromhex(dleq.B_),
-                bytes.fromhex(dleq.C_),
+                bytes.fromhex(proof.dleq.B_),
+                bytes.fromhex(proof.dleq.C_),
             ):
                 raise Exception("DLEQ proof invalid.")
 
