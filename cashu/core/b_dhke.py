@@ -99,8 +99,6 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     return C == Y.mult(a)
 
 
-
-
 def hash_e(R1: PublicKey, R2: PublicKey, K: PublicKey, C_: PublicKey):
     _R1 = R1.serialize(compressed=False).hex()
     _R2 = R2.serialize(compressed=False).hex()

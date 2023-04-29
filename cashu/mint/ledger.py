@@ -7,13 +7,13 @@ import cashu.core.b_dhke as b_dhke
 import cashu.core.bolt11 as bolt11
 import cashu.core.legacy as legacy
 from cashu.core.base import (
+    DLEQ,
     BlindedMessage,
     BlindedSignature,
     Invoice,
     MintKeyset,
     MintKeysets,
     Proof,
-    DLEQ,
 )
 from cashu.core.crypto import derive_pubkey
 from cashu.core.db import Database
@@ -150,7 +150,9 @@ class Ledger:
             id=keyset.id,
             amount=amount,
             C_=C_.serialize().hex(),
-            dleq=DLEQ(e=e.hex(), s=s.hex(), B_=B_.serialize().hex(), C_=C_.serialize().hex()),
+            dleq=DLEQ(
+                e=e.hex(), s=s.hex(), B_=B_.serialize().hex(), C_=C_.serialize().hex()
+            ),
         )
 
     def _check_spendable(self, proof: Proof):
