@@ -55,8 +55,12 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
 
-    def to_dict(self):
+    def to_dict(self, include_dleq=True):
         # dictionary without the fields that don't need to be send to Carol
+        if not include_dleq:
+            return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
+
+        assert self.dleq, "DLEQ proof is missing"
         return dict(
             id=self.id,
             amount=self.amount,
@@ -376,8 +380,8 @@ class TokenV3Token(BaseModel):
     mint: Optional[str] = None
     proofs: List[Proof]
 
-    def to_dict(self):
-        return_dict = dict(proofs=[p.to_dict() for p in self.proofs])
+    def to_dict(self, include_dleq=True):
+        return_dict = dict(proofs=[p.to_dict(include_dleq) for p in self.proofs])
         if self.mint:
             return_dict.update(dict(mint=self.mint))  # type: ignore
         return return_dict
@@ -391,8 +395,8 @@ class TokenV3(BaseModel):
     token: List[TokenV3Token] = []
     memo: Optional[str] = None
 
-    def to_dict(self):
-        return_dict = dict(token=[t.to_dict() for t in self.token])
+    def to_dict(self, include_dleq=True):
+        return_dict = dict(token=[t.to_dict(include_dleq) for t in self.token])
         if self.memo:
             return_dict.update(dict(memo=self.memo))  # type: ignore
         return return_dict
@@ -419,7 +423,7 @@ class TokenV3(BaseModel):
         token = json.loads(base64.urlsafe_b64decode(token_base64))
         return cls.parse_obj(token)
 
-    def serialize(self):
+    def serialize(self, include_dleq=True):
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """
@@ -427,6 +431,6 @@ class TokenV3(BaseModel):
         tokenv3_serialized = prefix
         # encode the token as a base64 string
         tokenv3_serialized += base64.urlsafe_b64encode(
-            json.dumps(self.to_dict()).encode()
+            json.dumps(self.to_dict(include_dleq)).encode()
         ).decode()
         return tokenv3_serialized
