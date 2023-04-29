@@ -218,7 +218,7 @@ async def balance(ctx: Context, verbose):
         print(f"Balance: {wallet.available_balance} sat")
 
 
-async def send(ctx: Context, amount: int, lock: str, legacy: bool):
+async def send(ctx: Context, amount: int, lock: str, dleq: bool, legacy: bool):
     """
     Prints token to send to stdout.
     """
@@ -238,6 +238,7 @@ async def send(ctx: Context, amount: int, lock: str, legacy: bool):
     token = await wallet.serialize_proofs(
         send_proofs,
         include_mints=True,
+        include_dleq=dleq,
     )
     print(token)
 
@@ -266,6 +267,14 @@ async def send(ctx: Context, amount: int, lock: str, legacy: bool):
 )
 @click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
 @click.option(
+    "--dleq",
+    "-d",
+    default=False,
+    is_flag=True,
+    help="Send with DLEQ proof.",
+    type=bool,
+)
+@click.option(
     "--legacy",
     "-l",
     default=False,
@@ -292,12 +301,13 @@ async def send_command(
     nostr: str,
     nopt: str,
     lock: str,
+    dleq: bool,
     legacy: bool,
     verbose: bool,
     yes: bool,
 ):
     if not nostr and not nopt:
-        await send(ctx, amount, lock, legacy)
+        await send(ctx, amount, lock, dleq, legacy)
     else:
         await send_nostr(ctx, amount, nostr or nopt, verbose, yes)
 

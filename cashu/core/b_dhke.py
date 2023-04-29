@@ -129,10 +129,6 @@ def alice_verify_dleq(e: bytes, s: bytes, A: PublicKey, B_: bytes, C_: bytes):
     ck = PublicKey(C_, raw=True)
     R1 = spk.pubkey - A.mult(epk)  # type: ignore
     R2 = bk.mult(spk) - ck.mult(epk)  # type: ignore
-    if e == hash_e(R1, R2, A, ck):
-        print("DLEQ proof ok!")
-    else:
-        print("DLEQ proof broken")
     return e == hash_e(R1, R2, A, ck)
 
 

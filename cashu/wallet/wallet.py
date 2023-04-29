@@ -113,6 +113,7 @@ class LedgerAPI:
         # ---------- DLEQ PROOFS ----------
 
     def verify_proofs_dleq(self, proofs: List[Proof]):
+        """Verifies DLEQ proofs in proofs."""
         for proof in proofs:
             dleq = proof.dleq
             if not proof.dleq:
@@ -127,6 +128,7 @@ class LedgerAPI:
                 bytes.fromhex(proof.dleq.C_),
             ):
                 raise Exception("DLEQ proof invalid.")
+        logger.debug("DLEQ proofs verified.")
 
     def _construct_proofs(
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
@@ -734,7 +736,7 @@ class Wallet(LedgerAPI):
         return token
 
     async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, legacy=False
+        self, proofs: List[Proof], include_mints=True, include_dleq=True, legacy=False
     ):
         """
         Produces sharable token with proofs and mint information.
@@ -753,7 +755,7 @@ class Wallet(LedgerAPI):
 
         # V3 tokens
         token = await self._make_token(proofs, include_mints)
-        return token.serialize()
+        return token.serialize(include_dleq)
 
     async def _make_token_v2(self, proofs: List[Proof], include_mints=True):
         """
