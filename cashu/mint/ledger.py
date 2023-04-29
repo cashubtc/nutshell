@@ -65,12 +65,12 @@ class Ledger:
             version=settings.version,
         )
         # check if current keyset is stored in db and store if not
-        logger.trace(f"Loading keyset {keyset.id} from db.")
+        logger.debug(f"Active keyset: {keyset.id}")
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
             id=keyset.id, db=self.db
         )
         if not len(tmp_keyset_local) and autosave:
-            logger.trace(f"Storing keyset {keyset.id}.")
+            logger.debug(f"Storing new keyset {keyset.id}.")
             await self.crud.store_keyset(keyset=keyset, db=self.db)
 
         # store the new keyset in the current keysets
@@ -93,7 +93,7 @@ class Ledger:
                 self.keysets.keysets[k.id] = k
 
         logger.debug(
-            f"Currently, there are {len(self.keysets.keysets)} active keysets."
+            f"We initialized {len(self.keysets.keysets)} previous keysets from the database."
         )
 
         # generate all private keys, public keys, and keyset id from the derivation path for all keysets that are not yet generated
