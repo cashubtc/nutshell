@@ -1,13 +1,13 @@
 import pytest
 
 from cashu.core.b_dhke import (
+    alice_verify_dleq,
+    hash_e,
     hash_to_curve,
     step1_alice,
     step2_bob,
-    step3_alice,
-    hash_e,
     step2_bob_dleq,
-    alice_verify_dleq,
+    step3_alice,
 )
 from cashu.core.secp import PrivateKey, PublicKey
 

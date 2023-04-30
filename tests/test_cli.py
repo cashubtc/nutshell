@@ -3,13 +3,13 @@ import asyncio
 import pytest
 from click.testing import CliRunner
 
+from cashu.core.base import TokenV2, TokenV3
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
 from cashu.wallet import migrations
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT, mint
-from cashu.core.base import TokenV2, TokenV3
 
 
 @pytest.fixture(autouse=True, scope="session")
