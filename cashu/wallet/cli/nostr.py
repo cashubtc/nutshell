@@ -10,12 +10,9 @@ from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...nostr.nostr.event import Event
 from ...nostr.nostr.key import PublicKey
-from ...wallet.cli.cli_helpers import get_mint_wallet
-from ...wallet.crud import (
-    get_nostr_last_check_timestamp,
-    set_nostr_last_check_timestamp,
-)
+from ..crud import get_nostr_last_check_timestamp, set_nostr_last_check_timestamp
 from ..wallet import Wallet
+from .cli_helpers import get_mint_wallet
 
 
 async def nip5_to_pubkey(wallet: Wallet, address: str):

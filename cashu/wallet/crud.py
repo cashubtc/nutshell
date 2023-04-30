@@ -71,8 +71,8 @@ async def invalidate_proof(
 async def update_proof_reserved(
     proof: Proof,
     reserved: bool,
-    send_id: str = None,
-    db: Database = None,
+    send_id: str = "",
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -131,8 +131,8 @@ async def store_p2sh(
 
 
 async def get_unused_locks(
-    address: str = None,
-    db: Database = None,
+    address: str = "",
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
     clause: List[str] = []
@@ -161,7 +161,7 @@ async def get_unused_locks(
 async def update_p2sh_used(
     p2sh: P2SHScript,
     used: bool,
-    db: Database = None,
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -177,8 +177,8 @@ async def update_p2sh_used(
 
 async def store_keyset(
     keyset: WalletKeyset,
-    mint_url: str = None,
-    db: Database = None,
+    mint_url: str = "",
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(  # type: ignore
@@ -201,7 +201,7 @@ async def store_keyset(
 async def get_keyset(
     id: str = "",
     mint_url: str = "",
-    db: Database = None,
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -253,7 +253,7 @@ async def store_lightning_invoice(
 
 async def get_lightning_invoice(
     db: Database,
-    hash: str = None,
+    hash: str = "",
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -278,7 +278,7 @@ async def get_lightning_invoice(
 
 async def get_lightning_invoices(
     db: Database,
-    paid: bool = None,
+    paid: Optional[bool] = None,
     conn: Optional[Connection] = None,
 ):
     clauses: List[Any] = []
@@ -306,7 +306,7 @@ async def update_lightning_invoice(
     db: Database,
     hash: str,
     paid: bool,
-    time_paid: int = None,
+    time_paid: Optional[int] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
