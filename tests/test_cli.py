@@ -121,7 +121,8 @@ def test_send_with_dleq(mint, cli_prefix):
     assert token.token[0].proofs[0].dleq is not None, "no dleq included"
 
 
- def test_send_legacy(mint, cli_prefix):
+@pytest.mark.asyncio
+def test_send_legacy(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
