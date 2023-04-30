@@ -221,7 +221,7 @@ async def store_keyset(
 
 async def get_keyset(
     db: Database,
-    id: str = None,
+    id: str = "",
     derivation_path: str = "",
     conn: Optional[Connection] = None,
 ):
