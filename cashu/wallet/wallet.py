@@ -117,7 +117,7 @@ class LedgerAPI:
         for proof in proofs:
             dleq = proof.dleq
             if not proof.dleq:
-                logger.warning("no DLEQ proof")
+                logger.warning("no DLEQ proof included.")
                 return
             assert self.keys.public_keys
             if not b_dhke.alice_verify_dleq(
