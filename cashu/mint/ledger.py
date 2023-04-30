@@ -144,7 +144,12 @@ class Ledger:
         private_key_amount = keyset.private_keys[amount]
         C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
         await self.crud.store_promise(
-            amount=amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
+            amount=amount,
+            B_=B_.serialize().hex(),
+            C_=C_.serialize().hex(),
+            e=e.hex(),
+            s=s.hex(),
+            db=self.db,
         )
         return BlindedSignature(
             id=keyset.id,

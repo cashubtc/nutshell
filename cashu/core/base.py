@@ -30,7 +30,6 @@ class DLEQ(BaseModel):
     s: str
     B_: str
     C_: str
-    r: str = ""
 
 
 class Proof(BaseModel):
