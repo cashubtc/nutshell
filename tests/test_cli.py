@@ -130,6 +130,7 @@ def test_send_legacy(mint, cli_prefix):
     )
     assert result.exception is None
     print(result.output)
+    # this is the legacy token in the output
     token_str = result.output.split("\n")[4]
     assert token_str.startswith("eyJwcm9v"), "output is not as expected"
 

@@ -1,6 +1,13 @@
 import pytest
 
-from cashu.core.b_dhke import hash_to_curve, step1_alice, step2_bob, step3_alice
+from cashu.core.b_dhke import (
+    hash_to_curve,
+    step1_alice,
+    step2_bob,
+    step3_alice,
+    hash_e,
+    step2_bob_dleq,
+)
 from cashu.core.secp import PrivateKey, PublicKey
 
 
@@ -104,3 +111,69 @@ def test_step3():
         C.serialize().hex()
         == "03c724d7e6a5443b39ac8acf11f40420adc4f99a02e7cc1b57703d9391f6d129cd"
     )
+
+
+def test_hash_e():
+    C_ = PublicKey(
+        bytes.fromhex(
+            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+        ),
+        raw=True,
+    )
+    K = PublicKey(
+        pubkey=b"\x02"
+        + bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001",
+        ),
+        raw=True,
+    )
+    R1 = PublicKey(
+        pubkey=b"\x02"
+        + bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001",
+        ),
+        raw=True,
+    )
+    R2 = PublicKey(
+        pubkey=b"\x02"
+        + bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001",
+        ),
+        raw=True,
+    )
+    e = hash_e(R1, R2, K, C_)
+    assert e.hex() == "a4dc034b74338c28c6bc3ea49731f2a24440fc7c4affc08b31a93fc9fbe6401e"
+
+
+def test_step2_bob_dleq():
+    B_, _ = step1_alice(
+        "test_message",
+        blinding_factor=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),  # 32 bytes
+    )
+    a = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),
+        raw=True,
+    )
+    p_bytes = bytes.fromhex(
+        "0000000000000000000000000000000000000000000000000000000000000001"
+    )  # 32 bytes
+    e, s = step2_bob_dleq(B_, a, p_bytes)
+    assert e.hex() == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9"
+    assert (
+        s.hex() == "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73da"
+    )  # differs from e only in least significant byte because `a = 0x1`
+
+    # change `a`
+    a = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000001111"
+        ),
+        raw=True,
+    )
+    e, s = step2_bob_dleq(B_, a, p_bytes)
+    assert e.hex() == "df1984d5c22f7e17afe33b8669f02f530f286ae3b00a1978edaf900f4721f65e"
+    assert s.hex() == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
