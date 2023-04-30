@@ -7,6 +7,7 @@ from cashu.core.b_dhke import (
     step3_alice,
     hash_e,
     step2_bob_dleq,
+    alice_verify_dleq,
 )
 from cashu.core.secp import PrivateKey, PublicKey
 
@@ -177,3 +178,63 @@ def test_step2_bob_dleq():
     e, s = step2_bob_dleq(B_, a, p_bytes)
     assert e.hex() == "df1984d5c22f7e17afe33b8669f02f530f286ae3b00a1978edaf900f4721f65e"
     assert s.hex() == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
+
+
+def test_alice_verify_dleq():
+    # e from test_step2_bob_dleq for a=0x1
+    e = bytes.fromhex(
+        "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9"
+    )
+    # s from test_step2_bob_dleq for a=0x1
+    s = bytes.fromhex(
+        "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73da"
+    )
+    # pubkey of a=0x1
+    K = PublicKey(
+        bytes.fromhex(
+            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+        ),
+        raw=True,
+    )
+
+    # B_ is the same as we did:
+    # B_, _ = step1_alice(
+    #     "test_message",
+    #     blinding_factor=bytes.fromhex(
+    #         "0000000000000000000000000000000000000000000000000000000000000001"
+    #     ),  # 32 bytes
+    # )
+    B_ = bytes.fromhex(
+        "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+    )
+
+    # # C_ is the same as if we did:
+    # a = PrivateKey(
+    #     privkey=bytes.fromhex(
+    #         "0000000000000000000000000000000000000000000000000000000000000001"
+    #     ),
+    #     raw=True,
+    # )
+    # C_, e, s = step2_bob(B_, a)
+
+    C_ = bytes.fromhex(
+        "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+    )
+
+    assert alice_verify_dleq(e, s, K, B_, C_)
+
+    # test again with B_ and C_ as per step1 and step2
+    B_, _ = step1_alice(
+        "test_message",
+        blinding_factor=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),  # 32 bytes
+    )
+    a = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),
+        raw=True,
+    )
+    C_, e, s = step2_bob(B_, a)
+    assert alice_verify_dleq(e, s, K, B_.serialize(), C_.serialize())

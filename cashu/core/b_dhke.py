@@ -129,14 +129,14 @@ def step2_bob_dleq(B_: PublicKey, a: PrivateKey, p_bytes: bytes = b""):
     return e, s
 
 
-def alice_verify_dleq(e: bytes, s: bytes, A: PublicKey, B_: bytes, C_: bytes):
+def alice_verify_dleq(e: bytes, s: bytes, K: PublicKey, B_: bytes, C_: bytes):
     epk = PrivateKey(e, raw=True)
     spk = PrivateKey(s, raw=True)
     bk = PublicKey(B_, raw=True)
     ck = PublicKey(C_, raw=True)
-    R1 = spk.pubkey - A.mult(epk)  # type: ignore
+    R1 = spk.pubkey - K.mult(epk)  # type: ignore
     R2 = bk.mult(spk) - ck.mult(epk)  # type: ignore
-    return e == hash_e(R1, R2, A, ck)
+    return e == hash_e(R1, R2, K, ck)
 
 
 ### Below is a test of a simple positive and negative case
