@@ -32,7 +32,6 @@ from ...wallet.crud import (
     get_unused_locks,
 )
 from ...wallet.wallet import Wallet as Wallet
-
 from .cli_helpers import (
     get_mint_wallet,
     print_mint_balances,

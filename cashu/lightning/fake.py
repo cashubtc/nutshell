@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import AsyncGenerator, Dict, Optional, Set
 
 from ..core.bolt11 import Invoice, decode, encode
-
 from .base import (
     InvoiceResponse,
     PaymentResponse,

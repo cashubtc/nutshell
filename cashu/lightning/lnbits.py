@@ -4,7 +4,6 @@ from typing import Dict, Optional
 import requests
 
 from ..core.settings import settings
-
 from .base import (
     InvoiceResponse,
     PaymentResponse,
