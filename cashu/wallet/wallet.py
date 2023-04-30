@@ -10,9 +10,9 @@ from typing import Dict, List, Optional
 import requests
 from loguru import logger
 
-import cashu.core.b_dhke as b_dhke
-import cashu.core.bolt11 as bolt11
-from cashu.core.base import (
+from ..core import b_dhke as b_dhke
+from ..core import bolt11 as bolt11
+from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
@@ -35,20 +35,20 @@ from cashu.core.base import (
     TokenV3Token,
     WalletKeyset,
 )
-from cashu.core.bolt11 import Invoice as InvoiceBolt11
-from cashu.core.db import Database
-from cashu.core.helpers import sum_proofs
-from cashu.core.script import (
+from ..core.bolt11 import Invoice as InvoiceBolt11
+from ..core.db import Database
+from ..core.helpers import sum_proofs
+from ..core.script import (
     step0_carol_checksig_redeemscrip,
     step0_carol_privkey,
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
 )
-from cashu.core.secp import PrivateKey, PublicKey
-from cashu.core.settings import settings
-from cashu.core.split import amount_split
-from cashu.tor.tor import TorProxy
-from cashu.wallet.crud import (
+from ..core.secp import PrivateKey, PublicKey
+from ..core.settings import settings
+from ..core.split import amount_split
+from ..tor.tor import TorProxy
+from ..wallet.crud import (
     get_keyset,
     get_proofs,
     invalidate_proof,

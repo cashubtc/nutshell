@@ -1,6 +1,6 @@
 import re
 
-from cashu.core.db import COCKROACH, POSTGRES, SQLITE, Database
+from ..core.db import COCKROACH, POSTGRES, SQLITE, Database
 
 
 def table_with_schema(db, table: str):

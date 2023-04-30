@@ -3,10 +3,10 @@ from typing import Dict, List, Literal, Optional, Set, Union
 
 from loguru import logger
 
-import cashu.core.b_dhke as b_dhke
-import cashu.core.bolt11 as bolt11
-import cashu.core.legacy as legacy
-from cashu.core.base import (
+from ..core import b_dhke as b_dhke
+from ..core import bolt11 as bolt11
+from ..core import legacy as legacy
+from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     Invoice,
@@ -14,15 +14,15 @@ from cashu.core.base import (
     MintKeysets,
     Proof,
 )
-from cashu.core.crypto import derive_pubkey
-from cashu.core.db import Database
-from cashu.core.helpers import fee_reserve, sum_proofs
-from cashu.core.script import verify_script
-from cashu.core.secp import PublicKey
-from cashu.core.settings import settings
-from cashu.core.split import amount_split
-from cashu.lightning.base import Wallet
-from cashu.mint.crud import LedgerCrud
+from ..core.crypto import derive_pubkey
+from ..core.db import Database
+from ..core.helpers import fee_reserve, sum_proofs
+from ..core.script import verify_script
+from ..core.secp import PublicKey
+from ..core.settings import settings
+from ..core.split import amount_split
+from ..lightning.base import Wallet
+from ..mint.crud import LedgerCrud
 
 
 class Ledger:
@@ -449,6 +449,7 @@ class Ledger:
         invoice_amount: int,
         ln_fee_msat: int,
         outputs: List[BlindedMessage],
+        keyset: Optional[MintKeyset] = None,
     ):
         """Generates a set of new promises (blinded signatures) from a set of blank outputs
         (outputs with no or ignored amount) by looking at the difference between the Lightning
@@ -497,7 +498,7 @@ class Ledger:
                 outputs[i].amount = return_amounts_sorted[i]
             if not self._verify_no_duplicate_outputs(outputs):
                 raise Exception("duplicate promises.")
-            return_promises = await self._generate_promises(outputs)
+            return_promises = await self._generate_promises(outputs, keyset)
             return return_promises
         else:
             return []

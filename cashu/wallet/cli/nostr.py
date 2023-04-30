@@ -6,16 +6,16 @@ import click
 from click import Context
 from requests.exceptions import ConnectionError
 
-from cashu.core.settings import settings
-from cashu.nostr.nostr.client.client import NostrClient
-from cashu.nostr.nostr.event import Event
-from cashu.nostr.nostr.key import PublicKey
-from cashu.wallet.cli.cli_helpers import get_mint_wallet
-from cashu.wallet.crud import (
+from ...core.settings import settings
+from ...nostr.nostr.client.client import NostrClient
+from ...nostr.nostr.event import Event
+from ...nostr.nostr.key import PublicKey
+from ...wallet.cli.cli_helpers import get_mint_wallet
+from ...wallet.crud import (
     get_nostr_last_check_timestamp,
     set_nostr_last_check_timestamp,
 )
-from cashu.wallet.wallet import Wallet
+from ..wallet import Wallet
 
 
 async def nip5_to_pubkey(wallet: Wallet, address: str):
@@ -113,7 +113,7 @@ async def receive_nostr(ctx: Context, verbose: bool):
             )
         try:
             # call the receive method
-            from cashu.wallet.cli.cli import receive
+            from ...wallet.cli.cli import receive
 
             asyncio.run(receive(ctx, decrypted_content, ""))
         except Exception as e:
