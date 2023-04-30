@@ -114,7 +114,7 @@ def test_step3():
     )
 
 
-def test_hash_e():
+def test_dleq_hash_e():
     C_ = PublicKey(
         bytes.fromhex(
             "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
@@ -146,7 +146,7 @@ def test_hash_e():
     assert e.hex() == "a4dc034b74338c28c6bc3ea49731f2a24440fc7c4affc08b31a93fc9fbe6401e"
 
 
-def test_step2_bob_dleq():
+def test_dleq_step2_bob_dleq():
     B_, _ = step1_alice(
         "test_message",
         blinding_factor=bytes.fromhex(
@@ -180,7 +180,7 @@ def test_step2_bob_dleq():
     assert s.hex() == "828404170c86f240c50ae0f5fc17bb6b82612d46b355e046d7cd84b0a3c934a0"
 
 
-def test_alice_verify_dleq():
+def test_dleq_alice_verify_dleq():
     # e from test_step2_bob_dleq for a=0x1
     e = bytes.fromhex(
         "9818e061ee51d5c8edc3342369a554998ff7b4381c8652d724cdf46429be73d9"
@@ -223,7 +223,8 @@ def test_alice_verify_dleq():
 
     assert alice_verify_dleq(e, s, K, B_, C_)
 
-    # test again with B_ and C_ as per step1 and step2
+    # ----- test again with B_ and C_ as per step1 and step2
+
     B_, _ = step1_alice(
         "test_message",
         blinding_factor=bytes.fromhex(
