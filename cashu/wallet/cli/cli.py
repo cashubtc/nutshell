@@ -515,7 +515,8 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             number,
         ):
             grouped_proofs = list(value)
-            token = await wallet.serialize_proofs(grouped_proofs)
+            # TODO: we can't return DLEQ because we don't store it
+            token = await wallet.serialize_proofs(grouped_proofs, include_dleq=False)
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)

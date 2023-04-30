@@ -214,3 +214,15 @@ def test_nostr_send(mint, cli_prefix):
     assert result.exception is None
     print("NOSTR_SEND")
     print(result.output)
+
+
+@pytest.mark.asyncio
+def test_pending(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "pending"],
+    )
+    assert result.exception is None
+    print(result.output)
+    assert result.exit_code == 0
