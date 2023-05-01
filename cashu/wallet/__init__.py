@@ -4,7 +4,7 @@ sys.tracebacklimit = None  # type: ignore
 
 from loguru import logger
 
-from cashu.core.settings import settings
+from ..core.settings import settings
 
 # configure logger
 logger.remove()

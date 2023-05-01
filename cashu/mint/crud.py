@@ -1,9 +1,9 @@
 import time
 from typing import Any, List, Optional
 
-from cashu.core.base import Invoice, MintKeyset, Proof
-from cashu.core.db import Connection, Database
-from cashu.core.migrations import table_with_schema
+from ..core.base import Invoice, MintKeyset, Proof
+from ..core.db import Connection, Database
+from ..core.migrations import table_with_schema
 
 
 class LedgerCrud:
@@ -14,37 +14,37 @@ class LedgerCrud:
     """
 
     async def get_keyset(*args, **kwags):
-        return await get_keyset(*args, **kwags)
+        return await get_keyset(*args, **kwags)  # type: ignore
 
     async def get_lightning_invoice(*args, **kwags):
-        return await get_lightning_invoice(*args, **kwags)
+        return await get_lightning_invoice(*args, **kwags)  # type: ignore
 
     async def get_proofs_used(*args, **kwags):
-        return await get_proofs_used(*args, **kwags)
+        return await get_proofs_used(*args, **kwags)  # type: ignore
 
     async def invalidate_proof(*args, **kwags):
-        return await invalidate_proof(*args, **kwags)
+        return await invalidate_proof(*args, **kwags)  # type: ignore
 
     async def get_proofs_pending(*args, **kwags):
-        return await get_proofs_pending(*args, **kwags)
+        return await get_proofs_pending(*args, **kwags)  # type: ignore
 
     async def set_proof_pending(*args, **kwags):
-        return await set_proof_pending(*args, **kwags)
+        return await set_proof_pending(*args, **kwags)  # type: ignore
 
     async def unset_proof_pending(*args, **kwags):
-        return await unset_proof_pending(*args, **kwags)
+        return await unset_proof_pending(*args, **kwags)  # type: ignore
 
     async def store_keyset(*args, **kwags):
-        return await store_keyset(*args, **kwags)
+        return await store_keyset(*args, **kwags)  # type: ignore
 
     async def store_lightning_invoice(*args, **kwags):
-        return await store_lightning_invoice(*args, **kwags)
+        return await store_lightning_invoice(*args, **kwags)  # type: ignore
 
     async def store_promise(*args, **kwags):
-        return await store_promise(*args, **kwags)
+        return await store_promise(*args, **kwags)  # type: ignore
 
     async def update_lightning_invoice(*args, **kwags):
-        return await update_lightning_invoice(*args, **kwags)
+        return await update_lightning_invoice(*args, **kwags)  # type: ignore
 
 
 async def store_promise(
@@ -225,7 +225,7 @@ async def store_keyset(
 
 async def get_keyset(
     db: Database,
-    id: str = None,
+    id: str = "",
     derivation_path: str = "",
     conn: Optional[Connection] = None,
 ):

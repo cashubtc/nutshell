@@ -1,5 +1,5 @@
-from cashu.core.db import Database
-from cashu.core.migrations import table_with_schema
+from ..core.db import Database
+from ..core.migrations import table_with_schema
 
 
 async def m000_create_migrations_table(db):

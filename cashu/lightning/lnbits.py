@@ -3,8 +3,7 @@ from typing import Dict, Optional
 
 import requests
 
-from cashu.core.settings import settings
-
+from ..core.settings import settings
 from .base import (
     InvoiceResponse,
     PaymentResponse,
@@ -110,7 +109,6 @@ class LNbitsWallet(Wallet):
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         try:
-
             r = self.s.get(
                 url=f"{self.endpoint}/api/v1/payments/{checking_id}",
                 headers=self.key,

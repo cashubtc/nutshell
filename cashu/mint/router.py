@@ -3,7 +3,7 @@ from typing import Dict, List, Union
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
-from cashu.core.base import (
+from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
@@ -21,9 +21,9 @@ from cashu.core.base import (
     PostSplitRequest,
     PostSplitResponse,
 )
-from cashu.core.errors import CashuError
-from cashu.core.settings import settings
-from cashu.mint.startup import ledger
+from ..core.errors import CashuError
+from ..core.settings import settings
+from ..mint.startup import ledger
 
 router: APIRouter = APIRouter()
 
