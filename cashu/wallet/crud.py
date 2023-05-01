@@ -1,8 +1,8 @@
 import time
 from typing import Any, List, Optional
 
-from cashu.core.base import Invoice, KeyBase, P2SHScript, Proof, WalletKeyset
-from cashu.core.db import Connection, Database
+from ..core.base import Invoice, KeyBase, P2SHScript, Proof, WalletKeyset
+from ..core.db import Connection, Database
 
 
 async def store_proof(
@@ -10,7 +10,6 @@ async def store_proof(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         """
         INSERT INTO proofs
@@ -25,7 +24,6 @@ async def get_proofs(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     rows = await (conn or db).fetchall(
         """
         SELECT * from proofs
@@ -38,7 +36,6 @@ async def get_reserved_proofs(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     rows = await (conn or db).fetchall(
         """
         SELECT * from proofs
@@ -53,7 +50,6 @@ async def invalidate_proof(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         f"""
         DELETE FROM proofs
@@ -75,8 +71,8 @@ async def invalidate_proof(
 async def update_proof_reserved(
     proof: Proof,
     reserved: bool,
-    send_id: str = None,
-    db: Database = None,
+    send_id: str = "",
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -104,7 +100,6 @@ async def secret_used(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     rows = await (conn or db).fetchone(
         """
         SELECT * from proofs
@@ -120,7 +115,6 @@ async def store_p2sh(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         """
         INSERT INTO p2sh
@@ -137,11 +131,10 @@ async def store_p2sh(
 
 
 async def get_unused_locks(
-    address: str = None,
-    db: Database = None,
+    address: str = "",
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
-
     clause: List[str] = []
     args: List[str] = []
 
@@ -168,7 +161,7 @@ async def get_unused_locks(
 async def update_p2sh_used(
     p2sh: P2SHScript,
     used: bool,
-    db: Database = None,
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -184,11 +177,10 @@ async def update_p2sh_used(
 
 async def store_keyset(
     keyset: WalletKeyset,
-    mint_url: str = None,
-    db: Database = None,
+    mint_url: str = "",
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
@@ -209,7 +201,7 @@ async def store_keyset(
 async def get_keyset(
     id: str = "",
     mint_url: str = "",
-    db: Database = None,
+    db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -241,7 +233,6 @@ async def store_lightning_invoice(
     invoice: Invoice,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         f"""
         INSERT INTO invoices
@@ -262,7 +253,7 @@ async def store_lightning_invoice(
 
 async def get_lightning_invoice(
     db: Database,
-    hash: str = None,
+    hash: str = "",
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -287,7 +278,7 @@ async def get_lightning_invoice(
 
 async def get_lightning_invoices(
     db: Database,
-    paid: bool = None,
+    paid: Optional[bool] = None,
     conn: Optional[Connection] = None,
 ):
     clauses: List[Any] = []
@@ -315,7 +306,7 @@ async def update_lightning_invoice(
     db: Database,
     hash: str,
     paid: bool,
-    time_paid: int = None,
+    time_paid: Optional[int] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []

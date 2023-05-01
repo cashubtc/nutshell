@@ -2,8 +2,8 @@ import base64
 import hashlib
 from typing import Dict, List
 
-from cashu.core.secp import PrivateKey, PublicKey
-from cashu.core.settings import settings
+from ..core.secp import PrivateKey, PublicKey
+from ..core.settings import settings
 
 # entropy = bytes([random.getrandbits(8) for i in range(16)])
 # mnemonic = bip39.mnemonic_from_bytes(entropy)

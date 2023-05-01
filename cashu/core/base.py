@@ -6,13 +6,13 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 from loguru import logger
 from pydantic import BaseModel
 
-from cashu.core.crypto import (
+from ..core.crypto import (
     derive_keys,
     derive_keys_backwards_compatible_0_11_insecure,
     derive_keyset_id,
     derive_pubkeys,
 )
-from cashu.core.secp import PrivateKey, PublicKey
+from ..core.secp import PrivateKey, PublicKey
 
 # ------- PROOFS -------
 

@@ -6,7 +6,7 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.base import (
+from ...core.base import (
     Proof,
     TokenV1,
     TokenV2,
@@ -15,10 +15,10 @@ from cashu.core.base import (
     TokenV3Token,
     WalletKeyset,
 )
-from cashu.core.helpers import sum_proofs
-from cashu.core.settings import settings
-from cashu.wallet.crud import get_keyset
-from cashu.wallet.wallet import Wallet as Wallet
+from ...core.helpers import sum_proofs
+from ...core.settings import settings
+from ...wallet.crud import get_keyset
+from ...wallet.wallet import Wallet as Wallet
 
 
 async def verify_mint(mint_wallet: Wallet, url: str):
