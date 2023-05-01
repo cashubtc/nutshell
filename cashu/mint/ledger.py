@@ -7,13 +7,13 @@ from ..core import b_dhke as b_dhke
 from ..core import bolt11 as bolt11
 from ..core import legacy as legacy
 from ..core.base import (
+    DLEQ,
     BlindedMessage,
     BlindedSignature,
     Invoice,
     MintKeyset,
     MintKeysets,
     Proof,
-    DLEQ,
 )
 from ..core.crypto import derive_pubkey
 from ..core.db import Database
