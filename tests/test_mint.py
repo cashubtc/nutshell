@@ -53,6 +53,32 @@ async def ledger():
 
 
 @pytest.mark.asyncio
+async def test_pubkeys(ledger: Ledger):
+    assert ledger.keyset.public_keys
+    assert (
+        ledger.keyset.public_keys[1].serialize().hex()
+        == "03190ebc0c3e2726a5349904f572a2853ea021b0128b269b8b6906501d262edaa8"
+    )
+    assert (
+        ledger.keyset.public_keys[2 ** (settings.max_order - 1)].serialize().hex()
+        == "032dc008b88b85fdc2301a499bfaaef774c191a6307d8c9434838fc2eaa2e48d51"
+    )
+
+
+@pytest.mark.asyncio
+async def test_privatekeys(ledger: Ledger):
+    assert ledger.keyset.private_keys
+    assert (
+        ledger.keyset.private_keys[1].serialize()
+        == "67de62e1bf8b5ccf88dbad6768b7d13fa0f41433b0a89caf915039505f2e00a7"
+    )
+    assert (
+        ledger.keyset.private_keys[2 ** (settings.max_order - 1)].serialize()
+        == "3b1340c703b02028a11025302d2d9e68d2a6dd721ab1a2770f0942d15eacb8d0"
+    )
+
+
+@pytest.mark.asyncio
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets.keysets)
     assert len(ledger.keysets.get_ids())
