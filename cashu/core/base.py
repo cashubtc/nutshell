@@ -3,8 +3,9 @@ import json
 from sqlite3 import Row
 from typing import Any, Dict, List, Optional, TypedDict, Union
 
-from pydantic import BaseModel
 from loguru import logger
+from pydantic import BaseModel
+
 from cashu.core.crypto import (
     derive_keys,
     derive_keys_backwards_compatible_0_11_insecure,
