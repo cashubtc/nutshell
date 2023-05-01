@@ -22,6 +22,24 @@ def derive_keys(master_key: str, derivation_path: str = ""):
     return {
         2
         ** i: PrivateKey(
+            hashlib.sha256(
+                (master_key + derivation_path + str(i)).encode("utf-8")
+            ).digest()[:32],
+            raw=True,
+        )
+        for i in range(settings.max_order)
+    }
+
+
+def derive_keys_backwards_compatible_0_11_insecure(
+    master_key: str, derivation_path: str = ""
+):
+    """
+    WARNING: Broken key derivation for backwards compatibility with 0.11.
+    """
+    return {
+        2
+        ** i: PrivateKey(
             hashlib.sha256((master_key + derivation_path + str(i)).encode("utf-8"))
             .hexdigest()
             .encode("utf-8")[:32],
@@ -33,7 +51,7 @@ def derive_keys(master_key: str, derivation_path: str = ""):
 
 def derive_pubkey(master_key: str):
     return PrivateKey(
-        hashlib.sha256((master_key).encode("utf-8")).hexdigest().encode("utf-8")[:32],
+        hashlib.sha256((master_key).encode("utf-8")).digest()[:32],
         raw=True,
     ).pubkey
 
