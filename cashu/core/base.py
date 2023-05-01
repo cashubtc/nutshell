@@ -113,7 +113,7 @@ class GetInfoResponse(BaseModel):
     version: Optional[str] = None
     description: Optional[str] = None
     description_long: Optional[str] = None
-    contact: Optional[List[str]] = None
+    contact: Optional[List[List[str]]] = None
     nuts: Optional[List[str]] = None
     motd: Optional[str] = None
 
