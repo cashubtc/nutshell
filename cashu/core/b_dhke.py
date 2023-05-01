@@ -35,11 +35,11 @@ If true, C must have originated from Bob
 (These steps occur once Bob returns C')
 
 Bob:
- r = random nonce
+r = random nonce
 R1 = r*G
 R2 = r*B'
- e = hash(R1,R2,A,C')
- s = r + e*a
+e = hash(R1,R2,A,C')
+s = r + e*a
 return e, s
 
 Alice:
