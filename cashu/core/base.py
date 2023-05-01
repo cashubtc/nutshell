@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 
 from pydantic import BaseModel
 
-from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
-from cashu.core.secp import PrivateKey, PublicKey
+from ..core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
+from ..core.secp import PrivateKey, PublicKey
 
 # ------- PROOFS -------
 

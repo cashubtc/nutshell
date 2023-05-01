@@ -1,4 +1,4 @@
-from cashu.core.db import Database
+from ..core.db import Database
 
 
 async def m000_create_migrations_table(db):
