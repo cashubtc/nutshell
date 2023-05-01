@@ -789,7 +789,8 @@ class Wallet(LedgerAPI):
         proofs_old_epochs = [p for p in proofs if p.id != self.keys.id]
         send_proofs += proofs_old_epochs
 
-        # coinselect based on amount to send only from the current keyset
+        # coinselect based on amount only from the current keyset
+        # start with the proofs with the largest amount and add them until the target amount is reached
         proofs_current_epoch = [p for p in proofs if p.id == self.keys.id]
         sorted_proofs_of_current_keyset = sorted(
             proofs_current_epoch, key=lambda p: p.amount
