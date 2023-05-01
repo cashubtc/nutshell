@@ -12,6 +12,7 @@ import os
 
 from cashu.core.db import Database
 from cashu.core.settings import settings
+from cashu.lightning.fake import FakeWallet
 from cashu.mint import migrations
 from cashu.mint.ledger import Ledger
 
@@ -46,7 +47,7 @@ async def ledger():
         db=Database("test", "data/mint"),
         seed="TEST_PRIVATE_KEY",
         derivation_path="0/0/0/0",
-        lightning=None,
+        lightning=FakeWallet(),
     )
     await start_mint_init(ledger)
     yield ledger
