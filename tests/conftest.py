@@ -30,6 +30,7 @@ class UvicornServer(multiprocessing.Process):
         settings.mint_lightning_backend = "FakeWallet"
         settings.mint_listen_port = 3337
         settings.mint_database = "data/test_mint"
+        settings.mint_derivation_path = "0/0/0/0"
         settings.mint_private_key = "privatekeyofthemint"
 
         dirpath = Path(settings.mint_database)

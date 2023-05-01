@@ -24,7 +24,7 @@ lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
     seed=settings.mint_private_key,
-    derivation_path="0/0/0/0",
+    derivation_path=settings.mint_derivation_path,
     lightning=lightning_backend,
 )
 
