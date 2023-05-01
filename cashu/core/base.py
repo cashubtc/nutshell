@@ -289,23 +289,26 @@ class MintKeyset:
 
     def generate_keys(self, seed):
         """Generates keys of a keyset from a seed."""
+        backwards_compatibility_pre_0_12 = False
         if (
             self.version
             and len(self.version.split(".")) > 1
             and int(self.version.split(".")[0]) == 0
             and int(self.version.split(".")[1]) <= 11
         ):
-            # WARNING: Broken key derivation for backwards compatibility with 0.11.
+            backwards_compatibility_pre_0_12 = True
+            # WARNING: Broken key derivation for backwards compatibility with < 0.12
             self.private_keys = derive_keys_backwards_compatible_0_11_insecure(
                 seed, self.derivation_path
-            )
-            logger.warning(
-                "WARNING: Broken key derivation for backwards compatibility with 0.11."
             )
         else:
             self.private_keys = derive_keys(seed, self.derivation_path)
         self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
         self.id = derive_keyset_id(self.public_keys)  # type: ignore
+        if backwards_compatibility_pre_0_12:
+            logger.warning(
+                f"WARNING: Using weak key derivation for keyset {self.id} (backwards compatibility < 0.12)"
+            )
 
 
 class MintKeysets:
