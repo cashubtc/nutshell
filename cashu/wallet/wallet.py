@@ -117,7 +117,7 @@ class LedgerAPI:
         for proof in proofs:
             dleq = proof.dleq
             if not proof.dleq:
-                logger.warning("no DLEQ proof included.")
+                logger.debug("Warning: no DLEQ proof included.")
                 return
             assert self.keys.public_keys
             if not b_dhke.alice_verify_dleq(
@@ -128,7 +128,6 @@ class LedgerAPI:
                 bytes.fromhex(proof.dleq.C_),
             ):
                 raise Exception("DLEQ proof invalid.")
-        logger.debug("DLEQ proofs verified.")
 
     def _construct_proofs(
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]

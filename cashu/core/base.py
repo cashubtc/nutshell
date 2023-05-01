@@ -104,10 +104,10 @@ class BlindedSignature(BaseModel):
     Blinded signature or "promise" which is the signature on a `BlindedMessage`
     """
 
-    id: Union[str, None] = None
+    id: str
     amount: int
     C_: str  # Hex-encoded signature
-    dleq: DLEQ
+    dleq: Optional[DLEQ] = None  # DLEQ proof
 
 
 class BlindedMessages(BaseModel):
