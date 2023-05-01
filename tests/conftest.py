@@ -30,7 +30,7 @@ class UvicornServer(multiprocessing.Process):
         settings.mint_lightning_backend = "FakeWallet"
         settings.mint_listen_port = 3337
         settings.mint_database = "data/test_mint"
-        settings.mint_private_key = "privatekeyofthemint"
+        settings.mint_private_key = "TEST_PRIVATE_KEY"
 
         dirpath = Path(settings.mint_database)
         if dirpath.exists() and dirpath.is_dir():
