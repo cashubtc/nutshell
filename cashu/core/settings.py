@@ -43,7 +43,7 @@ class CashuSettings(BaseSettings):
 class EnvSettings(CashuSettings):
     debug: bool = Field(default=False)
     host: str = Field(default="127.0.0.1")
-    port: int = Field(default=5000)
+    port: int = Field(default=3338)
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
 
 
@@ -65,7 +65,7 @@ class MintInformation(CashuSettings):
     mint_info_description: str = Field(default=None)
     mint_info_description_long: str = Field(default=None)
     mint_info_contact: List[List[str]] = Field(default=[["", ""]])
-    mint_info_nuts: List[str] = Field(default=["NUT-07", "NUT-08"])
+    mint_info_nuts: List[str] = Field(default=["NUT-07", "NUT-08", "NUT-09"])
     mint_info_motd: str = Field(default=None)
 
 
