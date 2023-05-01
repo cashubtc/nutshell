@@ -116,7 +116,7 @@ class LedgerAPI:
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
         proofs: List[Proof] = []
         for promise, secret, r in zip(promises, secrets, rs):
-            logger.trace(f"Creating proof with keyset {self.keyset_id} =+ {promise.id}")
+            logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
             assert (
                 self.keyset_id == promise.id
             ), "our keyset id does not match promise id."
@@ -278,7 +278,7 @@ class LedgerAPI:
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.items()
         }
-        keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
+        keyset = WalletKeyset(id=keyset_id, public_keys=keyset_keys, mint_url=url)
         return keyset
 
     @async_set_requests

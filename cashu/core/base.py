@@ -241,6 +241,8 @@ class WalletKeyset:
         if public_keys:
             self.public_keys = public_keys
             self.id = derive_keyset_id(self.public_keys)
+        if id:
+            assert id == self.id, "id must match derived id from public keys"
 
 
 class MintKeyset:
@@ -267,7 +269,7 @@ class MintKeyset:
         active=None,
         seed: str = "",
         derivation_path: str = "",
-        version: str = "",
+        version: str = "1",
     ):
         self.derivation_path = derivation_path
         self.id = id

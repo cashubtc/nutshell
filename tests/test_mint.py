@@ -56,7 +56,7 @@ async def ledger():
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets.keysets)
     assert len(ledger.keysets.get_ids())
-    assert ledger.keyset.id == "XQM1wwtQbOXE"
+    assert ledger.keyset.id == "1cCNIAZ2X/w1"
 
 
 @pytest.mark.asyncio
@@ -79,7 +79,7 @@ async def test_mint(ledger: Ledger):
     assert promises[0].amount == 8
     assert (
         promises[0].C_
-        == "032dfadd74bb3abba8170ecbae5401507e384eafd312defda94148fa37314c0ef0"
+        == "037074c4f53e326ee14ed67125f387d160e0e729351471b69ad41f7d5d21071e15"
     )
 
 
@@ -107,5 +107,5 @@ async def test_generate_promises(ledger: Ledger):
     promises = await ledger._generate_promises(blinded_messages_mock)
     assert (
         promises[0].C_
-        == "032dfadd74bb3abba8170ecbae5401507e384eafd312defda94148fa37314c0ef0"
+        == "037074c4f53e326ee14ed67125f387d160e0e729351471b69ad41f7d5d21071e15"
     )
