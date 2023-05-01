@@ -21,7 +21,7 @@ class PublicKeyExt(PublicKey):
 
     def __sub__(self, pubkey2):
         if isinstance(pubkey2, PublicKey):
-            return self + (-pubkey2)
+            return self + (-pubkey2)  # type: ignore
         else:
             raise TypeError("Can't add pubkey and %s" % pubkey2.__class__)
 
@@ -34,19 +34,20 @@ class PublicKeyExt(PublicKey):
     def __eq__(self, pubkey2):
         if isinstance(pubkey2, PublicKey):
             seq1 = self.to_data()
-            seq2 = pubkey2.to_data()
+            seq2 = pubkey2.to_data()  # type: ignore
             return seq1 == seq2
         else:
             raise TypeError("Can't compare pubkey and %s" % pubkey2.__class__)
 
     def to_data(self):
+        assert self.public_key
         return [self.public_key.data[i] for i in range(64)]
 
 
 # Horrible monkeypatching
-PublicKey.__add__ = PublicKeyExt.__add__
-PublicKey.__neg__ = PublicKeyExt.__neg__
-PublicKey.__sub__ = PublicKeyExt.__sub__
-PublicKey.mult = PublicKeyExt.mult
-PublicKey.__eq__ = PublicKeyExt.__eq__
-PublicKey.to_data = PublicKeyExt.to_data
+PublicKey.__add__ = PublicKeyExt.__add__  # type: ignore
+PublicKey.__neg__ = PublicKeyExt.__neg__  # type: ignore
+PublicKey.__sub__ = PublicKeyExt.__sub__  # type: ignore
+PublicKey.mult = PublicKeyExt.mult  # type: ignore
+PublicKey.__eq__ = PublicKeyExt.__eq__  # type: ignore
+PublicKey.to_data = PublicKeyExt.to_data  # type: ignore

@@ -6,13 +6,9 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 from loguru import logger
 from pydantic import BaseModel
 
-from ..core.crypto import (
-    derive_keys,
-    derive_keys_backwards_compatible_0_11_insecure,
-    derive_keyset_id,
-    derive_pubkeys,
-)
+from ..core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
 from ..core.secp import PrivateKey, PublicKey
+from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 
 # ------- PROOFS -------
 
@@ -144,7 +140,7 @@ class GetInfoResponse(BaseModel):
     version: Optional[str] = None
     description: Optional[str] = None
     description_long: Optional[str] = None
-    contact: Optional[List[str]] = None
+    contact: Optional[List[List[str]]] = None
     nuts: Optional[List[str]] = None
     motd: Optional[str] = None
 
@@ -326,7 +322,7 @@ class MintKeyset:
         ):
             backwards_compatibility_pre_0_12 = True
             # WARNING: Broken key derivation for backwards compatibility with < 0.12
-            self.private_keys = derive_keys_backwards_compatible_0_11_insecure(
+            self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
                 seed, self.derivation_path
             )
         else:

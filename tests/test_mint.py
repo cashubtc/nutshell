@@ -1,19 +1,15 @@
 from typing import List
 
 import pytest
-import pytest_asyncio
 
 from cashu.core.base import BlindedMessage, Proof
 from cashu.core.migrations import migrate_databases
 
 SERVER_ENDPOINT = "http://localhost:3338"
 
-import os
-
-from cashu.core.db import Database
 from cashu.core.settings import settings
-from cashu.mint import migrations
 from cashu.mint.ledger import Ledger
+from tests.conftest import ledger
 
 
 async def assert_err(f, msg):
@@ -29,27 +25,6 @@ async def assert_err(f, msg):
 def assert_amt(proofs: List[Proof], expected: int):
     """Assert amounts the proofs contain."""
     assert [p.amount for p in proofs] == expected
-
-
-async def start_mint_init(ledger):
-    await migrate_databases(ledger.db, migrations)
-    await ledger.load_used_proofs()
-    await ledger.init_keysets()
-
-
-@pytest_asyncio.fixture(scope="function")
-async def ledger():
-    db_file = "data/mint/test.sqlite3"
-    if os.path.exists(db_file):
-        os.remove(db_file)
-    ledger = Ledger(
-        db=Database("test", "data/mint"),
-        seed="TEST_PRIVATE_KEY",
-        derivation_path="0/0/0/0",
-        lightning=None,
-    )
-    await start_mint_init(ledger)
-    yield ledger
 
 
 @pytest.mark.asyncio
