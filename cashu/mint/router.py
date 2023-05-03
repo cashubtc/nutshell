@@ -125,14 +125,7 @@ async def mint(
     try:
         # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
         # We use the payment_hash to lookup the hash from the database and pass that one along.
-        if payment_hash:
-            invoice = await ledger.crud.get_lightning_invoice(
-                payment_hash=payment_hash, db=ledger.db
-            )
-            assert invoice, "no invoice found"
-            assert invoice.payment_hash, "no payment hash found"
-            hash = invoice.payment_hash
-            # emd: backwards compatibility pre < 0.12
+        hash = payment_hash or hash
         # END: backwards compatibility < 0.12
 
         promises = await ledger.mint(payload.outputs, hash=hash)
