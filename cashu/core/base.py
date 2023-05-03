@@ -95,6 +95,7 @@ class Invoice(BaseModel):
     amount: int
     pr: str
     hash: Union[None, str] = None
+    payment_hash: Union[None, str] = None
     preimage: Union[str, None] = None
     issued: Union[None, bool] = False
     paid: Union[None, bool] = False

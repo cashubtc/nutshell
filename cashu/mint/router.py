@@ -99,9 +99,9 @@ async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
     """
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
-    payment_request, payment_hash = await ledger.request_mint(amount)
+    payment_request, hash = await ledger.request_mint(amount)
     print(f"Lightning invoice: {payment_request}")
-    resp = GetMintResponse(pr=payment_request, hash=payment_hash)
+    resp = GetMintResponse(pr=payment_request, hash=hash)
     return resp
 
 
@@ -124,9 +124,15 @@ async def mint(
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
     try:
         # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
-        # We use an encrypted key now.
+        # We use the payment_hash to lookup the hash from the database and pass that one along.
         if payment_hash:
-            hash = ledger._encrypt_payment_hash(payment_hash)
+            invoice = await ledger.crud.get_lightning_invoice(
+                payment_hash=payment_hash, db=ledger.db
+            )
+            assert invoice, "no invoice found"
+            assert invoice.payment_hash, "no payment hash found"
+            hash = invoice.payment_hash
+            # emd: backwards compatibility pre < 0.12
         # END: backwards compatibility < 0.12
 
         promises = await ledger.mint(payload.outputs, hash=hash)

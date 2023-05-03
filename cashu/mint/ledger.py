@@ -13,8 +13,7 @@ from ..core.base import (
     Proof,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.aes import AESCipher
-from ..core.crypto.keys import derive_pubkey
+from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
 from ..core.db import Database
 from ..core.helpers import fee_reserve, sum_proofs
@@ -79,11 +78,12 @@ class Ledger:
         return keyset
 
     async def init_keysets(self, autosave=True):
-        """Loads all keysets from db.
+        """Initializes all keysets of the mint from the db.
 
         Args:
-            autosave (bool, optional): Whether the keyset should be saved if it is
-            not in the database yet. Will be passed to `self.load_keyset`. Defaults to True.
+            autosave (bool, optional): Whether the current keyset should be saved if it is
+            not in the database yet. Will be passed to `self.load_keyset` where it is
+            generated from `self.derivation_path`. Defaults to True.
         """
         # load all past keysets from db
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
@@ -103,6 +103,7 @@ class Ledger:
                 continue
             logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
+
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
 
@@ -279,31 +280,12 @@ class Ledger:
         ) = await self.lightning.create_invoice(amount, "cashu deposit")
         return payment_request, checking_id
 
-    def _encrypt_payment_hash(self, payment_hash: str) -> str:
-        """
-        Encrypts payment hash using the master key of the mint.
-        This is necessary as per NUT-04 because we don't want to the user to lookup
-        the invoice payment state using public info (the bolt11 payment_hash).
-        Value must be URL-safe since we use it as a URL parameter.
-        """
-        return AESCipher(key=self.master_key).encrypt(payment_hash.encode("utf-8"))
-
-    def _decrypt_payment_hash(self, hash: str) -> str:
-        """
-        Decrypts hash using the master key of the mint to get back a payment hash.
-        This is necessary as per NUT-04 because we don't want to the user to lookup
-        the invoice payment state using public info (the bolt11 payment_hash)
-        """
-        return AESCipher(key=self.master_key).decrypt(hash)
-
-    async def _check_lightning_invoice(
-        self, amount: int, payment_hash: str
-    ) -> Literal[True]:
-        """Checks with the Lightning backend whether an invoice with this payment_hash was paid.
+    async def _check_lightning_invoice(self, amount: int, hash: str) -> Literal[True]:
+        """Checks with the Lightning backend whether an invoice stored with `hash` was paid.
 
         Args:
             amount (int): Amount of the outputs the wallet wants in return (in Satoshis).
-            payment_hash (str): Payment hash of Lightning invoice (for lookup).
+            hash (str): Hash to look up Lightning invoice by.
 
         Raises:
             Exception: Invoice not found.
@@ -316,17 +298,16 @@ class Ledger:
             bool: True if invoice has been paid, else False
         """
         invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
-            hash=payment_hash, db=self.db
+            hash=hash, db=self.db
         )
         if invoice is None:
             raise Exception("invoice not found.")
         if invoice.issued:
             raise Exception("tokens already issued for this invoice.")
+        assert invoice.payment_hash, "invoice has no payment hash."
 
         # set this invoice as issued
-        await self.crud.update_lightning_invoice(
-            hash=payment_hash, issued=True, db=self.db
-        )
+        await self.crud.update_lightning_invoice(hash=hash, issued=True, db=self.db)
 
         try:
             if amount > invoice.amount:
@@ -334,7 +315,7 @@ class Ledger:
                     f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
                 )
 
-            status = await self.lightning.get_invoice_status(payment_hash)
+            status = await self.lightning.get_invoice_status(invoice.payment_hash)
             if status.paid:
                 return status.paid
             else:
@@ -342,7 +323,7 @@ class Ledger:
         except Exception as e:
             # unset issued
             await self.crud.update_lightning_invoice(
-                hash=payment_hash, issued=False, db=self.db
+                hash=hash, issued=False, db=self.db
             )
             raise e
 
@@ -539,22 +520,26 @@ class Ledger:
             Exception: Invoice creation failed.
 
         Returns:
-            Tuple[str, str]: Bolt11 invoice and payment hash (for looking it up later)
+            Tuple[str, str]: Bolt11 invoice and a hash (for looking it up later)
         """
         payment_request, payment_hash = await self._request_lightning_invoice(amount)
         assert payment_request, Exception(
             "could not fetch invoice from Lightning backend"
         )
         invoice = Invoice(
-            amount=amount, pr=payment_request, hash=payment_hash, issued=False
+            amount=amount,
+            pr=payment_request,
+            payment_hash=payment_hash,
+            issued=False,
+            hash=random_hash(),  # use random hash for lookup
         )
+        assert invoice.hash, Exception("could not store invoice in database")
+
         if not payment_request or not payment_hash:
             raise Exception(f"Could not create Lightning invoice.")
-        await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
 
-        # we return an encrypted payment hash to the user
-        hash = self._encrypt_payment_hash(payment_hash)
-        return payment_request, hash
+        await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
+        return payment_request, invoice.hash
 
     async def mint(
         self,
@@ -566,7 +551,7 @@ class Ledger:
 
         Args:
             B_s (List[BlindedMessage]): Outputs (blinded messages) to sign.
-            hash (Optional[str], optional): Encrypted payment hash of (paid) Lightning invoice. Defaults to None.
+            hash (Optional[str], optional): Hash of (paid) Lightning invoice. Defaults to None.
             keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
 
         Raises:
@@ -584,8 +569,7 @@ class Ledger:
             if not hash:
                 raise Exception("no hash provided.")
             try:
-                payment_hash = self._decrypt_payment_hash(hash)
-                paid = await self._check_lightning_invoice(amount, payment_hash)
+                paid = await self._check_lightning_invoice(amount, hash)
             except Exception as e:
                 raise e
 
