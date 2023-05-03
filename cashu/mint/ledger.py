@@ -283,13 +283,14 @@ class Ledger:
         """
         Encrypts payment hash using the master key of the mint.
         This is necessary as per NUT-04 because we don't want to the user to lookup
-        the invoice payment state using public info (the bolt11 payment_hash)
+        the invoice payment state using public info (the bolt11 payment_hash).
+        Value must be URL-safe since we use it as a URL parameter.
         """
         return AESCipher(key=self.master_key).encrypt(payment_hash.encode("utf-8"))
 
     def _decrypt_payment_hash(self, hash: str) -> str:
         """
-        Decrypts payment hash using the master key of the mint.
+        Decrypts hash using the master key of the mint to get back a payment hash.
         This is necessary as per NUT-04 because we don't want to the user to lookup
         the invoice payment state using public info (the bolt11 payment_hash)
         """

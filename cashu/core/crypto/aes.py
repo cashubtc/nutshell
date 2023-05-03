@@ -44,7 +44,7 @@ class AESCipher:
 
     def decrypt(self, encrypted: str) -> str:  # type: ignore
         """Decrypts a string using AES-256-CBC."""
-        encrypted = base64.b64decode(encrypted)  # type: ignore
+        encrypted = base64.urlsafe_b64decode(encrypted)  # type: ignore
         assert encrypted[0:8] == b"Salted__"
         salt = encrypted[8:16]
         key_iv = self.bytes_to_key(self.key.encode(), salt, 32 + 16)
@@ -62,6 +62,6 @@ class AESCipher:
         key = key_iv[:32]
         iv = key_iv[32:]
         aes = AES.new(key, AES.MODE_CBC, iv)
-        return base64.b64encode(
+        return base64.urlsafe_b64encode(
             b"Salted__" + salt + aes.encrypt(self.pad(message))
         ).decode()
