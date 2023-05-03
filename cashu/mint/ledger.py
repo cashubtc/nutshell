@@ -523,20 +523,17 @@ class Ledger:
             Tuple[str, str]: Bolt11 invoice and a hash (for looking it up later)
         """
         payment_request, payment_hash = await self._request_lightning_invoice(amount)
-        assert payment_request, Exception(
+        assert payment_request and payment_hash, Exception(
             "could not fetch invoice from Lightning backend"
         )
+
         invoice = Invoice(
             amount=amount,
+            hash=random_hash(),
             pr=payment_request,
-            payment_hash=payment_hash,
+            payment_hash=payment_hash,  # what we got from the backend
             issued=False,
-            hash=random_hash(),  # use random hash for lookup
         )
-        assert invoice.hash, Exception("could not store invoice in database")
-
-        if not payment_request or not payment_hash:
-            raise Exception(f"Could not create Lightning invoice.")
 
         await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
         return payment_request, invoice.hash

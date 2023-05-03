@@ -94,7 +94,7 @@ class BlindedMessages(BaseModel):
 class Invoice(BaseModel):
     amount: int
     pr: str
-    hash: Union[None, str] = None
+    hash: str
     payment_hash: Union[None, str] = None
     preimage: Union[str, None] = None
     issued: Union[None, bool] = False
