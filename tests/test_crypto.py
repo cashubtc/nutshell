@@ -1,7 +1,7 @@
 import pytest
 
-from cashu.core.b_dhke import hash_to_curve, step1_alice, step2_bob, step3_alice
-from cashu.core.secp import PrivateKey, PublicKey
+from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice, step2_bob, step3_alice
+from cashu.core.crypto.secp import PrivateKey, PublicKey
 
 
 def test_hash_to_curve():

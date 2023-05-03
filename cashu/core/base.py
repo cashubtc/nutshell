@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 from loguru import logger
 from pydantic import BaseModel
 
-from ..core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
-from ..core.secp import PrivateKey, PublicKey
+from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
+from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 
 # ------- PROOFS -------
@@ -94,7 +94,8 @@ class BlindedMessages(BaseModel):
 class Invoice(BaseModel):
     amount: int
     pr: str
-    hash: Union[None, str] = None
+    hash: str
+    payment_hash: Union[None, str] = None
     preimage: Union[str, None] = None
     issued: Union[None, bool] = False
     paid: Union[None, bool] = False

@@ -146,3 +146,17 @@ async def m005_pending_proofs_table(db: Database) -> None:
             );
         """
     )
+
+
+async def m006_invoices_add_payment_hash(db: Database):
+    """
+    Column that remembers the payment_hash as we're using
+    the column hash as a random identifier now
+    (see https://github.com/cashubtc/nuts/pull/14).
+    """
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN payment_hash TEXT"
+    )
+    await db.execute(
+        f"UPDATE {table_with_schema(db, 'invoices')} SET payment_hash = hash"
+    )

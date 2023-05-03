@@ -154,14 +154,15 @@ async def store_lightning_invoice(
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'invoices')}
-          (amount, pr, hash, issued)
-        VALUES (?, ?, ?, ?)
+          (amount, pr, hash, issued, payment_hash)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             invoice.amount,
             invoice.pr,
             invoice.hash,
             invoice.issued,
+            invoice.payment_hash,
         ),
     )
 
@@ -178,6 +179,7 @@ async def get_lightning_invoice(
         """,
         (hash,),
     )
+
     return Invoice(**row) if row else None
 
 

@@ -10,7 +10,6 @@ from typing import Dict, List, Optional
 import requests
 from loguru import logger
 
-from ..core import b_dhke as b_dhke
 from ..core import bolt11 as bolt11
 from ..core.base import (
     BlindedMessage,
@@ -36,6 +35,8 @@ from ..core.base import (
     WalletKeyset,
 )
 from ..core.bolt11 import Invoice as InvoiceBolt11
+from ..core.crypto import b_dhke
+from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.helpers import sum_proofs
 from ..core.script import (
@@ -44,7 +45,6 @@ from ..core.script import (
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
 )
-from ..core.secp import PrivateKey, PublicKey
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..tor.tor import TorProxy
@@ -311,7 +311,7 @@ class LedgerAPI:
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
     @async_set_requests
-    async def mint(self, amounts, payment_hash=None):
+    async def mint(self, amounts, hash=None):
         """Mints new coins and returns a proof of promise."""
         secrets = [self._generate_secret() for s in range(len(amounts))]
         await self._check_used_secrets(secrets)
@@ -320,7 +320,7 @@ class LedgerAPI:
         resp = self.s.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
-            params={"payment_hash": payment_hash},
+            params={"hash": hash},
         )
         resp.raise_for_status()
         reponse_dict = resp.json()
@@ -495,12 +495,12 @@ class Wallet(LedgerAPI):
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
-    async def mint(self, amount: int, payment_hash: Optional[str] = None):
+    async def mint(self, amount: int, hash: Optional[str] = None):
         """Mint tokens of a specific amount after an invoice has been paid.
 
         Args:
             amount (int): Total amount of tokens to be minted
-            payment_hash (Optional[str], optional): Hash of the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+            hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
 
         Raises:
             Exception: Raises exception if no proofs have been provided
@@ -509,25 +509,23 @@ class Wallet(LedgerAPI):
             List[Proof]: Newly minted proofs.
         """
         split = amount_split(amount)
-        proofs = await super().mint(split, payment_hash)
+        proofs = await super().mint(split, hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
-        if payment_hash:
+        if hash:
             await update_lightning_invoice(
-                db=self.db, hash=payment_hash, paid=True, time_paid=int(time.time())
+                db=self.db, hash=hash, paid=True, time_paid=int(time.time())
             )
         self.proofs += proofs
         return proofs
 
-    async def mint_amounts(
-        self, amounts: List[int], payment_hash: Optional[str] = None
-    ):
+    async def mint_amounts(self, amounts: List[int], hash: Optional[str] = None):
         """Similar to wallet.mint() but accepts a predefined list of amount to be minted.
 
         Args:
             amounts (List[int]): List of amounts requested
-            payment_hash (Optional[str], optional): Hash of the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+            hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
 
         Raises:
             Exception: Newly minted proofs.
@@ -540,13 +538,13 @@ class Wallet(LedgerAPI):
                 raise Exception(
                     f"Can only mint amounts with 2^n up to {2**settings.max_order}."
                 )
-        proofs = await super().mint(amounts, payment_hash)
+        proofs = await super().mint(amounts, hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
-        if payment_hash:
+        if hash:
             await update_lightning_invoice(
-                db=self.db, hash=payment_hash, paid=True, time_paid=int(time.time())
+                db=self.db, hash=hash, paid=True, time_paid=int(time.time())
             )
         self.proofs += proofs
         return proofs
