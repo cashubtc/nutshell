@@ -1,4 +1,4 @@
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter
 from secp256k1 import PublicKey
@@ -112,7 +112,8 @@ async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
 )
 async def mint(
     payload: PostMintRequest,
-    payment_hash: Union[str, None] = None,
+    hash: Optional[str] = None,
+    payment_hash: Optional[str] = None,
 ) -> Union[PostMintResponse, CashuError]:
     """
     Requests the minting of tokens belonging to a paid payment request.
@@ -122,7 +123,13 @@ async def mint(
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
     try:
-        promises = await ledger.mint(payload.outputs, payment_hash=payment_hash)
+        # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
+        # We use an encrypted key now.
+        if payment_hash:
+            hash = ledger._encrypt_payment_hash(payment_hash)
+        # END: backwards compatibility < 0.12
+
+        promises = await ledger.mint(payload.outputs, hash=hash)
         blinded_signatures = PostMintResponse(promises=promises)
         return blinded_signatures
     except Exception as exc:

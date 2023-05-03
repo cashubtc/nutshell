@@ -6,8 +6,8 @@ from typing import Any, Dict, List, Optional, TypedDict, Union
 from loguru import logger
 from pydantic import BaseModel
 
-from ..core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
-from ..core.secp import PrivateKey, PublicKey
+from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
+from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 
 # ------- PROOFS -------
