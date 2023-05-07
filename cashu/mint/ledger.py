@@ -63,18 +63,17 @@ class Ledger:
             derivation_path=derivation_path,
             version=settings.version,
         )
-        # check if current keyset is stored in db and store if not
+        # load the keyest from db and generate keys (in crud.get_keyset)
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
             derivation_path=derivation_path, db=self.db
         )
-        if len(tmp_keyset_local):
+        if tmp_keyset_local:
             # we have a keyset for this derivation path
             keyset = tmp_keyset_local[0]
-            logger.debug(f"Loaded keyset {keyset.id}.")
-
         else:
             # no keyset for this derivation path yet
             # we generate a new keyset
+            logger.debug(f"Generating new keyset {keyset.id}.")
             keyset = MintKeyset(
                 seed=self.master_key,
                 derivation_path=derivation_path,
@@ -87,6 +86,7 @@ class Ledger:
         # store the new keyset in the current keysets
         if keyset.id:
             self.keysets.keysets[keyset.id] = keyset
+        logger.debug(f"Loaded keyset {keyset.id}.")
         return keyset
 
     async def init_keysets(self, autosave=True):
@@ -104,11 +104,7 @@ class Ledger:
             if k.id and k.id not in self.keysets.keysets:
                 self.keysets.keysets[k.id] = k
 
-        logger.debug(
-            f"We initialized {len(self.keysets.keysets)} previous keysets from the database."
-        )
-
-        # generate all private keys, public keys, and keyset id from the derivation path for all keysets that are not yet generated
+        # generate keys for all keysets in the database
         for _, v in self.keysets.keysets.items():
             # we already generated the keys for this keyset
             if v.id and v.public_keys and len(v.public_keys):
@@ -116,6 +112,9 @@ class Ledger:
             logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
 
+        logger.debug(
+            f"Initialized {len(self.keysets.keysets)} keysets from the database."
+        )
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
 
