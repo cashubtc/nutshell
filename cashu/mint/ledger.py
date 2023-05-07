@@ -63,13 +63,16 @@ class Ledger:
             derivation_path=derivation_path,
             version=settings.version,
         )
-        # load the keyest from db and generate keys (in crud.get_keyset)
+        # load the keyest from db
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
             derivation_path=derivation_path, db=self.db
         )
         if tmp_keyset_local:
             # we have a keyset for this derivation path
             keyset = tmp_keyset_local[0]
+            # we need to initialize it
+            keyset.generate_keys(self.master_key)
+
         else:
             # no keyset for this derivation path yet
             # we generate a new keyset
