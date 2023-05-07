@@ -49,7 +49,7 @@ class Ledger:
         self.proofs_used = set(proofs_used)
 
     async def load_keyset(self, derivation_path, autosave=True):
-        """Load current keyset keyset or generate new one.
+        """Load the keyset for a derivation path if it already exists. If not generate new one and store in the db.
 
         Args:
             derivation_path (_type_): Derivation path from which the keyset is generated.
@@ -64,13 +64,25 @@ class Ledger:
             version=settings.version,
         )
         # check if current keyset is stored in db and store if not
-        logger.debug(f"Active keyset: {keyset.id}")
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
-            id=keyset.id, db=self.db
+            derivation_path=derivation_path, db=self.db
         )
-        if not len(tmp_keyset_local) and autosave:
-            logger.debug(f"Storing new keyset {keyset.id}.")
-            await self.crud.store_keyset(keyset=keyset, db=self.db)
+        if len(tmp_keyset_local):
+            # we have a keyset for this derivation path
+            keyset = tmp_keyset_local[0]
+            logger.debug(f"Loaded keyset {keyset.id}.")
+
+        else:
+            # no keyset for this derivation path yet
+            # we generate a new keyset
+            keyset = MintKeyset(
+                seed=self.master_key,
+                derivation_path=derivation_path,
+                version=settings.version,
+            )
+            if autosave:
+                logger.debug(f"Storing new keyset {keyset.id}.")
+                await self.crud.store_keyset(keyset=keyset, db=self.db)
 
         # store the new keyset in the current keysets
         if keyset.id:
@@ -78,7 +90,7 @@ class Ledger:
         return keyset
 
     async def init_keysets(self, autosave=True):
-        """Initializes all keysets of the mint from the db.
+        """Initializes all keysets of the mint from the db. Loads all past keysets and generate their keys. Then load the current keyset.
 
         Args:
             autosave (bool, optional): Whether the current keyset should be saved if it is
