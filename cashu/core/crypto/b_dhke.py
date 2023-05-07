@@ -31,6 +31,7 @@ If true, C must have originated from Bob
 """
 
 import hashlib
+from typing import Optional
 
 from secp256k1 import PrivateKey, PublicKey
 
@@ -41,8 +42,8 @@ def hash_to_curve(message: bytes) -> PublicKey:
     point = None
     msg_to_hash = message
     while point is None:
+        _hash = hashlib.sha256(msg_to_hash).digest()
         try:
-            _hash = hashlib.sha256(msg_to_hash).digest()
             point = PublicKey(b"\x02" + _hash, raw=True)
         except:
             msg_to_hash = _hash
@@ -50,30 +51,30 @@ def hash_to_curve(message: bytes) -> PublicKey:
 
 
 def step1_alice(
-    secret_msg: str, blinding_factor: bytes = None
+    secret_msg: str, blinding_factor: Optional[bytes] = None
 ) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     if blinding_factor:
         r = PrivateKey(privkey=blinding_factor, raw=True)
     else:
         r = PrivateKey()
-    B_: PublicKey = Y + r.pubkey
+    B_: PublicKey = Y + r.pubkey  # type: ignore
     return B_, r
 
 
 def step2_bob(B_: PublicKey, a: PrivateKey) -> PublicKey:
-    C_: PublicKey = B_.mult(a)
+    C_: PublicKey = B_.mult(a)  # type: ignore
     return C_
 
 
 def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
-    C: PublicKey = C_ - A.mult(r)
+    C: PublicKey = C_ - A.mult(r)  # type: ignore
     return C
 
 
 def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    return C == Y.mult(a)
+    return C == Y.mult(a)  # type: ignore
 
 
 ### Below is a test of a simple positive and negative case

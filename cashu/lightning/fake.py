@@ -4,8 +4,7 @@ import random
 from datetime import datetime
 from typing import AsyncGenerator, Dict, Optional, Set
 
-from cashu.core.bolt11 import Invoice, decode, encode
-
+from ..core.bolt11 import Invoice, decode, encode
 from .base import (
     InvoiceResponse,
     PaymentResponse,

@@ -6,13 +6,13 @@ import importlib
 
 from loguru import logger
 
-from cashu.core.db import Database
-from cashu.core.migrations import migrate_databases
-from cashu.core.settings import settings
-from cashu.lightning.fake import FakeWallet  # type: ignore
-from cashu.lightning.lnbits import LNbitsWallet  # type: ignore
-from cashu.mint import migrations
-from cashu.mint.ledger import Ledger
+from ..core.db import Database
+from ..core.migrations import migrate_databases
+from ..core.settings import settings
+from ..lightning.fake import FakeWallet  # type: ignore
+from ..lightning.lnbits import LNbitsWallet  # type: ignore
+from ..mint import migrations
+from ..mint.ledger import Ledger
 
 logger.debug("Enviroment Settings:")
 for key, value in settings.dict().items():
@@ -24,7 +24,7 @@ lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
     seed=settings.mint_private_key,
-    derivation_path="0/0/0/0",
+    derivation_path=settings.mint_derivation_path,
     lightning=lightning_backend,
 )
 

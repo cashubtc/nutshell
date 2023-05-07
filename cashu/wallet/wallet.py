@@ -10,9 +10,8 @@ from typing import Dict, List, Optional
 import requests
 from loguru import logger
 
-import cashu.core.b_dhke as b_dhke
-import cashu.core.bolt11 as bolt11
-from cashu.core.base import (
+from ..core import bolt11 as bolt11
+from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
@@ -35,20 +34,21 @@ from cashu.core.base import (
     TokenV3Token,
     WalletKeyset,
 )
-from cashu.core.bolt11 import Invoice as InvoiceBolt11
-from cashu.core.db import Database
-from cashu.core.helpers import sum_proofs
-from cashu.core.script import (
+from ..core.bolt11 import Invoice as InvoiceBolt11
+from ..core.crypto import b_dhke
+from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.db import Database
+from ..core.helpers import sum_proofs
+from ..core.script import (
     step0_carol_checksig_redeemscrip,
     step0_carol_privkey,
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
 )
-from cashu.core.secp import PrivateKey, PublicKey
-from cashu.core.settings import settings
-from cashu.core.split import amount_split
-from cashu.tor.tor import TorProxy
-from cashu.wallet.crud import (
+from ..core.settings import settings
+from ..core.split import amount_split
+from ..tor.tor import TorProxy
+from ..wallet.crud import (
     get_keyset,
     get_proofs,
     invalidate_proof,
@@ -116,7 +116,7 @@ class LedgerAPI:
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
         proofs: List[Proof] = []
         for promise, secret, r in zip(promises, secrets, rs):
-            logger.trace(f"Creating proof with keyset {self.keyset_id} =+ {promise.id}")
+            logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
             assert (
                 self.keyset_id == promise.id
             ), "our keyset id does not match promise id."
@@ -278,7 +278,7 @@ class LedgerAPI:
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.items()
         }
-        keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
+        keyset = WalletKeyset(id=keyset_id, public_keys=keyset_keys, mint_url=url)
         return keyset
 
     @async_set_requests
@@ -311,7 +311,7 @@ class LedgerAPI:
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
     @async_set_requests
-    async def mint(self, amounts, payment_hash=None):
+    async def mint(self, amounts, hash=None):
         """Mints new coins and returns a proof of promise."""
         secrets = [self._generate_secret() for s in range(len(amounts))]
         await self._check_used_secrets(secrets)
@@ -320,7 +320,7 @@ class LedgerAPI:
         resp = self.s.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
-            params={"payment_hash": payment_hash},
+            params={"hash": hash},
         )
         resp.raise_for_status()
         reponse_dict = resp.json()
@@ -495,12 +495,12 @@ class Wallet(LedgerAPI):
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
-    async def mint(self, amount: int, payment_hash: Optional[str] = None):
+    async def mint(self, amount: int, hash: Optional[str] = None):
         """Mint tokens of a specific amount after an invoice has been paid.
 
         Args:
             amount (int): Total amount of tokens to be minted
-            payment_hash (Optional[str], optional): Hash of the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+            hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
 
         Raises:
             Exception: Raises exception if no proofs have been provided
@@ -509,25 +509,23 @@ class Wallet(LedgerAPI):
             List[Proof]: Newly minted proofs.
         """
         split = amount_split(amount)
-        proofs = await super().mint(split, payment_hash)
+        proofs = await super().mint(split, hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
-        if payment_hash:
+        if hash:
             await update_lightning_invoice(
-                db=self.db, hash=payment_hash, paid=True, time_paid=int(time.time())
+                db=self.db, hash=hash, paid=True, time_paid=int(time.time())
             )
         self.proofs += proofs
         return proofs
 
-    async def mint_amounts(
-        self, amounts: List[int], payment_hash: Optional[str] = None
-    ):
+    async def mint_amounts(self, amounts: List[int], hash: Optional[str] = None):
         """Similar to wallet.mint() but accepts a predefined list of amount to be minted.
 
         Args:
             amounts (List[int]): List of amounts requested
-            payment_hash (Optional[str], optional): Hash of the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+            hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
 
         Raises:
             Exception: Newly minted proofs.
@@ -540,13 +538,13 @@ class Wallet(LedgerAPI):
                 raise Exception(
                     f"Can only mint amounts with 2^n up to {2**settings.max_order}."
                 )
-        proofs = await super().mint(amounts, payment_hash)
+        proofs = await super().mint(amounts, hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
-        if payment_hash:
+        if hash:
             await update_lightning_invoice(
-                db=self.db, hash=payment_hash, paid=True, time_paid=int(time.time())
+                db=self.db, hash=hash, paid=True, time_paid=int(time.time())
             )
         self.proofs += proofs
         return proofs
@@ -768,11 +766,19 @@ class Wallet(LedgerAPI):
 
     async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
         """
-        Selects proofs that can be used with the current mint.
-        Chooses:
+        Selects proofs that can be used with the current mint. Implements a simple coin selection algorithm.
+
+        The algorithm has two objectives: Get rid of all tokens from old epochs and include additional proofs from
+        the current epoch starting from the proofs with the largest amount.
+
+        Rules:
         1) Proofs that are not marked as reserved
-        2) Proofs that have a keyset id that is in self.keysets (active keysets of mint) - !!! optional for backwards compatibility with legacy clients
+        2) Proofs that have a keyset id that is in self.keysets (all active keysets of mint)
+        3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
+        4) If the target amount is not reached, add proofs of the current keyset until it is.
         """
+        send_proofs: List[Proof] = []
+
         # select proofs that are not reserved
         proofs = [p for p in proofs if not p.reserved]
 
@@ -783,11 +789,19 @@ class Wallet(LedgerAPI):
         if sum_proofs(proofs) < amount_to_send:
             raise Exception("balance too low.")
 
-        # coinselect based on amount to send
-        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
-        send_proofs: List[Proof] = []
+        # add all proofs that have an older keyset than the current keyset of the mint
+        proofs_old_epochs = [p for p in proofs if p.id != self.keys.id]
+        send_proofs += proofs_old_epochs
+
+        # coinselect based on amount only from the current keyset
+        # start with the proofs with the largest amount and add them until the target amount is reached
+        proofs_current_epoch = [p for p in proofs if p.id == self.keys.id]
+        sorted_proofs_of_current_keyset = sorted(
+            proofs_current_epoch, key=lambda p: p.amount
+        )
+
         while sum_proofs(send_proofs) < amount_to_send:
-            proof_to_add = sorted_proofs[len(send_proofs)]
+            proof_to_add = sorted_proofs_of_current_keyset.pop()
             send_proofs.append(proof_to_add)
         return send_proofs
 

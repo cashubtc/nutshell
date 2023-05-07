@@ -1,19 +1,15 @@
 from typing import List
 
 import pytest
-import pytest_asyncio
 
 from cashu.core.base import BlindedMessage, Proof
 from cashu.core.migrations import migrate_databases
 
 SERVER_ENDPOINT = "http://localhost:3338"
 
-import os
-
-from cashu.core.db import Database
 from cashu.core.settings import settings
-from cashu.mint import migrations
 from cashu.mint.ledger import Ledger
+from tests.conftest import ledger
 
 
 async def assert_err(f, msg):
@@ -31,32 +27,37 @@ def assert_amt(proofs: List[Proof], expected: int):
     assert [p.amount for p in proofs] == expected
 
 
-async def start_mint_init(ledger):
-    await migrate_databases(ledger.db, migrations)
-    await ledger.load_used_proofs()
-    await ledger.init_keysets()
-
-
-@pytest_asyncio.fixture(scope="function")
-async def ledger():
-    db_file = "data/mint/test.sqlite3"
-    if os.path.exists(db_file):
-        os.remove(db_file)
-    ledger = Ledger(
-        db=Database("test", "data/mint"),
-        seed="TEST_PRIVATE_KEY",
-        derivation_path="0/0/0/0",
-        lightning=None,
+@pytest.mark.asyncio
+async def test_pubkeys(ledger: Ledger):
+    assert ledger.keyset.public_keys
+    assert (
+        ledger.keyset.public_keys[1].serialize().hex()
+        == "03190ebc0c3e2726a5349904f572a2853ea021b0128b269b8b6906501d262edaa8"
     )
-    await start_mint_init(ledger)
-    yield ledger
+    assert (
+        ledger.keyset.public_keys[2 ** (settings.max_order - 1)].serialize().hex()
+        == "032dc008b88b85fdc2301a499bfaaef774c191a6307d8c9434838fc2eaa2e48d51"
+    )
+
+
+@pytest.mark.asyncio
+async def test_privatekeys(ledger: Ledger):
+    assert ledger.keyset.private_keys
+    assert (
+        ledger.keyset.private_keys[1].serialize()
+        == "67de62e1bf8b5ccf88dbad6768b7d13fa0f41433b0a89caf915039505f2e00a7"
+    )
+    assert (
+        ledger.keyset.private_keys[2 ** (settings.max_order - 1)].serialize()
+        == "3b1340c703b02028a11025302d2d9e68d2a6dd721ab1a2770f0942d15eacb8d0"
+    )
 
 
 @pytest.mark.asyncio
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets.keysets)
     assert len(ledger.keysets.get_ids())
-    assert ledger.keyset.id == "XQM1wwtQbOXE"
+    assert ledger.keyset.id == "1cCNIAZ2X/w1"
 
 
 @pytest.mark.asyncio
@@ -79,7 +80,7 @@ async def test_mint(ledger: Ledger):
     assert promises[0].amount == 8
     assert (
         promises[0].C_
-        == "032dfadd74bb3abba8170ecbae5401507e384eafd312defda94148fa37314c0ef0"
+        == "037074c4f53e326ee14ed67125f387d160e0e729351471b69ad41f7d5d21071e15"
     )
 
 
@@ -107,5 +108,5 @@ async def test_generate_promises(ledger: Ledger):
     promises = await ledger._generate_promises(blinded_messages_mock)
     assert (
         promises[0].C_
-        == "032dfadd74bb3abba8170ecbae5401507e384eafd312defda94148fa37314c0ef0"
+        == "037074c4f53e326ee14ed67125f387d160e0e729351471b69ad41f7d5d21071e15"
     )

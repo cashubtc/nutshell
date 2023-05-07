@@ -16,19 +16,15 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.base import TokenV3
-from cashu.core.helpers import sum_proofs
-from cashu.core.settings import settings
-from cashu.nostr.nostr.client.client import NostrClient
-from cashu.tor.tor import TorProxy
-from cashu.wallet.crud import (
-    get_lightning_invoices,
-    get_reserved_proofs,
-    get_unused_locks,
-)
-from cashu.wallet.helpers import init_wallet, print_mint_balances, receive, send
-from cashu.wallet.nostr import receive_nostr, send_nostr
-from cashu.wallet.wallet import Wallet as Wallet
+from ...core.base import TokenV3
+from ...core.helpers import sum_proofs
+from ...core.settings import settings
+from ...nostr.nostr.client.client import NostrClient
+from ...tor.tor import TorProxy
+from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
+from ...wallet.wallet import Wallet as Wallet
+from ..helpers import init_wallet, print_mint_balances, receive, send
+from ..nostr import receive_nostr, send_nostr
 
 
 class NaturalOrderGroup(click.Group):
