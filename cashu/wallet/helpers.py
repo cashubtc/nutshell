@@ -201,7 +201,7 @@ async def print_mint_balances(wallet, show_mints=False):
         print("")
 
 
-async def get_mint_wallet(wallet: Wallet, is_api: bool = False, mint_nr: int = None):
+async def get_mint_wallet(wallet: Wallet, mint_nr: int = None):
     """
     Helper function that asks the user for an input to select which mint they want to load.
     Useful for selecting the mint that the user wants to send tokens from.
@@ -213,24 +213,9 @@ async def get_mint_wallet(wallet: Wallet, is_api: bool = False, mint_nr: int = N
     if len(mint_balances) > 1:
         await print_mint_balances(wallet, show_mints=True)
 
-        url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])
-        nr_max = list(mint_balances).index(url_max) + 1
-
-        if not is_api and not mint_nr:
-            mint_nr_str = input(
-                f"Select mint [1-{len(mint_balances)}] or "
-                f"press enter for mint with largest balance (Mint {nr_max}): "
-            )
-            if not mint_nr_str:
-                mint_nr = None
-            elif not mint_nr_str.isdigit():
-                raise Exception("invalid input.")
-            else:
-                mint_nr = int(mint_nr_str)
-
         if not mint_nr:  # largest balance
-            mint_url = url_max
-        elif mint_nr <= len(mint_balances):  # specific
+            mint_url = max(mint_balances, key=lambda v: mint_balances[v]["available"])
+        elif mint_nr <= len(mint_balances):  # specific mint
             mint_url = list(mint_balances.keys())[mint_nr - 1]
         else:
             raise Exception("invalid input.")
@@ -386,7 +371,7 @@ async def send(
     if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
 
-    wallet = await get_mint_wallet(wallet, is_api=is_api, mint_nr=specific_mint)
+    wallet = await get_mint_wallet(wallet, mint_nr=specific_mint)
     await wallet.load_proofs()
 
     _, send_proofs = await wallet.split_to_send(
