@@ -294,72 +294,72 @@ async def receive(
     else:
         script, signature = None, None
 
-        # deserialize token
+    # deserialize token
 
-        # ----- backwards compatibility -----
+    # ----- backwards compatibility -----
 
-        # V2Tokens (0.7-0.11.0) (eyJwcm9...)
-        if token.startswith("eyJwcm9"):
-            try:
-                tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-                token = await serialize_TokenV2_to_TokenV3(tokenv2)
-            except:
-                pass
+    # V2Tokens (0.7-0.11.0) (eyJwcm9...)
+    if token.startswith("eyJwcm9"):
+        try:
+            tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
+            token = await serialize_TokenV2_to_TokenV3(tokenv2)
+        except:
+            pass
 
-        # V1Tokens (<0.7) (W3siaWQ...)
-        if token.startswith("W3siaWQ"):
-            try:
+    # V1Tokens (<0.7) (W3siaWQ...)
+    if token.startswith("W3siaWQ"):
+        try:
 
-                tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-                token = await serialize_TokenV1_to_TokenV3(tokenv1)
-            except:
-                pass
+            tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
+            token = await serialize_TokenV1_to_TokenV3(tokenv1)
+        except:
+            pass
 
-        # ----- receive token -----
+    # ----- receive token -----
 
-        # deserialize token
-        # dtoken = json.loads(base64.urlsafe_b64decode(token))
-        tokenObj = TokenV3.deserialize(token)
+    # deserialize token
+    # dtoken = json.loads(base64.urlsafe_b64decode(token))
+    tokenObj = TokenV3.deserialize(token)
 
-        # tokenObj = TokenV2.parse_obj(dtoken)
-        assert len(tokenObj.token), Exception("no proofs in token")
-        assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
-        includes_mint_info: bool = any([t.mint for t in tokenObj.token])
+    # tokenObj = TokenV2.parse_obj(dtoken)
+    assert len(tokenObj.token), Exception("no proofs in token")
+    assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
+    includes_mint_info: bool = any([t.mint for t in tokenObj.token])
 
-        # if there is a `mints` field in the token
-        # we check whether the token has mints that we don't know yet
-        # and ask the user if they want to trust the new mints
-        if includes_mint_info:
-            # we ask the user to confirm any new mints the tokens may include
-            # await verify_mints(ctx, tokenObj)
-            # redeem tokens with new wallet instances
-            await redeem_TokenV3_multimint(
-                wallet,
-                tokenObj,
-                script,
-                signature,
-                is_api=is_api,
-                trust_new_mint=trust_new_mint,
-            )
-        else:
-            # no mint information present, we extract the proofs and use wallet's default mint
+    # if there is a `mints` field in the token
+    # we check whether the token has mints that we don't know yet
+    # and ask the user if they want to trust the new mints
+    if includes_mint_info:
+        # we ask the user to confirm any new mints the tokens may include
+        # await verify_mints(ctx, tokenObj)
+        # redeem tokens with new wallet instances
+        await redeem_TokenV3_multimint(
+            wallet,
+            tokenObj,
+            script,
+            signature,
+            is_api=is_api,
+            trust_new_mint=trust_new_mint,
+        )
+    else:
+        # no mint information present, we extract the proofs and use wallet's default mint
 
-            proofs = [p for t in tokenObj.token for p in t.proofs]
-            # first we load the mint URL from the DB
-            keyset_in_token = proofs[0].id
-            assert keyset_in_token
-            # we get the keyset from the db
-            mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
-            assert mint_keysets, Exception("we don't know this keyset")
-            assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
-            # now we have the URL
-            mint_wallet = Wallet(
-                mint_keysets.mint_url,
-                os.path.join(settings.cashu_dir, wallet.name),
-            )
-            await mint_wallet.load_mint(keyset_in_token)
-            _, _ = await mint_wallet.redeem(proofs, script, signature)
-            print(f"Received {sum_proofs(proofs)} sats")
+        proofs = [p for t in tokenObj.token for p in t.proofs]
+        # first we load the mint URL from the DB
+        keyset_in_token = proofs[0].id
+        assert keyset_in_token
+        # we get the keyset from the db
+        mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
+        assert mint_keysets, Exception("we don't know this keyset")
+        assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
+        # now we have the URL
+        mint_wallet = Wallet(
+            mint_keysets.mint_url,
+            os.path.join(settings.cashu_dir, wallet.name),
+        )
+        await mint_wallet.load_mint(keyset_in_token)
+        _, _ = await mint_wallet.redeem(proofs, script, signature)
+        print(f"Received {sum_proofs(proofs)} sats")
 
     # reload main wallet so the balance updates
     await wallet.load_proofs()
