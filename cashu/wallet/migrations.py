@@ -43,10 +43,10 @@ async def m001_initial(db: Database):
         """
         CREATE VIEW IF NOT EXISTS balance AS
         SELECT COALESCE(SUM(s), 0) AS balance FROM (
-            SELECT SUM(amount) AS s
+            SELECT SUM(amount) 
             FROM proofs
-            WHERE amount > 0
-        );
+            WHERE amount > 0 
+        ) AS s;
     """
     )
 
@@ -54,10 +54,10 @@ async def m001_initial(db: Database):
         """
         CREATE VIEW IF NOT EXISTS balance_used AS
         SELECT COALESCE(SUM(s), 0) AS used FROM (
-            SELECT SUM(amount) AS s
+            SELECT SUM(amount) 
             FROM proofs_used
-            WHERE amount > 0
-        );
+            WHERE amount > 0 
+        ) AS s;
     """
     )
 
