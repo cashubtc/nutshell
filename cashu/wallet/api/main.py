@@ -1,6 +1,6 @@
 import uvicorn
 
-from cashu.core.settings import settings
+from ...core.settings import settings
 
 
 def main(port=settings.api_port):
