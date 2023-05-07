@@ -2,8 +2,8 @@ import asyncio
 from functools import partial, wraps
 from typing import List
 
-from cashu.core.base import Proof
-from cashu.core.settings import settings
+from ..core.base import Proof
+from ..core.settings import settings
 
 
 def sum_proofs(proofs: List[Proof]):

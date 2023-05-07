@@ -1,9 +1,9 @@
-from typing import Dict, List, Union, Optional
+from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter
 from secp256k1 import PublicKey
 
-from cashu.core.base import (
+from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
@@ -21,9 +21,9 @@ from cashu.core.base import (
     PostSplitRequest,
     PostSplitResponse,
 )
-from cashu.core.errors import CashuError
-from cashu.core.settings import settings
-from cashu.mint.startup import ledger
+from ..core.errors import CashuError
+from ..core.settings import settings
+from ..mint.startup import ledger
 
 router: APIRouter = APIRouter()
 
@@ -97,9 +97,9 @@ async def request_mint(amount: int = 0, description_hash: Optional[bytes] = None
 
     Call `POST /mint` after paying the invoice.
     """
-    payment_request, payment_hash = await ledger.request_mint(amount, description_hash)
+    payment_request, hash = await ledger.request_mint(amount, description_hash)
     print(f"Lightning invoice: {payment_request}")
-    resp = GetMintResponse(pr=payment_request, hash=payment_hash)
+    resp = GetMintResponse(pr=payment_request, hash=hash)
     return resp
 
 
@@ -110,7 +110,8 @@ async def request_mint(amount: int = 0, description_hash: Optional[bytes] = None
 )
 async def mint(
     payload: PostMintRequest,
-    payment_hash: Union[str, None] = None,
+    hash: Optional[str] = None,
+    payment_hash: Optional[str] = None,
 ) -> Union[PostMintResponse, CashuError]:
     """
     Requests the minting of tokens belonging to a paid payment request.
@@ -120,7 +121,12 @@ async def mint(
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
     try:
-        promises = await ledger.mint(payload.outputs, payment_hash=payment_hash)
+        # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
+        # We use the payment_hash to lookup the hash from the database and pass that one along.
+        hash = payment_hash or hash
+        # END: backwards compatibility < 0.12
+
+        promises = await ledger.mint(payload.outputs, hash=hash)
         blinded_signatures = PostMintResponse(promises=promises)
         return blinded_signatures
     except Exception as exc:

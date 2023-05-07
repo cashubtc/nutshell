@@ -4,7 +4,7 @@ import click
 import uvicorn
 from click import Context
 
-from cashu.core.settings import settings
+from ..core.settings import settings
 
 
 @click.command(

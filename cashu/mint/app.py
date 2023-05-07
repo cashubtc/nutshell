@@ -7,8 +7,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
-from cashu.core.settings import settings
-
+from ..core.settings import settings
 from .router import router
 from .startup import start_mint_init
 

@@ -1,6 +1,6 @@
 import re
 
-from cashu.core.db import COCKROACH, POSTGRES, SQLITE, Database
+from ..core.db import COCKROACH, POSTGRES, SQLITE, Database
 
 
 def table_with_schema(db, table: str):
@@ -35,6 +35,7 @@ async def migrate_databases(db: Database, migrations_module):
                             await set_migration_version(conn, db_name, version)
 
     async with db.connect() as conn:
+        exists = None
         if conn.type == SQLITE:
             exists = await conn.fetchone(
                 f"SELECT * FROM sqlite_master WHERE type='table' AND name='{table_with_schema(db, 'dbversions')}'"

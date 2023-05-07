@@ -3,10 +3,12 @@ import json
 from sqlite3 import Row
 from typing import Any, Dict, List, Optional, TypedDict, Union
 
+from loguru import logger
 from pydantic import BaseModel
 
-from cashu.core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
-from cashu.core.secp import PrivateKey, PublicKey
+from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
+from .crypto.secp import PrivateKey, PublicKey
+from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 
 # ------- PROOFS -------
 
@@ -92,7 +94,8 @@ class BlindedMessages(BaseModel):
 class Invoice(BaseModel):
     amount: int
     pr: str
-    hash: Union[None, str] = None
+    hash: str
+    payment_hash: Union[None, str] = None
     preimage: Union[str, None] = None
     issued: Union[None, bool] = False
     paid: Union[None, bool] = False
@@ -111,7 +114,7 @@ class GetInfoResponse(BaseModel):
     version: Optional[str] = None
     description: Optional[str] = None
     description_long: Optional[str] = None
-    contact: Optional[List[str]] = None
+    contact: Optional[List[List[str]]] = None
     nuts: Optional[List[str]] = None
     motd: Optional[str] = None
 
@@ -241,6 +244,8 @@ class WalletKeyset:
         if public_keys:
             self.public_keys = public_keys
             self.id = derive_keyset_id(self.public_keys)
+        if id:
+            assert id == self.id, "id must match derived id from public keys"
 
 
 class MintKeyset:
@@ -267,7 +272,7 @@ class MintKeyset:
         active=None,
         seed: str = "",
         derivation_path: str = "",
-        version: str = "",
+        version: str = "1",
     ):
         self.derivation_path = derivation_path
         self.id = id
@@ -282,16 +287,26 @@ class MintKeyset:
 
     def generate_keys(self, seed):
         """Generates keys of a keyset from a seed."""
-        self.private_keys = derive_keys(seed, self.derivation_path)
+        backwards_compatibility_pre_0_12 = False
+        if (
+            self.version
+            and len(self.version.split(".")) > 1
+            and int(self.version.split(".")[0]) == 0
+            and int(self.version.split(".")[1]) <= 11
+        ):
+            backwards_compatibility_pre_0_12 = True
+            # WARNING: Broken key derivation for backwards compatibility with < 0.12
+            self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
+                seed, self.derivation_path
+            )
+        else:
+            self.private_keys = derive_keys(seed, self.derivation_path)
         self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
         self.id = derive_keyset_id(self.public_keys)  # type: ignore
-
-    def get_keybase(self):
-        assert self.id is not None
-        return {
-            k: KeyBase(id=self.id, amount=k, pubkey=v.serialize().hex())
-            for k, v in self.public_keys.items()  # type: ignore
-        }
+        if backwards_compatibility_pre_0_12:
+            logger.warning(
+                f"WARNING: Using weak key derivation for keyset {self.id} (backwards compatibility < 0.12)"
+            )
 
 
 class MintKeysets:
