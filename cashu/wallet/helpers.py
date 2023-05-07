@@ -357,7 +357,6 @@ async def send(
     amount: int,
     lock: str,
     legacy: bool,
-    is_api: bool = False,
     specific_mint: int = None,
 ):
     """

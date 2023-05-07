@@ -48,7 +48,6 @@ async def send_nostr(
     pubkey: str,
     verbose: bool = False,
     yes: bool = True,
-    is_api: bool = False,
     specific_mint: int = None,
 ):
     """

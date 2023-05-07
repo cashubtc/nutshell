@@ -148,15 +148,13 @@ async def send_command(
     if not nostr:
         try:
             balance, token = await send(
-                wallet, amount, lock, legacy, is_api=True, specific_mint=mint
+                wallet, amount, lock, legacy, specific_mint=mint
             )
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return {"balance": balance, "token sent": token}
     else:
-        token, pubkey = await send_nostr(
-            wallet, amount, nostr, is_api=True, specific_mint=mint
-        )
+        token, pubkey = await send_nostr(wallet, amount, nostr, specific_mint=mint)
         return {
             "balance": wallet.available_balance,
             "token sent": token,
