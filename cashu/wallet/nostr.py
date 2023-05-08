@@ -99,7 +99,6 @@ async def send_nostr(
 async def receive_nostr(
     wallet: Wallet,
     verbose: bool = False,
-    is_api: bool = False,
     trust_new_mint: bool = False,
 ):
     if settings.nostr_private_key is None:
@@ -129,7 +128,6 @@ async def receive_nostr(
                     wallet,
                     decrypted_content,
                     "",
-                    is_api=is_api,
                     trust_new_mint=trust_new_mint,
                 )
             )
