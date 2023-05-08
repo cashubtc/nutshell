@@ -154,7 +154,10 @@ async def send_command(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return {"balance": balance, "token sent": token}
     else:
-        token, pubkey = await send_nostr(wallet, amount, nostr, specific_mint=mint)
+        try:
+            token, pubkey = await send_nostr(wallet, amount, nostr, specific_mint=mint)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return {
             "balance": wallet.available_balance,
             "token sent": token,
@@ -177,8 +180,11 @@ async def receive_command(
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     elif nostr:
-        await receive_nostr(wallet, trust_new_mint=trust)
-        balance = wallet.available_balance
+        try:
+            await receive_nostr(wallet, trust_new_mint=trust)
+            balance = wallet.available_balance
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         balance = None
