@@ -43,7 +43,7 @@ async def verify_mint(mint_wallet: Wallet, url: str, trust_new_mint: bool = Fals
         logger.debug(f"We know keyset {mint_keysets.id} already")
 
 
-async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2, is_api: bool = False):
+async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2):
     """
     A helper function that iterates through all mints in the token and if it has
     not been encountered before, asks the user to confirm.
@@ -75,24 +75,20 @@ async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2, is_api: bool = Fa
             # we check the db whether we know this mint already and ask the user if not
             mint_keysets = await get_keyset(mint_url=mint.url, db=keyset_wallet.db)
             if mint_keysets is None:
-                if is_api:
-                    # via api new mint is trusted
-                    trust_token_mints = True
-                else:
-                    # we encountered a new mint and ask for a user confirmation
-                    trust_token_mints = False
-                    print("")
-                    print("Warning: Tokens are from a mint you don't know yet.")
-                    print("\n")
-                    print(f"Mint URL: {mint.url}")
-                    print(f"Mint keyset: {keyset}")
-                    print("\n")
-                    click.confirm(
-                        f"Do you trust this mint and want to receive the tokens?",
-                        abort=True,
-                        default=True,
-                    )
-                    trust_token_mints = True
+                # we encountered a new mint and ask for a user confirmation
+                trust_token_mints = False
+                print("")
+                print("Warning: Tokens are from a mint you don't know yet.")
+                print("\n")
+                print(f"Mint URL: {mint.url}")
+                print(f"Mint keyset: {keyset}")
+                print("\n")
+                click.confirm(
+                    f"Do you trust this mint and want to receive the tokens?",
+                    abort=True,
+                    default=True,
+                )
+                trust_token_mints = True
             else:
                 logger.debug(f"We know keyset {mint_keysets.id} already")
     assert trust_token_mints, Exception("Aborted!")
