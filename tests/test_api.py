@@ -22,7 +22,7 @@ def test_balance():
         assert response.status_code == 200
         assert response.json()["balance"]
         assert response.json()["keysets"]
-        assert response.json()["mint 1"]
+        assert response.json()["mints"]
 
 
 def test_send(mint):
