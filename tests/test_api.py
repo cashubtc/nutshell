@@ -4,8 +4,6 @@ from fastapi.testclient import TestClient
 from cashu.core.settings import settings
 from cashu.wallet.api.app import app
 
-# from tests.conftest import mint, app
-
 
 def test_invoice(mint):
     with TestClient(app) as client:

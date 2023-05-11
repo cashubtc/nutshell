@@ -24,10 +24,11 @@ SERVER_ENDPOINT = "http://localhost:3337"
 
 
 class UvicornServer(multiprocessing.Process):
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, private_key: str = "TEST_PRIVATE_KEY"):
         super().__init__()
         self.server = Server(config=config)
         self.config = config
+        self.private_key = private_key
 
     def stop(self):
         self.terminate()
@@ -37,7 +38,7 @@ class UvicornServer(multiprocessing.Process):
         settings.mint_lightning_backend = "FakeWallet"
         settings.mint_listen_port = 3337
         settings.mint_database = "data/test_mint"
-        settings.mint_private_key = "TEST_PRIVATE_KEY"
+        settings.mint_private_key = self.private_key
         settings.mint_derivation_path = "0/0/0/0"
 
         dirpath = Path(settings.mint_database)
@@ -102,7 +103,7 @@ def mint_3338():
         host="127.0.0.1",
     )
 
-    server = UvicornServer(config=config)
+    server = UvicornServer(config=config, private_key="SECOND_PRIVATE_KEY")
     server.start()
     time.sleep(1)
     yield server
