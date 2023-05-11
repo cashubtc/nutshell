@@ -276,9 +276,6 @@ async def send_command(
     default=False,
     type=bool,
 )
-@click.option(
-    "--trust", "-t", help="Trust unknown mint", is_flag=True, default=False, type=bool
-)
 @click.pass_context
 @coro
 async def receive_cli(
@@ -288,7 +285,6 @@ async def receive_cli(
     nostr: bool,
     all: bool,
     verbose: bool,
-    trust: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()
@@ -313,6 +309,13 @@ async def receive_cli(
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 tokenObj = TokenV3.deserialize(token)
+                # verify that we trust all mints in these tokens
+                # ask the user if they want to trust the new mints
+                for mint_url in set([t.mint for t in tokenObj.token if t.mint]):
+                    mint_wallet = Wallet(
+                        mint_url, os.path.join(settings.cashu_dir, wallet.name)
+                    )
+                    await verify_mint(mint_wallet, mint_url)
                 await receive(wallet, tokenObj, lock)
     else:
         print("Error: enter token or use either flag --nostr or --all.")
