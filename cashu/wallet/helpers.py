@@ -20,17 +20,6 @@ async def init_wallet(wallet: Wallet):
     await wallet.load_proofs()
 
 
-async def verify_mints(wallet, token: TokenV3):
-    # verify mints
-    mints = set([t.mint for t in TokenV3.token])
-    if None in mints:
-        raise Exception("Token has missing mint information.")
-    for mint in mints:
-        assert mint
-        mint_keysets = await get_keyset(mint_url=mint, db=wallet.db)
-        assert mint_keysets, "We don't know this mint."
-
-
 async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2):
     """
     A helper function that iterates through all mints in the token and if it has

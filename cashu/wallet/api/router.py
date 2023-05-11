@@ -18,15 +18,10 @@ from ...wallet.crud import (
     get_reserved_proofs,
     get_unused_locks,
 )
-from ...wallet.helpers import (
-    deserialize_token_from_string,
-    init_wallet,
-    receive,
-    send,
-    verify_mints,
-)
+from ...wallet.helpers import deserialize_token_from_string, init_wallet, receive, send
 from ...wallet.nostr import receive_nostr, send_nostr
 from ...wallet.wallet import Wallet as Wallet
+from .api_helpers import verify_mints
 
 router: APIRouter = APIRouter()
 
