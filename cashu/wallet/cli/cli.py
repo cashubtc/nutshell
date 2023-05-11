@@ -23,8 +23,8 @@ from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
 from ...wallet.wallet import Wallet as Wallet
-from ..helpers import init_wallet, receive, send
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
+from ..helpers import init_wallet, receive, send, deserialize_token_from_string
 from ..nostr import receive_nostr, send_nostr
 
 
@@ -305,7 +305,7 @@ async def receive_cli(
     wallet.status()
 
     if token:
-        tokenObj = TokenV3.deserialize(token)
+        tokenObj = await deserialize_token_from_string(token)
         # verify that we trust all mints in these tokens
         # ask the user if they want to trust the new mints
         for mint_url in set([t.mint for t in tokenObj.token if t.mint]):

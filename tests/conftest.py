@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import pytest_asyncio
 import uvicorn
+from fastapi import FastAPI
 from uvicorn import Config, Server
 
 from cashu.core.db import Database
@@ -16,6 +17,7 @@ from cashu.lightning.fake import FakeWallet
 from cashu.mint import migrations as migrations_mint
 from cashu.mint.ledger import Ledger
 from cashu.wallet import migrations as migrations_wallet
+from cashu.wallet.api.router import router
 from cashu.wallet.wallet import Wallet
 
 SERVER_ENDPOINT = "http://localhost:3337"
@@ -86,3 +88,22 @@ async def ledger():
     )
     await start_mint_init(ledger)
     yield ledger
+
+
+@pytest.fixture(autouse=True, scope="session")
+def mint_3338():
+    settings.mint_listen_port = 3338
+    settings.port = 3338
+    settings.mint_url = "http://localhost:3338"
+    settings.port = settings.mint_listen_port
+    config = uvicorn.Config(
+        "cashu.mint.app:app",
+        port=settings.mint_listen_port,
+        host="127.0.0.1",
+    )
+
+    server = UvicornServer(config=config)
+    server.start()
+    time.sleep(1)
+    yield server
+    server.stop()

@@ -13,7 +13,7 @@ from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
-from ...wallet.helpers import init_wallet, receive, send, deserialize_token_from_string
+from ...wallet.helpers import deserialize_token_from_string, init_wallet, receive, send
 from ...wallet.nostr import receive_nostr, send_nostr
 from ...wallet.wallet import Wallet as Wallet
 
