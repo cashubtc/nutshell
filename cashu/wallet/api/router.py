@@ -4,6 +4,7 @@ from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -30,6 +31,16 @@ def create_wallet(url=settings.mint_url, dir=settings.cashu_dir, name="wallet"):
     return Wallet(url, os.path.join(dir, name), name=name)
 
 
+async def load_mint(wallet: Wallet, mint: Optional[str] = None):
+    if mint:
+        wallet = create_wallet(mint)
+    try:
+        await wallet.load_mint()
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return wallet
+
+
 wallet = create_wallet()
 
 
@@ -44,13 +55,19 @@ async def start_wallet():
 
 @router.post("/pay", name="Pay lightning invoice")
 async def pay(
-    invoice: str = Query(default=..., description="Lightning invoice to pay")
+    invoice: str = Query(default=..., description="Lightning invoice to pay"),
+    mint: str = Query(
+        default=None,
+        description="Mint URL to pay from (None for default mint)",
+    ),
 ):
     if not settings.lightning:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="lightning not enabled."
         )
-    await wallet.load_mint()
+    global wallet
+    wallet = await load_mint(wallet, mint)
+
     await wallet.load_proofs()
     initial_balance = wallet.available_balance
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
@@ -78,8 +95,13 @@ async def pay(
 async def invoice(
     amount: int = Query(default=..., description="Amount to request in invoice"),
     hash: str = Query(default=None, description="Hash of paid invoice"),
+    mint: str = Query(
+        default=None,
+        description="Mint URL to create an invoice at (None for default mint)",
+    ),
 ):
-    await wallet.load_mint()
+    global wallet
+    wallet = await load_mint(wallet, mint)
     initial_balance = wallet.available_balance
     if not settings.lightning:
         r = await wallet.mint(amount)
@@ -125,21 +147,21 @@ async def send_command(
     amount: int = Query(default=..., description="Amount to send"),
     nostr: str = Query(default=None, description="Send to nostr pubkey"),
     lock: str = Query(default=None, description="Lock tokens (P2SH)"),
-    legacy: bool = Query(
-        default=False, description="Legacy token without mint information"
-    ),
-    mint: int = Query(
+    mint: str = Query(
         default=None,
-        description="Select mint to send from (None for mint with maximum balance, "
-        "integer for specific mint)",
+        description="Mint URL to send from (None for default mint)",
     ),
 ):
+    global wallet
+    wallet = await load_mint(wallet, mint)
+
+    await wallet.load_proofs()
     if not nostr:
         try:
-            balance, token = await send(wallet, amount, lock, legacy)
+            balance, token = await send(wallet, amount, lock, legacy=False)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        return {"balance": balance, "token sent": token}
+        return {"balance": balance, "token": token}
     else:
         try:
             token, pubkey = await send_nostr(wallet, amount, nostr)
@@ -147,7 +169,7 @@ async def send_command(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return {
             "balance": wallet.available_balance,
-            "token_sent": token,
+            "token": token,
             "npub": pubkey,
         }
 
@@ -219,9 +241,14 @@ async def burn(
         default=None,
         description="Forcefully delete pending token by send ID if mint is unavailable",
     ),
+    mint: str = Query(
+        default=None,
+        description="Mint URL to burn from (None for default mint)",
+    ),
 ):
+    global wallet
     if not delete:
-        await wallet.load_mint()
+        wallet = await load_mint(wallet, mint)
     if not (all or token or force or delete) or (token and all):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
