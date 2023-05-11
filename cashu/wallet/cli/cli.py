@@ -23,7 +23,8 @@ from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
 from ...wallet.wallet import Wallet as Wallet
-from ..helpers import init_wallet, print_mint_balances, receive, send
+from ..helpers import init_wallet, receive, send, deserialize_token_from_string
+from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
 from ..nostr import receive_nostr, send_nostr
 
 
@@ -70,7 +71,20 @@ def cli(ctx: Context, host: str, walletname: str):
     )
     ctx.obj["WALLET"] = wallet
     asyncio.run(init_wallet(wallet))
-    pass
+
+    # MUTLIMINT: Select a wallet
+    # we only select a mint for a subset of commands
+    if ctx.invoked_subcommand not in ["send", "invoice", "pay"]:
+        return
+    # if a mint host is already specified in the context, use it
+    if ctx.obj["HOST"] != settings.mint_url:
+        return
+    # else: we ask the user to select one
+    ctx.obj["WALLET"] = wallet  # set a wallet for get_mint_wallet in the next step
+    ctx.obj["WALLET"] = asyncio.run(
+        get_mint_wallet(ctx)
+    )  # select a specific wallet by CLI input
+    asyncio.run(init_wallet(ctx.obj["WALLET"]))
 
 
 # https://github.com/pallets/click/issues/85#issuecomment-503464628
@@ -251,11 +265,9 @@ async def send_command(
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     if not nostr and not nopt:
-        await send(wallet, amount, lock, legacy, specific_mint=mint)
+        await send(wallet, amount, lock, legacy)
     else:
-        await send_nostr(
-            wallet, amount, nostr or nopt, verbose, yes, specific_mint=mint
-        )
+        await send_nostr(wallet, amount, nostr or nopt, verbose, yes)
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -291,17 +303,31 @@ async def receive_cli(
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     wallet.status()
+
     if token:
-        await receive(wallet, token, lock, trust_new_mint=trust)
+        tokenObj = await deserialize_token_from_string(token)
+        # verify that we trust all mints in these tokens
+        # ask the user if they want to trust the new mints
+        for mint_url in set([t.mint for t in tokenObj.token]):
+            assert mint_url, Exception("multimint redeem without URL")
+            mint_wallet = Wallet(
+                mint_url, os.path.join(settings.cashu_dir, wallet.name)
+            )
+            await verify_mint(mint_wallet, mint_url)
+
+        await receive(wallet, tokenObj, lock)
     elif nostr:
-        await receive_nostr(wallet, verbose, trust_new_mint=trust)
+        await receive_nostr(wallet, verbose)
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
             for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
-                await receive(wallet, token, lock, trust_new_mint=trust)
+                tokenObj = await deserialize_token_from_string(
+                    token
+                )  # NOTE: super ugly back and forth
+                await receive(wallet, tokenObj, lock)
     else:
         print("Error: enter token or use either flag --nostr or --all.")
 

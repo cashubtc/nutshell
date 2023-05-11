@@ -604,6 +604,7 @@ class Wallet(LedgerAPI):
                 preimage=status.preimage,
                 paid=True,
                 time_paid=time.time(),
+                hash="",
             )
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 

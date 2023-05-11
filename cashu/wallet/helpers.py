@@ -20,29 +20,6 @@ async def init_wallet(wallet: Wallet):
     await wallet.load_proofs()
 
 
-async def verify_mint(mint_wallet: Wallet, url: str, trust_new_mint: bool = False):
-    """A helper function that asks the user if they trust the mint if the user
-    has not encountered the mint before (there is no entry in the database).
-
-    Throws an Exception if the user chooses to not trust the mint.
-    """
-    logger.debug(f"Verifying mint {url}")
-    # dummy Wallet to check the database later
-    # mint_wallet = Wallet(url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]))
-    # we check the db whether we know this mint already and ask the user if not
-    mint_keysets = await get_keyset(mint_url=url, db=mint_wallet.db)
-    if mint_keysets is None and not trust_new_mint:
-        raise Exception(
-            "Tokens are from a mint you don't know yet. "
-            f"Mint URL: {url}. "
-            "To continue call receive with trust=True."
-        )
-    elif mint_keysets is None and trust_new_mint:
-        logger.debug(f"We trust new mint with URL {url}")
-    else:
-        logger.debug(f"We know keyset {mint_keysets.id} already")
-
-
 async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2):
     """
     A helper function that iterates through all mints in the token and if it has
@@ -56,7 +33,6 @@ async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2):
         return
     proofs_keysets = set([p.id for p in token.proofs])
 
-    logger.debug(f"Verifying mints")
     trust_token_mints = True
     for mint in token.mints:
         for keyset in set([id for id in mint.ids if id in proofs_keysets]):
@@ -130,7 +106,6 @@ async def redeem_TokenV3_multimint(
     token: TokenV3,
     script,
     signature,
-    trust_new_mint: bool = False,
 ):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
@@ -139,7 +114,6 @@ async def redeem_TokenV3_multimint(
     for t in token.token:
         assert t.mint, Exception("Multimint redeem without URL")
         mint_wallet = Wallet(t.mint, os.path.join(settings.cashu_dir, wallet.name))
-        await verify_mint(mint_wallet, t.mint, trust_new_mint=trust_new_mint)
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
         logger.debug(f"Keysets in tokens: {keysets}")
         # loop over all keysets
@@ -153,58 +127,32 @@ async def redeem_TokenV3_multimint(
             print(f"Received {sum_proofs(redeem_proofs)} sats")
 
 
-async def print_mint_balances(wallet, show_mints=False):
-    """
-    Helper function that prints the balances for each mint URL that we have tokens from.
-    """
-    # get balances per mint
-    mint_balances = await wallet.balance_per_minturl()
+# async def get_mint_wallet(wallet: Wallet, mint_nr: int = None):
+#     """
+#     Helper function that asks the user for an input to select which mint they want to load.
+#     Useful for selecting the mint that the user wants to send tokens from.
+#     """
 
-    # if we have a balance on a non-default mint, we show its URL
-    keysets = [k for k, v in wallet.balance_per_keyset().items()]
-    for k in keysets:
-        ks = await get_keyset(id=str(k), db=wallet.db)
-        if ks and ks.mint_url != wallet.url:
-            show_mints = True
+#     mint_balances = await wallet.balance_per_minturl()
 
-    # or we have a balance on more than one mint
-    # show balances per mint
-    if len(mint_balances) > 1 or show_mints:
-        print(f"You have balances in {len(mint_balances)} mints:")
-        print("")
-        for i, (k, v) in enumerate(mint_balances.items()):
-            print(
-                f"Mint {i+1}: Balance: {v['available']} sat (pending: {v['balance']-v['available']} sat) URL: {k}"
-            )
-        print("")
+#     # if we have balances on more than one mint, we ask the user to select one
+#     if len(mint_balances) > 1:
+#         await print_mint_balances(wallet, show_mints=True)
 
+#         if not mint_nr:  # largest balance
+#             mint_url = max(mint_balances, key=lambda v: mint_balances[v]["available"])
+#         elif mint_nr <= len(mint_balances):  # specific mint
+#             mint_url = list(mint_balances.keys())[mint_nr - 1]
+#         else:
+#             raise Exception("invalid input.")
+#     else:
+#         mint_url = list(mint_balances.keys())[0]
 
-async def get_mint_wallet(wallet: Wallet, mint_nr: int = None):
-    """
-    Helper function that asks the user for an input to select which mint they want to load.
-    Useful for selecting the mint that the user wants to send tokens from.
-    """
+#     # load this mint_url into a wallet
+#     mint_wallet = Wallet(mint_url, os.path.join(settings.cashu_dir, wallet.name))
+#     await mint_wallet.load_mint()
 
-    mint_balances = await wallet.balance_per_minturl()
-
-    # if we have balances on more than one mint, we ask the user to select one
-    if len(mint_balances) > 1:
-        await print_mint_balances(wallet, show_mints=True)
-
-        if not mint_nr:  # largest balance
-            mint_url = max(mint_balances, key=lambda v: mint_balances[v]["available"])
-        elif mint_nr <= len(mint_balances):  # specific mint
-            mint_url = list(mint_balances.keys())[mint_nr - 1]
-        else:
-            raise Exception("invalid input.")
-    else:
-        mint_url = list(mint_balances.keys())[0]
-
-    # load this mint_url into a wallet
-    mint_wallet = Wallet(mint_url, os.path.join(settings.cashu_dir, wallet.name))
-    await mint_wallet.load_mint()
-
-    return mint_wallet
+#     return mint_wallet
 
 
 async def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
@@ -235,11 +183,43 @@ async def serialize_TokenV1_to_TokenV3(tokenv1: TokenV1):
     return token_serialized
 
 
+async def deserialize_token_from_string(token: str) -> TokenV3:
+    # deserialize token
+
+    # ----- backwards compatibility -----
+
+    # V2Tokens (0.7-0.11.0) (eyJwcm9...)
+    if token.startswith("eyJwcm9"):
+        try:
+            tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
+            token = await serialize_TokenV2_to_TokenV3(tokenv2)
+        except:
+            pass
+
+    # V1Tokens (<0.7) (W3siaWQ...)
+    if token.startswith("W3siaWQ"):
+        try:
+            tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
+            token = await serialize_TokenV1_to_TokenV3(tokenv1)
+        except:
+            pass
+
+    # ----- receive token -----
+
+    # deserialize token
+    # dtoken = json.loads(base64.urlsafe_b64decode(token))
+    tokenObj = TokenV3.deserialize(token)
+
+    # tokenObj = TokenV2.parse_obj(dtoken)
+    assert len(tokenObj.token), Exception("no proofs in token")
+    assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
+    return tokenObj
+
+
 async def receive(
     wallet: Wallet,
-    token: str,
+    tokenObj: TokenV3,
     lock: str,
-    trust_new_mint: bool = False,
 ):
     # await wallet.load_mint()
 
@@ -256,51 +236,15 @@ async def receive(
     else:
         script, signature = None, None
 
-    # deserialize token
-
-    # ----- backwards compatibility -----
-
-    # V2Tokens (0.7-0.11.0) (eyJwcm9...)
-    if token.startswith("eyJwcm9"):
-        try:
-            tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-            token = await serialize_TokenV2_to_TokenV3(tokenv2)
-        except:
-            pass
-
-    # V1Tokens (<0.7) (W3siaWQ...)
-    if token.startswith("W3siaWQ"):
-        try:
-
-            tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-            token = await serialize_TokenV1_to_TokenV3(tokenv1)
-        except:
-            pass
-
-    # ----- receive token -----
-
-    # deserialize token
-    # dtoken = json.loads(base64.urlsafe_b64decode(token))
-    tokenObj = TokenV3.deserialize(token)
-
-    # tokenObj = TokenV2.parse_obj(dtoken)
-    assert len(tokenObj.token), Exception("no proofs in token")
-    assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
     includes_mint_info: bool = any([t.mint for t in tokenObj.token])
 
-    # if there is a `mints` field in the token
-    # we check whether the token has mints that we don't know yet
-    # and ask the user if they want to trust the new mints
     if includes_mint_info:
-        # we ask the user to confirm any new mints the tokens may include
-        # await verify_mints(ctx, tokenObj)
         # redeem tokens with new wallet instances
         await redeem_TokenV3_multimint(
             wallet,
             tokenObj,
             script,
             signature,
-            trust_new_mint=trust_new_mint,
         )
     else:
         # no mint information present, we extract the proofs and use wallet's default mint
@@ -333,7 +277,6 @@ async def send(
     amount: int,
     lock: str,
     legacy: bool,
-    specific_mint: int = None,
 ):
     """
     Prints token to send to stdout.
@@ -346,8 +289,7 @@ async def send(
     if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
 
-    wallet = await get_mint_wallet(wallet, mint_nr=specific_mint)
-    await wallet.load_proofs()
+    await wallet.load_mint()
 
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, amount, lock, set_reserved=True

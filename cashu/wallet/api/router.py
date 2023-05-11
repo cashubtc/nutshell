@@ -13,7 +13,7 @@ from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
-from ...wallet.helpers import init_wallet, receive, send
+from ...wallet.helpers import init_wallet, receive, send, deserialize_token_from_string
 from ...wallet.nostr import receive_nostr, send_nostr
 from ...wallet.wallet import Wallet as Wallet
 
@@ -147,15 +147,13 @@ async def send_command(
 ):
     if not nostr:
         try:
-            balance, token = await send(
-                wallet, amount, lock, legacy, specific_mint=mint
-            )
+            balance, token = await send(wallet, amount, lock, legacy)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return {"balance": balance, "token sent": token}
     else:
         try:
-            token, pubkey = await send_nostr(wallet, amount, nostr, specific_mint=mint)
+            token, pubkey = await send_nostr(wallet, amount, nostr)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return {
@@ -171,17 +169,16 @@ async def receive_command(
     lock: str = Query(default=None, description="Unlock tokens"),
     nostr: bool = Query(default=False, description="Receive tokens via nostr"),
     all: bool = Query(default=False, description="Receive all pending tokens"),
-    trust: bool = Query(default=False, description="Trust unknown mint"),
 ):
     result = {"initial balance": wallet.available_balance}
     if token:
         try:
-            balance = await receive(wallet, token, lock, trust_new_mint=trust)
+            balance = await receive(wallet, token, lock)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     elif nostr:
         try:
-            await receive_nostr(wallet, trust_new_mint=trust)
+            await receive_nostr(wallet)
             balance = wallet.available_balance
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -192,8 +189,9 @@ async def receive_command(
             for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
+                tokenObj = await deserialize_token_from_string(token)
                 try:
-                    balance = await receive(wallet, token, lock, trust_new_mint=trust)
+                    balance = await receive(wallet, tokenObj, lock)
                 except Exception as e:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
@@ -203,6 +201,7 @@ async def receive_command(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="enter token or use either flag --nostr or --all.",
         )
+    assert balance
     result.update({"balance": balance})
     return result
 

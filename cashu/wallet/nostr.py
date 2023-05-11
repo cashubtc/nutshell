@@ -10,7 +10,8 @@ from ..nostr.nostr.client.client import NostrClient
 from ..nostr.nostr.event import Event
 from ..nostr.nostr.key import PublicKey
 from .crud import get_nostr_last_check_timestamp, set_nostr_last_check_timestamp
-from .helpers import get_mint_wallet, receive
+from .helpers import receive
+from .cli.cli_helpers import get_mint_wallet
 from .wallet import Wallet
 
 
@@ -48,13 +49,10 @@ async def send_nostr(
     pubkey: str,
     verbose: bool = False,
     yes: bool = True,
-    specific_mint: int = None,
 ):
     """
     Sends tokens via nostr.
     """
-    # load a wallet for the chosen mint
-    wallet = await get_mint_wallet(wallet, mint_nr=specific_mint)
 
     if "@" in pubkey or "." in pubkey:
         # matches user@domain.com and domain.com (which is _@domain.com)
@@ -99,7 +97,6 @@ async def send_nostr(
 async def receive_nostr(
     wallet: Wallet,
     verbose: bool = False,
-    trust_new_mint: bool = False,
 ):
     if settings.nostr_private_key is None:
         print(
@@ -128,7 +125,6 @@ async def receive_nostr(
                     wallet,
                     decrypted_content,
                     "",
-                    trust_new_mint=trust_new_mint,
                 )
             )
         except Exception as e:
