@@ -60,11 +60,11 @@ async def pay(
     await wallet.pay_lightning(send_proofs, invoice)
     await wallet.load_proofs()
     return {
-        "initial balance": initial_balance,
-        "total amount": total_amount,
         "amount": total_amount - fee_reserve_sat,
         "fee": fee_reserve_sat,
-        "final balance": wallet.available_balance,
+        "amount_with_fee": total_amount,
+        "initial_balance": initial_balance,
+        "balance": wallet.available_balance,
     }
 
 
@@ -80,14 +80,14 @@ async def invoice(
         return {
             "amount": amount,
             "balance": wallet.available_balance,
-            "initial balance": initial_balance,
+            "initial_balance": initial_balance,
         }
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)
         return {
             "invoice": invoice,
             "balance": wallet.available_balance,
-            "initial balance": initial_balance,
+            "initial_balance": initial_balance,
         }
     elif amount and hash:
         await wallet.mint(amount, hash)
@@ -95,7 +95,7 @@ async def invoice(
             "amount": amount,
             "hash": hash,
             "balance": wallet.available_balance,
-            "initial balance": initial_balance,
+            "initial_balance": initial_balance,
         }
     return
 
@@ -103,24 +103,24 @@ async def invoice(
 @router.get("/balance", name="Balance", summary="Display balance.")
 async def balance():
     await wallet.load_proofs()
-    result = {"balance": wallet.available_balance}
+    result: dict = {"balance": wallet.available_balance}
     keyset_balances = wallet.balance_per_keyset()
     for k, v in keyset_balances.items():
         result.update(
             {
-                "balance per keyset": {  # type: ignore
-                    f"{k}": {
+                "keysets": {
+                    f"{k if k else ''}": {
                         "available": v["available"],
                         "pending": v["balance"] - v["available"],
                     }
-                }
+                },
             }
         )
     mint_balances = await wallet.balance_per_minturl()
     for i, (k, v) in enumerate(mint_balances.items()):
         result.update(
             {
-                f"mint {i+1}": {  # type: ignore
+                f"mint {i+1}": {
                     "url": k,
                     "available": v["available"],
                     "pending": v["balance"] - v["available"],
@@ -158,7 +158,7 @@ async def send_command(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
         return {
             "balance": wallet.available_balance,
-            "token sent": token,
+            "token_sent": token,
             "npub": pubkey,
         }
 
@@ -187,7 +187,7 @@ async def receive_command(
         reserved_proofs = await get_reserved_proofs(wallet.db)
         balance = None
         if len(reserved_proofs):
-            for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
+            for _, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 tokenObj = await deserialize_token_from_string(token)
@@ -257,7 +257,7 @@ async def pending(
     ),
 ):
     reserved_proofs = await get_reserved_proofs(wallet.db)
-    result = {}
+    result: dict = {}
     if len(reserved_proofs):
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))  # type: ignore
         if number:
@@ -279,7 +279,7 @@ async def pending(
             ).strftime("%Y-%m-%d %H:%M:%S")
             result.update(
                 {
-                    f"{i}": {  # type: ignore
+                    f"{i}": {
                         "amount": sum_proofs(grouped_proofs),
                         "time": reserved_date,
                         "ID": key,
