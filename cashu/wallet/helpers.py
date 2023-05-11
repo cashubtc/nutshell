@@ -112,7 +112,9 @@ async def redeem_TokenV3_multimint(
     these mints one keyset at a time.
     """
     for t in token.token:
-        assert t.mint, Exception("Multimint redeem without URL")
+        assert t.mint, Exception(
+            "redeem_TokenV3_multimint: multimint redeem without URL"
+        )
         mint_wallet = Wallet(t.mint, os.path.join(settings.cashu_dir, wallet.name))
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
         logger.debug(f"Keysets in tokens: {keysets}")

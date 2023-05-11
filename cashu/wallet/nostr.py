@@ -57,7 +57,7 @@ async def send_nostr(
     if "@" in pubkey or "." in pubkey:
         # matches user@domain.com and domain.com (which is _@domain.com)
         pubkey = await nip5_to_pubkey(wallet, pubkey)
-
+    await wallet.load_mint()
     await wallet.load_proofs()
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, amount, set_reserved=True

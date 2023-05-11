@@ -308,8 +308,7 @@ async def receive_cli(
         tokenObj = await deserialize_token_from_string(token)
         # verify that we trust all mints in these tokens
         # ask the user if they want to trust the new mints
-        for mint_url in set([t.mint for t in tokenObj.token]):
-            assert mint_url, Exception("multimint redeem without URL")
+        for mint_url in set([t.mint for t in tokenObj.token if t.mint]):
             mint_wallet = Wallet(
                 mint_url, os.path.join(settings.cashu_dir, wallet.name)
             )
