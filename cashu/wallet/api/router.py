@@ -278,9 +278,6 @@ async def burn(
 
 @router.get("/pending", name="Show pending tokens")
 async def pending(
-    legacy: bool = Query(
-        default=False, description="Legacy token without mint information"
-    ),
     number: int = Query(default=None, description="Show only n pending tokens"),
     offset: int = Query(
         default=0, description="Show pending tokens only starting from offset"
@@ -320,13 +317,6 @@ async def pending(
                     }
                 }
             )
-
-            if legacy:
-                token_legacy = await wallet.serialize_proofs(
-                    grouped_proofs,
-                    legacy=True,
-                )
-                result = {"Legacy token": token_legacy}
     return result
 
 
@@ -341,9 +331,9 @@ async def lock():
 async def locks():
     locks = await get_unused_locks(db=wallet.db)
     if len(locks):
-        return {"unused receiving locks": locks}
+        return {"locks": locks}
     else:
-        return {"unused receiving locks": []}
+        return {"locks": []}
 
 
 @router.get("/invoices", name="List all pending invoices")
@@ -393,22 +383,24 @@ async def wallets():
 async def info():
     general = {
         "version": settings.version,
-        "wallet name": wallet.name,
+        "wallet": wallet.name,
         "debug": settings.debug,
-        "cashu dir": settings.cashu_dir,
-        "mint URL": settings.mint_url,
+        "cashu_dir": settings.cashu_dir,
+        "mint_url": settings.mint_url,
     }
     if settings.env_file:
         general.update({"settings": settings.env_file})
     if settings.tor:
-        general.update({"tor enabled": settings.tor})
+        general.update({"tor": settings.tor})
     if settings.nostr_private_key:
         try:
             client = NostrClient(private_key=settings.nostr_private_key, connect=False)
             general.update(
                 {
-                    "nostr public key": client.private_key.bech32(),
-                    "nostr relays": settings.nostr_relays,
+                    "nostr": {
+                        "public_key": client.private_key.bech32(),
+                        "relays": settings.nostr_relays,
+                    },
                 }
             )
         except:
