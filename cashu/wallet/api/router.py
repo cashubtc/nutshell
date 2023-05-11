@@ -186,12 +186,12 @@ async def receive_command(
         try:
             tokenObj: TokenV3 = await deserialize_token_from_string(token)
 
-            try:
-                await verify_mints(wallet, tokenObj)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-                )
+            # try:
+            #     await verify_mints(wallet, tokenObj)
+            # except Exception as e:
+            #     raise HTTPException(
+            #         status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+            #     )
 
             balance = await receive(wallet, tokenObj, lock)
         except Exception as e:
@@ -210,12 +210,12 @@ async def receive_command(
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 tokenObj = await deserialize_token_from_string(token)
-                try:
-                    await verify_mints(wallet, tokenObj)
-                except Exception as e:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-                    )
+                # try:
+                #     await verify_mints(wallet, tokenObj)
+                # except Exception as e:
+                #     raise HTTPException(
+                #         status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+                #     )
                 try:
                     balance = await receive(wallet, tokenObj, lock)
                 except Exception as e:
