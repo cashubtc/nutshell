@@ -320,7 +320,10 @@ class LedgerAPI:
         resp = self.s.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
-            params={"hash": hash},
+            params={
+                "hash": hash,
+                "payment_hash": hash, # backwards compatibility pre 0.12.0
+                    },
         )
         resp.raise_for_status()
         reponse_dict = resp.json()
