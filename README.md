@@ -168,6 +168,13 @@ Balance: 0 sat
 Balance: 69 sat
 ```
 
+# Starting the wallet API daemon
+Nutshell wallet can be used in daemon mode that can be controlled through a REST API:
+```bash
+poetry run api
+```
+
+You can find the API docs at [http://localhost:4448/docs](http://localhost:4448/docs).
 
 # Running a mint
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
