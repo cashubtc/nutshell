@@ -292,7 +292,7 @@ async def send(
         p2sh = True
 
     await wallet.load_mint()
-
+    await wallet.load_proofs()
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, amount, lock, set_reserved=True
     )

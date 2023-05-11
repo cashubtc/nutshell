@@ -41,7 +41,7 @@ def test_pending():
         assert response.json()["0"]
 
 
-def test_receive(mint):
+def test_receive_all(mint):
     with TestClient(app) as client:
         response = client.post("/receive?all=true")
         assert response.status_code == 200
@@ -49,7 +49,7 @@ def test_receive(mint):
         assert response.json()["balance"]
 
 
-def test_burn(mint):
+def test_burn_all(mint):
     with TestClient(app) as client:
         response = client.post("/send?amount=20")
         assert response.status_code == 200

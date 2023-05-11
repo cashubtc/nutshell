@@ -23,7 +23,7 @@ from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
 from ...wallet.wallet import Wallet as Wallet
-from ..helpers import init_wallet, receive, send, deserialize_token_from_string
+from ..helpers import init_wallet, receive, send
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
 from ..nostr import receive_nostr, send_nostr
 
@@ -305,7 +305,7 @@ async def receive_cli(
     wallet.status()
 
     if token:
-        tokenObj = await deserialize_token_from_string(token)
+        tokenObj = TokenV3.deserialize(token)
         # verify that we trust all mints in these tokens
         # ask the user if they want to trust the new mints
         for mint_url in set([t.mint for t in tokenObj.token if t.mint]):
@@ -323,9 +323,7 @@ async def receive_cli(
             for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
-                tokenObj = await deserialize_token_from_string(
-                    token
-                )  # NOTE: super ugly back and forth
+                tokenObj = TokenV3.deserialize(token)
                 await receive(wallet, tokenObj, lock)
     else:
         print("Error: enter token or use either flag --nostr or --all.")

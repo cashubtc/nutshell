@@ -108,7 +108,7 @@ async def balance():
     for k, v in keyset_balances.items():
         result.update(
             {
-                "balance per keyset": {
+                "balance per keyset": {  # type: ignore
                     f"{k}": {
                         "available": v["available"],
                         "pending": v["balance"] - v["available"],
@@ -120,7 +120,7 @@ async def balance():
     for i, (k, v) in enumerate(mint_balances.items()):
         result.update(
             {
-                f"mint {i+1}": {
+                f"mint {i+1}": {  # type: ignore
                     "url": k,
                     "available": v["available"],
                     "pending": v["balance"] - v["available"],
@@ -173,7 +173,8 @@ async def receive_command(
     result = {"initial balance": wallet.available_balance}
     if token:
         try:
-            balance = await receive(wallet, token, lock)
+            tokenObj = await deserialize_token_from_string(token)
+            balance = await receive(wallet, tokenObj, lock)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     elif nostr:
@@ -278,7 +279,7 @@ async def pending(
             ).strftime("%Y-%m-%d %H:%M:%S")
             result.update(
                 {
-                    f"{i}": {
+                    f"{i}": {  # type: ignore
                         "amount": sum_proofs(grouped_proofs),
                         "time": reserved_date,
                         "ID": key,
