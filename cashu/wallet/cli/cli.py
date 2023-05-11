@@ -24,7 +24,7 @@ from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
 from ...wallet.wallet import Wallet as Wallet
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
-from ..helpers import init_wallet, receive, send, deserialize_token_from_string
+from ..helpers import deserialize_token_from_string, init_wallet, receive, send
 from ..nostr import receive_nostr, send_nostr
 
 
