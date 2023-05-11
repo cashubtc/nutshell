@@ -111,28 +111,11 @@ async def balance():
     await wallet.load_proofs()
     result: dict = {"balance": wallet.available_balance}
     keyset_balances = wallet.balance_per_keyset()
-    for k, v in keyset_balances.items():
-        result.update(
-            {
-                "keysets": {
-                    f"{k if k else ''}": {
-                        "available": v["available"],
-                        "pending": v["balance"] - v["available"],
-                    }
-                },
-            }
-        )
+    if len(keyset_balances) > 0:
+        result.update({"keysets": keyset_balances})
     mint_balances = await wallet.balance_per_minturl()
-    for i, (k, v) in enumerate(mint_balances.items()):
-        result.update(
-            {
-                f"mint {i+1}": {
-                    "url": k,
-                    "available": v["available"],
-                    "pending": v["balance"] - v["available"],
-                }
-            }
-        )
+    if len(mint_balances) > 0:
+        result.update({"mints": mint_balances})
 
     return result
 

@@ -39,7 +39,7 @@ class NaturalOrderGroup(click.Group):
 @click.option(
     "--host",
     "-h",
-    default=settings.mint_url,
+    default=None,
     help=f"Mint URL (default: {settings.mint_url}).",
 )
 @click.option(
@@ -64,7 +64,7 @@ def cli(ctx: Context, host: str, walletname: str):
         raise Exception(error_str)
 
     ctx.ensure_object(dict)
-    ctx.obj["HOST"] = host
+    ctx.obj["HOST"] = host or settings.mint_url
     ctx.obj["WALLET_NAME"] = walletname
     wallet = Wallet(
         ctx.obj["HOST"], os.path.join(settings.cashu_dir, walletname), name=walletname
@@ -73,11 +73,9 @@ def cli(ctx: Context, host: str, walletname: str):
     asyncio.run(init_wallet(wallet))
 
     # MUTLIMINT: Select a wallet
-    # we only select a mint for a subset of commands
-    if ctx.invoked_subcommand not in ["send", "invoice", "pay"]:
-        return
-    # if a mint host is already specified in the context, use it
-    if ctx.obj["HOST"] != settings.mint_url:
+    # only if a command is one of a subset that needs to specify a mint host
+    # if a mint host is already specified as an argument `host`, use it
+    if ctx.invoked_subcommand not in ["send", "invoice", "pay"] or host:
         return
     # else: we ask the user to select one
     ctx.obj["WALLET"] = wallet  # set a wallet for get_mint_wallet in the next step
