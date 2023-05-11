@@ -12,8 +12,19 @@ from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
-from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
-from ...wallet.helpers import deserialize_token_from_string, init_wallet, receive, send
+from ...wallet.crud import (
+    get_keyset,
+    get_lightning_invoices,
+    get_reserved_proofs,
+    get_unused_locks,
+)
+from ...wallet.helpers import (
+    deserialize_token_from_string,
+    init_wallet,
+    receive,
+    send,
+    verify_mints,
+)
 from ...wallet.nostr import receive_nostr, send_nostr
 from ...wallet.wallet import Wallet as Wallet
 
@@ -173,7 +184,15 @@ async def receive_command(
     result = {"initial_balance": wallet.available_balance}
     if token:
         try:
-            tokenObj = await deserialize_token_from_string(token)
+            tokenObj: TokenV3 = await deserialize_token_from_string(token)
+
+            try:
+                await verify_mints(wallet, tokenObj)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+                )
+
             balance = await receive(wallet, tokenObj, lock)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -191,6 +210,12 @@ async def receive_command(
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 tokenObj = await deserialize_token_from_string(token)
+                try:
+                    await verify_mints(wallet, tokenObj)
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
+                    )
                 try:
                     balance = await receive(wallet, tokenObj, lock)
                 except Exception as e:

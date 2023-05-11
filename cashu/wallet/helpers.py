@@ -20,6 +20,17 @@ async def init_wallet(wallet: Wallet):
     await wallet.load_proofs()
 
 
+async def verify_mints(wallet, token: TokenV3):
+    # verify mints
+    mints = set([t.mint for t in TokenV3.token])
+    if None in mints:
+        raise Exception("Token has missing mint information.")
+    for mint in mints:
+        assert mint
+        mint_keysets = await get_keyset(mint_url=mint, db=wallet.db)
+        assert mint_keysets, "We don't know this mint."
+
+
 async def verify_mints_tokenv2(wallet: Wallet, token: TokenV2):
     """
     A helper function that iterates through all mints in the token and if it has
@@ -127,34 +138,6 @@ async def redeem_TokenV3_multimint(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
             )
             print(f"Received {sum_proofs(redeem_proofs)} sats")
-
-
-# async def get_mint_wallet(wallet: Wallet, mint_nr: int = None):
-#     """
-#     Helper function that asks the user for an input to select which mint they want to load.
-#     Useful for selecting the mint that the user wants to send tokens from.
-#     """
-
-#     mint_balances = await wallet.balance_per_minturl()
-
-#     # if we have balances on more than one mint, we ask the user to select one
-#     if len(mint_balances) > 1:
-#         await print_mint_balances(wallet, show_mints=True)
-
-#         if not mint_nr:  # largest balance
-#             mint_url = max(mint_balances, key=lambda v: mint_balances[v]["available"])
-#         elif mint_nr <= len(mint_balances):  # specific mint
-#             mint_url = list(mint_balances.keys())[mint_nr - 1]
-#         else:
-#             raise Exception("invalid input.")
-#     else:
-#         mint_url = list(mint_balances.keys())[0]
-
-#     # load this mint_url into a wallet
-#     mint_wallet = Wallet(mint_url, os.path.join(settings.cashu_dir, wallet.name))
-#     await mint_wallet.load_mint()
-
-#     return mint_wallet
 
 
 async def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
