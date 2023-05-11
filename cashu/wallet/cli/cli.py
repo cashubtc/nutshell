@@ -2,7 +2,6 @@
 
 import asyncio
 import os
-import sys
 import time
 from datetime import datetime
 from functools import wraps
@@ -10,11 +9,9 @@ from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
-from typing import Dict, List
 
 import click
 from click import Context
-from loguru import logger
 
 from ...core.base import TokenV3
 from ...core.helpers import sum_proofs
