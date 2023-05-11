@@ -412,12 +412,14 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
+            tokenObj = await deserialize_token_from_string(token)
+            mint = [t.mint for t in tokenObj.token][0]
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time: {reserved_date} ID: {key}\n"
+                f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time: {reserved_date} ID: {key}  Mint: {mint}\n"
             )
             print(f"{token}\n")
 
