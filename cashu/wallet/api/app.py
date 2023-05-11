@@ -5,10 +5,9 @@ from .router import router
 
 
 def create_app() -> FastAPI:
-
     app = FastAPI(
-        title="Cashu Wallet RestAPI",
-        description="RestAPI for Cashu Nutshell",
+        title="Cashu Wallet REST API",
+        description="REST API for Cashu Nutshell",
         version=settings.version,
         license_info={
             "name": "MIT License",
