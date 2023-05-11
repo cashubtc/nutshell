@@ -23,7 +23,7 @@ def test_balance():
         response = client.get("/balance")
         assert response.status_code == 200
         assert response.json()["balance"]
-        assert response.json()["balance per keyset"]
+        assert response.json()["keysets"]
         assert response.json()["mint 1"]
 
 
@@ -45,7 +45,7 @@ def test_receive_all(mint):
     with TestClient(app) as client:
         response = client.post("/receive?all=true")
         assert response.status_code == 200
-        assert response.json()["initial balance"]
+        assert response.json()["initial_balance"]
         assert response.json()["balance"]
 
 

@@ -170,7 +170,7 @@ async def receive_command(
     nostr: bool = Query(default=False, description="Receive tokens via nostr"),
     all: bool = Query(default=False, description="Receive all pending tokens"),
 ):
-    result = {"initial balance": wallet.available_balance}
+    result = {"initial_balance": wallet.available_balance}
     if token:
         try:
             tokenObj = await deserialize_token_from_string(token)
