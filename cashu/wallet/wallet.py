@@ -938,6 +938,11 @@ class Wallet(LedgerAPI):
 
     async def balance_per_minturl(self):
         balances = await self._get_proofs_per_minturl(self.proofs)
+
+        # If the current Mint URL is not yet part of the database, we have to explicitly add it here.
+        if self.url not in balances:
+            balances[self.url] = []
+
         balances_return = {
             key: {
                 "balance": sum_proofs(proofs),

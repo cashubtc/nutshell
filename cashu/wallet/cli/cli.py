@@ -67,7 +67,7 @@ def cli(ctx: Context, host: str, walletname: str):
         ctx.obj["HOST"], os.path.join(settings.cashu_dir, walletname), name=walletname
     )
     ctx.obj["WALLET"] = wallet
-    asyncio.run(init_wallet(wallet))
+    asyncio.run(init_wallet(ctx.obj["WALLET"]))
 
     # MUTLIMINT: Select a wallet
     # only if a command is one of a subset that needs to specify a mint host
@@ -75,7 +75,6 @@ def cli(ctx: Context, host: str, walletname: str):
     if ctx.invoked_subcommand not in ["send", "invoice", "pay"] or host:
         return
     # else: we ask the user to select one
-    ctx.obj["WALLET"] = wallet  # set a wallet for get_mint_wallet in the next step
     ctx.obj["WALLET"] = asyncio.run(
         get_mint_wallet(ctx)
     )  # select a specific wallet by CLI input
