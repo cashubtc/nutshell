@@ -1,4 +1,5 @@
 import time
+from datetime import datetime 
 from typing import Any, List, Optional
 
 from ..core.base import Invoice, KeyBase, P2SHScript, Proof, WalletKeyset
@@ -16,7 +17,7 @@ async def store_proof(
           (id, amount, C, secret, time_created)
         VALUES (?, ?, ?, ?, ?)
         """,
-        (proof.id, proof.amount, str(proof.C), str(proof.secret), int(time.time())),
+        (proof.id, proof.amount, str(proof.C), str(proof.secret), datetime.fromtimestamp(time.time())),
     )
 
 
@@ -190,14 +191,14 @@ async def store_keyset(
         (
             keyset.id,
             mint_url or keyset.mint_url,
-            keyset.valid_from or int(time.time()),
-            keyset.valid_to or int(time.time()),
-            keyset.first_seen or int(time.time()),
+            keyset.valid_from or datetime.fromtimestamp(time.time()),
+            keyset.valid_to or datetime.fromtimestamp(time.time()),
+            keyset.first_seen or datetime.fromtimestamp(time.time()),
             True,
         ),
     )
 
-
+datetime.fromtimestamp(time.time())
 async def get_keyset(
     id: str = "",
     mint_url: str = "",
@@ -233,6 +234,7 @@ async def store_lightning_invoice(
     invoice: Invoice,
     conn: Optional[Connection] = None,
 ):
+    print("lightning_store", invoice)
     await (conn or db).execute(
         f"""
         INSERT INTO invoices
@@ -245,8 +247,8 @@ async def store_lightning_invoice(
             invoice.hash,
             invoice.preimage,
             invoice.paid,
-            invoice.time_created,
-            invoice.time_paid,
+            datetime.fromtimestamp(invoice.time_created),
+            datetime.fromtimestamp(invoice.time_paid), 
         ),
     )
 
