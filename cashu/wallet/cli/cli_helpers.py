@@ -30,7 +30,7 @@ async def get_mint_wallet(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
     mint_balances = await wallet.balance_per_minturl()
 
-    if wallet.url not in mint_balances:
+    if ctx.obj["HOST"] not in mint_balances:
         mint_url = wallet.url
     elif len(mint_balances) > 1:
         # if we have balances on more than one mint, we ask the user to select one
