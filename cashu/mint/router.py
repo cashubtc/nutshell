@@ -128,14 +128,11 @@ async def mint(
 
     Call this endpoint after `GET /mint`.
     """
-    if settings.mint_peg_out_only:
-        return CashuError(code=0, error="Mint does not allow minting new tokens.")
     try:
         # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
         # We use the payment_hash to lookup the hash from the database and pass that one along.
         hash = payment_hash or hash
         # END: backwards compatibility < 0.12
-
         promises = await ledger.mint(payload.outputs, hash=hash)
         blinded_signatures = PostMintResponse(promises=promises)
         return blinded_signatures

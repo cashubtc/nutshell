@@ -539,6 +539,8 @@ class Ledger:
 
         if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
             raise Exception(f"Maximum mint amount is {settings.mint_max_peg_in} sats.")
+        if settings.mint_peg_out_only:
+            raise Exception("Mint does not allow minting new tokens.")
 
         payment_request, payment_hash = await self._request_lightning_invoice(amount)
         assert payment_request and payment_hash, Exception(
