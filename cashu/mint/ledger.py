@@ -619,6 +619,9 @@ class Ledger:
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
+            if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
+                raise Exception(f"Maximum amount to pay is {settings.mint_max_peg_out} sats "
+                                f"({invoice_amount} sats requested).")
             fees_msat = await self.check_fees(invoice)
             assert total_provided >= invoice_amount + fees_msat / 1000, Exception(
                 "provided proofs not enough for Lightning payment."

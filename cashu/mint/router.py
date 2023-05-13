@@ -45,6 +45,10 @@ async def info():
         contact=settings.mint_info_contact,
         nuts=settings.mint_info_nuts,
         motd=settings.mint_info_motd,
+        parameter={"max_peg_in": settings.mint_max_peg_in,
+                   "max_peg_out": settings.mint_max_peg_out,
+                   "peg_out_only": settings.mint_peg_out_only
+                   }
     )
 
 
@@ -99,6 +103,9 @@ async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
     """
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
+    if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
+        return CashuError(code=0, error=f"Maximum amount to mint is {settings.mint_max_peg_in} sats "
+                                        f"({amount} sats requested).")
     payment_request, hash = await ledger.request_mint(amount)
     print(f"Lightning invoice: {payment_request}")
     resp = GetMintResponse(pr=payment_request, hash=hash)
@@ -122,6 +129,11 @@ async def mint(
     """
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
+    if settings.mint_max_peg_in:
+        amount_requested = sum([b.amount for b in payload.outputs])
+        if amount_requested > settings.mint_max_peg_in:
+            return CashuError(code=0, error=f"Maximum amount to mint is {settings.mint_max_peg_in} sats "
+                                            f"({amount_requested} sats requested).")
     try:
         # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
         # We use the payment_hash to lookup the hash from the database and pass that one along.
