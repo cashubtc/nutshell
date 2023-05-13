@@ -21,6 +21,10 @@ for key, value in settings.dict().items():
 wallets_module = importlib.import_module("cashu.lightning")
 lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
 
+assert (
+    settings.mint_private_key is not None
+), "Cannot create ledger: No private key set for mint. Check your environment settings."
+
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
     seed=settings.mint_private_key,
