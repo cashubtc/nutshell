@@ -30,15 +30,10 @@ async def get_mint_wallet(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
     mint_balances = await wallet.balance_per_minturl()
 
-    # NOTE: This is a bit of a hack that is necessary because of the way the environment
-    # variables are handled right now. If there is a mint set through an env var and it
-    # is does not yet contain any proofs, we have to explicitly add it here, so it shows
-    # up in the mint selector.
     if wallet.url not in mint_balances:
-        mint_balances[wallet.url] = {"balance": 0, "available": 0}
-
-    # if we have balances on more than one mint, we ask the user to select one
-    if len(mint_balances) > 1:
+        mint_url = wallet.url
+    elif len(mint_balances) > 1:
+        # if we have balances on more than one mint, we ask the user to select one
         await print_mint_balances(wallet, show_mints=True)
 
         url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])
