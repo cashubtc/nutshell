@@ -99,8 +99,8 @@ class Invoice(BaseModel):
     preimage: Union[str, None] = None
     issued: Union[None, bool] = False
     paid: Union[None, bool] = False
-    time_created: Union[None, str, int, float] = ""
-    time_paid: Union[None, str, int, float] = ""
+    time_created: Union[None, str, int, float] = 0
+    time_paid: Union[None, str, int, float] = 0
 
 
 # ------- API -------
