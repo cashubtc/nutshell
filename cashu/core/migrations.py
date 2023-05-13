@@ -34,7 +34,7 @@ async def migrate_databases(db: Database, migrations_module):
                         async with db.connect() as conn:
                             await set_migration_version(conn, db_name, version)
 
-    async with db.connect() as conn:
+    async with db.connect() as conn:  # type: ignore
         exists = None
         if conn.type == SQLITE:
             exists = await conn.fetchone(

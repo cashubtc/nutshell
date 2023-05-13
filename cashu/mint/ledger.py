@@ -49,7 +49,7 @@ class Ledger:
         self.proofs_used = set(proofs_used)
 
     async def load_keyset(self, derivation_path, autosave=True):
-        """Load current keyset keyset or generate new one.
+        """Load the keyset for a derivation path if it already exists. If not generate new one and store in the db.
 
         Args:
             derivation_path (_type_): Derivation path from which the keyset is generated.
@@ -63,22 +63,37 @@ class Ledger:
             derivation_path=derivation_path,
             version=settings.version,
         )
-        # check if current keyset is stored in db and store if not
-        logger.debug(f"Active keyset: {keyset.id}")
+        # load the keyest from db
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
-            id=keyset.id, db=self.db
+            derivation_path=derivation_path, db=self.db
         )
-        if not len(tmp_keyset_local) and autosave:
-            logger.debug(f"Storing new keyset {keyset.id}.")
-            await self.crud.store_keyset(keyset=keyset, db=self.db)
+        if tmp_keyset_local:
+            # we have a keyset for this derivation path
+            keyset = tmp_keyset_local[0]
+            # we need to initialize it
+            keyset.generate_keys(self.master_key)
+
+        else:
+            # no keyset for this derivation path yet
+            # we generate a new keyset
+            logger.debug(f"Generating new keyset {keyset.id}.")
+            keyset = MintKeyset(
+                seed=self.master_key,
+                derivation_path=derivation_path,
+                version=settings.version,
+            )
+            if autosave:
+                logger.debug(f"Storing new keyset {keyset.id}.")
+                await self.crud.store_keyset(keyset=keyset, db=self.db)
 
         # store the new keyset in the current keysets
         if keyset.id:
             self.keysets.keysets[keyset.id] = keyset
+        logger.debug(f"Loaded keyset {keyset.id}.")
         return keyset
 
     async def init_keysets(self, autosave=True):
-        """Initializes all keysets of the mint from the db.
+        """Initializes all keysets of the mint from the db. Loads all past keysets and generate their keys. Then load the current keyset.
 
         Args:
             autosave (bool, optional): Whether the current keyset should be saved if it is
@@ -92,11 +107,7 @@ class Ledger:
             if k.id and k.id not in self.keysets.keysets:
                 self.keysets.keysets[k.id] = k
 
-        logger.debug(
-            f"We initialized {len(self.keysets.keysets)} previous keysets from the database."
-        )
-
-        # generate all private keys, public keys, and keyset id from the derivation path for all keysets that are not yet generated
+        # generate keys for all keysets in the database
         for _, v in self.keysets.keysets.items():
             # we already generated the keys for this keyset
             if v.id and v.public_keys and len(v.public_keys):
@@ -104,6 +115,9 @@ class Ledger:
             logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
 
+        logger.debug(
+            f"Initialized {len(self.keysets.keysets)} keysets from the database."
+        )
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
 
