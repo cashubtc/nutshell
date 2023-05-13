@@ -123,6 +123,50 @@ async def invoice(
     return
 
 
+@router.post("/swap", name="Multi-mint swaps", summary="Swap funds between mints.")
+async def swap(
+    amount: int = Query(default=..., description="Amount to swap between mints"),
+    outgoing_mint: str = Query(default=..., description="URL of outgoing mint"),
+    incoming_mint: str = Query(default=..., description="URL of incoming mint"),
+):
+    assert settings.lightning, HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="lightning not enabled",
+    )
+    assert outgoing_mint not in incoming_mint, HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="mints for swap have to be different",
+    )
+    global wallet
+    # request invoice from incoming mint
+    wallet = await load_mint(wallet, incoming_mint)
+    invoice = await wallet.request_mint(amount)
+    # pay invoice from outgoing mint
+    wallet = await load_mint(wallet, outgoing_mint)
+    await wallet.load_proofs()
+    total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice.pr)
+    assert total_amount > 0, HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="amount has to be larger than zero.",
+    )
+    assert wallet.available_balance >= total_amount, HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST, detail="balance is too low."
+    )
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    await wallet.pay_lightning(send_proofs, invoice.pr)
+    # mint token in incoming mint
+    wallet = await load_mint(wallet, incoming_mint)
+    await wallet.mint(amount, invoice.hash)
+    await wallet.load_proofs()
+    mint_balances = await wallet.balance_per_minturl()
+    return {
+        "outgoing_mint": outgoing_mint,
+        "incoming_mint": incoming_mint,
+        "invoice": invoice,
+        "balances": mint_balances,
+    }
+
+
 @router.get("/balance", name="Balance", summary="Display balance.")
 async def balance():
     await wallet.load_proofs()

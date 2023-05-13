@@ -171,6 +171,51 @@ async def invoice(ctx: Context, amount: int, hash: str):
     return
 
 
+@cli.command("swap", help="Swap funds between mints.")
+@click.pass_context
+@coro
+async def swap(ctx: Context):
+    assert settings.lightning, "lightning not enabled"
+    print("Mint to swap from:")
+    wallet_outgoing_mint = await get_mint_wallet(ctx)
+    amount = int(input("Enter amount to swap in sats:"))
+    incoming_mint_url = input("Enter URL of mint to swap to:")
+    assert (
+        wallet_outgoing_mint.url not in incoming_mint_url
+    ), "mints for swap have to be different"
+    # request invoice from incoming mint
+    wallet = Wallet(
+        incoming_mint_url,
+        os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
+        ctx.obj["WALLET_NAME"],
+    )
+    await wallet.load_mint()
+    invoice = await wallet.request_mint(amount)
+    # pay invoice from outgoing mint
+    wallet = Wallet(
+        wallet_outgoing_mint.url,
+        os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
+        ctx.obj["WALLET_NAME"],
+    )
+    await wallet.load_mint()
+    await wallet.load_proofs()
+    total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice.pr)
+    assert total_amount > 0, "amount is not positive"
+    assert wallet.available_balance >= total_amount, "balance too low"
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    await wallet.pay_lightning(send_proofs, invoice.pr)
+    # mint token in incoming mint
+    wallet = Wallet(
+        incoming_mint_url,
+        os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
+        ctx.obj["WALLET_NAME"],
+    )
+    await wallet.load_mint()
+    await wallet.mint(amount, invoice.hash)
+    await wallet.load_proofs()
+    await print_mint_balances(wallet, show_mints=True)
+
+
 @cli.command("balance", help="Balance.")
 @click.option(
     "--verbose",
