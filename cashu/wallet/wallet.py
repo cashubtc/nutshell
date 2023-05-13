@@ -938,7 +938,6 @@ class Wallet(LedgerAPI):
 
     async def balance_per_minturl(self):
         balances = await self._get_proofs_per_minturl(self.proofs)
-
         balances_return = {
             key: {
                 "balance": sum_proofs(proofs),
