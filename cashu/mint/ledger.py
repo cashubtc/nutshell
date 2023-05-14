@@ -268,6 +268,7 @@ class Ledger:
         valid = (
             isinstance(amount, int) and amount > 0 and amount < 2**settings.max_order
         )
+        logger.trace(f"Verifying amount {amount} is valid: {valid}")
         if not valid:
             raise Exception("invalid amount: " + str(amount))
         return amount
@@ -724,6 +725,7 @@ class Ledger:
                 raise Exception("Lightning payment unsuccessful.")
 
         except Exception as e:
+            logger.trace(f"exception: {e}")
             raise e
         finally:
             # delete proofs from pending list
@@ -799,7 +801,7 @@ class Ledger:
         Returns:
             Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
         """
-        logger.trace(f"splitting {amount} from {proofs}")
+        logger.trace(f"split called")
         # set proofs as pending
         logger.trace(f"setting proofs as pending")
         await self._set_proofs_pending(proofs)
@@ -807,12 +809,14 @@ class Ledger:
         total = sum_proofs(proofs)
 
         try:
+            logger.trace(f"verifying _verify_split_amount")
             # verify that amount is kosher
             self._verify_split_amount(amount)
             # verify overspending attempt
             if amount > total:
                 raise Exception("split amount is higher than the total sum.")
 
+            logger.trace("verifying proofs: _verify_proofs")
             await self._verify_proofs(proofs)
             logger.trace(f"verified proofs")
             # verify that only unique outputs were used
@@ -823,6 +827,7 @@ class Ledger:
                 raise Exception("split of promises is not as expected.")
             logger.trace(f"verified outputs")
         except Exception as e:
+            logger.trace(f"split failed: {e}")
             raise e
         finally:
             # delete proofs from pending list
