@@ -536,13 +536,15 @@ class Ledger:
         Returns:
             Tuple[str, str]: Bolt11 invoice and a hash (for looking it up later)
         """
-
+        logger.trace(f"called request_mint")
         if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
             raise Exception(f"Maximum mint amount is {settings.mint_max_peg_in} sats.")
         if settings.mint_peg_out_only:
             raise Exception("Mint does not allow minting new tokens.")
 
+        logger.trace(f"requesting invoice for {amount} satoshis")
         payment_request, payment_hash = await self._request_lightning_invoice(amount)
+        logger.trace(f"got invoice {payment_request} with hash {payment_hash}")
         assert payment_request and payment_hash, Exception(
             "could not fetch invoice from Lightning backend"
         )
@@ -556,6 +558,7 @@ class Ledger:
         )
 
         await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
+        logger.trace(f"stored invoice {invoice.hash} in db")
         return payment_request, invoice.hash
 
     async def mint(
@@ -579,6 +582,7 @@ class Ledger:
         Returns:
             List[BlindedSignature]: Signatures on the outputs.
         """
+        logger.trace("called mint")
         amounts = [b.amount for b in B_s]
         amount = sum(amounts)
         # check if lightning invoice was paid
@@ -586,7 +590,9 @@ class Ledger:
             if not hash:
                 raise Exception("no hash provided.")
             try:
+                logger.trace("checking lightning invoice")
                 paid = await self._check_lightning_invoice(amount, hash)
+                logger.trace(f"invoice paid: {paid}")
             except Exception as e:
                 raise e
 
@@ -597,6 +603,7 @@ class Ledger:
                 )
 
         promises = await self._generate_promises(B_s, keyset)
+        logger.trace("generated promises")
         return promises
 
     async def melt(
@@ -615,12 +622,15 @@ class Ledger:
         Returns:
             List[BlindedMessage]: Signed outputs for returning overpaid fees to wallet.
         """
-
+        logger.trace("melt called")
         # validate and set proofs as pending
+        logger.trace("setting proofs pending")
         await self._set_proofs_pending(proofs)
+        logger.trace(f"set proofs as pending")
 
         try:
             await self._verify_proofs(proofs)
+            logger.trace("verified proofs")
 
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
@@ -638,15 +648,21 @@ class Ledger:
             return_promises: List[BlindedSignature] = []
 
             if settings.lightning:
+                logger.trace("paying lightning invoice")
                 status, preimage, fee_msat = await self._pay_lightning_invoice(
                     invoice, fees_msat
                 )
+                logger.trace("paid lightning invoice")
             else:
                 status, preimage, fee_msat = True, "preimage", 0
 
+            logger.trace(
+                f"status: {status}, preimage: {preimage}, fee_msat: {fee_msat}"
+            )
+
             if status == True:
                 await self._invalidate_proofs(proofs)
-
+                logger.trace("invalidated proofs")
                 # prepare change to compensate wallet for overpaid fees
                 assert fee_msat is not None, Exception("fees not valid")
                 if outputs:
@@ -657,13 +673,16 @@ class Ledger:
                         outputs=outputs,
                     )
             else:
+                logger.trace("lightning payment unsuccessful")
                 raise Exception("Lightning payment unsuccessful.")
 
         except Exception as e:
             raise e
         finally:
             # delete proofs from pending list
+            logger.trace("unsetting proofs pending")
             await self._unset_proofs_pending(proofs)
+            logger.trace("unset proofs pending")
 
         return status, preimage, return_promises
 
@@ -729,10 +748,11 @@ class Ledger:
         Returns:
             Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
         """
-
+        logger.trace(f"splitting {amount} from {proofs}")
         # set proofs as pending
+        logger.trace(f"setting proofs as pending")
         await self._set_proofs_pending(proofs)
-
+        logger.trace(f"set proofs as pending")
         total = sum_proofs(proofs)
 
         try:
@@ -743,21 +763,25 @@ class Ledger:
                 raise Exception("split amount is higher than the total sum.")
 
             await self._verify_proofs(proofs)
-
+            logger.trace(f"verified proofs")
             # verify that only unique outputs were used
             if not self._verify_no_duplicate_outputs(outputs):
                 raise Exception("duplicate promises.")
             # verify that outputs have the correct amount
             if not self._verify_outputs(total, amount, outputs):
                 raise Exception("split of promises is not as expected.")
+            logger.trace(f"verified outputs")
         except Exception as e:
             raise e
         finally:
             # delete proofs from pending list
+            logger.trace(f"unsetting proofs as pending")
             await self._unset_proofs_pending(proofs)
+            logger.trace(f"unset proofs as pending")
 
         # Mark proofs as used and prepare new promises
         await self._invalidate_proofs(proofs)
+        logger.trace(f"invalidated proofs")
 
         # split outputs according to amount
         outs_fst = amount_split(total - amount)
@@ -771,4 +795,6 @@ class Ledger:
 
         # verify amounts in produced proofs
         self._verify_equation_balanced(proofs, prom_fst + prom_snd)
+
+        logger.trace(f"split successful")
         return prom_fst, prom_snd
