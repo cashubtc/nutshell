@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Union
 
 from fastapi import APIRouter
+from loguru import logger
 from secp256k1 import PublicKey
 
 from ..core.base import (
@@ -36,6 +37,7 @@ router: APIRouter = APIRouter()
     response_model_exclude_none=True,
 )
 async def info():
+    logger.trace(f"> GET /info")
     return GetInfoResponse(
         name=settings.mint_info_name,
         pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
@@ -60,6 +62,7 @@ async def info():
 )
 async def keys() -> KeysResponse:
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
+    logger.trace(f"> GET /keys")
     keyset = ledger.get_keyset()
     keys = KeysResponse.parse_obj(keyset)
     return keys
@@ -76,6 +79,7 @@ async def keyset_keys(idBase64Urlsafe: str) -> Union[KeysResponse, CashuError]:
     The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
     normal base64 before it can be processed (by the mint).
     """
+    logger.trace(f"> GET /keys/{idBase64Urlsafe}")
     try:
         id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
         keyset = ledger.get_keyset(keyset_id=id)
@@ -90,6 +94,7 @@ async def keyset_keys(idBase64Urlsafe: str) -> Union[KeysResponse, CashuError]:
 )
 async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
+    logger.trace(f"> GET /keysets")
     keysets = KeysetsResponse(keysets=ledger.keysets.get_ids())
     return keysets
 
@@ -102,6 +107,7 @@ async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
 
     Call `POST /mint` after paying the invoice.
     """
+    logger.trace(f"> GET /mint: amount={amount}")
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
     try:
@@ -128,6 +134,7 @@ async def mint(
 
     Call this endpoint after `GET /mint`.
     """
+    logger.trace(f"> POST /mint: {payload}")
     try:
         # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
         # We use the payment_hash to lookup the hash from the database and pass that one along.
@@ -149,6 +156,7 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
+    logger.trace(f"> POST /melt: {payload}")
     try:
         ok, preimage, change_promises = await ledger.melt(
             payload.proofs, payload.pr, payload.outputs
@@ -168,6 +176,7 @@ async def check_spendable(
     payload: CheckSpendableRequest,
 ) -> CheckSpendableResponse:
     """Check whether a secret has been spent already or not."""
+    logger.trace(f"> POST /check: {payload}")
     spendableList = await ledger.check_spendable(payload.proofs)
     return CheckSpendableResponse(spendable=spendableList)
 
@@ -183,6 +192,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     Used by wallets for figuring out the fees they need to supply together with the payment amount.
     This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
     """
+    logger.trace(f"> POST /checkfees: {payload}")
     fees_sat = await ledger.check_fees(payload.pr)
     return CheckFeesResponse(fee=fees_sat)
 
@@ -198,6 +208,7 @@ async def split(
     This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
     It is then used by Carol (by setting split=total) to redeem the tokens.
     """
+    logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
     try:
         split_return = await ledger.split(
