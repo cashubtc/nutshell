@@ -112,8 +112,8 @@ async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
     try:
         payment_request, hash = await ledger.request_mint(amount)
-        print(f"Lightning invoice: {payment_request}")
         resp = GetMintResponse(pr=payment_request, hash=hash)
+        logger.trace(f"< GET /mint: {resp}")
         return resp
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
@@ -142,6 +142,7 @@ async def mint(
         # END: backwards compatibility < 0.12
         promises = await ledger.mint(payload.outputs, hash=hash)
         blinded_signatures = PostMintResponse(promises=promises)
+        logger.trace(f"< POST /mint: {blinded_signatures}")
         return blinded_signatures
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
@@ -162,6 +163,7 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
             payload.proofs, payload.pr, payload.outputs
         )
         resp = GetMeltResponse(paid=ok, preimage=preimage, change=change_promises)
+        logger.trace(f"< POST /melt: {resp}")
         return resp
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
@@ -178,6 +180,7 @@ async def check_spendable(
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /check: {payload}")
     spendableList = await ledger.check_spendable(payload.proofs)
+    logger.trace(f"< POST /check: {spendableList}")
     return CheckSpendableResponse(spendable=spendableList)
 
 
@@ -194,6 +197,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     """
     logger.trace(f"> POST /checkfees: {payload}")
     fees_sat = await ledger.check_fees(payload.pr)
+    logger.trace(f"< POST /checkfees: {fees_sat}")
     return CheckFeesResponse(fee=fees_sat)
 
 
@@ -220,4 +224,5 @@ async def split(
         return CashuError(code=0, error="there was an error with the split")
     frst_promises, scnd_promises = split_return
     resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
+    logger.trace(f"< POST /split: {resp}")
     return resp
