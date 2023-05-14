@@ -45,7 +45,9 @@ class Ledger:
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""
+        logger.trace(f"crud: loading used proofs")
         proofs_used = await self.crud.get_proofs_used(db=self.db)
+        logger.trace(f"crud: loaded {len(proofs_used)} used proofs")
         self.proofs_used = set(proofs_used)
 
     async def load_keyset(self, derivation_path, autosave=True):
@@ -64,9 +66,11 @@ class Ledger:
             version=settings.version,
         )
         # load the keyest from db
+        logger.trace(f"crud: loading keyset for {derivation_path}")
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
             derivation_path=derivation_path, db=self.db
         )
+        logger.trace(f"crud: loaded {len(tmp_keyset_local)} keysets")
         if tmp_keyset_local:
             # we have a keyset for this derivation path
             keyset = tmp_keyset_local[0]
@@ -83,8 +87,9 @@ class Ledger:
                 version=settings.version,
             )
             if autosave:
-                logger.debug(f"Storing new keyset {keyset.id}.")
+                logger.debug(f"crud: storing new keyset {keyset.id}.")
                 await self.crud.store_keyset(keyset=keyset, db=self.db)
+                logger.trace(f"crud: stored new keyset {keyset.id}.")
 
         # store the new keyset in the current keysets
         if keyset.id:
@@ -101,7 +106,9 @@ class Ledger:
             generated from `self.derivation_path`. Defaults to True.
         """
         # load all past keysets from db
+        logger.trace(f"crud: loading keysets")
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
+        logger.trace(f"crud: loaded {len(tmp_keysets)} keysets")
         # add keysets from db to current keysets
         for k in tmp_keysets:
             if k.id and k.id not in self.keysets.keysets:
@@ -157,9 +164,11 @@ class Ledger:
         logger.trace(f"Generating promise with keyset {keyset.id}.")
         private_key_amount = keyset.private_keys[amount]
         C_ = b_dhke.step2_bob(B_, private_key_amount)
+        logger.trace(f"crud: _generate_promise storing promise for {amount}")
         await self.crud.store_promise(
             amount=amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
         )
+        logger.trace(f"crud: _generate_promise stored promise for {amount}")
         return BlindedSignature(id=keyset.id, amount=amount, C_=C_.serialize().hex())
 
     def _check_spendable(self, proof: Proof):
@@ -283,7 +292,11 @@ class Ledger:
         Returns:
             Tuple[str, str]: Bolt11 invoice and payment hash (for lookup)
         """
+        logger.trace(
+            f"_request_lightning_invoice: Requesting Lightning invoice for {amount} satoshis."
+        )
         error, balance = await self.lightning.status()
+        logger.trace(f"_request_lightning_invoice: Lightning wallet balance: {balance}")
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         (
@@ -292,6 +305,9 @@ class Ledger:
             payment_request,
             error_message,
         ) = await self.lightning.create_invoice(amount, "cashu deposit")
+        logger.trace(
+            f"_request_lightning_invoice: Lightning invoice: {payment_request}"
+        )
         return payment_request, checking_id
 
     async def _check_lightning_invoice(self, amount: int, hash: str) -> Literal[True]:
@@ -311,9 +327,11 @@ class Ledger:
         Returns:
             bool: True if invoice has been paid, else False
         """
+        logger.trace(f"crud: _check_lightning_invoice: checking invoice {hash}")
         invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
             hash=hash, db=self.db
         )
+        logger.trace(f"crud: _check_lightning_invoice: invoice: {invoice}")
         if invoice is None:
             raise Exception("invoice not found.")
         if invoice.issued:
@@ -321,24 +339,33 @@ class Ledger:
         assert invoice.payment_hash, "invoice has no payment hash."
 
         # set this invoice as issued
+        logger.trace(f"crud: setting invoice {invoice.payment_hash} as issued")
         await self.crud.update_lightning_invoice(hash=hash, issued=True, db=self.db)
+        logger.trace(f"crud: invoice {invoice.payment_hash} set as issued")
 
         try:
             if amount > invoice.amount:
                 raise Exception(
                     f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
                 )
-
+            logger.trace(
+                f"_check_lightning_invoice: checking invoice {invoice.payment_hash}"
+            )
             status = await self.lightning.get_invoice_status(invoice.payment_hash)
+            logger.trace(
+                f"_check_lightning_invoice: invoice {invoice.payment_hash} status: {status}"
+            )
             if status.paid:
                 return status.paid
             else:
                 raise Exception("Lightning invoice not paid yet.")
         except Exception as e:
             # unset issued
+            logger.trace(f"crud: unsetting invoice {invoice.payment_hash} as issued")
             await self.crud.update_lightning_invoice(
                 hash=hash, issued=False, db=self.db
             )
+            logger.trace(f"crud: invoice {invoice.payment_hash} unset as issued")
             raise e
 
     async def _pay_lightning_invoice(self, invoice: str, fee_limit_msat: int):
@@ -354,7 +381,9 @@ class Ledger:
         Returns:
             Tuple[bool, string, int]: Returns payment status, preimage of invoice, paid fees (in Millisatoshi)
         """
-        error, _ = await self.lightning.status()
+        logger.trace(f"_pay_lightning_invoice: paying Lightning invoice {invoice}")
+        error, balance = await self.lightning.status()
+        logger.trace(f"_pay_lightning_invoice: Lightning wallet balance: {balance}")
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         (
@@ -364,6 +393,7 @@ class Ledger:
             preimage,
             error_message,
         ) = await self.lightning.pay_invoice(invoice, fee_limit_msat=fee_limit_msat)
+        logger.trace(f"_pay_lightning_invoice: Lightning payment status: {ok}")
         # make sure that fee is positive
         fee_msat = abs(fee_msat) if fee_msat else fee_msat
         return ok, preimage, fee_msat
@@ -379,8 +409,10 @@ class Ledger:
         proof_msgs = set([p.secret for p in proofs])
         self.proofs_used |= proof_msgs
         # store in db
+        logger.trace(f"crud: storing proofs")
         for p in proofs:
             await self.crud.invalidate_proof(proof=p, db=self.db)
+        logger.trace(f"crud: stored proofs")
 
     async def _set_proofs_pending(self, proofs: List[Proof]):
         """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
@@ -396,7 +428,13 @@ class Ledger:
         await self._validate_proofs_pending(proofs)
         for p in proofs:
             try:
+                logger.trace(
+                    f"crud: _set_proofs_pending setting proof {p.secret} as pending"
+                )
                 await self.crud.set_proof_pending(proof=p, db=self.db)
+                logger.trace(
+                    f"crud: _set_proofs_pending proof {p.secret} set as pending"
+                )
             except:
                 raise Exception("proofs already pending.")
 
@@ -410,7 +448,13 @@ class Ledger:
         # could block the _invalidate_proofs() call that happens afterwards.
         try:
             for p in proofs:
+                logger.trace(
+                    f"crud: _unset_proofs_pending unsetting proof {p.secret} as pending"
+                )
                 await self.crud.unset_proof_pending(proof=p, db=self.db)
+                logger.trace(
+                    f"crud: _unset_proofs_pending proof {p.secret} unset as pending"
+                )
         except Exception as e:
             print(e)
             pass
@@ -424,7 +468,9 @@ class Ledger:
         Raises:
             Exception: At least one of the proofs is in the pending table.
         """
+        logger.trace(f"crud: _validate_proofs_pending validating proofs")
         proofs_pending = await self.crud.get_proofs_pending(db=self.db)
+        logger.trace(f"crud: _validate_proofs_pending got proofs pending")
         for p in proofs:
             for pp in proofs_pending:
                 if p.secret == pp.secret:
@@ -556,9 +602,9 @@ class Ledger:
             payment_hash=payment_hash,  # what we got from the backend
             issued=False,
         )
-
+        logger.trace(f"crud: storing invoice {invoice.hash} in db")
         await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
-        logger.trace(f"stored invoice {invoice.hash} in db")
+        logger.trace(f"crud: stored invoice {invoice.hash} in db")
         return payment_request, invoice.hash
 
     async def mint(
@@ -718,7 +764,11 @@ class Ledger:
         if settings.lightning:
             decoded_invoice = bolt11.decode(pr)
             amount = math.ceil(decoded_invoice.amount_msat / 1000)
+            logger.trace(
+                f"check_fees: checking lightning invoice: {decoded_invoice.payment_hash}"
+            )
             paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
+            logger.trace(f"check_fees: paid: {paid}")
             internal = paid.paid == False
         else:
             amount = 0
