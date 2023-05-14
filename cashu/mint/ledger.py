@@ -661,6 +661,7 @@ class Ledger:
             )
 
             if status == True:
+                logger.trace(f"invalidating proofs")
                 await self._invalidate_proofs(proofs)
                 logger.trace("invalidated proofs")
                 # prepare change to compensate wallet for overpaid fees
@@ -780,6 +781,7 @@ class Ledger:
             logger.trace(f"unset proofs as pending")
 
         # Mark proofs as used and prepare new promises
+        logger.trace(f"invalidating proofs")
         await self._invalidate_proofs(proofs)
         logger.trace(f"invalidated proofs")
 
