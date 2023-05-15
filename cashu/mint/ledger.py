@@ -15,7 +15,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
-from ..core.db import Database, lock_table
+from ..core.db import Connection, Database, lock_table
 from ..core.helpers import fee_reserve, sum_proofs
 from ..core.script import verify_script
 from ..core.settings import settings
@@ -312,7 +312,7 @@ class Ledger:
         return payment_request, checking_id
 
     async def _check_lightning_invoice(
-        self, amount: int, hash: str, conn
+        self, amount: int, hash: str, conn: Optional[Connection] = None
     ) -> Literal[True]:
         """Checks with the Lightning backend whether an invoice stored with `hash` was paid.
 
@@ -419,7 +419,9 @@ class Ledger:
             await self.crud.invalidate_proof(proof=p, db=self.db)
         logger.trace(f"crud: stored proofs")
 
-    async def _set_proofs_pending(self, proofs: List[Proof], conn):
+    async def _set_proofs_pending(
+        self, proofs: List[Proof], conn: Optional[Connection] = None
+    ):
         """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
         the list of pending proofs or removes them. Used as a mutex for proofs.
 
@@ -443,7 +445,9 @@ class Ledger:
             except:
                 raise Exception("proofs already pending.")
 
-    async def _unset_proofs_pending(self, proofs: List[Proof], conn):
+    async def _unset_proofs_pending(
+        self, proofs: List[Proof], conn: Optional[Connection] = None
+    ):
         """Deletes proofs from pending table.
 
         Args:
