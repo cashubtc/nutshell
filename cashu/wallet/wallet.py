@@ -3,6 +3,7 @@ import json
 import math
 import secrets as scrts
 import time
+from datetime import datetime
 import uuid
 from itertools import groupby
 from typing import Dict, List, Optional
@@ -301,9 +302,12 @@ class LedgerAPI:
         return keysets.keysets
 
     @async_set_requests
-    async def request_mint(self, amount):
+    async def request_mint(self, amount, description_hash: Optional[bytes] = None):
         """Requests a mint from the server and returns Lightning invoice."""
-        resp = self.s.get(self.url + "/mint", params={"amount": amount})
+        if description_hash != None:
+            description_hash = description_hash.decode("utf-8")
+
+        resp = self.s.get(self.url + "/mint", params={"amount": amount, "description_hash": description_hash})
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
@@ -320,10 +324,7 @@ class LedgerAPI:
         resp = self.s.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
-            params={
-                "hash": hash,
-                "payment_hash": hash,  # backwards compatibility pre 0.12.0
-            },
+            params={"hash": hash},
         )
         resp.raise_for_status()
         reponse_dict = resp.json()
@@ -492,8 +493,8 @@ class Wallet(LedgerAPI):
     async def load_proofs(self):
         self.proofs = await get_proofs(db=self.db)
 
-    async def request_mint(self, amount):
-        invoice = await super().request_mint(amount)
+    async def request_mint(self, amount, description_hash: Optional[bytes] = None):
+        invoice = await super().request_mint(amount,description_hash)
         invoice.time_created = int(time.time())
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
@@ -607,7 +608,6 @@ class Wallet(LedgerAPI):
                 preimage=status.preimage,
                 paid=True,
                 time_paid=time.time(),
-                hash="",
             )
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 

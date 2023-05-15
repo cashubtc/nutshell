@@ -65,7 +65,7 @@ async def invalidate_proof(
           (amount, C, secret, time_used, id)
         VALUES (?, ?, ?, ?, ?)
         """,
-        (proof.amount, str(proof.C), str(proof.secret), int(time.time()), proof.id),
+        (proof.amount, str(proof.C), str(proof.secret), datetime.fromtimestamp(time.time()), proof.id),
     )
 
 
@@ -88,7 +88,7 @@ async def update_proof_reserved(
     if reserved:
         # set the time of reserving
         clauses.append("time_reserved = ?")
-        values.append(int(time.time()))
+        values.append(datetime.fromtimestamp(time.time()))
 
     await (conn or db).execute(  # type: ignore
         f"UPDATE proofs SET {', '.join(clauses)} WHERE secret = ?",
