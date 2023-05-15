@@ -2,8 +2,7 @@ import time
 from typing import Any, List, Optional
 
 from ..core.base import Invoice, MintKeyset, Proof
-from ..core.db import Connection, Database
-from ..core.migrations import table_with_schema
+from ..core.db import Connection, Database, table_with_schema
 
 
 class LedgerCrud:
