@@ -183,6 +183,11 @@ async def swap(ctx: Context):
     assert (
         wallet_outgoing_mint.url not in incoming_mint_url
     ), "mints for swap have to be different"
+    click.confirm(
+        f"Swap {amount} sats from mint {wallet_outgoing_mint.url} to mint {incoming_mint_url}?",
+        abort=True,
+        default=True,
+    )
     # request invoice from incoming mint
     wallet = Wallet(
         incoming_mint_url,
