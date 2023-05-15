@@ -536,6 +536,12 @@ class Ledger:
         Returns:
             Tuple[str, str]: Bolt11 invoice and a hash (for looking it up later)
         """
+
+        if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
+            raise Exception(f"Maximum mint amount is {settings.mint_max_peg_in} sats.")
+        if settings.mint_peg_out_only:
+            raise Exception("Mint does not allow minting new tokens.")
+
         payment_request, payment_hash = await self._request_lightning_invoice(amount)
         assert payment_request and payment_hash, Exception(
             "could not fetch invoice from Lightning backend"
@@ -619,6 +625,10 @@ class Ledger:
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
+            if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
+                raise Exception(
+                    f"Maximum melt amount is {settings.mint_max_peg_out} sats."
+                )
             fees_msat = await self.check_fees(invoice)
             assert total_provided >= invoice_amount + fees_msat / 1000, Exception(
                 "provided proofs not enough for Lightning payment."

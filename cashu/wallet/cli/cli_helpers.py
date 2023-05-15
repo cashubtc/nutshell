@@ -30,8 +30,10 @@ async def get_mint_wallet(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
     mint_balances = await wallet.balance_per_minturl()
 
-    # if we have balances on more than one mint, we ask the user to select one
-    if len(mint_balances) > 1:
+    if ctx.obj["HOST"] not in mint_balances:
+        mint_url = wallet.url
+    elif len(mint_balances) > 1:
+        # if we have balances on more than one mint, we ask the user to select one
         await print_mint_balances(wallet, show_mints=True)
 
         url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])

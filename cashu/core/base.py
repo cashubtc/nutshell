@@ -116,6 +116,7 @@ class GetInfoResponse(BaseModel):
     contact: Optional[List[List[str]]] = None
     nuts: Optional[List[str]] = None
     motd: Optional[str] = None
+    parameter: Optional[dict] = None
 
 
 # ------- API: KEYS -------
