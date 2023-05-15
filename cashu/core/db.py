@@ -48,6 +48,15 @@ class Compat:
         elif self.type == SQLITE:
             return ""
         return "<nothing>"
+    
+    def lock_table(self, table: str) -> str:
+        if self.type == POSTGRES:
+            return f"LOCK TABLE {table} IN EXCLUSIVE MODE;"
+        elif self.type == COCKROACH:
+            return f"LOCK TABLE {table};"
+        elif self.type == SQLITE:
+            return "BEGIN EXCLUSIVE TRANSACTION;"
+        return "<nothing>"
 
 
 class Connection(Compat):
