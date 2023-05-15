@@ -311,7 +311,9 @@ class Ledger:
         )
         return payment_request, checking_id
 
-    async def _check_lightning_invoice(self, amount: int, hash: str, conn) -> Literal[True]:
+    async def _check_lightning_invoice(
+        self, amount: int, hash: str, conn
+    ) -> Literal[True]:
         """Checks with the Lightning backend whether an invoice stored with `hash` was paid.
 
         Args:
@@ -341,7 +343,9 @@ class Ledger:
 
         # set this invoice as issued
         logger.trace(f"crud: setting invoice {invoice.payment_hash} as issued")
-        await self.crud.update_lightning_invoice(hash=hash, issued=True, db=self.db, conn=conn)
+        await self.crud.update_lightning_invoice(
+            hash=hash, issued=True, db=self.db, conn=conn
+        )
         logger.trace(f"crud: invoice {invoice.payment_hash} set as issued")
 
         try:
@@ -633,7 +637,7 @@ class Ledger:
         amounts = [b.amount for b in B_s]
         amount = sum(amounts)
         async with self.db.connect() as conn:
-            logger.trace("trying to lock table invoice")
+            logger.trace("attempting lock table invoice")
             await conn.execute(self.db.lock_table("invoices"))
             logger.trace("locked table invoice")
             # check if lightning invoice was paid
@@ -673,11 +677,11 @@ class Ledger:
         Returns:
             List[BlindedMessage]: Signed outputs for returning overpaid fees to wallet.
         """
-        
+
         logger.trace("melt called")
 
         async with self.db.connect() as conn:
-            logger.trace("trying to lock table proofs_pending")
+            logger.trace("attempting lock table proofs_pending")
             await conn.execute(self.db.lock_table("proofs_pending"))
             logger.trace("locked table proofs_pending")
             # validate and set proofs as pending
@@ -740,7 +744,7 @@ class Ledger:
         finally:
             # delete proofs from pending list
             async with self.db.connect() as conn:
-                logger.trace("trying to lock table proofs_pending")
+                logger.trace("attempting lock table proofs_pending")
                 await conn.execute(self.db.lock_table("proofs_pending"))
                 logger.trace("locked table proofs_pending")
                 logger.trace("unsetting proofs as pending")
@@ -818,7 +822,7 @@ class Ledger:
         logger.trace(f"split called")
         # set proofs as pending
         async with self.db.connect() as conn:
-            logger.trace("trying to lock table proofs_pending")
+            logger.trace("attempting lock table proofs_pending")
             await conn.execute(self.db.lock_table("proofs_pending"))
             logger.trace("locked table proofs_pending")
             # validate and set proofs as pending
@@ -851,7 +855,7 @@ class Ledger:
         finally:
             # delete proofs from pending list
             async with self.db.connect() as conn:
-                logger.trace("trying to lock table proofs_pending")
+                logger.trace("attempting lock table proofs_pending")
                 await conn.execute(self.db.lock_table("proofs_pending"))
                 logger.trace("locked table proofs_pending")
                 logger.trace("unsetting proofs as pending")
