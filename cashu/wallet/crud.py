@@ -318,7 +318,7 @@ async def update_lightning_invoice(
 
     if time_paid:
         clauses.append("time_paid = ?")
-        values.append(time_paid)
+        values.append(datetime.fromtimestamp(time_paid))
 
     await (conn or db).execute(
         f"UPDATE invoices SET {', '.join(clauses)} WHERE hash = ?",
