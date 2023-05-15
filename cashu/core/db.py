@@ -49,15 +49,6 @@ class Compat:
             return ""
         return "<nothing>"
 
-    def lock_table(self, table: str) -> str:
-        if self.type == POSTGRES:
-            return f"LOCK TABLE {table} IN EXCLUSIVE MODE;"
-        elif self.type == COCKROACH:
-            return f"LOCK TABLE {table};"
-        elif self.type == SQLITE:
-            return "BEGIN EXCLUSIVE TRANSACTION;"
-        return "<nothing>"
-
 
 class Connection(Compat):
     def __init__(self, conn: AsyncConnection, txn, typ, name, schema):
@@ -109,15 +100,15 @@ class Database(Compat):
                     f = "%Y-%m-%d %H:%M:%S"
                 return time.mktime(datetime.datetime.strptime(value, f).timetuple())
 
-            psycopg2.extensions.register_type(
-                psycopg2.extensions.new_type(
-                    psycopg2.extensions.DECIMAL.values,
+            psycopg2.extensions.register_type(  # type: ignore
+                psycopg2.extensions.new_type(  # type: ignore
+                    psycopg2.extensions.DECIMAL.values,  # type: ignore
                     "DEC2FLOAT",
                     lambda value, curs: float(value) if value is not None else None,
                 )
             )
-            psycopg2.extensions.register_type(
-                psycopg2.extensions.new_type(
+            psycopg2.extensions.register_type(  # type: ignore
+                psycopg2.extensions.new_type(  # type: ignore
                     (1082, 1083, 1266),
                     "DATE2INT",
                     lambda value, curs: time.mktime(value.timetuple())
@@ -152,7 +143,7 @@ class Database(Compat):
     async def connect(self):
         await self.lock.acquire()
         try:
-            async with self.engine.connect() as conn:
+            async with self.engine.connect() as conn:  # type: ignore
                 async with conn.begin() as txn:
                     wconn = Connection(conn, txn, self.type, self.name, self.schema)
 
@@ -189,3 +180,18 @@ class Database(Compat):
     @asynccontextmanager
     async def reuse_conn(self, conn: Connection):
         yield conn
+
+
+# public functions for LNbits to use (we don't want to change the Database or Compat classes above)
+def table_with_schema(db: Database, table: str):
+    return f"{db.references_schema if db.schema else ''}{table}"
+
+
+def lock_table(db: Database, table: str) -> str:
+    if db.type == POSTGRES:
+        return f"LOCK TABLE {table_with_schema(db, table)} IN EXCLUSIVE MODE;"
+    elif db.type == COCKROACH:
+        return f"LOCK TABLE {table};"
+    elif db.type == SQLITE:
+        return "BEGIN EXCLUSIVE TRANSACTION;"
+    return "<nothing>"
