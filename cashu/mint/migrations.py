@@ -1,8 +1,7 @@
-from ..core.db import Database
-from ..core.migrations import table_with_schema
+from ..core.db import Database, table_with_schema
 
 
-async def m000_create_migrations_table(db):
+async def m000_create_migrations_table(db: Database):
     await db.execute(
         f"""
     CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'dbversions')} (

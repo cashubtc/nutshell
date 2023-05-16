@@ -1,10 +1,6 @@
 import re
 
-from ..core.db import COCKROACH, POSTGRES, SQLITE, Database
-
-
-def table_with_schema(db, table: str):
-    return f"{db.references_schema if db.schema else ''}{table}"
+from ..core.db import COCKROACH, POSTGRES, SQLITE, Database, table_with_schema
 
 
 async def migrate_databases(db: Database, migrations_module):
