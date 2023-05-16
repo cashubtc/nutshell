@@ -75,7 +75,7 @@ async def pay(
             status_code=status.HTTP_400_BAD_REQUEST, detail="balance is too low."
         )
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
-    await wallet.pay_lightning(send_proofs, invoice)
+    await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
     await wallet.load_proofs()
     return {
         "amount": total_amount - fee_reserve_sat,

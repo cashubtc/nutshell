@@ -38,7 +38,7 @@ from ..core.bolt11 import Invoice as InvoiceBolt11
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
-from ..core.helpers import sum_proofs
+from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
 from ..core.script import (
     step0_carol_checksig_redeemscrip,
     step0_carol_privkey,
@@ -586,13 +586,13 @@ class Wallet(LedgerAPI):
             await invalidate_proof(proof, db=self.db)
         return frst_proofs, scnd_proofs
 
-    async def pay_lightning(self, proofs: List[Proof], invoice: str):
+    async def pay_lightning(self, proofs: List[Proof], invoice: str, fee_reserve: int):
         """Pays a lightning invoice"""
 
-        # generate outputs for the change for overpaid fees
-        # we will generate four blanked outputs that the mint will
-        # imprint with value depending on the fees we overpaid
-        n_return_outputs = 4
+        # Generate a number of blank outputs for any overpaid fees. As described in
+        # NUT-08, the mint will imprint these outputs with a value depending on the
+        # amount of fees we overpaid.
+        n_return_outputs = calculate_number_of_blank_outputs(fee_reserve)
         secrets = [self._generate_secret() for _ in range(n_return_outputs)]
         outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets)
 

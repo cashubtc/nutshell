@@ -3,6 +3,8 @@ from typing import List
 import pytest
 
 from cashu.core.base import BlindedMessage, Proof
+from cashu.core.crypto.b_dhke import step1_alice
+from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.migrations import migrate_databases
 
 SERVER_ENDPOINT = "http://localhost:3338"
@@ -110,3 +112,69 @@ async def test_generate_promises(ledger: Ledger):
         promises[0].C_
         == "037074c4f53e326ee14ed67125f387d160e0e729351471b69ad41f7d5d21071e15"
     )
+
+
+@pytest.mark.asyncio
+async def test_generate_change_promises(ledger: Ledger):
+    # Example slightly adapted from NUT-08 because we want to ensure the dynamic change
+    # token amount works: `n_blank_outputs != n_returned_promises != 4`.
+    invoice_amount = 100_000
+    fee_reserve = 2_000
+    total_provided = invoice_amount + fee_reserve
+    actual_fee_msat = 100_000
+
+    expected_returned_promises = 7  # Amounts = [4, 8, 32, 64, 256, 512, 1024]
+    expected_returned_fees = 1900
+
+    n_blank_outputs = calculate_number_of_blank_outputs(fee_reserve)
+    blinded_msgs = [step1_alice(str(n)) for n in range(n_blank_outputs)]
+    outputs = [
+        BlindedMessage(amount=1, B_=b.serialize().hex()) for b, _ in blinded_msgs
+    ]
+
+    promises = await ledger._generate_change_promises(
+        total_provided, invoice_amount, actual_fee_msat, outputs
+    )
+
+    assert len(promises) == expected_returned_promises
+    assert sum([promise.amount for promise in promises]) == expected_returned_fees
+
+
+@pytest.mark.asyncio
+async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
+    # Check if mint handles a legacy wallet implementation (always sends 4 blank
+    # outputs) as well.
+    invoice_amount = 100_000
+    fee_reserve = 2_000
+    total_provided = invoice_amount + fee_reserve
+    actual_fee_msat = 100_000
+
+    expected_returned_promises = 4  # Amounts = [64, 256, 512, 1024]
+    expected_returned_fees = 1856
+
+    n_blank_outputs = 4
+    blinded_msgs = [step1_alice(str(n)) for n in range(n_blank_outputs)]
+    outputs = [
+        BlindedMessage(amount=1, B_=b.serialize().hex()) for b, _ in blinded_msgs
+    ]
+
+    promises = await ledger._generate_change_promises(
+        total_provided, invoice_amount, actual_fee_msat, outputs
+    )
+
+    assert len(promises) == expected_returned_promises
+    assert sum([promise.amount for promise in promises]) == expected_returned_fees
+
+
+@pytest.mark.asyncio
+async def test_generate_change_promises_returns_empty_if_no_outputs(ledger: Ledger):
+    invoice_amount = 100_000
+    fee_reserve = 1_000
+    total_provided = invoice_amount + fee_reserve
+    actual_fee_msat = 100_000
+    outputs = None
+
+    promises = await ledger._generate_change_promises(
+        total_provided, invoice_amount, actual_fee_msat, outputs
+    )
+    assert len(promises) == 0
