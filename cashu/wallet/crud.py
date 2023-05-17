@@ -27,18 +27,23 @@ async def get_proofs(
 ):
     rows = await (conn or db).fetchall(
         """
-        SELECT * from proofs
+        SELECT id,amount,c,secret,reserved,send_id,time_created,time_reserved from proofs
         """
     )   
     Proofs = []
     for each in rows:
-        print("each:", each )
-        print("C:", each[1], type(each[1]))
-        proof_compat = Proof(id=each[7], amount=each[0],C=each[1],secret=each[2])
+        
+        proof_compat = Proof(   id              =   each[0], 
+                                amount          =   each[1],
+                                C               =   each[2],
+                                secret          =   each[3],                                
+                                reserved        =   each[4],
+                                send_id         =   each[5],
+                                time_created    =   each[6],
+                                time_reserved   =   each[7]                               
+                                )
         print("proof_compat", proof_compat)
-        Proofs.append(proof_compat)
-    print("this is the new proofs:" ,Proofs)
-    # print("this is where the proofs are!", [Proof(**dict(r)) for r in rows])
+        Proofs.append(proof_compat) 
     # return [Proof(**dict(r)) for r in rows]
     return Proofs
 
