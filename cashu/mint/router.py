@@ -1,6 +1,6 @@
-from typing import Dict, List, Optional, Union
+from typing import Annotated, Dict, List, Optional, Union
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from loguru import logger
 from secp256k1 import PublicKey
 
@@ -100,7 +100,9 @@ async def keysets() -> KeysetsResponse:
 
 
 @router.get("/mint", name="Request mint", summary="Request minting of new tokens")
-async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
+async def request_mint(
+    amount: Annotated[int, Query(gt=0, le=21_000_000 * 100_000_000)] = 1
+) -> Union[GetMintResponse, CashuError]:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
