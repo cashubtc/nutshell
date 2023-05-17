@@ -60,9 +60,9 @@ async def m001_initial(db: Database):
         f"""
         CREATE VIEW {table_with_schema(db, 'balance_issued')} AS
         SELECT COALESCE(SUM(s), 0) AS balance FROM (
-            SELECT SUM(amount) 
+            SELECT SUM(amount)
             FROM {table_with_schema(db, 'promises')}
-            WHERE amount > 0 
+            WHERE amount > 0
         ) AS s;
     """
     )
@@ -71,21 +71,21 @@ async def m001_initial(db: Database):
         f"""
         CREATE VIEW {table_with_schema(db, 'balance_redeemed')} AS
         SELECT COALESCE(SUM(s), 0) AS balance FROM (
-            SELECT SUM(amount) 
+            SELECT SUM(amount) AS s
             FROM {table_with_schema(db, 'proofs_used')}
-            WHERE amount > 0 
-        ) AS s;
+            WHERE amount > 0
+        );
     """
     )
 
     await db.execute(
         f"""
         CREATE VIEW {table_with_schema(db, 'balance')} AS
-        SELECT s_issued AS balance FROM (
-            SELECT bi.balance AS s_issued, bu.balance 
+        SELECT s_issued - s_used AS balance FROM (
+            SELECT bi.balance AS s_issued, bu.balance AS s_used
             FROM {table_with_schema(db, 'balance_issued')} bi
             CROSS JOIN {table_with_schema(db, 'balance_redeemed')} bu
-        ) AS s_used;
+        );
     """
     )
 
