@@ -29,8 +29,18 @@ async def get_proofs(
         """
         SELECT * from proofs
         """
-    )
-    return [Proof(**dict(r)) for r in rows]
+    )   
+    Proofs = []
+    for each in rows:
+        print("each:", each )
+        print("C:", each[1], type(each[1]))
+        proof_compat = Proof(id=each[7], amount=each[0],C=each[1],secret=each[2])
+        print("proof_compat", proof_compat)
+        Proofs.append(proof_compat)
+    print("this is the new proofs:" ,Proofs)
+    # print("this is where the proofs are!", [Proof(**dict(r)) for r in rows])
+    # return [Proof(**dict(r)) for r in rows]
+    return Proofs
 
 
 async def get_reserved_proofs(
