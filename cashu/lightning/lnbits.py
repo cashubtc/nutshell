@@ -1,7 +1,7 @@
 # type: ignore
 from typing import Dict, Optional
 
-import requests
+import httpx
 
 from ..core.settings import settings
 from .base import (
@@ -18,22 +18,23 @@ class LNbitsWallet(Wallet):
 
     def __init__(self):
         self.endpoint = settings.mint_lnbits_endpoint
-
         key = settings.mint_lnbits_key
-        self.key = {"X-Api-Key": key}
-        self.s = requests.Session()
-        self.s.auth = ("user", "pass")
-        self.s.headers.update({"X-Api-Key": key})
-        self.s.verify = not settings.debug
+        self.headers = {"X-Api-Key": key}
+        self.verify = not settings.debug
 
     async def status(self) -> StatusResponse:
-        try:
-            r = self.s.get(url=f"{self.endpoint}/api/v1/wallet", timeout=15)
-            r.raise_for_status()
-        except Exception as exc:
-            return StatusResponse(
-                f"Failed to connect to {self.endpoint} due to: {exc}", 0
-            )
+        async with httpx.AsyncClient(verify=self.verify) as client:
+            try:
+                r = await client.get(
+                    url=f"{self.endpoint}/api/v1/wallet",
+                    timeout=15,
+                    headers=self.headers,
+                )
+                r.raise_for_status()
+            except Exception as exc:
+                return StatusResponse(
+                    f"Failed to connect to {self.endpoint} due to: {exc}", 0
+                )
 
         try:
             data = r.json()
@@ -59,11 +60,16 @@ class LNbitsWallet(Wallet):
             data["unhashed_description"] = unhashed_description.hex()
 
         data["memo"] = memo or ""
-        try:
-            r = self.s.post(url=f"{self.endpoint}/api/v1/payments", json=data)
-            r.raise_for_status()
-        except:
-            return InvoiceResponse(False, None, None, r.json()["detail"])
+        async with httpx.AsyncClient(verify=self.verify) as client:
+            try:
+                r = await client.post(
+                    url=f"{self.endpoint}/api/v1/payments",
+                    json=data,
+                    headers=self.headers,
+                )
+                r.raise_for_status()
+            except:
+                return InvoiceResponse(False, None, None, r.json()["detail"])
         ok, checking_id, payment_request, error_message = (
             True,
             None,
@@ -77,16 +83,18 @@ class LNbitsWallet(Wallet):
         return InvoiceResponse(ok, checking_id, payment_request, error_message)
 
     async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
-        try:
-            r = self.s.post(
-                url=f"{self.endpoint}/api/v1/payments",
-                json={"out": True, "bolt11": bolt11},
-                timeout=None,
-            )
-            r.raise_for_status()
-        except:
-            error_message = r.json()["detail"]
-            return PaymentResponse(None, None, None, None, error_message)
+        async with httpx.AsyncClient(verify=self.verify) as client:
+            try:
+                r = await client.post(
+                    url=f"{self.endpoint}/api/v1/payments",
+                    json={"out": True, "bolt11": bolt11},
+                    timeout=None,
+                    headers=self.headers,
+                )
+                r.raise_for_status()
+            except:
+                error_message = r.json()["detail"]
+                return PaymentResponse(None, None, None, None, error_message)
         if r.status_code > 299:
             return PaymentResponse(None, None, None, None, f"HTTP status: {r.reason}")
         if "detail" in r.json():
@@ -108,26 +116,29 @@ class LNbitsWallet(Wallet):
         return PaymentResponse(ok, checking_id, payment.fee_msat, payment.preimage)
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        try:
-            r = self.s.get(
-                url=f"{self.endpoint}/api/v1/payments/{checking_id}",
-                headers=self.key,
-            )
-            r.raise_for_status()
-        except:
-            return PaymentStatus(None)
+        async with httpx.AsyncClient(verify=self.verify) as client:
+            try:
+                r = await client.get(
+                    url=f"{self.endpoint}/api/v1/payments/{checking_id}",
+                    headers=self.headers,
+                )
+                r.raise_for_status()
+            except:
+                return PaymentStatus(None)
         if r.json().get("detail"):
             return PaymentStatus(None)
         return PaymentStatus(r.json()["paid"])
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        try:
-            r = self.s.get(
-                url=f"{self.endpoint}/api/v1/payments/{checking_id}", headers=self.key
-            )
-            r.raise_for_status()
-        except:
-            return PaymentStatus(None)
+        async with httpx.AsyncClient(verify=self.verify) as client:
+            try:
+                r = await client.get(
+                    url=f"{self.endpoint}/api/v1/payments/{checking_id}",
+                    headers=self.headers,
+                )
+                r.raise_for_status()
+            except:
+                return PaymentStatus(None)
         data = r.json()
         if "paid" not in data and "details" not in data:
             return PaymentStatus(None)
