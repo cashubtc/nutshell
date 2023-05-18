@@ -18,6 +18,20 @@ from ...wallet.helpers import deserialize_token_from_string, init_wallet, receiv
 from ...wallet.nostr import receive_nostr, send_nostr
 from ...wallet.wallet import Wallet as Wallet
 from .api_helpers import verify_mints
+from .responses import (
+    BalanceResponse,
+    BurnResponse,
+    InfoResponse,
+    InvoiceResponse,
+    InvoicesResponse,
+    LockResponse,
+    LocksResponse,
+    PayResponse,
+    PendingResponse,
+    ReceiveResponse,
+    SendResponse,
+    WalletsResponse,
+)
 
 router: APIRouter = APIRouter()
 
@@ -48,7 +62,7 @@ async def start_wallet():
     await init_wallet(wallet)
 
 
-@router.post("/pay", name="Pay lightning invoice")
+@router.post("/pay", name="Pay lightning invoice", response_model=PayResponse)
 async def pay(
     invoice: str = Query(default=..., description="Lightning invoice to pay"),
     mint: str = Query(
@@ -77,16 +91,16 @@ async def pay(
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice)
     await wallet.load_proofs()
-    return {
-        "amount": total_amount - fee_reserve_sat,
-        "fee": fee_reserve_sat,
-        "amount_with_fee": total_amount,
-        "initial_balance": initial_balance,
-        "balance": wallet.available_balance,
-    }
+    return PayResponse(
+        amount=total_amount - fee_reserve_sat,
+        fee=fee_reserve_sat,
+        amount_with_fee=total_amount,
+        initial_balance=initial_balance,
+        balance=wallet.available_balance,
+    )
 
 
-@router.post("/invoice", name="Request lightning invoice")
+@router.post("/invoice", name="Request lightning invoice", response_model=InvoiceResponse)
 async def invoice(
     amount: int = Query(default=..., description="Amount to request in invoice"),
     hash: str = Query(default=None, description="Hash of paid invoice"),
@@ -100,44 +114,40 @@ async def invoice(
     initial_balance = wallet.available_balance
     if not settings.lightning:
         r = await wallet.mint(amount)
-        return {
-            "amount": amount,
-            "balance": wallet.available_balance,
-            "initial_balance": initial_balance,
-        }
+        return InvoiceResponse(
+            amount=amount,
+            balance=wallet.available_balance,
+            initial_balance=initial_balance,
+        )
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)
-        return {
-            "invoice": invoice,
-            "balance": wallet.available_balance,
-            "initial_balance": initial_balance,
-        }
+        return InvoiceResponse(
+            invoice=invoice,
+            balance=wallet.available_balance,
+            initial_balance=initial_balance,
+        )
     elif amount and hash:
         await wallet.mint(amount, hash)
-        return {
-            "amount": amount,
-            "hash": hash,
-            "balance": wallet.available_balance,
-            "initial_balance": initial_balance,
-        }
+        return InvoiceResponse(
+            amount=amount,
+            hash=hash,
+            balance=wallet.available_balance,
+            initial_balance=initial_balance,
+        )
     return
 
 
-@router.get("/balance", name="Balance", summary="Display balance.")
+@router.get("/balance", name="Balance", summary="Display balance.", response_model=BalanceResponse)
 async def balance():
     await wallet.load_proofs()
-    result: dict = {"balance": wallet.available_balance}
     keyset_balances = wallet.balance_per_keyset()
-    if len(keyset_balances) > 0:
-        result.update({"keysets": keyset_balances})
     mint_balances = await wallet.balance_per_minturl()
-    if len(mint_balances) > 0:
-        result.update({"mints": mint_balances})
+    return BalanceResponse(
+        balance=wallet.available_balance, keysets=keyset_balances, mints=mint_balances
+    )
 
-    return result
 
-
-@router.post("/send", name="Send tokens")
+@router.post("/send", name="Send tokens", response_model=SendResponse)
 async def send_command(
     amount: int = Query(default=..., description="Amount to send"),
     nostr: str = Query(default=None, description="Send to nostr pubkey"),
@@ -156,27 +166,23 @@ async def send_command(
             balance, token = await send(wallet, amount, lock, legacy=False)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        return {"balance": balance, "token": token}
+        return SendResponse(balance=balance, token=token)
     else:
         try:
             token, pubkey = await send_nostr(wallet, amount, nostr)
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-        return {
-            "balance": wallet.available_balance,
-            "token": token,
-            "npub": pubkey,
-        }
+        return SendResponse(balance=wallet.available_balance, token=token, npub=pubkey)
 
 
-@router.post("/receive", name="Receive tokens")
+@router.post("/receive", name="Receive tokens", response_model=ReceiveResponse)
 async def receive_command(
     token: str = Query(default=None, description="Token to receive"),
     lock: str = Query(default=None, description="Unlock tokens"),
     nostr: bool = Query(default=False, description="Receive tokens via nostr"),
     all: bool = Query(default=False, description="Receive all pending tokens"),
 ):
-    result = {"initial_balance": wallet.available_balance}
+    initial_balance = wallet.available_balance
     if token:
         try:
             tokenObj: TokenV3 = await deserialize_token_from_string(token)
@@ -223,11 +229,10 @@ async def receive_command(
             detail="enter token or use either flag --nostr or --all.",
         )
     assert balance
-    result.update({"balance": balance})
-    return result
+    return ReceiveResponse(initial_balance=initial_balance, balance=balance)
 
 
-@router.post("/burn", name="Burn spent tokens")
+@router.post("/burn", name="Burn spent tokens", response_model=BurnResponse)
 async def burn(
     token: str = Query(default=None, description="Token to burn"),
     all: bool = Query(default=False, description="Burn all spent tokens"),
@@ -268,10 +273,10 @@ async def burn(
         await wallet.invalidate(proofs, check_spendable=False)
     else:
         await wallet.invalidate(proofs)
-    return {"balance": wallet.available_balance}
+    return BurnResponse(balance=wallet.available_balance)
 
 
-@router.get("/pending", name="Show pending tokens")
+@router.get("/pending", name="Show pending tokens", response_model=PendingResponse)
 async def pending(
     number: int = Query(default=None, description="Show only n pending tokens"),
     offset: int = Query(
@@ -312,35 +317,29 @@ async def pending(
                     }
                 }
             )
-    return result
+    return PendingResponse(pending_token=result)
 
 
-@router.get("/lock", name="Generate receiving lock")
+@router.get("/lock", name="Generate receiving lock", response_model=LockResponse)
 async def lock():
     p2shscript = await wallet.create_p2sh_lock()
     txin_p2sh_address = p2shscript.address
-    return {"P2SH": txin_p2sh_address}
+    return LockResponse(P2SH=txin_p2sh_address)
 
 
-@router.get("/locks", name="Show unused receiving locks")
+@router.get("/locks", name="Show unused receiving locks", response_model=LocksResponse)
 async def locks():
     locks = await get_unused_locks(db=wallet.db)
-    if len(locks):
-        return {"locks": locks}
-    else:
-        return {"locks": []}
+    return LocksResponse(locks=locks)
 
 
-@router.get("/invoices", name="List all pending invoices")
+@router.get("/invoices", name="List all pending invoices", response_model=InvoicesResponse)
 async def invoices():
     invoices = await get_lightning_invoices(db=wallet.db)
-    if len(invoices):
-        return {"invoices": invoices}
-    else:
-        return {"invoices": []}
+    return InvoicesResponse(invoices=invoices)
 
 
-@router.get("/wallets", name="List all available wallets")
+@router.get("/wallets", name="List all available wallets", response_model=WalletsResponse)
 async def wallets():
     wallets = [
         d for d in listdir(settings.cashu_dir) if isdir(join(settings.cashu_dir, d))
@@ -371,38 +370,35 @@ async def wallets():
                     )
         except:
             pass
-    return result
+    return WalletsResponse(wallets=result)
 
 
-@router.get("/info", name="Information about Cashu wallet")
+@router.get("/info", name="Information about Cashu wallet", response_model=InfoResponse)
 async def info():
-    general = {
-        "version": settings.version,
-        "wallet": wallet.name,
-        "debug": settings.debug,
-        "cashu_dir": settings.cashu_dir,
-        "mint_url": settings.mint_url,
-    }
-    if settings.env_file:
-        general.update({"settings": settings.env_file})
-    if settings.tor:
-        general.update({"tor": settings.tor})
     if settings.nostr_private_key:
         try:
             client = NostrClient(private_key=settings.nostr_private_key, connect=False)
-            general.update(
-                {
-                    "nostr": {
-                        "public_key": client.private_key.bech32(),
-                        "relays": settings.nostr_relays,
-                    },
-                }
-            )
+            nostr_public_key = client.private_key.bech32()
+            nostr_relays = settings.nostr_relays
         except:
-            general.update({"nostr": "Invalid key"})
+            nostr_public_key = "Invalid key"
+            nostr_relays = []
+    else:
+        nostr_public_key = None
+        nostr_relays = []
     if settings.socks_host:
-        general.update(
-            {"socks proxy": settings.socks_host + ":" + str(settings.socks_host)}
-        )
-
-    return general
+        socks_proxy = settings.socks_host + ":" + str(settings.socks_host)
+    else:
+        socks_proxy = None
+    return InfoResponse(
+        version=settings.version,
+        wallet=wallet.name,
+        debug=settings.debug,
+        cashu_dir=settings.cashu_dir,
+        mint_url=settings.mint_url,
+        settings=settings.env_file,
+        tor=settings.tor,
+        nostr_public_key=nostr_public_key,
+        nostr_relays=nostr_relays,
+        socks_proxy=socks_proxy,
+    )
