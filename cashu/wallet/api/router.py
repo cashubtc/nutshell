@@ -100,7 +100,9 @@ async def pay(
     )
 
 
-@router.post("/invoice", name="Request lightning invoice", response_model=InvoiceResponse)
+@router.post(
+    "/invoice", name="Request lightning invoice", response_model=InvoiceResponse
+)
 async def invoice(
     amount: int = Query(default=..., description="Amount to request in invoice"),
     hash: str = Query(default=None, description="Hash of paid invoice"),
@@ -137,7 +139,12 @@ async def invoice(
     return
 
 
-@router.get("/balance", name="Balance", summary="Display balance.", response_model=BalanceResponse)
+@router.get(
+    "/balance",
+    name="Balance",
+    summary="Display balance.",
+    response_model=BalanceResponse,
+)
 async def balance():
     await wallet.load_proofs()
     keyset_balances = wallet.balance_per_keyset()
@@ -333,13 +340,17 @@ async def locks():
     return LocksResponse(locks=locks)
 
 
-@router.get("/invoices", name="List all pending invoices", response_model=InvoicesResponse)
+@router.get(
+    "/invoices", name="List all pending invoices", response_model=InvoicesResponse
+)
 async def invoices():
     invoices = await get_lightning_invoices(db=wallet.db)
     return InvoicesResponse(invoices=invoices)
 
 
-@router.get("/wallets", name="List all available wallets", response_model=WalletsResponse)
+@router.get(
+    "/wallets", name="List all available wallets", response_model=WalletsResponse
+)
 async def wallets():
     wallets = [
         d for d in listdir(settings.cashu_dir) if isdir(join(settings.cashu_dir, d))
