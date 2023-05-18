@@ -42,3 +42,15 @@ async def test_api_keyset_keys(ledger):
     assert response.json() == {
         str(k): v.serialize().hex() for k, v in ledger.keyset.public_keys.items()
     }
+
+
+@pytest.mark.asyncio
+async def test_api_mint_validation(ledger):
+    response = requests.get(f"{BASE_URL}/mint?amount=-21")
+    assert "error" in response.json()
+    response = requests.get(f"{BASE_URL}/mint?amount=0")
+    assert "error" in response.json()
+    response = requests.get(f"{BASE_URL}/mint?amount=2100000000000001")
+    assert "error" in response.json()
+    response = requests.get(f"{BASE_URL}/mint?amount=1")
+    assert "error" not in response.json()
