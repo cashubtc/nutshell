@@ -18,10 +18,8 @@ from ...wallet.helpers import deserialize_token_from_string, init_wallet, receiv
 from ...wallet.nostr import receive_nostr, send_nostr
 from ...wallet.wallet import Wallet as Wallet
 from .api_helpers import verify_mints
-from .error_handler import ErrorHandler
 
 router: APIRouter = APIRouter()
-router.route_class = ErrorHandler
 
 
 def create_wallet(url=settings.mint_url, dir=settings.cashu_dir, name="wallet"):
