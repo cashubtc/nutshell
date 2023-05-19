@@ -153,7 +153,7 @@ async def get_unused_locks(
     clause: List[str] = []
     args: List[str] = []
 
-    clause.append("used = 0")
+    clause.append("used = false")
 
     if address:
         clause.append("address = ?")
