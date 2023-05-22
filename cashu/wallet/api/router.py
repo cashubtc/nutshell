@@ -30,6 +30,7 @@ from .responses import (
     PendingResponse,
     ReceiveResponse,
     SendResponse,
+    SwapResponse,
     WalletsResponse,
 )
 
@@ -139,7 +140,12 @@ async def invoice(
     return
 
 
-@router.post("/swap", name="Multi-mint swaps", summary="Swap funds between mints.")
+@router.post(
+    "/swap",
+    name="Multi-mint swaps",
+    summary="Swap funds between mints.",
+    response_model=SwapResponse,
+)
 async def swap(
     amount: int = Query(default=..., description="Amount to swap between mints"),
     outgoing_mint: str = Query(default=..., description="URL of outgoing mint"),
@@ -178,12 +184,12 @@ async def swap(
     await wallet.mint(amount, invoice.hash)
     await wallet.load_proofs()
     mint_balances = await wallet.balance_per_minturl()
-    return {
-        "outgoing_mint": outgoing_mint,
-        "incoming_mint": incoming_mint,
-        "invoice": invoice,
-        "balances": mint_balances,
-    }
+    return SwapResponse(
+        outgoing_mint=outgoing_mint,
+        incoming_mint=incoming_mint,
+        invoice=invoice,
+        balances=mint_balances,
+    )
 
 
 @router.get(

@@ -21,6 +21,13 @@ class InvoiceResponse(BaseModel):
     balance: int
 
 
+class SwapResponse(BaseModel):
+    outgoing_mint: str
+    incoming_mint: str
+    invoice: Invoice
+    balances: Dict
+
+
 class BalanceResponse(BaseModel):
     balance: int
     keysets: Union[Dict, None] = None
