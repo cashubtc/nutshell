@@ -29,10 +29,7 @@ def create_wallet(url=settings.mint_url, dir=settings.cashu_dir, name="wallet"):
 async def load_mint(wallet: Wallet, mint: Optional[str] = None):
     if mint:
         wallet = create_wallet(mint)
-    try:
-        await wallet.load_mint()
-    except Exception as e:
-        raise Exception(str(e))
+    await wallet.load_mint()
     return wallet
 
 
