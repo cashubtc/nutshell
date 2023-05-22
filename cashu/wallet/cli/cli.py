@@ -175,14 +175,14 @@ async def invoice(ctx: Context, amount: int, hash: str):
 @click.pass_context
 @coro
 async def swap(ctx: Context):
-    assert settings.lightning, "lightning not enabled"
+    if not settings.lightning:
+        raise Exception("this mint does not support lightning.")
     print("Mint to swap from:")
     wallet_outgoing_mint = await get_mint_wallet(ctx)
     amount = int(input("Enter amount to swap in sats:"))
     incoming_mint_url = input("Enter URL of mint to swap to:")
-    assert (
-        wallet_outgoing_mint.url not in incoming_mint_url
-    ), "mints for swap have to be different"
+    if wallet_outgoing_mint.url in incoming_mint_url:
+        raise Exception("mints for swap have to be different")
     click.confirm(
         f"Swap {amount} sats from mint {wallet_outgoing_mint.url} to mint {incoming_mint_url}?",
         abort=True,
@@ -206,7 +206,8 @@ async def swap(ctx: Context):
     await wallet.load_proofs()
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice.pr)
     assert total_amount > 0, "amount is not positive"
-    assert wallet.available_balance >= total_amount, "balance too low"
+    if wallet.available_balance < total_amount:
+        raise Exception("balance too low")
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice.pr)
     # mint token in incoming mint

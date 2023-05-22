@@ -129,14 +129,16 @@ async def swap(
     outgoing_mint: str = Query(default=..., description="URL of outgoing mint"),
     incoming_mint: str = Query(default=..., description="URL of incoming mint"),
 ):
-    assert settings.lightning, HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="lightning not enabled",
-    )
-    assert outgoing_mint not in incoming_mint, HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="mints for swap have to be different",
-    )
+    if not settings.lightning:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="this mint does not support lightning.",
+        )
+    if outgoing_mint in incoming_mint:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="mints for swap have to be different",
+        )
     global wallet
     # request invoice from incoming mint
     wallet = await load_mint(wallet, incoming_mint)
@@ -149,9 +151,10 @@ async def swap(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="amount has to be larger than zero.",
     )
-    assert wallet.available_balance >= total_amount, HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST, detail="balance is too low."
-    )
+    if wallet.available_balance < total_amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="balance is too low."
+        )
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice.pr)
     # mint token in incoming mint
