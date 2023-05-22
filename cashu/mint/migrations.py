@@ -1,8 +1,7 @@
-from ..core.db import Database
-from ..core.migrations import table_with_schema
+from ..core.db import Database, table_with_schema
 
 
-async def m000_create_migrations_table(db):
+async def m000_create_migrations_table(db: Database):
     await db.execute(
         f"""
     CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'dbversions')} (
@@ -17,7 +16,7 @@ async def m001_initial(db: Database):
     await db.execute(
         f"""
             CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'promises')} (
-                amount INTEGER NOT NULL,
+                amount {db.big_int} NOT NULL,
                 B_b TEXT NOT NULL,
                 C_b TEXT NOT NULL,
 
@@ -30,7 +29,7 @@ async def m001_initial(db: Database):
     await db.execute(
         f"""
             CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_used')} (
-                amount INTEGER NOT NULL,
+                amount {db.big_int} NOT NULL,
                 C TEXT NOT NULL,
                 secret TEXT NOT NULL,
 
@@ -43,7 +42,7 @@ async def m001_initial(db: Database):
     await db.execute(
         f"""
             CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'invoices')} (
-                amount INTEGER NOT NULL,
+                amount {db.big_int} NOT NULL,
                 pr TEXT NOT NULL,
                 hash TEXT NOT NULL,
                 issued BOOL NOT NULL,
@@ -58,10 +57,10 @@ async def m001_initial(db: Database):
         f"""
         CREATE VIEW {table_with_schema(db, 'balance_issued')} AS
         SELECT COALESCE(SUM(s), 0) AS balance FROM (
-            SELECT SUM(amount) AS s
+            SELECT SUM(amount)
             FROM {table_with_schema(db, 'promises')}
             WHERE amount > 0
-        );
+        ) AS s;
     """
     )
 
@@ -69,21 +68,21 @@ async def m001_initial(db: Database):
         f"""
         CREATE VIEW {table_with_schema(db, 'balance_redeemed')} AS
         SELECT COALESCE(SUM(s), 0) AS balance FROM (
-            SELECT SUM(amount) AS s
+            SELECT SUM(amount)
             FROM {table_with_schema(db, 'proofs_used')}
             WHERE amount > 0
-        );
+        )  AS s;
     """
     )
 
     await db.execute(
         f"""
         CREATE VIEW {table_with_schema(db, 'balance')} AS
-        SELECT s_issued - s_used AS balance FROM (
+        SELECT s_issued - s_used FROM (
             SELECT bi.balance AS s_issued, bu.balance AS s_used
             FROM {table_with_schema(db, 'balance_issued')} bi
             CROSS JOIN {table_with_schema(db, 'balance_redeemed')} bu
-        );
+        )  AS balance;
     """
     )
 
