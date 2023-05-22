@@ -6,7 +6,7 @@ from os import listdir
 from os.path import isdir, join
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query
 
 from ...core.base import TokenV3
 from ...core.helpers import sum_proofs
@@ -43,10 +43,7 @@ def create_wallet(url=settings.mint_url, dir=settings.cashu_dir, name="wallet"):
 async def load_mint(wallet: Wallet, mint: Optional[str] = None):
     if mint:
         wallet = create_wallet(mint)
-    try:
-        await wallet.load_mint()
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    await wallet.load_mint()
     return wallet
 
 
@@ -56,9 +53,7 @@ wallet = create_wallet()
 @router.on_event("startup")
 async def start_wallet():
     if settings.tor and not TorProxy().check_platform():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="tor not working"
-        )
+        raise Exception("tor not working.")
     await init_wallet(wallet)
 
 
@@ -71,23 +66,16 @@ async def pay(
     ),
 ):
     if not settings.lightning:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="lightning not enabled."
-        )
+        raise Exception("lightning not enabled.")
+
     global wallet
     wallet = await load_mint(wallet, mint)
 
     await wallet.load_proofs()
     initial_balance = wallet.available_balance
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
-    assert total_amount > 0, HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="amount has to be larger than zero.",
-    )
-    if wallet.available_balance < total_amount:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="balance is too low."
-        )
+    assert total_amount > 0, "amount has to be larger than zero."
+    assert wallet.available_balance >= total_amount, "balance is too low."
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice)
     await wallet.load_proofs()
@@ -169,16 +157,10 @@ async def send_command(
 
     await wallet.load_proofs()
     if not nostr:
-        try:
-            balance, token = await send(wallet, amount, lock, legacy=False)
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        balance, token = await send(wallet, amount, lock, legacy=False)
         return SendResponse(balance=balance, token=token)
     else:
-        try:
-            token, pubkey = await send_nostr(wallet, amount, nostr)
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        token, pubkey = await send_nostr(wallet, amount, nostr)
         return SendResponse(balance=wallet.available_balance, token=token, npub=pubkey)
 
 
@@ -191,25 +173,12 @@ async def receive_command(
 ):
     initial_balance = wallet.available_balance
     if token:
-        try:
-            tokenObj: TokenV3 = await deserialize_token_from_string(token)
-
-            try:
-                await verify_mints(wallet, tokenObj)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-                )
-
-            balance = await receive(wallet, tokenObj, lock)
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        tokenObj: TokenV3 = await deserialize_token_from_string(token)
+        await verify_mints(wallet, tokenObj)
+        balance = await receive(wallet, tokenObj, lock)
     elif nostr:
-        try:
-            await receive_nostr(wallet)
-            balance = wallet.available_balance
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        await receive_nostr(wallet)
+        balance = wallet.available_balance
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         balance = None
@@ -218,23 +187,10 @@ async def receive_command(
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
                 tokenObj = await deserialize_token_from_string(token)
-                try:
-                    await verify_mints(wallet, tokenObj)
-                except Exception as e:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-                    )
-                try:
-                    balance = await receive(wallet, tokenObj, lock)
-                except Exception as e:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-                    )
+                await verify_mints(wallet, tokenObj)
+                balance = await receive(wallet, tokenObj, lock)
     else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="enter token or use either flag --nostr or --all.",
-        )
+        raise Exception("enter token or use either flag --nostr or --all.")
     assert balance
     return ReceiveResponse(initial_balance=initial_balance, balance=balance)
 
@@ -257,9 +213,8 @@ async def burn(
     if not delete:
         wallet = await load_mint(wallet, mint)
     if not (all or token or force or delete) or (token and all):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="enter a token or use --all to burn all pending tokens, --force to check all tokens"
+        raise Exception(
+            "enter a token or use --all to burn all pending tokens, --force to check all tokens"
             "or --delete with send ID to force-delete pending token from list if mint is unavailable.",
         )
     if all:
