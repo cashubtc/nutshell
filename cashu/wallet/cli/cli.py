@@ -20,10 +20,10 @@ from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
 from ...wallet.wallet import Wallet as Wallet
+from ..api.api_server import start_api_server
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
 from ..helpers import deserialize_token_from_string, init_wallet, receive, send
 from ..nostr import receive_nostr, send_nostr
-from ..api.api_server import start_api_server
 
 
 class NaturalOrderGroup(click.Group):
@@ -60,7 +60,7 @@ def run_api_server(ctx, param, daemon):
     is_flag=True,
     expose_value=False,
     callback=run_api_server,
-    help="Start server for wallet REST API"
+    help="Start server for wallet REST API",
 )
 @click.pass_context
 def cli(ctx: Context, host: str, walletname: str):
