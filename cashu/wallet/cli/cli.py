@@ -23,6 +23,7 @@ from ...wallet.wallet import Wallet as Wallet
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
 from ..helpers import deserialize_token_from_string, init_wallet, receive, send
 from ..nostr import receive_nostr, send_nostr
+from ..api.api_server import start_api_server
 
 
 class NaturalOrderGroup(click.Group):
@@ -30,6 +31,13 @@ class NaturalOrderGroup(click.Group):
 
     def list_commands(self, ctx):
         return self.commands.keys()
+
+
+def run_api_server(ctx, param, daemon):
+    if not daemon:
+        return
+    start_api_server()
+    ctx.exit()
 
 
 @click.group(cls=NaturalOrderGroup)
@@ -45,6 +53,14 @@ class NaturalOrderGroup(click.Group):
     "walletname",
     default="wallet",
     help="Wallet name (default: wallet).",
+)
+@click.option(
+    "--daemon",
+    "-d",
+    is_flag=True,
+    expose_value=False,
+    callback=run_api_server,
+    help="Start server for wallet REST API"
 )
 @click.pass_context
 def cli(ctx: Context, host: str, walletname: str):
