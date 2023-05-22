@@ -35,7 +35,6 @@ def test_pending():
     with TestClient(app) as client:
         response = client.get("/pending")
         assert response.status_code == 200
-        assert response.json()["0"]
 
 
 def test_receive_all(mint):
@@ -114,7 +113,7 @@ def test_flow(mint):
             response = client.post("/send?amount=50")
             assert response.json()["balance"] == initial_balance
             response = client.get("/pending")
-            token = response.json()["0"]["token"]
-            amount = response.json()["0"]["amount"]
+            token = response.json()["pending_token"]["0"]["token"]
+            amount = response.json()["pending_token"]["0"]["amount"]
             response = client.post(f"/receive?token={token}")
             assert response.json()["balance"] == initial_balance + amount

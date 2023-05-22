@@ -14,9 +14,9 @@ async def m000_create_migrations_table(db: Database):
 
 async def m001_initial(db: Database):
     await db.execute(
-        """
+        f"""
             CREATE TABLE IF NOT EXISTS proofs (
-                amount INTEGER NOT NULL,
+                amount {db.big_int} NOT NULL,
                 C TEXT NOT NULL,
                 secret TEXT NOT NULL,
 
@@ -27,9 +27,9 @@ async def m001_initial(db: Database):
     )
 
     await db.execute(
-        """
+        f"""
             CREATE TABLE IF NOT EXISTS proofs_used (
-                amount INTEGER NOT NULL,
+                amount {db.big_int} NOT NULL,
                 C TEXT NOT NULL,
                 secret TEXT NOT NULL,
 

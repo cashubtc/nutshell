@@ -1,10 +1,10 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
 from environs import Env  # type: ignore
-from pydantic import BaseSettings, Extra, Field, validator
+from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
@@ -13,14 +13,14 @@ VERSION = "0.12.0"
 
 def find_env_file():
     # env file: default to current dir, else home dir
-    ENV_FILE = os.path.join(os.getcwd(), ".env")
-    if not os.path.isfile(ENV_FILE):
-        ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
-    if os.path.isfile(ENV_FILE):
-        env.read_env(ENV_FILE)
+    env_file = os.path.join(os.getcwd(), ".env")
+    if not os.path.isfile(env_file):
+        env_file = os.path.join(str(Path.home()), ".cashu", ".env")
+    if os.path.isfile(env_file):
+        env.read_env(env_file)
     else:
-        ENV_FILE = ""
-    return ENV_FILE
+        env_file = ""
+    return env_file
 
 
 class CashuSettings(BaseSettings):
@@ -30,7 +30,7 @@ class CashuSettings(BaseSettings):
     lightning_reserve_fee_min: int = Field(default=2000)
     max_order: int = Field(default=64)
 
-    class Config:
+    class Config(BaseSettings.Config):
         env_file = find_env_file()
         env_file_encoding = "utf-8"
         case_sensitive = False
@@ -42,6 +42,7 @@ class CashuSettings(BaseSettings):
 
 class EnvSettings(CashuSettings):
     debug: bool = Field(default=False)
+    log_level: str = Field(default="INFO")
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=3338)
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
@@ -55,6 +56,8 @@ class MintSettings(CashuSettings):
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
     mint_peg_out_only: bool = Field(default=False)
+    mint_max_peg_in: int = Field(default=None)
+    mint_max_peg_out: int = Field(default=None)
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
