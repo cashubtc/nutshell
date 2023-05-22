@@ -1,9 +1,8 @@
 import time
 from typing import Any, List, Optional
 
-from cashu.core.base import BlindedSignature, Invoice, MintKeyset, Proof
-from cashu.core.db import Connection, Database
-from cashu.core.migrations import table_with_schema
+from ..core.base import Invoice, MintKeyset, Proof, BlindedSignature
+from ..core.db import Connection, Database, table_with_schema
 
 
 class LedgerCrud:
@@ -14,52 +13,40 @@ class LedgerCrud:
     """
 
     async def get_keyset(*args, **kwags):
-
-        return await get_keyset(*args, **kwags)
+        return await get_keyset(*args, **kwags)  # type: ignore
 
     async def get_lightning_invoice(*args, **kwags):
-
-        return await get_lightning_invoice(*args, **kwags)
+        return await get_lightning_invoice(*args, **kwags)  # type: ignore
 
     async def get_proofs_used(*args, **kwags):
-
-        return await get_proofs_used(*args, **kwags)
+        return await get_proofs_used(*args, **kwags)  # type: ignore
 
     async def invalidate_proof(*args, **kwags):
-
-        return await invalidate_proof(*args, **kwags)
+        return await invalidate_proof(*args, **kwags)  # type: ignore
 
     async def get_proofs_pending(*args, **kwags):
-
-        return await get_proofs_pending(*args, **kwags)
+        return await get_proofs_pending(*args, **kwags)  # type: ignore
 
     async def set_proof_pending(*args, **kwags):
-
-        return await set_proof_pending(*args, **kwags)
+        return await set_proof_pending(*args, **kwags)  # type: ignore
 
     async def unset_proof_pending(*args, **kwags):
-
-        return await unset_proof_pending(*args, **kwags)
+        return await unset_proof_pending(*args, **kwags)  # type: ignore
 
     async def store_keyset(*args, **kwags):
-
-        return await store_keyset(*args, **kwags)
+        return await store_keyset(*args, **kwags)  # type: ignore
 
     async def store_lightning_invoice(*args, **kwags):
-
-        return await store_lightning_invoice(*args, **kwags)
+        return await store_lightning_invoice(*args, **kwags)  # type: ignore
 
     async def store_promise(*args, **kwags):
-
-        return await store_promise(*args, **kwags)
+        return await store_promise(*args, **kwags)  # type: ignore
 
     async def get_promise(*args, **kwags):
-
-        return await get_promise(*args, **kwags)
+        return await get_promise(*args, **kwags)  # type: ignore
 
     async def update_lightning_invoice(*args, **kwags):
-
-        return await update_lightning_invoice(*args, **kwags)
+        return await update_lightning_invoice(*args, **kwags)  # type: ignore
 
 
 async def store_promise(
@@ -69,7 +56,6 @@ async def store_promise(
     C_: str,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'promises')}
@@ -89,7 +75,6 @@ async def get_promise(
     B_: str,
     conn: Optional[Connection] = None,
 ):
-
     row = await (conn or db).fetchone(
         f"""
         SELECT * from {table_with_schema(db, 'promises')}
@@ -104,7 +89,6 @@ async def get_proofs_used(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     rows = await (conn or db).fetchall(
         f"""
         SELECT secret from {table_with_schema(db, 'proofs_used')}
@@ -118,7 +102,6 @@ async def invalidate_proof(
     proof: Proof,
     conn: Optional[Connection] = None,
 ):
-
     # we add the proof and secret to the used list
     await (conn or db).execute(
         f"""
@@ -138,7 +121,6 @@ async def get_proofs_pending(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     rows = await (conn or db).fetchall(
         f"""
         SELECT * from {table_with_schema(db, 'proofs_pending')}
@@ -152,7 +134,6 @@ async def set_proof_pending(
     proof: Proof,
     conn: Optional[Connection] = None,
 ):
-
     # we add the proof and secret to the used list
     await (conn or db).execute(
         f"""
@@ -173,7 +154,6 @@ async def unset_proof_pending(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         f"""
         DELETE FROM {table_with_schema(db, 'proofs_pending')}
@@ -188,18 +168,18 @@ async def store_lightning_invoice(
     invoice: Invoice,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'invoices')}
-          (amount, pr, hash, issued)
-        VALUES (?, ?, ?, ?)
+          (amount, pr, hash, issued, payment_hash)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             invoice.amount,
             invoice.pr,
             invoice.hash,
             invoice.issued,
+            invoice.payment_hash,
         ),
     )
 
@@ -209,7 +189,6 @@ async def get_lightning_invoice(
     hash: str,
     conn: Optional[Connection] = None,
 ):
-
     row = await (conn or db).fetchone(
         f"""
         SELECT * from {table_with_schema(db, 'invoices')}
@@ -217,6 +196,7 @@ async def get_lightning_invoice(
         """,
         (hash,),
     )
+
     return Invoice(**row) if row else None
 
 
@@ -240,7 +220,6 @@ async def store_keyset(
     keyset: MintKeyset,
     conn: Optional[Connection] = None,
 ):
-
     await (conn or db).execute(  # type: ignore
         f"""
         INSERT INTO {table_with_schema(db, 'keysets')}
@@ -261,7 +240,7 @@ async def store_keyset(
 
 async def get_keyset(
     db: Database,
-    id: str = None,
+    id: str = "",
     derivation_path: str = "",
     conn: Optional[Connection] = None,
 ):

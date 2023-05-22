@@ -1,26 +1,26 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
 from environs import Env  # type: ignore
-from pydantic import BaseSettings, Extra, Field, validator
+from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.11.0"
+VERSION = "0.12.0"
 
 
 def find_env_file():
     # env file: default to current dir, else home dir
-    ENV_FILE = os.path.join(os.getcwd(), ".env")
-    if not os.path.isfile(ENV_FILE):
-        ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
-    if os.path.isfile(ENV_FILE):
-        env.read_env(ENV_FILE)
+    env_file = os.path.join(os.getcwd(), ".env")
+    if not os.path.isfile(env_file):
+        env_file = os.path.join(str(Path.home()), ".cashu", ".env")
+    if os.path.isfile(env_file):
+        env.read_env(env_file)
     else:
-        ENV_FILE = ""
-    return ENV_FILE
+        env_file = ""
+    return env_file
 
 
 class CashuSettings(BaseSettings):
@@ -30,7 +30,7 @@ class CashuSettings(BaseSettings):
     lightning_reserve_fee_min: int = Field(default=2000)
     max_order: int = Field(default=64)
 
-    class Config:
+    class Config(BaseSettings.Config):
         env_file = find_env_file()
         env_file_encoding = "utf-8"
         case_sensitive = False
@@ -42,20 +42,34 @@ class CashuSettings(BaseSettings):
 
 class EnvSettings(CashuSettings):
     debug: bool = Field(default=False)
+    log_level: str = Field(default="INFO")
     host: str = Field(default="127.0.0.1")
-    port: int = Field(default=5000)
+    port: int = Field(default=3338)
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
 
 
 class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
+    mint_derivation_path: str = Field(default="0/0/0/0")
     mint_listen_host: str = Field(default="127.0.0.1")
     mint_listen_port: int = Field(default=3338)
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
+    mint_peg_out_only: bool = Field(default=False)
+    mint_max_peg_in: int = Field(default=None)
+    mint_max_peg_out: int = Field(default=None)
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
+
+
+class MintInformation(CashuSettings):
+    mint_info_name: str = Field(default="Cashu mint")
+    mint_info_description: str = Field(default=None)
+    mint_info_description_long: str = Field(default=None)
+    mint_info_contact: List[List[str]] = Field(default=[["", ""]])
+    mint_info_nuts: List[str] = Field(default=["NUT-07", "NUT-08", "NUT-09"])
+    mint_info_motd: str = Field(default=None)
 
 
 class WalletSettings(CashuSettings):
@@ -67,6 +81,8 @@ class WalletSettings(CashuSettings):
     mint_url: str = Field(default=None)
     mint_host: str = Field(default="8333.space")
     mint_port: int = Field(default=3338)
+
+    api_port: int = Field(default=4448)
 
     nostr_private_key: str = Field(default=None)
     nostr_relays: List[str] = Field(
@@ -80,7 +96,9 @@ class WalletSettings(CashuSettings):
     )
 
 
-class Settings(EnvSettings, MintSettings, WalletSettings, CashuSettings):
+class Settings(
+    EnvSettings, MintSettings, MintInformation, WalletSettings, CashuSettings
+):
     version: str = Field(default=VERSION)
 
     # def __init__(self, env_file=None):

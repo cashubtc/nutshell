@@ -7,8 +7,7 @@ from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
-from cashu.core.settings import settings
-
+from ..core.settings import settings
 from .router import router
 from .startup import start_mint_init
 
@@ -53,7 +52,9 @@ def create_app(config_object="core.settings") -> FastAPI:
                 logger.log(level, record.getMessage())
 
         logger.remove()
-        log_level: str = "DEBUG" if settings.debug else "INFO"
+        log_level = settings.log_level
+        if settings.debug and log_level == "INFO":
+            log_level = "DEBUG"
         formatter = Formatter()
         logger.add(sys.stderr, level=log_level, format=formatter.format)
 

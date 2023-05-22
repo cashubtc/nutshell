@@ -1,12 +1,6 @@
 import re
 
-from loguru import logger
-
-from cashu.core.db import COCKROACH, POSTGRES, SQLITE, Database
-
-
-def table_with_schema(db, table: str):
-    return f"{db.references_schema if db.schema else ''}{table}"
+from ..core.db import COCKROACH, POSTGRES, SQLITE, Database, table_with_schema
 
 
 async def migrate_databases(db: Database, migrations_module):
@@ -28,7 +22,6 @@ async def migrate_databases(db: Database, migrations_module):
             if match:
                 version = int(match.group(1))
                 if version > current_versions.get(db_name, 0):
-                    logger.debug(f"Migration: Running migration {db_name}:{key}.")
                     await migrate(db)
 
                     if db.schema == None:
@@ -37,7 +30,8 @@ async def migrate_databases(db: Database, migrations_module):
                         async with db.connect() as conn:
                             await set_migration_version(conn, db_name, version)
 
-    async with db.connect() as conn:
+    async with db.connect() as conn:  # type: ignore
+        exists = None
         if conn.type == SQLITE:
             exists = await conn.fetchone(
                 f"SELECT * FROM sqlite_master WHERE type='table' AND name='{table_with_schema(db, 'dbversions')}'"
@@ -48,7 +42,6 @@ async def migrate_databases(db: Database, migrations_module):
             )
 
         if not exists:
-            logger.debug("Migration: creating migrations table.")
             await migrations_module.m000_create_migrations_table(conn)
 
         rows = await (

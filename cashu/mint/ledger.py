@@ -3,10 +3,8 @@ from typing import Dict, List, Literal, Optional, Set, Union
 
 from loguru import logger
 
-import cashu.core.b_dhke as b_dhke
-import cashu.core.bolt11 as bolt11
-import cashu.core.legacy as legacy
-from cashu.core.base import (
+from ..core import bolt11, legacy
+from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     Invoice,
@@ -14,14 +12,16 @@ from cashu.core.base import (
     MintKeysets,
     Proof,
 )
-from cashu.core.db import Database
-from cashu.core.helpers import fee_reserve, sum_proofs
-from cashu.core.script import verify_script
-from cashu.core.secp import PublicKey
-from cashu.core.settings import settings
-from cashu.core.split import amount_split
-from cashu.lightning.base import Wallet
-from cashu.mint.crud import LedgerCrud
+from ..core.crypto import b_dhke
+from ..core.crypto.keys import derive_pubkey, random_hash
+from ..core.crypto.secp import PublicKey
+from ..core.db import Connection, Database, lock_table
+from ..core.helpers import fee_reserve, sum_proofs
+from ..core.script import verify_script
+from ..core.settings import settings
+from ..core.split import amount_split
+from ..lightning.base import Wallet
+from ..mint.crud import LedgerCrud
 
 
 class Ledger:
@@ -40,14 +40,18 @@ class Ledger:
         self.db = db
         self.crud = crud
         self.lightning = lightning
+        self.pubkey = derive_pubkey(self.master_key)
+        self.keysets = MintKeysets([])
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""
+        logger.trace(f"crud: loading used proofs")
         proofs_used = await self.crud.get_proofs_used(db=self.db)
+        logger.trace(f"crud: loaded {len(proofs_used)} used proofs")
         self.proofs_used = set(proofs_used)
 
     async def load_keyset(self, derivation_path, autosave=True):
-        """Load current keyset keyset or generate new one.
+        """Load the keyset for a derivation path if it already exists. If not generate new one and store in the db.
 
         Args:
             derivation_path (_type_): Derivation path from which the keyset is generated.
@@ -61,35 +65,66 @@ class Ledger:
             derivation_path=derivation_path,
             version=settings.version,
         )
-        # check if current keyset is stored in db and store if not
-        logger.trace(f"Loading keyset {keyset.id} from db.")
+        # load the keyest from db
+        logger.trace(f"crud: loading keyset for {derivation_path}")
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
-            id=keyset.id, db=self.db
+            derivation_path=derivation_path, db=self.db
         )
-        if not len(tmp_keyset_local) and autosave:
-            logger.trace(f"Storing keyset {keyset.id}.")
-            await self.crud.store_keyset(keyset=keyset, db=self.db)
+        logger.trace(f"crud: loaded {len(tmp_keyset_local)} keysets")
+        if tmp_keyset_local:
+            # we have a keyset for this derivation path
+            keyset = tmp_keyset_local[0]
+            # we need to initialize it
+            keyset.generate_keys(self.master_key)
+
+        else:
+            # no keyset for this derivation path yet
+            # we generate a new keyset
+            logger.debug(f"Generating new keyset {keyset.id}.")
+            keyset = MintKeyset(
+                seed=self.master_key,
+                derivation_path=derivation_path,
+                version=settings.version,
+            )
+            if autosave:
+                logger.debug(f"crud: storing new keyset {keyset.id}.")
+                await self.crud.store_keyset(keyset=keyset, db=self.db)
+                logger.trace(f"crud: stored new keyset {keyset.id}.")
 
         # store the new keyset in the current keysets
         if keyset.id:
             self.keysets.keysets[keyset.id] = keyset
+        logger.debug(f"Loaded keyset {keyset.id}.")
         return keyset
 
     async def init_keysets(self, autosave=True):
-        """Loads all keysets from db.
+        """Initializes all keysets of the mint from the db. Loads all past keysets and generate their keys. Then load the current keyset.
 
         Args:
-            autosave (bool, optional): Whether the keyset should be saved if it is
-            not in the database yet. Will be passed to `self.load_keyset`. Defaults to True.
+            autosave (bool, optional): Whether the current keyset should be saved if it is
+            not in the database yet. Will be passed to `self.load_keyset` where it is
+            generated from `self.derivation_path`. Defaults to True.
         """
         # load all past keysets from db
+        logger.trace(f"crud: loading keysets")
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
-        self.keysets = MintKeysets(tmp_keysets)
-        logger.trace(f"Loading {len(self.keysets.keysets)} keysets form db.")
-        # generate all derived keys from stored derivation paths of past keysets
+        logger.trace(f"crud: loaded {len(tmp_keysets)} keysets")
+        # add keysets from db to current keysets
+        for k in tmp_keysets:
+            if k.id and k.id not in self.keysets.keysets:
+                self.keysets.keysets[k.id] = k
+
+        # generate keys for all keysets in the database
         for _, v in self.keysets.keysets.items():
-            logger.trace(f"Generating keys for keyset {v.id}")
+            # we already generated the keys for this keyset
+            if v.id and v.public_keys and len(v.public_keys):
+                continue
+            logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
+
+        logger.debug(
+            f"Initialized {len(self.keysets.keysets)} keysets from the database."
+        )
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
 
@@ -126,11 +161,14 @@ class Ledger:
             BlindedSignature: Generated promise.
         """
         keyset = keyset if keyset else self.keyset
+        logger.trace(f"Generating promise with keyset {keyset.id}.")
         private_key_amount = keyset.private_keys[amount]
         C_ = b_dhke.step2_bob(B_, private_key_amount)
+        logger.trace(f"crud: _generate_promise storing promise for {amount}")
         await self.crud.store_promise(
             amount=amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
         )
+        logger.trace(f"crud: _generate_promise stored promise for {amount}")
         return BlindedSignature(id=keyset.id, amount=amount, C_=C_.serialize().hex())
 
     def _check_spendable(self, proof: Proof):
@@ -153,6 +191,9 @@ class Ledger:
         if not proof.id:
             private_key_amount = self.keyset.private_keys[proof.amount]
         else:
+            logger.trace(
+                f"Validating proof with keyset {self.keysets.keysets[proof.id].id}."
+            )
             # use the appropriate active keyset for this proof.id
             private_key_amount = self.keysets.keysets[proof.id].private_keys[
                 proof.amount
@@ -227,6 +268,7 @@ class Ledger:
         valid = (
             isinstance(amount, int) and amount > 0 and amount < 2**settings.max_order
         )
+        logger.trace(f"Verifying amount {amount} is valid: {valid}")
         if not valid:
             raise Exception("invalid amount: " + str(amount))
         return amount
@@ -251,7 +293,11 @@ class Ledger:
         Returns:
             Tuple[str, str]: Bolt11 invoice and payment hash (for lookup)
         """
+        logger.trace(
+            f"_request_lightning_invoice: Requesting Lightning invoice for {amount} satoshis."
+        )
         error, balance = await self.lightning.status()
+        logger.trace(f"_request_lightning_invoice: Lightning wallet balance: {balance}")
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         (
@@ -259,17 +305,20 @@ class Ledger:
             checking_id,
             payment_request,
             error_message,
-        ) = await self.lightning.create_invoice(amount, "cashu deposit")
+        ) = await self.lightning.create_invoice(amount, "Cashu deposit")
+        logger.trace(
+            f"_request_lightning_invoice: Lightning invoice: {payment_request}"
+        )
         return payment_request, checking_id
 
     async def _check_lightning_invoice(
-        self, amount: int, payment_hash: str
+        self, amount: int, hash: str, conn: Optional[Connection] = None
     ) -> Literal[True]:
-        """Checks with the Lightning backend whether an invoice with this payment_hash was paid.
+        """Checks with the Lightning backend whether an invoice stored with `hash` was paid.
 
         Args:
             amount (int): Amount of the outputs the wallet wants in return (in Satoshis).
-            payment_hash (str): Payment hash of Lightning invoice (for lookup).
+            hash (str): Hash to look up Lightning invoice by.
 
         Raises:
             Exception: Invoice not found.
@@ -281,35 +330,47 @@ class Ledger:
         Returns:
             bool: True if invoice has been paid, else False
         """
+        logger.trace(f"crud: _check_lightning_invoice: checking invoice {hash}")
         invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
-            hash=payment_hash, db=self.db
+            hash=hash, db=self.db, conn=conn
         )
+        logger.trace(f"crud: _check_lightning_invoice: invoice: {invoice}")
         if invoice is None:
             raise Exception("invoice not found.")
         if invoice.issued:
             raise Exception("tokens already issued for this invoice.")
+        assert invoice.payment_hash, "invoice has no payment hash."
 
         # set this invoice as issued
+        logger.trace(f"crud: setting invoice {invoice.payment_hash} as issued")
         await self.crud.update_lightning_invoice(
-            hash=payment_hash, issued=True, db=self.db
+            hash=hash, issued=True, db=self.db, conn=conn
         )
+        logger.trace(f"crud: invoice {invoice.payment_hash} set as issued")
 
         try:
             if amount > invoice.amount:
                 raise Exception(
                     f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
                 )
-
-            status = await self.lightning.get_invoice_status(payment_hash)
+            logger.trace(
+                f"_check_lightning_invoice: checking invoice {invoice.payment_hash}"
+            )
+            status = await self.lightning.get_invoice_status(invoice.payment_hash)
+            logger.trace(
+                f"_check_lightning_invoice: invoice {invoice.payment_hash} status: {status}"
+            )
             if status.paid:
                 return status.paid
             else:
                 raise Exception("Lightning invoice not paid yet.")
         except Exception as e:
             # unset issued
+            logger.trace(f"crud: unsetting invoice {invoice.payment_hash} as issued")
             await self.crud.update_lightning_invoice(
-                hash=payment_hash, issued=False, db=self.db
+                hash=hash, issued=False, db=self.db, conn=conn
             )
+            logger.trace(f"crud: invoice {invoice.payment_hash} unset as issued")
             raise e
 
     async def _pay_lightning_invoice(self, invoice: str, fee_limit_msat: int):
@@ -325,7 +386,9 @@ class Ledger:
         Returns:
             Tuple[bool, string, int]: Returns payment status, preimage of invoice, paid fees (in Millisatoshi)
         """
-        error, _ = await self.lightning.status()
+        logger.trace(f"_pay_lightning_invoice: paying Lightning invoice {invoice}")
+        error, balance = await self.lightning.status()
+        logger.trace(f"_pay_lightning_invoice: Lightning wallet balance: {balance}")
         if error:
             raise Exception(f"Lightning wallet not responding: {error}")
         (
@@ -335,6 +398,7 @@ class Ledger:
             preimage,
             error_message,
         ) = await self.lightning.pay_invoice(invoice, fee_limit_msat=fee_limit_msat)
+        logger.trace(f"_pay_lightning_invoice: Lightning payment status: {ok}")
         # make sure that fee is positive
         fee_msat = abs(fee_msat) if fee_msat else fee_msat
         return ok, preimage, fee_msat
@@ -350,10 +414,14 @@ class Ledger:
         proof_msgs = set([p.secret for p in proofs])
         self.proofs_used |= proof_msgs
         # store in db
+        logger.trace(f"crud: storing proofs")
         for p in proofs:
             await self.crud.invalidate_proof(proof=p, db=self.db)
+        logger.trace(f"crud: stored proofs")
 
-    async def _set_proofs_pending(self, proofs: List[Proof]):
+    async def _set_proofs_pending(
+        self, proofs: List[Proof], conn: Optional[Connection] = None
+    ):
         """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
         the list of pending proofs or removes them. Used as a mutex for proofs.
 
@@ -364,14 +432,22 @@ class Ledger:
             Exception: At least one proof already in pending table.
         """
         # first we check whether these proofs are pending aready
-        await self._validate_proofs_pending(proofs)
+        await self._validate_proofs_pending(proofs, conn)
         for p in proofs:
             try:
-                await self.crud.set_proof_pending(proof=p, db=self.db)
+                logger.trace(
+                    f"crud: _set_proofs_pending setting proof {p.secret} as pending"
+                )
+                await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
+                logger.trace(
+                    f"crud: _set_proofs_pending proof {p.secret} set as pending"
+                )
             except:
                 raise Exception("proofs already pending.")
 
-    async def _unset_proofs_pending(self, proofs: List[Proof]):
+    async def _unset_proofs_pending(
+        self, proofs: List[Proof], conn: Optional[Connection] = None
+    ):
         """Deletes proofs from pending table.
 
         Args:
@@ -381,12 +457,18 @@ class Ledger:
         # could block the _invalidate_proofs() call that happens afterwards.
         try:
             for p in proofs:
-                await self.crud.unset_proof_pending(proof=p, db=self.db)
+                logger.trace(
+                    f"crud: _unset_proofs_pending unsetting proof {p.secret} as pending"
+                )
+                await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+                logger.trace(
+                    f"crud: _unset_proofs_pending proof {p.secret} unset as pending"
+                )
         except Exception as e:
             print(e)
             pass
 
-    async def _validate_proofs_pending(self, proofs: List[Proof]):
+    async def _validate_proofs_pending(self, proofs: List[Proof], conn):
         """Checks if any of the provided proofs is in the pending proofs table.
 
         Args:
@@ -395,7 +477,9 @@ class Ledger:
         Raises:
             Exception: At least one of the proofs is in the pending table.
         """
-        proofs_pending = await self.crud.get_proofs_pending(db=self.db)
+        logger.trace(f"crud: _validate_proofs_pending validating proofs")
+        proofs_pending = await self.crud.get_proofs_pending(db=self.db, conn=conn)
+        logger.trace(f"crud: _validate_proofs_pending got proofs pending")
         for p in proofs:
             for pp in proofs_pending:
                 if p.secret == pp.secret:
@@ -432,6 +516,7 @@ class Ledger:
         invoice_amount: int,
         ln_fee_msat: int,
         outputs: List[BlindedMessage],
+        keyset: Optional[MintKeyset] = None,
     ):
         """Generates a set of new promises (blinded signatures) from a set of blank outputs
         (outputs with no or ignored amount) by looking at the difference between the Lightning
@@ -480,7 +565,7 @@ class Ledger:
                 outputs[i].amount = return_amounts_sorted[i]
             if not self._verify_no_duplicate_outputs(outputs):
                 raise Exception("duplicate promises.")
-            return_promises = await self._generate_promises(outputs)
+            return_promises = await self._generate_promises(outputs, keyset)
             return return_promises
         else:
             return []
@@ -504,31 +589,44 @@ class Ledger:
             Exception: Invoice creation failed.
 
         Returns:
-            Tuple[str, str]: Bolt11 invoice and payment hash (for looking it up later)
+            Tuple[str, str]: Bolt11 invoice and a hash (for looking it up later)
         """
-        payment_request, checking_id = await self._request_lightning_invoice(amount)
-        assert payment_request, Exception(
+        logger.trace(f"called request_mint")
+        if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
+            raise Exception(f"Maximum mint amount is {settings.mint_max_peg_in} sats.")
+        if settings.mint_peg_out_only:
+            raise Exception("Mint does not allow minting new tokens.")
+
+        logger.trace(f"requesting invoice for {amount} satoshis")
+        payment_request, payment_hash = await self._request_lightning_invoice(amount)
+        logger.trace(f"got invoice {payment_request} with hash {payment_hash}")
+        assert payment_request and payment_hash, Exception(
             "could not fetch invoice from Lightning backend"
         )
+
         invoice = Invoice(
-            amount=amount, pr=payment_request, hash=checking_id, issued=False
+            amount=amount,
+            hash=random_hash(),
+            pr=payment_request,
+            payment_hash=payment_hash,  # what we got from the backend
+            issued=False,
         )
-        if not payment_request or not checking_id:
-            raise Exception(f"Could not create Lightning invoice.")
+        logger.trace(f"crud: storing invoice {invoice.hash} in db")
         await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
-        return payment_request, checking_id
+        logger.trace(f"crud: stored invoice {invoice.hash} in db")
+        return payment_request, invoice.hash
 
     async def mint(
         self,
         B_s: List[BlindedMessage],
-        payment_hash: Optional[str] = None,
+        hash: Optional[str] = None,
         keyset: Optional[MintKeyset] = None,
     ):
         """Mints a promise for coins for B_.
 
         Args:
             B_s (List[BlindedMessage]): Outputs (blinded messages) to sign.
-            payment_hash (Optional[str], optional): Payment hash of (paid) Lightning invoice. Defaults to None.
+            hash (Optional[str], optional): Hash of (paid) Lightning invoice. Defaults to None.
             keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
 
         Raises:
@@ -539,16 +637,23 @@ class Ledger:
         Returns:
             List[BlindedSignature]: Signatures on the outputs.
         """
+        logger.trace("called mint")
         amounts = [b.amount for b in B_s]
         amount = sum(amounts)
-        # check if lightning invoice was paid
-        if settings.lightning:
-            if not payment_hash:
-                raise Exception("no payment_hash provided.")
-            try:
-                paid = await self._check_lightning_invoice(amount, payment_hash)
-            except Exception as e:
-                raise e
+        async with self.db.connect() as conn:
+            logger.trace("attempting lock table invoice")
+            await conn.execute(lock_table(self.db, "invoices"))
+            logger.trace("locked table invoice")
+            # check if lightning invoice was paid
+            if settings.lightning:
+                if not hash:
+                    raise Exception("no hash provided.")
+                try:
+                    logger.trace("checking lightning invoice")
+                    paid = await self._check_lightning_invoice(amount, hash, conn)
+                    logger.trace(f"invoice paid: {paid}")
+                except Exception as e:
+                    raise e
 
         for amount in amounts:
             if amount not in [2**i for i in range(settings.max_order)]:
@@ -557,6 +662,7 @@ class Ledger:
                 )
 
         promises = await self._generate_promises(B_s, keyset)
+        logger.trace("generated promises")
         return promises
 
     async def melt(
@@ -576,15 +682,29 @@ class Ledger:
             List[BlindedMessage]: Signed outputs for returning overpaid fees to wallet.
         """
 
-        # validate and set proofs as pending
-        await self._set_proofs_pending(proofs)
+        logger.trace("melt called")
+
+        async with self.db.connect() as conn:
+            logger.trace("attempting lock table proofs_pending")
+            await conn.execute(lock_table(self.db, "proofs_pending"))
+            logger.trace("locked table proofs_pending")
+            # validate and set proofs as pending
+            logger.trace("setting proofs pending")
+            await self._set_proofs_pending(proofs, conn)
+            logger.trace(f"set proofs as pending")
+        logger.trace("unlocked table proofs_pending")
 
         try:
             await self._verify_proofs(proofs)
+            logger.trace("verified proofs")
 
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
+            if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
+                raise Exception(
+                    f"Maximum melt amount is {settings.mint_max_peg_out} sats."
+                )
             fees_msat = await self.check_fees(invoice)
             assert total_provided >= invoice_amount + fees_msat / 1000, Exception(
                 "provided proofs not enough for Lightning payment."
@@ -594,15 +714,22 @@ class Ledger:
             return_promises: List[BlindedSignature] = []
 
             if settings.lightning:
+                logger.trace("paying lightning invoice")
                 status, preimage, fee_msat = await self._pay_lightning_invoice(
                     invoice, fees_msat
                 )
+                logger.trace("paid lightning invoice")
             else:
                 status, preimage, fee_msat = True, "preimage", 0
 
-            if status == True:
-                await self._invalidate_proofs(proofs)
+            logger.trace(
+                f"status: {status}, preimage: {preimage}, fee_msat: {fee_msat}"
+            )
 
+            if status == True:
+                logger.trace(f"invalidating proofs")
+                await self._invalidate_proofs(proofs)
+                logger.trace("invalidated proofs")
                 # prepare change to compensate wallet for overpaid fees
                 assert fee_msat is not None, Exception("fees not valid")
                 if outputs:
@@ -612,12 +739,23 @@ class Ledger:
                         ln_fee_msat=fee_msat,
                         outputs=outputs,
                     )
+            else:
+                logger.trace("lightning payment unsuccessful")
+                raise Exception("Lightning payment unsuccessful.")
 
         except Exception as e:
+            logger.trace(f"exception: {e}")
             raise e
         finally:
             # delete proofs from pending list
-            await self._unset_proofs_pending(proofs)
+            async with self.db.connect() as conn:
+                logger.trace("attempting lock table proofs_pending")
+                await conn.execute(lock_table(self.db, "proofs_pending"))
+                logger.trace("locked table proofs_pending")
+                logger.trace("unsetting proofs as pending")
+                await self._unset_proofs_pending(proofs, conn)
+                logger.trace(f"unset proofs as pending")
+            logger.trace("unlocked table proofs_pending")
 
         return status, preimage, return_promises
 
@@ -652,7 +790,11 @@ class Ledger:
         if settings.lightning:
             decoded_invoice = bolt11.decode(pr)
             amount = math.ceil(decoded_invoice.amount_msat / 1000)
+            logger.trace(
+                f"check_fees: checking lightning invoice: {decoded_invoice.payment_hash}"
+            )
             paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
+            logger.trace(f"check_fees: paid: {paid}")
             internal = paid.paid == False
         else:
             amount = 0
@@ -683,35 +825,53 @@ class Ledger:
         Returns:
             Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
         """
-
+        logger.trace(f"split called")
         # set proofs as pending
-        await self._set_proofs_pending(proofs)
-
+        async with self.db.connect() as conn:
+            logger.trace("attempting lock table proofs_pending")
+            await conn.execute(lock_table(self.db, "proofs_pending"))
+            logger.trace("locked table proofs_pending")
+            # validate and set proofs as pending
+            logger.trace("setting proofs pending")
+            await self._set_proofs_pending(proofs, conn)
+            logger.trace(f"set proofs as pending")
         total = sum_proofs(proofs)
 
         try:
+            logger.trace(f"verifying _verify_split_amount")
             # verify that amount is kosher
             self._verify_split_amount(amount)
             # verify overspending attempt
             if amount > total:
                 raise Exception("split amount is higher than the total sum.")
 
+            logger.trace("verifying proofs: _verify_proofs")
             await self._verify_proofs(proofs)
-
+            logger.trace(f"verified proofs")
             # verify that only unique outputs were used
             if not self._verify_no_duplicate_outputs(outputs):
                 raise Exception("duplicate promises.")
             # verify that outputs have the correct amount
             if not self._verify_outputs(total, amount, outputs):
                 raise Exception("split of promises is not as expected.")
+            logger.trace(f"verified outputs")
         except Exception as e:
+            logger.trace(f"split failed: {e}")
             raise e
         finally:
             # delete proofs from pending list
-            await self._unset_proofs_pending(proofs)
+            async with self.db.connect() as conn:
+                logger.trace("attempting lock table proofs_pending")
+                await conn.execute(lock_table(self.db, "proofs_pending"))
+                logger.trace("locked table proofs_pending")
+                logger.trace("unsetting proofs as pending")
+                await self._unset_proofs_pending(proofs, conn)
+                logger.trace(f"unset proofs as pending")
 
         # Mark proofs as used and prepare new promises
+        logger.trace(f"invalidating proofs")
         await self._invalidate_proofs(proofs)
+        logger.trace(f"invalidated proofs")
 
         # split outputs according to amount
         outs_fst = amount_split(total - amount)
@@ -725,6 +885,8 @@ class Ledger:
 
         # verify amounts in produced proofs
         self._verify_equation_balanced(proofs, prom_fst + prom_snd)
+
+        logger.trace(f"split successful")
         return prom_fst, prom_snd
 
     async def restore(self, outputs: List[BlindedMessage]) -> list[BlindedSignature]:

@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Tor PID
+tor.pid
+
+# Default data directory
+/data

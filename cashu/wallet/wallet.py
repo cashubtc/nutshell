@@ -11,9 +11,8 @@ from typing import Dict, List, Optional, Union
 import requests
 from loguru import logger
 
-import cashu.core.b_dhke as b_dhke
-import cashu.core.bolt11 as bolt11
-from cashu.core.base import (
+from ..core import bolt11 as bolt11
+from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
@@ -36,21 +35,30 @@ from cashu.core.base import (
     TokenV3Token,
     WalletKeyset,
 )
-from cashu.core.bolt11 import Invoice as InvoiceBolt11
-from cashu.core.db import Database
-from cashu.core.helpers import sum_proofs
-from cashu.core.script import (
+from ..core.bolt11 import Invoice as InvoiceBolt11
+from ..core.crypto import b_dhke
+from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.db import Database
+from ..core.helpers import sum_proofs
+from ..core.script import (
     step0_carol_checksig_redeemscrip,
     step0_carol_privkey,
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
 )
+<<<<<<< HEAD
 from cashu.core.secp import PrivateKey, PublicKey
 from cashu.core.settings import settings
 from cashu.core.split import amount_split
 from cashu.tor.tor import TorProxy
 from cashu.wallet.crud import (
     bump_secret_derivation,
+=======
+from ..core.settings import settings
+from ..core.split import amount_split
+from ..tor.tor import TorProxy
+from ..wallet.crud import (
+>>>>>>> main
     get_keyset,
     get_proofs,
     invalidate_proof,
@@ -114,16 +122,30 @@ class LedgerAPI:
         return
 
     def _construct_proofs(
+<<<<<<< HEAD
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[bytes]
+=======
+        self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
+>>>>>>> main
     ):
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
         proofs: List[Proof] = []
         for promise, secret, r in zip(promises, secrets, rs):
+            logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
+            assert (
+                self.keyset_id == promise.id
+            ), "our keyset id does not match promise id."
+
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
+<<<<<<< HEAD
             r_pk = PrivateKey(privkey=r, raw=True)
             C = b_dhke.step3_alice(C_, r_pk, self.public_keys[promise.amount])
+=======
+            C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
+
+>>>>>>> main
             proof = Proof(
-                id=self.keyset_id,
+                id=promise.id,
                 amount=promise.amount,
                 C=C.serialize().hex(),
                 secret=secret,
@@ -204,6 +226,7 @@ class LedgerAPI:
         keyset_local: Optional[WalletKeyset] = await get_keyset(keyset.id, db=self.db)
         # if not, store it
         if keyset_local is None:
+            logger.debug(f"Storing new mint keyset: {keyset.id}")
             await store_keyset(keyset=keyset, db=self.db)
 
         self.keys = keyset
@@ -252,10 +275,17 @@ class LedgerAPI:
         ), "lists of secrets and blinding factors do not have the same length"
 
         outputs: List[BlindedMessage] = []
+<<<<<<< HEAD
         for secret, amount, r in zip(secrets, amounts, rs):
             r_pk = PrivateKey(privkey=r, raw=True)
             # step1_alice passes back the original r if we give it one as an argument
             B_, _ = b_dhke.step1_alice(secret, r_pk)
+=======
+        rs: List[PrivateKey] = []
+        for secret, amount in zip(secrets, amounts):
+            B_, r = b_dhke.step1_alice(secret)
+            rs.append(r)
+>>>>>>> main
             output: BlindedMessage = BlindedMessage(
                 amount=amount, B_=B_.serialize().hex()
             )
@@ -324,7 +354,7 @@ class LedgerAPI:
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.items()
         }
-        keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
+        keyset = WalletKeyset(id=keyset_id, public_keys=keyset_keys, mint_url=url)
         return keyset
 
     @async_set_requests
@@ -357,7 +387,7 @@ class LedgerAPI:
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
     @async_set_requests
-    async def mint(self, amounts, payment_hash=None):
+    async def mint(self, amounts, hash=None):
         """Mints new coins and returns a proof of promise."""
         secrets, rs = await self.generate_n_secrets(len(amounts))
         await self._check_used_secrets(secrets)
@@ -366,7 +396,10 @@ class LedgerAPI:
         resp = self.s.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
-            params={"payment_hash": payment_hash},
+            params={
+                "hash": hash,
+                "payment_hash": hash,  # backwards compatibility pre 0.12.0
+            },
         )
         resp.raise_for_status()
         reponse_dict = resp.json()
@@ -378,6 +411,7 @@ class LedgerAPI:
     @async_set_requests
     async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
         """Consume proofs and create new promises based on amount split.
+
         If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
         and the promises to send (scnd_outputs).
 
@@ -534,6 +568,13 @@ class Wallet(LedgerAPI):
     # ---------- API ----------
 
     async def load_mint(self, keyset_id: str = ""):
+        """Load a mint's keys with a given keyset_id if specified or else
+        loads the active keyset of the mint into self.keys.
+        Also loads all keyset ids into self.keysets.
+
+        Args:
+            keyset_id (str, optional): _description_. Defaults to "".
+        """
         await super()._load_mint(keyset_id)
 
     async def load_proofs(self):
@@ -545,12 +586,12 @@ class Wallet(LedgerAPI):
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
-    async def mint(self, amount: int, payment_hash: Optional[str] = None):
+    async def mint(self, amount: int, hash: Optional[str] = None):
         """Mint tokens of a specific amount after an invoice has been paid.
 
         Args:
             amount (int): Total amount of tokens to be minted
-            payment_hash (Optional[str], optional): Hash of the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+            hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
 
         Raises:
             Exception: Raises exception if no proofs have been provided
@@ -559,25 +600,23 @@ class Wallet(LedgerAPI):
             List[Proof]: Newly minted proofs.
         """
         split = amount_split(amount)
-        proofs = await super().mint(split, payment_hash)
+        proofs = await super().mint(split, hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
-        if payment_hash:
+        if hash:
             await update_lightning_invoice(
-                db=self.db, hash=payment_hash, paid=True, time_paid=int(time.time())
+                db=self.db, hash=hash, paid=True, time_paid=int(time.time())
             )
         self.proofs += proofs
         return proofs
 
-    async def mint_amounts(
-        self, amounts: List[int], payment_hash: Optional[str] = None
-    ):
+    async def mint_amounts(self, amounts: List[int], hash: Optional[str] = None):
         """Similar to wallet.mint() but accepts a predefined list of amount to be minted.
 
         Args:
             amounts (List[int]): List of amounts requested
-            payment_hash (Optional[str], optional): Hash of the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+            hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
 
         Raises:
             Exception: Newly minted proofs.
@@ -590,13 +629,13 @@ class Wallet(LedgerAPI):
                 raise Exception(
                     f"Can only mint amounts with 2^n up to {2**settings.max_order}."
                 )
-        proofs = await super().mint(amounts, payment_hash)
+        proofs = await super().mint(amounts, hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
-        if payment_hash:
+        if hash:
             await update_lightning_invoice(
-                db=self.db, hash=payment_hash, paid=True, time_paid=int(time.time())
+                db=self.db, hash=hash, paid=True, time_paid=int(time.time())
             )
         self.proofs += proofs
         return proofs
@@ -624,10 +663,13 @@ class Wallet(LedgerAPI):
         frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
+
+        # remove used proofs from wallet and add new ones
         used_secrets = [p.secret for p in proofs]
         self.proofs = list(filter(lambda p: p.secret not in used_secrets, self.proofs))
         self.proofs += frst_proofs + scnd_proofs
         await self._store_proofs(frst_proofs + scnd_proofs)
+        # invalidate used proofs
         for proof in proofs:
             await invalidate_proof(proof, db=self.db)
         return frst_proofs, scnd_proofs
@@ -653,6 +695,7 @@ class Wallet(LedgerAPI):
                 preimage=status.preimage,
                 paid=True,
                 time_paid=time.time(),
+                hash="",
             )
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
@@ -750,30 +793,6 @@ class Wallet(LedgerAPI):
             token.token.append(token_proofs)
         return token
 
-    async def _serialize_token_V3(self, token: TokenV3):
-        """
-        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
-        """
-        prefix = "cashuA"
-        tokenv3_serialized = prefix
-        # encode the token as a base64 string
-        tokenv3_serialized += base64.urlsafe_b64encode(
-            json.dumps(token.to_dict()).encode()
-        ).decode()
-        return tokenv3_serialized
-
-    def _deserialize_token_V3(self, tokenv3_serialized: str) -> TokenV3:
-        """
-        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
-        """
-        prefix = "cashuA"
-        assert tokenv3_serialized.startswith(prefix), Exception(
-            f"Token prefix not valid. Expected {prefix}."
-        )
-        token_base64 = tokenv3_serialized[len(prefix) :]
-        token = json.loads(base64.urlsafe_b64decode(token_base64))
-        return TokenV3.parse_obj(token)
-
     async def serialize_proofs(
         self, proofs: List[Proof], include_mints=True, legacy=False
     ):
@@ -794,7 +813,7 @@ class Wallet(LedgerAPI):
 
         # V3 tokens
         token = await self._make_token(proofs, include_mints)
-        return await self._serialize_token_V3(token)
+        return token.serialize()
 
     async def _make_token_v2(self, proofs: List[Proof], include_mints=True):
         """
@@ -840,26 +859,43 @@ class Wallet(LedgerAPI):
 
     async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
         """
-        Selects proofs that can be used with the current mint.
-        Chooses:
+        Selects proofs that can be used with the current mint. Implements a simple coin selection algorithm.
+
+        The algorithm has two objectives: Get rid of all tokens from old epochs and include additional proofs from
+        the current epoch starting from the proofs with the largest amount.
+
+        Rules:
         1) Proofs that are not marked as reserved
-        2) Proofs that have a keyset id that is in self.keysets (active keysets of mint) - !!! optional for backwards compatibility with legacy clients
+        2) Proofs that have a keyset id that is in self.keysets (all active keysets of mint)
+        3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
+        4) If the target amount is not reached, add proofs of the current keyset until it is.
         """
-        # select proofs that are in the active keysets of the mint
-        proofs = [
-            p for p in proofs if p.id in self.keysets or not p.id
-        ]  # "or not p.id" is for backwards compatibility with proofs without a keyset id
+        send_proofs: List[Proof] = []
+
         # select proofs that are not reserved
         proofs = [p for p in proofs if not p.reserved]
+
+        # select proofs that are in the active keysets of the mint
+        proofs = [p for p in proofs if p.id in self.keysets or not p.id]
+
         # check that enough spendable proofs exist
         if sum_proofs(proofs) < amount_to_send:
             raise Exception("balance too low.")
 
-        # coinselect based on amount to send
-        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
-        send_proofs: List[Proof] = []
+        # add all proofs that have an older keyset than the current keyset of the mint
+        proofs_old_epochs = [p for p in proofs if p.id != self.keys.id]
+        send_proofs += proofs_old_epochs
+
+        # coinselect based on amount only from the current keyset
+        # start with the proofs with the largest amount and add them until the target amount is reached
+        proofs_current_epoch = [p for p in proofs if p.id == self.keys.id]
+        sorted_proofs_of_current_keyset = sorted(
+            proofs_current_epoch, key=lambda p: p.amount
+        )
+
         while sum_proofs(send_proofs) < amount_to_send:
-            send_proofs.append(sorted_proofs[len(send_proofs)])
+            proof_to_add = sorted_proofs_of_current_keyset.pop()
+            send_proofs.append(proof_to_add)
         return send_proofs
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
@@ -913,24 +949,33 @@ class Wallet(LedgerAPI):
         Splits proofs such that a Lightning invoice can be paid.
         """
         amount, _ = await self.get_pay_amount_with_fees(invoice)
-        # TODO: fix mypy asyncio return multiple values
-        _, send_proofs = await self.split_to_send(self.proofs, amount)  # type: ignore
+        _, send_proofs = await self.split_to_send(self.proofs, amount)
         return send_proofs
 
     async def split_to_send(
         self,
         proofs: List[Proof],
-        amount,
+        amount: int,
         scnd_secret: Optional[str] = None,
         set_reserved: bool = False,
     ):
-        """Like self.split but only considers non-reserved tokens."""
+        """
+        Splits proofs such that a certain amount can be sent.
+
+        Args:
+            proofs (List[Proof]): Proofs to split
+            amount (int): Amount to split to
+            scnd_secret (Optional[str], optional): If set, a custom secret is used to lock new outputs. Defaults to None.
+            set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
+            is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
+            displayed to the user to be then sent to someone else. Defaults to False.
+        """
         if scnd_secret:
             logger.debug(f"Spending conditions: {scnd_secret}")
         spendable_proofs = await self._select_proofs_to_send(proofs, amount)
 
         keep_proofs, send_proofs = await self.split(
-            [p for p in spendable_proofs if not p.reserved], amount, scnd_secret
+            spendable_proofs, amount, scnd_secret
         )
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
