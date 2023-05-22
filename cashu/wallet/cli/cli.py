@@ -51,8 +51,8 @@ def run_api_server(ctx, param, daemon):
     "--wallet",
     "-w",
     "walletname",
-    default="wallet",
-    help="Wallet name (default: wallet).",
+    default=settings.wallet_name,
+    help=f"Wallet name (default: {settings.wallet_name}).",
 )
 @click.option(
     "--daemon",

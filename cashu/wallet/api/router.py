@@ -36,7 +36,7 @@ from .responses import (
 router: APIRouter = APIRouter()
 
 
-def create_wallet(url=settings.mint_url, dir=settings.cashu_dir, name="wallet"):
+def create_wallet(url=settings.mint_url, dir=settings.cashu_dir, name=settings.wallet_name):
     return Wallet(url, os.path.join(dir, name), name=name)
 
 
