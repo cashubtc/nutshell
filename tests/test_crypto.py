@@ -1,7 +1,7 @@
 import pytest
 
-from cashu.core.b_dhke import hash_to_curve, step1_alice, step2_bob, step3_alice
-from cashu.core.secp import PrivateKey, PublicKey
+from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice, step2_bob, step3_alice
+from cashu.core.crypto.secp import PrivateKey, PublicKey
 
 
 def test_hash_to_curve():
@@ -70,7 +70,7 @@ def test_step2():
         ),
         raw=True,
     )
-    C_ = B_.mult(a)
+    C_ = step2_bob(B_, a)
     assert (
         C_.serialize().hex()
         == "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"

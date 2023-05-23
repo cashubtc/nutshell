@@ -4,7 +4,7 @@ import requests
 from cashu.tor.tor import TorProxy
 
 
-@pytest.mark.skip
+@pytest.mark.skip(reason="Tor is not installed on CI")
 def test_tor_setup():
     s = requests.Session()
 

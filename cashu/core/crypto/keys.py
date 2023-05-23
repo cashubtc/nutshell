@@ -1,9 +1,10 @@
 import base64
 import hashlib
+import random
 from typing import Dict, List
 
-from cashu.core.secp import PrivateKey, PublicKey
-from cashu.core.settings import settings
+from ..settings import settings
+from .secp import PrivateKey, PublicKey
 
 # entropy = bytes([random.getrandbits(8) for i in range(16)])
 # mnemonic = bip39.mnemonic_from_bytes(entropy)
@@ -22,9 +23,9 @@ def derive_keys(master_key: str, derivation_path: str = ""):
     return {
         2
         ** i: PrivateKey(
-            hashlib.sha256((master_key + derivation_path + str(i)).encode("utf-8"))
-            .hexdigest()
-            .encode("utf-8")[:32],
+            hashlib.sha256(
+                (master_key + derivation_path + str(i)).encode("utf-8")
+            ).digest()[:32],
             raw=True,
         )
         for i in range(settings.max_order)
@@ -33,7 +34,7 @@ def derive_keys(master_key: str, derivation_path: str = ""):
 
 def derive_pubkey(master_key: str):
     return PrivateKey(
-        hashlib.sha256((master_key).encode("utf-8")).hexdigest().encode("utf-8")[:32],
+        hashlib.sha256((master_key).encode("utf-8")).digest()[:32],
         raw=True,
     ).pubkey
 
@@ -52,3 +53,10 @@ def derive_keyset_id(keys: Dict[int, PublicKey]):
     return base64.b64encode(
         hashlib.sha256((pubkeys_concat).encode("utf-8")).digest()
     ).decode()[:12]
+
+
+def random_hash() -> str:
+    """Returns a base64-urlsafe encoded random hash."""
+    return base64.urlsafe_b64encode(
+        bytes([random.getrandbits(8) for i in range(32)])
+    ).decode()

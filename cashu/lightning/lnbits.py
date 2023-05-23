@@ -1,10 +1,9 @@
 # type: ignore
 from typing import Dict, Optional
 
-import requests
+import httpx
 
-from cashu.core.settings import settings
-
+from ..core.settings import settings
 from .base import (
     InvoiceResponse,
     PaymentResponse,
@@ -19,17 +18,14 @@ class LNbitsWallet(Wallet):
 
     def __init__(self):
         self.endpoint = settings.mint_lnbits_endpoint
-
-        key = settings.mint_lnbits_key
-        self.key = {"X-Api-Key": key}
-        self.s = requests.Session()
-        self.s.auth = ("user", "pass")
-        self.s.headers.update({"X-Api-Key": key})
-        self.s.verify = not settings.debug
+        self.client = httpx.AsyncClient(
+            verify=not settings.debug,
+            headers={"X-Api-Key": settings.mint_lnbits_key},
+        )
 
     async def status(self) -> StatusResponse:
         try:
-            r = self.s.get(url=f"{self.endpoint}/api/v1/wallet", timeout=15)
+            r = await self.client.get(url=f"{self.endpoint}/api/v1/wallet", timeout=15)
             r.raise_for_status()
         except Exception as exc:
             return StatusResponse(
@@ -61,7 +57,9 @@ class LNbitsWallet(Wallet):
 
         data["memo"] = memo or ""
         try:
-            r = self.s.post(url=f"{self.endpoint}/api/v1/payments", json=data)
+            r = await self.client.post(
+                url=f"{self.endpoint}/api/v1/payments", json=data
+            )
             r.raise_for_status()
         except:
             return InvoiceResponse(False, None, None, r.json()["detail"])
@@ -79,7 +77,7 @@ class LNbitsWallet(Wallet):
 
     async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
         try:
-            r = self.s.post(
+            r = await self.client.post(
                 url=f"{self.endpoint}/api/v1/payments",
                 json={"out": True, "bolt11": bolt11},
                 timeout=None,
@@ -110,10 +108,8 @@ class LNbitsWallet(Wallet):
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         try:
-
-            r = self.s.get(
-                url=f"{self.endpoint}/api/v1/payments/{checking_id}",
-                headers=self.key,
+            r = await self.client.get(
+                url=f"{self.endpoint}/api/v1/payments/{checking_id}"
             )
             r.raise_for_status()
         except:
@@ -124,8 +120,8 @@ class LNbitsWallet(Wallet):
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         try:
-            r = self.s.get(
-                url=f"{self.endpoint}/api/v1/payments/{checking_id}", headers=self.key
+            r = await self.client.get(
+                url=f"{self.endpoint}/api/v1/payments/{checking_id}"
             )
             r.raise_for_status()
         except:
