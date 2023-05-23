@@ -1,4 +1,4 @@
-from typing import Dict, List, Union
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -14,23 +14,23 @@ class PayResponse(BaseModel):
 
 
 class InvoiceResponse(BaseModel):
-    amount: int
-    invoice: Union[Invoice, None] = None
-    hash: Union[str, None] = None
+    amount: Optional[int] = None
+    invoice: Optional[Invoice] = None
+    hash: Optional[str] = None
     initial_balance: int
     balance: int
 
 
 class BalanceResponse(BaseModel):
     balance: int
-    keysets: Union[Dict, None] = None
-    mints: Union[Dict, None] = None
+    keysets: Optional[Dict] = None
+    mints: Optional[Dict] = None
 
 
 class SendResponse(BaseModel):
     balance: int
     token: str
-    npub: Union[str, None] = None
+    npub: Optional[str] = None
 
 
 class ReceiveResponse(BaseModel):
@@ -47,7 +47,7 @@ class PendingResponse(BaseModel):
 
 
 class LockResponse(BaseModel):
-    P2SH: Union[str, None]
+    P2SH: Optional[str]
 
 
 class LocksResponse(BaseModel):
@@ -68,8 +68,8 @@ class InfoResponse(BaseModel):
     debug: bool
     cashu_dir: str
     mint_url: str
-    settings: Union[str, None]
+    settings: Optional[str]
     tor: bool
-    nostr_public_key: Union[str, None] = None
+    nostr_public_key: Optional[str] = None
     nostr_relays: List[str] = []
-    socks_proxy: Union[str, None] = None
+    socks_proxy: Optional[str] = None
