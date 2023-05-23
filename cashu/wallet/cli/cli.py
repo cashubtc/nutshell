@@ -369,6 +369,7 @@ async def restore(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await wallet.restore_promises(0, 10)
+    await wallet.invalidate(wallet.proofs)
     wallet.status()
 
 

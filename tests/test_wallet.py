@@ -3,6 +3,7 @@ from typing import List
 
 import pytest
 import pytest_asyncio
+from pathlib import Path
 
 from cashu.core.base import Proof
 from cashu.core.helpers import async_unwrap, sum_proofs
@@ -13,6 +14,7 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT, mint
+import shutil
 
 
 async def assert_err(f, msg):
@@ -46,6 +48,20 @@ async def wallet2(mint):
     await wallet2.load_mint()
     wallet2.status()
     yield wallet2
+
+
+@pytest_asyncio.fixture(scope="function")
+async def wallet3(mint):
+    settings.wallet_private_key = "TEST_PRIVATE_KEY"
+    dirpath = Path("data/wallet3")
+    if dirpath.exists() and dirpath.is_dir():
+        shutil.rmtree(dirpath)
+
+    wallet3 = Wallet1(SERVER_ENDPOINT, "data/wallet3", "wallet3")
+    await migrate_databases(wallet3.db, migrations)
+    await wallet3.load_mint()
+    wallet3.status()
+    yield wallet3
 
 
 @pytest.mark.asyncio
@@ -305,3 +321,53 @@ async def test_p2sh_receive_wrong_signature(wallet1: Wallet, wallet2: Wallet):
         "Mint Error: ('Script evaluation failed:', EvalScriptError('EvalScript: OP_RETURN called'))",
     )
     assert wallet2.balance == 0
+
+
+@pytest.mark.asyncio
+async def test_bump_secret_derivation(wallet3: Wallet):
+    secrets1, rs1 = await wallet3.generate_n_secrets(5)
+    secrets2, rs2 = await wallet3.generate_secrets_from_to(0, 4)
+    assert secrets1 == secrets2
+    assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
+    assert secrets1 == [
+        "exIYik7JvoU4mj0mRd3HqYdHmP3MAd5Gn1ztC9mEoCc=",
+        "i3W/Ew3j0PI8/OZt4PEmTzPg+8+wlbsG+LbpdInLmBg=",
+        "3j4TYWENbRGjWFA27OSpuK9erNGLsVK8m3EPCC13bsY=",
+        "Hq/22K5ZmyFTE+zPbgkflPYJkroEl7fpNnR6sDUi2As=",
+        "iTNr6WeJNUGSKV8gAkyfCDJ5Tv4MePiJ1eQDM2kZEtg=",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
+    secrets1_1, rs1_1 = await wallet3.generate_n_secrets(2)
+    secrets1_2, rs1_2 = await wallet3.generate_n_secrets(3)
+    secrets1 = secrets1_1 + secrets1_2
+    rs1 = rs1_1 + rs1_2
+    secrets2, rs2 = await wallet3.generate_secrets_from_to(0, 4)
+    assert secrets1 == secrets2
+    assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
+    assert secrets1 == [
+        "exIYik7JvoU4mj0mRd3HqYdHmP3MAd5Gn1ztC9mEoCc=",
+        "i3W/Ew3j0PI8/OZt4PEmTzPg+8+wlbsG+LbpdInLmBg=",
+        "3j4TYWENbRGjWFA27OSpuK9erNGLsVK8m3EPCC13bsY=",
+        "Hq/22K5ZmyFTE+zPbgkflPYJkroEl7fpNnR6sDUi2As=",
+        "iTNr6WeJNUGSKV8gAkyfCDJ5Tv4MePiJ1eQDM2kZEtg=",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_generate_secrets_from_to(wallet3: Wallet):
+    secrets1, rs1 = await wallet3.generate_secrets_from_to(0, 4)
+    assert len(secrets1) == 5
+    secrets2, rs2 = await wallet3.generate_secrets_from_to(2, 4)
+    assert len(secrets2) == 3
+    assert secrets1[2:] == secrets2
+    assert [r.private_key for r in rs1[2:]] == [r.private_key for r in rs2]
+    assert secrets1 == [
+        "exIYik7JvoU4mj0mRd3HqYdHmP3MAd5Gn1ztC9mEoCc=",
+        "i3W/Ew3j0PI8/OZt4PEmTzPg+8+wlbsG+LbpdInLmBg=",
+        "3j4TYWENbRGjWFA27OSpuK9erNGLsVK8m3EPCC13bsY=",
+        "Hq/22K5ZmyFTE+zPbgkflPYJkroEl7fpNnR6sDUi2As=",
+        "iTNr6WeJNUGSKV8gAkyfCDJ5Tv4MePiJ1eQDM2kZEtg=",
+    ]

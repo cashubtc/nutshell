@@ -147,19 +147,19 @@ class LedgerAPI:
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
         outputs: List[BlindedMessage] = []
-        if not rs:
-            rs = [None] * len(amounts)  # type: ignore
-
-        for secret, amount, r in zip(secrets, amounts, rs):
-            B_, _ = b_dhke.step1_alice(secret, r or None)
-            rs.append(r)
+        
+        rs_ = [None] * len(amounts)  if not rs else rs
+        rs_return: List[PrivateKey] = []
+        for secret, amount, r in zip(secrets, amounts, rs_):
+            B_, r = b_dhke.step1_alice(secret, r or None)
+            rs_return.append(r)
             output: BlindedMessage = BlindedMessage(
                 amount=amount, B_=B_.serialize().hex()
             )
             outputs.append(output)
-        for o, r in zip(outputs, rs):
+        for o, r in zip(outputs, rs_return):
             logger.debug(f"Constructing output: {o}, r: {r.serialize()}")
-        return outputs, rs
+        return outputs, rs_return
 
     @staticmethod
     def raise_on_error(resp_dict):
@@ -246,7 +246,9 @@ class LedgerAPI:
         seed_secret = settings.wallet_private_key + "x" + str(secret_counter)
         # blinding factor
         r_secret = settings.wallet_private_key + "r" + str(secret_counter)
-        logger.debug(f"Generating sercret from {secret_counter}: {seed_secret} {r_secret}")
+        logger.debug(
+            f"Generating sercret from {secret_counter}: {seed_secret} {r_secret}"
+        )
         secred = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
         logger.debug(f"Sercret {secred}")
         r = base64.b64encode(hashlib.sha256(r_secret.encode("utf-8")).digest())[:32]
