@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import math
 import secrets as scrts
@@ -6,7 +7,7 @@ import time
 import uuid
 from itertools import groupby
 from typing import Dict, List, Optional, Tuple
-import hashlib
+
 import requests
 from loguru import logger
 
@@ -49,18 +50,18 @@ from ..core.settings import settings
 from ..core.split import amount_split
 from ..tor.tor import TorProxy
 from ..wallet.crud import (
+    bump_secret_derivation,
     get_keyset,
     get_proofs,
     invalidate_proof,
     secret_used,
+    set_secret_derivation,
     store_keyset,
     store_lightning_invoice,
     store_p2sh,
     store_proof,
     update_lightning_invoice,
     update_proof_reserved,
-    bump_secret_derivation,
-    set_secret_derivation,
 )
 
 
@@ -147,8 +148,8 @@ class LedgerAPI:
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
         outputs: List[BlindedMessage] = []
-        
-        rs_ = [None] * len(amounts)  if not rs else rs
+
+        rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
         for secret, amount, r in zip(secrets, amounts, rs_):
             B_, r = b_dhke.step1_alice(secret, r or None)

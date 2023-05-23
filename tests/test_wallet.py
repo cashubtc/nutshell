@@ -1,9 +1,10 @@
+import shutil
 import time
+from pathlib import Path
 from typing import List
 
 import pytest
 import pytest_asyncio
-from pathlib import Path
 
 from cashu.core.base import Proof
 from cashu.core.helpers import async_unwrap, sum_proofs
@@ -14,7 +15,6 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT, mint
-import shutil
 
 
 async def assert_err(f, msg):
