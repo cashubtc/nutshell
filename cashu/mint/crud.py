@@ -54,18 +54,20 @@ async def store_promise(
     amount: int,
     B_: str,
     C_: str,
+    id: str,
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'promises')}
-          (amount, B_b, C_b)
-        VALUES (?, ?, ?)
+          (amount, B_b, C_b, id)
+        VALUES (?, ?, ?, ?)
         """,
         (
             amount,
             str(B_),
             str(C_),
+            id,
         ),
     )
 
@@ -82,7 +84,7 @@ async def get_promise(
         """,
         (str(B_),),
     )
-    return BlindedSignature(amount=row[0], C_=row[2]) if row else None
+    return BlindedSignature(amount=row[0], C_=row[2], id=row[3]) if row else None
 
 
 async def get_proofs_used(
@@ -106,13 +108,14 @@ async def invalidate_proof(
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'proofs_used')}
-          (amount, C, secret)
-        VALUES (?, ?, ?)
+          (amount, C, secret, id)
+        VALUES (?, ?, ?, ?)
         """,
         (
             proof.amount,
             str(proof.C),
             str(proof.secret),
+            str(proof.id),
         ),
     )
 

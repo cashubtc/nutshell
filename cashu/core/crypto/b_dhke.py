@@ -51,13 +51,10 @@ def hash_to_curve(message: bytes) -> PublicKey:
 
 
 def step1_alice(
-    secret_msg: str, blinding_factor: Optional[bytes] = None
+    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
 ) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    if blinding_factor:
-        r = PrivateKey(privkey=blinding_factor, raw=True)
-    else:
-        r = PrivateKey()
+    r = blinding_factor or PrivateKey()
     B_: PublicKey = Y + r.pubkey  # type: ignore
     return B_, r
 

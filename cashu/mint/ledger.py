@@ -166,7 +166,11 @@ class Ledger:
         C_ = b_dhke.step2_bob(B_, private_key_amount)
         logger.trace(f"crud: _generate_promise storing promise for {amount}")
         await self.crud.store_promise(
-            amount=amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
+            amount=amount,
+            B_=B_.serialize().hex(),
+            C_=C_.serialize().hex(),
+            id=keyset.id,
+            db=self.db,
         )
         logger.trace(f"crud: _generate_promise stored promise for {amount}")
         return BlindedSignature(id=keyset.id, amount=amount, C_=C_.serialize().hex())

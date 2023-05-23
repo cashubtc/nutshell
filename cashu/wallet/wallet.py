@@ -1,13 +1,12 @@
 import base64
-import hashlib
 import json
 import math
 import secrets as scrts
 import time
 import uuid
 from itertools import groupby
-from typing import Dict, List, Optional, Union
-
+from typing import Dict, List, Optional, Tuple
+import hashlib
 import requests
 from loguru import logger
 
@@ -46,30 +45,22 @@ from ..core.script import (
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
 )
-<<<<<<< HEAD
-from cashu.core.secp import PrivateKey, PublicKey
-from cashu.core.settings import settings
-from cashu.core.split import amount_split
-from cashu.tor.tor import TorProxy
-from cashu.wallet.crud import (
-    bump_secret_derivation,
-=======
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..tor.tor import TorProxy
 from ..wallet.crud import (
->>>>>>> main
     get_keyset,
     get_proofs,
     invalidate_proof,
     secret_used,
-    set_secret_derivation,
     store_keyset,
     store_lightning_invoice,
     store_p2sh,
     store_proof,
     update_lightning_invoice,
     update_proof_reserved,
+    bump_secret_derivation,
+    set_secret_derivation,
 )
 
 
@@ -122,11 +113,7 @@ class LedgerAPI:
         return
 
     def _construct_proofs(
-<<<<<<< HEAD
-        self, promises: List[BlindedSignature], secrets: List[str], rs: List[bytes]
-=======
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
->>>>>>> main
     ):
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
         proofs: List[Proof] = []
@@ -137,13 +124,8 @@ class LedgerAPI:
             ), "our keyset id does not match promise id."
 
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
-<<<<<<< HEAD
-            r_pk = PrivateKey(privkey=r, raw=True)
-            C = b_dhke.step3_alice(C_, r_pk, self.public_keys[promise.amount])
-=======
             C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
 
->>>>>>> main
             proof = Proof(
                 id=promise.id,
                 amount=promise.amount,
@@ -151,7 +133,33 @@ class LedgerAPI:
                 secret=secret,
             )
             proofs.append(proof)
+            logger.debug(f"Created proof: {proof}, r: {r.serialize()}")
+
         return proofs
+
+    @staticmethod
+    def _construct_outputs(
+        amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
+    ):
+        """Takes a list of amounts and secrets and returns outputs.
+        Outputs are blinded messages `outputs` and blinding factors `rs`"""
+        assert len(amounts) == len(
+            secrets
+        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        outputs: List[BlindedMessage] = []
+        if not rs:
+            rs = [None] * len(amounts)  # type: ignore
+
+        for secret, amount, r in zip(secrets, amounts, rs):
+            B_, _ = b_dhke.step1_alice(secret, r or None)
+            rs.append(r)
+            output: BlindedMessage = BlindedMessage(
+                amount=amount, B_=B_.serialize().hex()
+            )
+            outputs.append(output)
+        for o, r in zip(outputs, rs):
+            logger.debug(f"Constructing output: {o}, r: {r.serialize()}")
+        return outputs, rs
 
     @staticmethod
     def raise_on_error(resp_dict):
@@ -162,49 +170,6 @@ class LedgerAPI:
     def _generate_secret(randombits=128):
         """Returns base64 encoded random string."""
         return scrts.token_urlsafe(randombits // 8)
-
-    async def generate_determinstic_secret(self, secret_counter):
-        """
-        Determinstically generates two secrets (one as the secret message,
-        one as the blinding factor).
-        """
-        # for secret
-        seed_secret = settings.wallet_private_key + "x" + str(secret_counter)
-        # blinding factor
-        r_secret = settings.wallet_private_key + "r" + str(secret_counter)
-        logger.debug(f"generating sercret {secret_counter}: {seed_secret} {r_secret}")
-        secred = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
-        r = base64.b64encode(hashlib.sha256(r_secret.encode("utf-8")).digest())[:32]
-        return secred, r
-
-    async def generate_n_secrets(self, n: int = 1):
-        """Generates n secrets and blinding factors and returns two lists"""
-        secret_counters = [await bump_secret_derivation(db=self.db) for i in range(n)]
-        secrets_and_rs = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
-        ]
-        # secrets are supplied as str
-        secrets = [s[0].decode("utf-8") for s in secrets_and_rs]
-        # rs are supplied as bytes
-        rs = [s[1] for s in secrets_and_rs]
-
-        # sanity check to make sure we're not reusing secrets
-        # NOTE: this step is probably wasting more resources than it helps
-        await self._check_used_secrets(secrets)
-
-        return secrets, rs
-
-    async def generate_secrets_from_to(self, from_counter: int, to_counter: int):
-        """Generates n secrets and blinding factors and returns two lists"""
-        secret_counters = [c for c in range(from_counter, to_counter + 1)]
-        secrets_and_rs = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
-        ]
-        # secrets are supplied as str
-        secrets = [s[0].decode("utf-8") for s in secrets_and_rs]
-        # rs are supplied as bytes
-        rs = [s[1] for s in secrets_and_rs]
-        return secrets, rs
 
     async def _load_mint_keys(self, keyset_id: str = ""):
         assert len(
@@ -261,47 +226,65 @@ class LedgerAPI:
         if keyset_id:
             assert keyset_id in self.keysets, f"keyset {keyset_id} not active on mint"
 
-    @staticmethod
-    def _construct_outputs(
-        amounts: List[int], secrets: List[str], rs: List[bytes]
-    ) -> list[BlindedMessage]:
-        """Takes a list of amounts and secrets and returns outputs.
-        Outputs are blinded messages `outputs` and blinding factors `rs`"""
-        assert len(amounts) == len(
-            secrets
-        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
-        assert len(secrets) == len(
-            rs
-        ), "lists of secrets and blinding factors do not have the same length"
-
-        outputs: List[BlindedMessage] = []
-<<<<<<< HEAD
-        for secret, amount, r in zip(secrets, amounts, rs):
-            r_pk = PrivateKey(privkey=r, raw=True)
-            # step1_alice passes back the original r if we give it one as an argument
-            B_, _ = b_dhke.step1_alice(secret, r_pk)
-=======
-        rs: List[PrivateKey] = []
-        for secret, amount in zip(secrets, amounts):
-            B_, r = b_dhke.step1_alice(secret)
-            rs.append(r)
->>>>>>> main
-            output: BlindedMessage = BlindedMessage(
-                amount=amount, B_=B_.serialize().hex()
-            )
-            outputs.append(output)
-        return outputs
-
     async def _check_used_secrets(self, secrets):
         for s in secrets:
             if await secret_used(s, db=self.db):
                 raise Exception(f"secret already used: {s}")
 
-    def generate_multiple_secrets(self, secret, n):
+    def generate_secrets(self, secret, n):
         """`secret` is the base string that will be tweaked n times"""
         if len(secret.split("P2SH:")) == 2:
             return [f"{secret}:{self._generate_secret()}" for i in range(n)]
         return [f"{i}:{secret}" for i in range(n)]
+
+    async def generate_determinstic_secret(self, secret_counter):
+        """
+        Determinstically generates two secrets (one as the secret message,
+        one as the blinding factor).
+        """
+        # for secret
+        seed_secret = settings.wallet_private_key + "x" + str(secret_counter)
+        # blinding factor
+        r_secret = settings.wallet_private_key + "r" + str(secret_counter)
+        logger.debug(f"Generating sercret from {secret_counter}: {seed_secret} {r_secret}")
+        secred = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
+        logger.debug(f"Sercret {secred}")
+        r = base64.b64encode(hashlib.sha256(r_secret.encode("utf-8")).digest())[:32]
+        return secred, r
+
+    async def generate_n_secrets(
+        self, n: int = 1
+    ) -> Tuple[List[str], List[PrivateKey]]:
+        """Generates n secrets and blinding factors and returns two lists"""
+        secret_counters = [await bump_secret_derivation(db=self.db) for i in range(n)]
+        logger.debug(f"Last secret counter: {secret_counters[-1]}")
+        secrets_and_rs = [
+            await self.generate_determinstic_secret(s) for s in secret_counters
+        ]
+        # secrets are supplied as str
+        secrets = [s[0].decode("utf-8") for s in secrets_and_rs]
+        # rs are supplied as bytes
+        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_and_rs]
+
+        # sanity check to make sure we're not reusing secrets
+        # NOTE: this step is probably wasting more resources than it helps
+        await self._check_used_secrets(secrets)
+
+        return secrets, rs
+
+    async def generate_secrets_from_to(
+        self, from_counter: int, to_counter: int
+    ) -> Tuple[List[str], List[PrivateKey]]:
+        """Generates n secrets and blinding factors and returns two lists"""
+        secret_counters = [c for c in range(from_counter, to_counter + 1)]
+        secrets_and_rs = [
+            await self.generate_determinstic_secret(s) for s in secret_counters
+        ]
+        # secrets are supplied as str
+        secrets = [s[0].decode("utf-8") for s in secrets_and_rs]
+        # rs are supplied as bytes
+        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_and_rs]
+        return secrets, rs
 
     """
     ENDPOINTS
@@ -381,9 +364,9 @@ class LedgerAPI:
         """Requests a mint from the server and returns Lightning invoice."""
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
         resp.raise_for_status()
-        reponse_dict = resp.json()
-        self.raise_on_error(reponse_dict)
-        mint_response = GetMintResponse.parse_obj(reponse_dict)
+        return_dict = resp.json()
+        self.raise_on_error(return_dict)
+        mint_response = GetMintResponse.parse_obj(return_dict)
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
     @async_set_requests
@@ -391,7 +374,7 @@ class LedgerAPI:
         """Mints new coins and returns a proof of promise."""
         secrets, rs = await self.generate_n_secrets(len(amounts))
         await self._check_used_secrets(secrets)
-        outputs = self._construct_outputs(amounts, secrets, rs)
+        outputs, rs = self._construct_outputs(amounts, secrets, rs)
         outputs_payload = PostMintRequest(outputs=outputs)
         resp = self.s.post(
             self.url + "/mint",
@@ -404,8 +387,11 @@ class LedgerAPI:
         resp.raise_for_status()
         reponse_dict = resp.json()
         self.raise_on_error(reponse_dict)
-
-        promises = PostMintResponse.parse_obj(reponse_dict).promises
+        try:
+            # backwards compatibility: parse promises < 0.8.0 with no "promises" field
+            promises = PostMintResponseLegacy.parse_obj(reponse_dict).__root__
+        except:
+            promises = PostMintResponse.parse_obj(reponse_dict).promises
         return self._construct_proofs(promises, secrets, rs)
 
     @async_set_requests
@@ -425,15 +411,14 @@ class LedgerAPI:
 
         amounts = frst_outputs + scnd_outputs
         secrets, rs = await self.generate_n_secrets(len(amounts))
+
         # TODO: Fix P2SH with `generate_n_secrets`, make it work with
         # `generate_multiple_secrets` (which should be renamed!)
         #
         # if scnd_secret is None:
-        #     secrets, rs = await self.generate_n_secrets(len(amounts))
+        #     secrets = [self._generate_secret() for _ in range(len(amounts))]
         # else:
-        #     scnd_secrets = self.generate_multiple_secrets(
-        #         scnd_secret, len(scnd_outputs)
-        #     )
+        #     scnd_secrets = self.generate_secrets(scnd_secret, len(scnd_outputs))
         #     logger.debug(f"Creating proofs with custom secrets: {scnd_secrets}")
         #     assert len(scnd_secrets) == len(
         #         scnd_outputs
@@ -442,9 +427,12 @@ class LedgerAPI:
         #     secrets = [
         #         self._generate_secret() for s in range(len(frst_outputs))
         #     ] + scnd_secrets
-        #
 
-        outputs = self._construct_outputs(amounts, secrets, rs)
+        assert len(secrets) == len(
+            amounts
+        ), "number of secrets does not match number of outputs"
+        await self._check_used_secrets(secrets)
+        outputs, rs = self._construct_outputs(amounts, secrets, rs)
         split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
 
         # construct payload
@@ -495,9 +483,9 @@ class LedgerAPI:
             json=payload.dict(include=_check_spendable_include_fields(proofs)),  # type: ignore
         )
         resp.raise_for_status()
-        reponse_dict = resp.json()
-        self.raise_on_error(reponse_dict)
-        spendable = CheckSpendableResponse.parse_obj(reponse_dict)
+        return_dict = resp.json()
+        self.raise_on_error(return_dict)
+        spendable = CheckSpendableResponse.parse_obj(return_dict)
         return spendable
 
     @async_set_requests
@@ -509,9 +497,9 @@ class LedgerAPI:
             json=payload.dict(),
         )
         resp.raise_for_status()
-        reponse_dict = resp.json()
-        self.raise_on_error(reponse_dict)
-        return reponse_dict
+        return_dict = resp.json()
+        self.raise_on_error(return_dict)
+        return return_dict
 
     @async_set_requests
     async def pay_lightning(
@@ -681,8 +669,8 @@ class Wallet(LedgerAPI):
         # we will generate four blanked outputs that the mint will
         # imprint with value depending on the fees we overpaid
         n_return_outputs = 4
-        secrets, rs = await self.generate_n_secrets(n_return_outputs)
-        outputs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
+        secrets = [self._generate_secret() for _ in range(n_return_outputs)]
+        outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets)
 
         status = await super().pay_lightning(proofs, invoice, outputs)
 
@@ -720,8 +708,7 @@ class Wallet(LedgerAPI):
 
     async def _store_proofs(self, proofs):
         for proof in proofs:
-            if proof.secret not in [p.secret for p in self.proofs]:
-                await store_proof(proof, db=self.db)
+            await store_proof(proof, db=self.db)
 
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
@@ -1041,7 +1028,7 @@ class Wallet(LedgerAPI):
         # we don't know the amount but luckily the mint will tell us so we use a dummy
         # variable here
         amounts_dummy = [1] * len(secrets)
-        outputs = self._construct_outputs(amounts_dummy, secrets, rs)
+        outputs, rs = self._construct_outputs(amounts_dummy, secrets, rs)
         promises = await super().restore_promises(outputs)
         proofs = self._construct_proofs(promises, secrets, rs)
         print(f"Restored tokens worth {sum([p.amount for p in proofs])} sats")
