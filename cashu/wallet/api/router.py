@@ -77,7 +77,7 @@ async def pay(
     assert total_amount > 0, "amount has to be larger than zero."
     assert wallet.available_balance >= total_amount, "balance is too low."
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
-    await wallet.pay_lightning(send_proofs, invoice)
+    await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
     await wallet.load_proofs()
     return PayResponse(
         amount=total_amount - fee_reserve_sat,
