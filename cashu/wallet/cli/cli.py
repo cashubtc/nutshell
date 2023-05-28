@@ -58,6 +58,7 @@ def run_api_server(ctx, param, daemon):
     "--daemon",
     "-d",
     is_flag=True,
+    is_eager=True,
     expose_value=False,
     callback=run_api_server,
     help="Start server for wallet REST API",
