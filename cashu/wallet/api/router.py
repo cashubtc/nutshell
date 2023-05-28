@@ -143,9 +143,8 @@ async def swap(
         raise Exception("this mint does not support lightning.")
     if outgoing_mint in incoming_mint:
         raise Exception("mints for swap have to be different")
-    global wallet
     # request invoice from incoming mint
-    wallet = await load_mint(wallet, incoming_mint)
+    wallet = create_wallet(url=incoming_mint)
     invoice = await wallet.request_mint(amount)
     # pay invoice from outgoing mint
     wallet = await load_mint(wallet, outgoing_mint)
