@@ -209,7 +209,7 @@ async def swap(ctx: Context):
     if wallet.available_balance < total_amount:
         raise Exception("balance too low")
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
-    await wallet.pay_lightning(send_proofs, invoice.pr)
+    await wallet.pay_lightning(send_proofs, invoice.pr, fee_reserve_sat)
     # mint token in incoming mint
     wallet = Wallet(
         incoming_mint_url,
