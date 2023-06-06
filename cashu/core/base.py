@@ -1,6 +1,7 @@
 import base64
 import json
 from typing import Any, Dict, List, Optional, Union
+from sqlite3 import Row
 
 from loguru import logger
 from pydantic import BaseModel
