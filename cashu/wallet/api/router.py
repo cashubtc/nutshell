@@ -132,7 +132,7 @@ async def invoice(
             initial_balance=initial_balance,
         )
     elif amount and hash:
-        await wallet.mint(amount, hash)
+        await wallet.mint(amount, hash=hash)
         return InvoiceResponse(
             amount=amount,
             hash=hash,
