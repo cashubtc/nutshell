@@ -1,4 +1,5 @@
 import asyncio
+import math
 from functools import partial, wraps
 from typing import List
 
@@ -42,3 +43,13 @@ def fee_reserve(amount_msat: int, internal=False) -> int:
         int(settings.lightning_reserve_fee_min),
         int(amount_msat * settings.lightning_fee_percent / 100.0),
     )
+
+
+def calculate_number_of_blank_outputs(fee_reserve_sat: int):
+    """Calculates the number of blank outputs used for returning overpaid fees.
+
+    The formula ensures that any overpaid fees can be represented by the blank outputs,
+    see NUT-08 for details.
+    """
+    assert fee_reserve_sat > 0, "Fee reserve has to be positive."
+    return max(math.ceil(math.log2(fee_reserve_sat)), 1)
