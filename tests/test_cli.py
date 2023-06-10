@@ -121,7 +121,7 @@ def test_send_without_split(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "send", "1", "--nosplit"],
+        [*cli_prefix, "send", "2", "--nosplit"],
     )
     assert result.exception is None
     print("SEND")
