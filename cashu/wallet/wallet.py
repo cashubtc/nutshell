@@ -114,6 +114,7 @@ class LedgerAPI:
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
     ):
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
+        logger.trace(f"Constructing proofs.")
         proofs: List[Proof] = []
         for promise, secret, r in zip(promises, secrets, rs):
             logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
@@ -131,6 +132,7 @@ class LedgerAPI:
                 secret=secret,
             )
             proofs.append(proof)
+        logger.trace(f"Constructed {len(proofs)} proofs.")
         return proofs
 
     @staticmethod
@@ -202,6 +204,7 @@ class LedgerAPI:
     def _construct_outputs(amounts: List[int], secrets: List[str]):
         """Takes a list of amounts and secrets and returns outputs.
         Outputs are blinded messages `outputs` and blinding factors `rs`"""
+        logger.trace(f"Constructing outputs.")
         assert len(amounts) == len(
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
@@ -214,12 +217,16 @@ class LedgerAPI:
                 amount=amount, B_=B_.serialize().hex()
             )
             outputs.append(output)
+        logger.trace(f"Constructed {len(outputs)} outputs.")
         return outputs, rs
 
     async def _check_used_secrets(self, secrets):
+        """Checks if any of the secrets have already been used"""
+        logger.trace("Checking secrets.")
         for s in secrets:
             if await secret_used(s, db=self.db):
                 raise Exception(f"secret already used: {s}")
+        logger.trace("Secret check complete.")
 
     def generate_secrets(self, secret, n):
         """`secret` is the base string that will be tweaked n times"""
@@ -303,6 +310,7 @@ class LedgerAPI:
     @async_set_requests
     async def request_mint(self, amount):
         """Requests a mint from the server and returns Lightning invoice."""
+        logger.trace("Requesting mint: GET /mint")
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
         resp.raise_for_status()
         return_dict = resp.json()
@@ -317,6 +325,7 @@ class LedgerAPI:
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets)
         outputs_payload = PostMintRequest(outputs=outputs)
+        logger.trace("Checking Lightning invoice. POST /mint")
         resp = self.s.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
@@ -328,6 +337,7 @@ class LedgerAPI:
         resp.raise_for_status()
         reponse_dict = resp.json()
         self.raise_on_error(reponse_dict)
+        logger.trace("Lightning invoice checked. POST /mint")
         try:
             # backwards compatibility: parse promises < 0.8.0 with no "promises" field
             promises = PostMintResponseLegacy.parse_obj(reponse_dict).__root__
@@ -498,50 +508,38 @@ class Wallet(LedgerAPI):
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
-    async def mint(self, amount: int, hash: Optional[str] = None):
+    async def mint(
+        self,
+        amount: int,
+        split: Optional[List[int]] = None,
+        hash: Optional[str] = None,
+    ):
         """Mint tokens of a specific amount after an invoice has been paid.
 
         Args:
             amount (int): Total amount of tokens to be minted
+            split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
             hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
 
         Raises:
+            Exception: Raises exception if `amounts` does not sum to `amount` or has unsupported value.
             Exception: Raises exception if no proofs have been provided
 
         Returns:
             List[Proof]: Newly minted proofs.
         """
-        split = amount_split(amount)
+        # specific split
+        if split:
+            assert sum(split) == amount, "split must sum to amount"
+            for a in split:
+                if a not in [2**i for i in range(settings.max_order)]:
+                    raise Exception(
+                        f"Can only mint amounts with 2^n up to {2**settings.max_order}."
+                    )
+
+        # if no split was specified, we use the canonical split
+        split = split or amount_split(amount)
         proofs = await super().mint(split, hash)
-        if proofs == []:
-            raise Exception("received no proofs.")
-        await self._store_proofs(proofs)
-        if hash:
-            await update_lightning_invoice(
-                db=self.db, hash=hash, paid=True, time_paid=int(time.time())
-            )
-        self.proofs += proofs
-        return proofs
-
-    async def mint_amounts(self, amounts: List[int], hash: Optional[str] = None):
-        """Similar to wallet.mint() but accepts a predefined list of amount to be minted.
-
-        Args:
-            amounts (List[int]): List of amounts requested
-            hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
-
-        Raises:
-            Exception: Newly minted proofs.
-
-        Returns:
-            List[Proof]: Newly minted proofs.
-        """
-        for amount in amounts:
-            if amount not in [2**i for i in range(settings.max_order)]:
-                raise Exception(
-                    f"Can only mint amounts with 2^n up to {2**settings.max_order}."
-                )
-        proofs = await super().mint(amounts, hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)

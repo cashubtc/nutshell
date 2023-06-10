@@ -12,6 +12,7 @@ from os.path import isdir, join
 
 import click
 from click import Context
+from loguru import logger
 
 from ...core.base import TokenV3
 from ...core.helpers import sum_proofs
@@ -140,14 +141,31 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 @cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=int)
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
+@click.option(
+    "--split",
+    "-s",
+    default=None,
+    help="Split minted tokens with a specific amount.",
+    type=int,
+)
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: int, hash: str):
+async def invoice(ctx: Context, amount: int, hash: str, split: int):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
+    # in case the user wants a specific split, we create a list of amounts
+    optional_split = None
+    if split:
+        assert amount % split == 0, "split must be divisor or amount"
+        assert amount >= split, "split must smaller or equal amount"
+        n_splits = amount // split
+        optional_split = [split] * n_splits
+        print(f"Requesting split with {n_splits}*{split} sat tokens.")
+
     if not settings.lightning:
         r = await wallet.mint(amount)
+    # user requests an invoice
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)
         if invoice.pr:
@@ -169,21 +187,25 @@ async def invoice(ctx: Context, amount: int, hash: str):
             while time.time() < check_until and not paid:
                 time.sleep(3)
                 try:
-                    await wallet.mint(amount, invoice.hash)
+                    await wallet.mint(amount, split=optional_split, hash=invoice.hash)
                     paid = True
                     print(" Invoice paid.")
                 except Exception as e:
                     # TODO: user error codes!
-                    if str(e) == "Error: Lightning invoice not paid yet.":
+                    if "invoice not paid" in str(e):
                         print(".", end="", flush=True)
                         continue
+                    else:
+                        print(f"Error: {str(e)}")
             if not paid:
                 print("\n")
                 print(
                     "Invoice is not paid yet, stopping check. Use the command above to recheck after the invoice has been paid."
                 )
+
+    # user paid invoice and want to check it
     elif amount and hash:
-        await wallet.mint(amount, hash)
+        await wallet.mint(amount, split=optional_split, hash=hash)
     wallet.status()
     return
 

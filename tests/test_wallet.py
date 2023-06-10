@@ -97,16 +97,28 @@ async def test_mint(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint_amounts(wallet1: Wallet):
     """Mint predefined amounts"""
-    await wallet1.mint_amounts([1, 1, 1, 2, 2, 4, 16])
+    amts = [1, 1, 1, 2, 2, 4, 16]
+    await wallet1.mint(amount=sum(amts), split=amts)
     assert wallet1.balance == 27
-    assert wallet1.proof_amounts == [1, 1, 1, 2, 2, 4, 16]
+    assert wallet1.proof_amounts == amts
+
+
+@pytest.mark.asyncio
+async def test_mint_amounts_wrong_sum(wallet1: Wallet):
+    """Mint predefined amounts"""
+    amts = [1, 1, 1, 2, 2, 4, 16]
+    await assert_err(
+        wallet1.mint(amount=sum(amts) + 1, split=amts),
+        "split must sum to amount",
+    )
 
 
 @pytest.mark.asyncio
 async def test_mint_amounts_wrong_order(wallet1: Wallet):
     """Mint amount that is not part in 2^n"""
+    amts = [1, 2, 3]
     await assert_err(
-        wallet1.mint_amounts([1, 2, 3]),
+        wallet1.mint(amount=sum(amts), split=[1, 2, 3]),
         f"Can only mint amounts with 2^n up to {2**settings.max_order}.",
     )
 
