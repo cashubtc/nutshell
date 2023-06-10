@@ -59,7 +59,7 @@ def test_send(mint):
 
 def test_send_without_split(mint):
     with TestClient(app) as client:
-        response = client.post("/send?amount=1&nosplit=true")
+        response = client.post("/send?amount=2&nosplit=true")
         assert response.status_code == 200
         assert response.json()["balance"]
 
