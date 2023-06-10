@@ -109,6 +109,7 @@ async def invoice(
         print(f"Requesting split with {n_splits}*{split} sat tokens.")
 
     global wallet
+    wallet = await load_mint(wallet, mint)
     if not settings.lightning:
         r = await wallet.mint(amount, split=optional_split)
         return InvoiceResponse(
