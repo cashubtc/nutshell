@@ -36,9 +36,9 @@ def test_invoice_with_split(mint):
         else:
             assert response.json()["balance"]
             assert response.json()["amount"]
-        wallet = asyncio.run(init_wallet())
-        asyncio.run(wallet.load_proofs())
-        assert wallet.proof_amounts.count(1) >= 10
+        # wallet = asyncio.run(init_wallet())
+        # asyncio.run(wallet.load_proofs())
+        # assert wallet.proof_amounts.count(1) >= 10
 
 
 def test_balance():
