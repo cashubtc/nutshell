@@ -544,35 +544,6 @@ class Wallet(LedgerAPI):
         self.proofs += proofs
         return proofs
 
-    # async def mint_amounts(self, amounts: List[int], hash: Optional[str] = None):
-    #     """Similar to wallet.mint() but accepts a predefined list of amount to be minted.
-
-    #     Args:
-    #         amounts (List[int]): List of amounts requested
-    #         hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
-
-    #     Raises:
-    #         Exception: Newly minted proofs.
-
-    #     Returns:
-    #         List[Proof]: Newly minted proofs.
-    #     """
-    #     for amount in amounts:
-    #         if amount not in [2**i for i in range(settings.max_order)]:
-    #             raise Exception(
-    #                 f"Can only mint amounts with 2^n up to {2**settings.max_order}."
-    #             )
-    #     proofs = await super().mint(amounts, hash)
-    #     if proofs == []:
-    #         raise Exception("received no proofs.")
-    #     await self._store_proofs(proofs)
-    #     if hash:
-    #         await update_lightning_invoice(
-    #             db=self.db, hash=hash, paid=True, time_paid=int(time.time())
-    #         )
-    #     self.proofs += proofs
-    #     return proofs
-
     async def redeem(
         self,
         proofs: List[Proof],
