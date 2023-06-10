@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
 
 from cashu.core.migrations import migrate_databases
@@ -7,41 +9,45 @@ from cashu.core.settings import settings
 from cashu.wallet import migrations
 from cashu.wallet.api.app import app
 from cashu.wallet.wallet import Wallet
+from tests.conftest import SERVER_ENDPOINT, mint
 
 
-async def init_wallet():
-    wallet = Wallet(settings.mint_host, "data/wallet", "wallet")
+@pytest_asyncio.fixture(scope="function")
+async def wallet(mint):
+    wallet = Wallet(SERVER_ENDPOINT, "data/test_wallet_api", "wallet_api")
     await migrate_databases(wallet.db, migrations)
-    await wallet.load_proofs()
-    return wallet
+    await wallet.load_mint()
+    wallet.status()
+    yield wallet
 
 
-def test_invoice(mint):
+@pytest.mark.asyncio
+async def test_invoice(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/invoice?amount=100")
         assert response.status_code == 200
         if settings.lightning:
             assert response.json()["invoice"]
         else:
-            assert response.json()["balance"]
             assert response.json()["amount"]
 
 
-def test_invoice_with_split(mint):
+@pytest.mark.asyncio
+async def test_invoice_with_split(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/invoice?amount=10&split=1")
         assert response.status_code == 200
         if settings.lightning:
             assert response.json()["invoice"]
         else:
-            assert response.json()["balance"]
             assert response.json()["amount"]
         # wallet = asyncio.run(init_wallet())
         # asyncio.run(wallet.load_proofs())
         # assert wallet.proof_amounts.count(1) >= 10
 
 
-def test_balance():
+@pytest.mark.asyncio
+async def test_balance():
     with TestClient(app) as client:
         response = client.get("/balance")
         assert response.status_code == 200
@@ -50,33 +56,38 @@ def test_balance():
         assert response.json()["mints"]
 
 
-def test_send(mint):
+@pytest.mark.asyncio
+async def test_send(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/send?amount=10")
         assert response.status_code == 200
         assert response.json()["balance"]
 
 
-def test_send_without_split(mint):
+@pytest.mark.asyncio
+async def test_send_without_split(wallet: Wallet):
     with TestClient(app) as client:
-        response = client.post("/send?amount=1&nosplit=true")
+        response = client.post("/send?amount=2&nosplit=true")
         assert response.status_code == 200
         assert response.json()["balance"]
 
 
-def test_send_without_split_but_wrong_amount(mint):
+@pytest.mark.asyncio
+async def test_send_without_split_but_wrong_amount(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/send?amount=10&nosplit=true")
         assert response.status_code == 400
 
 
-def test_pending():
+@pytest.mark.asyncio
+async def test_pending():
     with TestClient(app) as client:
         response = client.get("/pending")
         assert response.status_code == 200
 
 
-def test_receive_all(mint):
+@pytest.mark.asyncio
+async def test_receive_all(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/receive?all=true")
         assert response.status_code == 200
@@ -84,7 +95,8 @@ def test_receive_all(mint):
         assert response.json()["balance"]
 
 
-def test_burn_all(mint):
+@pytest.mark.asyncio
+async def test_burn_all(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/send?amount=20")
         assert response.status_code == 200
@@ -93,7 +105,8 @@ def test_burn_all(mint):
         assert response.json()["balance"]
 
 
-def test_pay():
+@pytest.mark.asyncio
+async def test_pay():
     with TestClient(app) as client:
         invoice = (
             "lnbc100n1pjzp22cpp58xvjxvagzywky9xz3vurue822aaax"
@@ -109,50 +122,60 @@ def test_pay():
             assert response.status_code == 200
 
 
-def test_lock():
+@pytest.mark.asyncio
+async def test_lock():
     with TestClient(app) as client:
         response = client.get("/lock")
         assert response.status_code == 200
 
 
-def test_locks():
+@pytest.mark.asyncio
+async def test_locks():
     with TestClient(app) as client:
         response = client.get("/locks")
         assert response.status_code == 200
 
 
-def test_invoices():
+@pytest.mark.asyncio
+async def test_invoices():
     with TestClient(app) as client:
         response = client.get("/invoices")
         assert response.status_code == 200
 
 
-def test_wallets():
+@pytest.mark.asyncio
+async def test_wallets():
     with TestClient(app) as client:
         response = client.get("/wallets")
         assert response.status_code == 200
 
 
-def test_info():
+@pytest.mark.asyncio
+async def test_info():
     with TestClient(app) as client:
         response = client.get("/info")
         assert response.status_code == 200
         assert response.json()["version"]
 
 
-def test_flow(mint):
+@pytest.mark.asyncio
+async def test_flow(wallet: Wallet):
     with TestClient(app) as client:
         if not settings.lightning:
             response = client.get("/balance")
             initial_balance = response.json()["balance"]
             response = client.post("/invoice?amount=100")
+            response = client.get("/balance")
             assert response.json()["balance"] == initial_balance + 100
             response = client.post("/send?amount=50")
+            response = client.get("/balance")
             assert response.json()["balance"] == initial_balance + 50
             response = client.post("/send?amount=50")
+            response = client.get("/balance")
             assert response.json()["balance"] == initial_balance
             response = client.get("/pending")
             token = response.json()["pending_token"]["0"]["token"]
             amount = response.json()["pending_token"]["0"]["amount"]
             response = client.post(f"/receive?token={token}")
+            response = client.get("/balance")
             assert response.json()["balance"] == initial_balance + amount

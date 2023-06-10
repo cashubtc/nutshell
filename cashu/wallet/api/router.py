@@ -73,20 +73,15 @@ async def pay(
     global wallet
     wallet = await load_mint(wallet, mint)
 
-    await wallet.load_proofs()
-    initial_balance = wallet.available_balance
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
     assert total_amount > 0, "amount has to be larger than zero."
     assert wallet.available_balance >= total_amount, "balance is too low."
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
-    await wallet.load_proofs()
     return PayResponse(
         amount=total_amount - fee_reserve_sat,
         fee=fee_reserve_sat,
         amount_with_fee=total_amount,
-        initial_balance=initial_balance,
-        balance=wallet.available_balance,
     )
 
 
@@ -115,29 +110,22 @@ async def invoice(
 
     global wallet
     wallet = await load_mint(wallet, mint)
-    initial_balance = wallet.available_balance
     if not settings.lightning:
         r = await wallet.mint(amount, split=optional_split)
         return InvoiceResponse(
             amount=amount,
-            balance=wallet.available_balance,
-            initial_balance=initial_balance,
         )
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)
         return InvoiceResponse(
             amount=amount,
             invoice=invoice,
-            balance=wallet.available_balance,
-            initial_balance=initial_balance,
         )
     elif amount and hash:
         await wallet.mint(amount, split=optional_split, hash=hash)
         return InvoiceResponse(
             amount=amount,
             hash=hash,
-            balance=wallet.available_balance,
-            initial_balance=initial_balance,
         )
     return
 
@@ -171,7 +159,6 @@ async def send_command(
     ),
 ):
     global wallet
-    await wallet.load_proofs()
     if not nostr:
         balance, token = await send(
             wallet, amount, lock, legacy=False, split=not nosplit

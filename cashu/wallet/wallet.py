@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import math
@@ -499,7 +500,12 @@ class Wallet(LedgerAPI):
         """
         await super()._load_mint(keyset_id)
 
-    async def load_proofs(self):
+    async def load_proofs(self, reload: bool = False):
+        """Load all proofs from the database."""
+
+        if self.proofs and not reload:
+            logger.debug("Proofs already loaded.")
+            return
         self.proofs = await get_proofs(db=self.db)
 
     async def request_mint(self, amount):
