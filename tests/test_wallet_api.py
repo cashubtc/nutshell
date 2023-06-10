@@ -1,7 +1,19 @@
+import asyncio
+
 from fastapi.testclient import TestClient
 
+from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
+from cashu.wallet import migrations
 from cashu.wallet.api.app import app
+from cashu.wallet.wallet import Wallet
+
+
+async def init_wallet():
+    wallet = Wallet(settings.mint_host, "data/wallet", "wallet")
+    await migrate_databases(wallet.db, migrations)
+    await wallet.load_proofs()
+    return wallet
 
 
 def test_invoice(mint):
@@ -13,6 +25,20 @@ def test_invoice(mint):
         else:
             assert response.json()["balance"]
             assert response.json()["amount"]
+
+
+def test_invoice_with_split(mint):
+    with TestClient(app) as client:
+        response = client.post("/invoice?amount=10&split=1")
+        assert response.status_code == 200
+        if settings.lightning:
+            assert response.json()["invoice"]
+        else:
+            assert response.json()["balance"]
+            assert response.json()["amount"]
+        wallet = asyncio.run(init_wallet())
+        asyncio.run(wallet.load_proofs())
+        assert wallet.proof_amounts.count(1) >= 10
 
 
 def test_balance():

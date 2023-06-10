@@ -100,12 +100,24 @@ async def invoice(
         default=None,
         description="Mint URL to create an invoice at (None for default mint)",
     ),
+    split: int = Query(
+        default=None, description="Split minted tokens with a specific amount."
+    ),
 ):
+    # in case the user wants a specific split, we create a list of amounts
+    optional_split = None
+    if split:
+        assert amount % split == 0, "split must be divisor or amount"
+        assert amount >= split, "split must smaller or equal amount"
+        n_splits = amount // split
+        optional_split = [split] * n_splits
+        print(f"Requesting split with {n_splits}*{split} sat tokens.")
+
     global wallet
     wallet = await load_mint(wallet, mint)
     initial_balance = wallet.available_balance
     if not settings.lightning:
-        r = await wallet.mint(amount)
+        r = await wallet.mint(amount, split=optional_split)
         return InvoiceResponse(
             amount=amount,
             balance=wallet.available_balance,
@@ -120,7 +132,7 @@ async def invoice(
             initial_balance=initial_balance,
         )
     elif amount and hash:
-        await wallet.mint(amount, hash=hash)
+        await wallet.mint(amount, split=optional_split, hash=hash)
         return InvoiceResponse(
             amount=amount,
             hash=hash,
