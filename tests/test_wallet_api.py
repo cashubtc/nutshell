@@ -146,13 +146,17 @@ def test_flow(mint):
             response = client.get("/balance")
             initial_balance = response.json()["balance"]
             response = client.post("/invoice?amount=100")
+            response = client.get("/balance")
             assert response.json()["balance"] == initial_balance + 100
             response = client.post("/send?amount=50")
+            response = client.get("/balance")
             assert response.json()["balance"] == initial_balance + 50
             response = client.post("/send?amount=50")
+            response = client.get("/balance")
             assert response.json()["balance"] == initial_balance
             response = client.get("/pending")
             token = response.json()["pending_token"]["0"]["token"]
             amount = response.json()["pending_token"]["0"]["amount"]
             response = client.post(f"/receive?token={token}")
+            response = client.get("/balance")
             assert response.json()["balance"] == initial_balance + amount
