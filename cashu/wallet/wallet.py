@@ -5,7 +5,7 @@ import secrets as scrts
 import time
 import uuid
 from itertools import groupby
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import requests
 from loguru import logger
@@ -355,7 +355,7 @@ class LedgerAPI:
 
         If scnd_secret is provided, the wallet will create blinded secrets with those to attach a
         predefined spending condition to the tokens they want to send."""
-
+        logger.debug("Calling split. POST /split")
         total = sum_proofs(proofs)
         frst_amt, scnd_amt = total - amount, amount
         frst_outputs = amount_split(frst_amt)
@@ -852,14 +852,6 @@ class Wallet(LedgerAPI):
         logger.debug(f"Mint wants {fees} sat as fee reserve.")
         amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
         return amount, fees
-
-    async def split_to_pay(self, invoice: str):
-        """
-        Splits proofs such that a Lightning invoice can be paid.
-        """
-        amount, _ = await self.get_pay_amount_with_fees(invoice)
-        _, send_proofs = await self.split_to_send(self.proofs, amount)
-        return send_proofs
 
     async def split_to_send(
         self,

@@ -117,6 +117,29 @@ def test_send(mint, cli_prefix):
 
 
 @pytest.mark.asyncio
+def test_send_without_split(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "1", "--nosplit"],
+    )
+    assert result.exception is None
+    print("SEND")
+    print(result.output)
+    assert "cashuA" in result.output, "output does not have a token"
+
+
+@pytest.mark.asyncio
+def test_send_without_split_but_wrong_amount(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--nosplit"],
+    )
+    assert "No proof with this amount found" in str(result.exception)
+
+
+@pytest.mark.asyncio
 def test_receive_tokenv3(mint, cli_prefix):
     runner = CliRunner()
     token = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjFjQ05JQVoyWC93MSIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIld6TEF2VW53SDlRaFYwQU1rMy1oYWciLCAiQyI6ICIwMmZlMzUxYjAyN2FlMGY1ZDkyN2U2ZjFjMTljMjNjNTc3NzRhZTI2M2UyOGExN2E2MTUxNjY1ZjU3NWNhNjMyNWMifSwgeyJpZCI6ICIxY0NOSUFaMlgvdzEiLCAiYW1vdW50IjogOCwgInNlY3JldCI6ICJDamFTeTcyR2dVOGwzMGV6bE5zZnVBIiwgIkMiOiAiMDNjMzM0OTJlM2ZlNjI4NzFhMWEzMDhiNWUyYjVhZjBkNWI1Mjk5YzI0YmVkNDI2ZjQ1YzZmNDg5N2QzZjc4NGQ5In1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzcifV19"

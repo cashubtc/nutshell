@@ -166,13 +166,16 @@ async def send_command(
         default=None,
         description="Mint URL to send from (None for default mint)",
     ),
+    nosplit: bool = Query(
+        default=False, description="Do not split tokens before sending."
+    ),
 ):
     global wallet
-    wallet = await load_mint(wallet, mint)
-
     await wallet.load_proofs()
     if not nostr:
-        balance, token = await send(wallet, amount, lock, legacy=False)
+        balance, token = await send(
+            wallet, amount, lock, legacy=False, split=not nosplit
+        )
         return SendResponse(balance=balance, token=token)
     else:
         token, pubkey = await send_nostr(wallet, amount, nostr)

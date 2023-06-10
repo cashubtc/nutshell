@@ -114,8 +114,6 @@ async def receive(
     tokenObj: TokenV3,
     lock: str,
 ):
-    # await wallet.load_mint()
-
     # check for P2SH locks
     if lock:
         # load the script and signature of this address from the database
@@ -166,10 +164,7 @@ async def receive(
 
 
 async def send(
-    wallet: Wallet,
-    amount: int,
-    lock: str,
-    legacy: bool,
+    wallet: Wallet, amount: int, lock: str, legacy: bool, split: bool = True
 ):
     """
     Prints token to send to stdout.
@@ -182,11 +177,24 @@ async def send(
     if lock and len(lock.split("P2SH:")) == 2:
         p2sh = True
 
-    await wallet.load_mint()
     await wallet.load_proofs()
-    _, send_proofs = await wallet.split_to_send(
-        wallet.proofs, amount, lock, set_reserved=True
-    )
+    if split:
+        await wallet.load_mint()
+        _, send_proofs = await wallet.split_to_send(
+            wallet.proofs, amount, lock, set_reserved=True
+        )
+    else:
+        # get a proof with specific amount
+        send_proofs = []
+        for p in wallet.proofs:
+            if not p.reserved and p.amount == amount:
+                send_proofs = [p]
+                break
+        assert send_proofs, Exception(
+            f"No proof with this amount found. Available amounts: {set([p.amount for p in wallet.proofs])}"
+        )
+        await wallet.set_reserved(send_proofs, reserved=True)
+
     token = await wallet.serialize_proofs(
         send_proofs,
         include_mints=True,
