@@ -114,6 +114,7 @@ class LedgerAPI:
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
     ):
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
+        logger.trace(f"Constructing proofs.")
         proofs: List[Proof] = []
         for promise, secret, r in zip(promises, secrets, rs):
             logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
@@ -131,7 +132,7 @@ class LedgerAPI:
                 secret=secret,
             )
             proofs.append(proof)
-        logger.debug(f"Constructed {len(proofs)} proofs.")
+        logger.trace(f"Constructed {len(proofs)} proofs.")
         return proofs
 
     @staticmethod
@@ -203,6 +204,7 @@ class LedgerAPI:
     def _construct_outputs(amounts: List[int], secrets: List[str]):
         """Takes a list of amounts and secrets and returns outputs.
         Outputs are blinded messages `outputs` and blinding factors `rs`"""
+        logger.trace(f"Constructing outputs.")
         assert len(amounts) == len(
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
@@ -215,13 +217,16 @@ class LedgerAPI:
                 amount=amount, B_=B_.serialize().hex()
             )
             outputs.append(output)
-        logger.debug(f"Constructed {len(outputs)} outputs.")
+        logger.trace(f"Constructed {len(outputs)} outputs.")
         return outputs, rs
 
     async def _check_used_secrets(self, secrets):
+        """Checks if any of the secrets have already been used"""
+        logger.trace("Checking secrets.")
         for s in secrets:
             if await secret_used(s, db=self.db):
                 raise Exception(f"secret already used: {s}")
+        logger.trace("Secret check complete.")
 
     def generate_secrets(self, secret, n):
         """`secret` is the base string that will be tweaked n times"""
@@ -305,7 +310,7 @@ class LedgerAPI:
     @async_set_requests
     async def request_mint(self, amount):
         """Requests a mint from the server and returns Lightning invoice."""
-        logger.debug("Requesting mint: GET /mint")
+        logger.trace("Requesting mint: GET /mint")
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
         resp.raise_for_status()
         return_dict = resp.json()
@@ -320,7 +325,7 @@ class LedgerAPI:
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets)
         outputs_payload = PostMintRequest(outputs=outputs)
-        logger.debug("Checking Lightning invoice. POST /mint")
+        logger.trace("Checking Lightning invoice. POST /mint")
         resp = self.s.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
@@ -332,6 +337,7 @@ class LedgerAPI:
         resp.raise_for_status()
         reponse_dict = resp.json()
         self.raise_on_error(reponse_dict)
+        logger.trace("Lightning invoice checked. POST /mint")
         try:
             # backwards compatibility: parse promises < 0.8.0 with no "promises" field
             promises = PostMintResponseLegacy.parse_obj(reponse_dict).__root__
