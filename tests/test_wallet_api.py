@@ -14,22 +14,15 @@ from tests.conftest import SERVER_ENDPOINT, mint
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet(mint):
-    wallet1 = Wallet(SERVER_ENDPOINT, "data/test_wallet_api", "wallet_api")
-    await migrate_databases(wallet1.db, migrations)
-    await wallet1.load_mint()
-    wallet1.status()
-    yield wallet1
-
-
-# async def init_wallet():
-#     wallet = Wallet(settings.mint_host, "data/wallet", "wallet")
-#     await migrate_databases(wallet.db, migrations)
-#     await wallet.load_proofs()
-#     return wallet
+    wallet = Wallet(SERVER_ENDPOINT, "data/test_wallet_api", "wallet_api")
+    await migrate_databases(wallet.db, migrations)
+    await wallet.load_mint()
+    wallet.status()
+    yield wallet
 
 
 @pytest.mark.asyncio
-async def test_invoice(wallet):
+async def test_invoice(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/invoice?amount=100")
         assert response.status_code == 200
@@ -40,7 +33,7 @@ async def test_invoice(wallet):
 
 
 @pytest.mark.asyncio
-async def test_invoice_with_split(mint):
+async def test_invoice_with_split(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/invoice?amount=10&split=1")
         assert response.status_code == 200
@@ -64,7 +57,7 @@ async def test_balance():
 
 
 @pytest.mark.asyncio
-async def test_send(mint):
+async def test_send(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/send?amount=10")
         assert response.status_code == 200
@@ -72,7 +65,7 @@ async def test_send(mint):
 
 
 @pytest.mark.asyncio
-async def test_send_without_split(mint):
+async def test_send_without_split(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/send?amount=2&nosplit=true")
         assert response.status_code == 200
@@ -80,7 +73,7 @@ async def test_send_without_split(mint):
 
 
 @pytest.mark.asyncio
-async def test_send_without_split_but_wrong_amount(mint):
+async def test_send_without_split_but_wrong_amount(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/send?amount=10&nosplit=true")
         assert response.status_code == 400
@@ -94,7 +87,7 @@ async def test_pending():
 
 
 @pytest.mark.asyncio
-async def test_receive_all(mint):
+async def test_receive_all(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/receive?all=true")
         assert response.status_code == 200
@@ -103,7 +96,7 @@ async def test_receive_all(mint):
 
 
 @pytest.mark.asyncio
-async def test_burn_all(mint):
+async def test_burn_all(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/send?amount=20")
         assert response.status_code == 200
@@ -166,7 +159,7 @@ async def test_info():
 
 
 @pytest.mark.asyncio
-async def test_flow(mint):
+async def test_flow(wallet: Wallet):
     with TestClient(app) as client:
         if not settings.lightning:
             response = client.get("/balance")
