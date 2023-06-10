@@ -14,10 +14,11 @@ from ..wallet.crud import get_keyset, get_unused_locks
 from ..wallet.wallet import Wallet as Wallet
 
 
-async def init_wallet(wallet: Wallet):
+async def init_wallet(wallet: Wallet, load_proofs: bool = True):
     """Performs migrations and loads proofs from db."""
     await migrate_databases(wallet.db, migrations)
-    await wallet.load_proofs()
+    if load_proofs:
+        await wallet.load_proofs(reload=True)
 
 
 async def redeem_TokenV3_multimint(
@@ -158,7 +159,7 @@ async def receive(
         print(f"Received {sum_proofs(proofs)} sats")
 
     # reload main wallet so the balance updates
-    await wallet.load_proofs()
+    await wallet.load_proofs(reload=True)
     wallet.status()
     return wallet.available_balance
 

@@ -85,7 +85,7 @@ def cli(ctx: Context, host: str, walletname: str):
         ctx.obj["HOST"], os.path.join(settings.cashu_dir, walletname), name=walletname
     )
     ctx.obj["WALLET"] = wallet
-    asyncio.run(init_wallet(ctx.obj["WALLET"]))
+    asyncio.run(init_wallet(ctx.obj["WALLET"], load_proofs=False))
 
     # MUTLIMINT: Select a wallet
     # only if a command is one of a subset that needs to specify a mint host
@@ -96,7 +96,7 @@ def cli(ctx: Context, host: str, walletname: str):
     ctx.obj["WALLET"] = asyncio.run(
         get_mint_wallet(ctx)
     )  # select a specific wallet by CLI input
-    asyncio.run(init_wallet(ctx.obj["WALLET"]))
+    asyncio.run(init_wallet(ctx.obj["WALLET"], load_proofs=False))
 
 
 # https://github.com/pallets/click/issues/85#issuecomment-503464628
@@ -134,7 +134,6 @@ async def pay(ctx: Context, invoice: str, yes: bool):
         return
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
-    await wallet.load_proofs()
     wallet.status()
 
 
