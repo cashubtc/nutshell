@@ -275,6 +275,14 @@ async def balance(ctx: Context, verbose):
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
+@click.option(
+    "--nosplit",
+    "-s",
+    default=False,
+    is_flag=True,
+    help="Do not split tokens before sending.",
+    type=bool,
+)
 @click.pass_context
 @coro
 async def send_command(
@@ -286,10 +294,11 @@ async def send_command(
     legacy: bool,
     verbose: bool,
     yes: bool,
+    nosplit: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     if not nostr and not nopt:
-        await send(wallet, amount, lock, legacy)
+        await send(wallet, amount, lock, legacy, split=not nosplit)
     else:
         await send_nostr(wallet, amount, nostr or nopt, verbose, yes)
 
