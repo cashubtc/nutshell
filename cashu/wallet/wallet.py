@@ -253,7 +253,7 @@ class LedgerAPI:
             url + "/keys",
         )
         resp.raise_for_status()
-        keys = resp.json()
+        keys: dict = resp.json()
         assert len(keys), Exception("did not receive any keys")
         keyset_keys = {
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
