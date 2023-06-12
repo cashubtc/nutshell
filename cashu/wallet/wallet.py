@@ -536,6 +536,7 @@ class Wallet(LedgerAPI):
         """
         # specific split
         if split:
+            logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
             for a in split:
                 if a not in [2**i for i in range(settings.max_order)]:

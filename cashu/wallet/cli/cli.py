@@ -160,10 +160,10 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
         assert amount >= split, "split must smaller or equal amount"
         n_splits = amount // split
         optional_split = [split] * n_splits
-        print(f"Requesting split with {n_splits}*{split} sat tokens.")
+        logger.debug(f"Requesting split with {n_splits} * {split} sat tokens.")
 
     if not settings.lightning:
-        r = await wallet.mint(amount)
+        r = await wallet.mint(amount, split=optional_split)
     # user requests an invoice
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)
