@@ -1,43 +1,82 @@
 import flet as f
 
-from cashu.gui.src.repository import CashuRepository, GuiWallet
+from cashu.gui.src.controls.overview_card import OverviewCard
+from cashu.gui.src.mint_repository import MintRepository
+from cashu.gui.src.wallet_repository import WalletRepository
 
 
 class NutWorksApp:
-    current_page = "0"
+    _selected_wallet: str
+    _selected_mint: str
 
     def __init__(self, page: f.Page):
         self.page = page
-        self.repo = CashuRepository()
+        self.mint_repo = MintRepository()
+        self.wallet_repo = WalletRepository()
 
     async def init(self):
-        await self.repo.init()
-
-        self.nw_pages = {
-            "0": [self._build_app_bar(), f.Text("Balances go here")],
-            "1": [self._build_app_bar(), f.Text("Sending goes here")],
-            "2": [self._build_app_bar(), f.Text("Receiving goes here")],
-        }
+        await self.wallet_repo.init(self.mint_repo.default_mint)
 
         self.appbar = self._build_app_bar()
-        self.page.navigation_bar = self._build_nav_bar()
         self.page.appbar = self.appbar
-        await self.page.add_async(*self.nw_pages[self.current_page])
+
+        self.page.vertical_alignment = f.CrossAxisAlignment.START
+        await self._update_page()
+
+        await self.page.update_async()
+
+    async def _update_page(self):
+        await self.page.clean_async()
+        await self.page.add_async(
+            f.Column(
+                alignment=f.MainAxisAlignment.END,
+                controls=[
+                    OverviewCard(self.wallet_repo.wallet),
+                ],
+            ),
+        )
+
         await self.page.update_async()
 
     def _build_app_bar(self, title: str = "NutWorks"):
-        def on_wallet_changed(e):
+        async def on_wallet_changed(e: f.ControlEvent):
             try:
-                self.page.update()
-            except NotImplementedError as e:
+                if self.wallet_repo.wallet.name == e.data:
+                    return
+
+                await self.wallet_repo.set_wallet(e.data)
+                self._selected_wallet = e.data
+                await self._update_page()
+            except NotImplementedError:
                 pass
 
-        dd = f.Dropdown(
-            content_padding=f.padding.all(16),
-            width=100,
+        async def on_mint_changed(e: f.ControlEvent):
+            try:
+                if self.wallet_repo.mint.name == e.data:
+                    return
+
+                await self.wallet_repo.set_mint(e.data)
+                self._selected_mint = e.data
+                await self._update_page()
+            except NotImplementedError:
+                pass
+
+        wallet_dd = f.Dropdown(
+            content_padding=f.padding.symmetric(vertical=16, horizontal=8),
+            width=120,
             label="Wallet",
-            options=[f.dropdown.Option(w.name) for w in self.repo.list_wallets()],
+            value=self.wallet_repo.wallet.name,
+            options=[f.dropdown.Option(w) for w in self.wallet_repo.get_wallets()],
             on_change=on_wallet_changed,
+        )
+
+        mint_dd = f.Dropdown(
+            content_padding=f.padding.symmetric(vertical=16, horizontal=8),
+            width=120,
+            label="Mint",
+            value=self.wallet_repo.mint.name,
+            options=[f.dropdown.Option(mint.name) for mint in self.mint_repo.mint_list],
+            on_change=on_mint_changed,
         )
 
         return f.AppBar(
@@ -47,26 +86,7 @@ class NutWorksApp:
             center_title=False,
             toolbar_height=75,
             actions=[
-                f.Container(
-                    content=dd,
-                    margin=f.margin.only(left=50, right=25),
-                )
-            ],
-        )
-
-    def _build_nav_bar(self):
-        async def on_nav(e):
-            # important, remove old controls
-            await self.page.remove_async(*self.nw_pages[self.current_page])
-            self.current_page = e.data
-            await self.page.add_async(*self.nw_pages[self.current_page])
-            await self.page.update_async()
-
-        return f.NavigationBar(
-            on_change=on_nav,
-            destinations=[
-                f.NavigationDestination(icon=f.icons.WALLET, label="Balance"),
-                f.NavigationDestination(icon=f.icons.SEND, label="Send"),
-                f.NavigationDestination(icon=f.icons.RECEIPT, label="Receive"),
+                f.Container(content=wallet_dd, margin=f.margin.only(right=8)),
+                f.Container(content=mint_dd, margin=f.margin.only(right=8)),
             ],
         )
