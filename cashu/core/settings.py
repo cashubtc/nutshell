@@ -43,8 +43,6 @@ class CashuSettings(BaseSettings):
 class EnvSettings(CashuSettings):
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")
-    host: str = Field(default="127.0.0.1")
-    port: int = Field(default=3338)
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
 
 

@@ -240,7 +240,7 @@ class LedgerAPI:
 
         NOTE: This method should probably retire after `deterministic_secrets`. We are
         deriving secrets from a counter but don't store the respective blinding factor.
-        We won't be anle to restore any
+        We won't be anle to restore any ecash generated with these secrets.
         """
         secret_counters = await bump_secret_derivation(db=self.db)
         s, _ = await self.generate_determinstic_secret(secret_counters)

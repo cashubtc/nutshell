@@ -38,7 +38,7 @@ async def wallet1(mint):
         url=SERVER_ENDPOINT,
         db="data/wallet1",
         name="wallet1",
-        private_key="TEST_WALLET_PRIVATE_KEY_1",
+        # private_key="TEST_WALLET_PRIVATE_KEY_1",
     )
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
@@ -52,7 +52,7 @@ async def wallet2(mint):
         url=SERVER_ENDPOINT,
         db="data/wallet2",
         name="wallet2",
-        private_key="TEST_WALLET_PRIVATE_KEY_2",
+        # private_key="TEST_WALLET_PRIVATE_KEY_2",
     )
     await migrate_databases(wallet2.db, migrations)
     await wallet2.load_mint()
@@ -71,7 +71,7 @@ async def wallet3(mint):
         url=SERVER_ENDPOINT,
         db="data/wallet3",
         name="wallet3",
-        private_key="",
+        # private_key="",
     )
     await migrate_databases(wallet3.db, migrations)
     await wallet3.load_mint()
