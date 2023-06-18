@@ -100,14 +100,16 @@ def async_set_requests(func):
 class LedgerAPI:
     keys: WalletKeyset  # holds current keys of mint
     keyset_id: str  # holds id of current keyset
-    public_keys: Dict[int, PublicKey]  # holds public keys of
+    public_keys: Dict[int, PublicKey]  # holds public keys of the mint
+    private_key: str  # holds private key of the wallet
     tor: TorProxy
     db: Database
     s: requests.Session
 
-    def __init__(self, url):
+    def __init__(self, url: str, private_key: str):
         self.url = url
         self.s = requests.Session()
+        self.private_key = private_key
 
     @async_set_requests
     async def _init_s(self):
@@ -238,6 +240,7 @@ class LedgerAPI:
 
         NOTE: This method should probably retire after `deterministic_secrets`. We are
         deriving secrets from a counter but don't store the respective blinding factor.
+        We won't be anle to restore any
         """
         secret_counters = await bump_secret_derivation(db=self.db)
         s, _ = await self.generate_determinstic_secret(secret_counters)
@@ -255,9 +258,9 @@ class LedgerAPI:
         one as the blinding factor).
         """
         # for secret
-        seed_secret = settings.wallet_private_key + "x" + str(secret_counter)
+        seed_secret = self.private_key + "x" + str(secret_counter)
         # blinding factor
-        r_secret = settings.wallet_private_key + "r" + str(secret_counter)
+        r_secret = self.private_key + "r" + str(secret_counter)
         logger.debug(
             f"Generating sercret from {secret_counter}: {seed_secret} {r_secret}"
         )
@@ -569,11 +572,18 @@ class LedgerAPI:
 class Wallet(LedgerAPI):
     """Minimal wallet wrapper."""
 
-    def __init__(self, url: str, db: str, name: str = "no_name"):
-        super().__init__(url)
+    def __init__(
+        self,
+        url: str,
+        db: str,
+        name: str = "no_name",
+        private_key: Optional[str] = None,
+    ):
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
+        self.private_key = private_key or settings.wallet_private_key
+        super().__init__(url=url, private_key=self.private_key)
         logger.debug(f"Wallet initalized with mint URL {url}")
 
     # ---------- API ----------
