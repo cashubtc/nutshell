@@ -170,11 +170,6 @@ class LedgerAPI:
         if "error" in resp_dict:
             raise Exception("Mint Error: {}".format(resp_dict["error"]))
 
-    @staticmethod
-    def _generate_secret(randombits=128):
-        """Returns base64 encoded random string."""
-        return scrts.token_urlsafe(randombits // 8)
-
     async def _load_mint_keys(self, keyset_id: str = ""):
         assert len(
             self.url
@@ -238,13 +233,23 @@ class LedgerAPI:
                 raise Exception(f"secret already used: {s}")
         logger.trace("Secret check complete.")
 
-    def generate_secrets(self, secret, n):
+    async def _generate_secret(self, randombits=128) -> str:
+        """Returns base64 encoded deterministic random string.
+
+        NOTE: This method should probably retire after `deterministic_secrets`. We are
+        deriving secrets from a counter but don't store the respective blinding factor.
+        """
+        secret_counters = await bump_secret_derivation(db=self.db)
+        s, _ = await self.generate_determinstic_secret(secret_counters)
+        return s.decode("utf-8")
+
+    async def generate_secrets_numbered(self, secret: str, n: int) -> List[str]:
         """`secret` is the base string that will be tweaked n times"""
         if len(secret.split("P2SH:")) == 2:
-            return [f"{secret}:{self._generate_secret()}" for i in range(n)]
+            return [f"{secret}:{await self._generate_secret()}" for i in range(n)]
         return [f"{i}:{secret}" for i in range(n)]
 
-    async def generate_determinstic_secret(self, secret_counter):
+    async def generate_determinstic_secret(self, secret_counter) -> Tuple[bytes, bytes]:
         """
         Determinstically generates two secrets (one as the secret message,
         one as the blinding factor).
@@ -256,10 +261,10 @@ class LedgerAPI:
         logger.debug(
             f"Generating sercret from {secret_counter}: {seed_secret} {r_secret}"
         )
-        secred = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
-        logger.debug(f"Sercret {secred}")
+        secret = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
+        logger.debug(f"Sercret {secret.decode('utf-8')}")
         r = base64.b64encode(hashlib.sha256(r_secret.encode("utf-8")).digest())[:32]
-        return secred, r
+        return secret, r
 
     async def generate_n_secrets(
         self, n: int = 1
@@ -424,26 +429,26 @@ class LedgerAPI:
         scnd_outputs = amount_split(scnd_amt)
 
         amounts = frst_outputs + scnd_outputs
-        # secrets, rs = await self.generate_n_secrets(len(amounts))
 
         # TODO: Fix P2SH with `generate_n_secrets`, make it work with
-        # `generate_multiple_secrets` (which should be renamed!)
+        # `generate_secrets_numbered` (which should be renamed!)
         #
         if scnd_secret is None:
             secrets, rs = await self.generate_n_secrets(len(amounts))
-            # secrets = [self._generate_secret() for _ in range(len(amounts))]
         else:
             # NOTE: we use random blinding factors for P2SH, we won't be able to
             # restore these tokens from a backup
             rs = []
-            scnd_secrets = self.generate_secrets(scnd_secret, len(scnd_outputs))
+            scnd_secrets = await self.generate_secrets_numbered(
+                scnd_secret, len(scnd_outputs)
+            )
             logger.debug(f"Creating proofs with custom secrets: {scnd_secrets}")
             assert len(scnd_secrets) == len(
                 scnd_outputs
             ), "number of scnd_secrets does not match number of ouptus."
             # append predefined secrets (to send) to random secrets (to keep)
             secrets = [
-                self._generate_secret() for s in range(len(frst_outputs))
+                await self._generate_secret() for s in range(len(frst_outputs))
             ] + scnd_secrets
 
         assert len(secrets) == len(
@@ -681,7 +686,7 @@ class Wallet(LedgerAPI):
         # NUT-08, the mint will imprint these outputs with a value depending on the
         # amount of fees we overpaid.
         n_return_outputs = calculate_number_of_blank_outputs(fee_reserve)
-        secrets = [self._generate_secret() for _ in range(n_return_outputs)]
+        secrets = [await self._generate_secret() for _ in range(n_return_outputs)]
         outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets)
 
         status = await super().pay_lightning(proofs, invoice, outputs)
