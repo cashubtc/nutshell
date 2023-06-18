@@ -222,6 +222,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
 @coro
 async def balance(ctx: Context, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_proofs()
     if verbose:
         # show balances per keyset
         keyset_balances = wallet.balance_per_keyset()
