@@ -583,6 +583,10 @@ class Wallet(LedgerAPI):
         self.proofs: List[Proof] = []
         self.name = name
         self.private_key = private_key or settings.wallet_private_key
+        if not self.private_key:
+            # generate a new private key
+            logger.debug("Generating new wallet private key")
+            self.private_key = scrts.token_urlsafe(256 // 8)
         super().__init__(url=url, private_key=self.private_key)
         logger.debug(f"Wallet initalized with mint URL {url}")
 

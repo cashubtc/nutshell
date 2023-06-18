@@ -98,6 +98,11 @@ def cli(ctx: Context, host: str, walletname: str):
     )  # select a specific wallet by CLI input
     asyncio.run(init_wallet(ctx.obj["WALLET"], load_proofs=False))
 
+    if not settings.wallet_private_key:
+        print(
+            f"Warning: your wallet has no private key set. You will not be able to restore your wallet from a seed phrase. Set WALLET_PRIVATE_KEY in your .env file located at {settings.env_file}."
+        )
+
 
 # https://github.com/pallets/click/issues/85#issuecomment-503464628
 def coro(f):
