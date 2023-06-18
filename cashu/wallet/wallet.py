@@ -230,26 +230,6 @@ class LedgerAPI:
         if keyset_id:
             assert keyset_id in self.keysets, f"keyset {keyset_id} not active on mint"
 
-    @staticmethod
-    def _construct_outputs(amounts: List[int], secrets: List[str]):
-        """Takes a list of amounts and secrets and returns outputs.
-        Outputs are blinded messages `outputs` and blinding factors `rs`"""
-        logger.trace(f"Constructing outputs.")
-        assert len(amounts) == len(
-            secrets
-        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
-        outputs: List[BlindedMessage] = []
-        rs: List[PrivateKey] = []
-        for secret, amount in zip(secrets, amounts):
-            B_, r = b_dhke.step1_alice(secret)
-            rs.append(r)
-            output: BlindedMessage = BlindedMessage(
-                amount=amount, B_=B_.serialize().hex()
-            )
-            outputs.append(output)
-        logger.trace(f"Constructed {len(outputs)} outputs.")
-        return outputs, rs
-
     async def _check_used_secrets(self, secrets):
         """Checks if any of the secrets have already been used"""
         logger.trace("Checking secrets.")
