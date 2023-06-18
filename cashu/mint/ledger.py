@@ -191,6 +191,7 @@ class Ledger:
         if not proof.id:
             private_key_amount = self.keyset.private_keys[proof.amount]
         else:
+            assert proof.id in self.keysets.keysets, f"keyset {proof.id} unknown"
             logger.trace(
                 f"Validating proof with keyset {self.keysets.keysets[proof.id].id}."
             )

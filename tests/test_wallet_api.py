@@ -41,8 +41,7 @@ async def test_invoice_with_split(wallet: Wallet):
             assert response.json()["invoice"]
         else:
             assert response.json()["amount"]
-        # wallet = asyncio.run(init_wallet())
-        # asyncio.run(wallet.load_proofs())
+        # await wallet.load_proofs(reload=True)
         # assert wallet.proof_amounts.count(1) >= 10
 
 

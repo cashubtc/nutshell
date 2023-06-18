@@ -253,7 +253,7 @@ class LedgerAPI:
             url + "/keys",
         )
         resp.raise_for_status()
-        keys = resp.json()
+        keys: dict = resp.json()
         assert len(keys), Exception("did not receive any keys")
         keyset_keys = {
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
@@ -536,6 +536,7 @@ class Wallet(LedgerAPI):
         """
         # specific split
         if split:
+            logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
             for a in split:
                 if a not in [2**i for i in range(settings.max_order)]:
