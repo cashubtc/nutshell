@@ -52,13 +52,12 @@ class UvicornServer(multiprocessing.Process):
         self.server.run()
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True, scope="module")
 def mint():
     settings.mint_listen_port = 3337
     settings.port = 3337
     settings.mint_url = "http://localhost:3337"
     settings.port = settings.mint_listen_port
-    settings.wallet_private_key = "WALLET_TEST_PRIVATE_KEY"
     config = uvicorn.Config(
         "cashu.mint.app:app",
         port=settings.mint_listen_port,
@@ -92,7 +91,7 @@ async def ledger():
     yield ledger
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True, scope="module")
 def mint_3338():
     settings.mint_listen_port = 3338
     settings.port = 3338
