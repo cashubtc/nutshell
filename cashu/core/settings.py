@@ -71,7 +71,7 @@ class MintInformation(CashuSettings):
 
 
 class WalletSettings(CashuSettings):
-    wallet_private_key: str = Field(default=None)
+    wallet_private_key: str = Field(default="secretprivatekey")
     lightning: bool = Field(default=True)
     tor: bool = Field(default=True)
     socks_host: str = Field(default=None)

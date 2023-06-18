@@ -19,7 +19,7 @@ def cli_prefix():
 async def init_wallet():
     wallet = Wallet(
         url=settings.mint_host,
-        db="data/test_wallet",
+        db="data/test_cli_wallet",
         name="wallet",
         private_key="TEST_WALLET_CLI_PRIVATE_KEY_1",
     )
