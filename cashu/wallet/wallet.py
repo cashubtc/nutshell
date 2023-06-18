@@ -369,7 +369,7 @@ class LedgerAPI:
         return keysets.keysets
 
     @async_set_requests
-    async def request_mint(self, amount):
+    async def request_mint(self, amount: int):
         """Requests a mint from the server and returns Lightning invoice."""
         logger.trace("Requesting mint: GET /mint")
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
@@ -380,7 +380,7 @@ class LedgerAPI:
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
     @async_set_requests
-    async def mint(self, amounts, hash=None):
+    async def mint(self, amounts: List[int], hash: Optional[str] = None):
         """Mints new coins and returns a proof of promise."""
         secrets, rs = await self.generate_n_secrets(len(amounts))
         await self._check_used_secrets(secrets)
@@ -407,7 +407,9 @@ class LedgerAPI:
         return self._construct_proofs(promises, secrets, rs)
 
     @async_set_requests
-    async def split(self, proofs, amount, scnd_secret: Optional[str] = None):
+    async def split(
+        self, proofs: List[Proof], amount: int, scnd_secret: Optional[str] = None
+    ):
         """Consume proofs and create new promises based on amount split.
 
         If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
@@ -448,7 +450,7 @@ class LedgerAPI:
         split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
 
         # construct payload
-        def _splitrequest_include_fields(proofs):
+        def _splitrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /split"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
@@ -523,7 +525,7 @@ class LedgerAPI:
 
         payload = PostMeltRequest(proofs=proofs, pr=invoice, outputs=outputs)
 
-        def _meltrequest_include_fields(proofs):
+        def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
@@ -542,7 +544,7 @@ class LedgerAPI:
         return GetMeltResponse.parse_obj(return_dict)
 
     @async_set_requests
-    async def restore_promises(self, outputs):
+    async def restore_promises(self, outputs: List[BlindedMessage]):
         """
         Asks the mint to restore promises corresponding to outputs.
         """
