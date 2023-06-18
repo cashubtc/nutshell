@@ -898,8 +898,9 @@ class Ledger:
 
     async def restore(self, outputs: List[BlindedMessage]) -> list[BlindedSignature]:
         promises: List[BlindedSignature] = []
-        for output in outputs:
-            promise = await self.crud.get_promise(B_=output.B_, db=self.db)
-            if promise is not None:
-                promises.append(promise)
+        async with self.db.connect() as conn:
+            for output in outputs:
+                promise = await self.crud.get_promise(B_=output.B_, db=self.db, conn=conn)
+                if promise is not None:
+                    promises.append(promise)
         return promises

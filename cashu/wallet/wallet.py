@@ -272,7 +272,7 @@ class LedgerAPI:
         ]
         # secrets are supplied as str
         secrets = [s[0].decode("utf-8") for s in secrets_and_rs]
-        # rs are supplied as bytes
+        # rs are supplied as PrivateKey
         rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_and_rs]
 
         # sanity check to make sure we're not reusing secrets
@@ -291,7 +291,7 @@ class LedgerAPI:
         ]
         # secrets are supplied as str
         secrets = [s[0].decode("utf-8") for s in secrets_and_rs]
-        # rs are supplied as bytes
+        # rs are supplied as PrivateKey
         rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_and_rs]
         return secrets, rs
 

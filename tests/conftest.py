@@ -58,6 +58,7 @@ def mint():
     settings.port = 3337
     settings.mint_url = "http://localhost:3337"
     settings.port = settings.mint_listen_port
+    settings.wallet_private_key = "WALLET_TEST_PRIVATE_KEY"
     config = uvicorn.Config(
         "cashu.mint.app:app",
         port=settings.mint_listen_port,
