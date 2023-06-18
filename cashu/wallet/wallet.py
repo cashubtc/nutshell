@@ -424,23 +424,27 @@ class LedgerAPI:
         scnd_outputs = amount_split(scnd_amt)
 
         amounts = frst_outputs + scnd_outputs
-        secrets, rs = await self.generate_n_secrets(len(amounts))
+        # secrets, rs = await self.generate_n_secrets(len(amounts))
 
         # TODO: Fix P2SH with `generate_n_secrets`, make it work with
         # `generate_multiple_secrets` (which should be renamed!)
         #
-        # if scnd_secret is None:
-        #     secrets = [self._generate_secret() for _ in range(len(amounts))]
-        # else:
-        #     scnd_secrets = self.generate_secrets(scnd_secret, len(scnd_outputs))
-        #     logger.debug(f"Creating proofs with custom secrets: {scnd_secrets}")
-        #     assert len(scnd_secrets) == len(
-        #         scnd_outputs
-        #     ), "number of scnd_secrets does not match number of ouptus."
-        #     # append predefined secrets (to send) to random secrets (to keep)
-        #     secrets = [
-        #         self._generate_secret() for s in range(len(frst_outputs))
-        #     ] + scnd_secrets
+        if scnd_secret is None:
+            secrets, rs = await self.generate_n_secrets(len(amounts))
+            # secrets = [self._generate_secret() for _ in range(len(amounts))]
+        else:
+            # NOTE: we use random blinding factors for P2SH, we won't be able to
+            # restore these tokens from a backup
+            rs = []
+            scnd_secrets = self.generate_secrets(scnd_secret, len(scnd_outputs))
+            logger.debug(f"Creating proofs with custom secrets: {scnd_secrets}")
+            assert len(scnd_secrets) == len(
+                scnd_outputs
+            ), "number of scnd_secrets does not match number of ouptus."
+            # append predefined secrets (to send) to random secrets (to keep)
+            secrets = [
+                self._generate_secret() for s in range(len(frst_outputs))
+            ] + scnd_secrets
 
         assert len(secrets) == len(
             amounts

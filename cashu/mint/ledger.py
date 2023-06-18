@@ -900,7 +900,9 @@ class Ledger:
         promises: List[BlindedSignature] = []
         async with self.db.connect() as conn:
             for output in outputs:
-                promise = await self.crud.get_promise(B_=output.B_, db=self.db, conn=conn)
+                promise = await self.crud.get_promise(
+                    B_=output.B_, db=self.db, conn=conn
+                )
                 if promise is not None:
                     promises.append(promise)
         return promises
