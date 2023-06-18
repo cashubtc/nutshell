@@ -2,6 +2,8 @@ import logging
 import sys
 
 from fastapi import FastAPI
+
+# from fastapi_profiler import PyInstrumentProfilerMiddleware
 from loguru import logger
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -90,6 +92,9 @@ def create_app(config_object="core.settings") -> FastAPI:
         },
         middleware=middleware,
     )
+
+    # app.add_middleware(PyInstrumentProfilerMiddleware)
+
     return app
 
 

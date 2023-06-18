@@ -81,8 +81,10 @@ class WalletSettings(CashuSettings):
     mint_url: str = Field(default=None)
     mint_host: str = Field(default="8333.space")
     mint_port: int = Field(default=3338)
+    wallet_name: str = Field(default="wallet")
 
     api_port: int = Field(default=4448)
+    api_host: str = Field(default="127.0.0.1")
 
     nostr_private_key: str = Field(default=None)
     nostr_relays: List[str] = Field(
