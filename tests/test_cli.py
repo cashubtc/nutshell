@@ -16,19 +16,6 @@ def cli_prefix():
     yield ["--wallet", "test_wallet", "--host", settings.mint_url]
 
 
-@pytest.fixture(scope="session")
-def wallet():
-    wallet = Wallet(
-        url=settings.mint_host,
-        db="data/test_wallet",
-        name="wallet",
-        private_key="TEST_WALLET_CLI_PRIVATE_KEY_1",
-    )
-    asyncio.run(migrate_databases(wallet.db, migrations))
-    asyncio.run(wallet.load_proofs())
-    yield wallet
-
-
 async def init_wallet():
     wallet = Wallet(
         url=settings.mint_host,
