@@ -44,7 +44,15 @@ class UvicornServer(multiprocessing.Process):
         if dirpath.exists() and dirpath.is_dir():
             shutil.rmtree(dirpath)
 
-        dirpath = Path("data/test_wallet")
+        dirpath = Path("data/wallet1")
+        if dirpath.exists() and dirpath.is_dir():
+            shutil.rmtree(dirpath)
+
+        dirpath = Path("data/wallet2")
+        if dirpath.exists() and dirpath.is_dir():
+            shutil.rmtree(dirpath)
+
+        dirpath = Path("data/wallet3")
         if dirpath.exists() and dirpath.is_dir():
             shutil.rmtree(dirpath)
 

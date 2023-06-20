@@ -138,7 +138,9 @@ class LedgerAPI:
                 secret=secret,
             )
             proofs.append(proof)
-            logger.debug(f"Created proof: {proof}, r: {r.serialize()}")
+            logger.debug(
+                f"Created proof: {proof}, r: {r.serialize()} out of promise {promise}"
+            )
 
         logger.trace(f"Constructed {len(proofs)} proofs.")
         return proofs
@@ -148,7 +150,10 @@ class LedgerAPI:
         amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
     ):
         """Takes a list of amounts and secrets and returns outputs.
-        Outputs are blinded messages `outputs` and blinding factors `rs`"""
+        Outputs are blinded messages `outputs` and blinding factors `rs`
+
+        If `rs` is not given, it is generated in step1_alice.
+        """
         assert len(amounts) == len(
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
@@ -262,7 +267,7 @@ class LedgerAPI:
         # blinding factor
         r_secret = self.private_key + "r" + str(secret_counter)
         logger.debug(
-            f"Generating sercret from {secret_counter}: {seed_secret} {r_secret}"
+            f"Generating sercret nr {secret_counter}: {seed_secret} {r_secret}"
         )
         secret = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
         logger.debug(f"Sercret {secret.decode('utf-8')}")
@@ -273,8 +278,11 @@ class LedgerAPI:
         self, n: int = 1
     ) -> Tuple[List[str], List[PrivateKey]]:
         """Generates n secrets and blinding factors and returns two lists"""
-        secret_counters = [await bump_secret_derivation(db=self.db) for i in range(n)]
-        logger.debug(f"Last secret counter: {secret_counters[-1]}")
+        secret_counters_start = await bump_secret_derivation(db=self.db, by=n)
+        secret_counters = list(range(secret_counters_start, secret_counters_start + n))
+        logger.debug(
+            f"Generating secret nr {secret_counters[0]} to {secret_counters[-1]}."
+        )
         secrets_and_rs = [
             await self.generate_determinstic_secret(s) for s in secret_counters
         ]
@@ -689,8 +697,9 @@ class Wallet(LedgerAPI):
         self.proofs += frst_proofs + scnd_proofs
         await self._store_proofs(frst_proofs + scnd_proofs)
         # invalidate used proofs
-        for proof in proofs:
-            await invalidate_proof(proof, db=self.db)
+        async with self.db.connect() as conn:
+            for proof in proofs:
+                await invalidate_proof(proof, db=self.db, conn=conn)
         return frst_proofs, scnd_proofs
 
     async def pay_lightning(self, proofs: List[Proof], invoice: str, fee_reserve: int):
@@ -700,8 +709,9 @@ class Wallet(LedgerAPI):
         # NUT-08, the mint will imprint these outputs with a value depending on the
         # amount of fees we overpaid.
         n_return_outputs = calculate_number_of_blank_outputs(fee_reserve)
-        secrets = [await self._generate_secret() for _ in range(n_return_outputs)]
-        outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets)
+        # secrets = [await self._generate_secret() for _ in range(n_return_outputs)]
+        secrets, rs = await self.generate_n_secrets(n_return_outputs)
+        outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
 
         status = await super().pay_lightning(proofs, invoice, outputs)
 
@@ -738,8 +748,9 @@ class Wallet(LedgerAPI):
     # ---------- TOKEN MECHANIS ----------
 
     async def _store_proofs(self, proofs):
-        for proof in proofs:
-            await store_proof(proof, db=self.db)
+        async with self.db.connect() as conn:
+            for proof in proofs:
+                await store_proof(proof, db=self.db, conn=conn)
 
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
@@ -914,6 +925,8 @@ class Wallet(LedgerAPI):
         while sum_proofs(send_proofs) < amount_to_send:
             proof_to_add = sorted_proofs_of_current_keyset.pop()
             send_proofs.append(proof_to_add)
+
+        logger.debug(f"selected proof amounts: {[p.amount for p in send_proofs]}")
         return send_proofs
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool):
@@ -941,8 +954,15 @@ class Wallet(LedgerAPI):
         else:
             invalidated_proofs = proofs
 
-        for p in invalidated_proofs:
-            await invalidate_proof(p, db=self.db)
+        if invalidated_proofs:
+            logger.debug(
+                f"Invalidating {len(invalidated_proofs)} proofs worth {sum_proofs(invalidated_proofs)} sat."
+            )
+
+        async with self.db.connect() as conn:
+            for p in invalidated_proofs:
+                await invalidate_proof(p, db=self.db, conn=conn)
+
         invalidate_secrets = [p.secret for p in invalidated_proofs]
         self.proofs = list(
             filter(lambda p: p.secret not in invalidate_secrets, self.proofs)
@@ -1054,8 +1074,14 @@ class Wallet(LedgerAPI):
         outputs, rs = self._construct_outputs(amounts_dummy, secrets, rs)
         promises = await super().restore_promises(outputs)
         proofs = self._construct_proofs(promises, secrets, rs)
+        print(f"Restored {len(promises)} promises")
+        for i, (promise, o, proof) in enumerate(zip(promises, outputs, proofs)):
+            logger.debug(
+                f"{i}: {proof.secret} : B_: {o.B_} -> C_: {promise.C_} -> C: {proof.C}"
+            )
         print(f"Restored tokens worth {sum([p.amount for p in proofs])} sats")
         await self._store_proofs(proofs)
+
         # append proofs to proofs in memory so the balance updates
         for proof in proofs:
             if proof.secret not in [p.secret for p in self.proofs]:

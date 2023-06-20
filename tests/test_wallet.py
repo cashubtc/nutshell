@@ -1,7 +1,7 @@
 import shutil
 import time
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 
 import pytest
 import pytest_asyncio
@@ -30,6 +30,12 @@ async def assert_err(f, msg):
 def assert_amt(proofs: List[Proof], expected: int):
     """Assert amounts the proofs contain."""
     assert [p.amount for p in proofs] == expected
+
+
+async def reset_wallet_db(wallet: Wallet):
+    await wallet.db.execute("DELETE FROM proofs")
+    await wallet.db.execute("DELETE FROM proofs_used")
+    await wallet.db.execute("UPDATE secret_derivation SET counter = 0")
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -62,7 +68,6 @@ async def wallet2(mint):
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet3(mint):
-    settings.wallet_private_key = "TEST_PRIVATE_KEY"
     dirpath = Path("data/wallet3")
     if dirpath.exists() and dirpath.is_dir():
         shutil.rmtree(dirpath)
@@ -71,9 +76,11 @@ async def wallet3(mint):
         url=SERVER_ENDPOINT,
         db="data/wallet3",
         name="wallet3",
-        private_key="",
+        private_key="TEST_PRIVATE_KEY",
     )
     await migrate_databases(wallet3.db, migrations)
+    await wallet3.db.execute("DELETE FROM proofs")
+    await wallet3.db.execute("DELETE FROM proofs_used")
     await wallet3.load_mint()
     wallet3.status()
     yield wallet3
@@ -398,3 +405,207 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
         "Hq/22K5ZmyFTE+zPbgkflPYJkroEl7fpNnR6sDUi2As=",
         "iTNr6WeJNUGSKV8gAkyfCDJ5Tv4MePiJ1eQDM2kZEtg=",
     ]
+
+
+@pytest.mark.asyncio
+async def test_restore_wallet_after_mint(wallet3: Wallet):
+    await reset_wallet_db(wallet3)
+    await wallet3.mint(64)
+    assert wallet3.balance == 64
+    await reset_wallet_db(wallet3)
+    await wallet3.load_proofs()
+    wallet3.proofs = []
+    assert wallet3.balance == 0
+    await wallet3.restore_promises(0, 20)
+    assert wallet3.balance == 64
+
+
+@pytest.mark.asyncio
+async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
+    wallet3.private_key += "1"
+    await reset_wallet_db(wallet3)
+
+    await wallet3.mint(64)
+    assert wallet3.balance == 64
+
+    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
+        wallet3.proofs, 32, set_reserved=True
+    )
+
+    await reset_wallet_db(wallet3)
+    await wallet3.load_proofs()
+    wallet3.proofs = []
+    assert wallet3.balance == 0
+    await wallet3.restore_promises(0, 100)
+    assert wallet3.balance == 64 * 2
+    await wallet3.invalidate(wallet3.proofs)
+    assert wallet3.balance == 64
+
+
+@pytest.mark.asyncio
+async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: Wallet):
+    wallet3.private_key += "2"
+    await reset_wallet_db(wallet3)
+
+    await wallet3.mint(64)
+    assert wallet3.balance == 64
+
+    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
+        wallet3.proofs, 32, set_reserved=True
+    )
+
+    await wallet2.redeem(spendable_proofs)
+
+    await reset_wallet_db(wallet3)
+    await wallet3.load_proofs(reload=True)
+    assert wallet3.proofs == []
+    assert wallet3.balance == 0
+    await wallet3.restore_promises(0, 100)
+    assert wallet3.balance == 64 + 2 * 32
+    await wallet3.invalidate(wallet3.proofs)
+    assert wallet3.balance == 32
+
+
+class ProofBox:
+    proofs: Dict[str, Proof] = {}
+
+    def add(self, proofs: List[Proof]) -> None:
+        for proof in proofs:
+            if proof.secret in self.proofs:
+                if self.proofs[proof.secret].C != proof.C:
+                    print("Proofs are not equal")
+                    print(self.proofs[proof.secret])
+                    print(proof)
+            else:
+                self.proofs[proof.secret] = proof
+
+
+@pytest.mark.asyncio
+async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
+    wallet3.private_key += "3"
+    await reset_wallet_db(wallet3)
+
+    await wallet3.mint(64)
+    assert wallet3.balance == 64
+
+    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
+        wallet3.proofs, 32, set_reserved=True
+    )
+
+    await wallet3.redeem(spendable_proofs)
+
+    await reset_wallet_db(wallet3)
+    await wallet3.load_proofs(reload=True)
+    assert wallet3.proofs == []
+    assert wallet3.balance == 0
+    await wallet3.restore_promises(0, 100)
+    assert wallet3.balance == 64 + 2 * 32 + 32
+    await wallet3.invalidate(wallet3.proofs)
+    assert wallet3.balance == 64
+
+
+@pytest.mark.asyncio
+async def test_restore_wallet_after_send_twice(
+    wallet3: Wallet,
+):
+    box = ProofBox()
+    wallet3.private_key += "4.0"
+    await reset_wallet_db(wallet3)
+
+    await wallet3.mint(2)
+    box.add(wallet3.proofs)
+    assert wallet3.balance == 2
+
+    keep_proofs, spendable_proofs = await wallet3.split_to_send(  # type: ignore
+        wallet3.proofs, 1, set_reserved=True
+    )
+    box.add(wallet3.proofs)
+    assert wallet3.available_balance == 1
+    await wallet3.redeem(spendable_proofs)
+    box.add(wallet3.proofs)
+    assert wallet3.available_balance == 2
+    assert wallet3.balance == 2
+
+    await reset_wallet_db(wallet3)
+    await wallet3.load_proofs(reload=True)
+    assert wallet3.proofs == []
+    assert wallet3.balance == 0
+    await wallet3.restore_promises(0, 10)
+    box.add(wallet3.proofs)
+    assert wallet3.balance == 5
+    await wallet3.invalidate(wallet3.proofs)
+    assert wallet3.balance == 2
+
+    # again
+
+    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
+        wallet3.proofs, 1, set_reserved=True
+    )
+    box.add(wallet3.proofs)
+
+    assert wallet3.available_balance == 1
+    await wallet3.redeem(spendable_proofs)
+    box.add(wallet3.proofs)
+    assert wallet3.available_balance == 2
+
+    await reset_wallet_db(wallet3)
+    await wallet3.load_proofs(reload=True)
+    assert wallet3.proofs == []
+    assert wallet3.balance == 0
+    await wallet3.restore_promises(0, 15)
+    box.add(wallet3.proofs)
+    assert wallet3.balance == 7
+    await wallet3.invalidate(wallet3.proofs)
+    assert wallet3.balance == 2
+
+
+@pytest.mark.asyncio
+async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
+    wallet3: Wallet,
+):
+    box = ProofBox()
+    wallet3.private_key += "4"
+    await reset_wallet_db(wallet3)
+
+    await wallet3.mint(64)
+    box.add(wallet3.proofs)
+    assert wallet3.balance == 64
+
+    keep_proofs, spendable_proofs = await wallet3.split_to_send(  # type: ignore
+        wallet3.proofs, 10, set_reserved=True
+    )
+    box.add(wallet3.proofs)
+
+    assert wallet3.available_balance == 64 - 10
+    await wallet3.redeem(spendable_proofs)
+    box.add(wallet3.proofs)
+    assert wallet3.available_balance == 64
+
+    await reset_wallet_db(wallet3)
+    await wallet3.load_proofs(reload=True)
+    assert wallet3.proofs == []
+    assert wallet3.balance == 0
+    await wallet3.restore_promises(0, 20)
+    box.add(wallet3.proofs)
+    assert wallet3.balance == 138
+    await wallet3.invalidate(wallet3.proofs)
+    assert wallet3.balance == 64
+
+    # again
+
+    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
+        wallet3.proofs, 12, set_reserved=True
+    )
+
+    assert wallet3.available_balance == 64 - 12
+    await wallet3.redeem(spendable_proofs)
+    assert wallet3.available_balance == 64
+
+    await reset_wallet_db(wallet3)
+    await wallet3.load_proofs(reload=True)
+    assert wallet3.proofs == []
+    assert wallet3.balance == 0
+    await wallet3.restore_promises(0, 50)
+    assert wallet3.balance == 182
+    await wallet3.invalidate(wallet3.proofs)
+    assert wallet3.balance == 64

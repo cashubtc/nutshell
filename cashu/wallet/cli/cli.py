@@ -421,7 +421,7 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 async def restore(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    await wallet.restore_promises(0, 10)
+    await wallet.restore_promises(0, 20)
     await wallet.invalidate(wallet.proofs)
     wallet.status()
 

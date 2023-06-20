@@ -900,9 +900,11 @@ class Ledger:
         promises: List[BlindedSignature] = []
         async with self.db.connect() as conn:
             for output in outputs:
+                logger.trace(f"looking for promise: {output}")
                 promise = await self.crud.get_promise(
                     B_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
                     promises.append(promise)
+                    logger.trace(f"promise found: {promise}")
         return promises
