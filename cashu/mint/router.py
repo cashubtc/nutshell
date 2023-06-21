@@ -212,19 +212,41 @@ async def split(
     newly minted sets with amount "split" and "total-split".
 
     This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
-    It is then used by Carol (by setting split=total) to redeem the tokens.
+    It is then used by Carol (by setting split=total) to redeem the tokens.xD
     """
     logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
     try:
-        split_return = await ledger.split(
-            payload.proofs, payload.amount, payload.outputs
+        promises = await ledger.split(
+            proofs=payload.proofs, outputs=payload.outputs, amount=payload.amount
         )
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
-    if not split_return:
+    if not promises:
         return CashuError(code=0, error="there was an error with the split")
-    frst_promises, scnd_promises = split_return
-    resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
+
+    if payload.amount:
+        # BEGIN backwards compatibility < 0.13
+        # old clients expect two lists of promises where the second one's amounts
+        # sum up to `amount`. The first one is the rest.
+        # The returned value `promises` has the form [keep1, keep2, ..., send1, send2, ...]
+        # The sum of the sendx is `amount`. We need to split this into two lists and keep the order of the elements.
+        frst_promises: List[BlindedSignature] = []
+        scnd_promises: List[BlindedSignature] = []
+        scnd_amount = 0
+        for promise in promises[::-1]:  # we iterate backwards
+            if scnd_amount < payload.amount:
+                scnd_promises.insert(0, promise)  # and insert at the beginning
+                scnd_amount += promise.amount
+            else:
+                frst_promises.insert(0, promise)  # and insert at the beginning
+        logger.trace(
+            f"Split into keep: {len(frst_promises)}: {sum([p.amount for p in frst_promises])} sat and send: {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
+        )
+        resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
+        # END backwards compatibility < 0.13
+    else:
+        resp = PostSplitResponse(promises=promises)
+
     logger.trace(f"< POST /split: {resp}")
     return resp

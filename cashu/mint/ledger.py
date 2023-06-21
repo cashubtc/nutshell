@@ -233,16 +233,16 @@ class Ledger:
             ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]} is not {txin_p2sh_address}."
         return valid
 
-    def _verify_outputs(
-        self, total: int, amount: int, outputs: List[BlindedMessage]
-    ) -> bool:
-        """Verifies the expected split was correctly computed"""
-        frst_amt, scnd_amt = total - amount, amount  # we have two amounts to split to
-        frst_outputs = amount_split(frst_amt)
-        scnd_outputs = amount_split(scnd_amt)
-        expected = frst_outputs + scnd_outputs
-        given = [o.amount for o in outputs]
-        return given == expected
+    # def _verify_outputs(
+    #     self, total: int, amount: int, outputs: List[BlindedMessage]
+    # ) -> bool:
+    #     """Verifies the expected split was correctly computed"""
+    #     frst_amt, scnd_amt = total - amount, amount  # we have two amounts to split to
+    #     frst_outputs = amount_split(frst_amt)
+    #     scnd_outputs = amount_split(scnd_amt)
+    #     expected = frst_outputs + scnd_outputs
+    #     given = [o.amount for o in outputs]
+    #     return given == expected
 
     def _verify_no_duplicate_proofs(self, proofs: List[Proof]) -> bool:
         secrets = [p.secret for p in proofs]
@@ -275,9 +275,13 @@ class Ledger:
         return amount
 
     def _verify_equation_balanced(
-        self, proofs: List[Proof], outs: List[BlindedSignature]
+        self,
+        proofs: List[Proof],
+        outs: Union[List[BlindedSignature], List[BlindedMessage]],
     ) -> None:
-        """Verify that Σoutputs - Σinputs = 0."""
+        """Verify that Σinputs - Σoutputs = 0.
+        Outputs can be BlindedSignature or BlindedMessage.
+        """
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
         assert sum_outputs - sum_inputs == 0
@@ -809,9 +813,9 @@ class Ledger:
     async def split(
         self,
         proofs: List[Proof],
-        amount: int,
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
+        amount: Optional[int] = None,  # backwards compatibility < 0.13.0
     ):
         """Consumes proofs and prepares new promises based on the amount split. Used for splitting tokens
         Before sending or for redeeming tokens for new ones that have been received by another wallet.
@@ -838,15 +842,15 @@ class Ledger:
             logger.trace("setting proofs pending")
             await self._set_proofs_pending(proofs, conn)
             logger.trace(f"set proofs as pending")
-        total = sum_proofs(proofs)
+        total_amount = sum_proofs(proofs)
 
         try:
             logger.trace(f"verifying _verify_split_amount")
             # verify that amount is kosher
-            self._verify_split_amount(amount)
+            self._verify_split_amount(total_amount)
+
             # verify overspending attempt
-            if amount > total:
-                raise Exception("split amount is higher than the total sum.")
+            self._verify_equation_balanced(proofs, outputs)
 
             logger.trace("verifying proofs: _verify_proofs")
             await self._verify_proofs(proofs)
@@ -854,9 +858,6 @@ class Ledger:
             # verify that only unique outputs were used
             if not self._verify_no_duplicate_outputs(outputs):
                 raise Exception("duplicate promises.")
-            # verify that outputs have the correct amount
-            if not self._verify_outputs(total, amount, outputs):
-                raise Exception("split of promises is not as expected.")
             logger.trace(f"verified outputs")
         except Exception as e:
             logger.trace(f"split failed: {e}")
@@ -876,18 +877,27 @@ class Ledger:
         await self._invalidate_proofs(proofs)
         logger.trace(f"invalidated proofs")
 
-        # split outputs according to amount
-        outs_fst = amount_split(total - amount)
-        B_fst = [od for od in outputs[: len(outs_fst)]]
-        B_snd = [od for od in outputs[len(outs_fst) :]]
+        # BEGIN backwards compatibility < 0.13.0
+        if amount is not None:
+            # split outputs according to amount
+            total = sum_proofs(proofs)
+            if amount > total:
+                raise Exception("split amount is higher than the total sum.")
+            outs_fst = amount_split(total - amount)
+            B_fst = [od for od in outputs[: len(outs_fst)]]
+            B_snd = [od for od in outputs[len(outs_fst) :]]
 
-        # generate promises
-        prom_fst, prom_snd = await self._generate_promises(
-            B_fst, keyset
-        ), await self._generate_promises(B_snd, keyset)
+            # # generate promises
+            prom_fst, prom_snd = await self._generate_promises(
+                B_fst, keyset
+            ), await self._generate_promises(B_snd, keyset)
+            promises = prom_fst + prom_snd
+        # END backwards compatibility < 0.13.0
+        else:
+            promises = await self._generate_promises(outputs, keyset)
 
-        # verify amounts in produced proofs
-        self._verify_equation_balanced(proofs, prom_fst + prom_snd)
+        # verify amounts in produced promises
+        self._verify_equation_balanced(proofs, promises)
 
         logger.trace(f"split successful")
-        return prom_fst, prom_snd
+        return promises

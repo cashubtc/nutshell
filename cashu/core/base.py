@@ -171,13 +171,16 @@ class GetMeltResponse(BaseModel):
 
 class PostSplitRequest(BaseModel):
     proofs: List[Proof]
-    amount: int
+    amount: Optional[int] = None  # deprecated since 0.13.0
     outputs: List[BlindedMessage]
 
 
 class PostSplitResponse(BaseModel):
-    fst: List[BlindedSignature]
-    snd: List[BlindedSignature]
+    fst: List[BlindedSignature] = []  # deprecated since 0.13.0
+    snd: List[BlindedSignature] = []  # deprecated since 0.13.0
+    promises: List[
+        BlindedSignature
+    ] = []  # NOTE: remove default [] after transition period
 
 
 # ------- API: CHECK -------
