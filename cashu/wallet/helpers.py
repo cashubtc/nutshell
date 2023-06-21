@@ -49,7 +49,7 @@ async def redeem_TokenV3_multimint(
             print(f"Received {sum_proofs(redeem_proofs)} sats")
 
 
-async def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
+def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
     """Helper function to receive legacy TokenV2 tokens.
     Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
     the ordinary path.
@@ -64,7 +64,7 @@ async def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
     return token_serialized
 
 
-async def serialize_TokenV1_to_TokenV3(tokenv1: TokenV1):
+def serialize_TokenV1_to_TokenV3(tokenv1: TokenV1):
     """Helper function to receive legacy TokenV1 tokens.
     Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
     the ordinary path.
@@ -77,7 +77,7 @@ async def serialize_TokenV1_to_TokenV3(tokenv1: TokenV1):
     return token_serialized
 
 
-async def deserialize_token_from_string(token: str) -> TokenV3:
+def deserialize_token_from_string(token: str) -> TokenV3:
     # deserialize token
 
     # ----- backwards compatibility -----
@@ -86,7 +86,7 @@ async def deserialize_token_from_string(token: str) -> TokenV3:
     if token.startswith("eyJwcm9"):
         try:
             tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-            token = await serialize_TokenV2_to_TokenV3(tokenv2)
+            token = serialize_TokenV2_to_TokenV3(tokenv2)
         except:
             pass
 
@@ -94,7 +94,7 @@ async def deserialize_token_from_string(token: str) -> TokenV3:
     if token.startswith("W3siaWQ"):
         try:
             tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-            token = await serialize_TokenV1_to_TokenV3(tokenv1)
+            token = serialize_TokenV1_to_TokenV3(tokenv1)
         except:
             pass
 
