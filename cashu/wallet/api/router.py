@@ -178,7 +178,7 @@ async def receive_command(
 ):
     initial_balance = wallet.available_balance
     if token:
-        tokenObj: TokenV3 = await deserialize_token_from_string(token)
+        tokenObj: TokenV3 = deserialize_token_from_string(token)
         await verify_mints(wallet, tokenObj)
         balance = await receive(wallet, tokenObj, lock)
     elif nostr:
@@ -191,7 +191,7 @@ async def receive_command(
             for _, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
-                tokenObj = await deserialize_token_from_string(token)
+                tokenObj = deserialize_token_from_string(token)
                 await verify_mints(wallet, tokenObj)
                 balance = await receive(wallet, tokenObj, lock)
     else:
@@ -268,7 +268,7 @@ async def pending(
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
-            tokenObj = await deserialize_token_from_string(token)
+            tokenObj = deserialize_token_from_string(token)
             mint = [t.mint for t in tokenObj.token][0]
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)

@@ -334,7 +334,7 @@ async def receive_cli(
     wallet.status()
 
     if token:
-        tokenObj = await deserialize_token_from_string(token)
+        tokenObj = deserialize_token_from_string(token)
         # verify that we trust all mints in these tokens
         # ask the user if they want to trust the new mints
         for mint_url in set([t.mint for t in tokenObj.token if t.mint]):
@@ -450,7 +450,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
-            tokenObj = await deserialize_token_from_string(token)
+            tokenObj = deserialize_token_from_string(token)
             mint = [t.mint for t in tokenObj.token][0]
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
             reserved_date = datetime.utcfromtimestamp(
