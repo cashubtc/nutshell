@@ -453,6 +453,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             tokenObj = deserialize_token_from_string(token)
             mint = [t.mint for t in tokenObj.token][0]
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
+            assert grouped_proofs[0].time_reserved
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
