@@ -52,4 +52,6 @@ def calculate_number_of_blank_outputs(fee_reserve_sat: int):
     see NUT-08 for details.
     """
     assert fee_reserve_sat >= 0, "Fee reserve can't be negative."
-    return max(math.ceil(math.log2(fee_reserve_sat)), 1)
+    if fee_reserve_sat == 0:
+        return 1
+    return math.ceil(math.log2(fee_reserve_sat))
