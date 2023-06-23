@@ -662,9 +662,9 @@ class Ledger:
                 self.locks.get(hash) or asyncio.Lock()
             )  # create a new lock if it doesn't exist
             async with self.locks[hash]:
-                async with self.db.connect() as conn:
-                    # will raise an exception if the invoice is not paid
-                    await self._check_lightning_invoice(amount, hash, conn)
+                # will raise an exception if the invoice is not paid or tokens are already issued
+                await self._check_lightning_invoice(amount, hash)
+            del self.locks[hash]
 
         for amount in amounts:
             if amount not in [2**i for i in range(settings.max_order)]:
@@ -695,8 +695,7 @@ class Ledger:
 
         logger.trace("melt called")
 
-        async with self.db.connect() as conn:
-            await self._set_proofs_pending(proofs, conn)
+        await self._set_proofs_pending(proofs)
 
         try:
             await self._verify_proofs(proofs)
@@ -752,8 +751,7 @@ class Ledger:
             raise e
         finally:
             # delete proofs from pending list
-            async with self.db.connect() as conn:
-                await self._unset_proofs_pending(proofs, conn)
+            await self._unset_proofs_pending(proofs)
 
         return status, preimage, return_promises
 
@@ -825,8 +823,7 @@ class Ledger:
         """
         logger.trace(f"split called")
 
-        async with self.db.connect() as conn:
-            await self._set_proofs_pending(proofs, conn)
+        await self._set_proofs_pending(proofs)
 
         total = sum_proofs(proofs)
 
@@ -853,8 +850,7 @@ class Ledger:
             raise e
         finally:
             # delete proofs from pending list
-            async with self.db.connect() as conn:
-                await self._unset_proofs_pending(proofs, conn)
+            await self._unset_proofs_pending(proofs)
 
         # Mark proofs as used and prepare new promises
         logger.trace(f"invalidating proofs")
