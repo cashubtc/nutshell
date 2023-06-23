@@ -439,18 +439,19 @@ class Ledger:
             Exception: At least one proof already in pending table.
         """
         # first we check whether these proofs are pending aready
-        await self._validate_proofs_pending(proofs, conn)
-        for p in proofs:
-            try:
-                logger.trace(
-                    f"crud: _set_proofs_pending setting proof {p.secret} as pending"
-                )
-                await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
-                logger.trace(
-                    f"crud: _set_proofs_pending proof {p.secret} set as pending"
-                )
-            except:
-                raise Exception("proofs already pending.")
+        async with self.proofs_pending_lock:
+            await self._validate_proofs_pending(proofs, conn)
+            for p in proofs:
+                try:
+                    logger.trace(
+                        f"crud: _set_proofs_pending setting proof {p.secret} as pending"
+                    )
+                    await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
+                    logger.trace(
+                        f"crud: _set_proofs_pending proof {p.secret} set as pending"
+                    )
+                except:
+                    raise Exception("proofs already pending.")
 
     async def _unset_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
@@ -462,18 +463,19 @@ class Ledger:
         """
         # we try: except: this block in order to avoid that any errors here
         # could block the _invalidate_proofs() call that happens afterwards.
-        try:
-            for p in proofs:
-                logger.trace(
-                    f"crud: _unset_proofs_pending unsetting proof {p.secret} as pending"
-                )
-                await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
-                logger.trace(
-                    f"crud: _unset_proofs_pending proof {p.secret} unset as pending"
-                )
-        except Exception as e:
-            print(e)
-            pass
+        async with self.proofs_pending_lock:
+            try:
+                for p in proofs:
+                    logger.trace(
+                        f"crud: _unset_proofs_pending unsetting proof {p.secret} as pending"
+                    )
+                    await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+                    logger.trace(
+                        f"crud: _unset_proofs_pending proof {p.secret} unset as pending"
+                    )
+            except Exception as e:
+                print(e)
+                pass
 
     async def _validate_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
@@ -693,12 +695,8 @@ class Ledger:
 
         logger.trace("melt called")
 
-        async with self.proofs_pending_lock:
-            async with self.db.connect() as conn:
-                await self._set_proofs_pending(proofs, conn)
-                import asyncio
-
-                await asyncio.sleep(10)
+        async with self.db.connect() as conn:
+            await self._set_proofs_pending(proofs, conn)
 
         try:
             await self._verify_proofs(proofs)
@@ -754,9 +752,8 @@ class Ledger:
             raise e
         finally:
             # delete proofs from pending list
-            async with self.proofs_pending_lock:
-                async with self.db.connect() as conn:
-                    await self._unset_proofs_pending(proofs, conn)
+            async with self.db.connect() as conn:
+                await self._unset_proofs_pending(proofs, conn)
 
         return status, preimage, return_promises
 
@@ -828,9 +825,8 @@ class Ledger:
         """
         logger.trace(f"split called")
 
-        async with self.proofs_pending_lock:
-            async with self.db.connect() as conn:
-                await self._set_proofs_pending(proofs, conn)
+        async with self.db.connect() as conn:
+            await self._set_proofs_pending(proofs, conn)
 
         total = sum_proofs(proofs)
 
@@ -857,9 +853,8 @@ class Ledger:
             raise e
         finally:
             # delete proofs from pending list
-            async with self.proofs_pending_lock:
-                async with self.db.connect() as conn:
-                    await self._unset_proofs_pending(proofs, conn)
+            async with self.db.connect() as conn:
+                await self._unset_proofs_pending(proofs, conn)
 
         # Mark proofs as used and prepare new promises
         logger.trace(f"invalidating proofs")
