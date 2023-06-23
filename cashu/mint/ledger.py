@@ -1,6 +1,5 @@
 import math
-import multiprocessing as mp
-from multiprocessing.synchronize import Lock as LockBase
+import asyncio
 from typing import Dict, List, Literal, Optional, Set, Union
 
 from loguru import logger
@@ -17,7 +16,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
-from ..core.db import Connection, Database, lock_table
+from ..core.db import Connection, Database
 from ..core.helpers import fee_reserve, sum_proofs
 from ..core.script import verify_script
 from ..core.settings import settings
@@ -27,8 +26,10 @@ from ..mint.crud import LedgerCrud
 
 
 class Ledger:
-    locks: Dict[str, LockBase] = {}  # holds multiprocessing locks
-    proofs_pending_lock: LockBase = mp.Lock()  # holds locks for proofs_pending database
+    locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
+    proofs_pending_lock: asyncio.Lock = (
+        asyncio.Lock()
+    )  # holds locks for proofs_pending database
 
     def __init__(
         self,
@@ -656,9 +657,9 @@ class Ledger:
             if not hash:
                 raise Exception("no hash provided.")
             self.locks[hash] = (
-                self.locks.get(hash) or mp.Lock()
+                self.locks.get(hash) or asyncio.Lock()
             )  # create a new lock if it doesn't exist
-            with self.locks[hash]:
+            async with self.locks[hash]:
                 async with self.db.connect() as conn:
                     # will raise an exception if the invoice is not paid
                     await self._check_lightning_invoice(amount, hash, conn)
@@ -692,10 +693,9 @@ class Ledger:
 
         logger.trace("melt called")
 
-        with self.proofs_pending_lock:
+        async with self.proofs_pending_lock:
             async with self.db.connect() as conn:
                 await self._set_proofs_pending(proofs, conn)
-
         try:
             await self._verify_proofs(proofs)
             logger.trace("verified proofs")
@@ -750,7 +750,7 @@ class Ledger:
             raise e
         finally:
             # delete proofs from pending list
-            with self.proofs_pending_lock:
+            async with self.proofs_pending_lock:
                 async with self.db.connect() as conn:
                     await self._unset_proofs_pending(proofs, conn)
 
@@ -823,15 +823,11 @@ class Ledger:
             Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
         """
         logger.trace(f"split called")
-        # set proofs as pending
-        async with self.db.connect() as conn:
-            logger.trace("attempting lock table proofs_pending")
-            await conn.execute(lock_table(self.db, "proofs_pending"))
-            logger.trace("locked table proofs_pending")
-            # validate and set proofs as pending
-            logger.trace("setting proofs pending")
-            await self._set_proofs_pending(proofs, conn)
-            logger.trace(f"set proofs as pending")
+
+        async with self.proofs_pending_lock:
+            async with self.db.connect() as conn:
+                await self._set_proofs_pending(proofs, conn)
+
         total = sum_proofs(proofs)
 
         try:
@@ -857,13 +853,9 @@ class Ledger:
             raise e
         finally:
             # delete proofs from pending list
-            async with self.db.connect() as conn:
-                logger.trace("attempting lock table proofs_pending")
-                await conn.execute(lock_table(self.db, "proofs_pending"))
-                logger.trace("locked table proofs_pending")
-                logger.trace("unsetting proofs as pending")
-                await self._unset_proofs_pending(proofs, conn)
-                logger.trace(f"unset proofs as pending")
+            async with self.proofs_pending_lock:
+                async with self.db.connect() as conn:
+                    await self._unset_proofs_pending(proofs, conn)
 
         # Mark proofs as used and prepare new promises
         logger.trace(f"invalidating proofs")
