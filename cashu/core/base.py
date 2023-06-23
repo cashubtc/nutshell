@@ -200,6 +200,14 @@ class CheckFeesResponse(BaseModel):
     fee: Union[int, None]
 
 
+# ------- API: RESTORE -------
+
+
+class PostRestoreResponse(BaseModel):
+    outputs: List[BlindedMessage] = []
+    promises: List[BlindedSignature] = []
+
+
 # ------- KEYSETS -------
 
 

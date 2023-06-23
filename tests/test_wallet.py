@@ -1,7 +1,7 @@
 import shutil
 import time
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
 import pytest
 import pytest_asyncio

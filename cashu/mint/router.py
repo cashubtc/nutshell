@@ -19,6 +19,7 @@ from ..core.base import (
     PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
+    PostRestoreResponse,
     PostSplitRequest,
     PostSplitResponse,
 )
@@ -109,7 +110,7 @@ async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
     """
     logger.trace(f"> GET /mint: amount={amount}")
     if amount > 21_000_000 * 100_000_000 or amount <= 0:
-        return CashuError(code=0, error="Amount must be a valid amount of sats.")
+        return CashuError(code=0, error="Amount must be a valid amount of sat.")
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
     try:
@@ -233,10 +234,10 @@ async def split(
 @router.post(
     "/restore", name="Restore", summary="Restores a blinded signature from a secret"
 )
-async def restore(payload: PostMintRequest) -> Union[CashuError, PostMintResponse]:
+async def restore(payload: PostMintRequest) -> Union[CashuError, PostRestoreResponse]:
     assert payload.outputs, Exception("no outputs provided.")
     try:
-        promises = await ledger.restore(payload.outputs)
+        outputs, promises = await ledger.restore(payload.outputs)
     except Exception as exc:
         return CashuError(code=0, error=str(exc))
-    return PostMintResponse(promises=promises)
+    return PostRestoreResponse(outputs=outputs, promises=promises)

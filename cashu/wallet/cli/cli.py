@@ -232,7 +232,7 @@ async def swap(ctx: Context):
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    amount = int(input("Enter amount to swap in sats: "))
+    amount = int(input("Enter amount to swap in sat: "))
     assert amount > 0, "amount is not positive"
 
     # request invoice from incoming mint
@@ -458,12 +458,19 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 
 
 @cli.command("restore", help="Restore backups.")
+@click.option(
+    "--to",
+    "-t",
+    default=200,
+    help="Split minted tokens with a specific amount.",
+    type=int,
+)
 @click.pass_context
 @coro
-async def restore(ctx: Context):
+async def restore(ctx: Context, to: int):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    await wallet.restore_promises(0, 20)
+    await wallet.restore_promises(0, to)
     await wallet.invalidate(wallet.proofs)
     wallet.status()
 

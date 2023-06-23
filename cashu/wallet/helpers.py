@@ -46,7 +46,7 @@ async def redeem_TokenV3_multimint(
             _, _ = await mint_wallet.redeem(
                 redeem_proofs, scnd_script=script, scnd_siganture=signature
             )
-            print(f"Received {sum_proofs(redeem_proofs)} sats")
+            print(f"Received {sum_proofs(redeem_proofs)} sat")
 
 
 def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
@@ -156,7 +156,7 @@ async def receive(
         )
         await mint_wallet.load_mint(keyset_in_token)
         _, _ = await mint_wallet.redeem(proofs, script, signature)
-        print(f"Received {sum_proofs(proofs)} sats")
+        print(f"Received {sum_proofs(proofs)} sat")
 
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)

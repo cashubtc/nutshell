@@ -28,6 +28,7 @@ from ..core.base import (
     PostMintRequest,
     PostMintResponse,
     PostMintResponseLegacy,
+    PostRestoreResponse,
     PostSplitRequest,
     Proof,
     TokenV2,
@@ -564,7 +565,9 @@ class LedgerAPI:
         return GetMeltResponse.parse_obj(return_dict)
 
     @async_set_requests
-    async def restore_promises(self, outputs: List[BlindedMessage]):
+    async def restore_promises(
+        self, outputs: List[BlindedMessage]
+    ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
         """
         Asks the mint to restore promises corresponding to outputs.
         """
@@ -573,8 +576,8 @@ class LedgerAPI:
         resp.raise_for_status()
         reponse_dict = resp.json()
         self.raise_on_error(reponse_dict)
-        promises = PostMintResponse.parse_obj(reponse_dict).promises
-        return promises
+        returnObj = PostRestoreResponse.parse_obj(reponse_dict)
+        return returnObj.outputs, returnObj.promises
 
 
 class Wallet(LedgerAPI):
@@ -727,7 +730,7 @@ class Wallet(LedgerAPI):
                 hash="",
             )
             # we have a unique constraint on the hash, so we generate a random one if it doesn't exist
-            invoice_obj.hash = invoice_obj.hash or self._generate_secret()
+            invoice_obj.hash = invoice_obj.hash or await self._generate_secret()
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
             # handle change and produce proofs
@@ -1073,15 +1076,30 @@ class Wallet(LedgerAPI):
         # we don't know the amount but luckily the mint will tell us so we use a dummy
         # variable here
         amounts_dummy = [1] * len(secrets)
-        outputs, rs = self._construct_outputs(amounts_dummy, secrets, rs)
-        promises = await super().restore_promises(outputs)
-        proofs = self._construct_proofs(promises, secrets, rs)
-        print(f"Restored {len(promises)} promises")
-        for i, (promise, o, proof) in enumerate(zip(promises, outputs, proofs)):
+        reconstructed_outputs, reconstructed_rs = self._construct_outputs(
+            amounts_dummy, secrets, rs
+        )
+        restored_outputs, restored_promises = await super().restore_promises(
+            reconstructed_outputs
+        )
+
+        # now we need to filter out the secrets that had a match
+        matching_indices = [
+            idx
+            for idx, val in enumerate(reconstructed_outputs)
+            if val.B_ in [o.B_ for o in restored_outputs]
+        ]
+        secrets = [secrets[i] for i in matching_indices]
+        rs = [rs[i] for i in matching_indices]
+        proofs = self._construct_proofs(restored_promises, secrets, rs)
+        print(f"Restored {len(restored_promises)} promises")
+        for i, (promise, o, proof) in enumerate(
+            zip(restored_promises, restored_outputs, proofs)
+        ):
             logger.debug(
                 f"{i}: {proof.secret} : B_: {o.B_} -> C_: {promise.C_} -> C: {proof.C}"
             )
-        print(f"Restored tokens worth {sum([p.amount for p in proofs])} sats")
+        print(f"Restored tokens worth {sum([p.amount for p in proofs])} sat")
         await self._store_proofs(proofs)
 
         # append proofs to proofs in memory so the balance updates
