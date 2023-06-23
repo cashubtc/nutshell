@@ -171,7 +171,14 @@ async def m007_nostr(db: Database):
     )
 
 
-async def m008_secret_derivation_counter(db: Database):
+async def m008_keysets_add_public_keys(db: Database):
+    """
+    Stores public keys of mint in a new column of table keysets.
+    """
+    await db.execute("ALTER TABLE keysets ADD COLUMN public_keys TEXT")
+
+
+async def m009_secret_derivation_counter(db: Database):
     await db.execute(
         """
             CREATE TABLE IF NOT EXISTS secret_derivation (

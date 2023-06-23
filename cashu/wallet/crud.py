@@ -1,3 +1,4 @@
+import json
 import time
 from typing import Any, List, Optional
 
@@ -184,8 +185,8 @@ async def store_keyset(
     await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
-          (id, mint_url, valid_from, valid_to, first_seen, active)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (id, mint_url, valid_from, valid_to, first_seen, active, public_keys)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             keyset.id,
@@ -194,6 +195,7 @@ async def store_keyset(
             keyset.valid_to or int(time.time()),
             keyset.first_seen or int(time.time()),
             True,
+            keyset.serialize(),
         ),
     )
 
@@ -225,7 +227,7 @@ async def get_keyset(
         """,
         tuple(values),
     )
-    return WalletKeyset(**row) if row is not None else None
+    return WalletKeyset.from_row(row) if row is not None else None
 
 
 async def store_lightning_invoice(

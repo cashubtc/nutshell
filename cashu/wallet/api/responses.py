@@ -17,6 +17,13 @@ class InvoiceResponse(BaseModel):
     hash: Optional[str] = None
 
 
+class SwapResponse(BaseModel):
+    outgoing_mint: str
+    incoming_mint: str
+    invoice: Invoice
+    balances: Dict
+
+
 class BalanceResponse(BaseModel):
     balance: int
     keysets: Optional[Dict] = None

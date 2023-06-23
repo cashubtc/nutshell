@@ -1,5 +1,6 @@
 import base64
 import json
+from sqlite3 import Row
 from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
@@ -217,8 +218,8 @@ class WalletKeyset:
     Contains the keyset from the wallets's perspective.
     """
 
-    id: Union[str, None]
-    public_keys: Union[Dict[int, PublicKey], None]
+    id: str
+    public_keys: Dict[int, PublicKey]
     mint_url: Union[str, None] = None
     valid_from: Union[str, None] = None
     valid_to: Union[str, None] = None
@@ -227,25 +228,48 @@ class WalletKeyset:
 
     def __init__(
         self,
-        public_keys=None,
-        mint_url=None,
+        public_keys: Dict[int, PublicKey],
         id=None,
+        mint_url=None,
         valid_from=None,
         valid_to=None,
         first_seen=None,
         active=None,
     ):
-        self.id = id
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = active
         self.mint_url = mint_url
-        if public_keys:
-            self.public_keys = public_keys
-            self.id = derive_keyset_id(self.public_keys)
-        if id:
-            assert id == self.id, "id must match derived id from public keys"
+
+        self.public_keys = public_keys
+        # overwrite id by deriving it from the public keys
+        self.id = derive_keyset_id(self.public_keys)
+
+    def serialize(self):
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
+
+    @classmethod
+    def from_row(cls, row: Row):
+        def deserialize(serialized: str):
+            return {
+                amount: PublicKey(bytes.fromhex(hex_key), raw=True)
+                for amount, hex_key in dict(json.loads(serialized)).items()
+            }
+
+        return cls(
+            id=row["id"],
+            public_keys=deserialize(str(row["public_keys"]))
+            if dict(row).get("public_keys")
+            else {},
+            mint_url=row["mint_url"],
+            valid_from=row["valid_from"],
+            valid_to=row["valid_to"],
+            first_seen=row["first_seen"],
+            active=row["active"],
+        )
 
 
 class MintKeyset:

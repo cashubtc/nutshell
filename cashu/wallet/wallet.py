@@ -726,6 +726,8 @@ class Wallet(LedgerAPI):
                 time_paid=time.time(),
                 hash="",
             )
+            # we have a unique constraint on the hash, so we generate a random one if it doesn't exist
+            invoice_obj.hash = invoice_obj.hash or self._generate_secret()
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
             # handle change and produce proofs
@@ -939,7 +941,7 @@ class Wallet(LedgerAPI):
             )
 
     async def invalidate(self, proofs: List[Proof], check_spendable=True):
-        """Invalidates all spendable tokens supplied in proofs.
+        """Invalidates all unspendable tokens supplied in proofs.
 
         Args:
             proofs (List[Proof]): Which proofs to delete

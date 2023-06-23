@@ -214,6 +214,48 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
     return
 
 
+@cli.command("swap", help="Swap funds between mints.")
+@click.pass_context
+@coro
+async def swap(ctx: Context):
+    if not settings.lightning:
+        raise Exception("lightning not supported.")
+    print("Select the mint to swap from:")
+    outgoing_wallet = await get_mint_wallet(ctx, force_select=True)
+
+    print("Select the mint to swap to:")
+    incoming_wallet = await get_mint_wallet(ctx, force_select=True)
+
+    await incoming_wallet.load_mint()
+    await outgoing_wallet.load_mint()
+
+    if incoming_wallet.url == outgoing_wallet.url:
+        raise Exception("mints for swap have to be different")
+
+    amount = int(input("Enter amount to swap in sats: "))
+    assert amount > 0, "amount is not positive"
+
+    # request invoice from incoming mint
+    invoice = await incoming_wallet.request_mint(amount)
+
+    # pay invoice from outgoing mint
+    total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
+        invoice.pr
+    )
+    if outgoing_wallet.available_balance < total_amount:
+        raise Exception("balance too low")
+    _, send_proofs = await outgoing_wallet.split_to_send(
+        outgoing_wallet.proofs, total_amount, set_reserved=True
+    )
+    await outgoing_wallet.pay_lightning(send_proofs, invoice.pr, fee_reserve_sat)
+
+    # mint token in incoming mint
+    await incoming_wallet.mint(amount, hash=invoice.hash)
+
+    await incoming_wallet.load_proofs(reload=True)
+    await print_mint_balances(incoming_wallet, show_mints=True)
+
+
 @cli.command("balance", help="Balance.")
 @click.option(
     "--verbose",
@@ -339,7 +381,7 @@ async def receive_cli(
     wallet.status()
 
     if token:
-        tokenObj = await deserialize_token_from_string(token)
+        tokenObj = deserialize_token_from_string(token)
         # verify that we trust all mints in these tokens
         # ask the user if they want to trust the new mints
         for mint_url in set([t.mint for t in tokenObj.token if t.mint]):
@@ -466,9 +508,10 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
-            tokenObj = await deserialize_token_from_string(token)
+            tokenObj = deserialize_token_from_string(token)
             mint = [t.mint for t in tokenObj.token][0]
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
+            assert grouped_proofs[0].time_reserved
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
