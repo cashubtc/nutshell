@@ -70,9 +70,22 @@ def test_invoice(mint, cli_prefix):
     assert result.exception is None
     print("INVOICE")
     print(result.output)
-    # wallet = asyncio.run(init_wallet())
-    # assert f"Balance: {wallet.available_balance} sat" in result.output
+    wallet = asyncio.run(init_wallet())
+    # assert wallet.available_balance >= 1000
+    assert f"Balance: {wallet.available_balance} sat" in result.output
     assert result.exit_code == 0
+
+
+@pytest.mark.asyncio
+def test_invoice_with_split(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "10", "-s", "1"],
+    )
+    assert result.exception is None
+    # wallet = asyncio.run(init_wallet())
+    # assert wallet.proof_amounts.count(1) >= 10
 
 
 @pytest.mark.asyncio
@@ -101,6 +114,29 @@ def test_send(mint, cli_prefix):
     print("SEND")
     print(result.output)
     assert "cashuA" in result.output, "output does not have a token"
+
+
+@pytest.mark.asyncio
+def test_send_without_split(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "2", "--nosplit"],
+    )
+    assert result.exception is None
+    print("SEND")
+    print(result.output)
+    assert "cashuA" in result.output, "output does not have a token"
+
+
+@pytest.mark.asyncio
+def test_send_without_split_but_wrong_amount(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--nosplit"],
+    )
+    assert "No proof with this amount found" in str(result.exception)
 
 
 @pytest.mark.asyncio

@@ -36,7 +36,9 @@ from .responses import (
 router: APIRouter = APIRouter()
 
 
-def create_wallet(url=settings.mint_url, dir=settings.cashu_dir, name="wallet"):
+def create_wallet(
+    url=settings.mint_url, dir=settings.cashu_dir, name=settings.wallet_name
+):
     return Wallet(url, os.path.join(dir, name), name=name)
 
 
@@ -71,20 +73,15 @@ async def pay(
     global wallet
     wallet = await load_mint(wallet, mint)
 
-    await wallet.load_proofs()
-    initial_balance = wallet.available_balance
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
     assert total_amount > 0, "amount has to be larger than zero."
     assert wallet.available_balance >= total_amount, "balance is too low."
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
-    await wallet.load_proofs()
     return PayResponse(
         amount=total_amount - fee_reserve_sat,
         fee=fee_reserve_sat,
         amount_with_fee=total_amount,
-        initial_balance=initial_balance,
-        balance=wallet.available_balance,
     )
 
 
@@ -98,31 +95,37 @@ async def invoice(
         default=None,
         description="Mint URL to create an invoice at (None for default mint)",
     ),
+    split: int = Query(
+        default=None, description="Split minted tokens with a specific amount."
+    ),
 ):
+    # in case the user wants a specific split, we create a list of amounts
+    optional_split = None
+    if split:
+        assert amount % split == 0, "split must be divisor or amount"
+        assert amount >= split, "split must smaller or equal amount"
+        n_splits = amount // split
+        optional_split = [split] * n_splits
+        print(f"Requesting split with {n_splits}*{split} sat tokens.")
+
     global wallet
     wallet = await load_mint(wallet, mint)
-    initial_balance = wallet.available_balance
     if not settings.lightning:
-        r = await wallet.mint(amount)
+        r = await wallet.mint(amount, split=optional_split)
         return InvoiceResponse(
             amount=amount,
-            balance=wallet.available_balance,
-            initial_balance=initial_balance,
         )
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)
         return InvoiceResponse(
+            amount=amount,
             invoice=invoice,
-            balance=wallet.available_balance,
-            initial_balance=initial_balance,
         )
     elif amount and hash:
-        await wallet.mint(amount, hash)
+        await wallet.mint(amount, split=optional_split, hash=hash)
         return InvoiceResponse(
             amount=amount,
             hash=hash,
-            balance=wallet.available_balance,
-            initial_balance=initial_balance,
         )
     return
 
@@ -151,13 +154,15 @@ async def send_command(
         default=None,
         description="Mint URL to send from (None for default mint)",
     ),
+    nosplit: bool = Query(
+        default=False, description="Do not split tokens before sending."
+    ),
 ):
     global wallet
-    wallet = await load_mint(wallet, mint)
-
-    await wallet.load_proofs()
     if not nostr:
-        balance, token = await send(wallet, amount, lock, legacy=False)
+        balance, token = await send(
+            wallet, amount, lock, legacy=False, split=not nosplit
+        )
         return SendResponse(balance=balance, token=token)
     else:
         token, pubkey = await send_nostr(wallet, amount, nostr)
@@ -173,7 +178,7 @@ async def receive_command(
 ):
     initial_balance = wallet.available_balance
     if token:
-        tokenObj: TokenV3 = await deserialize_token_from_string(token)
+        tokenObj: TokenV3 = deserialize_token_from_string(token)
         await verify_mints(wallet, tokenObj)
         balance = await receive(wallet, tokenObj, lock)
     elif nostr:
@@ -186,7 +191,7 @@ async def receive_command(
             for _, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
-                tokenObj = await deserialize_token_from_string(token)
+                tokenObj = deserialize_token_from_string(token)
                 await verify_mints(wallet, tokenObj)
                 balance = await receive(wallet, tokenObj, lock)
     else:
@@ -263,7 +268,7 @@ async def pending(
         ):
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
-            tokenObj = await deserialize_token_from_string(token)
+            tokenObj = deserialize_token_from_string(token)
             mint = [t.mint for t in tokenObj.token][0]
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)

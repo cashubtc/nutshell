@@ -21,12 +21,12 @@ Cashu is an Ecash implementation based on David Wagner's variant of Chaumian bli
 ### Feature overview of Nutshell
 
 - Full Bitcoin Lightning support
-- Standalone CLI wallet and mint server
-- Mint library includable into other Python projects
+- CLI Cashu wallet and mint server
+- Include the wallet and mint library into other Python projects
 - PostgreSQL and SQLite database support
-- Builtin Tor for hiding IPs for wallet and mint interactions
-- Multimint wallet for tokens from different mints
-- Send and receive tokens on nostr
+- Wallet: Builtin Tor for hiding IPs
+- Wallet: Multimint support
+- Wallet: Send and receive tokens on nostr
 
 ## The Cashu protocol
 There are ongoing efforts to implement alternative Cashu clients that use the same protocol. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in helping with Cashu development, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts). 
@@ -104,8 +104,7 @@ To use the wallet with the [public test mint](#test-instance), you need to chang
 
 Change the appropriate `.env` file settings to
 ```bash
-MINT_HOST=8333.space
-MINT_PORT=3338
+MINT_URL=https://8333.space:3338
 ```
 
 # Using Cashu
@@ -171,7 +170,7 @@ Balance: 69 sat
 # Starting the wallet API daemon
 Nutshell wallet can be used in daemon mode that can be controlled through a REST API:
 ```bash
-poetry run api
+cashu -d
 ```
 
 You can find the API docs at [http://localhost:4448/docs](http://localhost:4448/docs).

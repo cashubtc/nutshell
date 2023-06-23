@@ -63,7 +63,7 @@ async def get_mint_wallet(ctx: Context):
         name=wallet.name,
     )
     # await mint_wallet.load_mint()
-    await mint_wallet.load_proofs()
+    await mint_wallet.load_proofs(reload=True)
 
     return mint_wallet
 
