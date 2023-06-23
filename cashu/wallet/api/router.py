@@ -30,6 +30,7 @@ from .responses import (
     PendingResponse,
     ReceiveResponse,
     SendResponse,
+    SwapResponse,
     WalletsResponse,
 )
 
@@ -128,6 +129,53 @@ async def invoice(
             hash=hash,
         )
     return
+
+
+@router.post(
+    "/swap",
+    name="Multi-mint swaps",
+    summary="Swap funds between mints",
+    response_model=SwapResponse,
+)
+async def swap(
+    amount: int = Query(default=..., description="Amount to swap between mints"),
+    outgoing_mint: str = Query(default=..., description="URL of outgoing mint"),
+    incoming_mint: str = Query(default=..., description="URL of incoming mint"),
+):
+    if not settings.lightning:
+        raise Exception("lightning not supported")
+    incoming_wallet = await load_mint(wallet, mint=incoming_mint)
+    outgoing_wallet = await load_mint(wallet, mint=outgoing_mint)
+    if incoming_wallet.url == outgoing_wallet.url:
+        raise Exception("mints for swap have to be different")
+
+    # request invoice from incoming mint
+    invoice = await incoming_wallet.request_mint(amount)
+
+    # pay invoice from outgoing mint
+    await outgoing_wallet.load_proofs()
+    total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
+        invoice.pr
+    )
+    assert total_amount > 0, "amount must be positive"
+    if outgoing_wallet.available_balance < total_amount:
+        raise Exception("balance too low")
+
+    _, send_proofs = await outgoing_wallet.split_to_send(
+        outgoing_wallet.proofs, total_amount, set_reserved=True
+    )
+    await outgoing_wallet.pay_lightning(send_proofs, invoice.pr, fee_reserve_sat)
+
+    # mint token in incoming mint
+    await incoming_wallet.mint(amount, hash=invoice.hash)
+    await incoming_wallet.load_proofs()
+    mint_balances = await incoming_wallet.balance_per_minturl()
+    return SwapResponse(
+        outgoing_mint=outgoing_mint,
+        incoming_mint=incoming_mint,
+        invoice=invoice,
+        balances=mint_balances,
+    )
 
 
 @router.get(
