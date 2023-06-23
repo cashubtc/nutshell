@@ -1,3 +1,4 @@
+from typing import Callable
 import flet as f
 from cashu.gui.src.controls.balance_pie_chart import BalancePieChart
 
@@ -7,8 +8,13 @@ from cashu.gui.src.models.gui_wallet import GuiWallet
 class OverviewCard(f.UserControl):
     _wallet: GuiWallet
 
-    def __init__(self, wallet: GuiWallet):
+    def __init__(
+        self, wallet: GuiWallet, on_mint_selected: Callable, selected_mint: str
+    ) -> None:
         self._wallet = wallet
+        self._on_mint_selected = on_mint_selected
+        self._selected_mint = selected_mint
+
         super().__init__()
 
     def build(self):
@@ -47,7 +53,11 @@ class OverviewCard(f.UserControl):
                         f.Container(
                             width=300,
                             height=300,
-                            content=BalancePieChart(self._wallet.balance_per_mint),
+                            content=BalancePieChart(
+                                self._wallet.balance_per_mint,
+                                on_selected=self._on_section_selected,
+                                selected_mint=self._selected_mint,
+                            ),
                         ),
                     ],
                 ),
@@ -62,6 +72,8 @@ class OverviewCard(f.UserControl):
             ]
         )
 
+    async def _on_section_selected(self, mint_name: str):
+        await self._on_mint_selected(mint_name)
     def _build_header_text(self, text: str):
         return f.Container(
             width=150,

@@ -16,27 +16,34 @@ class NutWorksApp:
 
     async def init(self):
         await self.wallet_repo.init(self.mint_repo.default_mint)
-
-        self.appbar = self._build_app_bar()
-        self.page.appbar = self.appbar
-
         self.page.vertical_alignment = f.CrossAxisAlignment.START
-        await self._update_page()
+        self._selected_mint = self.mint_repo.default_mint.name
 
-        await self.page.update_async()
+        await self._build_page()
 
-    async def _update_page(self):
+    async def _build_page(self):
         await self.page.clean_async()
+        self.page.appbar = self._build_app_bar()
         await self.page.add_async(
             f.Column(
                 alignment=f.MainAxisAlignment.END,
                 controls=[
-                    OverviewCard(self.wallet_repo.wallet),
+                    OverviewCard(
+                        self.wallet_repo.wallet,
+                        self._on_overview_card_mint_change,
+                        self._selected_mint,
+                    ),
                 ],
             ),
         )
 
         await self.page.update_async()
+
+    async def _on_overview_card_mint_change(self, name: str):
+        await self.wallet_repo.set_mint(name)
+        self._selected_mint = name
+
+        await self._build_page()
 
     def _build_app_bar(self, title: str = "NutWorks"):
         async def on_wallet_changed(e: f.ControlEvent):
@@ -46,7 +53,7 @@ class NutWorksApp:
 
                 await self.wallet_repo.set_wallet(e.data)
                 self._selected_wallet = e.data
-                await self._update_page()
+                await self._build_page()
             except NotImplementedError:
                 pass
 
@@ -57,7 +64,7 @@ class NutWorksApp:
 
                 await self.wallet_repo.set_mint(e.data)
                 self._selected_mint = e.data
-                await self._update_page()
+                await self._build_page()
             except NotImplementedError:
                 pass
 
