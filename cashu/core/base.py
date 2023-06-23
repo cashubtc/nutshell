@@ -261,7 +261,9 @@ class WalletKeyset:
 
         return cls(
             id=row["id"],
-            public_keys=deserialize(str(row["public_keys"])),
+            public_keys=deserialize(str(row["public_keys"]))
+            if dict(row).get("public_keys")
+            else {},
             mint_url=row["mint_url"],
             valid_from=row["valid_from"],
             valid_to=row["valid_to"],
