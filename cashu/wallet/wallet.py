@@ -829,7 +829,7 @@ class Wallet(LedgerAPI):
             )
 
     async def invalidate(self, proofs: List[Proof], check_spendable=True):
-        """Invalidates all spendable tokens supplied in proofs.
+        """Invalidates all unspendable tokens supplied in proofs.
 
         Args:
             proofs (List[Proof]): Which proofs to delete
