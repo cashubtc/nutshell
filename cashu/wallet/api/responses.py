@@ -9,16 +9,12 @@ class PayResponse(BaseModel):
     amount: int
     fee: int
     amount_with_fee: int
-    initial_balance: int
-    balance: int
 
 
 class InvoiceResponse(BaseModel):
     amount: Optional[int] = None
     invoice: Optional[Invoice] = None
     hash: Optional[str] = None
-    initial_balance: int
-    balance: int
 
 
 class SwapResponse(BaseModel):
