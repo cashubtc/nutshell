@@ -1,5 +1,5 @@
-import math
 import asyncio
+import math
 from typing import Dict, List, Literal, Optional, Set, Union
 
 from loguru import logger
@@ -696,6 +696,10 @@ class Ledger:
         async with self.proofs_pending_lock:
             async with self.db.connect() as conn:
                 await self._set_proofs_pending(proofs, conn)
+                import asyncio
+
+                await asyncio.sleep(10)
+
         try:
             await self._verify_proofs(proofs)
             logger.trace("verified proofs")
