@@ -134,7 +134,7 @@ async def invoice(
 @router.post(
     "/swap",
     name="Multi-mint swaps",
-    summary="Swap funds between mints.",
+    summary="Swap funds between mints",
     response_model=SwapResponse,
 )
 async def swap(
