@@ -614,6 +614,11 @@ class Wallet(LedgerAPI):
                 time_paid=time.time(),
                 hash="",
             )
+            # we have a unique constraint on the hash, so we generate a random one
+            # if it doesn't exist and add "-outgoing" to distinguish it from incoming
+            if not invoice_obj.hash:
+                invoice_obj.hash = self._generate_secret()
+            invoice_obj.hash += "-outgoing"
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
             # handle change and produce proofs

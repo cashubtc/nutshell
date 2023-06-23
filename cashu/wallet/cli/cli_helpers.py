@@ -21,16 +21,17 @@ from ...wallet.crud import get_keyset
 from ...wallet.wallet import Wallet as Wallet
 
 
-async def get_mint_wallet(ctx: Context):
+async def get_mint_wallet(ctx: Context, force_select: bool = False):
     """
     Helper function that asks the user for an input to select which mint they want to load.
     Useful for selecting the mint that the user wants to send tokens from.
     """
     # we load a dummy wallet so we can check the balance per mint
     wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_proofs(reload=True)
     mint_balances = await wallet.balance_per_minturl()
 
-    if ctx.obj["HOST"] not in mint_balances:
+    if ctx.obj["HOST"] not in mint_balances and not force_select:
         mint_url = wallet.url
     elif len(mint_balances) > 1:
         # if we have balances on more than one mint, we ask the user to select one

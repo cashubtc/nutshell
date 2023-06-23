@@ -215,47 +215,39 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
 async def swap(ctx: Context):
     if not settings.lightning:
         raise Exception("lightning not supported.")
-    print("Mint to swap from:")
-    wallet_outgoing_mint = await get_mint_wallet(ctx)
-    amount = int(input("Enter amount to swap in sats:"))
-    incoming_mint_url = input("Enter URL of mint to swap to:")
-    click.confirm(
-        f"Swap {amount} sats from mint {wallet_outgoing_mint.url} to mint {incoming_mint_url}?",
-        abort=True,
-        default=True,
-    )
-    incoming_wallet = Wallet(
-        incoming_mint_url,
-        os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
-        ctx.obj["WALLET_NAME"],
-    )
+    print("Select the mint to swap from:")
+    outgoing_wallet = await get_mint_wallet(ctx, force_select=True)
+
+    print("Select the mint to swap to:")
+    incoming_wallet = await get_mint_wallet(ctx, force_select=True)
+
     await incoming_wallet.load_mint()
-    outgoing_wallet = Wallet(
-        wallet_outgoing_mint.url,
-        os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
-        ctx.obj["WALLET_NAME"],
-    )
     await outgoing_wallet.load_mint()
-    if incoming_wallet.keys.id == outgoing_wallet.keys.id:
+
+    if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
+
+    amount = int(input("Enter amount to swap in sats: "))
+    assert amount > 0, "amount is not positive"
+
     # request invoice from incoming mint
     invoice = await incoming_wallet.request_mint(amount)
+
     # pay invoice from outgoing mint
-    await outgoing_wallet.load_proofs()
     total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
         invoice.pr
     )
-    assert total_amount > 0, "amount is not positive"
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     _, send_proofs = await outgoing_wallet.split_to_send(
-        outgoing_wallet.proofs, total_amount
+        outgoing_wallet.proofs, total_amount, set_reserved=True
     )
     await outgoing_wallet.pay_lightning(send_proofs, invoice.pr, fee_reserve_sat)
+
     # mint token in incoming mint
-    await incoming_wallet.load_mint()
-    await incoming_wallet.mint(amount, invoice.hash)
-    await incoming_wallet.load_proofs()
+    await incoming_wallet.mint(amount, hash=invoice.hash)
+
+    await incoming_wallet.load_proofs(reload=True)
     await print_mint_balances(incoming_wallet, show_mints=True)
 
 
