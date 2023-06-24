@@ -1,5 +1,5 @@
 from os import listdir, path
-from typing import Union, Dict
+from typing import Union
 
 from genericpath import isdir
 
@@ -52,6 +52,7 @@ class WalletRepository:
                     self._current_mint.url, path.join(settings.cashu_dir, dir), dir
                 )
                 await wallet.init()
+                await wallet.load_mint()
                 self._current_wallet = wallet
 
     async def _recreate_wallet(self, wallet_name, mint_name):
