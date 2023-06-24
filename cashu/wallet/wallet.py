@@ -8,7 +8,7 @@ import time
 import uuid
 from itertools import groupby
 from typing import Dict, List, Optional, Tuple
-
+from bip32 import BIP32
 import requests
 from loguru import logger
 
@@ -111,6 +111,12 @@ class LedgerAPI:
         self.url = url
         self.s = requests.Session()
         self.private_key = private_key
+        try:
+            self.bip32 = BIP32.from_seed(
+                hashlib.sha256(self.private_key.encode("utf-8")).digest()[:32]
+            )
+        except ValueError:
+            raise ValueError("Invalid private key")
 
     @async_set_requests
     async def _init_s(self):
@@ -250,7 +256,8 @@ class LedgerAPI:
         """
         secret_counters = await bump_secret_derivation(db=self.db)
         s, _ = await self.generate_determinstic_secret(secret_counters)
-        return s.decode("utf-8")
+        # return s.decode("utf-8")
+        return hashlib.sha256(s).hexdigest()
 
     async def generate_secrets_numbered(self, secret: str, n: int) -> List[str]:
         """`secret` is the base string that will be tweaked n times"""
@@ -264,15 +271,16 @@ class LedgerAPI:
         one as the blinding factor).
         """
         # for secret
-        seed_secret = self.private_key + "x" + str(secret_counter)
+        secret = self.bip32.get_privkey_from_path(f"m/0h/0/{secret_counter}")
         # blinding factor
-        r_secret = self.private_key + "r" + str(secret_counter)
-        logger.debug(
-            f"Generating sercret nr {secret_counter}: {seed_secret} {r_secret}"
-        )
-        secret = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
-        logger.debug(f"Sercret {secret.decode('utf-8')}")
-        r = base64.b64encode(hashlib.sha256(r_secret.encode("utf-8")).digest())[:32]
+        r = self.bip32.get_privkey_from_path(f"m/0h/1/{secret_counter}")
+        # r_secret = self.private_key + "r" + str(secret_counter)
+        # logger.debug(
+        #     f"Generating sercret nr {secret_counter}: {seed_secret} {r_secret}"
+        # )
+        # secret = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
+        # logger.debug(f"Sercret {secret.decode('utf-8')}")
+        # r = base64.b64encode(hashlib.sha256(r_secret.encode("utf-8")).digest())[:32]
         return secret, r
 
     async def generate_n_secrets(
@@ -288,7 +296,7 @@ class LedgerAPI:
             await self.generate_determinstic_secret(s) for s in secret_counters
         ]
         # secrets are supplied as str
-        secrets = [s[0].decode("utf-8") for s in secrets_and_rs]
+        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_and_rs]
         # rs are supplied as PrivateKey
         rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_and_rs]
 
@@ -307,7 +315,7 @@ class LedgerAPI:
             await self.generate_determinstic_secret(s) for s in secret_counters
         ]
         # secrets are supplied as str
-        secrets = [s[0].decode("utf-8") for s in secrets_and_rs]
+        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_and_rs]
         # rs are supplied as PrivateKey
         rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_and_rs]
         return secrets, rs
@@ -1072,34 +1080,29 @@ class Wallet(LedgerAPI):
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
 
     async def restore_promises(self, from_counter: int, to_counter: int):
+        # we regenerate the secrets and rs for the given range
         secrets, rs = await self.generate_secrets_from_to(from_counter, to_counter)
-        # we don't know the amount but luckily the mint will tell us so we use a dummy
-        # variable here
+        # we don't know the amount but luckily the mint will tell us so we use a dummy amount here
         amounts_dummy = [1] * len(secrets)
-        reconstructed_outputs, reconstructed_rs = self._construct_outputs(
-            amounts_dummy, secrets, rs
-        )
+        # we generate outptus from deterministic secrets and rs
+        regenerated_outputs, _ = self._construct_outputs(amounts_dummy, secrets, rs)
+        # we ask the mint to reissue the promises
+        # restored_outputs is there so we can match the promises to the secrets and rs
         restored_outputs, restored_promises = await super().restore_promises(
-            reconstructed_outputs
+            regenerated_outputs
         )
-
-        # now we need to filter out the secrets that had a match
+        # now we need to filter out the secrets and rs that had a match
         matching_indices = [
             idx
-            for idx, val in enumerate(reconstructed_outputs)
+            for idx, val in enumerate(regenerated_outputs)
             if val.B_ in [o.B_ for o in restored_outputs]
         ]
         secrets = [secrets[i] for i in matching_indices]
         rs = [rs[i] for i in matching_indices]
+        # now we can construct the proofs with the secrets and rs
         proofs = self._construct_proofs(restored_promises, secrets, rs)
-        print(f"Restored {len(restored_promises)} promises")
-        for i, (promise, o, proof) in enumerate(
-            zip(restored_promises, restored_outputs, proofs)
-        ):
-            logger.debug(
-                f"{i}: {proof.secret} : B_: {o.B_} -> C_: {promise.C_} -> C: {proof.C}"
-            )
-        print(f"Restored tokens worth {sum([p.amount for p in proofs])} sat")
+        logger.debug(f"Restored {len(restored_promises)} promises")
+        print(f"Restored {sum([p.amount for p in proofs])} sat")
         await self._store_proofs(proofs)
 
         # append proofs to proofs in memory so the balance updates

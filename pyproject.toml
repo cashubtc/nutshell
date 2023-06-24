@@ -32,6 +32,7 @@ wheel = "^0.38.4"
 importlib-metadata = "^5.2.0"
 psycopg2-binary = {version = "^2.9.5", optional = true }
 httpx = "0.23.0"
+bip32 = "^3.4"
 
 [tool.poetry.extras]
 pgsql = ["psycopg2-binary"]
