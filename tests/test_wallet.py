@@ -365,21 +365,25 @@ async def test_p2sh_receive_wrong_signature(wallet1: Wallet, wallet2: Wallet):
 
 @pytest.mark.asyncio
 async def test_bump_secret_derivation(wallet3: Wallet):
+    wallet3.private_key = "TEST_PRIVATE_KEY"
+    wallet3._init_bip32()
     secrets1, rs1 = await wallet3.generate_n_secrets(5)
     secrets2, rs2 = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert secrets1 == [
-        "exIYik7JvoU4mj0mRd3HqYdHmP3MAd5Gn1ztC9mEoCc=",
-        "i3W/Ew3j0PI8/OZt4PEmTzPg+8+wlbsG+LbpdInLmBg=",
-        "3j4TYWENbRGjWFA27OSpuK9erNGLsVK8m3EPCC13bsY=",
-        "Hq/22K5ZmyFTE+zPbgkflPYJkroEl7fpNnR6sDUi2As=",
-        "iTNr6WeJNUGSKV8gAkyfCDJ5Tv4MePiJ1eQDM2kZEtg=",
+        "1576adb6d9848408bbffdcccca60b045accfd70c0caebc29b42934bb44b19a20",
+        "1d42c69cb4404e7ab76e7ad1b4b415e46ed4c7fa9d8510c46e23366bfa19827f",
+        "b78a9d30671e1768e7d79a3284de234bbe49db905482134eb614c1e4564438ac",
+        "703a224a42ef0ae5ceed6ec6b92131fea840e51c5b1938673746098a6bf81163",
+        "7005b8ddbc61d5c018e1979f919aeafeabebc5b8eb61752efb2076873033b918",
     ]
 
 
 @pytest.mark.asyncio
 async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
+    wallet3.private_key = "TEST_PRIVATE_KEY"
+    wallet3._init_bip32()
     secrets1_1, rs1_1 = await wallet3.generate_n_secrets(2)
     secrets1_2, rs1_2 = await wallet3.generate_n_secrets(3)
     secrets1 = secrets1_1 + secrets1_2
@@ -388,16 +392,18 @@ async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert secrets1 == [
-        "exIYik7JvoU4mj0mRd3HqYdHmP3MAd5Gn1ztC9mEoCc=",
-        "i3W/Ew3j0PI8/OZt4PEmTzPg+8+wlbsG+LbpdInLmBg=",
-        "3j4TYWENbRGjWFA27OSpuK9erNGLsVK8m3EPCC13bsY=",
-        "Hq/22K5ZmyFTE+zPbgkflPYJkroEl7fpNnR6sDUi2As=",
-        "iTNr6WeJNUGSKV8gAkyfCDJ5Tv4MePiJ1eQDM2kZEtg=",
+        "1576adb6d9848408bbffdcccca60b045accfd70c0caebc29b42934bb44b19a20",
+        "1d42c69cb4404e7ab76e7ad1b4b415e46ed4c7fa9d8510c46e23366bfa19827f",
+        "b78a9d30671e1768e7d79a3284de234bbe49db905482134eb614c1e4564438ac",
+        "703a224a42ef0ae5ceed6ec6b92131fea840e51c5b1938673746098a6bf81163",
+        "7005b8ddbc61d5c018e1979f919aeafeabebc5b8eb61752efb2076873033b918",
     ]
 
 
 @pytest.mark.asyncio
 async def test_generate_secrets_from_to(wallet3: Wallet):
+    wallet3.private_key = "TEST_PRIVATE_KEY"
+    wallet3._init_bip32()
     secrets1, rs1 = await wallet3.generate_secrets_from_to(0, 4)
     assert len(secrets1) == 5
     secrets2, rs2 = await wallet3.generate_secrets_from_to(2, 4)
@@ -405,11 +411,11 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
     assert secrets1[2:] == secrets2
     assert [r.private_key for r in rs1[2:]] == [r.private_key for r in rs2]
     assert secrets1 == [
-        "exIYik7JvoU4mj0mRd3HqYdHmP3MAd5Gn1ztC9mEoCc=",
-        "i3W/Ew3j0PI8/OZt4PEmTzPg+8+wlbsG+LbpdInLmBg=",
-        "3j4TYWENbRGjWFA27OSpuK9erNGLsVK8m3EPCC13bsY=",
-        "Hq/22K5ZmyFTE+zPbgkflPYJkroEl7fpNnR6sDUi2As=",
-        "iTNr6WeJNUGSKV8gAkyfCDJ5Tv4MePiJ1eQDM2kZEtg=",
+        "1576adb6d9848408bbffdcccca60b045accfd70c0caebc29b42934bb44b19a20",
+        "1d42c69cb4404e7ab76e7ad1b4b415e46ed4c7fa9d8510c46e23366bfa19827f",
+        "b78a9d30671e1768e7d79a3284de234bbe49db905482134eb614c1e4564438ac",
+        "703a224a42ef0ae5ceed6ec6b92131fea840e51c5b1938673746098a6bf81163",
+        "7005b8ddbc61d5c018e1979f919aeafeabebc5b8eb61752efb2076873033b918",
     ]
 
 
@@ -429,6 +435,7 @@ async def test_restore_wallet_after_mint(wallet3: Wallet):
 @pytest.mark.asyncio
 async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
     wallet3.private_key += "1"
+    wallet3._init_bip32()
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(64)
@@ -451,6 +458,7 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: Wallet):
     wallet3.private_key += "2"
+    wallet3._init_bip32()
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(64)
@@ -489,6 +497,7 @@ class ProofBox:
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
     wallet3.private_key += "3"
+    wallet3._init_bip32()
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(64)
@@ -516,6 +525,7 @@ async def test_restore_wallet_after_send_twice(
 ):
     box = ProofBox()
     wallet3.private_key += "4.0"
+    wallet3._init_bip32()
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(2)
@@ -571,6 +581,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
 ):
     box = ProofBox()
     wallet3.private_key += "4"
+    wallet3._init_bip32()
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(64)

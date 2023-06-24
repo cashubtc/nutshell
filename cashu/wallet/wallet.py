@@ -113,6 +113,9 @@ class LedgerAPI:
         self.url = url
         self.s = requests.Session()
         self.private_key = private_key
+        self._init_bip32()
+
+    def _init_bip32(self):
         try:
             self.bip32 = BIP32.from_seed(
                 hashlib.sha256(self.private_key.encode("utf-8")).digest()[:32]
