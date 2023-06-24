@@ -54,3 +54,32 @@ class GuiWallet(Wallet):
 
         except Exception as e:
             print(e)
+
+    async def get_token_string(self, amount: int, lock: str = None) -> str:
+        """
+        Returns a token string.
+        """
+        if lock:
+            assert len(lock) > 21, Exception(
+                "Error: lock has to be at least 22 characters long."
+            )
+
+        await self.load_proofs()
+        _, send_proofs = await self.split_to_send(
+            self.proofs, amount, lock, set_reserved=True
+        )
+        token = await self.serialize_proofs(
+            send_proofs,
+            include_mints=True,
+        )
+
+        return token
+
+    async def pay_lightning(self, invoice: str, amount: int, fee_reserve: int):
+        total_amount = amount + fee_reserve
+        if self.available_balance < total_amount:
+            raise RuntimeError("Error: Balance too low.")
+
+        _, send_proofs = await self.split_to_send(self.proofs, total_amount)
+        await super().pay_lightning(send_proofs, invoice, fee_reserve)
+        await self.load_proofs()

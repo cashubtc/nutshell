@@ -1,7 +1,8 @@
 from typing import Callable
-import flet as f
-from cashu.gui.src.controls.balance_pie_chart import BalancePieChart
 
+import flet as f
+
+from cashu.gui.src.controls.balance_pie_chart import BalancePieChart
 from cashu.gui.src.models.gui_wallet import GuiWallet
 
 
@@ -9,12 +10,18 @@ class OverviewCard(f.UserControl):
     _wallet: GuiWallet
 
     def __init__(
-        self, wallet: GuiWallet, on_mint_selected: Callable, selected_mint: str
+        self,
+        wallet: GuiWallet,
+        on_mint_selected: Callable,
+        selected_mint: str,
+        on_send: Callable,
+        on_receive: Callable,
     ) -> None:
         self._wallet = wallet
         self._on_mint_selected = on_mint_selected
         self._selected_mint = selected_mint
-
+        self._on_send_clicked = on_send
+        self._on_receive_clicked = on_receive
         super().__init__()
 
     def build(self):
@@ -65,8 +72,12 @@ class OverviewCard(f.UserControl):
                 f.Row(
                     alignment=f.MainAxisAlignment.END,
                     controls=[
-                        f.FilledTonalButton(text="Send"),
-                        f.FilledTonalButton(text="Receive"),
+                        f.FilledTonalButton(
+                            text="Send", on_click=self._on_send_clicked
+                        ),
+                        f.FilledTonalButton(
+                            text="Receive", on_click=self._on_receive_clicked
+                        ),
                     ],
                 ),
             ]
@@ -74,6 +85,7 @@ class OverviewCard(f.UserControl):
 
     async def _on_section_selected(self, mint_name: str):
         await self._on_mint_selected(mint_name)
+
     def _build_header_text(self, text: str):
         return f.Container(
             width=150,
