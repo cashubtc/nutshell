@@ -643,9 +643,12 @@ async def wallets(ctx):
 
 
 @cli.command("info", help="Information about Cashu wallet.")
+@click.option(
+    "--mint", "-m", default=False, is_flag=True, help="Fetch mint information."
+)
 @click.pass_context
 @coro
-async def info(ctx: Context):
+async def info(ctx: Context, mint: bool):
     print(f"Version: {settings.version}")
     print(f"Wallet: {ctx.obj['WALLET_NAME']}")
     if settings.debug:
@@ -665,4 +668,25 @@ async def info(ctx: Context):
     if settings.socks_host:
         print(f"Socks proxy: {settings.socks_host}:{settings.socks_port}")
     print(f"Mint URL: {ctx.obj['HOST']}")
+    if mint:
+        wallet: Wallet = ctx.obj["WALLET"]
+        mint_info: dict = (await wallet._load_mint_info()).dict()
+        print("")
+        print("Mint information:")
+        print("")
+        if mint_info:
+            print(f"Mint name: {mint_info['name']}")
+            if mint_info["description"]:
+                print(f"Description: {mint_info['description']}")
+            if mint_info["description_long"]:
+                print(f"Long description: {mint_info['description_long']}")
+            if mint_info["contact"]:
+                print(f"Contact: {mint_info['contact']}")
+            if mint_info["version"]:
+                print(f"Version: {mint_info['version']}")
+            if mint_info["motd"]:
+                print(f"Message of the day: {mint_info['motd']}")
+            if mint_info["parameter"]:
+                print(f"Parameter: {mint_info['parameter']}")
+
     return

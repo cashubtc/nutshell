@@ -111,6 +111,12 @@ async def test_get_keyset(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_get_info(wallet1: Wallet):
+    info = await wallet1._get_info(wallet1.url)
+    assert info.name
+
+
+@pytest.mark.asyncio
 async def test_get_nonexistent_keyset(wallet1: Wallet):
     await assert_err(
         wallet1._get_keys_of_keyset(wallet1.url, "nonexistent"),

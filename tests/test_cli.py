@@ -43,6 +43,20 @@ def test_info(cli_prefix):
 
 
 @pytest.mark.asyncio
+def test_info_with_mint(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "info", "-m"],
+    )
+    assert result.exception is None
+    print("INFO -M")
+    print(result.output)
+    assert "Mint name" in result.output
+    assert result.exit_code == 0
+
+
+@pytest.mark.asyncio
 def test_balance(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(

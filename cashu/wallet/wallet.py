@@ -21,6 +21,7 @@ from ..core.base import (
     CheckSpendableResponse,
     GetMeltResponse,
     GetMintResponse,
+    GetInfoResponse,
     Invoice,
     KeysetsResponse,
     P2SHScript,
@@ -101,8 +102,9 @@ def async_set_requests(func):
 class LedgerAPI:
     keys: WalletKeyset  # holds current keys of mint
     keyset_id: str  # holds id of current keyset
-    public_keys: Dict[int, PublicKey]  # holds public keys of the mint
     private_key: str  # holds private key of the wallet
+    public_keys: Dict[int, PublicKey]  # holds public keys of
+    mint_info: GetInfoResponse  # holds info about mint
     tor: TorProxy
     db: Database
     s: requests.Session
@@ -125,7 +127,7 @@ class LedgerAPI:
 
     def _construct_proofs(
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
-    ):
+    ) -> List[Proof]:
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
         logger.trace(f"Constructing proofs.")
         proofs: List[Proof] = []
@@ -215,7 +217,7 @@ class LedgerAPI:
         logger.debug(f"Current mint keyset: {self.keys.id}")
         return self.keys
 
-    async def _load_mint_keysets(self):
+    async def _load_mint_keysets(self) -> List[str]:
         # get all active keysets of this mint
         mint_keysets = []
         try:
@@ -227,7 +229,13 @@ class LedgerAPI:
         logger.debug(f"Mint keysets: {self.keysets}")
         return self.keysets
 
-    async def _load_mint(self, keyset_id: str = ""):
+    async def _load_mint_info(self) -> GetInfoResponse:
+        """Loads the mint info from the mint."""
+        self.mint_info = await self._get_info(self.url)
+        logger.debug(f"Mint info: {self.mint_info}")
+        return self.mint_info
+
+    async def _load_mint(self, keyset_id: str = "") -> None:
         """
         Loads the public keys of the mint. Either gets the keys for the specified
         `keyset_id` or gets the keys of the active keyset from the mint.
@@ -235,6 +243,7 @@ class LedgerAPI:
         """
         await self._load_mint_keys(keyset_id)
         await self._load_mint_keysets()
+        await self._load_mint_info()
 
         if keyset_id:
             assert keyset_id in self.keysets, f"keyset {keyset_id} not active on mint"
@@ -325,7 +334,7 @@ class LedgerAPI:
     """
 
     @async_set_requests
-    async def _get_keys(self, url: str):
+    async def _get_keys(self, url: str) -> WalletKeyset:
         """API that gets the current keys of the mint
 
         Args:
@@ -333,6 +342,9 @@ class LedgerAPI:
 
         Returns:
             WalletKeyset: Current mint keyset
+
+        Raises:
+            Exception: If no keys are received from the mint
         """
         resp = self.s.get(
             url + "/keys",
@@ -348,7 +360,7 @@ class LedgerAPI:
         return keyset
 
     @async_set_requests
-    async def _get_keys_of_keyset(self, url: str, keyset_id: str):
+    async def _get_keys_of_keyset(self, url: str, keyset_id: str) -> WalletKeyset:
         """API that gets the keys of a specific keyset from the mint.
 
 
@@ -358,6 +370,9 @@ class LedgerAPI:
 
         Returns:
             WalletKeyset: Keyset with ID keyset_id
+
+        Raises:
+            Exception: If no keys are received from the mint
         """
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = self.s.get(
@@ -375,7 +390,7 @@ class LedgerAPI:
         return keyset
 
     @async_set_requests
-    async def _get_keyset_ids(self, url: str):
+    async def _get_keyset_ids(self, url: str) -> List[str]:
         """API that gets a list of all active keysets of the mint.
 
         Args:
@@ -383,6 +398,9 @@ class LedgerAPI:
 
         Returns:
             KeysetsResponse (List[str]): List of all active keyset IDs of the mint
+
+        Raises:
+            Exception: If no keysets are received from the mint
         """
         resp = self.s.get(
             url + "/keysets",
@@ -394,8 +412,39 @@ class LedgerAPI:
         return keysets.keysets
 
     @async_set_requests
-    async def request_mint(self, amount: int):
-        """Requests a mint from the server and returns Lightning invoice."""
+    async def _get_info(self, url: str) -> GetInfoResponse:
+        """API that gets the mint info.
+
+        Args:
+            url (str): Mint URL
+
+        Returns:
+            GetInfoResponse: Current mint info
+
+        Raises:
+            Exception: If the mint info request fails
+        """
+        resp = self.s.get(
+            url + "/info",
+        )
+        resp.raise_for_status()
+        data: dict = resp.json()
+        mint_info: GetInfoResponse = GetInfoResponse.parse_obj(data)
+        return mint_info
+
+    @async_set_requests
+    async def request_mint(self, amount) -> Invoice:
+        """Requests a mint from the server and returns Lightning invoice.
+
+        Args:
+            amount (int): Amount of tokens to mint
+
+        Returns:
+            Invoice: Lightning invoice
+
+        Raises:
+            Exception: If the mint request fails
+        """
         logger.trace("Requesting mint: GET /mint")
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
         resp.raise_for_status()
@@ -405,8 +454,19 @@ class LedgerAPI:
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
     @async_set_requests
-    async def mint(self, amounts: List[int], hash: Optional[str] = None):
-        """Mints new coins and returns a proof of promise."""
+    async def mint(self, amounts: List[int], hash: Optional[str] = None) -> List[Proof]:
+        """Mints new coins and returns a proof of promise.
+
+        Args:
+            amounts (List[int]): Amounts of tokens to mint
+            hash (str, optional): Hash of the paid invoice. Defaults to None.
+
+        Returns:
+            list[Proof]: List of proofs.
+
+        Raises:
+            Exception: If the minting fails
+        """
         secrets, rs = await self.generate_n_secrets(len(amounts))
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
@@ -434,7 +494,7 @@ class LedgerAPI:
     @async_set_requests
     async def split(
         self, proofs: List[Proof], amount: int, scnd_secret: Optional[str] = None
-    ):
+    ) -> Tuple[List[Proof], List[Proof]]:
         """Consume proofs and create new promises based on amount split.
 
         If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
