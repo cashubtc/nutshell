@@ -20,7 +20,8 @@ async def migrate_wallet_db(db: Database):
 
 async def init_wallet(wallet: Wallet, load_proofs: bool = True):
     """Performs migrations and loads proofs from db."""
-    await migrate_wallet_db(wallet.db)
+    await wallet._migrate_database()
+    await wallet._init_private_key()
     if load_proofs:
         await wallet.load_proofs(reload=True)
 

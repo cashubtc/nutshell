@@ -41,13 +41,11 @@ async def reset_wallet_db(wallet: Wallet):
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet1(mint):
-    wallet1 = Wallet1(
+    wallet1 = await Wallet1.with_db(
         url=SERVER_ENDPOINT,
         db="data/wallet1",
         name="wallet1",
-        private_key="TEST_WALLET_PRIVATE_KEY_1",
     )
-    await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
     wallet1.status()
     yield wallet1
@@ -55,13 +53,11 @@ async def wallet1(mint):
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet2(mint):
-    wallet2 = Wallet2(
+    wallet2 = await Wallet2.with_db(
         url=SERVER_ENDPOINT,
         db="data/wallet2",
         name="wallet2",
-        private_key="TEST_WALLET_PRIVATE_KEY_2",
     )
-    await migrate_databases(wallet2.db, migrations)
     await wallet2.load_mint()
     wallet2.status()
     yield wallet2
@@ -73,13 +69,11 @@ async def wallet3(mint):
     if dirpath.exists() and dirpath.is_dir():
         shutil.rmtree(dirpath)
 
-    wallet3 = Wallet1(
+    wallet3 = await Wallet1.with_db(
         url=SERVER_ENDPOINT,
         db="data/wallet3",
         name="wallet3",
-        private_key="TEST_PRIVATE_KEY",
     )
-    await migrate_databases(wallet3.db, migrations)
     await wallet3.db.execute("DELETE FROM proofs")
     await wallet3.db.execute("DELETE FROM proofs_used")
     await wallet3.load_mint()
