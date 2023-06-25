@@ -411,3 +411,30 @@ async def get_nostr_last_check_timestamp(
         ("dm",),
     )
     return row[0] if row else None
+
+
+async def get_private_key(
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT private_key from private_key
+        """,
+    )
+    return row[0] if row else None
+
+
+async def store_private_key(
+    db: Database,
+    private_key: str,
+    conn: Optional[Connection] = None,
+):
+    await (conn or db).execute(
+        f"""
+        INSERT INTO private_key
+          (private_key)
+        VALUES (?)
+        """,
+        (private_key,),
+    )

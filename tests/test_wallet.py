@@ -367,7 +367,7 @@ async def test_p2sh_receive_wrong_signature(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_bump_secret_derivation(wallet3: Wallet):
     wallet3.private_key = "TEST_PRIVATE_KEY"
-    wallet3._init_bip32()
+    await wallet3._init_private_key()
     secrets1, rs1, derivaion_paths1 = await wallet3.generate_n_secrets(5)
     secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
@@ -392,7 +392,7 @@ async def test_bump_secret_derivation(wallet3: Wallet):
 @pytest.mark.asyncio
 async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
     wallet3.private_key = "TEST_PRIVATE_KEY"
-    wallet3._init_bip32()
+    await wallet3._init_private_key()
     secrets1_1, rs1_1, derivaion_paths1 = await wallet3.generate_n_secrets(2)
     secrets1_2, rs1_2, derivaion_paths2 = await wallet3.generate_n_secrets(3)
     secrets1 = secrets1_1 + secrets1_2
@@ -412,7 +412,7 @@ async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
 @pytest.mark.asyncio
 async def test_generate_secrets_from_to(wallet3: Wallet):
     wallet3.private_key = "TEST_PRIVATE_KEY"
-    wallet3._init_bip32()
+    await wallet3._init_private_key()
     secrets1, rs1, derivaion_paths1 = await wallet3.generate_secrets_from_to(0, 4)
     assert len(secrets1) == 5
     secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(2, 4)

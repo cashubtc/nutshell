@@ -1,5 +1,5 @@
 import re
-
+from loguru import logger
 from ..core.db import COCKROACH, POSTGRES, SQLITE, Database, table_with_schema
 
 
@@ -22,6 +22,7 @@ async def migrate_databases(db: Database, migrations_module):
             if match:
                 version = int(match.group(1))
                 if version > current_versions.get(db_name, 0):
+                    logger.debug(f"Migrating {db_name} db: {key}")
                     await migrate(db)
 
                     if db.schema == None:

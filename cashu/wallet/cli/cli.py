@@ -28,8 +28,15 @@ from ...wallet.crud import (
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
-from ..helpers import deserialize_token_from_string, init_wallet, receive, send
+from ..helpers import (
+    deserialize_token_from_string,
+    init_wallet,
+    receive,
+    send,
+    migrate_wallet_db,
+)
 from ..nostr import receive_nostr, send_nostr
+from ...core.db import Database
 
 
 class NaturalOrderGroup(click.Group):
@@ -44,6 +51,15 @@ def run_api_server(ctx, param, daemon):
         return
     start_api_server()
     ctx.exit()
+
+
+# https://github.com/pallets/click/issues/85#issuecomment-503464628
+def coro(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        return asyncio.run(f(*args, **kwargs))
+
+    return wrapper
 
 
 @click.group(cls=NaturalOrderGroup)
@@ -70,7 +86,8 @@ def run_api_server(ctx, param, daemon):
     help="Start server for wallet REST API",
 )
 @click.pass_context
-def cli(ctx: Context, host: str, walletname: str):
+@coro
+async def cli(ctx: Context, host: str, walletname: str):
     if settings.tor and not TorProxy().check_platform():
         error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
         error_str += "\n\n"
@@ -86,36 +103,34 @@ def cli(ctx: Context, host: str, walletname: str):
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host or settings.mint_url
     ctx.obj["WALLET_NAME"] = walletname
-    wallet = Wallet(
-        ctx.obj["HOST"], os.path.join(settings.cashu_dir, walletname), name=walletname
-    )
-    ctx.obj["WALLET"] = wallet
-    asyncio.run(init_wallet(ctx.obj["WALLET"], load_proofs=False))
 
+    db_path = os.path.join(settings.cashu_dir, walletname)
+    # loop = asyncio.new_event_loop()
+
+    # # we need to run the migrations before we load the wallet for the first time
+    # # otherwise the wallet will not be able to generate a new private key and store it
+    # loop.run_until_complete(migrate_wallet_db(Database("wallet", db_path)))
+
+    wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
+    assert wallet, "Wallet not found."
+    ctx.obj["WALLET"] = wallet
+    await init_wallet(ctx.obj["WALLET"], load_proofs=False)
+    print("Wallet loaded.")
     # MUTLIMINT: Select a wallet
     # only if a command is one of a subset that needs to specify a mint host
     # if a mint host is already specified as an argument `host`, use it
     if ctx.invoked_subcommand not in ["send", "invoice", "pay"] or host:
         return
     # else: we ask the user to select one
-    ctx.obj["WALLET"] = asyncio.run(
-        get_mint_wallet(ctx)
+    ctx.obj["WALLET"] = await get_mint_wallet(
+        ctx
     )  # select a specific wallet by CLI input
-    asyncio.run(init_wallet(ctx.obj["WALLET"], load_proofs=False))
+    await init_wallet(ctx.obj["WALLET"], load_proofs=False)
 
     if not settings.wallet_private_key:
         print(
             f"Warning: your wallet has no private key set. You will not be able to restore your wallet from a seed phrase. Set WALLET_PRIVATE_KEY in your .env file located at {settings.env_file}."
         )
-
-
-# https://github.com/pallets/click/issues/85#issuecomment-503464628
-def coro(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        return asyncio.run(f(*args, **kwargs))
-
-    return wrapper
 
 
 @cli.command("pay", help="Pay Lightning invoice.")

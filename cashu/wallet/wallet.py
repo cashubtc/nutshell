@@ -66,7 +66,12 @@ from ..wallet.crud import (
     store_proof,
     update_lightning_invoice,
     update_proof_reserved,
+    get_private_key,
+    store_private_key,
 )
+
+from ..core.migrations import migrate_databases
+from . import migrations
 
 
 def async_set_requests(func):
@@ -100,29 +105,30 @@ def async_set_requests(func):
     return wrapper
 
 
-class LedgerAPI:
+class LedgerAPI(object):
     keys: WalletKeyset  # holds current keys of mint
     keyset_id: str  # holds id of current keyset
-    private_key: str  # holds private key of the wallet
     public_keys: Dict[int, PublicKey]  # holds public keys of
     mint_info: GetInfoResponse  # holds info about mint
     tor: TorProxy
-    db: Database
     s: requests.Session
+    db: Database
 
-    def __init__(self, url: str, private_key: str):
+    def __init__(self, url: str, db: Database):
         self.url = url
         self.s = requests.Session()
-        self.private_key = private_key
-        self._init_bip32()
+        self.db = db
 
-    def _init_bip32(self):
-        try:
-            self.bip32 = BIP32.from_seed(
-                hashlib.sha256(self.private_key.encode("utf-8")).digest()[:32]
-            )
-        except ValueError:
-            raise ValueError("Invalid private key")
+    async def generate_n_secrets(
+        self, n: int = 1, skip_bump: bool = False
+    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
+        return await self.generate_n_secrets(n, skip_bump)
+
+    async def generate_secrets_numbered(self, secret: str, n: int) -> List[str]:
+        return await self.generate_secrets_numbered(secret, n)
+
+    async def _generate_secret(self, skip_bump: bool = False) -> str:
+        return await self._generate_secret(skip_bump)
 
     @async_set_requests
     async def _init_s(self):
@@ -264,93 +270,6 @@ class LedgerAPI:
             if await secret_used(s, db=self.db):
                 raise Exception(f"secret already used: {s}")
         logger.trace("Secret check complete.")
-
-    async def _generate_secret(self, randombits=128) -> str:
-        """Returns base64 encoded deterministic random string.
-
-        NOTE: This method should probably retire after `deterministic_secrets`. We are
-        deriving secrets from a counter but don't store the respective blinding factor.
-        We won't be anle to restore any ecash generated with these secrets.
-        """
-        secret_counter = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id
-        )
-        logger.trace(f"secret_counter: {secret_counter}")
-        s, _, _ = await self.generate_determinstic_secret(secret_counter)
-        # return s.decode("utf-8")
-        return hashlib.sha256(s).hexdigest()
-
-    async def generate_secrets_numbered(self, secret: str, n: int) -> List[str]:
-        """`secret` is the base string that will be tweaked n times"""
-        if len(secret.split("P2SH:")) == 2:
-            return [f"{secret}:{await self._generate_secret()}" for i in range(n)]
-        return [f"{i}:{secret}" for i in range(n)]
-
-    async def generate_determinstic_secret(
-        self, counter: int
-    ) -> Tuple[bytes, bytes, str]:
-        """
-        Determinstically generates two secrets (one as the secret message,
-        one as the blinding factor).
-        """
-        assert self.mint_info.pubkey, "Mint info not loaded yet."
-        # integer keyset id modulo max number of bip32 child keys
-        keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
-            2**31 - 1
-        )
-        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id}")
-        token_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'"
-        # for secret
-        secret_derivation_path = f"{token_derivation_path}/0"
-        logger.trace(f"secret derivation path: {secret_derivation_path}")
-        secret = self.bip32.get_privkey_from_path(secret_derivation_path)
-        # blinding factor
-        r_derivation_path = f"{token_derivation_path}/1"
-        logger.trace(f"r derivation path: {r_derivation_path}")
-        r = self.bip32.get_privkey_from_path(r_derivation_path)
-        return secret, r, token_derivation_path
-
-    async def generate_n_secrets(
-        self, n: int = 1, skip_bump: bool = False
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        """Generates n secrets and blinding factors and returns two lists"""
-        secret_counters_start = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump
-        )
-        logger.trace(f"secret_counters_start: {secret_counters_start}")
-        secret_counters = list(range(secret_counters_start, secret_counters_start + n))
-        logger.trace(
-            f"Generating secret nr {secret_counters[0]} to {secret_counters[-1]}."
-        )
-        secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
-        ]
-        # secrets are supplied as str
-        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
-        # rs are supplied as PrivateKey
-        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
-
-        derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
-        # sanity check to make sure we're not reusing secrets
-        # NOTE: this step is probably wasting more resources than it helps
-        await self._check_used_secrets(secrets)
-
-        return secrets, rs, derivation_paths
-
-    async def generate_secrets_from_to(
-        self, from_counter: int, to_counter: int
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        """Generates n secrets and blinding factors and returns two lists"""
-        secret_counters = [c for c in range(from_counter, to_counter + 1)]
-        secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
-        ]
-        # secrets are supplied as str
-        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
-        # rs are supplied as PrivateKey
-        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
-        derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
-        return secrets, rs, derivation_paths
 
     """
     ENDPOINTS
@@ -691,23 +610,151 @@ class LedgerAPI:
 class Wallet(LedgerAPI):
     """Minimal wallet wrapper."""
 
+    private_key: str  # holds private key of the wallet
+    db: Database
+    bip32: BIP32
+
     def __init__(
         self,
         url: str,
         db: str,
         name: str = "no_name",
-        private_key: Optional[str] = None,
     ):
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
-        self.private_key = private_key or settings.wallet_private_key
-        if not self.private_key:
-            # generate a new private key
-            logger.debug("Generating new wallet private key")
-            self.private_key = scrts.token_urlsafe(256 // 8)
-        super().__init__(url=url, private_key=self.private_key)
+
+        super().__init__(url=url, db=self.db)
         logger.debug(f"Wallet initalized with mint URL {url}")
+
+    @classmethod
+    async def with_db(
+        cls,
+        url: str,
+        db: str,
+        name: str = "no_name",
+    ):
+        self = cls(url=url, db=db, name=name)
+        await self._migrate_database()
+        await self._init_private_key()
+        return self
+
+    async def _migrate_database(self):
+        try:
+            await migrate_databases(self.db, migrations)
+        except Exception as e:
+            logger.error(f"Could not run migrations: {e}")
+
+    async def _init_private_key(self):
+        try:
+            pk = await get_private_key(self.db)  # or settings.wallet_private_key
+            if pk is None:
+                self.private_key = PrivateKey().serialize()
+                logger.debug(f"Generated new private key: {self.private_key}")
+                await store_private_key(self.db, self.private_key)
+            else:
+                logger.debug(f"Loaded private key: {pk}")
+                self.private_key = pk
+
+        except Exception as e:
+            logger.error(e)
+
+        try:
+            self.bip32 = BIP32.from_seed(
+                hashlib.sha256(self.private_key.encode("utf-8")).digest()[:32]
+            )
+        except ValueError:
+            raise ValueError("Invalid private key")
+        except Exception as e:
+            logger.error(e)
+
+    async def _generate_secret(self, randombits=128) -> str:
+        """Returns base64 encoded deterministic random string.
+
+        NOTE: This method should probably retire after `deterministic_secrets`. We are
+        deriving secrets from a counter but don't store the respective blinding factor.
+        We won't be anle to restore any ecash generated with these secrets.
+        """
+        secret_counter = await bump_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id
+        )
+        logger.trace(f"secret_counter: {secret_counter}")
+        s, _, _ = await self.generate_determinstic_secret(secret_counter)
+        # return s.decode("utf-8")
+        return hashlib.sha256(s).hexdigest()
+
+    async def generate_secrets_numbered(self, secret: str, n: int) -> List[str]:
+        """`secret` is the base string that will be tweaked n times"""
+        if len(secret.split("P2SH:")) == 2:
+            return [f"{secret}:{await self._generate_secret()}" for i in range(n)]
+        return [f"{i}:{secret}" for i in range(n)]
+
+    async def generate_determinstic_secret(
+        self, counter: int
+    ) -> Tuple[bytes, bytes, str]:
+        """
+        Determinstically generates two secrets (one as the secret message,
+        one as the blinding factor).
+        """
+        assert self.mint_info.pubkey, "Mint info not loaded yet."
+        assert self.bip32, "BIP32 not initialized yet."
+        # integer keyset id modulo max number of bip32 child keys
+        keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
+            2**31 - 1
+        )
+        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id}")
+        token_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'"
+        # for secret
+        secret_derivation_path = f"{token_derivation_path}/0"
+        logger.trace(f"secret derivation path: {secret_derivation_path}")
+        secret = self.bip32.get_privkey_from_path(secret_derivation_path)
+        # blinding factor
+        r_derivation_path = f"{token_derivation_path}/1"
+        logger.trace(f"r derivation path: {r_derivation_path}")
+        r = self.bip32.get_privkey_from_path(r_derivation_path)
+        return secret, r, token_derivation_path
+
+    async def generate_n_secrets(
+        self, n: int = 1, skip_bump: bool = False
+    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
+        """Generates n secrets and blinding factors and returns two lists"""
+        secret_counters_start = await bump_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump
+        )
+        logger.trace(f"secret_counters_start: {secret_counters_start}")
+        secret_counters = list(range(secret_counters_start, secret_counters_start + n))
+        logger.trace(
+            f"Generating secret nr {secret_counters[0]} to {secret_counters[-1]}."
+        )
+        secrets_rs_derivationpaths = [
+            await self.generate_determinstic_secret(s) for s in secret_counters
+        ]
+        # secrets are supplied as str
+        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
+        # rs are supplied as PrivateKey
+        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
+
+        derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
+        # sanity check to make sure we're not reusing secrets
+        # NOTE: this step is probably wasting more resources than it helps
+        await self._check_used_secrets(secrets)
+
+        return secrets, rs, derivation_paths
+
+    async def generate_secrets_from_to(
+        self, from_counter: int, to_counter: int
+    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
+        """Generates n secrets and blinding factors and returns two lists"""
+        secret_counters = [c for c in range(from_counter, to_counter + 1)]
+        secrets_rs_derivationpaths = [
+            await self.generate_determinstic_secret(s) for s in secret_counters
+        ]
+        # secrets are supplied as str
+        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
+        # rs are supplied as PrivateKey
+        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
+        derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
+        return secrets, rs, derivation_paths
 
     # ---------- API ----------
 

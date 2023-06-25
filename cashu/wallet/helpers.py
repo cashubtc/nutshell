@@ -2,21 +2,25 @@ import base64
 import json
 import os
 
-import click
 from loguru import logger
 
 from ..core.base import TokenV1, TokenV2, TokenV3, TokenV3Token
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
+from ..core.db import Database
 from ..core.settings import settings
 from ..wallet import migrations
 from ..wallet.crud import get_keyset, get_unused_locks
 from ..wallet.wallet import Wallet
 
 
+async def migrate_wallet_db(db: Database):
+    await migrate_databases(db, migrations)
+
+
 async def init_wallet(wallet: Wallet, load_proofs: bool = True):
     """Performs migrations and loads proofs from db."""
-    await migrate_databases(wallet.db, migrations)
+    await migrate_wallet_db(wallet.db)
     if load_proofs:
         await wallet.load_proofs(reload=True)
 

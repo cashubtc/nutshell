@@ -178,18 +178,18 @@ async def m008_keysets_add_public_keys(db: Database):
     await db.execute("ALTER TABLE keysets ADD COLUMN public_keys TEXT")
 
 
-async def m009_secret_derivation_counter(db: Database):
+async def m009_privatekey_and_determinstic_key_derivation(db: Database):
     await db.execute("ALTER TABLE keysets ADD COLUMN counter INTEGER DEFAULT 0")
     await db.execute("ALTER TABLE proofs ADD COLUMN derivation_path TEXT")
     await db.execute("ALTER TABLE proofs_used ADD COLUMN derivation_path TEXT")
-    # await db.execute(
-    #     """
-    #         CREATE TABLE IF NOT EXISTS secret_derivation (
-    #         keyset_id TEXT NOT NULL,
-    #         counter INTEGER DEFAULT 0,
+    await db.execute(
+        """
+            CREATE TABLE IF NOT EXISTS private_key (
+            private_key TEXT NOT NULL,
 
-    #         UNIQUE (keyset_id)
-    #         );
-    #     """
-    # )
+            UNIQUE (private_key)
+            );
+        """
+    )
+    print("Migrating private key...")
     # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")
