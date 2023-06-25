@@ -15,7 +15,7 @@ async def store_proof(
         """
         INSERT INTO proofs
           (id, amount, C, secret, time_created, derivation_path)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             proof.id,
@@ -70,7 +70,7 @@ async def invalidate_proof(
         """
         INSERT INTO proofs_used
           (amount, C, secret, time_used, id, derivation_path)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             proof.amount,
