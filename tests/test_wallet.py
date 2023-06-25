@@ -368,10 +368,11 @@ async def test_p2sh_receive_wrong_signature(wallet1: Wallet, wallet2: Wallet):
 async def test_bump_secret_derivation(wallet3: Wallet):
     wallet3.private_key = "TEST_PRIVATE_KEY"
     wallet3._init_bip32()
-    secrets1, rs1 = await wallet3.generate_n_secrets(5)
-    secrets2, rs2 = await wallet3.generate_secrets_from_to(0, 4)
+    secrets1, rs1, derivaion_paths1 = await wallet3.generate_n_secrets(5)
+    secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
+    assert derivaion_paths1 == derivaion_paths2
     assert secrets1 == [
         "383d756bf069ed3b905711db409079f7c582b9b2a4a23642a88caca3a8002a32",
         "b61c998c7d542517b9772cc2bc13a4782fd174a56c4a56b2322776248487a89d",
@@ -379,17 +380,24 @@ async def test_bump_secret_derivation(wallet3: Wallet):
         "d4a77ee0a6c6f3b108ae396ccbd25b69c21edc6ee00ff638b1d5e6fdf50a2f09",
         "1092ae68478f3dfa2cdddefd071df820af3e5a1fe49000b5eca49cf8b0100a47",
     ]
+    assert derivaion_paths1 == [
+        "m/129372'/0'/2004500376'/0'",
+        "m/129372'/0'/2004500376'/1'",
+        "m/129372'/0'/2004500376'/2'",
+        "m/129372'/0'/2004500376'/3'",
+        "m/129372'/0'/2004500376'/4'",
+    ]
 
 
 @pytest.mark.asyncio
 async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
     wallet3.private_key = "TEST_PRIVATE_KEY"
     wallet3._init_bip32()
-    secrets1_1, rs1_1 = await wallet3.generate_n_secrets(2)
-    secrets1_2, rs1_2 = await wallet3.generate_n_secrets(3)
+    secrets1_1, rs1_1, derivaion_paths1 = await wallet3.generate_n_secrets(2)
+    secrets1_2, rs1_2, derivaion_paths2 = await wallet3.generate_n_secrets(3)
     secrets1 = secrets1_1 + secrets1_2
     rs1 = rs1_1 + rs1_2
-    secrets2, rs2 = await wallet3.generate_secrets_from_to(0, 4)
+    secrets2, rs2, derivaion_paths = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert secrets1 == [
@@ -405,9 +413,9 @@ async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
 async def test_generate_secrets_from_to(wallet3: Wallet):
     wallet3.private_key = "TEST_PRIVATE_KEY"
     wallet3._init_bip32()
-    secrets1, rs1 = await wallet3.generate_secrets_from_to(0, 4)
+    secrets1, rs1, derivaion_paths1 = await wallet3.generate_secrets_from_to(0, 4)
     assert len(secrets1) == 5
-    secrets2, rs2 = await wallet3.generate_secrets_from_to(2, 4)
+    secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(2, 4)
     assert len(secrets2) == 3
     assert secrets1[2:] == secrets2
     assert [r.private_key for r in rs1[2:]] == [r.private_key for r in rs2]
