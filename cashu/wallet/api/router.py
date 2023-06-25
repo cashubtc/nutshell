@@ -46,12 +46,26 @@ def create_wallet(
 
 async def load_mint(wallet: Wallet, mint: Optional[str] = None):
     if mint:
-        wallet = create_wallet(mint)
+        # wallet = create_wallet(mint)
+        wallet = await Wallet.with_db(
+            url=settings.mint_url,
+            db=os.path.join(settings.cashu_dir, settings.wallet_name),
+            name=settings.wallet_name,
+        )
     await wallet.load_mint()
     return wallet
 
 
-wallet = create_wallet()
+import asyncio
+
+wallet = asyncio.run(
+    Wallet.with_db(
+        url=settings.mint_url,
+        db=os.path.join(settings.cashu_dir, settings.wallet_name),
+        name=settings.wallet_name,
+    )
+)
+# wallet = create_wallet()
 
 
 @router.on_event("startup")

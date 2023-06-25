@@ -40,7 +40,9 @@ async def redeem_TokenV3_multimint(
         assert t.mint, Exception(
             "redeem_TokenV3_multimint: multimint redeem without URL"
         )
-        mint_wallet = Wallet(t.mint, os.path.join(settings.cashu_dir, wallet.name))
+        mint_wallet = await Wallet.with_db(
+            t.mint, os.path.join(settings.cashu_dir, wallet.name)
+        )
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
         logger.debug(f"Keysets in tokens: {keysets}")
         # loop over all keysets
@@ -155,7 +157,7 @@ async def receive(
         assert mint_keysets, Exception("we don't know this keyset")
         assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
         # now we have the URL
-        mint_wallet = Wallet(
+        mint_wallet = await Wallet.with_db(
             mint_keysets.mint_url,
             os.path.join(settings.cashu_dir, wallet.name),
         )

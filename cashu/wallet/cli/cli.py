@@ -672,7 +672,7 @@ async def wallets(ctx):
     for w in wallets:
         wallet = Wallet(ctx.obj["HOST"], os.path.join(settings.cashu_dir, w))
         try:
-            await init_wallet(wallet)
+            await wallet.load_proofs()
             if wallet.proofs and len(wallet.proofs):
                 active_wallet = False
                 if w == ctx.obj["WALLET_NAME"]:

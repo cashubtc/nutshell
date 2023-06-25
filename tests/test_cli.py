@@ -17,13 +17,11 @@ def cli_prefix():
 
 
 async def init_wallet():
-    wallet = Wallet(
+    wallet = await Wallet.with_db(
         url=settings.mint_host,
         db="data/test_cli_wallet",
         name="wallet",
-        private_key="TEST_WALLET_CLI_PRIVATE_KEY_1",
     )
-    await migrate_databases(wallet.db, migrations)
     await wallet.load_proofs()
     return wallet
 
