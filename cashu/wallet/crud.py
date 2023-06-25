@@ -14,10 +14,17 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (id, amount, C, secret, time_created)
+          (id, amount, C, secret, time_created, derivation_path)
         VALUES (?, ?, ?, ?, ?)
         """,
-        (proof.id, proof.amount, str(proof.C), str(proof.secret), int(time.time())),
+        (
+            proof.id,
+            proof.amount,
+            str(proof.C),
+            str(proof.secret),
+            int(time.time()),
+            proof.derivation_path,
+        ),
     )
 
 
@@ -62,10 +69,17 @@ async def invalidate_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs_used
-          (amount, C, secret, time_used, id)
+          (amount, C, secret, time_used, id, derivation_path)
         VALUES (?, ?, ?, ?, ?)
         """,
-        (proof.amount, str(proof.C), str(proof.secret), int(time.time()), proof.id),
+        (
+            proof.amount,
+            str(proof.C),
+            str(proof.secret),
+            int(time.time()),
+            proof.id,
+            proof.derivation_path,
+        ),
     )
 
 
@@ -333,6 +347,7 @@ async def bump_secret_derivation(
     db: Database,
     keyset_id: str,
     by: int = 1,
+    skip: bool = False,
     conn: Optional[Connection] = None,
 ):
     rows = await (conn or db).fetchone(
@@ -350,10 +365,12 @@ async def bump_secret_derivation(
         counter = 0
     else:
         counter = int(rows[0])
-    await (conn or db).execute(
-        f"UPDATE keysets SET counter = counter + {by} WHERE id = ?",
-        (keyset_id,),
-    )
+
+    if not skip:
+        await (conn or db).execute(
+            f"UPDATE keysets SET counter = counter + {by} WHERE id = ?",
+            (keyset_id,),
+        )
     return counter
 
 

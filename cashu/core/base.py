@@ -43,6 +43,7 @@ class Proof(BaseModel):
     ] = ""  # unique ID of send attempt, used for grouping pending tokens in the wallet
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
+    derivation_path: Union[None, str] = ""  # derivation path of the proof
 
     def to_dict(self):
         # dictionary without the fields that don't need to be send to Carol

@@ -303,11 +303,11 @@ class LedgerAPI:
         return secret, r
 
     async def generate_n_secrets(
-        self, n: int = 1
+        self, n: int = 1, skip_bump: bool = False
     ) -> Tuple[List[str], List[PrivateKey]]:
         """Generates n secrets and blinding factors and returns two lists"""
         secret_counters_start = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=n
+            db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump
         )
         logger.trace(f"secret_counters_start: {secret_counters_start}")
         secret_counters = list(range(secret_counters_start, secret_counters_start + n))
@@ -480,7 +480,10 @@ class LedgerAPI:
         Raises:
             Exception: If the minting fails
         """
-        secrets, rs = await self.generate_n_secrets(len(amounts))
+        # quirk: we skip bumping the secret counter in the database since we are
+        # not sure if the minting will succeed. If it succeeds, we will bump it
+        # in the next step.
+        secrets, rs = await self.generate_n_secrets(len(amounts), skip_bump=True)
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
         outputs_payload = PostMintRequest(outputs=outputs)
@@ -502,6 +505,11 @@ class LedgerAPI:
             promises = PostMintResponseLegacy.parse_obj(reponse_dict).__root__
         except:
             promises = PostMintResponse.parse_obj(reponse_dict).promises
+
+        # bump secret counter in database
+        await bump_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id, by=len(amounts)
+        )
         return self._construct_proofs(promises, secrets, rs)
 
     @async_set_requests

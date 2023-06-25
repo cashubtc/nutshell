@@ -180,6 +180,8 @@ async def m008_keysets_add_public_keys(db: Database):
 
 async def m009_secret_derivation_counter(db: Database):
     await db.execute("ALTER TABLE keysets ADD COLUMN counter INTEGER DEFAULT 0")
+    await db.execute("ALTER TABLE proofs ADD COLUMN derivation_path TEXT")
+    await db.execute("ALTER TABLE proofs_used ADD COLUMN derivation_path TEXT")
     # await db.execute(
     #     """
     #         CREATE TABLE IF NOT EXISTS secret_derivation (

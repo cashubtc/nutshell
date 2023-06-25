@@ -466,14 +466,14 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 @click.option(
     "--to",
     "-t",
-    default=50,
+    default=2,
     help="Split minted tokens with a specific amount.",
     type=int,
 )
 @click.option(
     "--batch",
     "-b",
-    default=10,
+    default=25,
     help="Batch size for restore.",
     type=int,
 )
@@ -484,21 +484,20 @@ async def restore(ctx: Context, to: int, batch: int):
     await wallet.load_mint()
     print("Restoring tokens...")
     stop_counter = 0
-    stop_threshould = 7
     i = 0
-    while stop_counter < stop_threshould:
-        print(f"Restoring tokens from {i} to {i + batch}...")
+    while stop_counter < to:
+        print(f"Restoring token {i} to {i + batch}...")
         restored_proofs = await wallet.restore_promises(i, i + batch - 1)
         if len(restored_proofs) == 0:
             stop_counter += 1
         spendable_proofs = await wallet.invalidate(restored_proofs)
         if len(spendable_proofs):
-            print(f"Restored {sum_proofs(restored_proofs)} sat.")
+            print(f"Restored {sum_proofs(restored_proofs)} sat")
         i += batch
 
     # restore the secret counter to its previous value
     before = await bump_secret_derivation(
-        db=wallet.db, keyset_id=wallet.keyset_id, by=-batch * (stop_threshould - 1)
+        db=wallet.db, keyset_id=wallet.keyset_id, by=-batch * (to - 1)
     )
     wallet.status()
 
