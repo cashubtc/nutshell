@@ -29,6 +29,7 @@ from .responses import (
     PayResponse,
     PendingResponse,
     ReceiveResponse,
+    RestoreResponse,
     SendResponse,
     SwapResponse,
     WalletsResponse,
@@ -390,6 +391,19 @@ async def wallets():
         except:
             pass
     return WalletsResponse(wallets=result)
+
+
+@router.post("/restore", name="Restore wallet", response_model=RestoreResponse)
+async def restore(
+    to: int = Query(default=..., description="Counter to which restore the wallet"),
+):
+    if to < 0:
+        raise Exception("Counter must be positive")
+    await wallet.load_mint()
+    await wallet.restore_promises(0, to)
+    await wallet.invalidate(wallet.proofs)
+    wallet.status()
+    return RestoreResponse(balance=wallet.available_balance)
 
 
 @router.get("/info", name="Information about Cashu wallet", response_model=InfoResponse)

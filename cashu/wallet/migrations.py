@@ -179,11 +179,15 @@ async def m008_keysets_add_public_keys(db: Database):
 
 
 async def m009_secret_derivation_counter(db: Database):
-    await db.execute(
-        """
-            CREATE TABLE IF NOT EXISTS secret_derivation (
-                counter INTEGER DEFAULT 0
-            );
-        """
-    )
-    await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")
+    await db.execute("ALTER TABLE keysets ADD COLUMN counter INTEGER DEFAULT 0")
+    # await db.execute(
+    #     """
+    #         CREATE TABLE IF NOT EXISTS secret_derivation (
+    #         keyset_id TEXT NOT NULL,
+    #         counter INTEGER DEFAULT 0,
+
+    #         UNIQUE (keyset_id)
+    #         );
+    #     """
+    # )
+    # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")

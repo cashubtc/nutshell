@@ -35,7 +35,8 @@ def assert_amt(proofs: List[Proof], expected: int):
 async def reset_wallet_db(wallet: Wallet):
     await wallet.db.execute("DELETE FROM proofs")
     await wallet.db.execute("DELETE FROM proofs_used")
-    await wallet.db.execute("UPDATE secret_derivation SET counter = 0")
+    await wallet.db.execute("DELETE FROM keysets")
+    await wallet._load_mint()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -372,11 +373,11 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert secrets1 == [
-        "1576adb6d9848408bbffdcccca60b045accfd70c0caebc29b42934bb44b19a20",
-        "1d42c69cb4404e7ab76e7ad1b4b415e46ed4c7fa9d8510c46e23366bfa19827f",
-        "b78a9d30671e1768e7d79a3284de234bbe49db905482134eb614c1e4564438ac",
-        "703a224a42ef0ae5ceed6ec6b92131fea840e51c5b1938673746098a6bf81163",
-        "7005b8ddbc61d5c018e1979f919aeafeabebc5b8eb61752efb2076873033b918",
+        "383d756bf069ed3b905711db409079f7c582b9b2a4a23642a88caca3a8002a32",
+        "b61c998c7d542517b9772cc2bc13a4782fd174a56c4a56b2322776248487a89d",
+        "7c6654b0d5153f203990d68405f4be65b854cbb79a2ac44dc59661885a634fca",
+        "d4a77ee0a6c6f3b108ae396ccbd25b69c21edc6ee00ff638b1d5e6fdf50a2f09",
+        "1092ae68478f3dfa2cdddefd071df820af3e5a1fe49000b5eca49cf8b0100a47",
     ]
 
 
@@ -392,11 +393,11 @@ async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert secrets1 == [
-        "1576adb6d9848408bbffdcccca60b045accfd70c0caebc29b42934bb44b19a20",
-        "1d42c69cb4404e7ab76e7ad1b4b415e46ed4c7fa9d8510c46e23366bfa19827f",
-        "b78a9d30671e1768e7d79a3284de234bbe49db905482134eb614c1e4564438ac",
-        "703a224a42ef0ae5ceed6ec6b92131fea840e51c5b1938673746098a6bf81163",
-        "7005b8ddbc61d5c018e1979f919aeafeabebc5b8eb61752efb2076873033b918",
+        "383d756bf069ed3b905711db409079f7c582b9b2a4a23642a88caca3a8002a32",
+        "b61c998c7d542517b9772cc2bc13a4782fd174a56c4a56b2322776248487a89d",
+        "7c6654b0d5153f203990d68405f4be65b854cbb79a2ac44dc59661885a634fca",
+        "d4a77ee0a6c6f3b108ae396ccbd25b69c21edc6ee00ff638b1d5e6fdf50a2f09",
+        "1092ae68478f3dfa2cdddefd071df820af3e5a1fe49000b5eca49cf8b0100a47",
     ]
 
 
@@ -411,11 +412,11 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
     assert secrets1[2:] == secrets2
     assert [r.private_key for r in rs1[2:]] == [r.private_key for r in rs2]
     assert secrets1 == [
-        "1576adb6d9848408bbffdcccca60b045accfd70c0caebc29b42934bb44b19a20",
-        "1d42c69cb4404e7ab76e7ad1b4b415e46ed4c7fa9d8510c46e23366bfa19827f",
-        "b78a9d30671e1768e7d79a3284de234bbe49db905482134eb614c1e4564438ac",
-        "703a224a42ef0ae5ceed6ec6b92131fea840e51c5b1938673746098a6bf81163",
-        "7005b8ddbc61d5c018e1979f919aeafeabebc5b8eb61752efb2076873033b918",
+        "383d756bf069ed3b905711db409079f7c582b9b2a4a23642a88caca3a8002a32",
+        "b61c998c7d542517b9772cc2bc13a4782fd174a56c4a56b2322776248487a89d",
+        "7c6654b0d5153f203990d68405f4be65b854cbb79a2ac44dc59661885a634fca",
+        "d4a77ee0a6c6f3b108ae396ccbd25b69c21edc6ee00ff638b1d5e6fdf50a2f09",
+        "1092ae68478f3dfa2cdddefd071df820af3e5a1fe49000b5eca49cf8b0100a47",
     ]
 
 

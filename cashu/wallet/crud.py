@@ -331,21 +331,45 @@ async def update_lightning_invoice(
 
 async def bump_secret_derivation(
     db: Database,
+    keyset_id: str,
     by: int = 1,
     conn: Optional[Connection] = None,
 ):
-    rows = await (conn or db).fetchone("SELECT counter from secret_derivation")
-    counter = int(rows[0])
-    await (conn or db).execute(f"UPDATE secret_derivation SET counter = counter + {by}")
+    rows = await (conn or db).fetchone(
+        "SELECT counter from keysets WHERE id = ?", (keyset_id,)
+    )
+    # if no counter for this keyset, create one
+    if not rows:
+        await (conn or db).execute(
+            "UPDATE keysets SET counter = ? WHERE id = ?",
+            (
+                0,
+                keyset_id,
+            ),
+        )
+        counter = 0
+    else:
+        counter = int(rows[0])
+    await (conn or db).execute(
+        f"UPDATE keysets SET counter = counter + {by} WHERE id = ?",
+        (keyset_id,),
+    )
     return counter
 
 
 async def set_secret_derivation(
     db: Database,
+    keyset_id: str,
     counter: int,
     conn: Optional[Connection] = None,
 ):
-    await (conn or db).execute("UPDATE secret_derivation SET counter = ?", (counter,))
+    await (conn or db).execute(
+        "UPDATE keysets SET counter = ? WHERE id = ?",
+        (
+            counter,
+            keyset_id,
+        ),
+    )
 
 
 async def set_nostr_last_check_timestamp(

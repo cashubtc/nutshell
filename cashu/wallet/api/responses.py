@@ -65,6 +65,10 @@ class WalletsResponse(BaseModel):
     wallets: Dict
 
 
+class RestoreResponse(BaseModel):
+    balance: int
+
+
 class InfoResponse(BaseModel):
     version: str
     wallet: str

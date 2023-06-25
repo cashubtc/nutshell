@@ -19,7 +19,12 @@ from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
-from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
+from ...wallet.crud import (
+    bump_secret_derivation,
+    get_lightning_invoices,
+    get_reserved_proofs,
+    get_unused_locks,
+)
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
@@ -461,17 +466,40 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 @click.option(
     "--to",
     "-t",
-    default=200,
+    default=50,
     help="Split minted tokens with a specific amount.",
+    type=int,
+)
+@click.option(
+    "--batch",
+    "-b",
+    default=10,
+    help="Batch size for restore.",
     type=int,
 )
 @click.pass_context
 @coro
-async def restore(ctx: Context, to: int):
+async def restore(ctx: Context, to: int, batch: int):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    await wallet.restore_promises(0, to)
-    await wallet.invalidate(wallet.proofs)
+    print("Restoring tokens...")
+    stop_counter = 0
+    stop_threshould = 7
+    i = 0
+    while stop_counter < stop_threshould:
+        print(f"Restoring tokens from {i} to {i + batch}...")
+        restored_proofs = await wallet.restore_promises(i, i + batch - 1)
+        if len(restored_proofs) == 0:
+            stop_counter += 1
+        spendable_proofs = await wallet.invalidate(restored_proofs)
+        if len(spendable_proofs):
+            print(f"Restored {sum_proofs(restored_proofs)} sat.")
+        i += batch
+
+    # restore the secret counter to its previous value
+    before = await bump_secret_derivation(
+        db=wallet.db, keyset_id=wallet.keyset_id, by=-batch * (stop_threshould - 1)
+    )
     wallet.status()
 
 

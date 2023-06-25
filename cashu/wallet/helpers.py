@@ -11,7 +11,7 @@ from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..wallet import migrations
 from ..wallet.crud import get_keyset, get_unused_locks
-from ..wallet.wallet import Wallet as Wallet
+from ..wallet.wallet import Wallet
 
 
 async def init_wallet(wallet: Wallet, load_proofs: bool = True):

@@ -8,8 +8,9 @@ import time
 import uuid
 from itertools import groupby
 from typing import Dict, List, Optional, Tuple
-from bip32 import BIP32
+
 import requests
+from bip32 import BIP32
 from loguru import logger
 
 from ..core import bolt11 as bolt11
@@ -19,9 +20,9 @@ from ..core.base import (
     CheckFeesRequest,
     CheckSpendableRequest,
     CheckSpendableResponse,
+    GetInfoResponse,
     GetMeltResponse,
     GetMintResponse,
-    GetInfoResponse,
     Invoice,
     KeysetsResponse,
     P2SHScript,
@@ -150,7 +151,7 @@ class LedgerAPI:
                 secret=secret,
             )
             proofs.append(proof)
-            logger.debug(
+            logger.trace(
                 f"Created proof: {proof}, r: {r.serialize()} out of promise {promise}"
             )
 
@@ -181,7 +182,7 @@ class LedgerAPI:
             )
             outputs.append(output)
         for o, r in zip(outputs, rs_return):
-            logger.debug(f"Constructing output: {o}, r: {r.serialize()}")
+            logger.trace(f"Constructing output: {o}, r: {r.serialize()}")
         return outputs, rs_return
 
     @staticmethod
@@ -266,8 +267,11 @@ class LedgerAPI:
         deriving secrets from a counter but don't store the respective blinding factor.
         We won't be anle to restore any ecash generated with these secrets.
         """
-        secret_counters = await bump_secret_derivation(db=self.db)
-        s, _ = await self.generate_determinstic_secret(secret_counters)
+        secret_counter = await bump_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id
+        )
+        logger.trace(f"secret_counter: {secret_counter}")
+        s, _ = await self.generate_determinstic_secret(secret_counter)
         # return s.decode("utf-8")
         return hashlib.sha256(s).hexdigest()
 
@@ -277,31 +281,37 @@ class LedgerAPI:
             return [f"{secret}:{await self._generate_secret()}" for i in range(n)]
         return [f"{i}:{secret}" for i in range(n)]
 
-    async def generate_determinstic_secret(self, secret_counter) -> Tuple[bytes, bytes]:
+    async def generate_determinstic_secret(self, counter: int) -> Tuple[bytes, bytes]:
         """
         Determinstically generates two secrets (one as the secret message,
         one as the blinding factor).
         """
+        assert self.mint_info.pubkey, "Mint info not loaded yet."
+        # integer keyset id modulo max number of bip32 child keys
+        keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
+            2**31 - 1
+        )
+        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id}")
         # for secret
-        secret = self.bip32.get_privkey_from_path(f"m/0h/0/{secret_counter}")
+        secret_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'/0"
+        logger.trace(f"secret derivation path: {secret_derivation_path}")
+        secret = self.bip32.get_privkey_from_path(secret_derivation_path)
         # blinding factor
-        r = self.bip32.get_privkey_from_path(f"m/0h/1/{secret_counter}")
-        # r_secret = self.private_key + "r" + str(secret_counter)
-        # logger.debug(
-        #     f"Generating sercret nr {secret_counter}: {seed_secret} {r_secret}"
-        # )
-        # secret = base64.b64encode(hashlib.sha256(seed_secret.encode("utf-8")).digest())
-        # logger.debug(f"Sercret {secret.decode('utf-8')}")
-        # r = base64.b64encode(hashlib.sha256(r_secret.encode("utf-8")).digest())[:32]
+        r_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'/1"
+        logger.trace(f"r derivation path: {r_derivation_path}")
+        r = self.bip32.get_privkey_from_path(r_derivation_path)
         return secret, r
 
     async def generate_n_secrets(
         self, n: int = 1
     ) -> Tuple[List[str], List[PrivateKey]]:
         """Generates n secrets and blinding factors and returns two lists"""
-        secret_counters_start = await bump_secret_derivation(db=self.db, by=n)
+        secret_counters_start = await bump_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id, by=n
+        )
+        logger.trace(f"secret_counters_start: {secret_counters_start}")
         secret_counters = list(range(secret_counters_start, secret_counters_start + n))
-        logger.debug(
+        logger.trace(
             f"Generating secret nr {secret_counters[0]} to {secret_counters[-1]}."
         )
         secrets_and_rs = [
@@ -1014,12 +1024,17 @@ class Wallet(LedgerAPI):
                 proof, reserved=reserved, send_id=uuid_str, db=self.db
             )
 
-    async def invalidate(self, proofs: List[Proof], check_spendable=True):
+    async def invalidate(
+        self, proofs: List[Proof], check_spendable=True
+    ) -> List[Proof]:
         """Invalidates all unspendable tokens supplied in proofs.
 
         Args:
             proofs (List[Proof]): Which proofs to delete
             check_spendable (bool, optional): Asks the mint to check whether proofs are already spent before deleting them. Defaults to True.
+
+        Returns:
+            List[Proof]: List of proofs that are still spendable.
         """
         invalidated_proofs: List[Proof] = []
         if check_spendable:
@@ -1043,6 +1058,7 @@ class Wallet(LedgerAPI):
         self.proofs = list(
             filter(lambda p: p.secret not in invalidate_secrets, self.proofs)
         )
+        return [p for p in proofs if p not in invalidated_proofs]
 
     # ---------- TRANSACTION HELPERS ----------
 
@@ -1142,7 +1158,7 @@ class Wallet(LedgerAPI):
         }
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
 
-    async def restore_promises(self, from_counter: int, to_counter: int):
+    async def restore_promises(self, from_counter: int, to_counter: int) -> List[Proof]:
         # we regenerate the secrets and rs for the given range
         secrets, rs = await self.generate_secrets_from_to(from_counter, to_counter)
         # we don't know the amount but luckily the mint will tell us so we use a dummy amount here
@@ -1165,7 +1181,6 @@ class Wallet(LedgerAPI):
         # now we can construct the proofs with the secrets and rs
         proofs = self._construct_proofs(restored_promises, secrets, rs)
         logger.debug(f"Restored {len(restored_promises)} promises")
-        print(f"Restored {sum([p.amount for p in proofs])} sat")
         await self._store_proofs(proofs)
 
         # append proofs to proofs in memory so the balance updates
@@ -1173,4 +1188,7 @@ class Wallet(LedgerAPI):
             if proof.secret not in [p.secret for p in self.proofs]:
                 self.proofs.append(proof)
 
-        await set_secret_derivation(db=self.db, counter=to_counter + 1)
+        await set_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id, counter=to_counter + 1
+        )
+        return proofs
