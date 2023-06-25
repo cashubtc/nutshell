@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-# from fastapi_profiler import PyInstrumentProfilerMiddleware
-
 from ...core.settings import settings
 from .router import router
+
+# from fastapi_profiler import PyInstrumentProfilerMiddleware
 
 
 def create_app() -> FastAPI:
