@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from ..core.base import Invoice, KeyBase, P2SHScript, Proof, WalletKeyset
 from ..core.db import Connection, Database
@@ -413,28 +413,39 @@ async def get_nostr_last_check_timestamp(
     return row[0] if row else None
 
 
-async def get_private_key(
+async def get_seed_and_mnemonic(
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> Optional[Tuple[str, str]]:
     row = await (conn or db).fetchone(
         f"""
-        SELECT private_key from private_key
+        SELECT seed, mnemonic from seed
         """,
     )
-    return row[0] if row else None
+    return (
+        (
+            row[0],
+            row[1],
+        )
+        if row
+        else None
+    )
 
 
-async def store_private_key(
+async def store_seed_and_mnemonic(
     db: Database,
-    private_key: str,
+    seed: str,
+    mnemonic: str,
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
         f"""
-        INSERT INTO private_key
-          (private_key)
-        VALUES (?)
+        INSERT INTO seed
+          (seed, mnemonic)
+        VALUES (?, ?)
         """,
-        (private_key,),
+        (
+            seed,
+            mnemonic,
+        ),
     )

@@ -184,12 +184,12 @@ async def m009_privatekey_and_determinstic_key_derivation(db: Database):
     await db.execute("ALTER TABLE proofs_used ADD COLUMN derivation_path TEXT")
     await db.execute(
         """
-            CREATE TABLE IF NOT EXISTS private_key (
-            private_key TEXT NOT NULL,
+            CREATE TABLE IF NOT EXISTS seed (
+            seed TEXT NOT NULL,
+            mnemonic TEXT NOT NULL,
 
-            UNIQUE (private_key)
+            UNIQUE (seed, mnemonic)
             );
         """
     )
-    print("Migrating private key...")
     # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")

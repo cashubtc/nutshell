@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 from bip32 import BIP32
+from mnemonic import Mnemonic
 from loguru import logger
 
 from ..core import bolt11 as bolt11
@@ -66,8 +67,8 @@ from ..wallet.crud import (
     store_proof,
     update_lightning_invoice,
     update_proof_reserved,
-    get_private_key,
-    store_private_key,
+    get_seed_and_mnemonic,
+    store_seed_and_mnemonic,
 )
 
 from ..core.migrations import migrate_databases
@@ -610,7 +611,8 @@ class LedgerAPI(object):
 class Wallet(LedgerAPI):
     """Minimal wallet wrapper."""
 
-    private_key: str  # holds private key of the wallet
+    mnemonic: str  # holds mnemonic of the wallet
+    seed: bytes  # holds private key of the wallet generated from the mnemonic
     db: Database
     bip32: BIP32
 
@@ -619,10 +621,12 @@ class Wallet(LedgerAPI):
         url: str,
         db: str,
         name: str = "no_name",
+        mnemonic: Optional[str] = None,
     ):
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
+        self.mnemonic = mnemonic or ""
 
         super().__init__(url=url, db=self.db)
         logger.debug(f"Wallet initalized with mint URL {url}")
@@ -646,25 +650,39 @@ class Wallet(LedgerAPI):
             logger.error(f"Could not run migrations: {e}")
 
     async def _init_private_key(self):
-        try:
-            pk = await get_private_key(self.db)  # or settings.wallet_private_key
-            if pk is None:
-                self.private_key = PrivateKey().serialize()
-                logger.debug(f"Generated new private key: {self.private_key}")
-                await store_private_key(self.db, self.private_key)
+        ret = await get_seed_and_mnemonic(self.db)  # or settings.wallet_private_key
+
+        # if there is no seed in the database
+        if ret is None:
+            mneno = Mnemonic("english")
+            if not self.mnemonic:
+                # generate a new one
+                mnemonic_str = mneno.generate()
+                logger.debug("Generated new mnemonic: ", mnemonic_str)
             else:
-                logger.debug(f"Loaded private key: {pk}")
-                self.private_key = pk
+                # or use the one provided
+                mnemonic_str = self.mnemonic
 
-        except Exception as e:
-            logger.error(e)
+            self.seed = mneno.to_seed(mnemonic_str)
+            logger.debug(f"Generated new seed: {self.seed.hex()}")
+            await store_seed_and_mnemonic(
+                self.db, seed=self.seed.hex(), mnemonic=mnemonic_str
+            )
+        else:
+            seed_hex, mnemonic = ret[0], ret[1]
+            if self.mnemonic:
+                assert (
+                    mnemonic == self.mnemonic
+                ), "Mnemonic from database does not match the wallet's mnemonic"
+            logger.debug(f"Loaded seed: {seed_hex}")
+            logger.debug(f"Loaded mnemonic: {mnemonic}")
+            self.mnemonic = mnemonic
+            self.seed = bytes.fromhex(seed_hex)
 
         try:
-            self.bip32 = BIP32.from_seed(
-                hashlib.sha256(self.private_key.encode("utf-8")).digest()[:32]
-            )
+            self.bip32 = BIP32.from_seed(self.seed)
         except ValueError:
-            raise ValueError("Invalid private key")
+            raise ValueError("Invalid seed")
         except Exception as e:
             logger.error(e)
 
@@ -1232,6 +1250,31 @@ class Wallet(LedgerAPI):
             for key, proofs in balances.items()
         }
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
+
+    async def restore_wallet_from_mnemonic(
+        self, mnemonic: str, to: int = 2, batch: int = 25
+    ):
+        """Restores the wallet from a mnemonic"""
+        self.mnemonic = mnemonic
+        await self._init_private_key()
+        await self.load_mint()
+        print("Restoring tokens...")
+        stop_counter = 0
+        i = 0
+        while stop_counter < to:
+            print(f"Restoring token {i} to {i + batch}...")
+            restored_proofs = await self.restore_promises(i, i + batch - 1)
+            if len(restored_proofs) == 0:
+                stop_counter += 1
+            spendable_proofs = await self.invalidate(restored_proofs)
+            if len(spendable_proofs):
+                print(f"Restored {sum_proofs(restored_proofs)} sat")
+            i += batch
+
+        # restore the secret counter to its previous value
+        before = await bump_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id, by=-batch * (to - 1)
+        )
 
     async def restore_promises(self, from_counter: int, to_counter: int) -> List[Proof]:
         # we regenerate the secrets and rs for the given range

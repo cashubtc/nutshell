@@ -9,6 +9,7 @@ from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
+from mnemonic import Mnemonic
 
 import click
 from click import Context
@@ -115,7 +116,7 @@ async def cli(ctx: Context, host: str, walletname: str):
     assert wallet, "Wallet not found."
     ctx.obj["WALLET"] = wallet
     await init_wallet(ctx.obj["WALLET"], load_proofs=False)
-    print("Wallet loaded.")
+
     # MUTLIMINT: Select a wallet
     # only if a command is one of a subset that needs to specify a mint host
     # if a mint host is already specified as an argument `host`, use it
@@ -496,24 +497,15 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 @coro
 async def restore(ctx: Context, to: int, batch: int):
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_mint()
-    print("Restoring tokens...")
-    stop_counter = 0
-    i = 0
-    while stop_counter < to:
-        print(f"Restoring token {i} to {i + batch}...")
-        restored_proofs = await wallet.restore_promises(i, i + batch - 1)
-        if len(restored_proofs) == 0:
-            stop_counter += 1
-        spendable_proofs = await wallet.invalidate(restored_proofs)
-        if len(spendable_proofs):
-            print(f"Restored {sum_proofs(restored_proofs)} sat")
-        i += batch
 
-    # restore the secret counter to its previous value
-    before = await bump_secret_derivation(
-        db=wallet.db, keyset_id=wallet.keyset_id, by=-batch * (to - 1)
+    # ask the user for a mnemonic but allow also no input
+    mnemonic = click.prompt(
+        "Enter your mnemonic (leave empty to skip)",
+        type=str,
+        default="",
     )
+    if mnemonic:
+        await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
     wallet.status()
 
 
@@ -688,9 +680,13 @@ async def wallets(ctx):
 @click.option(
     "--mint", "-m", default=False, is_flag=True, help="Fetch mint information."
 )
+@click.option(
+    "--mnemonic", "-mn", default=False, is_flag=True, help="Show your mnemonic."
+)
 @click.pass_context
 @coro
-async def info(ctx: Context, mint: bool):
+async def info(ctx: Context, mint: bool, mnemonic: bool):
+    wallet: Wallet = ctx.obj["WALLET"]
     print(f"Version: {settings.version}")
     print(f"Wallet: {ctx.obj['WALLET_NAME']}")
     if settings.debug:
@@ -711,7 +707,6 @@ async def info(ctx: Context, mint: bool):
         print(f"Socks proxy: {settings.socks_host}:{settings.socks_port}")
     print(f"Mint URL: {ctx.obj['HOST']}")
     if mint:
-        wallet: Wallet = ctx.obj["WALLET"]
         mint_info: dict = (await wallet._load_mint_info()).dict()
         print("")
         print("Mint information:")
@@ -731,4 +726,7 @@ async def info(ctx: Context, mint: bool):
             if mint_info["parameter"]:
                 print(f"Parameter: {mint_info['parameter']}")
 
+    if mnemonic:
+        assert wallet.mnemonic
+        print(f"Mnemonic: {wallet.mnemonic}")
     return
