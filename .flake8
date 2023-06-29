@@ -1,6 +1,6 @@
 [flake8]
 max-line-length = 150
-# exclude = lnbits/wallets/lnd_grpc_files/, lnbits/extensions/
+exclude = cashu/nostr
 # ignore =
 #     # E203 whitespace before ':' black does not like it
 #     E203
