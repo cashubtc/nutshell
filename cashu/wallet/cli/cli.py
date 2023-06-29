@@ -658,7 +658,7 @@ async def wallets(ctx):
                     f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: "
                     f"{sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
                 )
-        except:
+        except Exception:
             pass
 
 

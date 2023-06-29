@@ -296,7 +296,7 @@ class LedgerAPI(object):
         mint_keysets = []
         try:
             mint_keysets = await self._get_keyset_ids(self.url)
-        except:
+        except Exception:
             assert self.keys.id, "could not get keysets from mint, and do not have keys"
             pass
         self.keysets = mint_keysets or [self.keys.id]
