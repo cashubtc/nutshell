@@ -21,6 +21,7 @@ from ..core.base import (
     PostMintResponse,
     PostSplitRequest,
     PostSplitResponse,
+    PostSplitResponse_Deprecated,
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -206,13 +207,13 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
 @router.post("/split", name="Split", summary="Split proofs at a specified amount")
 async def split(
     payload: PostSplitRequest,
-) -> Union[CashuError, PostSplitResponse]:
+) -> Union[CashuError, PostSplitResponse, PostSplitResponse_Deprecated]:
     """
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
 
     This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
-    It is then used by Carol (by setting split=total) to redeem the tokens.xD
+    It is then used by Carol (by setting split=total) to redeem the tokens.
     """
     logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
@@ -243,10 +244,7 @@ async def split(
         logger.trace(
             f"Split into keep: {len(frst_promises)}: {sum([p.amount for p in frst_promises])} sat and send: {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
         )
-        resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
+        return PostSplitResponse_Deprecated(fst=frst_promises, snd=scnd_promises)
         # END backwards compatibility < 0.13
     else:
-        resp = PostSplitResponse(promises=promises)
-
-    logger.trace(f"< POST /split: {resp}")
-    return resp
+        return PostSplitResponse(promises=promises)

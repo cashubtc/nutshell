@@ -27,8 +27,8 @@ from ..core.base import (
     PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
-    PostMintResponseLegacy,
     PostSplitRequest,
+    PostSplitResponse_Deprecated,
     Proof,
     TokenV2,
     TokenV2Mint,
@@ -428,11 +428,7 @@ class LedgerAPI:
         reponse_dict = resp.json()
         self.raise_on_error(reponse_dict)
         logger.trace("Lightning invoice checked. POST /mint")
-        try:
-            # backwards compatibility: parse promises < 0.8.0 with no "promises" field
-            promises = PostMintResponseLegacy.parse_obj(reponse_dict).__root__
-        except:
-            promises = PostMintResponse.parse_obj(reponse_dict).promises
+        promises = PostMintResponse.parse_obj(reponse_dict).promises
 
         return self._construct_proofs(promises, secrets, rs)
 
@@ -472,14 +468,13 @@ class LedgerAPI:
         ), "number of secrets does not match number of outputs"
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets)
-        split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
+        split_payload = PostSplitRequest(proofs=proofs, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
-                "amount": ...,
                 "outputs": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
@@ -492,8 +487,23 @@ class LedgerAPI:
         promises_dict = resp.json()
         self.raise_on_error(promises_dict)
 
-        promises_fst = [BlindedSignature(**p) for p in promises_dict["fst"]]
-        promises_snd = [BlindedSignature(**p) for p in promises_dict["snd"]]
+        # begin: backwards compatibility mints < 0.13.0 - nut06 amount deprecated
+        if promises_dict.get("fst") and promises_dict.get("snd"):
+            logger.debug("Using backwards compatibility for split response")
+            promises_fst = [BlindedSignature(**p) for p in promises_dict["fst"]]
+            promises_snd = [BlindedSignature(**p) for p in promises_dict["snd"]]
+            # end: backwards compatibility mints < 0.13.0 - nut06 amount deprecated
+        else:
+            mint_response = PostMintResponse.parse_obj(promises_dict)
+            promises_fst = [
+                BlindedSignature(**p.dict())
+                for p in mint_response.promises[: len(frst_outputs)]
+            ]
+            promises_snd = [
+                BlindedSignature(**p.dict())
+                for p in mint_response.promises[len(frst_outputs) :]
+            ]
+
         # Construct proofs from promises (i.e., unblind signatures)
         frst_proofs = self._construct_proofs(
             promises_fst, secrets[: len(promises_fst)], rs[: len(promises_fst)]

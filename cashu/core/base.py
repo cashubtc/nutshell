@@ -138,11 +138,6 @@ class PostMintRequest(BaseModel):
     outputs: List[BlindedMessage]
 
 
-class PostMintResponseLegacy(BaseModel):
-    # NOTE: Backwards compability for < 0.8.0 where we used a simple list and not a key-value dictionary
-    __root__: List[BlindedSignature] = []
-
-
 class PostMintResponse(BaseModel):
     promises: List[BlindedSignature] = []
 
@@ -177,11 +172,13 @@ class PostSplitRequest(BaseModel):
 
 
 class PostSplitResponse(BaseModel):
-    fst: List[BlindedSignature] = []  # deprecated since 0.13.0
-    snd: List[BlindedSignature] = []  # deprecated since 0.13.0
-    promises: List[
-        BlindedSignature
-    ] = []  # NOTE: remove default [] after transition period
+    promises: List[BlindedSignature]
+
+
+# deprecated since 0.13.0
+class PostSplitResponse_Deprecated(BaseModel):
+    fst: List[BlindedSignature] = []
+    snd: List[BlindedSignature] = []
 
 
 # ------- API: CHECK -------
