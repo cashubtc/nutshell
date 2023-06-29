@@ -729,7 +729,7 @@ class Ledger:
                 f"status: {status}, preimage: {preimage}, fee_msat: {fee_msat}"
             )
 
-            if status == True:
+            if status is True:
                 logger.trace("invalidating proofs")
                 await self._invalidate_proofs(proofs)
                 logger.trace("invalidated proofs")
@@ -791,7 +791,7 @@ class Ledger:
             )
             paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
             logger.trace(f"check_fees: paid: {paid}")
-            internal = paid.paid == False
+            internal = paid.paid is False
         else:
             amount = 0
             internal = True
