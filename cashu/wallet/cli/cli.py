@@ -547,12 +547,12 @@ async def locks(ctx):
     if len(locks):
         print("")
         print("--------------------------\n")
-        for l in locks:
-            print(f"Address: {l.address}")
-            print(f"Script: {l.script}")
-            print(f"Signature: {l.signature}")
+        for lock in locks:
+            print(f"Address: {lock.address}")
+            print(f"Script: {lock.script}")
+            print(f"Signature: {lock.signature}")
             print("")
-            print(f"Receive: cashu receive <token> --lock P2SH:{l.address}")
+            print(f"Receive: cashu receive <token> --lock P2SH:{lock.address}")
             print("")
             print("--------------------------\n")
     else:

@@ -24,7 +24,7 @@ async def migrate_databases(db: Database, migrations_module):
                 if version > current_versions.get(db_name, 0):
                     await migrate(db)
 
-                    if db.schema == None:
+                    if db.schema is None:
                         await set_migration_version(db, db_name, version)
                     else:
                         async with db.connect() as conn:
