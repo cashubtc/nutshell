@@ -1,7 +1,7 @@
 import pytest
 import requests
 
-BASE_URL = f"http://localhost:3337"
+BASE_URL = "http://localhost:3337"
 
 @pytest.mark.asyncio
 async def test_info(ledger):

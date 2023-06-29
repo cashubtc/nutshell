@@ -127,7 +127,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
             default=True,
         )
 
-    print(f"Paying Lightning invoice ...")
+    print("Paying Lightning invoice ...")
     assert total_amount > 0, "amount is not positive"
     if wallet.available_balance < total_amount:
         print("Error: Balance too low.")
@@ -178,7 +178,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
             print(
-                f"Checking invoice ...",
+                "Checking invoice ...",
                 end="",
                 flush=True,
             )
@@ -476,7 +476,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
     wallet: Wallet = ctx.obj["WALLET"]
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
-        print(f"--------------------------\n")
+        print("--------------------------\n")
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))  # type: ignore
         if number:
             number += offset
@@ -510,7 +510,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                     legacy=True,
                 )
                 print(f"{token_legacy}\n")
-            print(f"--------------------------\n")
+            print("--------------------------\n")
         print("To remove all spent tokens use: cashu burn -a")
 
 
@@ -543,7 +543,7 @@ async def locks(ctx):
     locks = await get_unused_locks(db=wallet.db)
     if len(locks):
         print("")
-        print(f"--------------------------\n")
+        print("--------------------------\n")
         for l in locks:
             print(f"Address: {l.address}")
             print(f"Script: {l.script}")
@@ -551,7 +551,7 @@ async def locks(ctx):
             print("")
             print(f"Receive: cashu receive <token> --lock P2SH:{l.address}")
             print("")
-            print(f"--------------------------\n")
+            print("--------------------------\n")
     else:
         print("No locks found. Create one using: cashu lock")
     return True
@@ -565,7 +565,7 @@ async def invoices(ctx):
     invoices = await get_lightning_invoices(db=wallet.db)
     if len(invoices):
         print("")
-        print(f"--------------------------\n")
+        print("--------------------------\n")
         for invoice in invoices:
             print(f"Paid: {invoice.paid}")
             print(f"Incoming: {invoice.amount > 0}")
@@ -587,7 +587,7 @@ async def invoices(ctx):
             print("")
             print(f"Payment request: {invoice.pr}")
             print("")
-            print(f"--------------------------\n")
+            print("--------------------------\n")
     else:
         print("No invoices found.")
 
@@ -641,7 +641,7 @@ async def info(ctx: Context, mint: bool):
             print(f"Nostr public key: {client.public_key.bech32()}")
             print(f"Nostr relays: {settings.nostr_relays}")
         except:
-            print(f"Nostr: Error. Invalid key.")
+            print("Nostr: Error. Invalid key.")
     if settings.socks_host:
         print(f"Socks proxy: {settings.socks_host}:{settings.socks_port}")
     print(f"Mint URL: {ctx.obj['HOST']}")

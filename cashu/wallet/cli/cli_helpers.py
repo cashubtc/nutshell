@@ -102,7 +102,7 @@ async def verify_mint(mint_wallet: Wallet, url: str):
         print(f"Mint URL: {url}")
         print("\n")
         click.confirm(
-            f"Do you trust this mint and want to receive the tokens?",
+            "Do you trust this mint and want to receive the tokens?",
             abort=True,
             default=True,
         )

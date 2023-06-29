@@ -151,7 +151,7 @@ async def m007_nostr(db: Database):
     Stores timestamps of nostr operations.
     """
     await db.execute(
-        f"""
+        """
         CREATE TABLE IF NOT EXISTS nostr (
             type TEXT NOT NULL,
             last TIMESTAMP DEFAULT NULL
@@ -159,7 +159,7 @@ async def m007_nostr(db: Database):
         """
     )
     await db.execute(
-        f"""
+        """
         INSERT INTO nostr
             (type, last)
         VALUES (?, ?)

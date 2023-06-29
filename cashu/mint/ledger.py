@@ -51,7 +51,7 @@ class Ledger:
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""
-        logger.trace(f"crud: loading used proofs")
+        logger.trace("crud: loading used proofs")
         proofs_used = await self.crud.get_proofs_used(db=self.db)
         logger.trace(f"crud: loaded {len(proofs_used)} used proofs")
         self.proofs_used = set(proofs_used)
@@ -112,7 +112,7 @@ class Ledger:
             generated from `self.derivation_path`. Defaults to True.
         """
         # load all past keysets from db
-        logger.trace(f"crud: loading keysets")
+        logger.trace("crud: loading keysets")
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
         logger.trace(f"crud: loaded {len(tmp_keysets)} keysets")
         # add keysets from db to current keysets
@@ -421,10 +421,10 @@ class Ledger:
         proof_msgs = set([p.secret for p in proofs])
         self.proofs_used |= proof_msgs
         # store in db
-        logger.trace(f"crud: storing proofs")
+        logger.trace("crud: storing proofs")
         for p in proofs:
             await self.crud.invalidate_proof(proof=p, db=self.db)
-        logger.trace(f"crud: stored proofs")
+        logger.trace("crud: stored proofs")
 
     async def _set_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
@@ -488,9 +488,9 @@ class Ledger:
         Raises:
             Exception: At least one of the proofs is in the pending table.
         """
-        logger.trace(f"crud: _validate_proofs_pending validating proofs")
+        logger.trace("crud: _validate_proofs_pending validating proofs")
         proofs_pending = await self.crud.get_proofs_pending(db=self.db, conn=conn)
-        logger.trace(f"crud: _validate_proofs_pending got proofs pending")
+        logger.trace("crud: _validate_proofs_pending got proofs pending")
         for p in proofs:
             for pp in proofs_pending:
                 if p.secret == pp.secret:
@@ -604,7 +604,7 @@ class Ledger:
         Returns:
             Tuple[str, str]: Bolt11 invoice and a hash (for looking it up later)
         """
-        logger.trace(f"called request_mint")
+        logger.trace("called request_mint")
         if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
             raise Exception(f"Maximum mint amount is {settings.mint_max_peg_in} sats.")
         if settings.mint_peg_out_only:
@@ -730,7 +730,7 @@ class Ledger:
             )
 
             if status == True:
-                logger.trace(f"invalidating proofs")
+                logger.trace("invalidating proofs")
                 await self._invalidate_proofs(proofs)
                 logger.trace("invalidated proofs")
                 # prepare change to compensate wallet for overpaid fees
@@ -821,14 +821,14 @@ class Ledger:
         Returns:
             Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
         """
-        logger.trace(f"split called")
+        logger.trace("split called")
 
         await self._set_proofs_pending(proofs)
 
         total = sum_proofs(proofs)
 
         try:
-            logger.trace(f"verifying _verify_split_amount")
+            logger.trace("verifying _verify_split_amount")
             # verify that amount is kosher
             self._verify_split_amount(amount)
             # verify overspending attempt
@@ -837,14 +837,14 @@ class Ledger:
 
             logger.trace("verifying proofs: _verify_proofs")
             await self._verify_proofs(proofs)
-            logger.trace(f"verified proofs")
+            logger.trace("verified proofs")
             # verify that only unique outputs were used
             if not self._verify_no_duplicate_outputs(outputs):
                 raise Exception("duplicate promises.")
             # verify that outputs have the correct amount
             if not self._verify_outputs(total, amount, outputs):
                 raise Exception("split of promises is not as expected.")
-            logger.trace(f"verified outputs")
+            logger.trace("verified outputs")
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
@@ -853,9 +853,9 @@ class Ledger:
             await self._unset_proofs_pending(proofs)
 
         # Mark proofs as used and prepare new promises
-        logger.trace(f"invalidating proofs")
+        logger.trace("invalidating proofs")
         await self._invalidate_proofs(proofs)
-        logger.trace(f"invalidated proofs")
+        logger.trace("invalidated proofs")
 
         # split outputs according to amount
         outs_fst = amount_split(total - amount)
@@ -870,5 +870,5 @@ class Ledger:
         # verify amounts in produced proofs
         self._verify_equation_balanced(proofs, prom_fst + prom_snd)
 
-        logger.trace(f"split successful")
+        logger.trace("split successful")
         return prom_fst, prom_snd

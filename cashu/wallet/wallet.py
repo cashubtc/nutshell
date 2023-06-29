@@ -116,7 +116,7 @@ class LedgerAPI:
         self, promises: List[BlindedSignature], secrets: List[str], rs: List[PrivateKey]
     ) -> List[Proof]:
         """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
-        logger.trace(f"Constructing proofs.")
+        logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
         for promise, secret, r in zip(promises, secrets, rs):
             logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
@@ -226,7 +226,7 @@ class LedgerAPI:
         Raises:
             Exception: If len(amounts) != len(secrets)
         """
-        logger.trace(f"Constructing outputs.")
+        logger.trace("Constructing outputs.")
         assert len(amounts) == len(
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
