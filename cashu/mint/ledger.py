@@ -1,3 +1,4 @@
+import asyncio
 import math
 from typing import Dict, List, Literal, Optional, Set, Union
 
@@ -15,7 +16,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
-from ..core.db import Connection, Database, lock_table
+from ..core.db import Connection, Database
 from ..core.helpers import fee_reserve, sum_proofs
 from ..core.script import verify_script
 from ..core.settings import settings
@@ -25,6 +26,11 @@ from ..mint.crud import LedgerCrud
 
 
 class Ledger:
+    locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
+    proofs_pending_lock: asyncio.Lock = (
+        asyncio.Lock()
+    )  # holds locks for proofs_pending database
+
     def __init__(
         self,
         db: Database,
@@ -437,18 +443,19 @@ class Ledger:
             Exception: At least one proof already in pending table.
         """
         # first we check whether these proofs are pending aready
-        await self._validate_proofs_pending(proofs, conn)
-        for p in proofs:
-            try:
-                logger.trace(
-                    f"crud: _set_proofs_pending setting proof {p.secret} as pending"
-                )
-                await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
-                logger.trace(
-                    f"crud: _set_proofs_pending proof {p.secret} set as pending"
-                )
-            except:
-                raise Exception("proofs already pending.")
+        async with self.proofs_pending_lock:
+            await self._validate_proofs_pending(proofs, conn)
+            for p in proofs:
+                try:
+                    logger.trace(
+                        f"crud: _set_proofs_pending setting proof {p.secret} as pending"
+                    )
+                    await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
+                    logger.trace(
+                        f"crud: _set_proofs_pending proof {p.secret} set as pending"
+                    )
+                except:
+                    raise Exception("proofs already pending.")
 
     async def _unset_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
@@ -460,20 +467,23 @@ class Ledger:
         """
         # we try: except: this block in order to avoid that any errors here
         # could block the _invalidate_proofs() call that happens afterwards.
-        try:
-            for p in proofs:
-                logger.trace(
-                    f"crud: _unset_proofs_pending unsetting proof {p.secret} as pending"
-                )
-                await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
-                logger.trace(
-                    f"crud: _unset_proofs_pending proof {p.secret} unset as pending"
-                )
-        except Exception as e:
-            print(e)
-            pass
+        async with self.proofs_pending_lock:
+            try:
+                for p in proofs:
+                    logger.trace(
+                        f"crud: _unset_proofs_pending unsetting proof {p.secret} as pending"
+                    )
+                    await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+                    logger.trace(
+                        f"crud: _unset_proofs_pending proof {p.secret} unset as pending"
+                    )
+            except Exception as e:
+                print(e)
+                pass
 
-    async def _validate_proofs_pending(self, proofs: List[Proof], conn):
+    async def _validate_proofs_pending(
+        self, proofs: List[Proof], conn: Optional[Connection] = None
+    ):
         """Checks if any of the provided proofs is in the pending proofs table.
 
         Args:
@@ -637,8 +647,9 @@ class Ledger:
             keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
 
         Raises:
+            Exception: Lightning invvoice is not paid.
             Exception: Lightning is turned on but no payment hash is provided.
-            e: Something went wrong with the invoice check.
+            Exception: Something went wrong with the invoice check.
             Exception: Amount too large.
 
         Returns:
@@ -647,20 +658,17 @@ class Ledger:
         logger.trace("called mint")
         amounts = [b.amount for b in B_s]
         amount = sum(amounts)
-        async with self.db.connect() as conn:
-            logger.trace("attempting lock table invoice")
-            await conn.execute(lock_table(self.db, "invoices"))
-            logger.trace("locked table invoice")
-            # check if lightning invoice was paid
-            if settings.lightning:
-                if not hash:
-                    raise Exception("no hash provided.")
-                try:
-                    logger.trace("checking lightning invoice")
-                    paid = await self._check_lightning_invoice(amount, hash, conn)
-                    logger.trace(f"invoice paid: {paid}")
-                except Exception as e:
-                    raise e
+
+        if settings.lightning:
+            if not hash:
+                raise Exception("no hash provided.")
+            self.locks[hash] = (
+                self.locks.get(hash) or asyncio.Lock()
+            )  # create a new lock if it doesn't exist
+            async with self.locks[hash]:
+                # will raise an exception if the invoice is not paid or tokens are already issued
+                await self._check_lightning_invoice(amount, hash)
+            del self.locks[hash]
 
         for amount in amounts:
             if amount not in [2**i for i in range(settings.max_order)]:
@@ -691,15 +699,7 @@ class Ledger:
 
         logger.trace("melt called")
 
-        async with self.db.connect() as conn:
-            logger.trace("attempting lock table proofs_pending")
-            await conn.execute(lock_table(self.db, "proofs_pending"))
-            logger.trace("locked table proofs_pending")
-            # validate and set proofs as pending
-            logger.trace("setting proofs pending")
-            await self._set_proofs_pending(proofs, conn)
-            logger.trace(f"set proofs as pending")
-        logger.trace("unlocked table proofs_pending")
+        await self._set_proofs_pending(proofs)
 
         try:
             await self._verify_proofs(proofs)
@@ -755,14 +755,7 @@ class Ledger:
             raise e
         finally:
             # delete proofs from pending list
-            async with self.db.connect() as conn:
-                logger.trace("attempting lock table proofs_pending")
-                await conn.execute(lock_table(self.db, "proofs_pending"))
-                logger.trace("locked table proofs_pending")
-                logger.trace("unsetting proofs as pending")
-                await self._unset_proofs_pending(proofs, conn)
-                logger.trace(f"unset proofs as pending")
-            logger.trace("unlocked table proofs_pending")
+            await self._unset_proofs_pending(proofs)
 
         return status, preimage, return_promises
 
@@ -833,15 +826,9 @@ class Ledger:
             Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
         """
         logger.trace(f"split called")
-        # set proofs as pending
-        async with self.db.connect() as conn:
-            logger.trace("attempting lock table proofs_pending")
-            await conn.execute(lock_table(self.db, "proofs_pending"))
-            logger.trace("locked table proofs_pending")
-            # validate and set proofs as pending
-            logger.trace("setting proofs pending")
-            await self._set_proofs_pending(proofs, conn)
-            logger.trace(f"set proofs as pending")
+
+        await self._set_proofs_pending(proofs)
+
         total_amount = sum_proofs(proofs)
 
         try:
@@ -864,13 +851,7 @@ class Ledger:
             raise e
         finally:
             # delete proofs from pending list
-            async with self.db.connect() as conn:
-                logger.trace("attempting lock table proofs_pending")
-                await conn.execute(lock_table(self.db, "proofs_pending"))
-                logger.trace("locked table proofs_pending")
-                logger.trace("unsetting proofs as pending")
-                await self._unset_proofs_pending(proofs, conn)
-                logger.trace(f"unset proofs as pending")
+            await self._unset_proofs_pending(proofs)
 
         # Mark proofs as used and prepare new promises
         logger.trace(f"invalidating proofs")

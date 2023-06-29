@@ -169,3 +169,10 @@ async def m007_nostr(db: Database):
             None,
         ),
     )
+
+
+async def m008_keysets_add_public_keys(db: Database):
+    """
+    Stores public keys of mint in a new column of table keysets.
+    """
+    await db.execute("ALTER TABLE keysets ADD COLUMN public_keys TEXT")

@@ -43,8 +43,15 @@ def test_calculate_number_of_blank_outputs_for_small_fee_reserve():
     assert n_blank_outputs == expected_n_blank_outputs
 
 
-def test_calculate_number_of_blank_outputs_fails_for_negative_fee_reserve():
+def test_calculate_number_of_blank_outputs_for_zero_fee_reserve():
     # Negative fee reserve is not supported.
     fee_reserve_sat = 0
+    n_blank_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
+    assert n_blank_outputs == 0
+
+
+def test_calculate_number_of_blank_outputs_fails_for_negative_fee_reserve():
+    # Negative fee reserve is not supported.
+    fee_reserve_sat = -1
     with pytest.raises(AssertionError):
         _ = calculate_number_of_blank_outputs(fee_reserve_sat)
