@@ -29,7 +29,7 @@ Cashu is an Ecash implementation based on David Wagner's variant of Chaumian bli
 - Wallet: Send and receive tokens on nostr
 
 ## The Cashu protocol
-There are ongoing efforts to implement alternative Cashu clients that use the same protocol. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in helping with Cashu development, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts). 
+There are ongoing efforts to implement alternative Cashu clients that use the same protocol. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in helping with Cashu development, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts).
 
 ## Easy Install
 
@@ -38,7 +38,7 @@ The easiest way to use Cashu is to install the package it via pip:
 pip install cashu
 ```
 
-To update Cashu, use `pip install cashu -U`. 
+To update Cashu, use `pip install cashu -U`.
 
 If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config` and `pip install wheel`. On macOS, you might have to run `pip install wheel` and `brew install pkg-config`.
 
@@ -97,7 +97,7 @@ mv .env.example .env
 vim .env
 ```
 
-To use the wallet with the [public test mint](#test-instance), you need to change the appropriate entries in the `.env` file. 
+To use the wallet with the [public test mint](#test-instance), you need to change the appropriate entries in the `.env` file.
 
 #### Test instance
 *Warning: this instance is just for demonstration only. The server could vanish at any moment so consider any Satoshis you deposit a donation.*
@@ -126,7 +126,7 @@ Mint URL: https://8333.space:3338
 cashu balance
 ```
 
-#### Generate a Lightning invoice 
+#### Generate a Lightning invoice
 
 This command will return a Lightning invoice that you need to pay to mint new ecash tokens.
 
@@ -185,7 +185,7 @@ You can turn off Lightning support and mint as many tokens as you like by settin
 
 
 # Running tests
-To run the tests in this repository, first install the dev dependencies with 
+To run the tests in this repository, first install the dev dependencies with
 ```bash
 poetry install --with dev
 ```
