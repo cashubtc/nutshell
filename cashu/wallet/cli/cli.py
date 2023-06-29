@@ -89,7 +89,9 @@ def coro(f):
 @coro
 async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     if settings.tor and not TorProxy().check_platform():
-        error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
+        error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install Tor"
+        "manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by setting TOR=f"
+        "alse (not recommended). Cashu will not work until you edit your config file accordingly."
         error_str += "\n\n"
         if settings.env_file:
             error_str += f"Edit your Cashu config file here: {settings.env_file}"
@@ -310,7 +312,8 @@ async def balance(ctx: Context, verbose):
 
     if verbose:
         print(
-            f"Balance: {wallet.available_balance} sat (pending: {wallet.balance-wallet.available_balance} sat) in {len([p for p in wallet.proofs if not p.reserved])} tokens"
+            f"Balance: {wallet.available_balance} sat (pending: {wallet.balance-wallet.available_balance} sat) "
+            f"in {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
         print(f"Balance: {wallet.available_balance} sat")
@@ -652,7 +655,8 @@ async def wallets(ctx):
                 if w == ctx.obj["WALLET_NAME"]:
                     active_wallet = True
                 print(
-                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
+                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: "
+                    f"{sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
                 )
         except:
             pass
