@@ -112,7 +112,7 @@ async def invoice(
     global wallet
     wallet = await load_mint(wallet, mint)
     if not settings.lightning:
-        r = await wallet.mint(amount, split=optional_split)
+        await wallet.mint(amount, split=optional_split)
         return InvoiceResponse(
             amount=amount,
         )

@@ -3,6 +3,7 @@ import requests
 
 BASE_URL = "http://localhost:3337"
 
+
 @pytest.mark.asyncio
 async def test_info(ledger):
     response = requests.get(f"{BASE_URL}/info")

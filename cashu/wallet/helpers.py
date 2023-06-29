@@ -173,9 +173,11 @@ async def send(
         assert len(lock) > 21, Exception(
             "Error: lock has to be at least 22 characters long."
         )
-    p2sh = False
-    if lock and len(lock.split("P2SH:")) == 2:
-        p2sh = True
+
+    # UNUSED Code
+    # p2sh = False
+    # if lock and len(lock.split("P2SH:")) == 2:
+    #     p2sh = True
 
     await wallet.load_proofs()
     if split:

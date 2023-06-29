@@ -126,7 +126,7 @@ async def receive_nostr(
                     "",
                 )
             )
-        except Exception as e:
+        except Exception:
             pass
 
     # determine timestamp of last check so we don't scan all historical DMs
