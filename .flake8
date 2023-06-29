@@ -1,16 +1,8 @@
 [flake8]
 max-line-length = 150
-exclude = cashu/nostr
-# ignore =
-#     # E203 whitespace before ':' black does not like it
-#     E203
-#     # E402: module level import not at top of file
-#     E402,
-#     # W503: line break before binary operator
-#     W503,
-#     # F821: undefined name - should be addressed in future PR
-#     F821,
-#     # E722 do not use bare 'except' - should be addressed in future PR
-#     E722,
-#     # flake8-requirements import checks
-#     I
+exclude = cashu/nostr, cashu/core/bolt11.py
+ignore =
+    # E203 whitespace before ':' black does not like it
+    E203,
+    # W503: line break before binary operator
+    W503,
