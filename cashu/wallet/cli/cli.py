@@ -194,7 +194,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
         logger.debug(f"Requesting split with {n_splits} * {split} sat tokens.")
 
     if not settings.lightning:
-        r = await wallet.mint(amount, split=optional_split)
+        await wallet.mint(amount, split=optional_split)
     # user requests an invoice
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)

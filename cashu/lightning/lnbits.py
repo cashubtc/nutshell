@@ -90,13 +90,6 @@ class LNbitsWallet(Wallet):
             return PaymentResponse(None, None, None, None, f"HTTP status: {r.reason}")
         if "detail" in r.json():
             return PaymentResponse(None, None, None, None, r.json()["detail"])
-        ok, checking_id, fee_msat, preimage, error_message = (
-            True,
-            None,
-            None,
-            None,
-            None,
-        )
 
         data = r.json()
         checking_id = data["payment_hash"]
@@ -104,7 +97,7 @@ class LNbitsWallet(Wallet):
         # we do this to get the fee and preimage
         payment: PaymentStatus = await self.get_payment_status(checking_id)
 
-        return PaymentResponse(ok, checking_id, payment.fee_msat, payment.preimage)
+        return PaymentResponse(True, checking_id, payment.fee_msat, payment.preimage)
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         try:

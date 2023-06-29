@@ -138,7 +138,7 @@ class TorProxy:
             s.connect(location)
             s.close()
             return True
-        except Exception as e:
+        except Exception:
             return False
 
     def read_pid(self):
