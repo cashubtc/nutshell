@@ -11,7 +11,6 @@ SERVER_ENDPOINT = "http://localhost:3338"
 
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
-from tests.conftest import ledger
 
 
 async def assert_err(f, msg):

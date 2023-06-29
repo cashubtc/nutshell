@@ -5,7 +5,6 @@ import pytest_asyncio
 import requests
 
 from cashu.core.settings import settings
-from tests.conftest import ledger
 
 BASE_URL = f"http://localhost:3337"
 

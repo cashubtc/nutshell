@@ -12,7 +12,7 @@ from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
-from tests.conftest import SERVER_ENDPOINT, mint
+from tests.conftest import SERVER_ENDPOINT
 
 
 async def assert_err(f, msg):
