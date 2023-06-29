@@ -36,7 +36,7 @@ router: APIRouter = APIRouter()
     response_model_exclude_none=True,
 )
 async def info() -> GetInfoResponse:
-    logger.trace(f"> GET /info")
+    logger.trace("> GET /info")
     return GetInfoResponse(
         name=settings.mint_info_name,
         pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
@@ -63,7 +63,7 @@ async def info() -> GetInfoResponse:
 )
 async def keys():
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
-    logger.trace(f"> GET /keys")
+    logger.trace("> GET /keys")
     keyset = ledger.get_keyset()
     keys = KeysResponse.parse_obj(keyset)
     return keys.__root__
@@ -98,7 +98,7 @@ async def keyset_keys(idBase64Urlsafe: str):
 )
 async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
-    logger.trace(f"> GET /keysets")
+    logger.trace("> GET /keysets")
     keysets = KeysetsResponse(keysets=ledger.keysets.get_ids())
     return keysets
 
