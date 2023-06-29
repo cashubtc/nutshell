@@ -2,7 +2,6 @@ import base64
 import json
 import os
 
-import click
 from loguru import logger
 
 from ..core.base import TokenV1, TokenV2, TokenV3, TokenV3Token

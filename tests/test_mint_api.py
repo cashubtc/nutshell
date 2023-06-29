@@ -1,13 +1,7 @@
-import asyncio
-
 import pytest
-import pytest_asyncio
 import requests
 
-from cashu.core.settings import settings
-
 BASE_URL = f"http://localhost:3337"
-
 
 @pytest.mark.asyncio
 async def test_info(ledger):

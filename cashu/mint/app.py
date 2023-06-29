@@ -6,7 +6,6 @@ from fastapi import FastAPI
 # from fastapi_profiler import PyInstrumentProfilerMiddleware
 from loguru import logger
 from starlette.middleware import Middleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 
 from ..core.settings import settings

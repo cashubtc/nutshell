@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import random
-from typing import Dict, List
+from typing import Dict
 
 from ..settings import settings
 from .secp import PrivateKey, PublicKey

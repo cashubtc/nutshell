@@ -1,8 +1,7 @@
-import json
 import time
 from typing import Any, List, Optional
 
-from ..core.base import Invoice, KeyBase, P2SHScript, Proof, WalletKeyset
+from ..core.base import Invoice, P2SHScript, Proof, WalletKeyset
 from ..core.db import Connection, Database
 
 

@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import Proof
-from cashu.core.helpers import async_unwrap, sum_proofs
+from cashu.core.helpers import sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
 from cashu.wallet import migrations
