@@ -51,3 +51,5 @@ jobs:
         run: yes | poetry run mypy cashu --install-types || true
       - name: Run mypy
         run: poetry run mypy cashu --ignore-missing
+      - name: Run flake8
+        run: poetry run flake8
