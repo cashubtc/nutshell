@@ -1,15 +1,13 @@
-from typing import List
-
 import pytest
+from typing import List
 
 from cashu.core.base import BlindedMessage, Proof
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.helpers import calculate_number_of_blank_outputs
-
-SERVER_ENDPOINT = "http://localhost:3338"
-
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
+
+SERVER_ENDPOINT = "http://localhost:3338"
 
 
 async def assert_err(f, msg):
