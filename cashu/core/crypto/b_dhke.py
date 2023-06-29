@@ -77,7 +77,7 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     return C == Y.mult(a)  # type: ignore
 
 
-### Below is a test of a simple positive and negative case
+# Below is a test of a simple positive and negative case
 
 # # Alice's keys
 # a = PrivateKey()
