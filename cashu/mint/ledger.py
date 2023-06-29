@@ -199,7 +199,7 @@ class Ledger:
 
     def _check_spendable(self, proof: Proof):
         """Checks whether the proof was already spent."""
-        return not proof.secret in self.proofs_used
+        return proof.secret not in self.proofs_used
 
     async def _check_pending(self, proofs: List[Proof]):
         """Checks whether the proof is still pending."""
