@@ -3,7 +3,7 @@ import hashlib
 import random
 
 from bitcoin.core import CMutableTxIn, CMutableTxOut, COutPoint, CTransaction, lx
-from bitcoin.core.script import CScript, SignatureHash, OP_CHECKSIG, SIGHASH_ALL
+from bitcoin.core.script import OP_CHECKSIG, SIGHASH_ALL, CScript, SignatureHash
 from bitcoin.core.scripteval import (
     SCRIPT_VERIFY_P2SH,
     EvalScriptError,
