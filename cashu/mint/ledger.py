@@ -179,7 +179,7 @@ class Ledger:
 
     def _check_spendable(self, proof: Proof):
         """Checks whether the proof was already spent."""
-        return not proof.secret in self.proofs_used
+        return proof.secret not in self.proofs_used
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""
