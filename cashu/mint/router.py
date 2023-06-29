@@ -1,12 +1,9 @@
-from typing import Dict, List, Optional, Union
+from typing import Optional, Union
 
 from fastapi import APIRouter
 from loguru import logger
-from secp256k1 import PublicKey
 
 from ..core.base import (
-    BlindedMessage,
-    BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
     CheckSpendableRequest,

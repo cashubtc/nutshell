@@ -8,7 +8,6 @@ from cashu.core.settings import settings
 from cashu.wallet import migrations
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
-from tests.conftest import SERVER_ENDPOINT
 
 
 @pytest.fixture(autouse=True, scope="session")

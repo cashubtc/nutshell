@@ -5,7 +5,7 @@ from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
 from loguru import logger
 
-from ..core import bolt11, legacy
+from ..core import bolt11
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,

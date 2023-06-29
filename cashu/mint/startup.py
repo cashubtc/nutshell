@@ -9,8 +9,6 @@ from loguru import logger
 from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
-from ..lightning.fake import FakeWallet  # type: ignore
-from ..lightning.lnbits import LNbitsWallet  # type: ignore
 from ..mint import migrations
 from ..mint.ledger import Ledger
 
