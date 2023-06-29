@@ -266,7 +266,7 @@ class Ledger:
         """Split amount like output amount can't be negative or too big."""
         try:
             self._verify_amount(amount)
-        except:
+        except Exception:
             # For better error message
             raise Exception("invalid split amount: " + str(amount))
 
@@ -450,7 +450,7 @@ class Ledger:
                     logger.trace(
                         f"crud: _set_proofs_pending proof {p.secret} set as pending"
                     )
-                except:
+                except Exception:
                     raise Exception("proofs already pending.")
 
     async def _unset_proofs_pending(

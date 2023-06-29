@@ -183,7 +183,7 @@ class LedgerAPI:
         mint_keysets = []
         try:
             mint_keysets = await self._get_keyset_ids(self.url)
-        except:
+        except Exception:
             assert self.keys.id, "could not get keysets from mint, and do not have keys"
             pass
         self.keysets = mint_keysets or [self.keys.id]
@@ -429,7 +429,7 @@ class LedgerAPI:
         try:
             # backwards compatibility: parse promises < 0.8.0 with no "promises" field
             promises = PostMintResponseLegacy.parse_obj(reponse_dict).__root__
-        except:
+        except Exception:
             promises = PostMintResponse.parse_obj(reponse_dict).promises
 
         return self._construct_proofs(promises, secrets, rs)

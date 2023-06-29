@@ -387,7 +387,7 @@ async def wallets():
                             }
                         }
                     )
-        except:
+        except Exception:
             pass
     return WalletsResponse(wallets=result)
 
@@ -399,7 +399,7 @@ async def info():
             client = NostrClient(private_key=settings.nostr_private_key, connect=False)
             nostr_public_key = client.private_key.bech32()
             nostr_relays = settings.nostr_relays
-        except:
+        except Exception:
             nostr_public_key = "Invalid key"
             nostr_relays = []
     else:

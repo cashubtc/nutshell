@@ -619,7 +619,7 @@ async def wallets(ctx):
                     f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: "
                     f"{sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
                 )
-        except:
+        except Exception:
             pass
 
 
@@ -644,7 +644,7 @@ async def info(ctx: Context, mint: bool):
             client = NostrClient(private_key=settings.nostr_private_key, connect=False)
             print(f"Nostr public key: {client.public_key.bech32()}")
             print(f"Nostr relays: {settings.nostr_relays}")
-        except:
+        except Exception:
             print("Nostr: Error. Invalid key.")
     if settings.socks_host:
         print(f"Socks proxy: {settings.socks_host}:{settings.socks_port}")
