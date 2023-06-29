@@ -642,8 +642,10 @@ async def info(ctx: Context, mint: bool):
             print(f"Nostr relays: {settings.nostr_relays}")
         except:
             print(f"Nostr: Error. Invalid key.")
-    if settings.socks_host:
-        print(f"Socks proxy: {settings.socks_host}:{settings.socks_port}")
+    if settings.socks_proxy:
+        print(f"Socks proxy: {settings.socks_proxy}")
+    if settings.http_proxy:
+        print(f"HTTP proxy: {settings.http_proxy}")
     print(f"Mint URL: {ctx.obj['HOST']}")
     if mint:
         wallet: Wallet = ctx.obj["WALLET"]

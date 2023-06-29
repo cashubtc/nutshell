@@ -75,8 +75,10 @@ class MintInformation(CashuSettings):
 class WalletSettings(CashuSettings):
     lightning: bool = Field(default=True)
     tor: bool = Field(default=True)
-    socks_host: str = Field(default=None)
-    socks_port: int = Field(default=9050)
+    socks_host: str = Field(default=None)  # deprecated
+    socks_port: int = Field(default=9050)  # deprecated
+    socks_proxy: str = Field(default=None)
+    http_proxy: str = Field(default=None)
     mint_url: str = Field(default=None)
     mint_host: str = Field(default="8333.space")
     mint_port: int = Field(default=3338)
@@ -127,6 +129,10 @@ def startup_settings_tasks():
             settings.mint_url = f"http://{settings.mint_host}:{settings.mint_port}"
         else:
             settings.mint_url = f"https://{settings.mint_host}:{settings.mint_port}"
+
+    # backwards compatibility: set socks_proxy from socks_host and socks_port
+    if settings.socks_host and settings.socks_port:
+        settings.socks_proxy = f"socks5://{settings.socks_host}:{settings.socks_port}"
 
 
 startup_settings_tasks()
