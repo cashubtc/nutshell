@@ -2,10 +2,6 @@ import base64
 import hashlib
 import random
 
-COIN = 100_000_000
-TXID = "bff785da9f8169f49be92fa95e31f0890c385bfb1bd24d6b94d7900057c617ae"
-SEED = b"__not__used"
-
 from bitcoin.core import CMutableTxIn, CMutableTxOut, COutPoint, CTransaction, lx
 from bitcoin.core.script import *
 from bitcoin.core.script import CScript
@@ -16,6 +12,10 @@ from bitcoin.core.scripteval import (
     VerifyScriptError,
 )
 from bitcoin.wallet import CBitcoinSecret, P2SHBitcoinAddress
+
+COIN = 100_000_000
+TXID = "bff785da9f8169f49be92fa95e31f0890c385bfb1bd24d6b94d7900057c617ae"
+SEED = b"__not__used"
 
 
 def step0_carol_privkey():
