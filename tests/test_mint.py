@@ -1,5 +1,6 @@
-import pytest
 from typing import List
+
+import pytest
 
 from cashu.core.base import BlindedMessage, Proof
 from cashu.core.crypto.b_dhke import step1_alice
