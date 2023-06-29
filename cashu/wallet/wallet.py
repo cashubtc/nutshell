@@ -5,7 +5,7 @@ import secrets as scrts
 import time
 import uuid
 from itertools import groupby
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import requests
 from loguru import logger
@@ -74,21 +74,22 @@ def async_set_requests(func):
         self.s.headers.update({"Client-version": settings.version})
         if settings.debug:
             self.s.verify = False
-        socks_host, socks_port = None, None
+
+        # set proxy
+        proxy_url: Union[str, None] = None
         if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
             self.tor.run_daemon(verbose=True)
-            socks_host, socks_port = "localhost", 9050
-        else:
-            socks_host, socks_port = settings.socks_host, settings.socks_port
+            proxy_url = f"socks5://localhost:9050"
+        elif settings.socks_proxy:
+            proxy_url = f"socks5://{settings.socks_proxy}"
+        elif settings.http_proxy:
+            proxy_url = settings.http_proxy
+        if proxy_url:
+            self.s.proxies.update({"http": proxy_url})
+            self.s.proxies.update({"https": proxy_url})
 
-        if socks_host and socks_port:
-            proxies = {
-                "http": f"socks5://{socks_host}:{socks_port}",
-                "https": f"socks5://{socks_host}:{socks_port}",
-            }
-            self.s.proxies.update(proxies)
-            self.s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
+        self.s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
         return await func(self, *args, **kwargs)
 
     return wrapper

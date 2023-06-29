@@ -644,10 +644,12 @@ async def info(ctx: Context, mint: bool):
             client = NostrClient(private_key=settings.nostr_private_key, connect=False)
             print(f"Nostr public key: {client.public_key.bech32()}")
             print(f"Nostr relays: {settings.nostr_relays}")
-        except Exception:
-            print("Nostr: Error. Invalid key.")
-    if settings.socks_host:
-        print(f"Socks proxy: {settings.socks_host}:{settings.socks_port}")
+        except:
+            print(f"Nostr: Error. Invalid key.")
+    if settings.socks_proxy:
+        print(f"Socks proxy: {settings.socks_proxy}")
+    if settings.http_proxy:
+        print(f"HTTP proxy: {settings.http_proxy}")
     print(f"Mint URL: {ctx.obj['HOST']}")
     if mint:
         wallet: Wallet = ctx.obj["WALLET"]

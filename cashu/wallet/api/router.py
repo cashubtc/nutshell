@@ -405,10 +405,6 @@ async def info():
     else:
         nostr_public_key = None
         nostr_relays = []
-    if settings.socks_host:
-        socks_proxy = settings.socks_host + ":" + str(settings.socks_host)
-    else:
-        socks_proxy = None
     return InfoResponse(
         version=settings.version,
         wallet=wallet.name,
@@ -419,5 +415,5 @@ async def info():
         tor=settings.tor,
         nostr_public_key=nostr_public_key,
         nostr_relays=nostr_relays,
-        socks_proxy=socks_proxy,
+        socks_proxy=settings.socks_proxy,
     )
