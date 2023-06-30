@@ -248,8 +248,10 @@ async def test_split_with_secret(wallet1: Wallet):
     w1_frst_proofs, w1_scnd_proofs = await wallet1.split(
         wallet1.proofs, 32, secret_lock=secret
     )
-    # check if index prefix is in secret
-    assert w1_scnd_proofs[0].secret == "0:" + secret
+    # check if secret is in the proofs to send
+    assert w1_scnd_proofs[0].secret.startswith(secret)
+    # check if secret is not in the proofs to keep
+    assert not w1_frst_proofs[0].secret.startswith(secret)
 
 
 @pytest.mark.asyncio
