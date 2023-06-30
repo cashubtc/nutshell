@@ -211,7 +211,7 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(private_key_amount, C, proof.secret)
 
-    def _verify_script(self, idx: int, proof: Proof) -> bool:
+    def _verify_script(self, proof: Proof) -> bool:
         """
         Verify bitcoin script in proof.script commited to by <address> in proof.secret.
 
@@ -547,7 +547,7 @@ class Ledger:
             Exception: BDHKE verification failed.
         """
         # Verify scripts
-        if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
+        if not all([self._verify_script(p) for p in proofs]):
             raise Exception("script validation failed.")
         # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):

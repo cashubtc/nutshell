@@ -3,9 +3,7 @@ import hashlib
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 
 
-def sign_p2pk_pubkey(private_key: PrivateKey):
-    assert private_key.pubkey
-    message = private_key.pubkey.serialize()
+def sign_p2pk_sign(message: bytes, private_key: PrivateKey):
     signature = private_key.ecdsa_serialize(private_key.ecdsa_sign(message))
     return signature.hex()
 

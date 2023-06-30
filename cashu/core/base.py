@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
+from .p2pk import sign_p2pk_sign
 
 # ------- PROOFS -------
 
@@ -175,6 +176,19 @@ class PostSplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
     outputs: List[BlindedMessage]
+    signature: Optional[str] = None
+
+    def sign(self, private_key: PrivateKey):
+        """
+        Create a signed split request. The signature is over the `proofs` and `outputs` fields.
+        """
+        # message = json.dumps(self.proofs).encode("utf-8") + json.dumps(
+        #     self.outputs
+        # ).encode("utf-8")
+        message = json.dumps(self.dict(include={"proofs": ..., "outputs": ...})).encode(
+            "utf-8"
+        )
+        self.signature = sign_p2pk_sign(message, private_key)
 
 
 class PostSplitResponse(BaseModel):

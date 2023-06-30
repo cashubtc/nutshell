@@ -41,7 +41,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
-from ..core.p2pk import sign_p2pk_pubkey
+from ..core.p2pk import sign_p2pk_sign
 from ..core.script import (
     step0_carol_checksig_redeemscrip,
     step0_carol_privkey,
@@ -473,6 +473,11 @@ class LedgerAPI:
         outputs, rs = self._construct_outputs(amounts, secrets)
         split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
 
+        # sign split transaction
+        split_payload.sign(
+            PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
+        )
+
         # construct payload
         def _splitrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
@@ -481,6 +486,7 @@ class LedgerAPI:
                 "amount": ...,
                 "outputs": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
+                "signature": ...,
             }
 
         resp = self.s.post(
@@ -1015,8 +1021,10 @@ class Wallet(LedgerAPI):
         return public_key.serialize().hex()
 
     async def sign_p2pk_with_privatekey(self):
-        return sign_p2pk_pubkey(
-            PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
+        private_key = PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
+        assert private_key.pubkey
+        return sign_p2pk_sign(
+            message=private_key.pubkey.serialize(), private_key=private_key
         )
 
     # ---------- BALANCE CHECKS ----------

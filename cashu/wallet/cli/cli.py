@@ -513,26 +513,26 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
 
 @cli.command("lock", help="Generate receiving lock.")
 @click.option(
-    "--p2pk",
+    "--p2sh",
     "-p",
     default=False,
     is_flag=True,
-    help="Create P2PK lock.",
+    help="Create P2SH lock.",
     type=bool,
 )
 @click.pass_context
 @coro
-async def lock(ctx, p2pk):
+async def lock(ctx, p2sh):
     wallet: Wallet = ctx.obj["WALLET"]
-    if p2pk:
-        pubkey = await wallet.create_p2pk_lock()
-        lock_str = f"P2PK:{pubkey}"
-        print("---- Pay to public key (P2PK) ----\n")
-    else:
+    if p2sh:
         p2shscript = await wallet.create_p2sh_lock()
         txin_p2sh_address = p2shscript.address
         lock_str = f"P2SH:{txin_p2sh_address}"
         print("---- Pay to script hash (P2SH) ----\n")
+    else:
+        pubkey = await wallet.create_p2pk_lock()
+        lock_str = f"P2PK:{pubkey}"
+        print("---- Pay to public key (P2PK) ----\n")
 
     print("Use a lock to receive tokens that only you can unlock.")
     print("")
@@ -550,12 +550,18 @@ async def lock(ctx, p2pk):
 @coro
 async def locks(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
+    # P2PK lock
+    pubkey = await wallet.create_p2pk_lock()
+    lock_str = f"P2PK:{pubkey}"
+    print("---- Pay to public key (P2PK) lock ----\n")
+    print(f"Lock: {lock_str}")
+    # P2SH locks
     locks = await get_unused_locks(db=wallet.db)
     if len(locks):
         print("")
-        print(f"--------------------------\n")
+        print("---- Pay to script hash (P2SH) locks ----\n")
         for l in locks:
-            print(f"Address: {l.address}")
+            print(f"Lock: P2SH:{l.address}")
             print(f"Script: {l.script}")
             print(f"Signature: {l.signature}")
             print("")
