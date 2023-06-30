@@ -246,7 +246,7 @@ async def test_split_with_secret(wallet1: Wallet):
     await wallet1.mint(64)
     secret = f"asdasd_{time.time()}"
     w1_frst_proofs, w1_scnd_proofs = await wallet1.split(
-        wallet1.proofs, 32, scnd_secret=secret
+        wallet1.proofs, 32, secret_lock=secret
     )
     # check if index prefix is in secret
     assert w1_scnd_proofs[0].secret == "0:" + secret
