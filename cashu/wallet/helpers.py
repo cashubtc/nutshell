@@ -1,6 +1,8 @@
 import base64
 import json
 import os
+from datetime import datetime, timedelta
+from typing import Optional
 
 import click
 from loguru import logger
@@ -24,8 +26,8 @@ async def init_wallet(wallet: Wallet, load_proofs: bool = True):
 async def redeem_TokenV3_multimint(
     wallet: Wallet,
     token: TokenV3,
-    script,
-    signature,
+    script: Optional[str] = None,
+    signature: Optional[str] = None,
 ):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
@@ -44,7 +46,9 @@ async def redeem_TokenV3_multimint(
             # redeem proofs of this keyset
             redeem_proofs = [p for p in t.proofs if p.id == keyset]
             _, _ = await mint_wallet.redeem(
-                redeem_proofs, scnd_script=script, scnd_siganture=signature
+                redeem_proofs,
+                secret_lock_script=script,
+                secret_lock_signature=signature,
             )
             print(f"Received {sum_proofs(redeem_proofs)} sats")
 
@@ -113,20 +117,19 @@ def deserialize_token_from_string(token: str) -> TokenV3:
 async def receive(
     wallet: Wallet,
     tokenObj: TokenV3,
-    lock: str,
 ):
-    # check for P2SH locks
-    if lock:
-        # load the script and signature of this address from the database
-        assert len(lock.split("P2SH:")) == 2, Exception(
-            "lock has wrong format. Expected P2SH:<address>."
-        )
-        address_split = lock.split("P2SH:")[1]
+    # load for P2SH scripts and and sign P2PK locks
+    script, signature = None, None
+
+    # P2SH scripts
+    if all([p.secret.startswith("P2SH:") for p in tokenObj.token[0].proofs]):
+        address_split = tokenObj.token[0].proofs[0].secret.split(":")[1]
         p2shscripts = await get_unused_locks(address_split, db=wallet.db)
         assert len(p2shscripts) == 1, Exception("lock not found.")
         script, signature = p2shscripts[0].script, p2shscripts[0].signature
-    else:
-        script, signature = None, None
+    # P2PK signatures
+    elif all([p.secret.startswith("P2PK:") for p in tokenObj.token[0].proofs]):
+        signature = await wallet.sign_p2pk_with_privatekey()
 
     includes_mint_info: bool = any([t.mint for t in tokenObj.token])
 
@@ -174,9 +177,18 @@ async def send(
         assert len(lock) > 21, Exception(
             "Error: lock has to be at least 22 characters long."
         )
-    p2sh = False
-    if lock and len(lock.split("P2SH:")) == 2:
-        p2sh = True
+        if not lock.startswith("P2SH:") and not lock.startswith("P2PK:"):
+            raise Exception("Error: lock has to start with P2SH: or P2PK:")
+        # we add a time lock to the P2PK lock by appending the current unix time + 14 days
+        # we use datetime because it's easier to read
+        if lock.startswith("P2PK:"):
+            lock = (
+                lock
+                + ":"
+                + str(int((datetime.now() + timedelta(hours=24)).timestamp()))
+            )
+            # we also add some op_return data to the P2PK lock
+            lock += ":additional_commitmens"
 
     await wallet.load_proofs()
     if split:

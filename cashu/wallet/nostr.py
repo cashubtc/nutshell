@@ -123,7 +123,6 @@ async def receive_nostr(
                 receive(
                     wallet,
                     decrypted_content,
-                    "",
                 )
             )
         except Exception as e:

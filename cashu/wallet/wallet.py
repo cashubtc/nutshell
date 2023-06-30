@@ -41,6 +41,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
+from ..core.p2pk import sign_p2pk_pubkey
 from ..core.script import (
     step0_carol_checksig_redeemscrip,
     step0_carol_privkey,
@@ -259,7 +260,7 @@ class LedgerAPI:
                 raise Exception(f"secret already used: {s}")
         logger.trace("Secret check complete.")
 
-    def generate_secrets(self, secret, n) -> List[str]:
+    def generate_locked_secrets(self, secret, n) -> List[str]:
         """`secret` is the base string that will be tweaked n times
 
         Args:
@@ -269,9 +270,7 @@ class LedgerAPI:
         Returns:
             List[str]: List of secrets
         """
-        if len(secret.split("P2SH:")) == 2:
-            return [f"{secret}:{self._generate_secret()}" for i in range(n)]
-        return [f"{i}:{secret}" for i in range(n)]
+        return [f"{secret}:{self._generate_secret()}" for i in range(n)]
 
     """
     ENDPOINTS
@@ -438,14 +437,14 @@ class LedgerAPI:
 
     @async_set_requests
     async def split(
-        self, proofs, amount, scnd_secret: Optional[str] = None
+        self, proofs, amount, secret_lock: Optional[str] = None
     ) -> Tuple[List[Proof], List[Proof]]:
         """Consume proofs and create new promises based on amount split.
 
-        If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
+        If secret_lock is None, random secrets will be generated for the tokens to keep (frst_outputs)
         and the promises to send (scnd_outputs).
 
-        If scnd_secret is provided, the wallet will create blinded secrets with those to attach a
+        If secret_lock is provided, the wallet will create blinded secrets with those to attach a
         predefined spending condition to the tokens they want to send."""
         logger.debug("Calling split. POST /split")
         total = sum_proofs(proofs)
@@ -454,18 +453,18 @@ class LedgerAPI:
         scnd_outputs = amount_split(scnd_amt)
 
         amounts = frst_outputs + scnd_outputs
-        if scnd_secret is None:
+        if secret_lock is None:
             secrets = [self._generate_secret() for _ in range(len(amounts))]
         else:
-            scnd_secrets = self.generate_secrets(scnd_secret, len(scnd_outputs))
-            logger.debug(f"Creating proofs with custom secrets: {scnd_secrets}")
-            assert len(scnd_secrets) == len(
+            secret_locks = self.generate_locked_secrets(secret_lock, len(scnd_outputs))
+            logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
+            assert len(secret_locks) == len(
                 scnd_outputs
-            ), "number of scnd_secrets does not match number of ouptus."
+            ), "number of secret_locks does not match number of ouptus."
             # append predefined secrets (to send) to random secrets (to keep)
             secrets = [
                 self._generate_secret() for s in range(len(frst_outputs))
-            ] + scnd_secrets
+            ] + secret_locks
 
         assert len(secrets) == len(
             amounts
@@ -477,7 +476,7 @@ class LedgerAPI:
         # construct payload
         def _splitrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
-            proofs_include = {"id", "amount", "secret", "C", "script"}
+            proofs_include = {"id", "amount", "secret", "C", "script", "p2pksig"}
             return {
                 "amount": ...,
                 "outputs": ...,
@@ -651,24 +650,33 @@ class Wallet(LedgerAPI):
     async def redeem(
         self,
         proofs: List[Proof],
-        scnd_script: Optional[str] = None,
-        scnd_siganture: Optional[str] = None,
+        secret_lock_script: Optional[str] = None,
+        secret_lock_signature: Optional[str] = None,
     ):
-        if scnd_script and scnd_siganture:
-            logger.debug(f"Unlock script: {scnd_script}")
+        # P2SH
+        if secret_lock_script and secret_lock_signature:
+            logger.debug(f"Unlock script: {secret_lock_script}")
             # attach unlock scripts to proofs
             for p in proofs:
-                p.script = P2SHScript(script=scnd_script, signature=scnd_siganture)
+                p.script = P2SHScript(
+                    script=secret_lock_script, signature=secret_lock_signature
+                )
+        # P2PKH
+        elif secret_lock_signature:
+            logger.debug(f"Unlock signature: {secret_lock_signature}")
+            # attach unlock signatures to proofs
+            for p in proofs:
+                p.p2pksig = secret_lock_signature
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
         self,
         proofs: List[Proof],
         amount: int,
-        scnd_secret: Optional[str] = None,
+        secret_lock: Optional[str] = None,
     ):
         assert len(proofs) > 0, ValueError("no proofs provided.")
-        frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
+        frst_proofs, scnd_proofs = await super().split(proofs, amount, secret_lock)
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
 
@@ -957,7 +965,7 @@ class Wallet(LedgerAPI):
         self,
         proofs: List[Proof],
         amount: int,
-        scnd_secret: Optional[str] = None,
+        secret_lock: Optional[str] = None,
         set_reserved: bool = False,
     ):
         """
@@ -966,17 +974,17 @@ class Wallet(LedgerAPI):
         Args:
             proofs (List[Proof]): Proofs to split
             amount (int): Amount to split to
-            scnd_secret (Optional[str], optional): If set, a custom secret is used to lock new outputs. Defaults to None.
+            secret_lock (Optional[str], optional): If set, a custom secret is used to lock new outputs. Defaults to None.
             set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
             is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
             displayed to the user to be then sent to someone else. Defaults to False.
         """
-        if scnd_secret:
-            logger.debug(f"Spending conditions: {scnd_secret}")
+        if secret_lock:
+            logger.debug(f"Spending conditions: {secret_lock}")
         spendable_proofs = await self._select_proofs_to_send(proofs, amount)
 
         keep_proofs, send_proofs = await self.split(
-            spendable_proofs, amount, scnd_secret
+            spendable_proofs, amount, secret_lock
         )
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
@@ -998,6 +1006,18 @@ class Wallet(LedgerAPI):
         )
         await store_p2sh(p2shScript, db=self.db)
         return p2shScript
+
+    async def create_p2pk_lock(self):
+        public_key = PrivateKey(
+            bytes.fromhex(settings.nostr_private_key), raw=True
+        ).pubkey
+        assert public_key
+        return public_key.serialize().hex()
+
+    async def sign_p2pk_with_privatekey(self):
+        return sign_p2pk_pubkey(
+            PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
+        )
 
     # ---------- BALANCE CHECKS ----------
 

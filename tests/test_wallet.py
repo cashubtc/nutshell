@@ -277,7 +277,9 @@ async def no_test_p2sh(wallet1: Wallet, wallet2: Wallet):
     assert send_proofs[0].secret.startswith("P2SH:")
 
     frst_proofs, scnd_proofs = await wallet2.redeem(
-        send_proofs, scnd_script=p2shscript.script, scnd_siganture=p2shscript.signature
+        send_proofs,
+        secret_lock_script=p2shscript.script,
+        secret_lock_signature=p2shscript.signature,
     )
     assert len(frst_proofs) == 0
     assert len(scnd_proofs) == 1
@@ -298,7 +300,9 @@ async def test_p2sh_receive_wrong_script(wallet1: Wallet, wallet2: Wallet):
 
     await assert_err(
         wallet2.redeem(
-            send_proofs, scnd_script=wrong_script, scnd_siganture=p2shscript.signature
+            send_proofs,
+            secret_lock_script=wrong_script,
+            secret_lock_signature=p2shscript.signature,
         ),
         "Mint Error: ('Script verification failed:', VerifyScriptError('scriptPubKey returned false'))",
     )
@@ -318,7 +322,9 @@ async def test_p2sh_receive_wrong_signature(wallet1: Wallet, wallet2: Wallet):
 
     await assert_err(
         wallet2.redeem(
-            send_proofs, scnd_script=p2shscript.script, scnd_siganture=wrong_signature
+            send_proofs,
+            secret_lock_script=p2shscript.script,
+            secret_lock_signature=wrong_signature,
         ),
         "Mint Error: ('Script evaluation failed:', EvalScriptError('EvalScript: OP_RETURN called'))",
     )

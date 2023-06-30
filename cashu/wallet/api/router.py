@@ -220,7 +220,6 @@ async def send_command(
 @router.post("/receive", name="Receive tokens", response_model=ReceiveResponse)
 async def receive_command(
     token: str = Query(default=None, description="Token to receive"),
-    lock: str = Query(default=None, description="Unlock tokens"),
     nostr: bool = Query(default=False, description="Receive tokens via nostr"),
     all: bool = Query(default=False, description="Receive all pending tokens"),
 ):
@@ -228,7 +227,7 @@ async def receive_command(
     if token:
         tokenObj: TokenV3 = deserialize_token_from_string(token)
         await verify_mints(wallet, tokenObj)
-        balance = await receive(wallet, tokenObj, lock)
+        balance = await receive(wallet, tokenObj)
     elif nostr:
         await receive_nostr(wallet)
         balance = wallet.available_balance
@@ -241,7 +240,7 @@ async def receive_command(
                 token = await wallet.serialize_proofs(proofs)
                 tokenObj = deserialize_token_from_string(token)
                 await verify_mints(wallet, tokenObj)
-                balance = await receive(wallet, tokenObj, lock)
+                balance = await receive(wallet, tokenObj)
     else:
         raise Exception("enter token or use either flag --nostr or --all.")
     assert balance

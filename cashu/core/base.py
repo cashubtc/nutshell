@@ -34,6 +34,7 @@ class Proof(BaseModel):
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
+    p2pksig: Optional[str] = None  # P2PK signature
     script: Union[P2SHScript, None] = None  # P2SH spending condition
     reserved: Union[
         None, bool
