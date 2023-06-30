@@ -279,7 +279,9 @@ class Ledger:
         """
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
-        assert sum_outputs - sum_inputs == 0
+        assert (
+            sum_outputs - sum_inputs == 0
+        ), "inputs do not have same amount as outputs"
 
     async def _request_lightning_invoice(self, amount: int):
         """Generate a Lightning invoice using the funding source backend.

@@ -677,7 +677,9 @@ class Wallet(LedgerAPI):
         amount: int,
         scnd_secret: Optional[str] = None,
     ):
-        assert len(proofs) > 0, ValueError("no proofs provided.")
+        assert len(proofs) > 0, "no proofs provided."
+        assert sum_proofs(proofs) >= amount, "amount too high."
+        assert amount > 0, "amount must be positive."
         frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
