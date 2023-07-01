@@ -268,8 +268,8 @@ async def test_p2pk(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
-    # p2pk test
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
+    # sender side
     secret_lock = Secret(
         kind=SecretKind.P2PK,
         data=pubkey_wallet2,
@@ -277,6 +277,7 @@ async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wal
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
+    # receiver side: wrong private key
     settings.nostr_private_key = secrets.token_hex(32)  # wrong private key
     await assert_err(wallet1.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
 
@@ -284,11 +285,10 @@ async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wal
 @pytest.mark.asyncio
 async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    # p2sh test
-    _ = await wallet1.create_p2sh_address_and_store()
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8)
+    _ = await wallet1.create_p2sh_address_and_store()  # receiver side
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8)  # sender side
 
-    frst_proofs, scnd_proofs = await wallet2.redeem(send_proofs)
+    frst_proofs, scnd_proofs = await wallet2.redeem(send_proofs)  # receiver side
     assert len(frst_proofs) == 0
     assert len(scnd_proofs) == 1
     assert sum_proofs(scnd_proofs) == 8
@@ -298,8 +298,9 @@ async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    # p2sh test
-    wallet1_address = await wallet1.create_p2sh_address_and_store()
-    secret_lock = await wallet1.create_p2sh_lock(wallet1_address)
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock)
-    await assert_err(wallet2.redeem(send_proofs), "lock not found.")
+    wallet1_address = await wallet1.create_p2sh_address_and_store()  # receiver side
+    secret_lock = await wallet1.create_p2sh_lock(wallet1_address)  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock
+    )  # sender side
+    await assert_err(wallet2.redeem(send_proofs), "lock not found.")  # wrong receiver
