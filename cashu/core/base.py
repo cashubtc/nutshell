@@ -29,16 +29,16 @@ class Secret(BaseModel):
     tags: Union[None, List[List[str]]] = None
 
     def serialize(self) -> str:
+        data_dict: Dict[str, Any] = {
+            "data": self.data,
+            "nonce": self.nonce or PrivateKey().serialize()[:32],
+        }
+        if self.timelock:
+            data_dict["timelock"] = self.timelock
+        if self.tags:
+            data_dict["tags"] = self.tags
         return json.dumps(
-            [
-                self.kind,
-                {
-                    "data": self.data,
-                    "nonce": self.nonce or PrivateKey().serialize()[:32],
-                    "timelock": self.timelock,
-                    "tags": self.tags,
-                },
-            ]
+            [self.kind, data_dict],
         )
 
     @classmethod

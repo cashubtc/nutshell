@@ -310,23 +310,6 @@ async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
     assert wallet2.balance == 8
 
 
-# @pytest.mark.asyncio
-# async def test_p2sh_short_timelock_receive_with_another_wallet(
-#     wallet1: Wallet, wallet2: Wallet
-# ):
-#     await wallet1.mint(64)
-#     wallet1_address = await wallet1.create_p2sh_address_and_store()  # receiver side
-#     secret_lock = await wallet1.create_p2sh_lock(
-#         wallet1_address, timelock=5
-#     )  # sender side
-#     _, send_proofs = await wallet1.split_to_send(
-#         wallet1.proofs, 8, secret_lock
-#     )  # sender side
-#     await assert_err(wallet2.redeem(send_proofs), "lock not found.")  # wrong receiver
-#     await asyncio.sleep(6)
-#     await wallet2.redeem(send_proofs)  # receiver side
-
-
 @pytest.mark.asyncio
 async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
