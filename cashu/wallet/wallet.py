@@ -565,6 +565,8 @@ class LedgerAPI:
 class Wallet(LedgerAPI):
     """Minimal wallet wrapper."""
 
+    private_key: Optional[PrivateKey] = None
+
     def __init__(self, url: str, db: str, name: str = "no_name"):
         super().__init__(url)
         self.db = Database("wallet", db)
@@ -573,13 +575,15 @@ class Wallet(LedgerAPI):
         logger.debug(f"Wallet initalized with mint URL {url}")
 
         # temporarily, we use the NostrClient to generate keys
-        self.private_key = (
-            NostrClient(
+        try:
+            nostr_pk = NostrClient(
                 private_key=settings.nostr_private_key, connect=False
             ).private_key
-            if settings.nostr_private_key
-            else None
-        )
+            self.private_key = (
+                PrivateKey(bytes.fromhex(nostr_pk.hex()), raw=True) or None
+            )
+        except Exception as e:
+            pass
 
     # ---------- API ----------
 
@@ -1047,7 +1051,7 @@ class Wallet(LedgerAPI):
         assert (
             self.private_key
         ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
-        public_key = PrivateKey(bytes.fromhex(self.private_key.hex()), raw=True).pubkey
+        public_key = self.private_key.pubkey
         # logger.debug(f"Private key: {self.private_key.bech32()}")
         assert public_key
         return public_key.serialize().hex()
@@ -1086,7 +1090,7 @@ class Wallet(LedgerAPI):
         assert (
             self.private_key
         ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
-        private_key = PrivateKey(bytes.fromhex(self.private_key.hex()), raw=True)
+        private_key = self.private_key
         assert private_key.pubkey
         return [
             sign_p2pk_sign(

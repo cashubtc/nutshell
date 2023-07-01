@@ -273,7 +273,7 @@ async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wal
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # receiver side: wrong private key
-    settings.nostr_private_key = secrets.token_hex(32)  # wrong private key
+    wallet1.private_key = PrivateKey()  # wrong private key
     await assert_err(wallet1.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
 
 
@@ -291,7 +291,7 @@ async def test_p2pk_short_timelock_receive_with_wrong_private_key(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # receiver side: wrong private key
-    settings.nostr_private_key = secrets.token_hex(32)  # wrong private key
+    wallet1.private_key = PrivateKey()  # wrong private key
     await assert_err(wallet1.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
     await asyncio.sleep(6)
     await wallet1.redeem(send_proofs)
