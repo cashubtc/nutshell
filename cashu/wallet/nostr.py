@@ -3,6 +3,7 @@ import threading
 import time
 
 import click
+from loguru import logger
 from requests.exceptions import ConnectionError
 
 from ..core.settings import settings
@@ -10,7 +11,7 @@ from ..nostr.nostr.client.client import NostrClient
 from ..nostr.nostr.event import Event
 from ..nostr.nostr.key import PublicKey
 from .crud import get_nostr_last_check_timestamp, set_nostr_last_check_timestamp
-from .helpers import receive
+from .helpers import receive, deserialize_token_from_string
 from .wallet import Wallet
 
 
@@ -95,7 +96,6 @@ async def send_nostr(
 
 async def receive_nostr(
     wallet: Wallet,
-    verbose: bool = False,
 ):
     if settings.nostr_private_key is None:
         print(
@@ -107,33 +107,34 @@ async def receive_nostr(
         private_key=settings.nostr_private_key, relays=settings.nostr_relays
     )
     print(f"Your nostr public key: {client.public_key.bech32()}")
-    if verbose:
-        print(f"Your nostr private key (do not share!): {client.private_key.bech32()}")
+    # print(f"Your nostr private key (do not share!): {client.private_key.bech32()}")
     await asyncio.sleep(2)
 
     def get_token_callback(event: Event, decrypted_content):
-        if verbose:
-            print(
-                f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
-            )
+        logger.debug(
+            f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
+        )
         try:
             # call the receive method
-
+            tokenObj = deserialize_token_from_string(decrypted_content)
             asyncio.run(
                 receive(
                     wallet,
-                    decrypted_content,
+                    tokenObj,
                 )
             )
         except Exception as e:
+            logger.error(e)
             pass
 
     # determine timestamp of last check so we don't scan all historical DMs
     last_check = await get_nostr_last_check_timestamp(db=wallet.db)
+    logger.debug(f"Last check: {last_check}")
     if last_check:
         last_check -= 60 * 60  # 1 hour tolerance
-    await set_nostr_last_check_timestamp(timestamp=int(time.time()), db=wallet.db)
 
+    await set_nostr_last_check_timestamp(timestamp=int(time.time()), db=wallet.db)
+    logger.debug("Starting Nostr DM thread")
     t = threading.Thread(
         target=client.get_dm,
         args=(client.public_key, get_token_callback, {"since": last_check}),

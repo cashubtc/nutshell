@@ -109,6 +109,7 @@ async def receive(
     wallet: Wallet,
     tokenObj: TokenV3,
 ):
+    logger.debug(f"receive: {tokenObj}")
     proofs = [p for t in tokenObj.token for p in t.proofs]
 
     includes_mint_info: bool = any([t.mint for t in tokenObj.token])

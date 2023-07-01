@@ -353,14 +353,6 @@ async def send_command(
 @click.option(
     "--all", "-a", default=False, is_flag=True, help="Receive all pending tokens."
 )
-@click.option(
-    "--verbose",
-    "-v",
-    help="Display more information.",
-    is_flag=True,
-    default=False,
-    type=bool,
-)
 @click.pass_context
 @coro
 async def receive_cli(
@@ -368,7 +360,6 @@ async def receive_cli(
     token: str,
     nostr: bool,
     all: bool,
-    verbose: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
 
@@ -384,7 +375,7 @@ async def receive_cli(
 
         await receive(wallet, tokenObj)
     elif nostr:
-        await receive_nostr(wallet, verbose)
+        await receive_nostr(wallet)
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
