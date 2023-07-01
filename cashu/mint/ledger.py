@@ -1,4 +1,5 @@
 import asyncio
+import json
 import math
 import time
 from typing import Dict, List, Literal, Optional, Set, Union
@@ -225,20 +226,21 @@ class Ledger:
                 or proof.script.signature is None
             ):
                 # no script present although secret indicates one
-                return False
+                raise Exception("no script in proof.")
 
             # execute and verify P2SH
             txin_p2sh_address, valid = verify_script(
                 proof.script.script, proof.script.signature
             )
-            if valid:
-                # check if secret commits to script address
-                # format: P2SH:<address>:<secret>
-                assert len(proof.secret.split(":")) == 3, "secret format invalid."
-                assert proof.secret.split(":")[1] == str(
-                    txin_p2sh_address
-                ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]} is not {txin_p2sh_address}."
-            return valid
+            if not valid:
+                raise Exception("script invalid.")
+            # check if secret commits to script address
+            # format: P2SH:<address>:<secret>
+            assert len(proof.secret.split(":")) == 3, "secret format invalid."
+            assert proof.secret.split(":")[1] == str(
+                txin_p2sh_address
+            ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]} is not {txin_p2sh_address}."
+            return True
 
         # P2PK
         # proof.secret format: P2PK:<address>:<secret>
@@ -251,14 +253,14 @@ class Ledger:
             # check if timelock is in the past
             now = time.time()
             if timelock < now:
-                logger.debug(f"p2pk timelock ran out ({timelock}<{now}).")
+                logger.trace(f"p2pk timelock ran out ({timelock}<{now}).")
                 return True
-            logger.debug(f"p2pk timelock still active ({timelock}>{now}).")
 
+            logger.trace(f"p2pk timelock still active ({timelock}>{now}).")
             # now we check the signature
             if not proof.p2pksig:
                 # no signature present although secret indicates one
-                return False
+                raise Exception("no p2pk signature in proof.")
 
             # we parse the secret as a P2PK commitment
             assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
@@ -267,14 +269,16 @@ class Ledger:
             # check signature proof.p2pksig against pubkey
             # we expect the signature to be on the pubkey (=message) itself
             assert verify_p2pk_signature(
-                message=PublicKey(bytes.fromhex(pubkey), raw=True).serialize(),
+                message=proof.secret.encode("utf-8"),
                 pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
                 signature=bytes.fromhex(proof.p2pksig),
             ), "p2pk signature invalid."
-            logger.debug("p2pk signature valid.")
+            logger.trace(proof.p2pksig)
+            logger.trace("p2pk signature valid.")
 
             return True
 
+        # no spending contition
         return True
 
     def _verify_outputs(

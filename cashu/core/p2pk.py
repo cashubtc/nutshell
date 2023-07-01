@@ -9,7 +9,7 @@ def sign_p2pk_sign(message: bytes, private_key: PrivateKey):
 
 
 def verify_p2pk_signature(message: bytes, pubkey: PublicKey, signature: bytes):
-    return pubkey.ecdsa_verify(message, pubkey_verify.ecdsa_deserialize(signature))
+    return pubkey.ecdsa_verify(message, pubkey.ecdsa_deserialize(signature))
 
 
 if __name__ == "__main__":

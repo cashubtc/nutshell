@@ -473,10 +473,10 @@ class LedgerAPI:
         outputs, rs = self._construct_outputs(amounts, secrets)
         split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
 
-        # sign split transaction
-        split_payload.sign(
-            PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
-        )
+        # # sign split transaction
+        # split_payload.sign(
+        #     PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
+        # )
 
         # construct payload
         def _splitrequest_include_fields(proofs):
@@ -486,7 +486,7 @@ class LedgerAPI:
                 "amount": ...,
                 "outputs": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
-                "signature": ...,
+                # "signature": ...,
             }
 
         resp = self.s.post(
@@ -658,6 +658,7 @@ class Wallet(LedgerAPI):
         proofs: List[Proof],
         secret_lock_script: Optional[str] = None,
         secret_lock_signature: Optional[str] = None,
+        secret_p2pk_signatures: Optional[List[str]] = None,
     ):
         # P2SH
         if secret_lock_script and secret_lock_signature:
@@ -668,11 +669,14 @@ class Wallet(LedgerAPI):
                     script=secret_lock_script, signature=secret_lock_signature
                 )
         # P2PKH
-        elif secret_lock_signature:
-            logger.debug(f"Unlock signature: {secret_lock_signature}")
+        elif secret_p2pk_signatures:
+            logger.debug(f"Unlock signature: {secret_p2pk_signatures}")
             # attach unlock signatures to proofs
-            for p in proofs:
-                p.p2pksig = secret_lock_signature
+            assert len(proofs) == len(
+                secret_p2pk_signatures
+            ), "wrong number of signatures"
+            for p, s in zip(proofs, secret_p2pk_signatures):
+                p.p2pksig = s
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
@@ -1020,12 +1024,15 @@ class Wallet(LedgerAPI):
         assert public_key
         return public_key.serialize().hex()
 
-    async def sign_p2pk_with_privatekey(self):
+    async def sign_p2pk_with_privatekey(self, proofs: List[Proof]) -> List[str]:
         private_key = PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
         assert private_key.pubkey
-        return sign_p2pk_sign(
-            message=private_key.pubkey.serialize(), private_key=private_key
-        )
+        return [
+            sign_p2pk_sign(
+                message=proof.secret.encode("utf-8"), private_key=private_key
+            )
+            for proof in proofs
+        ]
 
     # ---------- BALANCE CHECKS ----------
 

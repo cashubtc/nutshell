@@ -176,19 +176,19 @@ class PostSplitRequest(BaseModel):
     proofs: List[Proof]
     amount: int
     outputs: List[BlindedMessage]
-    signature: Optional[str] = None
+    # signature: Optional[str] = None
 
-    def sign(self, private_key: PrivateKey):
-        """
-        Create a signed split request. The signature is over the `proofs` and `outputs` fields.
-        """
-        # message = json.dumps(self.proofs).encode("utf-8") + json.dumps(
-        #     self.outputs
-        # ).encode("utf-8")
-        message = json.dumps(self.dict(include={"proofs": ..., "outputs": ...})).encode(
-            "utf-8"
-        )
-        self.signature = sign_p2pk_sign(message, private_key)
+    # def sign(self, private_key: PrivateKey):
+    #     """
+    #     Create a signed split request. The signature is over the `proofs` and `outputs` fields.
+    #     """
+    #     # message = json.dumps(self.proofs).encode("utf-8") + json.dumps(
+    #     #     self.outputs
+    #     # ).encode("utf-8")
+    #     message = json.dumps(self.dict(include={"proofs": ..., "outputs": ...})).encode(
+    #         "utf-8"
+    #     )
+    #     self.signature = sign_p2pk_sign(message, private_key)
 
 
 class PostSplitResponse(BaseModel):

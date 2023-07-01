@@ -2,7 +2,7 @@ import base64
 import json
 import os
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import List, Optional
 
 import click
 from loguru import logger
@@ -26,8 +26,9 @@ async def init_wallet(wallet: Wallet, load_proofs: bool = True):
 async def redeem_TokenV3_multimint(
     wallet: Wallet,
     token: TokenV3,
-    script: Optional[str] = None,
-    signature: Optional[str] = None,
+    secret_lock_script: Optional[str] = None,
+    secret_lock_signature: Optional[str] = None,
+    secret_p2pk_signatures: Optional[List[str]] = None,
 ):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
@@ -47,8 +48,9 @@ async def redeem_TokenV3_multimint(
             redeem_proofs = [p for p in t.proofs if p.id == keyset]
             _, _ = await mint_wallet.redeem(
                 redeem_proofs,
-                secret_lock_script=script,
-                secret_lock_signature=signature,
+                secret_lock_script=secret_lock_script,
+                secret_lock_signature=secret_lock_signature,
+                secret_p2pk_signatures=secret_p2pk_signatures,
             )
             print(f"Received {sum_proofs(redeem_proofs)} sats")
 
@@ -118,18 +120,20 @@ async def receive(
     wallet: Wallet,
     tokenObj: TokenV3,
 ):
+    proofs = [p for t in tokenObj.token for p in t.proofs]
+
     # load for P2SH scripts and and sign P2PK locks
-    script, signature = None, None
+    script, signature, p2pk_signatures = None, None, None
 
     # P2SH scripts
-    if all([p.secret.startswith("P2SH:") for p in tokenObj.token[0].proofs]):
-        address_split = tokenObj.token[0].proofs[0].secret.split(":")[1]
+    if all([p.secret.startswith("P2SH:") for p in proofs]):
+        address_split = proofs[0].secret.split(":")[1]
         p2shscripts = await get_unused_locks(address_split, db=wallet.db)
         assert len(p2shscripts) == 1, Exception("lock not found.")
         script, signature = p2shscripts[0].script, p2shscripts[0].signature
     # P2PK signatures
-    elif all([p.secret.startswith("P2PK:") for p in tokenObj.token[0].proofs]):
-        signature = await wallet.sign_p2pk_with_privatekey()
+    elif all([p.secret.startswith("P2PK:") for p in proofs]):
+        p2pk_signatures = await wallet.sign_p2pk_with_privatekey(proofs)
 
     includes_mint_info: bool = any([t.mint for t in tokenObj.token])
 
@@ -140,11 +144,11 @@ async def receive(
             tokenObj,
             script,
             signature,
+            p2pk_signatures,
         )
     else:
+        # this is very legacy code, virtually any token should have mint information
         # no mint information present, we extract the proofs and use wallet's default mint
-
-        proofs = [p for t in tokenObj.token for p in t.proofs]
         # first we load the mint URL from the DB
         keyset_in_token = proofs[0].id
         assert keyset_in_token
@@ -158,7 +162,7 @@ async def receive(
             os.path.join(settings.cashu_dir, wallet.name),
         )
         await mint_wallet.load_mint(keyset_in_token)
-        _, _ = await mint_wallet.redeem(proofs, script, signature)
+        _, _ = await mint_wallet.redeem(proofs, script, signature, p2pk_signatures)
         print(f"Received {sum_proofs(proofs)} sats")
 
     # reload main wallet so the balance updates
