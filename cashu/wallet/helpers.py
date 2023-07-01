@@ -111,19 +111,6 @@ async def receive(
 ):
     proofs = [p for t in tokenObj.token for p in t.proofs]
 
-    # load for P2SH scripts and and sign P2PK locks
-    # script, signature, p2pk_signatures = None, None, None
-
-    # # P2SH scripts
-    # if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
-    #     address_split = Secret.deserialize(proofs[0].secret).data
-    #     p2shscripts = await get_unused_locks(address_split, db=wallet.db)
-    #     assert len(p2shscripts) == 1, Exception("lock not found.")
-    #     script, signature = p2shscripts[0].script, p2shscripts[0].signature
-    # # P2PK signatures
-    # elif all([Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]):
-    #     p2pk_signatures = await wallet.sign_p2pk_with_privatekey(proofs)
-    # logger.debug(f"p2pk_signatures: {p2pk_signatures}")
     includes_mint_info: bool = any([t.mint for t in tokenObj.token])
 
     if includes_mint_info:
@@ -163,7 +150,7 @@ async def send(
     """
     Prints token to send to stdout.
     """
-    lock_secret = None
+    secret_lock = None
     if lock:
         assert len(lock) > 21, Exception(
             "Error: lock has to be at least 22 characters long."
@@ -177,24 +164,20 @@ async def send(
             logger.debug(
                 f"Adding a time lock of {settings.timelock_delta_seconds} seconds."
             )
-            kind = SecretKind.P2PK if lock.startswith("P2PK:") else SecretKind.P2SH
-            lock_secret = Secret(
-                kind=kind,
-                data=lock.split(":")[1],
-                timelock=int(
-                    (
-                        datetime.now()
-                        + timedelta(seconds=settings.timelock_delta_seconds)
-                    ).timestamp()
-                ),
-                tags=[["some", "tags"], ["another", "tag"]],
-            )
+            if lock.startswith("P2SH:"):
+                secret_lock = await wallet.create_p2sh_lock(
+                    lock.split(":")[1], timelock=settings.timelock_delta_seconds
+                )
+            elif lock.startswith("P2PK:"):
+                secret_lock = await wallet.create_p2pk_lock(
+                    lock.split(":")[1], timelock=settings.timelock_delta_seconds
+                )
 
     await wallet.load_proofs()
     if split:
         await wallet.load_mint()
         _, send_proofs = await wallet.split_to_send(
-            wallet.proofs, amount, lock_secret, set_reserved=True
+            wallet.proofs, amount, secret_lock, set_reserved=True
         )
     else:
         # get a proof with specific amount

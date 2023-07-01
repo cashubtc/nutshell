@@ -525,12 +525,11 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
 async def lock(ctx, p2sh):
     wallet: Wallet = ctx.obj["WALLET"]
     if p2sh:
-        p2shscript = await wallet.create_p2sh_lock()
-        txin_p2sh_address = p2shscript.address
-        lock_str = f"P2SH:{txin_p2sh_address}"
+        address = await wallet.create_p2sh_address_and_store()
+        lock_str = f"P2SH:{address}"
         print("---- Pay to script hash (P2SH) ----\n")
     else:
-        pubkey = await wallet.create_p2pk_lock()
+        pubkey = await wallet.create_p2pk_pubkey()
         lock_str = f"P2PK:{pubkey}"
         print("---- Pay to public key (P2PK) ----\n")
 
@@ -551,7 +550,7 @@ async def lock(ctx, p2sh):
 async def locks(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
     # P2PK lock
-    pubkey = await wallet.create_p2pk_lock()
+    pubkey = await wallet.create_p2pk_pubkey()
     lock_str = f"P2PK:{pubkey}"
     print("---- Pay to public key (P2PK) lock ----\n")
     print(f"Lock: {lock_str}")

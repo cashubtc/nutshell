@@ -336,9 +336,8 @@ async def pending(
 
 @router.get("/lock", name="Generate receiving lock", response_model=LockResponse)
 async def lock():
-    p2shscript = await wallet.create_p2sh_lock()
-    txin_p2sh_address = p2shscript.address
-    return LockResponse(P2SH=txin_p2sh_address)
+    address = await wallet.create_p2sh_address_and_store()
+    return LockResponse(P2SH=address)
 
 
 @router.get("/locks", name="Show unused receiving locks", response_model=LocksResponse)

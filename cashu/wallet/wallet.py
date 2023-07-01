@@ -5,6 +5,7 @@ import math
 import secrets as scrts
 import time
 import uuid
+from datetime import datetime, timedelta
 from itertools import groupby
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -1030,9 +1031,10 @@ class Wallet(LedgerAPI):
             await self.set_reserved(send_proofs, reserved=True)
         return keep_proofs, send_proofs
 
-    # ---------- P2SH ----------
+    # ---------- P2SH and P2PK ----------
 
-    async def create_p2sh_lock(self):
+    async def create_p2sh_address_and_store(self) -> str:
+        """Creates a P2SH lock script and stores the script and signature in the database."""
         alice_privkey = step0_carol_privkey()
         txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
         txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
@@ -1045,14 +1047,45 @@ class Wallet(LedgerAPI):
             address=str(txin_p2sh_address),
         )
         await store_p2sh(p2shScript, db=self.db)
-        return p2shScript
+        assert p2shScript.address
+        return p2shScript.address
 
-    async def create_p2pk_lock(self):
+    async def create_p2pk_pubkey(self):
         public_key = PrivateKey(
             bytes.fromhex(settings.nostr_private_key), raw=True
         ).pubkey
         assert public_key
         return public_key.serialize().hex()
+
+    async def create_p2pk_lock(
+        self,
+        pubkey: str,
+        timelock: Optional[int] = None,
+        tags: Optional[List[List[str]]] = None,
+    ):
+        return Secret(
+            kind=SecretKind.P2PK,
+            data=pubkey,
+            timelock=int((datetime.now() + timedelta(seconds=timelock)).timestamp())
+            if timelock
+            else None,
+            tags=tags,
+        )
+
+    async def create_p2sh_lock(
+        self,
+        address: str,
+        timelock: Optional[int] = None,
+        tags: Optional[List[List[str]]] = None,
+    ):
+        return Secret(
+            kind=SecretKind.P2SH,
+            data=address,
+            timelock=int((datetime.now() + timedelta(seconds=timelock)).timestamp())
+            if timelock
+            else None,
+            tags=tags,
+        )
 
     async def sign_p2pk_with_privatekey(self, proofs: List[Proof]) -> List[str]:
         private_key = PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
