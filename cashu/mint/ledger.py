@@ -225,7 +225,7 @@ class Ledger:
         try:
             secret = Secret.deserialize(proof.secret)
         except Exception as e:
-            # secret is not a spending condition
+            # secret is not a spending condition so we treat is a normal secret
             return True
         if secret.kind == SecretKind.P2SH:
             # check if timelock is in the past
@@ -261,7 +261,18 @@ class Ledger:
             now = time.time()
             if secret.timelock and secret.timelock < now:
                 logger.trace(f"p2pk timelock ran out ({secret.timelock}<{now}).")
-                return True
+                # check tags if a refund pubkey is present.
+                # If yes, we demand the signature to be from the refund pubkey
+                if secret.tags and secret.tags.get_tag("refund"):
+                    signature_pubkey = secret.tags.get_tag("refund")
+                else:
+                    # if no refund pubkey is present and the timelock has expired
+                    # the token can be spent by anyone
+                    return True
+            else:
+                # the timelock is still active, therefore we demand the signature
+                # to be from the pubkey in the data field
+                signature_pubkey = secret.data
             logger.trace(f"p2pk timelock still active ({secret.timelock}>{now}).")
 
             # now we check the signature
@@ -271,13 +282,13 @@ class Ledger:
 
             # we parse the secret as a P2PK commitment
             # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
-            pubkey = secret.data
 
             # check signature proof.p2pksig against pubkey
             # we expect the signature to be on the pubkey (=message) itself
+            assert signature_pubkey, "no signature pubkey present."
             assert verify_p2pk_signature(
                 message=secret.serialize().encode("utf-8"),
-                pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
+                pubkey=PublicKey(bytes.fromhex(signature_pubkey), raw=True),
                 signature=bytes.fromhex(proof.p2pksig),
             ), "p2pk signature invalid."
             logger.trace(proof.p2pksig)

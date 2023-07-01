@@ -19,6 +19,16 @@ class SecretKind:
     P2PK = "P2PK"
 
 
+class Tags(BaseModel):
+    __root__: List[List[str]]
+
+    def get_tag(self, tag_name: str) -> Union[str, None]:
+        for tag in self.__root__:
+            if tag[0] == tag_name:
+                return tag[1]
+        return None
+
+
 class Secret(BaseModel):
     """Describes spending condition encoded in the secret field of a Proof."""
 
@@ -26,7 +36,7 @@ class Secret(BaseModel):
     data: str
     nonce: Union[None, str] = None
     timelock: Union[None, int] = None
-    tags: Union[None, List[List[str]]] = None
+    tags: Union[None, Tags] = None
 
     def serialize(self) -> str:
         data_dict: Dict[str, Any] = {
@@ -36,7 +46,7 @@ class Secret(BaseModel):
         if self.timelock:
             data_dict["timelock"] = self.timelock
         if self.tags:
-            data_dict["tags"] = self.tags
+            data_dict["tags"] = self.tags.__root__
         logger.debug(
             json.dumps(
                 [self.kind, data_dict],
