@@ -1,5 +1,5 @@
+import asyncio
 import secrets
-import time
 from typing import List
 
 import pytest
@@ -22,9 +22,10 @@ async def assert_err(f, msg):
     try:
         await f
     except Exception as exc:
-        assert str(exc.args[0]) == msg, Exception(
-            f"Expected error: {msg}, got: {exc.args[0]}"
-        )
+        if str(exc.args[0]) != msg:
+            raise Exception(f"Expected error: {msg}, got: {exc.args[0]}")
+        return
+    raise Exception(f"Expected error: {msg}, got no error")
 
 
 def assert_amt(proofs: List[Proof], expected: int):
@@ -255,10 +256,7 @@ async def test_p2pk(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     # p2pk test
-    secret_lock = Secret(
-        kind=SecretKind.P2PK,
-        data=pubkey_wallet2,
-    )
+    secret_lock = await wallet1.create_p2pk_lock(pubkey_wallet2)  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
@@ -270,16 +268,33 @@ async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wal
     await wallet1.mint(64)
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
-    secret_lock = Secret(
-        kind=SecretKind.P2PK,
-        data=pubkey_wallet2,
-    )
+    secret_lock = await wallet1.create_p2pk_lock(pubkey_wallet2)  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # receiver side: wrong private key
     settings.nostr_private_key = secrets.token_hex(32)  # wrong private key
     await assert_err(wallet1.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
+
+
+@pytest.mark.asyncio
+async def test_p2pk_short_timelock_receive_with_wrong_private_key(
+    wallet1: Wallet, wallet2: Wallet
+):
+    await wallet1.mint(64)
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
+    # sender side
+    secret_lock = await wallet1.create_p2pk_lock(
+        pubkey_wallet2, timelock=4
+    )  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
+    )
+    # receiver side: wrong private key
+    settings.nostr_private_key = secrets.token_hex(32)  # wrong private key
+    await assert_err(wallet1.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
+    await asyncio.sleep(6)
+    await wallet1.redeem(send_proofs)
 
 
 @pytest.mark.asyncio
@@ -293,6 +308,23 @@ async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
     assert len(scnd_proofs) == 1
     assert sum_proofs(scnd_proofs) == 8
     assert wallet2.balance == 8
+
+
+# @pytest.mark.asyncio
+# async def test_p2sh_short_timelock_receive_with_another_wallet(
+#     wallet1: Wallet, wallet2: Wallet
+# ):
+#     await wallet1.mint(64)
+#     wallet1_address = await wallet1.create_p2sh_address_and_store()  # receiver side
+#     secret_lock = await wallet1.create_p2sh_lock(
+#         wallet1_address, timelock=5
+#     )  # sender side
+#     _, send_proofs = await wallet1.split_to_send(
+#         wallet1.proofs, 8, secret_lock
+#     )  # sender side
+#     await assert_err(wallet2.redeem(send_proofs), "lock not found.")  # wrong receiver
+#     await asyncio.sleep(6)
+#     await wallet2.redeem(send_proofs)  # receiver side
 
 
 @pytest.mark.asyncio

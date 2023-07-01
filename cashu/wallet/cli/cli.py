@@ -348,7 +348,11 @@ async def send_command(
 @cli.command("receive", help="Receive tokens.")
 @click.argument("token", type=str, default="")
 @click.option(
-    "--nostr", "-n", default=False, is_flag=True, help="Receive tokens via nostr."
+    "--nostr",
+    "-n",
+    default=False,
+    is_flag=True,
+    help="Receive tokens via nostr." "receive",
 )
 @click.option(
     "--all", "-a", default=False, is_flag=True, help="Receive all pending tokens."
