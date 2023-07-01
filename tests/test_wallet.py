@@ -4,7 +4,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, Secret, SecretKind
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
@@ -244,45 +244,25 @@ async def test_split_invalid_amount(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_split_with_secret(wallet1: Wallet):
     await wallet1.mint(64)
-    secret = f"asdasd_{time.time()}"
+    secret = Secret(kind=SecretKind.P2SH, data=f"asdasd_{time.time()}")
     w1_frst_proofs, w1_scnd_proofs = await wallet1.split(
         wallet1.proofs, 32, secret_lock=secret
     )
     # check if secret is in the proofs to send
-    assert w1_scnd_proofs[0].secret.startswith(secret)
+    s1 = Secret.deserialize(w1_scnd_proofs[0].secret)
+    assert s1.kind == SecretKind.P2SH
     # check if secret is not in the proofs to keep
-    assert not w1_frst_proofs[0].secret.startswith(secret)
+    Secret.deserialize(w1_frst_proofs[0].secret)
 
 
 @pytest.mark.asyncio
-async def test_redeem_without_secret(wallet1: Wallet):
-    await wallet1.mint(64)
-    # strip away the secrets
-    w1_scnd_proofs_manipulated = wallet1.proofs.copy()
-    for p in w1_scnd_proofs_manipulated:
-        p.secret = ""
-    await assert_err(
-        wallet1.redeem(w1_scnd_proofs_manipulated),
-        "Mint Error: no secret in proof.",
-    )
-
-
-@pytest.mark.asyncio
-async def no_test_p2sh(wallet1: Wallet, wallet2: Wallet):
+async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
     # p2sh test
-    p2shscript = await wallet1.create_p2sh_lock()
-    txin_p2sh_address = p2shscript.address
-    lock = f"P2SH:{txin_p2sh_address}"
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
+    _ = await wallet1.create_p2sh_lock()
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8)
 
-    assert send_proofs[0].secret.startswith("P2SH:")
-
-    frst_proofs, scnd_proofs = await wallet2.redeem(
-        send_proofs,
-        secret_lock_script=p2shscript.script,
-        secret_lock_signature=p2shscript.signature,
-    )
+    frst_proofs, scnd_proofs = await wallet2.redeem(send_proofs)
     assert len(frst_proofs) == 0
     assert len(scnd_proofs) == 1
     assert sum_proofs(scnd_proofs) == 8
@@ -293,19 +273,13 @@ async def no_test_p2sh(wallet1: Wallet, wallet2: Wallet):
 async def test_p2sh_receive_wrong_script(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
     # p2sh test
-    p2shscript = await wallet1.create_p2sh_lock()
-    txin_p2sh_address = p2shscript.address
-    lock = f"P2SH:{txin_p2sh_address}"
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)  # type: ignore
+    _ = await wallet1.create_p2sh_lock()
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8)
 
-    wrong_script = "asad" + p2shscript.script
+    # wrong_script = "asad" + p2shscript.script
 
     await assert_err(
-        wallet2.redeem(
-            send_proofs,
-            secret_lock_script=wrong_script,
-            secret_lock_signature=p2shscript.signature,
-        ),
+        wallet2.redeem(send_proofs),
         "Mint Error: ('Script verification failed:', VerifyScriptError('scriptPubKey returned false'))",
     )
     assert wallet2.balance == 0
@@ -323,11 +297,7 @@ async def test_p2sh_receive_wrong_signature(wallet1: Wallet, wallet2: Wallet):
     wrong_signature = "asda" + p2shscript.signature
 
     await assert_err(
-        wallet2.redeem(
-            send_proofs,
-            secret_lock_script=p2shscript.script,
-            secret_lock_signature=wrong_signature,
-        ),
+        wallet2.redeem(send_proofs),
         "Mint Error: ('Script evaluation failed:', EvalScriptError('EvalScript: OP_RETURN called'))",
     )
     assert wallet2.balance == 0

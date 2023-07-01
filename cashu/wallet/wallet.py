@@ -30,6 +30,8 @@ from ..core.base import (
     PostMintResponseLegacy,
     PostSplitRequest,
     Proof,
+    Secret,
+    SecretKind,
     TokenV2,
     TokenV2Mint,
     TokenV3,
@@ -54,6 +56,7 @@ from ..tor.tor import TorProxy
 from ..wallet.crud import (
     get_keyset,
     get_proofs,
+    get_unused_locks,
     invalidate_proof,
     secret_used,
     store_keyset,
@@ -260,17 +263,17 @@ class LedgerAPI:
                 raise Exception(f"secret already used: {s}")
         logger.trace("Secret check complete.")
 
-    def generate_locked_secrets(self, secret, n) -> List[str]:
-        """`secret` is the base string that will be tweaked n times
+    # def generate_locked_secrets(self, secret, n) -> List[str]:
+    #     """`secret` is the base string that will be tweaked n times
 
-        Args:
-            secret (str): Base secret
-            n (int): Number of secrets to generate
+    #     Args:
+    #         secret (str): Base secret
+    #         n (int): Number of secrets to generate
 
-        Returns:
-            List[str]: List of secrets
-        """
-        return [f"{secret}:{self._generate_secret()}" for i in range(n)]
+    #     Returns:
+    #         List[str]: List of secrets
+    #     """
+    #     return [f"{secret}:{self._generate_secret()}" for i in range(n)]
 
     """
     ENDPOINTS
@@ -437,7 +440,7 @@ class LedgerAPI:
 
     @async_set_requests
     async def split(
-        self, proofs, amount, secret_lock: Optional[str] = None
+        self, proofs, amount, secret_lock: Optional[Secret] = None
     ) -> Tuple[List[Proof], List[Proof]]:
         """Consume proofs and create new promises based on amount split.
 
@@ -456,7 +459,7 @@ class LedgerAPI:
         if secret_lock is None:
             secrets = [self._generate_secret() for _ in range(len(amounts))]
         else:
-            secret_locks = self.generate_locked_secrets(secret_lock, len(scnd_outputs))
+            secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
             logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
             assert len(secret_locks) == len(
                 scnd_outputs
@@ -481,7 +484,7 @@ class LedgerAPI:
         # construct payload
         def _splitrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
-            proofs_include = {"id", "amount", "secret", "C", "script", "p2pksig"}
+            proofs_include = {"id", "amount", "secret", "C", "p2shscript", "p2pksig"}
             return {
                 "amount": ...,
                 "outputs": ...,
@@ -653,40 +656,67 @@ class Wallet(LedgerAPI):
         self.proofs += proofs
         return proofs
 
+    async def add_witnesses_to_proofs(self, proofs: List[Proof]):
+        """Adds witnesses to proofs for P2SH or P2PK redemption."""
+
+        p2sh_script, p2sh_signature = None, None
+        p2pk_signatures = None
+
+        # iterate through proofs and produce witnesses for each
+
+        # first we check whether all tokens have serialized secrets as their secret
+        try:
+            for p in proofs:
+                Secret.deserialize(p.secret)
+        except:
+            # if not, we do not add witnesses (treat as regular token secret)
+            return proofs
+        # P2SH scripts
+        if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
+            # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
+            address = Secret.deserialize(proofs[0].secret).data
+            p2shscripts = await get_unused_locks(address, db=self.db)
+            assert len(p2shscripts) == 1, Exception("lock not found.")
+            p2sh_script, p2sh_signature = (
+                p2shscripts[0].script,
+                p2shscripts[0].signature,
+            )
+            logger.debug(f"Unlock script: {p2sh_script} signature: {p2sh_signature}")
+
+            # attach unlock scripts to proofs
+            for p in proofs:
+                p.p2shscript = P2SHScript(script=p2sh_script, signature=p2sh_signature)
+
+        # P2PK signatures
+        elif all(
+            [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
+        ):
+            p2pk_signatures = await self.sign_p2pk_with_privatekey(proofs)
+            logger.debug(f"Unlock signature: {p2pk_signatures}")
+
+            # attach unlock signatures to proofs
+            assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
+            for p, s in zip(proofs, p2pk_signatures):
+                p.p2pksig = s
+
+        return proofs
+
     async def redeem(
         self,
         proofs: List[Proof],
-        secret_lock_script: Optional[str] = None,
-        secret_lock_signature: Optional[str] = None,
-        secret_p2pk_signatures: Optional[List[str]] = None,
     ):
-        # P2SH
-        if secret_lock_script and secret_lock_signature:
-            logger.debug(f"Unlock script: {secret_lock_script}")
-            # attach unlock scripts to proofs
-            for p in proofs:
-                p.script = P2SHScript(
-                    script=secret_lock_script, signature=secret_lock_signature
-                )
-        # P2PKH
-        elif secret_p2pk_signatures:
-            logger.debug(f"Unlock signature: {secret_p2pk_signatures}")
-            # attach unlock signatures to proofs
-            assert len(proofs) == len(
-                secret_p2pk_signatures
-            ), "wrong number of signatures"
-            for p, s in zip(proofs, secret_p2pk_signatures):
-                p.p2pksig = s
+        proofs = await self.add_witnesses_to_proofs(proofs)
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
         self,
         proofs: List[Proof],
         amount: int,
-        secret_lock: Optional[str] = None,
+        secret_lock: Optional[Secret] = None,
     ):
         assert len(proofs) > 0, ValueError("no proofs provided.")
         frst_proofs, scnd_proofs = await super().split(proofs, amount, secret_lock)
+
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
 
@@ -975,7 +1005,7 @@ class Wallet(LedgerAPI):
         self,
         proofs: List[Proof],
         amount: int,
-        secret_lock: Optional[str] = None,
+        secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
     ):
         """

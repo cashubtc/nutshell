@@ -1,5 +1,3 @@
-import hashlib
-
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 
 

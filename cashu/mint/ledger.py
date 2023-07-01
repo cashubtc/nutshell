@@ -14,6 +14,8 @@ from ..core.base import (
     MintKeyset,
     MintKeysets,
     Proof,
+    Secret,
+    SecretKind,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
@@ -212,65 +214,55 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(private_key_amount, C, proof.secret)
 
-    def _verify_script(self, proof: Proof) -> bool:
+    def _verify_spending_conditions(self, proof: Proof) -> bool:
         """
-        Verify bitcoin script in proof.script commited to by <address> in proof.secret.
+        Verify spending conditions:
+         Condition: P2SH - Witnesses proof.p2shscript
+         Condition: P2PK - Witness: proof.p2pksig
 
         """
         # P2SH
-        # proof.secret format: P2SH:<address>:<timelock>:<op_return>:<nonce>
-        if proof.secret.startswith("P2SH:"):
+        try:
+            secret = Secret.deserialize(proof.secret)
+        except Exception as e:
+            # secret is not a spending condition
+            return True
+        if secret.kind == SecretKind.P2SH:
+            # check if timelock is in the past
+            now = time.time()
+            if secret.timelock and secret.timelock < now:
+                logger.trace(f"p2sh timelock ran out ({secret.timelock}<{now}).")
+                return True
+            logger.trace(f"p2sh timelock still active ({secret.timelock}>{now}).")
+
             if (
-                proof.script is None
-                or proof.script.script is None
-                or proof.script.signature is None
+                proof.p2shscript is None
+                or proof.p2shscript.script is None
+                or proof.p2shscript.signature is None
             ):
                 # no script present although secret indicates one
                 raise Exception("no script in proof.")
 
-            try:
-                timelock = int(proof.secret.split(":")[2])
-                # check if timelock is in the past
-                now = time.time()
-                if timelock < now:
-                    logger.trace(f"p2sh timelock ran out ({timelock}<{now}).")
-                    return True
-                logger.trace(f"p2sh timelock still active ({timelock}>{now}).")
-            except Exception as e:
-                # we skip on error for secrets without timelocks
-                logger.error(f"p2sh timelock invalid: {e}")
-                logger.trace(proof.secret)
-
             # execute and verify P2SH
             txin_p2sh_address, valid = verify_bitcoin_script(
-                proof.script.script, proof.script.signature
+                proof.p2shscript.script, proof.p2shscript.signature
             )
             if not valid:
                 raise Exception("script invalid.")
             # check if secret commits to script address
-            # format: P2SH:<address>:<secret>
-            assert len(proof.secret.split(":")) >= 3, "p2sh secret format invalid."
-            assert proof.secret.split(":")[1] == str(
+            assert secret.data == str(
                 txin_p2sh_address
-            ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]} is not {txin_p2sh_address}."
+            ), f"secret does not contain correct P2SH address: {secret.data} is not {txin_p2sh_address}."
             return True
 
         # P2PK
-        # proof.secret format: P2PK:<pubkey_hex>:<timelock>:<op_return>:<nonce>
-        # first we check whether the timelock is in the past
-        if proof.secret.startswith("P2PK:"):
-            try:
-                timelock = int(proof.secret.split(":")[2])
-                # check if timelock is in the past
-                now = time.time()
-                if timelock < now:
-                    logger.trace(f"p2pk timelock ran out ({timelock}<{now}).")
-                    return True
-                logger.trace(f"p2pk timelock still active ({timelock}>{now}).")
-            except Exception as e:
-                # we skip on error for secrets without timelocks
-                logger.error(f"p2pk timelock invalid: {e}")
-                logger.trace(proof.secret)
+        if secret.kind == SecretKind.P2PK:
+            # check if timelock is in the past
+            now = time.time()
+            if secret.timelock and secret.timelock < now:
+                logger.trace(f"p2pk timelock ran out ({secret.timelock}<{now}).")
+                return True
+            logger.trace(f"p2pk timelock still active ({secret.timelock}>{now}).")
 
             # now we check the signature
             if not proof.p2pksig:
@@ -278,13 +270,13 @@ class Ledger:
                 raise Exception("no p2pk signature in proof.")
 
             # we parse the secret as a P2PK commitment
-            assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
-            pubkey = proof.secret.split(":")[1]
+            # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
+            pubkey = secret.data
 
             # check signature proof.p2pksig against pubkey
             # we expect the signature to be on the pubkey (=message) itself
             assert verify_p2pk_signature(
-                message=proof.secret.encode("utf-8"),
+                message=secret.serialize().encode("utf-8"),
                 pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
                 signature=bytes.fromhex(proof.p2pksig),
             ), "p2pk signature invalid."
@@ -566,7 +558,7 @@ class Ledger:
             Exception: BDHKE verification failed.
         """
         # Verify scripts
-        if not all([self._verify_script(p) for p in proofs]):
+        if not all([self._verify_spending_conditions(p) for p in proofs]):
             raise Exception("script validation failed.")
         # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):

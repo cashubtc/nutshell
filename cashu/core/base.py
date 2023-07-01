@@ -14,9 +14,42 @@ from .p2pk import sign_p2pk_sign
 # ------- PROOFS -------
 
 
+class SecretKind:
+    P2SH = "P2SH"
+    P2PK = "P2PK"
+
+
+class Secret(BaseModel):
+    """Describes spending condition encoded in the secret field of a Proof."""
+
+    kind: str
+    data: str
+    nonce: Union[None, str] = None
+    timelock: Union[None, int] = None
+    tags: Union[None, List[List[str]]] = None
+
+    def serialize(self) -> str:
+        return json.dumps(
+            [
+                self.kind,
+                {
+                    "data": self.data,
+                    "nonce": self.nonce or PrivateKey().serialize()[:32],
+                    "timelock": self.timelock,
+                    "tags": self.tags,
+                },
+            ]
+        )
+
+    @classmethod
+    def deserialize(cls, data: str):
+        kind, kwargs = json.loads(data)
+        return cls(kind=kind, **kwargs)
+
+
 class P2SHScript(BaseModel):
     """
-    Describes spending condition of a Proof
+    Unlocks P2SH spending condition of a Proof
     """
 
     script: str
@@ -36,7 +69,7 @@ class Proof(BaseModel):
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
     p2pksig: Optional[str] = None  # P2PK signature
-    script: Union[P2SHScript, None] = None  # P2SH spending condition
+    p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
     reserved: Union[
         None, bool
     ] = False  # whether this proof is reserved for sending, used for coin management in the wallet

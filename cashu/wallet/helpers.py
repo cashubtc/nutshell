@@ -7,7 +7,7 @@ from typing import List, Optional
 import click
 from loguru import logger
 
-from ..core.base import TokenV1, TokenV2, TokenV3, TokenV3Token
+from ..core.base import Secret, SecretKind, TokenV1, TokenV2, TokenV3, TokenV3Token
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
@@ -23,13 +23,7 @@ async def init_wallet(wallet: Wallet, load_proofs: bool = True):
         await wallet.load_proofs(reload=True)
 
 
-async def redeem_TokenV3_multimint(
-    wallet: Wallet,
-    token: TokenV3,
-    secret_lock_script: Optional[str] = None,
-    secret_lock_signature: Optional[str] = None,
-    secret_p2pk_signatures: Optional[List[str]] = None,
-):
+async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
@@ -46,12 +40,7 @@ async def redeem_TokenV3_multimint(
             await mint_wallet.load_mint()
             # redeem proofs of this keyset
             redeem_proofs = [p for p in t.proofs if p.id == keyset]
-            _, _ = await mint_wallet.redeem(
-                redeem_proofs,
-                secret_lock_script=secret_lock_script,
-                secret_lock_signature=secret_lock_signature,
-                secret_p2pk_signatures=secret_p2pk_signatures,
-            )
+            _, _ = await mint_wallet.redeem(redeem_proofs)
             print(f"Received {sum_proofs(redeem_proofs)} sats")
 
 
@@ -123,18 +112,18 @@ async def receive(
     proofs = [p for t in tokenObj.token for p in t.proofs]
 
     # load for P2SH scripts and and sign P2PK locks
-    script, signature, p2pk_signatures = None, None, None
+    # script, signature, p2pk_signatures = None, None, None
 
-    # P2SH scripts
-    if all([p.secret.startswith("P2SH:") for p in proofs]):
-        address_split = proofs[0].secret.split(":")[1]
-        p2shscripts = await get_unused_locks(address_split, db=wallet.db)
-        assert len(p2shscripts) == 1, Exception("lock not found.")
-        script, signature = p2shscripts[0].script, p2shscripts[0].signature
-    # P2PK signatures
-    elif all([p.secret.startswith("P2PK:") for p in proofs]):
-        p2pk_signatures = await wallet.sign_p2pk_with_privatekey(proofs)
-
+    # # P2SH scripts
+    # if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
+    #     address_split = Secret.deserialize(proofs[0].secret).data
+    #     p2shscripts = await get_unused_locks(address_split, db=wallet.db)
+    #     assert len(p2shscripts) == 1, Exception("lock not found.")
+    #     script, signature = p2shscripts[0].script, p2shscripts[0].signature
+    # # P2PK signatures
+    # elif all([Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]):
+    #     p2pk_signatures = await wallet.sign_p2pk_with_privatekey(proofs)
+    # logger.debug(f"p2pk_signatures: {p2pk_signatures}")
     includes_mint_info: bool = any([t.mint for t in tokenObj.token])
 
     if includes_mint_info:
@@ -142,9 +131,6 @@ async def receive(
         await redeem_TokenV3_multimint(
             wallet,
             tokenObj,
-            script,
-            signature,
-            p2pk_signatures,
         )
     else:
         # this is very legacy code, virtually any token should have mint information
@@ -162,7 +148,7 @@ async def receive(
             os.path.join(settings.cashu_dir, wallet.name),
         )
         await mint_wallet.load_mint(keyset_in_token)
-        _, _ = await mint_wallet.redeem(proofs, script, signature, p2pk_signatures)
+        _, _ = await mint_wallet.redeem(proofs)
         print(f"Received {sum_proofs(proofs)} sats")
 
     # reload main wallet so the balance updates
@@ -177,6 +163,7 @@ async def send(
     """
     Prints token to send to stdout.
     """
+    lock_secret = None
     if lock:
         assert len(lock) > 21, Exception(
             "Error: lock has to be at least 22 characters long."
@@ -190,26 +177,24 @@ async def send(
             logger.debug(
                 f"Adding a time lock of {settings.timelock_delta_seconds} seconds."
             )
-            lock = (
-                lock
-                + ":"
-                + str(
-                    int(
-                        (
-                            datetime.now()
-                            + timedelta(seconds=settings.timelock_delta_seconds)
-                        ).timestamp()
-                    )
-                )
+            kind = SecretKind.P2PK if lock.startswith("P2PK:") else SecretKind.P2SH
+            lock_secret = Secret(
+                kind=kind,
+                data=lock.split(":")[1],
+                timelock=int(
+                    (
+                        datetime.now()
+                        + timedelta(seconds=settings.timelock_delta_seconds)
+                    ).timestamp()
+                ),
+                tags=[["some", "tags"], ["another", "tag"]],
             )
-            # we can also add some op_return data to the lock just for fun
-            lock += ":rekt"
 
     await wallet.load_proofs()
     if split:
         await wallet.load_mint()
         _, send_proofs = await wallet.split_to_send(
-            wallet.proofs, amount, lock, set_reserved=True
+            wallet.proofs, amount, lock_secret, set_reserved=True
         )
     else:
         # get a proof with specific amount
