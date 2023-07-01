@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import secrets
 import shutil
 import time
 from pathlib import Path
@@ -58,6 +59,7 @@ def mint():
     settings.port = 3337
     settings.mint_url = "http://localhost:3337"
     settings.port = settings.mint_listen_port
+    settings.nostr_private_key = secrets.token_hex(32)  # wrong private key
     config = uvicorn.Config(
         "cashu.mint.app:app",
         port=settings.mint_listen_port,
