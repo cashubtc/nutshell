@@ -11,7 +11,7 @@ from ..nostr.nostr.client.client import NostrClient
 from ..nostr.nostr.event import Event
 from ..nostr.nostr.key import PublicKey
 from .crud import get_nostr_last_check_timestamp, set_nostr_last_check_timestamp
-from .helpers import receive, deserialize_token_from_string
+from .helpers import deserialize_token_from_string, receive
 from .wallet import Wallet
 
 
