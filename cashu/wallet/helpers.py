@@ -185,14 +185,25 @@ async def send(
             raise Exception("Error: lock has to start with P2SH: or P2PK:")
         # we add a time lock to the P2PK lock by appending the current unix time + 14 days
         # we use datetime because it's easier to read
-        if lock.startswith("P2PK:"):
+        if lock.startswith("P2PK:") or lock.startswith("P2SH:"):
+            logger.debug(f"Locking token to: {lock}")
+            logger.debug(
+                f"Adding a time lock of {settings.timelock_delta_seconds} seconds."
+            )
             lock = (
                 lock
                 + ":"
-                + str(int((datetime.now() + timedelta(hours=24)).timestamp()))
+                + str(
+                    int(
+                        (
+                            datetime.now()
+                            + timedelta(seconds=settings.timelock_delta_seconds)
+                        ).timestamp()
+                    )
+                )
             )
-            # we also add some op_return data to the P2PK lock
-            lock += ":additional_commitmens"
+            # we can also add some op_return data to the lock just for fun
+            lock += ":rekt"
 
     await wallet.load_proofs()
     if split:

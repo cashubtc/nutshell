@@ -4,12 +4,16 @@ from cashu.core.crypto.secp import PrivateKey, PublicKey
 
 
 def sign_p2pk_sign(message: bytes, private_key: PrivateKey):
-    signature = private_key.ecdsa_serialize(private_key.ecdsa_sign(message))
+    # ecdsa version
+    # signature = private_key.ecdsa_serialize(private_key.ecdsa_sign(message))
+    signature = private_key.schnorr_sign(message, None, raw=True)
     return signature.hex()
 
 
 def verify_p2pk_signature(message: bytes, pubkey: PublicKey, signature: bytes):
-    return pubkey.ecdsa_verify(message, pubkey.ecdsa_deserialize(signature))
+    # ecdsa version
+    # return pubkey.ecdsa_verify(message, pubkey.ecdsa_deserialize(signature))
+    return pubkey.schnorr_verify(message, signature, None, raw=True)
 
 
 if __name__ == "__main__":

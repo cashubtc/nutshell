@@ -98,9 +98,15 @@ class WalletSettings(CashuSettings):
         ]
     )
 
+    timelock_delta_seconds: int = Field(default=86400)
+
 
 class Settings(
-    EnvSettings, MintSettings, MintInformation, WalletSettings, CashuSettings
+    EnvSettings,
+    MintSettings,
+    MintInformation,
+    WalletSettings,
+    CashuSettings,
 ):
     version: str = Field(default=VERSION)
 

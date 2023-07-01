@@ -21,7 +21,7 @@ from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.helpers import fee_reserve, sum_proofs
 from ..core.p2pk import verify_p2pk_signature
-from ..core.script import verify_script
+from ..core.script import verify_bitcoin_script
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import Wallet
@@ -218,7 +218,7 @@ class Ledger:
 
         """
         # P2SH
-        # proof.secret format: P2SH:<address>:<secret>
+        # proof.secret format: P2SH:<address>:<timelock>:<op_return>:<nonce>
         if proof.secret.startswith("P2SH:"):
             if (
                 proof.script is None
@@ -228,35 +228,50 @@ class Ledger:
                 # no script present although secret indicates one
                 raise Exception("no script in proof.")
 
+            try:
+                timelock = int(proof.secret.split(":")[2])
+                # check if timelock is in the past
+                now = time.time()
+                if timelock < now:
+                    logger.trace(f"p2sh timelock ran out ({timelock}<{now}).")
+                    return True
+                logger.trace(f"p2sh timelock still active ({timelock}>{now}).")
+            except Exception as e:
+                # we skip on error for secrets without timelocks
+                logger.error(f"p2sh timelock invalid: {e}")
+                logger.trace(proof.secret)
+
             # execute and verify P2SH
-            txin_p2sh_address, valid = verify_script(
+            txin_p2sh_address, valid = verify_bitcoin_script(
                 proof.script.script, proof.script.signature
             )
             if not valid:
                 raise Exception("script invalid.")
             # check if secret commits to script address
             # format: P2SH:<address>:<secret>
-            assert len(proof.secret.split(":")) == 3, "secret format invalid."
+            assert len(proof.secret.split(":")) >= 3, "p2sh secret format invalid."
             assert proof.secret.split(":")[1] == str(
                 txin_p2sh_address
             ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]} is not {txin_p2sh_address}."
             return True
 
         # P2PK
-        # proof.secret format: P2PK:<address>:<secret>
+        # proof.secret format: P2PK:<pubkey_hex>:<timelock>:<op_return>:<nonce>
         # first we check whether the timelock is in the past
         if proof.secret.startswith("P2PK:"):
             try:
                 timelock = int(proof.secret.split(":")[2])
-            except ValueError:
-                raise Exception("p2pk timelock format invalid.")
-            # check if timelock is in the past
-            now = time.time()
-            if timelock < now:
-                logger.trace(f"p2pk timelock ran out ({timelock}<{now}).")
-                return True
+                # check if timelock is in the past
+                now = time.time()
+                if timelock < now:
+                    logger.trace(f"p2pk timelock ran out ({timelock}<{now}).")
+                    return True
+                logger.trace(f"p2pk timelock still active ({timelock}>{now}).")
+            except Exception as e:
+                # we skip on error for secrets without timelocks
+                logger.error(f"p2pk timelock invalid: {e}")
+                logger.trace(proof.secret)
 
-            logger.trace(f"p2pk timelock still active ({timelock}>{now}).")
             # now we check the signature
             if not proof.p2pksig:
                 # no signature present although secret indicates one

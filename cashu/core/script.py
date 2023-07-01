@@ -79,28 +79,28 @@ def step3_bob_verify_script(txin_signature, txin_redeemScript, tx):
         raise Exception("Script execution failed:", e)
 
 
-def verify_script(txin_redeemScript_b64, txin_signature_b64):
+def verify_bitcoin_script(txin_redeemScript_b64, txin_signature_b64):
     txin_redeemScript = CScript(base64.urlsafe_b64decode(txin_redeemScript_b64))
-    print("Redeem script:", txin_redeemScript.__repr__())
+    # print("Redeem script:", txin_redeemScript.__repr__())
     # txin_redeemScript = CScript([2, 3, OP_LESSTHAN, OP_VERIFY])
     txin_signature = CScript(value=base64.urlsafe_b64decode(txin_signature_b64))
 
     txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
-    print(f"Bob recreates secret: P2SH:{txin_p2sh_address}")
+    # print(f"Bob recreates secret: P2SH:{txin_p2sh_address}")
     # MINT checks that P2SH:txin_p2sh_address has not been spent yet
     # ...
     tx, _ = step1_bob_carol_create_tx(txin_p2sh_address)
 
-    print(
-        f"Bob verifies:\nscript: {txin_redeemScript_b64}\nsignature: {txin_signature_b64}\n"
-    )
+    # print(
+    #     f"Bob verifies:\nscript: {txin_redeemScript_b64}\nsignature: {txin_signature_b64}\n"
+    # )
     script_valid = step3_bob_verify_script(txin_signature, txin_redeemScript, tx)
     # MINT redeems tokens and stores P2SH:txin_p2sh_address
     # ...
-    if script_valid:
-        print("Successfull.")
-    else:
-        print("Error.")
+    # if script_valid:
+    # print("Successfull.")
+    # else:
+    # print("Error.")
     return txin_p2sh_address, script_valid
 
 
