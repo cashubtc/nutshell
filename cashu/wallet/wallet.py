@@ -33,6 +33,7 @@ from ..core.base import (
     Proof,
     Secret,
     SecretKind,
+    Tags,
     TokenV2,
     TokenV2Mint,
     TokenV3,
@@ -53,6 +54,7 @@ from ..core.script import (
 )
 from ..core.settings import settings
 from ..core.split import amount_split
+from ..nostr.nostr.client.client import NostrClient
 from ..tor.tor import TorProxy
 from ..wallet.crud import (
     get_keyset,
@@ -264,18 +266,6 @@ class LedgerAPI:
                 raise Exception(f"secret already used: {s}")
         logger.trace("Secret check complete.")
 
-    # def generate_locked_secrets(self, secret, n) -> List[str]:
-    #     """`secret` is the base string that will be tweaked n times
-
-    #     Args:
-    #         secret (str): Base secret
-    #         n (int): Number of secrets to generate
-
-    #     Returns:
-    #         List[str]: List of secrets
-    #     """
-    #     return [f"{secret}:{self._generate_secret()}" for i in range(n)]
-
     """
     ENDPOINTS
     """
@@ -477,11 +467,6 @@ class LedgerAPI:
         outputs, rs = self._construct_outputs(amounts, secrets)
         split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
 
-        # # sign split transaction
-        # split_payload.sign(
-        #     PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
-        # )
-
         # construct payload
         def _splitrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
@@ -490,7 +475,6 @@ class LedgerAPI:
                 "amount": ...,
                 "outputs": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
-                # "signature": ...,
             }
 
         resp = self.s.post(
@@ -587,6 +571,15 @@ class Wallet(LedgerAPI):
         self.proofs: List[Proof] = []
         self.name = name
         logger.debug(f"Wallet initalized with mint URL {url}")
+
+        # temporarily, we use the NostrClient to generate keys
+        self.private_key = (
+            NostrClient(
+                private_key=settings.nostr_private_key, connect=False
+            ).private_key
+            if settings.nostr_private_key
+            else None
+        )
 
     # ---------- API ----------
 
@@ -1051,9 +1044,11 @@ class Wallet(LedgerAPI):
         return p2shScript.address
 
     async def create_p2pk_pubkey(self):
-        public_key = PrivateKey(
-            bytes.fromhex(settings.nostr_private_key), raw=True
-        ).pubkey
+        assert (
+            self.private_key
+        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
+        public_key = PrivateKey(bytes.fromhex(self.private_key.hex()), raw=True).pubkey
+        # logger.debug(f"Private key: {self.private_key.bech32()}")
         assert public_key
         return public_key.serialize().hex()
 
@@ -1061,7 +1056,7 @@ class Wallet(LedgerAPI):
         self,
         pubkey: str,
         timelock: Optional[int] = None,
-        tags: Optional[List[List[str]]] = None,
+        tags: Optional[Tags] = None,
     ):
         return Secret(
             kind=SecretKind.P2PK,
@@ -1076,7 +1071,7 @@ class Wallet(LedgerAPI):
         self,
         address: str,
         timelock: Optional[int] = None,
-        tags: Optional[List[List[str]]] = None,
+        tags: Optional[Tags] = None,
     ):
         return Secret(
             kind=SecretKind.P2SH,
@@ -1088,7 +1083,10 @@ class Wallet(LedgerAPI):
         )
 
     async def sign_p2pk_with_privatekey(self, proofs: List[Proof]) -> List[str]:
-        private_key = PrivateKey(bytes.fromhex(settings.nostr_private_key), raw=True)
+        assert (
+            self.private_key
+        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
+        private_key = PrivateKey(bytes.fromhex(self.private_key.hex()), raw=True)
         assert private_key.pubkey
         return [
             sign_p2pk_sign(

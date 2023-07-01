@@ -5,7 +5,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof, Secret, SecretKind
+from cashu.core.base import Proof, Secret, SecretKind, Tags
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
@@ -307,7 +307,7 @@ async def test_p2pk_timelock_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
         timelock=4,  # timelock
-        tags=[["refund", pubkey_wallet2]],  # refund pubkey
+        tags=Tags(__root__=[["refund", pubkey_wallet2]]),  # refund pubkey
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -331,7 +331,9 @@ async def test_p2pk_timelock_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
         timelock=4,  # timelock
-        tags=[["refund", garbage_pubkey_2.serialize().hex()]],  # refund pubkey
+        tags=Tags(
+            __root__=[["refund", garbage_pubkey_2.serialize().hex()]]
+        ),  # refund pubkey
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
