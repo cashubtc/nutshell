@@ -347,33 +347,25 @@ async def send_command(
 
 @cli.command("receive", help="Receive tokens.")
 @click.argument("token", type=str, default="")
-@click.option("--lock", "-l", default=None, help="Unlock tokens.", type=str)
 @click.option(
-    "--nostr", "-n", default=False, is_flag=True, help="Receive tokens via nostr."
+    "--nostr",
+    "-n",
+    default=False,
+    is_flag=True,
+    help="Receive tokens via nostr." "receive",
 )
 @click.option(
     "--all", "-a", default=False, is_flag=True, help="Receive all pending tokens."
-)
-@click.option(
-    "--verbose",
-    "-v",
-    help="Display more information.",
-    is_flag=True,
-    default=False,
-    type=bool,
 )
 @click.pass_context
 @coro
 async def receive_cli(
     ctx: Context,
     token: str,
-    lock: str,
     nostr: bool,
     all: bool,
-    verbose: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
-    wallet.status()
 
     if token:
         tokenObj = deserialize_token_from_string(token)
@@ -385,9 +377,9 @@ async def receive_cli(
             )
             await verify_mint(mint_wallet, mint_url)
 
-        await receive(wallet, tokenObj, lock)
+        await receive(wallet, tokenObj)
     elif nostr:
-        await receive_nostr(wallet, verbose)
+        await receive_nostr(wallet)
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
@@ -402,7 +394,7 @@ async def receive_cli(
                         mint_url, os.path.join(settings.cashu_dir, wallet.name)
                     )
                     await verify_mint(mint_wallet, mint_url)
-                await receive(wallet, tokenObj, lock)
+                await receive(wallet, tokenObj)
     else:
         print("Error: enter token or use either flag --nostr or --all.")
 
@@ -515,24 +507,36 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
 
 
 @cli.command("lock", help="Generate receiving lock.")
+@click.option(
+    "--p2sh",
+    "-p",
+    default=False,
+    is_flag=True,
+    help="Create P2SH lock.",
+    type=bool,
+)
 @click.pass_context
 @coro
-async def lock(ctx):
+async def lock(ctx, p2sh):
     wallet: Wallet = ctx.obj["WALLET"]
-    p2shscript = await wallet.create_p2sh_lock()
-    txin_p2sh_address = p2shscript.address
-    print("---- Pay to script hash (P2SH) ----\n")
+    if p2sh:
+        address = await wallet.create_p2sh_address_and_store()
+        lock_str = f"P2SH:{address}"
+        print("---- Pay to script hash (P2SH) ----\n")
+    else:
+        pubkey = await wallet.create_p2pk_pubkey()
+        lock_str = f"P2PK:{pubkey}"
+        print("---- Pay to public key (P2PK) ----\n")
+
     print("Use a lock to receive tokens that only you can unlock.")
     print("")
-    print(f"Public receiving lock: P2SH:{txin_p2sh_address}")
+    print(f"Public receiving lock: {lock_str}")
     print("")
     print(
-        f"Anyone can send tokens to this lock:\n\ncashu send <amount> --lock P2SH:{txin_p2sh_address}"
+        f"Anyone can send tokens to this lock:\n\ncashu send <amount> --lock {lock_str}"
     )
     print("")
-    print(
-        f"Only you can receive tokens from this lock:\n\ncashu receive <token> --lock P2SH:{txin_p2sh_address}\n"
-    )
+    print(f"Only you can receive tokens from this lock: cashu receive <token>")
 
 
 @cli.command("locks", help="Show unused receiving locks.")
@@ -540,16 +544,20 @@ async def lock(ctx):
 @coro
 async def locks(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
+    # P2PK lock
+    pubkey = await wallet.create_p2pk_pubkey()
+    lock_str = f"P2PK:{pubkey}"
+    print("---- Pay to public key (P2PK) lock ----\n")
+    print(f"Lock: {lock_str}")
+    # P2SH locks
     locks = await get_unused_locks(db=wallet.db)
     if len(locks):
         print("")
-        print(f"--------------------------\n")
+        print("---- Pay to script hash (P2SH) locks ----\n")
         for l in locks:
-            print(f"Address: {l.address}")
+            print(f"Lock: P2SH:{l.address}")
             print(f"Script: {l.script}")
             print(f"Signature: {l.signature}")
-            print("")
-            print(f"Receive: cashu receive <token> --lock P2SH:{l.address}")
             print("")
             print(f"--------------------------\n")
     else:

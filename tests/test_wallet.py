@@ -1,10 +1,12 @@
-import time
+import asyncio
+import secrets
 from typing import List
 
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, Secret, SecretKind, Tags
+from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
@@ -20,9 +22,10 @@ async def assert_err(f, msg):
     try:
         await f
     except Exception as exc:
-        assert exc.args[0] == msg, Exception(
-            f"Expected error: {msg}, got: {exc.args[0]}"
-        )
+        if str(exc.args[0]) != msg:
+            raise Exception(f"Expected error: {msg}, got: {exc.args[0]}")
+        return
+    raise Exception(f"Expected error: {msg}, got no error")
 
 
 def assert_amt(proofs: List[Proof], expected: int):
@@ -242,43 +245,113 @@ async def test_split_invalid_amount(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
-async def test_split_with_secret(wallet1: Wallet):
+async def test_create_p2pk_pubkey(wallet1: Wallet):
     await wallet1.mint(64)
-    secret = f"asdasd_{time.time()}"
-    w1_frst_proofs, w1_scnd_proofs = await wallet1.split(
-        wallet1.proofs, 32, scnd_secret=secret
-    )
-    # check if index prefix is in secret
-    assert w1_scnd_proofs[0].secret == "0:" + secret
+    pubkey = await wallet1.create_p2pk_pubkey()
+    PublicKey(bytes.fromhex(pubkey), raw=True)
 
 
 @pytest.mark.asyncio
-async def test_redeem_without_secret(wallet1: Wallet):
+async def test_p2pk(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    # strip away the secrets
-    w1_scnd_proofs_manipulated = wallet1.proofs.copy()
-    for p in w1_scnd_proofs_manipulated:
-        p.secret = ""
-    await assert_err(
-        wallet1.redeem(w1_scnd_proofs_manipulated),
-        "Mint Error: no secret in proof.",
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    # p2pk test
+    secret_lock = await wallet1.create_p2pk_lock(pubkey_wallet2)  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
     )
+    await wallet2.redeem(send_proofs)
 
 
 @pytest.mark.asyncio
-async def no_test_p2sh(wallet1: Wallet, wallet2: Wallet):
+async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    # p2sh test
-    p2shscript = await wallet1.create_p2sh_lock()
-    txin_p2sh_address = p2shscript.address
-    lock = f"P2SH:{txin_p2sh_address}"
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)
-
-    assert send_proofs[0].secret.startswith("P2SH:")
-
-    frst_proofs, scnd_proofs = await wallet2.redeem(
-        send_proofs, scnd_script=p2shscript.script, scnd_siganture=p2shscript.signature
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
+    # sender side
+    secret_lock = await wallet1.create_p2pk_lock(pubkey_wallet2)  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
     )
+    # receiver side: wrong private key
+    wallet1.private_key = PrivateKey()  # wrong private key
+    await assert_err(wallet1.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
+
+
+@pytest.mark.asyncio
+async def test_p2pk_short_timelock_receive_with_wrong_private_key(
+    wallet1: Wallet, wallet2: Wallet
+):
+    await wallet1.mint(64)
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
+    # sender side
+    secret_lock = await wallet1.create_p2pk_lock(
+        pubkey_wallet2, timelock=4
+    )  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
+    )
+    # receiver side: wrong private key
+    wallet1.private_key = PrivateKey()  # wrong private key
+    await assert_err(wallet1.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
+    await asyncio.sleep(6)
+    await wallet1.redeem(send_proofs)
+
+
+@pytest.mark.asyncio
+async def test_p2pk_timelock_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
+    # sender side
+    garbage_pubkey = PrivateKey().pubkey
+    assert garbage_pubkey
+    secret_lock = await wallet1.create_p2pk_lock(
+        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
+        timelock=4,  # timelock
+        tags=Tags(__root__=[["refund", pubkey_wallet2]]),  # refund pubkey
+    )  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
+    )
+    # receiver side: can't redeem since we used a garbage pubkey
+    await assert_err(wallet2.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
+    await asyncio.sleep(6)
+    # we can now redeem because of the refund timelock
+    await wallet2.redeem(send_proofs)
+
+
+@pytest.mark.asyncio
+async def test_p2pk_timelock_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
+    # sender side
+    garbage_pubkey = PrivateKey().pubkey
+    garbage_pubkey_2 = PrivateKey().pubkey
+    assert garbage_pubkey
+    assert garbage_pubkey_2
+    secret_lock = await wallet1.create_p2pk_lock(
+        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
+        timelock=4,  # timelock
+        tags=Tags(
+            __root__=[["refund", garbage_pubkey_2.serialize().hex()]]
+        ),  # refund pubkey
+    )  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
+    )
+    # receiver side: can't redeem since we used a garbage pubkey
+    await assert_err(wallet2.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
+    await asyncio.sleep(6)
+    # we still can't redeem it because we used garbage_pubkey_2 as a refund pubkey
+    await assert_err(wallet2.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
+
+
+@pytest.mark.asyncio
+async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    _ = await wallet1.create_p2sh_address_and_store()  # receiver side
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8)  # sender side
+
+    frst_proofs, scnd_proofs = await wallet2.redeem(send_proofs)  # receiver side
     assert len(frst_proofs) == 0
     assert len(scnd_proofs) == 1
     assert sum_proofs(scnd_proofs) == 8
@@ -286,40 +359,11 @@ async def no_test_p2sh(wallet1: Wallet, wallet2: Wallet):
 
 
 @pytest.mark.asyncio
-async def test_p2sh_receive_wrong_script(wallet1: Wallet, wallet2: Wallet):
+async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    # p2sh test
-    p2shscript = await wallet1.create_p2sh_lock()
-    txin_p2sh_address = p2shscript.address
-    lock = f"P2SH:{txin_p2sh_address}"
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)  # type: ignore
-
-    wrong_script = "asad" + p2shscript.script
-
-    await assert_err(
-        wallet2.redeem(
-            send_proofs, scnd_script=wrong_script, scnd_siganture=p2shscript.signature
-        ),
-        "Mint Error: ('Script verification failed:', VerifyScriptError('scriptPubKey returned false'))",
-    )
-    assert wallet2.balance == 0
-
-
-@pytest.mark.asyncio
-async def test_p2sh_receive_wrong_signature(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
-    # p2sh test
-    p2shscript = await wallet1.create_p2sh_lock()
-    txin_p2sh_address = p2shscript.address
-    lock = f"P2SH:{txin_p2sh_address}"
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, lock)  # type: ignore
-
-    wrong_signature = "asda" + p2shscript.signature
-
-    await assert_err(
-        wallet2.redeem(
-            send_proofs, scnd_script=p2shscript.script, scnd_siganture=wrong_signature
-        ),
-        "Mint Error: ('Script evaluation failed:', EvalScriptError('EvalScript: OP_RETURN called'))",
-    )
-    assert wallet2.balance == 0
+    wallet1_address = await wallet1.create_p2sh_address_and_store()  # receiver side
+    secret_lock = await wallet1.create_p2sh_lock(wallet1_address)  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock
+    )  # sender side
+    await assert_err(wallet2.redeem(send_proofs), "lock not found.")  # wrong receiver
