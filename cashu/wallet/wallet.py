@@ -1092,7 +1092,8 @@ class Wallet(LedgerAPI):
         assert private_key.pubkey
         return [
             sign_p2pk_sign(
-                message=proof.secret.encode("utf-8"), private_key=private_key
+                message=proof.secret.encode("utf-8"),
+                private_key=private_key,
             )
             for proof in proofs
         ]

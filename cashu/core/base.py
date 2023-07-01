@@ -37,6 +37,11 @@ class Secret(BaseModel):
             data_dict["timelock"] = self.timelock
         if self.tags:
             data_dict["tags"] = self.tags
+        logger.debug(
+            json.dumps(
+                [self.kind, data_dict],
+            )
+        )
         return json.dumps(
             [self.kind, data_dict],
         )
