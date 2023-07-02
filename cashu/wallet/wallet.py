@@ -6,8 +6,9 @@ import math
 import secrets as scrts
 import time
 import uuid
+from datetime import datetime, timedelta
 from itertools import groupby
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import requests
 from bip32 import BIP32
@@ -34,6 +35,9 @@ from ..core.base import (
     PostRestoreResponse,
     PostSplitRequest,
     Proof,
+    Secret,
+    SecretKind,
+    Tags,
     TokenV2,
     TokenV2Mint,
     TokenV3,
@@ -45,6 +49,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
+from ..core.p2pk import sign_p2pk_sign
 from ..core.script import (
     step0_carol_checksig_redeemscrip,
     step0_carol_privkey,
@@ -53,11 +58,13 @@ from ..core.script import (
 )
 from ..core.settings import settings
 from ..core.split import amount_split
+from ..nostr.nostr.client.client import NostrClient
 from ..tor.tor import TorProxy
 from ..wallet.crud import (
     bump_secret_derivation,
     get_keyset,
     get_proofs,
+    get_unused_locks,
     invalidate_proof,
     secret_used,
     set_secret_derivation,
@@ -86,21 +93,22 @@ def async_set_requests(func):
         self.s.headers.update({"Client-version": settings.version})
         if settings.debug:
             self.s.verify = False
-        socks_host, socks_port = None, None
+
+        # set proxy
+        proxy_url: Union[str, None] = None
         if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
             self.tor.run_daemon(verbose=True)
-            socks_host, socks_port = "localhost", 9050
-        else:
-            socks_host, socks_port = settings.socks_host, settings.socks_port
+            proxy_url = f"socks5://localhost:9050"
+        elif settings.socks_proxy:
+            proxy_url = f"socks5://{settings.socks_proxy}"
+        elif settings.http_proxy:
+            proxy_url = settings.http_proxy
+        if proxy_url:
+            self.s.proxies.update({"http": proxy_url})
+            self.s.proxies.update({"https": proxy_url})
 
-        if socks_host and socks_port:
-            proxies = {
-                "http": f"socks5://{socks_host}:{socks_port}",
-                "https": f"socks5://{socks_host}:{socks_port}",
-            }
-            self.s.proxies.update(proxies)
-            self.s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
+        self.s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
         return await func(self, *args, **kwargs)
 
     return wrapper
@@ -446,14 +454,14 @@ class LedgerAPI(object):
 
     @async_set_requests
     async def split(
-        self, proofs: List[Proof], amount: int, scnd_secret: Optional[str] = None
+        self, proofs, amount, secret_lock: Optional[Secret] = None
     ) -> Tuple[List[Proof], List[Proof]]:
         """Consume proofs and create new promises based on amount split.
 
-        If scnd_secret is None, random secrets will be generated for the tokens to keep (frst_outputs)
+        If secret_lock is None, random secrets will be generated for the tokens to keep (frst_outputs)
         and the promises to send (scnd_outputs).
 
-        If scnd_secret is provided, the wallet will create blinded secrets with those to attach a
+        If secret_lock is provided, the wallet will create blinded secrets with those to attach a
         predefined spending condition to the tokens they want to send."""
         logger.debug("Calling split. POST /split")
         total = sum_proofs(proofs)
@@ -465,23 +473,21 @@ class LedgerAPI(object):
 
         # TODO: Fix P2SH with `generate_n_secrets`, make it work with
         # `generate_secrets_numbered` (which should be renamed!)
-        if scnd_secret is None:
+        if secret_lock is None:
             secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
         else:
             # NOTE: we use random blinding factors for P2SH, we won't be able to
             # restore these tokens from a backup
             rs = []
-            scnd_secrets = await self.generate_secrets_numbered(
-                scnd_secret, len(scnd_outputs)
-            )
-            logger.debug(f"Creating proofs with custom secrets: {scnd_secrets}")
-            assert len(scnd_secrets) == len(
+            secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
+            logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
+            assert len(secret_locks) == len(
                 scnd_outputs
-            ), "number of scnd_secrets does not match number of ouptus."
+            ), "number of secret_locks does not match number of ouptus."
             # append predefined secrets (to send) to random secrets (to keep)
             secrets = [
                 await self._generate_secret() for s in range(len(frst_outputs))
-            ] + scnd_secrets
+            ] + secret_locks
             # TODO: derive derivation paths from secrets
             derivation_paths = ["custom"] * len(secrets)
 
@@ -495,7 +501,7 @@ class LedgerAPI(object):
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /split"""
-            proofs_include = {"id", "amount", "secret", "C", "script"}
+            proofs_include = {"id", "amount", "secret", "C", "p2shscript", "p2pksig"}
             return {
                 "amount": ...,
                 "outputs": ...,
@@ -615,6 +621,7 @@ class Wallet(LedgerAPI):
     seed: bytes  # holds private key of the wallet generated from the mnemonic
     db: Database
     bip32: BIP32
+    private_key: Optional[PrivateKey] = None
 
     def __init__(
         self,
@@ -843,27 +850,67 @@ class Wallet(LedgerAPI):
         self.proofs += proofs
         return proofs
 
+    async def add_witnesses_to_proofs(self, proofs: List[Proof]):
+        """Adds witnesses to proofs for P2SH or P2PK redemption."""
+
+        p2sh_script, p2sh_signature = None, None
+        p2pk_signatures = None
+
+        # iterate through proofs and produce witnesses for each
+
+        # first we check whether all tokens have serialized secrets as their secret
+        try:
+            for p in proofs:
+                Secret.deserialize(p.secret)
+        except:
+            # if not, we do not add witnesses (treat as regular token secret)
+            return proofs
+        # P2SH scripts
+        if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
+            # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
+            address = Secret.deserialize(proofs[0].secret).data
+            p2shscripts = await get_unused_locks(address, db=self.db)
+            assert len(p2shscripts) == 1, Exception("lock not found.")
+            p2sh_script, p2sh_signature = (
+                p2shscripts[0].script,
+                p2shscripts[0].signature,
+            )
+            logger.debug(f"Unlock script: {p2sh_script} signature: {p2sh_signature}")
+
+            # attach unlock scripts to proofs
+            for p in proofs:
+                p.p2shscript = P2SHScript(script=p2sh_script, signature=p2sh_signature)
+
+        # P2PK signatures
+        elif all(
+            [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
+        ):
+            p2pk_signatures = await self.sign_p2pk_with_privatekey(proofs)
+            logger.debug(f"Unlock signature: {p2pk_signatures}")
+
+            # attach unlock signatures to proofs
+            assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
+            for p, s in zip(proofs, p2pk_signatures):
+                p.p2pksig = s
+
+        return proofs
+
     async def redeem(
         self,
         proofs: List[Proof],
-        scnd_script: Optional[str] = None,
-        scnd_siganture: Optional[str] = None,
     ):
-        if scnd_script and scnd_siganture:
-            logger.debug(f"Unlock script: {scnd_script}")
-            # attach unlock scripts to proofs
-            for p in proofs:
-                p.script = P2SHScript(script=scnd_script, signature=scnd_siganture)
+        proofs = await self.add_witnesses_to_proofs(proofs)
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
         self,
         proofs: List[Proof],
         amount: int,
-        scnd_secret: Optional[str] = None,
+        secret_lock: Optional[Secret] = None,
     ):
         assert len(proofs) > 0, ValueError("no proofs provided.")
-        frst_proofs, scnd_proofs = await super().split(proofs, amount, scnd_secret)
+        frst_proofs, scnd_proofs = await super().split(proofs, amount, secret_lock)
+
         if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
             raise Exception("received no splits.")
 
@@ -1171,7 +1218,7 @@ class Wallet(LedgerAPI):
         self,
         proofs: List[Proof],
         amount: int,
-        scnd_secret: Optional[str] = None,
+        secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
     ):
         """
@@ -1180,25 +1227,26 @@ class Wallet(LedgerAPI):
         Args:
             proofs (List[Proof]): Proofs to split
             amount (int): Amount to split to
-            scnd_secret (Optional[str], optional): If set, a custom secret is used to lock new outputs. Defaults to None.
+            secret_lock (Optional[str], optional): If set, a custom secret is used to lock new outputs. Defaults to None.
             set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
             is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
             displayed to the user to be then sent to someone else. Defaults to False.
         """
-        if scnd_secret:
-            logger.debug(f"Spending conditions: {scnd_secret}")
+        if secret_lock:
+            logger.debug(f"Spending conditions: {secret_lock}")
         spendable_proofs = await self._select_proofs_to_send(proofs, amount)
 
         keep_proofs, send_proofs = await self.split(
-            spendable_proofs, amount, scnd_secret
+            spendable_proofs, amount, secret_lock
         )
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
         return keep_proofs, send_proofs
 
-    # ---------- P2SH ----------
+    # ---------- P2SH and P2PK ----------
 
-    async def create_p2sh_lock(self):
+    async def create_p2sh_address_and_store(self) -> str:
+        """Creates a P2SH lock script and stores the script and signature in the database."""
         alice_privkey = step0_carol_privkey()
         txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
         txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
@@ -1211,7 +1259,61 @@ class Wallet(LedgerAPI):
             address=str(txin_p2sh_address),
         )
         await store_p2sh(p2shScript, db=self.db)
-        return p2shScript
+        assert p2shScript.address
+        return p2shScript.address
+
+    async def create_p2pk_pubkey(self):
+        assert (
+            self.private_key
+        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
+        public_key = self.private_key.pubkey
+        # logger.debug(f"Private key: {self.private_key.bech32()}")
+        assert public_key
+        return public_key.serialize().hex()
+
+    async def create_p2pk_lock(
+        self,
+        pubkey: str,
+        timelock: Optional[int] = None,
+        tags: Optional[Tags] = None,
+    ):
+        return Secret(
+            kind=SecretKind.P2PK,
+            data=pubkey,
+            timelock=int((datetime.now() + timedelta(seconds=timelock)).timestamp())
+            if timelock
+            else None,
+            tags=tags,
+        )
+
+    async def create_p2sh_lock(
+        self,
+        address: str,
+        timelock: Optional[int] = None,
+        tags: Optional[Tags] = None,
+    ):
+        return Secret(
+            kind=SecretKind.P2SH,
+            data=address,
+            timelock=int((datetime.now() + timedelta(seconds=timelock)).timestamp())
+            if timelock
+            else None,
+            tags=tags,
+        )
+
+    async def sign_p2pk_with_privatekey(self, proofs: List[Proof]) -> List[str]:
+        assert (
+            self.private_key
+        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
+        private_key = self.private_key
+        assert private_key.pubkey
+        return [
+            sign_p2pk_sign(
+                message=proof.secret.encode("utf-8"),
+                private_key=private_key,
+            )
+            for proof in proofs
+        ]
 
     # ---------- BALANCE CHECKS ----------
 

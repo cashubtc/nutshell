@@ -235,7 +235,6 @@ async def send_command(
 @router.post("/receive", name="Receive tokens", response_model=ReceiveResponse)
 async def receive_command(
     token: str = Query(default=None, description="Token to receive"),
-    lock: str = Query(default=None, description="Unlock tokens"),
     nostr: bool = Query(default=False, description="Receive tokens via nostr"),
     all: bool = Query(default=False, description="Receive all pending tokens"),
 ):
@@ -243,7 +242,7 @@ async def receive_command(
     if token:
         tokenObj: TokenV3 = deserialize_token_from_string(token)
         await verify_mints(wallet, tokenObj)
-        balance = await receive(wallet, tokenObj, lock)
+        balance = await receive(wallet, tokenObj)
     elif nostr:
         await receive_nostr(wallet)
         balance = wallet.available_balance
@@ -256,7 +255,7 @@ async def receive_command(
                 token = await wallet.serialize_proofs(proofs)
                 tokenObj = deserialize_token_from_string(token)
                 await verify_mints(wallet, tokenObj)
-                balance = await receive(wallet, tokenObj, lock)
+                balance = await receive(wallet, tokenObj)
     else:
         raise Exception("enter token or use either flag --nostr or --all.")
     assert balance
@@ -352,9 +351,8 @@ async def pending(
 
 @router.get("/lock", name="Generate receiving lock", response_model=LockResponse)
 async def lock():
-    p2shscript = await wallet.create_p2sh_lock()
-    txin_p2sh_address = p2shscript.address
-    return LockResponse(P2SH=txin_p2sh_address)
+    address = await wallet.create_p2sh_address_and_store()
+    return LockResponse(P2SH=address)
 
 
 @router.get("/locks", name="Show unused receiving locks", response_model=LocksResponse)
@@ -433,10 +431,6 @@ async def info():
     else:
         nostr_public_key = None
         nostr_relays = []
-    if settings.socks_host:
-        socks_proxy = settings.socks_host + ":" + str(settings.socks_host)
-    else:
-        socks_proxy = None
     return InfoResponse(
         version=settings.version,
         wallet=wallet.name,
@@ -447,5 +441,5 @@ async def info():
         tor=settings.tor,
         nostr_public_key=nostr_public_key,
         nostr_relays=nostr_relays,
-        socks_proxy=socks_proxy,
+        socks_proxy=settings.socks_proxy,
     )
