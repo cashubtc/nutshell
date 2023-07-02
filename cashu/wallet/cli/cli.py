@@ -9,13 +9,14 @@ from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
-from mnemonic import Mnemonic
 
 import click
 from click import Context
 from loguru import logger
+from mnemonic import Mnemonic
 
 from ...core.base import TokenV3
+from ...core.db import Database
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
@@ -32,12 +33,11 @@ from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
 from ..helpers import (
     deserialize_token_from_string,
     init_wallet,
+    migrate_wallet_db,
     receive,
     send,
-    migrate_wallet_db,
 )
 from ..nostr import receive_nostr, send_nostr
-from ...core.db import Database
 
 
 class NaturalOrderGroup(click.Group):
@@ -490,14 +490,7 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 async def restore(ctx: Context, to: int, batch: int):
     wallet: Wallet = ctx.obj["WALLET"]
 
-    # ask the user for a mnemonic but allow also no input
-    mnemonic = click.prompt(
-        "Enter your mnemonic (leave empty to skip)",
-        type=str,
-        default="",
-    )
-    if mnemonic:
-        await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
+    await wallet.restore_wallet_from_mnemonic(to=to, batch=batch)
     wallet.status()
 
 

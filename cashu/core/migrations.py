@@ -1,5 +1,7 @@
 import re
+
 from loguru import logger
+
 from ..core.db import COCKROACH, POSTGRES, SQLITE, Database, table_with_schema
 
 

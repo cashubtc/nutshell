@@ -1,11 +1,12 @@
+import asyncio
 import shutil
 import time
 from pathlib import Path
 from typing import Dict, List
-from mnemonic import Mnemonic
 
 import pytest
 import pytest_asyncio
+from mnemonic import Mnemonic
 
 from cashu.core.base import Proof, Secret, SecretKind, Tags
 from cashu.core.crypto.secp import PrivateKey, PublicKey
@@ -17,7 +18,6 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT, mint
-from cashu.core.crypto.secp import PrivateKey, PublicKey
 
 
 async def assert_err(f, msg):
@@ -405,26 +405,20 @@ async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
 
 @pytest.mark.asyncio
 async def test_bump_secret_derivation(wallet3: Wallet):
-    b = Mnemonic("english").to_seed(
-        "rug regular cherry rare cherry project actual cool elegant novel attack term hamster retire memory alone drift spring region wheat barrel rookie health fee"
+    await wallet3._init_private_key(
+        "half depart obvious quality work element tank gorilla view sugar picture humble"
     )
-    wallet3.private_key = PrivateKey(
-        Mnemonic("english").to_seed(
-            "rug regular cherry rare cherry project actual cool elegant novel attack term hamster retire memory alone drift spring region wheat barrel rookie health fee"
-        )
-    )
-    await wallet3._init_private_key()
     secrets1, rs1, derivaion_paths1 = await wallet3.generate_n_secrets(5)
     secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert derivaion_paths1 == derivaion_paths2
     assert secrets1 == [
-        "383d756bf069ed3b905711db409079f7c582b9b2a4a23642a88caca3a8002a32",
-        "b61c998c7d542517b9772cc2bc13a4782fd174a56c4a56b2322776248487a89d",
-        "7c6654b0d5153f203990d68405f4be65b854cbb79a2ac44dc59661885a634fca",
-        "d4a77ee0a6c6f3b108ae396ccbd25b69c21edc6ee00ff638b1d5e6fdf50a2f09",
-        "1092ae68478f3dfa2cdddefd071df820af3e5a1fe49000b5eca49cf8b0100a47",
+        "9bfb12704297fe90983907d122838940755fcce370ce51e9e00a4275a347c3fe",
+        "dbc5e05f2b1f24ec0e2ab6e8312d5e13f57ada52594d4caf429a697d9c742490",
+        "06a29fa8081b3a620b50b473fc80cde9a575c3b94358f3513c03007f8b66321e",
+        "652d08c804bd2c5f2c1f3e3d8895860397df394b30473753227d766affd15e89",
+        "654e5997f8a20402f7487296b6f7e463315dd52fc6f6cc5a4e35c7f6ccac77e0",
     ]
     assert derivaion_paths1 == [
         "m/129372'/0'/2004500376'/0'",
@@ -437,12 +431,9 @@ async def test_bump_secret_derivation(wallet3: Wallet):
 
 @pytest.mark.asyncio
 async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
-    wallet3.private_key = PrivateKey(
-        Mnemonic("english").to_seed(
-            "rug regular cherry rare cherry project actual cool elegant novel attack term hamster retire memory alone drift spring region wheat barrel rookie health fee"
-        )
+    await wallet3._init_private_key(
+        "half depart obvious quality work element tank gorilla view sugar picture humble"
     )
-    await wallet3._init_private_key()
     secrets1_1, rs1_1, derivaion_paths1 = await wallet3.generate_n_secrets(2)
     secrets1_2, rs1_2, derivaion_paths2 = await wallet3.generate_n_secrets(3)
     secrets1 = secrets1_1 + secrets1_2
@@ -450,36 +441,19 @@ async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
     secrets2, rs2, derivaion_paths = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
-    assert secrets1 == [
-        "383d756bf069ed3b905711db409079f7c582b9b2a4a23642a88caca3a8002a32",
-        "b61c998c7d542517b9772cc2bc13a4782fd174a56c4a56b2322776248487a89d",
-        "7c6654b0d5153f203990d68405f4be65b854cbb79a2ac44dc59661885a634fca",
-        "d4a77ee0a6c6f3b108ae396ccbd25b69c21edc6ee00ff638b1d5e6fdf50a2f09",
-        "1092ae68478f3dfa2cdddefd071df820af3e5a1fe49000b5eca49cf8b0100a47",
-    ]
 
 
 @pytest.mark.asyncio
 async def test_generate_secrets_from_to(wallet3: Wallet):
-    wallet3.private_key = PrivateKey(
-        Mnemonic("english").to_seed(
-            "rug regular cherry rare cherry project actual cool elegant novel attack term hamster retire memory alone drift spring region wheat barrel rookie fee fee"
-        )
+    await wallet3._init_private_key(
+        "half depart obvious quality work element tank gorilla view sugar picture humble"
     )
-    await wallet3._init_private_key()
     secrets1, rs1, derivaion_paths1 = await wallet3.generate_secrets_from_to(0, 4)
     assert len(secrets1) == 5
     secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(2, 4)
     assert len(secrets2) == 3
     assert secrets1[2:] == secrets2
     assert [r.private_key for r in rs1[2:]] == [r.private_key for r in rs2]
-    assert secrets1 == [
-        "383d756bf069ed3b905711db409079f7c582b9b2a4a23642a88caca3a8002a32",
-        "b61c998c7d542517b9772cc2bc13a4782fd174a56c4a56b2322776248487a89d",
-        "7c6654b0d5153f203990d68405f4be65b854cbb79a2ac44dc59661885a634fca",
-        "d4a77ee0a6c6f3b108ae396ccbd25b69c21edc6ee00ff638b1d5e6fdf50a2f09",
-        "1092ae68478f3dfa2cdddefd071df820af3e5a1fe49000b5eca49cf8b0100a47",
-    ]
 
 
 @pytest.mark.asyncio
@@ -497,10 +471,8 @@ async def test_restore_wallet_after_mint(wallet3: Wallet):
 
 @pytest.mark.asyncio
 async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
-    wallet3.private_key = PrivateKey(
-        Mnemonic("english").to_seed(
-            "rug regular cherry rare cherry project actual cool elegant novel attack term hamster retire memory alone drift spring region wheat barrel fee fee fee"
-        )
+    await wallet3._init_private_key(
+        "half depart obvious quality work element tank gorilla view sugar picture humble"
     )
     await reset_wallet_db(wallet3)
 
@@ -523,10 +495,8 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
 
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: Wallet):
-    wallet3.private_key = PrivateKey(
-        Mnemonic("english").to_seed(
-            "rug regular cherry rare cherry project actual cool elegant novel attack term hamster retire memory alone drift spring region wheat fee fee fee fee"
-        )
+    await wallet3._init_private_key(
+        "half depart obvious quality work element tank gorilla view sugar picture humble"
     )
     await reset_wallet_db(wallet3)
 
@@ -565,10 +535,8 @@ class ProofBox:
 
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
-    wallet3.private_key = PrivateKey(
-        Mnemonic("english").to_seed(
-            "rug regular cherry rare cherry project actual cool elegant novel attack term hamster retire memory alone drift spring region fee fee fee fee fee"
-        )
+    await wallet3._init_private_key(
+        "half depart obvious quality work element tank gorilla view sugar picture humble"
     )
     await reset_wallet_db(wallet3)
 
@@ -597,7 +565,6 @@ async def test_restore_wallet_after_send_twice(
 ):
     box = ProofBox()
     wallet3.private_key = PrivateKey()
-    wallet3._init_bip32()
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(2)
@@ -652,10 +619,8 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     wallet3: Wallet,
 ):
     box = ProofBox()
-    wallet3.private_key = PrivateKey(
-        Mnemonic("english").to_seed(
-            "rug regular cherry rare cherry project actual cool elegant novel attack term hamster retire memory alone drift spring fee fee fee fee fee fee"
-        )
+    await wallet3._init_private_key(
+        "half depart obvious quality work element tank gorilla view sugar picture humble"
     )
     await reset_wallet_db(wallet3)
 

@@ -10,10 +10,11 @@ from datetime import datetime, timedelta
 from itertools import groupby
 from typing import Dict, List, Optional, Tuple, Union
 
+import click
 import requests
 from bip32 import BIP32
-from mnemonic import Mnemonic
 from loguru import logger
+from mnemonic import Mnemonic
 
 from ..core import bolt11 as bolt11
 from ..core.base import (
@@ -49,6 +50,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
+from ..core.migrations import migrate_databases
 from ..core.p2pk import sign_p2pk_sign
 from ..core.script import (
     step0_carol_checksig_redeemscrip,
@@ -64,6 +66,7 @@ from ..wallet.crud import (
     bump_secret_derivation,
     get_keyset,
     get_proofs,
+    get_seed_and_mnemonic,
     get_unused_locks,
     invalidate_proof,
     secret_used,
@@ -72,13 +75,10 @@ from ..wallet.crud import (
     store_lightning_invoice,
     store_p2sh,
     store_proof,
+    store_seed_and_mnemonic,
     update_lightning_invoice,
     update_proof_reserved,
-    get_seed_and_mnemonic,
-    store_seed_and_mnemonic,
 )
-
-from ..core.migrations import migrate_databases
 from . import migrations
 
 
@@ -628,12 +628,10 @@ class Wallet(LedgerAPI):
         url: str,
         db: str,
         name: str = "no_name",
-        mnemonic: Optional[str] = None,
     ):
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
-        self.mnemonic = mnemonic or ""
 
         super().__init__(url=url, db=self.db)
         logger.debug(f"Wallet initalized with mint URL {url}")
@@ -656,38 +654,44 @@ class Wallet(LedgerAPI):
         except Exception as e:
             logger.error(f"Could not run migrations: {e}")
 
-    async def _init_private_key(self):
+    async def _init_private_key(self, from_mnemonic: Optional[str] = None):
         ret = await get_seed_and_mnemonic(self.db)  # or settings.wallet_private_key
 
-        # if there is no seed in the database
+        mneno = Mnemonic("english")
+
         if ret is None:
-            mneno = Mnemonic("english")
-            if not self.mnemonic:
-                # generate a new one
+            # if there is no seed in the database, ask for input or generate a new one
+            # ask the user for a mnemonic but allow also no input
+            mnemonic_str = click.prompt(
+                "Enter your mnemonic (or leave empty to generate a new one)",
+                type=str,
+                default="",
+            )
+            if not mnemonic_str:
                 mnemonic_str = mneno.generate()
                 logger.debug("Generated new mnemonic: ", mnemonic_str)
-            else:
-                # or use the one provided
-                mnemonic_str = self.mnemonic
+        elif from_mnemonic:
+            # or use the one provided
+            mnemonic_str = from_mnemonic
+        else:
+            # if there is a seed in the database, use it
+            _, mnemonic_str = ret[0], ret[1]
 
-            self.seed = mneno.to_seed(mnemonic_str)
-            logger.debug(f"Generated new seed: {self.seed.hex()}")
+        self.seed = mneno.to_seed(mnemonic_str)
+        self.mnemonic = mnemonic_str
+
+        logger.debug(f"Using seed: {self.seed.hex()}")
+        logger.debug(f"Using mnemonic: {mnemonic_str}")
+
+        # if no mnemonic was in the database, store the new one
+        if ret is None:
             await store_seed_and_mnemonic(
                 self.db, seed=self.seed.hex(), mnemonic=mnemonic_str
             )
-        else:
-            seed_hex, mnemonic = ret[0], ret[1]
-            if self.mnemonic:
-                assert (
-                    mnemonic == self.mnemonic
-                ), "Mnemonic from database does not match the wallet's mnemonic"
-            logger.debug(f"Loaded seed: {seed_hex}")
-            logger.debug(f"Loaded mnemonic: {mnemonic}")
-            self.mnemonic = mnemonic
-            self.seed = bytes.fromhex(seed_hex)
 
         try:
             self.bip32 = BIP32.from_seed(self.seed)
+            self.private_key = PrivateKey(self.bip32.get_privkey_from_path("m/0/0/0"))
         except ValueError:
             raise ValueError("Invalid seed")
         except Exception as e:
@@ -1353,11 +1357,8 @@ class Wallet(LedgerAPI):
         }
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
 
-    async def restore_wallet_from_mnemonic(
-        self, mnemonic: str, to: int = 2, batch: int = 25
-    ):
+    async def restore_wallet_from_mnemonic(self, to: int = 2, batch: int = 25):
         """Restores the wallet from a mnemonic"""
-        self.mnemonic = mnemonic
         await self._init_private_key()
         await self.load_mint()
         print("Restoring tokens...")
