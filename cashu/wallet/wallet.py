@@ -657,14 +657,20 @@ class Wallet(LedgerAPI):
             logger.error(f"Could not run migrations: {e}")
 
     async def _init_private_key(self, from_mnemonic: Optional[str] = None):
-        ret = await get_seed_and_mnemonic(self.db)  # or settings.wallet_private_key
+        ret = await get_seed_and_mnemonic(self.db)
 
         mneno = Mnemonic("english")
 
         if ret is None and from_mnemonic is None:
             # if there is no seed in the database, generate a new one
             mnemonic_str = mneno.generate()
-            logger.debug("Generated new mnemonic: ", mnemonic_str)
+            print("Generated a new mnemonic.")
+            print("")
+            print("#" * (len(mnemonic_str) + 6))
+            print("#  " + mnemonic_str + "  #")
+            print("#" * (len(mnemonic_str) + 6))
+            print("")
+            input("Please write it down and keep it safe. Press enter to continue...")
         elif from_mnemonic:
             # or use the one provided
             mnemonic_str = from_mnemonic
@@ -672,7 +678,8 @@ class Wallet(LedgerAPI):
             # if there is a seed in the database, use it
             _, mnemonic_str = ret[0], ret[1]
         else:
-            raise ValueError("No mnemonic provided")
+            logger.debug("No mnemonic provided")
+            return
 
         self.seed = mneno.to_seed(mnemonic_str)
         self.mnemonic = mnemonic_str
@@ -1355,14 +1362,22 @@ class Wallet(LedgerAPI):
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
 
     async def restore_wallet_from_mnemonic(
-        self, mnemonic: str, to: int = 2, batch: int = 25
+        self, mnemonic: Optional[str], to: int = 2, batch: int = 25
     ):
         """Restores the wallet from a mnemonic"""
         await self._init_private_key(mnemonic)
         await self.load_mint()
         print("Restoring tokens...")
         stop_counter = 0
-        i = 0
+        # we get the current secret counter and restore from there on
+        spendable_proofs = []
+        counter_before = await bump_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id, by=0
+        )
+        if counter_before != 0:
+            print("This wallet has already been used. Restoring from it's last state.")
+        i = counter_before
+        n_last_restored_proofs = 0
         while stop_counter < to:
             print(f"Restoring token {i} to {i + batch}...")
             restored_proofs = await self.restore_promises(i, i + batch - 1)
@@ -1370,13 +1385,24 @@ class Wallet(LedgerAPI):
                 stop_counter += 1
             spendable_proofs = await self.invalidate(restored_proofs)
             if len(spendable_proofs):
+                n_last_restored_proofs = len(spendable_proofs)
                 print(f"Restored {sum_proofs(restored_proofs)} sat")
             i += batch
 
-        # restore the secret counter to its previous value
+        # restore the secret counter to its previous value for the last round
+        revert_counter_by = batch * to + n_last_restored_proofs
+        logger.debug(f"Reverting secret counter by {revert_counter_by}")
         before = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=-batch * (to - 1)
+            db=self.db,
+            keyset_id=self.keyset_id,
+            by=-revert_counter_by,
         )
+        logger.debug(
+            f"Secret counter reverted from {before} to {before - revert_counter_by}"
+        )
+        if n_last_restored_proofs == 0:
+            print("No tokens restored.")
+            return
 
     async def restore_promises(self, from_counter: int, to_counter: int) -> List[Proof]:
         # we regenerate the secrets and rs for the given range

@@ -12,7 +12,7 @@ from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..wallet import migrations
-from ..wallet.crud import get_keyset, get_unused_locks
+from ..wallet.crud import get_keyset, get_seed_and_mnemonic, get_unused_locks
 from ..wallet.wallet import Wallet
 
 
@@ -217,3 +217,23 @@ async def send(
 
     wallet.status()
     return wallet.available_balance, token
+
+
+async def init_wallet_mnemonic(wallet: Wallet):
+    """Checks if a mnemonic is already set in the DB, if not, asks for one.
+    This function is called when the wallet is initialized.
+
+    Args:
+        wallet (Wallet): Wallet object to initialize.
+    """
+    ret = await get_seed_and_mnemonic(wallet.db)
+    if ret:
+        return
+    print(
+        "You have not entered a mnemonic and seed for this wallet yet. Enter a mnemonic or generate a new one."
+    )
+    mnemonic = input(
+        "Enter a mnemonic (press enter to generate a new one): ",
+    )
+
+    await wallet._init_private_key(mnemonic)

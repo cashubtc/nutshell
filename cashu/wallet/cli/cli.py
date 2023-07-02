@@ -25,6 +25,7 @@ from ...wallet.crud import (
     bump_secret_derivation,
     get_lightning_invoices,
     get_reserved_proofs,
+    get_seed_and_mnemonic,
     get_unused_locks,
 )
 from ...wallet.wallet import Wallet as Wallet
@@ -33,6 +34,7 @@ from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
 from ..helpers import (
     deserialize_token_from_string,
     init_wallet,
+    init_wallet_mnemonic,
     migrate_wallet_db,
     receive,
     send,
@@ -108,7 +110,7 @@ async def cli(ctx: Context, host: str, walletname: str):
     db_path = os.path.join(settings.cashu_dir, walletname)
     # loop = asyncio.new_event_loop()
 
-    # if the command is "restore" we don't want to start the wallet with a mnemonic
+    # if the command is "restore" we don't want to ask the user for a mnemonic
     # otherwise it will create a mnemonic and store it in the database
     if ctx.invoked_subcommand == "restore":
         wallet = await Wallet.with_db(
@@ -118,13 +120,17 @@ async def cli(ctx: Context, host: str, walletname: str):
         # # we need to run the migrations before we load the wallet for the first time
         # # otherwise the wallet will not be able to generate a new private key and store it
         # loop.run_until_complete(migrate_wallet_db(Database("wallet", db_path)))
+        wallet = await Wallet.with_db(
+            ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
+        )
+        await init_wallet_mnemonic(wallet)
         wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
 
     assert wallet, "Wallet not found."
     ctx.obj["WALLET"] = wallet
     # await init_wallet(ctx.obj["WALLET"], load_proofs=False)
 
-    # MUTLIMINT: Select a wallet
+    # ------ MUTLIMINT ------- : Select a wallet
     # only if a command is one of a subset that needs to specify a mint host
     # if a mint host is already specified as an argument `host`, use it
     if ctx.invoked_subcommand not in ["send", "invoice", "pay"] or host:
@@ -134,11 +140,6 @@ async def cli(ctx: Context, host: str, walletname: str):
         ctx
     )  # select a specific wallet by CLI input
     await init_wallet(ctx.obj["WALLET"], load_proofs=False)
-
-    if not settings.wallet_private_key:
-        print(
-            f"Warning: your wallet has no private key set. You will not be able to restore your wallet from a seed phrase. Set WALLET_PRIVATE_KEY in your .env file located at {settings.env_file}."
-        )
 
 
 @cli.command("pay", help="Pay Lightning invoice.")
@@ -496,17 +497,25 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 @coro
 async def restore(ctx: Context, to: int, batch: int):
     wallet: Wallet = ctx.obj["WALLET"]
+    # check if there is already a mnemonic in the database
+    ret = await get_seed_and_mnemonic(wallet.db)
+    if ret:
+        print("Wallet already has a mnemonic. Restoring tokens.")
+        mnemonic = None  # will be loaded from db in _init_private_key
+    else:
+        # ask the user for a mnemonic but allow also no input
+        print(
+            "Wallet has no mnemonic. Please enter your mnemonic to restore your balance."
+        )
+        mnemonic = input(
+            "Enter mnemonic: ",
+        )
+        if not mnemonic:
+            print("No mnemonic entered. Exiting.")
+            return
 
-    # ask the user for a mnemonic but allow also no input
-    mnemonic = click.prompt(
-        "Enter your mnemonic to restore your wallet.",
-        type=str,
-        default="",
-    )
-    if not mnemonic:
-        print("No mnemonic entered. Exiting.")
-        return
     await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
+    await wallet.load_proofs()
     wallet.status()
 
 
