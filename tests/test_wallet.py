@@ -496,7 +496,7 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: Wallet):
     await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla view sugar picture humble"
+        "half depart obvious quality work element tank gorilla view sugar picture picture"
     )
     await reset_wallet_db(wallet3)
 
@@ -536,7 +536,7 @@ class ProofBox:
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
     await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla view sugar picture humble"
+        "half depart obvious quality work element tank gorilla view picture picture picture"
     )
     await reset_wallet_db(wallet3)
 
@@ -620,7 +620,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
 ):
     box = ProofBox()
     await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla view sugar picture humble"
+        "half depart obvious quality work element tank gorilla picture picture picture picture"
     )
     await reset_wallet_db(wallet3)
 
