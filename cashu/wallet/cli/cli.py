@@ -108,14 +108,21 @@ async def cli(ctx: Context, host: str, walletname: str):
     db_path = os.path.join(settings.cashu_dir, walletname)
     # loop = asyncio.new_event_loop()
 
-    # # we need to run the migrations before we load the wallet for the first time
-    # # otherwise the wallet will not be able to generate a new private key and store it
-    # loop.run_until_complete(migrate_wallet_db(Database("wallet", db_path)))
+    # if the command is "restore" we don't want to start the wallet with a mnemonic
+    # otherwise it will create a mnemonic and store it in the database
+    if ctx.invoked_subcommand == "restore":
+        wallet = await Wallet.with_db(
+            ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
+        )
+    else:
+        # # we need to run the migrations before we load the wallet for the first time
+        # # otherwise the wallet will not be able to generate a new private key and store it
+        # loop.run_until_complete(migrate_wallet_db(Database("wallet", db_path)))
+        wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
 
-    wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
     assert wallet, "Wallet not found."
     ctx.obj["WALLET"] = wallet
-    await init_wallet(ctx.obj["WALLET"], load_proofs=False)
+    # await init_wallet(ctx.obj["WALLET"], load_proofs=False)
 
     # MUTLIMINT: Select a wallet
     # only if a command is one of a subset that needs to specify a mint host
@@ -490,7 +497,16 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 async def restore(ctx: Context, to: int, batch: int):
     wallet: Wallet = ctx.obj["WALLET"]
 
-    await wallet.restore_wallet_from_mnemonic(to=to, batch=batch)
+    # ask the user for a mnemonic but allow also no input
+    mnemonic = click.prompt(
+        "Enter your mnemonic to restore your wallet.",
+        type=str,
+        default="",
+    )
+    if not mnemonic:
+        print("No mnemonic entered. Exiting.")
+        return
+    await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
     wallet.status()
 
 

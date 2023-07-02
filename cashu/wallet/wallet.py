@@ -642,10 +642,12 @@ class Wallet(LedgerAPI):
         url: str,
         db: str,
         name: str = "no_name",
+        skip_private_key: bool = False,
     ):
         self = cls(url=url, db=db, name=name)
         await self._migrate_database()
-        await self._init_private_key()
+        if not skip_private_key:
+            await self._init_private_key()
         return self
 
     async def _migrate_database(self):
@@ -659,23 +661,18 @@ class Wallet(LedgerAPI):
 
         mneno = Mnemonic("english")
 
-        if ret is None:
-            # if there is no seed in the database, ask for input or generate a new one
-            # ask the user for a mnemonic but allow also no input
-            mnemonic_str = click.prompt(
-                "Enter your mnemonic (or leave empty to generate a new one)",
-                type=str,
-                default="",
-            )
-            if not mnemonic_str:
-                mnemonic_str = mneno.generate()
-                logger.debug("Generated new mnemonic: ", mnemonic_str)
+        if ret is None and from_mnemonic is None:
+            # if there is no seed in the database, generate a new one
+            mnemonic_str = mneno.generate()
+            logger.debug("Generated new mnemonic: ", mnemonic_str)
         elif from_mnemonic:
             # or use the one provided
             mnemonic_str = from_mnemonic
-        else:
+        elif ret is not None:
             # if there is a seed in the database, use it
             _, mnemonic_str = ret[0], ret[1]
+        else:
+            raise ValueError("No mnemonic provided")
 
         self.seed = mneno.to_seed(mnemonic_str)
         self.mnemonic = mnemonic_str
@@ -1357,9 +1354,11 @@ class Wallet(LedgerAPI):
         }
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
 
-    async def restore_wallet_from_mnemonic(self, to: int = 2, batch: int = 25):
+    async def restore_wallet_from_mnemonic(
+        self, mnemonic: str, to: int = 2, batch: int = 25
+    ):
         """Restores the wallet from a mnemonic"""
-        await self._init_private_key()
+        await self._init_private_key(mnemonic)
         await self.load_mint()
         print("Restoring tokens...")
         stop_counter = 0
