@@ -20,10 +20,12 @@ async def migrate_wallet_db(db: Database):
     await migrate_databases(db, migrations)
 
 
-async def init_wallet(wallet: Wallet, load_proofs: bool = True):
+async def init_wallet(
+    wallet: Wallet, load_proofs: bool = True, skip_cli_confirm_seed: bool = False
+):
     """Performs migrations and loads proofs from db."""
     await wallet._migrate_database()
-    await wallet._init_private_key()
+    await wallet._init_private_key(skip_cli_confirm_seed=skip_cli_confirm_seed)
     if load_proofs:
         await wallet.load_proofs(reload=True)
 

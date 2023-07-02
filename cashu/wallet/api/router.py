@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime
 from itertools import groupby, islice
@@ -41,40 +42,29 @@ router: APIRouter = APIRouter()
 def create_wallet(
     url=settings.mint_url, dir=settings.cashu_dir, name=settings.wallet_name
 ):
-    return Wallet(url, os.path.join(dir, name), name=name)
+    return Wallet(
+        url=url,
+        db=os.path.join(dir, name),
+        name=name,
+    )
 
 
 async def load_mint(wallet: Wallet, mint: Optional[str] = None):
     if mint:
-        # wallet = create_wallet(mint)
-        wallet = await Wallet.with_db(
-            url=settings.mint_url,
-            db=os.path.join(settings.cashu_dir, settings.wallet_name),
-            name=settings.wallet_name,
-            skip_cli_confirm_seed=True,
-        )
+        wallet = create_wallet(mint)
+    await init_wallet(wallet, skip_cli_confirm_seed=True)
     await wallet.load_mint()
     return wallet
 
 
-import asyncio
-
-wallet = asyncio.run(
-    Wallet.with_db(
-        url=settings.mint_url,
-        db=os.path.join(settings.cashu_dir, settings.wallet_name),
-        name=settings.wallet_name,
-        skip_cli_confirm_seed=True,
-    )
-)
-# wallet = create_wallet()
+wallet = create_wallet()
 
 
 @router.on_event("startup")
 async def start_wallet():
     if settings.tor and not TorProxy().check_platform():
         raise Exception("tor not working.")
-    await init_wallet(wallet)
+    await init_wallet(wallet, skip_cli_confirm_seed=True)
 
 
 @router.post("/pay", name="Pay lightning invoice", response_model=PayResponse)
