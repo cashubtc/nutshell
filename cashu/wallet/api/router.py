@@ -51,6 +51,7 @@ async def load_mint(wallet: Wallet, mint: Optional[str] = None):
             url=settings.mint_url,
             db=os.path.join(settings.cashu_dir, settings.wallet_name),
             name=settings.wallet_name,
+            skip_cli_confirm_seed=True,
         )
     await wallet.load_mint()
     return wallet
@@ -63,6 +64,7 @@ wallet = asyncio.run(
         url=settings.mint_url,
         db=os.path.join(settings.cashu_dir, settings.wallet_name),
         name=settings.wallet_name,
+        skip_cli_confirm_seed=True,
     )
 )
 # wallet = create_wallet()
