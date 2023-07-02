@@ -701,7 +701,9 @@ class Wallet(LedgerAPI):
 
         try:
             self.bip32 = BIP32.from_seed(self.seed)
-            self.private_key = PrivateKey(self.bip32.get_privkey_from_path("m/0/0/0"))
+            self.private_key = PrivateKey(
+                self.bip32.get_privkey_from_path(f"m/129372'/0'/0'/0'")
+            )
         except ValueError:
             raise ValueError("Invalid seed")
         except Exception as e:

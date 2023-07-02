@@ -631,6 +631,8 @@ async def locks(ctx):
     lock_str = f"P2PK:{pubkey}"
     print("---- Pay to public key (P2PK) lock ----\n")
     print(f"Lock: {lock_str}")
+    print("")
+    print("To see more information enter: cashu lock")
     # P2SH locks
     locks = await get_unused_locks(db=wallet.db)
     if len(locks):
@@ -642,8 +644,7 @@ async def locks(ctx):
             print(f"Signature: {l.signature}")
             print("")
             print(f"--------------------------\n")
-    else:
-        print("No locks found. Create one using: cashu lock")
+
     return True
 
 
