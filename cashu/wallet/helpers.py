@@ -232,8 +232,13 @@ async def init_wallet_mnemonic(wallet: Wallet, skip_input_for_tests: bool = Fals
     if ret:
         return
     print(
-        "You have not entered a mnemonic and seed for this wallet yet. Enter a mnemonic or generate a new one."
+        "You have not entered a mnemonic and seed for this wallet yet. Enter a mnemonic or generate a new one. You can do this step only once and will have to delete your database to repeat it."
     )
+    print("")
+    print(
+        "Warning: If you upgraded your wallet from an older version, your old funds will not be recoverable with the new mnemonic. To be able to recover your old funds from now on, send them to yourself once."
+    )
+    print("")
     if not skip_input_for_tests:
         mnemonic = input(
             "Enter a mnemonic (press enter to generate a new one): ",
