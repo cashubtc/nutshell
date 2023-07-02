@@ -643,11 +643,12 @@ class Wallet(LedgerAPI):
         db: str,
         name: str = "no_name",
         skip_private_key: bool = False,
+        skip_cli_confirm_seed: bool = False,
     ):
         self = cls(url=url, db=db, name=name)
         await self._migrate_database()
         if not skip_private_key:
-            await self._init_private_key()
+            await self._init_private_key(skip_cli_confirm_seed=skip_cli_confirm_seed)
         return self
 
     async def _migrate_database(self):
@@ -656,7 +657,9 @@ class Wallet(LedgerAPI):
         except Exception as e:
             logger.error(f"Could not run migrations: {e}")
 
-    async def _init_private_key(self, from_mnemonic: Optional[str] = None):
+    async def _init_private_key(
+        self, from_mnemonic: Optional[str] = None, skip_cli_confirm_seed: bool = False
+    ):
         ret = await get_seed_and_mnemonic(self.db)
 
         mneno = Mnemonic("english")
@@ -670,7 +673,10 @@ class Wallet(LedgerAPI):
             print("#  " + mnemonic_str + "  #")
             print("#" * (len(mnemonic_str) + 6))
             print("")
-            input("Please write it down and keep it safe. Press enter to continue...")
+            if not skip_cli_confirm_seed:
+                input(
+                    "Please write it down and keep it safe. Press enter to continue..."
+                )
         elif from_mnemonic:
             # or use the one provided
             mnemonic_str = from_mnemonic

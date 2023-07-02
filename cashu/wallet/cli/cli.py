@@ -88,9 +88,16 @@ def coro(f):
     callback=run_api_server,
     help="Start server for wallet REST API",
 )
+@click.option(
+    "--tests",
+    "-t",
+    is_flag=True,
+    default=False,
+    help="Run in test mode (don't ask for CLI inputs)",
+)
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str):
+async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     if settings.tor and not TorProxy().check_platform():
         error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
         error_str += "\n\n"
@@ -123,7 +130,7 @@ async def cli(ctx: Context, host: str, walletname: str):
         wallet = await Wallet.with_db(
             ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
         )
-        await init_wallet_mnemonic(wallet)
+        await init_wallet_mnemonic(wallet, skip_input_for_tests=tests)
         wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
 
     assert wallet, "Wallet not found."

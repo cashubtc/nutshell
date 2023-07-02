@@ -18,6 +18,7 @@ async def wallet(mint):
         url=SERVER_ENDPOINT,
         db="data/test_wallet_api",
         name="wallet_api",
+        skip_cli_confirm_seed=True,
     )
     await wallet.load_mint()
     wallet.status()

@@ -13,7 +13,7 @@ from tests.conftest import SERVER_ENDPOINT, mint
 
 @pytest.fixture(autouse=True, scope="session")
 def cli_prefix():
-    yield ["--wallet", "test_wallet", "--host", settings.mint_url]
+    yield ["--wallet", "test_wallet", "--host", settings.mint_url, "--tests"]
 
 
 async def init_wallet():
@@ -21,6 +21,7 @@ async def init_wallet():
         url=settings.mint_host,
         db="data/test_cli_wallet",
         name="wallet",
+        skip_cli_confirm_seed=True,
     )
     await wallet.load_proofs()
     return wallet

@@ -219,7 +219,7 @@ async def send(
     return wallet.available_balance, token
 
 
-async def init_wallet_mnemonic(wallet: Wallet):
+async def init_wallet_mnemonic(wallet: Wallet, skip_input_for_tests: bool = False):
     """Checks if a mnemonic is already set in the DB, if not, asks for one.
     This function is called when the wallet is initialized.
 
@@ -232,8 +232,11 @@ async def init_wallet_mnemonic(wallet: Wallet):
     print(
         "You have not entered a mnemonic and seed for this wallet yet. Enter a mnemonic or generate a new one."
     )
-    mnemonic = input(
-        "Enter a mnemonic (press enter to generate a new one): ",
-    )
+    if not skip_input_for_tests:
+        mnemonic = input(
+            "Enter a mnemonic (press enter to generate a new one): ",
+        )
+    else:
+        mnemonic = None
 
-    await wallet._init_private_key(mnemonic)
+    await wallet._init_private_key(mnemonic, skip_cli_confirm_seed=skip_input_for_tests)
