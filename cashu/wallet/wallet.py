@@ -133,9 +133,6 @@ class LedgerAPI(object):
     ) -> Tuple[List[str], List[PrivateKey], List[str]]:
         return await self.generate_n_secrets(n, skip_bump)
 
-    async def generate_secrets_numbered(self, secret: str, n: int) -> List[str]:
-        return await self.generate_secrets_numbered(secret, n)
-
     async def _generate_secret(self, skip_bump: bool = False) -> str:
         return await self._generate_secret(skip_bump)
 
@@ -151,7 +148,20 @@ class LedgerAPI(object):
         rs: List[PrivateKey],
         derivation_paths: List[str],
     ) -> List[Proof]:
-        """Returns proofs of promise from promises. Wants secrets and blinding factors rs."""
+        """Constructs proofs from promises, secrets, rs and derivation paths.
+
+        This method is called after the user has received blind signatures from
+        the mint. The results are proofs that can be used as ecash.
+
+        Args:
+            promises (List[BlindedSignature]): blind signatures from mint
+            secrets (List[str]): secrets that were previously used to create blind messages (that turned into promises)
+            rs (List[PrivateKey]): blinding factors that were previously used to create blind messages (that turned into promises)
+            derivation_paths (List[str]): derivation paths that were used to generate secrets and blinding factors
+
+        Returns:
+            List[Proof]: list of proofs that can be used as ecash
+        """
         logger.trace(f"Constructing proofs.")
         proofs: List[Proof] = []
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
@@ -181,11 +191,21 @@ class LedgerAPI(object):
     @staticmethod
     def _construct_outputs(
         amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
-    ):
+    ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
         """Takes a list of amounts and secrets and returns outputs.
         Outputs are blinded messages `outputs` and blinding factors `rs`
 
-        If `rs` is not given, it is generated in step1_alice.
+        Args:
+            amounts (List[int]): list of amounts
+            secrets (List[str]): list of secrets
+            rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
+
+        Returns:
+            List[BlindedMessage]: list of blinded messages that can be sent to the mint
+            List[PrivateKey]: list of blinding factors that can be used to construct proofs after receiving blind signatures from the mint
+
+        Raises:
+            AssertionError: if len(amounts) != len(secrets)
         """
         assert len(amounts) == len(
             secrets
@@ -206,11 +226,28 @@ class LedgerAPI(object):
         return outputs, rs_return
 
     @staticmethod
-    def raise_on_error(resp_dict):
+    def raise_on_error(resp_dict) -> None:
+        """Raises an exception if the response from the mint contains an error.
+
+        Args:
+            resp_dict (_type_): Response dict (previously JSON) from mint
+
+        Raises:
+            Exception: if the response contains an error
+        """
         if "error" in resp_dict:
             raise Exception("Mint Error: {}".format(resp_dict["error"]))
 
-    async def _load_mint_keys(self, keyset_id: str = ""):
+    async def _load_mint_keys(self, keyset_id: str = "") -> WalletKeyset:
+        """Loads keys from mint and stores them in the database.
+
+        Args:
+            keyset_id (str, optional): keyset id to load. If given, requests keys for this keyset from the mint. If not given, requests current keyset of the mint. Defaults to "".
+
+        Raises:
+            AssertionError: if mint URL is not set
+            AssertionError: if no keys are received from the mint
+        """
         assert len(
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
@@ -242,7 +279,14 @@ class LedgerAPI(object):
         return self.keys
 
     async def _load_mint_keysets(self) -> List[str]:
-        # get all active keysets of this mint
+        """Loads the keyset IDs of the mint.
+
+        Returns:
+            List[str]: list of keyset IDs of the mint
+
+        Raises:
+            AssertionError: if no keysets are received from the mint
+        """
         mint_keysets = []
         try:
             mint_keysets = await self._get_keyset_ids(self.url)
@@ -471,20 +515,20 @@ class LedgerAPI(object):
 
         amounts = frst_outputs + scnd_outputs
 
-        # TODO: Fix P2SH with `generate_n_secrets`, make it work with
-        # `generate_secrets_numbered` (which should be renamed!)
         if secret_lock is None:
             secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
         else:
             # NOTE: we use random blinding factors for P2SH, we won't be able to
             # restore these tokens from a backup
             rs = []
+            # generate secrets for receiver
             secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
             logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
             assert len(secret_locks) == len(
                 scnd_outputs
             ), "number of secret_locks does not match number of ouptus."
             # append predefined secrets (to send) to random secrets (to keep)
+            # generate sercets to keep
             secrets = [
                 await self._generate_secret() for s in range(len(frst_outputs))
             ] + secret_locks
@@ -724,12 +768,6 @@ class Wallet(LedgerAPI):
         # return s.decode("utf-8")
         return hashlib.sha256(s).hexdigest()
 
-    async def generate_secrets_numbered(self, secret: str, n: int) -> List[str]:
-        """`secret` is the base string that will be tweaked n times"""
-        if len(secret.split("P2SH:")) == 2:
-            return [f"{secret}:{await self._generate_secret()}" for i in range(n)]
-        return [f"{i}:{secret}" for i in range(n)]
-
     async def generate_determinstic_secret(
         self, counter: int
     ) -> Tuple[bytes, bytes, str]:
@@ -758,7 +796,19 @@ class Wallet(LedgerAPI):
     async def generate_n_secrets(
         self, n: int = 1, skip_bump: bool = False
     ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        """Generates n secrets and blinding factors and returns two lists"""
+        """Generates n secrets and blinding factors and returns a tuple of secrets,
+        blinding factors, and derivation paths.
+
+        Args:
+            n (int, optional): Number of secrets to generate. Defaults to 1.
+            skip_bump (bool, optional): Skip increment of secret counter in the database.
+            You want to set this to false if you don't know whether the following operation
+            will succeed or not (like a POST /mint request). Defaults to False.
+
+        Returns:
+            Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
+
+        """
         secret_counters_start = await bump_secret_derivation(
             db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump
         )
@@ -785,7 +835,21 @@ class Wallet(LedgerAPI):
     async def generate_secrets_from_to(
         self, from_counter: int, to_counter: int
     ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        """Generates n secrets and blinding factors and returns two lists"""
+        """Generates secrets and blinding factors from `from_counter` to `to_counter`
+
+        Args:
+            from_counter (int): Start counter
+            to_counter (int): End counter
+
+        Returns:
+            Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
+
+        Raises:
+            ValueError: If `from_counter` is larger than `to_counter`
+        """
+        assert (
+            from_counter <= to_counter
+        ), "from_counter must be smaller than to_counter"
         secret_counters = [c for c in range(from_counter, to_counter + 1)]
         secrets_rs_derivationpaths = [
             await self.generate_determinstic_secret(s) for s in secret_counters
@@ -948,7 +1012,6 @@ class Wallet(LedgerAPI):
         # NUT-08, the mint will imprint these outputs with a value depending on the
         # amount of fees we overpaid.
         n_return_outputs = calculate_number_of_blank_outputs(fee_reserve)
-        # secrets = [await self._generate_secret() for _ in range(n_return_outputs)]
         secrets, rs, derivation_paths = await self.generate_n_secrets(n_return_outputs)
         outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
 
