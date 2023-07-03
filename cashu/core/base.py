@@ -494,7 +494,7 @@ class TokenV3(BaseModel):
         return list(set([p.id for p in self.get_proofs()]))
 
     @classmethod
-    def deserialize(cls, tokenv3_serialized: str):
+    def deserialize(cls, tokenv3_serialized: str) -> "TokenV3":
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """
@@ -506,7 +506,7 @@ class TokenV3(BaseModel):
         token = json.loads(base64.urlsafe_b64decode(token_base64))
         return cls.parse_obj(token)
 
-    def serialize(self):
+    def serialize(self) -> str:
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """

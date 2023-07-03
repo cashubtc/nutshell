@@ -673,6 +673,13 @@ class Wallet(LedgerAPI):
         db: str,
         name: str = "no_name",
     ):
+        """A Cashu wallet.
+
+        Args:
+            url (str): URL of the mint.
+            db (str): Path to the database directory.
+            name (str, optional): Name of the wallet database file. Defaults to "no_name".
+        """
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
@@ -689,6 +696,18 @@ class Wallet(LedgerAPI):
         skip_private_key: bool = False,
         skip_cli_confirm_seed: bool = False,
     ):
+        """Initializes a wallet with a database and initializes the private key.
+
+        Args:
+            url (str): URL of the mint.
+            db (str): Path to the database.
+            name (str, optional): Name of the wallet. Defaults to "no_name".
+            skip_private_key (bool, optional): If true, the private key is not initialized. Defaults to False.
+            skip_cli_confirm_seed (bool, optional): If true, the user is not asked to confirm the seed. Defaults to False.
+
+        Returns:
+            Wallet: Initialized wallet.
+        """
         self = cls(url=url, db=db, name=name)
         await self._migrate_database()
         if not skip_private_key:
@@ -703,7 +722,25 @@ class Wallet(LedgerAPI):
 
     async def _init_private_key(
         self, from_mnemonic: Optional[str] = None, skip_cli_confirm_seed: bool = False
-    ):
+    ) -> None:
+        """Initializes the private key of the wallet from the mnemonic.
+        There are three ways to initialize the private key:
+        1. If the database does not contain a seed, and no mnemonic is given, a new seed is generated.
+        2. If the database does not contain a seed, and a mnemonic is given, the seed is generated from the mnemonic.
+        3. If the database contains a seed, the seed is loaded from the database.
+
+        If the mnemonic is generated, it is printed to the console and the user is asked to write it down.
+        The input is blocked until the user presses enter except if skip_cli_confirm_seed is set to True.
+
+        If the mnemonic was not loaded from the database, the seed and mnemonic are stored in the database.
+
+        Args:
+            from_mnemonic (Optional[str], optional): Mnemonic to use. Defaults to None.
+            skip_cli_confirm_seed (bool, optional): If True, the user is not asked to confirm the seed. Defaults to False.
+
+        Raises:
+            ValueError: If the mnemonic is not BIP39 compliant.
+        """
         ret = await get_seed_and_mnemonic(self.db)
 
         mneno = Mnemonic("english")
@@ -873,7 +910,7 @@ class Wallet(LedgerAPI):
         """
         await super()._load_mint(keyset_id)
 
-    async def load_proofs(self, reload: bool = False):
+    async def load_proofs(self, reload: bool = False) -> None:
         """Load all proofs from the database."""
 
         if self.proofs and not reload:
@@ -881,7 +918,15 @@ class Wallet(LedgerAPI):
             return
         self.proofs = await get_proofs(db=self.db)
 
-    async def request_mint(self, amount):
+    async def request_mint(self, amount: int) -> Invoice:
+        """Request a Lightning invoice for minting tokens.
+
+        Args:
+            amount (int): Amount for Lightning invoice in satoshis
+
+        Returns:
+            Invoice: Lightning invoice
+        """
         invoice = await super().request_mint(amount)
         invoice.time_created = int(time.time())
         await store_lightning_invoice(db=self.db, invoice=invoice)
@@ -892,7 +937,7 @@ class Wallet(LedgerAPI):
         amount: int,
         split: Optional[List[int]] = None,
         hash: Optional[str] = None,
-    ):
+    ) -> List[Proof]:
         """Mint tokens of a specific amount after an invoice has been paid.
 
         Args:
@@ -930,8 +975,23 @@ class Wallet(LedgerAPI):
         self.proofs += proofs
         return proofs
 
-    async def add_witnesses_to_proofs(self, proofs: List[Proof]):
-        """Adds witnesses to proofs for P2SH or P2PK redemption."""
+    async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        """Adds witnesses to proofs for P2SH or P2PK redemption.
+
+        This method parses the secret of each proof and determines the correct
+        witness type and adds it to the proof if we have it available.
+
+        Note: In order for this method to work, all proofs must have the same secret type.
+        This is because we use a single P2SH script and signature pair for all tokens in proofs.
+
+        For P2PK, we use an individual signature for each token in proofs.
+
+        Args:
+            proofs (List[Proof]): List of proofs to add witnesses to
+
+        Returns:
+            List[Proof]: List of proofs with witnesses added
+        """
 
         p2sh_script, p2sh_signature = None, None
         p2pk_signatures = None
@@ -978,7 +1038,16 @@ class Wallet(LedgerAPI):
     async def redeem(
         self,
         proofs: List[Proof],
-    ):
+    ) -> Tuple[List[Proof], List[Proof]]:
+        """Redeem proofs by sending them to yourself (by calling a split).)
+        Calls `add_witnesses_to_proofs` which parses all proofs and checks whether their
+        secrets corresponds to any locks that we have the unlock conditions for. If so,
+        it adds the unlock conditions to the proofs.
+
+        Args:
+            proofs (List[Proof]): Proofs to be redeemed.
+
+        """
         proofs = await self.add_witnesses_to_proofs(proofs)
         return await self.split(proofs, sum_proofs(proofs))
 
@@ -987,7 +1056,21 @@ class Wallet(LedgerAPI):
         proofs: List[Proof],
         amount: int,
         secret_lock: Optional[Secret] = None,
-    ):
+    ) -> Tuple[List[Proof], List[Proof]]:
+        """Split proofs into two sets of proofs at a given amount.
+
+        Args:
+            proofs (List[Proof]): Input proofs to split.
+            amount (int): Amount to split at.
+            secret_lock (Optional[Secret], optional): Secret to lock outputs to. Defaults to None.
+
+        Raises:
+            Exception: Raises exception if no proofs have been provided
+            Exception: Raises exception if no proofs are returned after splitting
+
+        Returns:
+            Tuple[List[Proof], List[Proof]]: Two sets of proofs after splitting.
+        """
         assert len(proofs) > 0, ValueError("no proofs provided.")
         frst_proofs, scnd_proofs = await super().split(proofs, amount, secret_lock)
 
@@ -1005,13 +1088,22 @@ class Wallet(LedgerAPI):
                 await invalidate_proof(proof, db=self.db, conn=conn)
         return frst_proofs, scnd_proofs
 
-    async def pay_lightning(self, proofs: List[Proof], invoice: str, fee_reserve: int):
-        """Pays a lightning invoice"""
+    async def pay_lightning(
+        self, proofs: List[Proof], invoice: str, fee_reserve_sat: int
+    ) -> bool:
+        """Pays a lightning invoice and returns the status of the payment.
+
+        Args:
+            proofs (List[Proof]): List of proofs to be spent.
+            invoice (str): Lightning invoice to be paid.
+            fee_reserve_sat (int): Amount of fees to be reserved for the payment.
+
+        """
 
         # Generate a number of blank outputs for any overpaid fees. As described in
         # NUT-08, the mint will imprint these outputs with a value depending on the
         # amount of fees we overpaid.
-        n_return_outputs = calculate_number_of_blank_outputs(fee_reserve)
+        n_return_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
         secrets, rs, derivation_paths = await self.generate_n_secrets(n_return_outputs)
         outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
 
@@ -1061,21 +1153,24 @@ class Wallet(LedgerAPI):
     def _get_proofs_per_keyset(proofs: List[Proof]):
         return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
 
-    async def _get_proofs_per_minturl(self, proofs: List[Proof]):
-        ret = {}
+    async def _get_proofs_per_minturl(
+        self, proofs: List[Proof]
+    ) -> Dict[str, List[Proof]]:
+        ret: Dict[str, List[Proof]] = {}
         for id in set([p.id for p in proofs]):
             if id is None:
                 continue
             keyset_crud = await get_keyset(id=id, db=self.db)
             assert keyset_crud is not None, "keyset not found"
             keyset: WalletKeyset = keyset_crud
+            assert keyset.mint_url
             if keyset.mint_url not in ret:
                 ret[keyset.mint_url] = [p for p in proofs if p.id == id]
             else:
                 ret[keyset.mint_url].extend([p for p in proofs if p.id == id])
         return ret
 
-    def _get_proofs_keysets(self, proofs: List[Proof]):
+    def _get_proofs_keysets(self, proofs: List[Proof]) -> List[str]:
         """Extracts all keyset ids from a list of proofs.
 
         Args:
@@ -1084,7 +1179,7 @@ class Wallet(LedgerAPI):
         keysets: List[str] = [proof.id for proof in proofs if proof.id]
         return keysets
 
-    async def _get_keyset_urls(self, keysets: List[str]):
+    async def _get_keyset_urls(self, keysets: List[str]) -> Dict[str, List[str]]:
         """Retrieves the mint URLs for a list of keyset id's from the wallet's database.
         Returns a dictionary from URL to keyset ID
 
@@ -1102,10 +1197,17 @@ class Wallet(LedgerAPI):
                 )
         return mint_urls
 
-    async def _make_token(self, proofs: List[Proof], include_mints=True):
+    async def _make_token(self, proofs: List[Proof], include_mints=True) -> TokenV3:
         """
         Takes list of proofs and produces a TokenV3 by looking up
         the mint URLs by the keyset id from the database.
+
+        Args:
+            proofs (List[Proof]): List of proofs to be included in the token
+            include_mints (bool, optional): Whether to include the mint URLs in the token. Defaults to True.
+
+        Returns:
+            TokenV3: TokenV3 object
         """
         token = TokenV3()
 
@@ -1129,15 +1231,22 @@ class Wallet(LedgerAPI):
 
     async def serialize_proofs(
         self, proofs: List[Proof], include_mints=True, legacy=False
-    ):
-        """
-        Produces sharable token with proofs and mint information.
+    ) -> str:
+        """Produces sharable token with proofs and mint information.
+
+        Args:
+            proofs (List[Proof]): List of proofs to be included in the token
+            include_mints (bool, optional): Whether to include the mint URLs in the token. Defaults to True.
+            legacy (bool, optional): Whether to produce a legacy V2 token. Defaults to False.
+
+        Returns:
+            str: Serialized Cashu token
         """
 
         if legacy:
             # V2 tokens
-            token = await self._make_token_v2(proofs, include_mints)
-            return await self._serialize_token_base64_tokenv2(token)
+            token_v2 = await self._make_token_v2(proofs, include_mints)
+            return await self._serialize_token_base64_tokenv2(token_v2)
 
             # # deprecated code for V1 tokens
             # proofs_serialized = [p.to_dict() for p in proofs]
@@ -1149,7 +1258,7 @@ class Wallet(LedgerAPI):
         token = await self._make_token(proofs, include_mints)
         return token.serialize()
 
-    async def _make_token_v2(self, proofs: List[Proof], include_mints=True):
+    async def _make_token_v2(self, proofs: List[Proof], include_mints=True) -> TokenV2:
         """
         Takes list of proofs and produces a TokenV2 by looking up
         the keyset id and mint URLs from the database.
@@ -1181,7 +1290,7 @@ class Wallet(LedgerAPI):
                 token.mints = list(mints.values())
         return token
 
-    async def _serialize_token_base64_tokenv2(self, token: TokenV2):
+    async def _serialize_token_base64_tokenv2(self, token: TokenV2) -> str:
         """
         Takes a TokenV2 and serializes it in urlsafe_base64.
         """
@@ -1191,7 +1300,9 @@ class Wallet(LedgerAPI):
         ).decode()
         return token_base64
 
-    async def _select_proofs_to_send(self, proofs: List[Proof], amount_to_send: int):
+    async def _select_proofs_to_send(
+        self, proofs: List[Proof], amount_to_send: int
+    ) -> List[Proof]:
         """
         Selects proofs that can be used with the current mint. Implements a simple coin selection algorithm.
 
@@ -1234,8 +1345,13 @@ class Wallet(LedgerAPI):
         logger.debug(f"selected proof amounts: {[p.amount for p in send_proofs]}")
         return send_proofs
 
-    async def set_reserved(self, proofs: List[Proof], reserved: bool):
-        """Mark a proof as reserved to avoid reuse or delete marking."""
+    async def set_reserved(self, proofs: List[Proof], reserved: bool) -> None:
+        """Mark a proof as reserved or reset it in the wallet db to avoid reuse when it is sent.
+
+        Args:
+            proofs (List[Proof]): List of proofs to mark as reserved
+            reserved (bool): Whether to mark the proofs as reserved or not
+        """
         uuid_str = str(uuid.uuid1())
         for proof in proofs:
             proof.reserved = True
@@ -1434,8 +1550,14 @@ class Wallet(LedgerAPI):
 
     async def restore_wallet_from_mnemonic(
         self, mnemonic: Optional[str], to: int = 2, batch: int = 25
-    ):
-        """Restores the wallet from a mnemonic"""
+    ) -> None:
+        """Restores the wallet from a mnemonic
+
+        Args:
+            mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.
+            to (int, optional): The number of consecutive empty reponses to stop restoring. Defaults to 2.
+            batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
+        """
         await self._init_private_key(mnemonic)
         await self.load_mint()
         print("Restoring tokens...")
@@ -1476,6 +1598,15 @@ class Wallet(LedgerAPI):
             return
 
     async def restore_promises(self, from_counter: int, to_counter: int) -> List[Proof]:
+        """Restores promises from a given range of counters. This is for restoring a wallet from a mnemonic.
+
+        Args:
+            from_counter (int): Counter for the secret derivation to start from
+            to_counter (int): Counter for the secret derivation to end at
+
+        Returns:
+            List[Proof]: List of restored proofs
+        """
         # we regenerate the secrets and rs for the given range
         secrets, rs, derivation_paths = await self.generate_secrets_from_to(
             from_counter, to_counter
