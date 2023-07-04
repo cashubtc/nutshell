@@ -694,7 +694,6 @@ class Wallet(LedgerAPI):
         db: str,
         name: str = "no_name",
         skip_private_key: bool = False,
-        skip_cli_confirm_seed: bool = False,
     ):
         """Initializes a wallet with a database and initializes the private key.
 
@@ -703,7 +702,6 @@ class Wallet(LedgerAPI):
             db (str): Path to the database.
             name (str, optional): Name of the wallet. Defaults to "no_name".
             skip_private_key (bool, optional): If true, the private key is not initialized. Defaults to False.
-            skip_cli_confirm_seed (bool, optional): If true, the user is not asked to confirm the seed. Defaults to False.
 
         Returns:
             Wallet: Initialized wallet.
@@ -711,7 +709,7 @@ class Wallet(LedgerAPI):
         self = cls(url=url, db=db, name=name)
         await self._migrate_database()
         if not skip_private_key:
-            await self._init_private_key(skip_cli_confirm_seed=skip_cli_confirm_seed)
+            await self._init_private_key()
         return self
 
     async def _migrate_database(self):
@@ -720,23 +718,17 @@ class Wallet(LedgerAPI):
         except Exception as e:
             logger.error(f"Could not run migrations: {e}")
 
-    async def _init_private_key(
-        self, from_mnemonic: Optional[str] = None, skip_cli_confirm_seed: bool = False
-    ) -> None:
+    async def _init_private_key(self, from_mnemonic: Optional[str] = None) -> None:
         """Initializes the private key of the wallet from the mnemonic.
         There are three ways to initialize the private key:
         1. If the database does not contain a seed, and no mnemonic is given, a new seed is generated.
         2. If the database does not contain a seed, and a mnemonic is given, the seed is generated from the mnemonic.
         3. If the database contains a seed, the seed is loaded from the database.
 
-        If the mnemonic is generated, it is printed to the console and the user is asked to write it down.
-        The input is blocked until the user presses enter except if skip_cli_confirm_seed is set to True.
-
         If the mnemonic was not loaded from the database, the seed and mnemonic are stored in the database.
 
         Args:
             from_mnemonic (Optional[str], optional): Mnemonic to use. Defaults to None.
-            skip_cli_confirm_seed (bool, optional): If True, the user is not asked to confirm the seed. Defaults to False.
 
         Raises:
             ValueError: If the mnemonic is not BIP39 compliant.
@@ -748,16 +740,7 @@ class Wallet(LedgerAPI):
         if ret is None and from_mnemonic is None:
             # if there is no seed in the database, generate a new one
             mnemonic_str = mneno.generate()
-            print("Generated a new mnemonic.")
-            print("")
-            print("#" * (len(mnemonic_str) + 6))
-            print("#  " + mnemonic_str + "  #")
-            print("#" * (len(mnemonic_str) + 6))
-            print("")
-            if not skip_cli_confirm_seed:
-                input(
-                    "Please write it down and keep it safe. Press enter to continue..."
-                )
+            print('Generated a new mnemonic. To view it, run "cashu info --mnemonic".')
         elif from_mnemonic:
             # or use the one provided
             mnemonic_str = from_mnemonic

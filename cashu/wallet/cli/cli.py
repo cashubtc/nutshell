@@ -13,16 +13,13 @@ from os.path import isdir, join
 import click
 from click import Context
 from loguru import logger
-from mnemonic import Mnemonic
 
 from ...core.base import TokenV3
-from ...core.db import Database
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
-    bump_secret_derivation,
     get_lightning_invoices,
     get_reserved_proofs,
     get_seed_and_mnemonic,
@@ -34,8 +31,6 @@ from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
 from ..helpers import (
     deserialize_token_from_string,
     init_wallet,
-    init_wallet_mnemonic,
-    migrate_wallet_db,
     receive,
     send,
 )
@@ -130,7 +125,7 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
         wallet = await Wallet.with_db(
             ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
         )
-        await init_wallet_mnemonic(wallet, skip_input_for_tests=tests)
+        # now with the migrations done, we can load the wallet and generate a new mnemonic if needed
         wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
 
     assert wallet, "Wallet not found."
@@ -711,12 +706,8 @@ async def wallets(ctx):
 
 
 @cli.command("info", help="Information about Cashu wallet.")
-@click.option(
-    "--mint", "-m", default=False, is_flag=True, help="Fetch mint information."
-)
-@click.option(
-    "--mnemonic", "-mn", default=False, is_flag=True, help="Show your mnemonic."
-)
+@click.option("--mint", default=False, is_flag=True, help="Fetch mint information.")
+@click.option("--mnemonic", default=False, is_flag=True, help="Show your mnemonic.")
 @click.pass_context
 @coro
 async def info(ctx: Context, mint: bool, mnemonic: bool):

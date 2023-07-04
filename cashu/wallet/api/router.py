@@ -52,7 +52,7 @@ def create_wallet(
 async def load_mint(wallet: Wallet, mint: Optional[str] = None):
     if mint:
         wallet = create_wallet(mint)
-    await init_wallet(wallet, skip_cli_confirm_seed=True)
+    await init_wallet(wallet)
     await wallet.load_mint()
     return wallet
 
@@ -64,7 +64,7 @@ wallet = create_wallet()
 async def start_wallet():
     if settings.tor and not TorProxy().check_platform():
         raise Exception("tor not working.")
-    await init_wallet(wallet, skip_cli_confirm_seed=True)
+    await init_wallet(wallet)
 
 
 @router.post("/pay", name="Pay lightning invoice", response_model=PayResponse)

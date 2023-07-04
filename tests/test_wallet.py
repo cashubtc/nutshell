@@ -49,7 +49,6 @@ async def wallet1(mint):
         url=SERVER_ENDPOINT,
         db="data/wallet1",
         name="wallet1",
-        skip_cli_confirm_seed=True,
     )
     await wallet1.load_mint()
     wallet1.status()
@@ -62,7 +61,6 @@ async def wallet2(mint):
         url=SERVER_ENDPOINT,
         db="data/wallet2",
         name="wallet2",
-        skip_cli_confirm_seed=True,
     )
     await wallet2.load_mint()
     wallet2.status()
@@ -79,7 +77,6 @@ async def wallet3(mint):
         url=SERVER_ENDPOINT,
         db="data/wallet3",
         name="wallet3",
-        skip_cli_confirm_seed=True,
     )
     await wallet3.db.execute("DELETE FROM proofs")
     await wallet3.db.execute("DELETE FROM proofs_used")

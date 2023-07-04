@@ -20,12 +20,10 @@ async def migrate_wallet_db(db: Database):
     await migrate_databases(db, migrations)
 
 
-async def init_wallet(
-    wallet: Wallet, load_proofs: bool = True, skip_cli_confirm_seed: bool = False
-):
+async def init_wallet(wallet: Wallet, load_proofs: bool = True):
     """Performs migrations and loads proofs from db."""
     await wallet._migrate_database()
-    await wallet._init_private_key(skip_cli_confirm_seed=skip_cli_confirm_seed)
+    await wallet._init_private_key()
     if load_proofs:
         await wallet.load_proofs(reload=True)
 
@@ -219,31 +217,3 @@ async def send(
 
     wallet.status()
     return wallet.available_balance, token
-
-
-async def init_wallet_mnemonic(wallet: Wallet, skip_input_for_tests: bool = False):
-    """Checks if a mnemonic is already set in the DB, if not, asks for one.
-    This function is called when the wallet is initialized.
-
-    Args:
-        wallet (Wallet): Wallet object to initialize.
-    """
-    ret = await get_seed_and_mnemonic(wallet.db)
-    if ret:
-        return
-    print(
-        "You have not entered a mnemonic and seed for this wallet yet. Enter a mnemonic or generate a new one. You can do this step only once and will have to delete your database to repeat it."
-    )
-    print("")
-    print(
-        "Warning: If you upgraded your wallet from an older version, your old funds will not be recoverable with the new mnemonic. To be able to recover your old funds from now on, send them to yourself once."
-    )
-    print("")
-    if not skip_input_for_tests:
-        mnemonic = input(
-            "Enter a mnemonic (press enter to generate a new one): ",
-        )
-    else:
-        mnemonic = None
-
-    await wallet._init_private_key(mnemonic, skip_cli_confirm_seed=skip_input_for_tests)

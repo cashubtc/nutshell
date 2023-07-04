@@ -21,7 +21,6 @@ async def init_wallet():
         url=settings.mint_host,
         db="data/test_cli_wallet",
         name="wallet",
-        skip_cli_confirm_seed=True,
     )
     await wallet.load_proofs()
     return wallet
