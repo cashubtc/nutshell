@@ -13,7 +13,7 @@ from tests.conftest import SERVER_ENDPOINT, mint
 
 @pytest.fixture(autouse=True, scope="session")
 def cli_prefix():
-    yield ["--wallet", "test_wallet", "--host", settings.mint_url, "--tests"]
+    yield ["--wallet", "test_cli_wallet", "--host", settings.mint_url, "--tests"]
 
 
 async def init_wallet():
@@ -45,12 +45,27 @@ def test_info_with_mint(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "info", "-m"],
+        [*cli_prefix, "info", "--mint"],
     )
     assert result.exception is None
     print("INFO -M")
     print(result.output)
     assert "Mint name" in result.output
+    assert result.exit_code == 0
+
+
+@pytest.mark.asyncio
+def test_info_with_mnemonic(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "info", "--mnemonic"],
+    )
+    assert result.exception is None
+    print("INFO -M")
+    print(result.output)
+    wallet = asyncio.run(init_wallet())
+    assert wallet.mnemonic in result.output
     assert result.exit_code == 0
 
 
