@@ -89,9 +89,11 @@ def coro(f):
 @coro
 async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     if settings.tor and not TorProxy().check_platform():
-        error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install Tor"
-        "manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by setting TOR=f"
-        "alse (not recommended). Cashu will not work until you edit your config file accordingly."
+        error_str = (
+            "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install"
+            " Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by "
+            "setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
+        )
         error_str += "\n\n"
         if settings.env_file:
             error_str += f"Edit your Cashu config file here: {settings.env_file}"
