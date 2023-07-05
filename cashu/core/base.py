@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
+
 # from .p2pk import sign_p2pk_sign
 
 # ------- PROOFS -------
