@@ -25,16 +25,16 @@ jobs:
           poetry-version: ${{ matrix.poetry-version }}
       - name: Install dependencies
         run: |
-          poetry install --with dev
+          poetry install
         shell: bash
       - name: Run tests
         env:
-          LIGHTNING: False
+          LIGHTNING: false
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
-          TOR: False
+          TOR: false
         run: |
-          poetry run pytest tests --cov-report xml --cov cashu
+          make test
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
