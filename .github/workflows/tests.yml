@@ -9,7 +9,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.9.13"]
-        poetry-version: ["1.4.2"]
+        poetry-version: ["1.5.1"]
     steps:
       - name: Checkout repository and submodules
         uses: actions/checkout@v2
