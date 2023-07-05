@@ -1,6 +1,6 @@
 import hashlib
 
-from cashu.core.crypto.secp import PrivateKey, PublicKey
+from .crypto.secp import PrivateKey, PublicKey
 
 
 def sign_p2pk_sign(message: bytes, private_key: PrivateKey):
