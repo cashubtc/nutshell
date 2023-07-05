@@ -16,7 +16,7 @@ jobs:
         with:
           poetry-version: ${{ matrix.poetry-version }}
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
@@ -39,7 +39,7 @@ jobs:
         with:
           poetry-version: ${{ matrix.poetry-version }}
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
