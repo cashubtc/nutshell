@@ -100,7 +100,7 @@ def async_set_requests(func):
         if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
             self.tor.run_daemon(verbose=True)
-            proxy_url = f"socks5://localhost:9050"
+            proxy_url = "socks5://localhost:9050"
         elif settings.socks_proxy:
             proxy_url = f"socks5://{settings.socks_proxy}"
         elif settings.http_proxy:
@@ -1014,7 +1014,7 @@ class Wallet(LedgerAPI):
         try:
             for p in proofs:
                 Secret.deserialize(p.secret)
-        except:
+        except Exception:
             # if not, we do not add witnesses (treat as regular token secret)
             return proofs
         logger.debug(f"Spending conditions detected.")

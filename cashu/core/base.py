@@ -2,7 +2,7 @@ import base64
 import json
 import time
 from sqlite3 import Row
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
 from pydantic import BaseModel
@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
-from .p2pk import sign_p2pk_sign
+# from .p2pk import sign_p2pk_sign
 
 # ------- PROOFS -------
 

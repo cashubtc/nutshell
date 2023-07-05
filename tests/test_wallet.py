@@ -8,7 +8,7 @@ import pytest
 import pytest_asyncio
 from mnemonic import Mnemonic
 
-from cashu.core.base import Proof, Secret, SecretKind, Tags
+from cashu.core.base import Proof, Tags
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.errors import (
     CashuError,

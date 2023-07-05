@@ -569,7 +569,7 @@ async def lock(ctx, p2sh):
         f"Anyone can send tokens to this lock:\n\ncashu send <amount> --lock {lock_str}"
     )
     print("")
-    print(f"Only you can receive tokens from this lock: cashu receive <token>")
+    print("Only you can receive tokens from this lock: cashu receive <token>")
 
 
 @cli.command("locks", help="Show unused receiving locks.")
@@ -589,10 +589,10 @@ async def locks(ctx):
     if len(locks):
         print("")
         print("---- Pay to script hash (P2SH) locks ----\n")
-        for l in locks:
-            print(f"Lock: P2SH:{l.address}")
-            print(f"Script: {l.script}")
-            print(f"Signature: {l.signature}")
+        for lock in locks:
+            print(f"Lock: P2SH:{lock.address}")
+            print(f"Script: {lock.script}")
+            print(f"Signature: {lock.signature}")
             print("")
             print(f"--------------------------\n")
 
@@ -683,8 +683,8 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
             client = NostrClient(private_key=settings.nostr_private_key, connect=False)
             print(f"Nostr public key: {client.public_key.bech32()}")
             print(f"Nostr relays: {settings.nostr_relays}")
-        except:
-            print(f"Nostr: Error. Invalid key.")
+        except Exception:
+            print("Nostr: Error. Invalid key.")
     if settings.socks_proxy:
         print(f"Socks proxy: {settings.socks_proxy}")
     if settings.http_proxy:
