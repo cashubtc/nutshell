@@ -635,15 +635,16 @@ class Wallet(LedgerAPI):
         if split:
             logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
+            allowed_amounts = [2**i for i in range(settings.max_order)]
             for a in split:
-                if a not in [2**i for i in range(settings.max_order)]:
+                if a not in allowed_amounts:
                     raise Exception(
                         f"Can only mint amounts with 2^n up to {2**settings.max_order}."
                     )
 
         # if no split was specified, we use the canonical split
-        split = split or amount_split(amount)
-        proofs = await super().mint(split, hash)
+        amounts = split or amount_split(amount)
+        proofs = await super().mint(amounts, hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
