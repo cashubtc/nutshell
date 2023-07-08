@@ -2,7 +2,7 @@ import asyncio
 import json
 import math
 import time
-from typing import Dict, List, Literal, Optional, Set, Union
+from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
 from loguru import logger
 
@@ -185,6 +185,17 @@ class Ledger:
     def _check_spendable(self, proof: Proof):
         """Checks whether the proof was already spent."""
         return not proof.secret in self.proofs_used
+
+    async def _check_pending(self, proofs: List[Proof]):
+        """Checks whether the proof is still pending."""
+        proofs_pending = await self.crud.get_proofs_pending(db=self.db)
+        pending_states: List[bool] = []
+        for p in proofs:
+            if p.secret in [pp.secret for pp in proofs_pending]:
+                pending_states.append(True)
+            else:
+                pending_states.append(False)
+        return pending_states
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""
@@ -815,12 +826,14 @@ class Ledger:
 
         return status, preimage, return_promises
 
-    async def check_spendable(self, proofs: List[Proof]):
-        """Checks if provided proofs are valid and have not been spent yet.
-        Used by wallets to check if their proofs have been redeemed by a receiver.
+    async def check_proof_state(
+        self, proofs: List[Proof]
+    ) -> Tuple[List[bool], List[bool]]:
+        """Checks if provided proofs are spend or are pending.
+        Used by wallets to check if their proofs have been redeemed by a receiver or they are still in-flight in a transaction.
 
-        Returns a list in the same order as the provided proofs. Wallet must match the list
-        to the proofs they have provided in order to figure out which proof is still spendable
+        Returns two lists that are in the same order as the provided proofs. Wallet must match the list
+        to the proofs they have provided in order to figure out which proof is spendable or pending
         and which isn't.
 
         Args:
@@ -828,8 +841,11 @@ class Ledger:
 
         Returns:
             List[bool]: List of which proof is still spendable (True if still spendable, else False)
+            List[bool]: List of which proof are pending (True if pending, else False)
         """
-        return [self._check_spendable(p) for p in proofs]
+        spendable = [self._check_spendable(p) for p in proofs]
+        pending = await self._check_pending(proofs)
+        return spendable, pending
 
     async def check_fees(self, pr: str):
         """Returns the fee reserve (in sat) that a wallet must add to its proofs

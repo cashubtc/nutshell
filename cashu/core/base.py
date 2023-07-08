@@ -253,6 +253,7 @@ class CheckSpendableRequest(BaseModel):
 
 class CheckSpendableResponse(BaseModel):
     spendable: List[bool]
+    pending: List[bool]
 
 
 class CheckFeesRequest(BaseModel):
