@@ -1,10 +1,11 @@
 import asyncio
+import json
 
 import pytest
 import pytest_asyncio
 import requests
-import json
-from cashu.core.base import Proof, CheckSpendableRequest, CheckSpendableResponse
+
+from cashu.core.base import CheckSpendableRequest, CheckSpendableResponse, Proof
 from cashu.core.settings import settings
 from tests.conftest import ledger
 
@@ -70,5 +71,7 @@ async def test_api_check_state(ledger):
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     states = CheckSpendableResponse.parse_obj(response.json())
+    assert states.spendable
     assert len(states.spendable) == 2
+    assert states.pending
     assert len(states.pending) == 2

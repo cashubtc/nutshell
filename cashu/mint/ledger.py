@@ -476,6 +476,7 @@ class Ledger:
             preimage,
             error_message,
         ) = await self.lightning.pay_invoice(invoice, fee_limit_msat=fee_limit_msat)
+        await asyncio.sleep(10)
         logger.trace(f"_pay_lightning_invoice: Lightning payment status: {ok}")
         # make sure that fee is positive
         fee_msat = abs(fee_msat) if fee_msat else fee_msat

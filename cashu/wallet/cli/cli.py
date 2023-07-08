@@ -415,6 +415,7 @@ async def receive_cli(
 @coro
 async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
     wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_proofs()
     if not delete:
         await wallet.load_mint()
     if not (all or token or force or delete) or (token and all):

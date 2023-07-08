@@ -374,3 +374,5 @@ async def test_token_state(wallet1: Wallet):
     await wallet1.mint(64)
     assert wallet1.balance == 64
     resp = await wallet1.check_proof_state(wallet1.proofs)
+    assert resp.dict()["spendable"]
+    assert resp.dict()["pending"]
