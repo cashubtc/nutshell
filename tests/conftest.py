@@ -93,20 +93,20 @@ async def ledger():
     yield ledger
 
 
-@pytest.fixture(autouse=True, scope="session")
-def mint_3338():
-    settings.mint_listen_port = 3338
-    settings.port = 3338
-    settings.mint_url = "http://localhost:3338"
-    settings.port = settings.mint_listen_port
-    config = uvicorn.Config(
-        "cashu.mint.app:app",
-        port=settings.mint_listen_port,
-        host="127.0.0.1",
-    )
+# @pytest.fixture(autouse=True, scope="session")
+# def mint_3338():
+#     settings.mint_listen_port = 3338
+#     settings.port = 3338
+#     settings.mint_url = "http://localhost:3338"
+#     settings.port = settings.mint_listen_port
+#     config = uvicorn.Config(
+#         "cashu.mint.app:app",
+#         port=settings.mint_listen_port,
+#         host="127.0.0.1",
+#     )
 
-    server = UvicornServer(config=config, private_key="SECOND_PRIVATE_KEY")
-    server.start()
-    time.sleep(1)
-    yield server
-    server.stop()
+#     server = UvicornServer(config=config, private_key="SECOND_PRIVATE_KEY")
+#     server.start()
+#     time.sleep(1)
+#     yield server
+#     server.stop()

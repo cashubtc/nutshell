@@ -173,17 +173,18 @@ async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
 
 @router.post(
     "/check",
-    name="Check spendable",
-    summary="Check whether a proof has already been spent",
+    name="Check proof state",
+    summary="Check whether a proof is spent already or is pending in a transaction",
 )
 async def check_spendable(
     payload: CheckSpendableRequest,
 ) -> CheckSpendableResponse:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /check: {payload}")
-    spendableList = await ledger.check_spendable(payload.proofs)
-    logger.trace(f"< POST /check: {spendableList}")
-    return CheckSpendableResponse(spendable=spendableList)
+    spendableList, pendingList = await ledger.check_proof_state(payload.proofs)
+    logger.trace(f"< POST /check <spendable>: {spendableList}")
+    logger.trace(f"< POST /check <pending>: {pendingList}")
+    return CheckSpendableResponse(spendable=spendableList, pending=pendingList)
 
 
 @router.post(
