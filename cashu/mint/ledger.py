@@ -189,12 +189,10 @@ class Ledger:
     async def _check_pending(self, proofs: List[Proof]):
         """Checks whether the proof is still pending."""
         proofs_pending = await self.crud.get_proofs_pending(db=self.db)
-        pending_states: List[bool] = []
-        for p in proofs:
-            if p.secret in [pp.secret for pp in proofs_pending]:
-                pending_states.append(True)
-            else:
-                pending_states.append(False)
+        pending_secrets = [pp.secret for pp in proofs_pending]
+        pending_states = [
+            True if p.secret in pending_secrets else False for p in proofs
+        ]
         return pending_states
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
