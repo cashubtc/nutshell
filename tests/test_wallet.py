@@ -477,6 +477,16 @@ async def test_restore_wallet_after_mint(wallet3: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_restore_wallet_with_invalid_mnemonic(wallet3: Wallet):
+    await assert_err(
+        wallet3._init_private_key(
+            "half depart obvious quality work element tank gorilla view sugar picture picture"
+        ),
+        "Invalid mnemonic",
+    )
+
+
+@pytest.mark.asyncio
 async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
     await wallet3._init_private_key(
         "half depart obvious quality work element tank gorilla view sugar picture humble"
@@ -503,7 +513,7 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: Wallet):
     await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla view sugar picture picture"
+        "hello rug want adapt talent together lunar method bean expose beef position"
     )
     await reset_wallet_db(wallet3)
 
@@ -543,7 +553,7 @@ class ProofBox:
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
     await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla view picture picture picture"
+        "lucky broken tell exhibit shuffle tomato ethics virus rabbit spread measure text"
     )
     await reset_wallet_db(wallet3)
 
@@ -627,7 +637,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
 ):
     box = ProofBox()
     await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla picture picture picture picture"
+        "casual demise flight cradle feature hub link slim remember anger front asthma"
     )
     await reset_wallet_db(wallet3)
 
