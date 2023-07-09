@@ -95,4 +95,3 @@ def mint():
     time.sleep(1)
     yield server
     server.stop()
-

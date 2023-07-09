@@ -402,13 +402,15 @@ async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
     )  # sender side
     await assert_err(wallet2.redeem(send_proofs), "lock not found.")  # wrong receiver
 
+
 async def test_token_state(wallet1: Wallet):
     await wallet1.mint(64)
     assert wallet1.balance == 64
     resp = await wallet1.check_proof_state(wallet1.proofs)
     assert resp.dict()["spendable"]
     assert resp.dict()["pending"]
-    
+
+
 async def test_bump_secret_derivation(wallet3: Wallet):
     await wallet3._init_private_key(
         "half depart obvious quality work element tank gorilla view sugar picture humble"
@@ -671,4 +673,3 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     assert wallet3.balance == 182
     await wallet3.invalidate(wallet3.proofs)
     assert wallet3.balance == 64
-    
