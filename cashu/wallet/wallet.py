@@ -642,13 +642,21 @@ class Wallet(LedgerAPI):
             proofs (List[Proof]): _description_
             outputs (List[BlindedMessage]): _description_
         """
+        # first we check whether all tokens have serialized secrets as their secret
+        try:
+            for p in proofs:
+                Secret.deserialize(p.secret)
+        except:
+            # if not, we do not add witnesses (treat as regular token secret)
+            return outputs
+
         # if any of the proofs provided require SIG_ALL, we must provide it
         if any(
             [Secret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs]
         ):
             p2pk_signatures = await self.sign_p2pk_outputs(outputs)
-            for p, s in zip(outputs, p2pk_signatures):
-                p.p2pksig = s
+            for o, s in zip(outputs, p2pk_signatures):
+                o.p2pksig = s
         return outputs
 
     async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
@@ -744,7 +752,7 @@ class Wallet(LedgerAPI):
 
         # construct outputs
         outputs, rs = self._construct_outputs(amounts, secrets)
-        
+
         # potentially add witnesses to outputs based on what requirement the proofs indicate
         outputs = await self.add_witnesses_to_outputs(proofs, outputs)
 
@@ -1106,7 +1114,8 @@ class Wallet(LedgerAPI):
         pubkey: str,
         timelock: Optional[int] = None,
         tags: Optional[Tags] = None,
-    ):
+        sig_all: bool = False,
+    ) -> Secret:
         return Secret(
             kind=SecretKind.P2PK,
             data=pubkey,
@@ -1114,6 +1123,7 @@ class Wallet(LedgerAPI):
             if timelock
             else None,
             tags=tags,
+            sigflag=SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS,
         )
 
     async def create_p2sh_lock(
@@ -1121,7 +1131,7 @@ class Wallet(LedgerAPI):
         address: str,
         timelock: Optional[int] = None,
         tags: Optional[Tags] = None,
-    ):
+    ) -> Secret:
         return Secret(
             kind=SecretKind.P2SH,
             data=address,

@@ -7,7 +7,7 @@ from typing import List, Optional
 import click
 from loguru import logger
 
-from ..core.base import Secret, SecretKind, TokenV1, TokenV2, TokenV3, TokenV3Token
+from ..core.base import TokenV1, TokenV2, TokenV3, TokenV3Token, SigFlags
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
@@ -171,7 +171,9 @@ async def send(
                 )
             elif lock.startswith("P2PK:"):
                 secret_lock = await wallet.create_p2pk_lock(
-                    lock.split(":")[1], timelock=settings.timelock_delta_seconds
+                    lock.split(":")[1],
+                    timelock=settings.timelock_delta_seconds,
+                    sig_all=True,
                 )
 
     await wallet.load_proofs()

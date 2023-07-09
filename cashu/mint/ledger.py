@@ -223,7 +223,7 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(private_key_amount, C, proof.secret)
 
-    def _verify_spending_conditions(self, proof: Proof) -> bool:
+    def _verify_input_spending_conditions(self, proof: Proof) -> bool:
         """
         Verify spending conditions:
          Condition: P2SH - Witnesses proof.p2shscript
@@ -299,9 +299,9 @@ class Ledger:
                 message=secret.serialize().encode("utf-8"),
                 pubkey=PublicKey(bytes.fromhex(signature_pubkey), raw=True),
                 signature=bytes.fromhex(proof.p2pksig),
-            ), "p2pk signature invalid."
+            ), "p2pk signature on input is invalid."
             logger.trace(proof.p2pksig)
-            logger.trace("p2pk signature valid.")
+            logger.trace("p2pk signature on inputs is valid.")
 
             return True
 
@@ -578,7 +578,7 @@ class Ledger:
             Exception: BDHKE verification failed.
         """
         # Verify scripts
-        if not all([self._verify_spending_conditions(p) for p in proofs]):
+        if not all([self._verify_input_spending_conditions(p) for p in proofs]):
             raise Exception("script validation failed.")
         # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):
