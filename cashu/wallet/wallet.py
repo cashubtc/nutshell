@@ -472,7 +472,7 @@ class LedgerAPI:
 
         if len(promises_fst) == 0 and len(promises_snd) == 0:
             raise Exception("received no splits.")
-        
+
         return promises_fst, promises_snd
 
     @async_set_requests
@@ -690,21 +690,27 @@ class Wallet(LedgerAPI):
         amount: int,
         secret_lock: Optional[Secret] = None,
     ):
+        assert len(proofs) > 0, ValueError("no proofs provided.")
+
+        # create a suitable amount split based on the proofs provided
         total = sum_proofs(proofs)
         frst_amt, scnd_amt = total - amount, amount
         frst_outputs = amount_split(frst_amt)
         scnd_outputs = amount_split(scnd_amt)
 
         amounts = frst_outputs + scnd_outputs
+        # generate secrets for new outputs
         if secret_lock is None:
+            # generate all secrets randomly
             secrets = [self._generate_secret() for _ in range(len(amounts))]
         else:
+            # use provided secret_lock to generate secrets
             secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
             logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
             assert len(secret_locks) == len(
                 scnd_outputs
             ), "number of secret_locks does not match number of ouptus."
-            # append predefined secrets (to send) to random secrets (to keep)
+            # append custom locks (to send) to randomly generated secrets (to keep)
             secrets = [
                 self._generate_secret() for s in range(len(frst_outputs))
             ] + secret_locks
@@ -714,7 +720,6 @@ class Wallet(LedgerAPI):
         ), "number of secrets does not match number of outputs"
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets)
-        assert len(proofs) > 0, ValueError("no proofs provided.")
 
         # Call /split API
         promises_fst, promises_snd = await super().split(
@@ -732,9 +737,11 @@ class Wallet(LedgerAPI):
         # remove used proofs from wallet and add new ones
         used_secrets = [p.secret for p in proofs]
         self.proofs = list(filter(lambda p: p.secret not in used_secrets, self.proofs))
+        # add new proofs to wallet
         self.proofs += frst_proofs + scnd_proofs
+        # store new proofs in database
         await self._store_proofs(frst_proofs + scnd_proofs)
-        # invalidate used proofs
+        # invalidate used proofs in database
         for proof in proofs:
             await invalidate_proof(proof, db=self.db)
         return frst_proofs, scnd_proofs
