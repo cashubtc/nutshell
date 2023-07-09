@@ -681,7 +681,6 @@ class Wallet(LedgerAPI):
         self,
         proofs: List[Proof],
     ):
-        proofs = await self.add_witnesses_to_proofs(proofs)
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
@@ -691,6 +690,9 @@ class Wallet(LedgerAPI):
         secret_lock: Optional[Secret] = None,
     ):
         assert len(proofs) > 0, ValueError("no proofs provided.")
+
+        # potentially add witnesses to unlock provided proofs (if they indicate one)
+        proofs = await self.add_witnesses_to_proofs(proofs)
 
         # create a suitable amount split based on the proofs provided
         total = sum_proofs(proofs)
@@ -718,7 +720,10 @@ class Wallet(LedgerAPI):
         assert len(secrets) == len(
             amounts
         ), "number of secrets does not match number of outputs"
+        # verify that we didn't accidentally reuse a secret
         await self._check_used_secrets(secrets)
+
+        # construct outputs
         outputs, rs = self._construct_outputs(amounts, secrets)
 
         # Call /split API
