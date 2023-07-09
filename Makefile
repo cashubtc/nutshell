@@ -35,3 +35,6 @@ upload:
 	make clean
 	python setup.py sdist bdist_wheel
 	twine upload --repository pypi dist/*
+
+docker-image:
+	docker image build -t cashu:0.4.2 .
