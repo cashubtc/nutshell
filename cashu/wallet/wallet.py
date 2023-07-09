@@ -217,12 +217,10 @@ class LedgerAPI(object):
         for secret, amount, r in zip(secrets, amounts, rs_):
             B_, r = b_dhke.step1_alice(secret, r or None)
             rs_return.append(r)
-            output: BlindedMessage = BlindedMessage(
-                amount=amount, B_=B_.serialize().hex()
-            )
+            output = BlindedMessage(amount=amount, B_=B_.serialize().hex())
             outputs.append(output)
-        for o, r in zip(outputs, rs_return):
-            logger.trace(f"Constructing output: {o}, r: {r.serialize()}")
+            logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
+
         return outputs, rs_return
 
     @staticmethod
@@ -781,7 +779,7 @@ class Wallet(LedgerAPI):
 
         NOTE: This method should probably retire after `deterministic_secrets`. We are
         deriving secrets from a counter but don't store the respective blinding factor.
-        We won't be anle to restore any ecash generated with these secrets.
+        We won't be able to restore any ecash generated with these secrets.
         """
         secret_counter = await bump_secret_derivation(
             db=self.db, keyset_id=self.keyset_id
