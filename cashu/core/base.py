@@ -37,6 +37,7 @@ class Secret(BaseModel):
     nonce: Union[None, str] = None
     timelock: Union[None, int] = None
     tags: Union[None, Tags] = None
+    sigflag: Union[None, str] = None
 
     def serialize(self) -> str:
         data_dict: Dict[str, Any] = {
@@ -47,11 +48,8 @@ class Secret(BaseModel):
             data_dict["timelock"] = self.timelock
         if self.tags:
             data_dict["tags"] = self.tags.__root__
-        logger.debug(
-            json.dumps(
-                [self.kind, data_dict],
-            )
-        )
+        if self.sigflag:
+            data_dict["sigflag"] = self.sigflag
         return json.dumps(
             [self.kind, data_dict],
         )
