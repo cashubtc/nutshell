@@ -431,8 +431,14 @@ class LedgerAPI:
 
     @async_set_requests
     async def split(
-        self, proofs, amount, secret_lock: Optional[Secret] = None
-    ) -> Tuple[List[Proof], List[Proof]]:
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        secrets: List[str],
+        rs: List[PrivateKey],
+        amount: int,
+        secret_lock: Optional[Secret] = None,
+    ) -> Tuple[List[BlindedSignature], List[BlindedSignature]]:
         """Consume proofs and create new promises based on amount split.
 
         If secret_lock is None, random secrets will be generated for the tokens to keep (frst_outputs)
@@ -441,30 +447,6 @@ class LedgerAPI:
         If secret_lock is provided, the wallet will create blinded secrets with those to attach a
         predefined spending condition to the tokens they want to send."""
         logger.debug("Calling split. POST /split")
-        total = sum_proofs(proofs)
-        frst_amt, scnd_amt = total - amount, amount
-        frst_outputs = amount_split(frst_amt)
-        scnd_outputs = amount_split(scnd_amt)
-
-        amounts = frst_outputs + scnd_outputs
-        if secret_lock is None:
-            secrets = [self._generate_secret() for _ in range(len(amounts))]
-        else:
-            secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
-            logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
-            assert len(secret_locks) == len(
-                scnd_outputs
-            ), "number of secret_locks does not match number of ouptus."
-            # append predefined secrets (to send) to random secrets (to keep)
-            secrets = [
-                self._generate_secret() for s in range(len(frst_outputs))
-            ] + secret_locks
-
-        assert len(secrets) == len(
-            amounts
-        ), "number of secrets does not match number of outputs"
-        await self._check_used_secrets(secrets)
-        outputs, rs = self._construct_outputs(amounts, secrets)
         split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
 
         # construct payload
@@ -487,15 +469,11 @@ class LedgerAPI:
 
         promises_fst = [BlindedSignature(**p) for p in promises_dict["fst"]]
         promises_snd = [BlindedSignature(**p) for p in promises_dict["snd"]]
-        # Construct proofs from promises (i.e., unblind signatures)
-        frst_proofs = self._construct_proofs(
-            promises_fst, secrets[: len(promises_fst)], rs[: len(promises_fst)]
-        )
-        scnd_proofs = self._construct_proofs(
-            promises_snd, secrets[len(promises_fst) :], rs[len(promises_fst) :]
-        )
 
-        return frst_proofs, scnd_proofs
+        if len(promises_fst) == 0 and len(promises_snd) == 0:
+            raise Exception("received no splits.")
+        
+        return promises_fst, promises_snd
 
     @async_set_requests
     async def check_proof_state(self, proofs: List[Proof]):
@@ -689,7 +667,7 @@ class Wallet(LedgerAPI):
         elif all(
             [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
         ):
-            p2pk_signatures = await self.sign_p2pk_with_privatekey(proofs)
+            p2pk_signatures = await self.sign_p2pk_proofs(proofs)
             logger.debug(f"Unlock signature: {p2pk_signatures}")
 
             # attach unlock signatures to proofs
@@ -712,11 +690,44 @@ class Wallet(LedgerAPI):
         amount: int,
         secret_lock: Optional[Secret] = None,
     ):
-        assert len(proofs) > 0, ValueError("no proofs provided.")
-        frst_proofs, scnd_proofs = await super().split(proofs, amount, secret_lock)
+        total = sum_proofs(proofs)
+        frst_amt, scnd_amt = total - amount, amount
+        frst_outputs = amount_split(frst_amt)
+        scnd_outputs = amount_split(scnd_amt)
 
-        if len(frst_proofs) == 0 and len(scnd_proofs) == 0:
-            raise Exception("received no splits.")
+        amounts = frst_outputs + scnd_outputs
+        if secret_lock is None:
+            secrets = [self._generate_secret() for _ in range(len(amounts))]
+        else:
+            secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
+            logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
+            assert len(secret_locks) == len(
+                scnd_outputs
+            ), "number of secret_locks does not match number of ouptus."
+            # append predefined secrets (to send) to random secrets (to keep)
+            secrets = [
+                self._generate_secret() for s in range(len(frst_outputs))
+            ] + secret_locks
+
+        assert len(secrets) == len(
+            amounts
+        ), "number of secrets does not match number of outputs"
+        await self._check_used_secrets(secrets)
+        outputs, rs = self._construct_outputs(amounts, secrets)
+        assert len(proofs) > 0, ValueError("no proofs provided.")
+
+        # Call /split API
+        promises_fst, promises_snd = await super().split(
+            proofs, outputs, secrets, rs, amount, secret_lock
+        )
+
+        # Construct proofs from returned promises (i.e., unblind the signatures)
+        frst_proofs = self._construct_proofs(
+            promises_fst, secrets[: len(promises_fst)], rs[: len(promises_fst)]
+        )
+        scnd_proofs = self._construct_proofs(
+            promises_snd, secrets[len(promises_fst) :], rs[len(promises_fst) :]
+        )
 
         # remove used proofs from wallet and add new ones
         used_secrets = [p.secret for p in proofs]
@@ -1086,7 +1097,7 @@ class Wallet(LedgerAPI):
             tags=tags,
         )
 
-    async def sign_p2pk_with_privatekey(self, proofs: List[Proof]) -> List[str]:
+    async def sign_p2pk_proofs(self, proofs: List[Proof]) -> List[str]:
         assert (
             self.private_key
         ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
