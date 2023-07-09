@@ -105,8 +105,6 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     ctx.obj["WALLET_NAME"] = walletname
 
     db_path = os.path.join(settings.cashu_dir, walletname)
-    # loop = asyncio.new_event_loop()
-
     # if the command is "restore" we don't want to ask the user for a mnemonic
     # otherwise it will create a mnemonic and store it in the database
     if ctx.invoked_subcommand == "restore":
@@ -116,7 +114,6 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     else:
         # # we need to run the migrations before we load the wallet for the first time
         # # otherwise the wallet will not be able to generate a new private key and store it
-        # loop.run_until_complete(migrate_wallet_db(Database("wallet", db_path)))
         wallet = await Wallet.with_db(
             ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
         )
@@ -476,47 +473,6 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
     wallet.status()
 
 
-@cli.command("restore", help="Restore backups.")
-@click.option(
-    "--to",
-    "-t",
-    default=2,
-    help="Split minted tokens with a specific amount.",
-    type=int,
-)
-@click.option(
-    "--batch",
-    "-b",
-    default=25,
-    help="Batch size for restore.",
-    type=int,
-)
-@click.pass_context
-@coro
-async def restore(ctx: Context, to: int, batch: int):
-    wallet: Wallet = ctx.obj["WALLET"]
-    # check if there is already a mnemonic in the database
-    ret = await get_seed_and_mnemonic(wallet.db)
-    if ret:
-        print("Wallet already has a mnemonic. Restoring tokens.")
-        mnemonic = None  # will be loaded from db in _init_private_key
-    else:
-        # ask the user for a mnemonic but allow also no input
-        print(
-            "Wallet has no mnemonic. Please enter your mnemonic to restore your balance."
-        )
-        mnemonic = input(
-            "Enter mnemonic: ",
-        )
-        if not mnemonic:
-            print("No mnemonic entered. Exiting.")
-            return
-
-    await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
-    await wallet.load_proofs()
-    wallet.status()
-
-
 @cli.command("pending", help="Show pending tokens.")
 @click.option(
     "--legacy",
@@ -753,3 +709,48 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
         assert wallet.mnemonic
         print(f"Mnemonic: {wallet.mnemonic}")
     return
+
+
+@cli.command("restore", help="Restore backups.")
+@click.option(
+    "--batch",
+    "-b",
+    default=25,
+    help="Batch size. Specifies how many proofs are restored in one batch.",
+    type=int,
+)
+@click.option(
+    "--to",
+    "-t",
+    default=2,
+    help="Number of empty batches to complete the restore process.",
+    type=int,
+)
+@click.pass_context
+@coro
+async def restore(ctx: Context, to: int, batch: int):
+    wallet: Wallet = ctx.obj["WALLET"]
+    # check if there is already a mnemonic in the database
+    ret = await get_seed_and_mnemonic(wallet.db)
+    if ret:
+        print(
+            "Wallet already has a mnemonic. You can't restore an already initialized wallet."
+        )
+        print("To restore a wallet, please delete the wallet directory and try again.")
+        print("")
+        print(
+            f"The wallet directory is: {os.path.join(settings.cashu_dir, ctx.obj['WALLET_NAME'])}"
+        )
+        return
+    # ask the user for a mnemonic but allow also no input
+    print("Please enter your mnemonic to restore your balance.")
+    mnemonic = input(
+        "Enter mnemonic: ",
+    )
+    if not mnemonic:
+        print("No mnemonic entered. Exiting.")
+        return
+
+    await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
+    await wallet.load_proofs()
+    wallet.status()

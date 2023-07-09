@@ -733,32 +733,35 @@ class Wallet(LedgerAPI):
         Raises:
             ValueError: If the mnemonic is not BIP39 compliant.
         """
-        ret = await get_seed_and_mnemonic(self.db)
+        ret_db = await get_seed_and_mnemonic(self.db)
 
-        mneno = Mnemonic("english")
+        mnemo = Mnemonic("english")
 
-        if ret is None and from_mnemonic is None:
+        if ret_db is None and from_mnemonic is None:
             # if there is no seed in the database, generate a new one
-            mnemonic_str = mneno.generate()
+            mnemonic_str = mnemo.generate()
             print('Generated a new mnemonic. To view it, run "cashu info --mnemonic".')
         elif from_mnemonic:
             # or use the one provided
             mnemonic_str = from_mnemonic
-        elif ret is not None:
+        elif ret_db is not None:
             # if there is a seed in the database, use it
-            _, mnemonic_str = ret[0], ret[1]
+            _, mnemonic_str = ret_db[0], ret_db[1]
         else:
             logger.debug("No mnemonic provided")
             return
 
-        self.seed = mneno.to_seed(mnemonic_str)
+        if not mnemo.check(mnemonic_str):
+            raise ValueError("Invalid mnemonic")
+
+        self.seed = mnemo.to_seed(mnemonic_str)
         self.mnemonic = mnemonic_str
 
         logger.debug(f"Using seed: {self.seed.hex()}")
         logger.debug(f"Using mnemonic: {mnemonic_str}")
 
         # if no mnemonic was in the database, store the new one
-        if ret is None:
+        if ret_db is None:
             await store_seed_and_mnemonic(
                 self.db, seed=self.seed.hex(), mnemonic=mnemonic_str
             )
