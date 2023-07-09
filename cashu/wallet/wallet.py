@@ -33,6 +33,7 @@ from ..core.base import (
     Proof,
     Secret,
     SecretKind,
+    SigFlags,
     Tags,
     TokenV2,
     TokenV2Mint,
@@ -632,7 +633,25 @@ class Wallet(LedgerAPI):
         self.proofs += proofs
         return proofs
 
-    async def add_witnesses_to_proofs(self, proofs: List[Proof]):
+    async def add_witnesses_to_outputs(
+        self, proofs: List[Proof], outputs: List[BlindedMessage]
+    ) -> List[BlindedMessage]:
+        """Adds witnesses to outputs if the inputs (proofs) indicate an appropriate signature flag
+
+        Args:
+            proofs (List[Proof]): _description_
+            outputs (List[BlindedMessage]): _description_
+        """
+        # if any of the proofs provided require SIG_ALL, we must provide it
+        if any(
+            [Secret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs]
+        ):
+            p2pk_signatures = await self.sign_p2pk_outputs(outputs)
+            for p, s in zip(outputs, p2pk_signatures):
+                p.p2pksig = s
+        return outputs
+
+    async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
         """Adds witnesses to proofs for P2SH or P2PK redemption."""
 
         p2sh_script, p2sh_signature = None, None
@@ -725,6 +744,9 @@ class Wallet(LedgerAPI):
 
         # construct outputs
         outputs, rs = self._construct_outputs(amounts, secrets)
+        
+        # potentially add witnesses to outputs based on what requirement the proofs indicate
+        outputs = await self.add_witnesses_to_outputs(proofs, outputs)
 
         # Call /split API
         promises_fst, promises_snd = await super().split(
@@ -1121,6 +1143,20 @@ class Wallet(LedgerAPI):
                 private_key=private_key,
             )
             for proof in proofs
+        ]
+
+    async def sign_p2pk_outputs(self, outputs: List[BlindedMessage]) -> List[str]:
+        assert (
+            self.private_key
+        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
+        private_key = self.private_key
+        assert private_key.pubkey
+        return [
+            sign_p2pk_sign(
+                message=output.B_.encode("utf-8"),
+                private_key=private_key,
+            )
+            for output in outputs
         ]
 
     # ---------- BALANCE CHECKS ----------

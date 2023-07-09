@@ -19,6 +19,13 @@ class SecretKind:
     P2PK = "P2PK"
 
 
+class SigFlags:
+    SIG_INPUTS = (
+        "SIG_INPUTS"  # require signatures only on the inputs (default signature flag)
+    )
+    SIG_ALL = "SIG_ALL"  # require signatures on inputs and outputs
+
+
 class Tags(BaseModel):
     __root__: List[List[str]]
 
@@ -119,6 +126,7 @@ class BlindedMessage(BaseModel):
 
     amount: int
     B_: str  # Hex-encoded blinded message
+    p2pksig: Union[str, None] = None  # signature for p2pk with SIG_ALL
 
 
 class BlindedSignature(BaseModel):
