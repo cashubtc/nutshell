@@ -720,7 +720,10 @@ class Wallet(LedgerAPI):
         assert len(secrets) == len(
             amounts
         ), "number of secrets does not match number of outputs"
+        # verify that we didn't accidentally reuse a secret
         await self._check_used_secrets(secrets)
+
+        # construct outputs
         outputs, rs = self._construct_outputs(amounts, secrets)
 
         # Call /split API
