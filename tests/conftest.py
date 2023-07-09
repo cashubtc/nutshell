@@ -96,32 +96,3 @@ def mint():
     yield server
     server.stop()
 
-
-# @pytest.fixture(autouse=True, scope="session")
-# def mint_3338():
-#     settings.mint_listen_port = 3338
-#     settings.mint_url = "http://localhost:3338"
-#     config = uvicorn.Config(
-#         "cashu.mint.app:app",
-#         port=settings.mint_listen_port,
-#         host="127.0.0.1",
-#     )
-
-#     server = UvicornServer(config=config, private_key="SECOND_PRIVATE_KEY")
-#     server.start()
-#     time.sleep(1)
-#     yield server
-#     server.stop()
-
-
-# @pytest.fixture(scope="session")
-# def wallet():
-#     wallet = Wallet(
-#         url=settings.mint_host,
-#         db="data/test_wallet",
-#         name="wallet",
-#         private_key="TEST_WALLET_CLI_PRIVATE_KEY_1",
-#     )
-#     asyncio.run(migrate_databases(wallet.db, migrations))
-#     asyncio.run(wallet.load_proofs())
-#     yield wallet

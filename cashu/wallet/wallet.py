@@ -579,13 +579,13 @@ class LedgerAPI(object):
         return frst_proofs, scnd_proofs
 
     @async_set_requests
-    async def check_spendable(self, proofs: List[Proof]):
+    async def check_proof_state(self, proofs: List[Proof]):
         """
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
         payload = CheckSpendableRequest(proofs=proofs)
 
-        def _check_spendable_include_fields(proofs):
+        def _check_proof_state_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
             return {
                 "proofs": {i: {"secret"} for i in range(len(proofs))},
@@ -593,13 +593,13 @@ class LedgerAPI(object):
 
         resp = self.s.post(
             self.url + "/check",
-            json=payload.dict(include=_check_spendable_include_fields(proofs)),  # type: ignore
+            json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
         )
         resp.raise_for_status()
         return_dict = resp.json()
         self.raise_on_error(return_dict)
-        spendable = CheckSpendableResponse.parse_obj(return_dict)
-        return spendable
+        states = CheckSpendableResponse.parse_obj(return_dict)
+        return states
 
     @async_set_requests
     async def check_fees(self, payment_request: str):
@@ -939,15 +939,16 @@ class Wallet(LedgerAPI):
         if split:
             logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
+            allowed_amounts = [2**i for i in range(settings.max_order)]
             for a in split:
-                if a not in [2**i for i in range(settings.max_order)]:
+                if a not in allowed_amounts:
                     raise Exception(
                         f"Can only mint amounts with 2^n up to {2**settings.max_order}."
                     )
 
         # if no split was specified, we use the canonical split
-        split = split or amount_split(amount)
-        proofs = await super().mint(split, hash)
+        amounts = split or amount_split(amount)
+        proofs = await super().mint(amounts, hash)
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
@@ -1122,8 +1123,8 @@ class Wallet(LedgerAPI):
             raise Exception("could not pay invoice.")
         return status.paid
 
-    async def check_spendable(self, proofs):
-        return await super().check_spendable(proofs)
+    async def check_proof_state(self, proofs):
+        return await super().check_proof_state(proofs)
 
     # ---------- TOKEN MECHANIS ----------
 
@@ -1356,8 +1357,8 @@ class Wallet(LedgerAPI):
         """
         invalidated_proofs: List[Proof] = []
         if check_spendable:
-            spendables = await self.check_spendable(proofs)
-            for i, spendable in enumerate(spendables.spendable):
+            proof_states = await self.check_proof_state(proofs)
+            for i, spendable in enumerate(proof_states.spendable):
                 if not spendable:
                     invalidated_proofs.append(proofs[i])
         else:

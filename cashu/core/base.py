@@ -254,6 +254,10 @@ class CheckSpendableRequest(BaseModel):
 
 class CheckSpendableResponse(BaseModel):
     spendable: List[bool]
+    pending: Optional[
+        List[bool]
+    ] = None  # TODO: Uncomment when all mints are updated to 0.12.3 and support /check
+    # with pending tokens (kept for backwards compatibility of new wallets with old mints)
 
 
 class CheckFeesRequest(BaseModel):
