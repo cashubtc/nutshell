@@ -103,6 +103,7 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host or settings.mint_url
     ctx.obj["WALLET_NAME"] = walletname
+    settings.wallet_name = walletname
 
     db_path = os.path.join(settings.cashu_dir, walletname)
     # if the command is "restore" we don't want to ask the user for a mnemonic

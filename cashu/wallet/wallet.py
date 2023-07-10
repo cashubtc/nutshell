@@ -738,7 +738,19 @@ class Wallet(LedgerAPI):
         if ret_db is None and from_mnemonic is None:
             # if there is no seed in the database, generate a new one
             mnemonic_str = mnemo.generate()
-            print('Generated a new mnemonic. To view it, run "cashu info --mnemonic".')
+            wallet_command_prefix_str = (
+                f" --wallet {settings.wallet_name}"
+                if settings.wallet_name != "wallet"
+                else ""
+            )
+            wallet_name = (
+                f' for wallet "{settings.wallet_name}"'
+                if settings.wallet_name != "wallet"
+                else ""
+            )
+            print(
+                f'Generated a new mnemonic{wallet_name}. To view it, run "cashu{wallet_command_prefix_str} info --mnemonic".'
+            )
         elif from_mnemonic:
             # or use the one provided
             mnemonic_str = from_mnemonic
