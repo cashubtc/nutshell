@@ -453,7 +453,7 @@ class LedgerAPI:
         # construct payload
         def _splitrequest_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
-            proofs_include = {"id", "amount", "secret", "C", "p2shscript", "p2pksig"}
+            proofs_include = {"id", "amount", "secret", "C", "p2shscript", "p2pksigs"}
             return {
                 "amount": ...,
                 "outputs": ...,
@@ -675,8 +675,10 @@ class Wallet(LedgerAPI):
         except:
             # if not, we do not add witnesses (treat as regular token secret)
             return proofs
+        logger.debug(f"Spending conditions detected.")
         # P2SH scripts
         if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
+            logger.debug(f"P2SH redemption detected.")
             # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
             address = Secret.deserialize(proofs[0].secret).data
             p2shscripts = await get_unused_locks(address, db=self.db)
@@ -695,8 +697,11 @@ class Wallet(LedgerAPI):
         elif all(
             [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
         ):
+            logger.debug(f"P2PK redemption detected.")
             p2pk_signatures = await self.sign_p2pk_proofs(proofs)
-            logger.debug(f"Unlock signature: {p2pk_signatures}")
+            logger.debug(
+                f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}"
+            )
 
             # attach unlock signatures to proofs
             assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
@@ -834,7 +839,7 @@ class Wallet(LedgerAPI):
 
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
-        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
+        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}  # type: ignore
 
     async def _get_proofs_per_minturl(self, proofs: List[Proof]):
         ret = {}
@@ -1125,6 +1130,7 @@ class Wallet(LedgerAPI):
             else None,
             tags=tags,
             sigflag=SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS,
+            n_sigs=1,
         )
 
     async def create_p2sh_lock(

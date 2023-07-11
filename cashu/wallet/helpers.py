@@ -7,7 +7,7 @@ from typing import List, Optional
 import click
 from loguru import logger
 
-from ..core.base import TokenV1, TokenV2, TokenV3, TokenV3Token, SigFlags
+from ..core.base import SigFlags, TokenV1, TokenV2, TokenV3, TokenV3Token
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.settings import settings

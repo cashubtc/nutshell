@@ -1,5 +1,6 @@
 import base64
 import json
+import time
 from sqlite3 import Row
 from typing import Any, Dict, List, Optional, Union
 
@@ -45,6 +46,7 @@ class Secret(BaseModel):
     timelock: Union[None, int] = None
     tags: Union[None, Tags] = None
     sigflag: Union[None, str] = None
+    n_sigs: Union[None, int] = None
 
     def serialize(self) -> str:
         data_dict: Dict[str, Any] = {
@@ -65,6 +67,31 @@ class Secret(BaseModel):
     def deserialize(cls, data: str):
         kind, kwargs = json.loads(data)
         return cls(kind=kind, **kwargs)
+
+    def get_p2pk_pubkey_from_secret(self) -> List[str]:
+        """Gets the P2PK pubkey from a Secret depending on the timelock
+
+        Args:
+            secret (Secret): P2PK Secret in ecash token
+
+        Returns:
+            str: pubkey to use for P2PK, empty string if anyone can spend (timelock passed)
+        """
+        pubkeys: List[str] = [self.data]  # for now we only support one pubkey
+        now = time.time()
+        if self.timelock and self.timelock < now:
+            logger.trace(f"p2pk timelock ran out ({self.timelock}<{now}).")
+            # check tags if a refund pubkey is present.
+            # If yes, we demand the signature to be from the refund pubkey
+            if self.tags:
+                refund_pubkey = self.tags.get_tag("refund")
+                if refund_pubkey:
+                    pubkeys = [refund_pubkey]
+            else:
+                # timelock has passed and no refund pubkey was provided
+                # that means anyone can spend
+                pubkeys = []
+        return pubkeys
 
 
 class P2SHScript(BaseModel):
