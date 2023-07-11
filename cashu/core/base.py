@@ -88,7 +88,7 @@ class Proof(BaseModel):
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
-    p2pksig: Optional[str] = None  # P2PK signature
+    p2pksigs: Union[List[str], None] = []  # P2PK signature
     p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
     reserved: Union[
         None, bool
@@ -126,7 +126,7 @@ class BlindedMessage(BaseModel):
 
     amount: int
     B_: str  # Hex-encoded blinded message
-    p2pksig: Union[str, None] = None  # signature for p2pk with SIG_ALL
+    p2pksigs: Union[List[str], None] = None  # signature for p2pk with SIG_ALL
 
 
 class BlindedSignature(BaseModel):

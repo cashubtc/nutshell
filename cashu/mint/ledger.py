@@ -227,7 +227,7 @@ class Ledger:
         """
         Verify spending conditions:
          Condition: P2SH - Witnesses proof.p2shscript
-         Condition: P2PK - Witness: proof.p2pksig
+         Condition: P2PK - Witness: proof.p2pksigs
 
         """
         # P2SH
@@ -285,22 +285,22 @@ class Ledger:
             logger.trace(f"p2pk timelock still active ({secret.timelock}>{now}).")
 
             # now we check the signature
-            if not proof.p2pksig:
+            if not proof.p2pksigs:
                 # no signature present although secret indicates one
                 raise Exception("no p2pk signature in proof.")
 
             # we parse the secret as a P2PK commitment
             # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
 
-            # check signature proof.p2pksig against pubkey
+            # check signature proof.p2pksigs against pubkey
             # we expect the signature to be on the pubkey (=message) itself
             assert signature_pubkey, "no signature pubkey present."
             assert verify_p2pk_signature(
                 message=secret.serialize().encode("utf-8"),
                 pubkey=PublicKey(bytes.fromhex(signature_pubkey), raw=True),
-                signature=bytes.fromhex(proof.p2pksig),
+                signature=bytes.fromhex(proof.p2pksigs[0]),
             ), "p2pk signature on input is invalid."
-            logger.trace(proof.p2pksig)
+            logger.trace(proof.p2pksigs)
             logger.trace("p2pk signature on inputs is valid.")
 
             return True

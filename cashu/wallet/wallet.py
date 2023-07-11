@@ -657,7 +657,7 @@ class Wallet(LedgerAPI):
         ):
             p2pk_signatures = await self.sign_p2pk_outputs(outputs)
             for o, s in zip(outputs, p2pk_signatures):
-                o.p2pksig = s
+                o.p2pksigs = [s]
         return outputs
 
     async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
@@ -701,7 +701,7 @@ class Wallet(LedgerAPI):
             # attach unlock signatures to proofs
             assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
             for p, s in zip(proofs, p2pk_signatures):
-                p.p2pksig = s
+                p.p2pksigs = [s]
 
         return proofs
 
