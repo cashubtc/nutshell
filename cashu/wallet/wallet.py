@@ -999,7 +999,14 @@ class Wallet(LedgerAPI):
     async def redeem(
         self,
         proofs: List[Proof],
-    ):
+    ) -> Tuple[List[Proof], List[Proof]]:
+        """Redeem proofs by sending them to yourself (by calling a split).)
+        Calls `add_witnesses_to_proofs` which parses all proofs and checks whether their
+        secrets corresponds to any locks that we have the unlock conditions for. If so,
+        it adds the unlock conditions to the proofs.
+        Args:
+            proofs (List[Proof]): Proofs to be redeemed.
+        """
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
@@ -1022,40 +1029,6 @@ class Wallet(LedgerAPI):
         Returns:
             Tuple[List[Proof], List[Proof]]: Two sets of proofs after splitting.
         """
-
-        # total = sum_proofs(proofs)
-        # frst_amt, scnd_amt = total - amount, amount
-        # frst_outputs = amount_split(frst_amt)
-        # scnd_outputs = amount_split(scnd_amt)
-
-        # amounts = frst_outputs + scnd_outputs
-
-        # if secret_lock is None:
-        #     secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
-        # else:
-        #     # NOTE: we use random blinding factors for P2SH, we won't be able to
-        #     # restore these tokens from a backup
-        #     rs = []
-        #     # generate secrets for receiver
-        #     secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
-        #     logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
-        #     assert len(secret_locks) == len(
-        #         scnd_outputs
-        #     ), "number of secret_locks does not match number of ouptus."
-        #     # append predefined secrets (to send) to random secrets (to keep)
-        #     # generate sercets to keep
-        #     secrets = [
-        #         await self._generate_secret() for s in range(len(frst_outputs))
-        #     ] + secret_locks
-        #     # TODO: derive derivation paths from secrets
-        #     derivation_paths = ["custom"] * len(secrets)
-
-        # assert len(secrets) == len(
-        #     amounts
-        # ), "number of secrets does not match number of outputs"
-        # await self._check_used_secrets(secrets)
-        # outputs, rs = self._construct_outputs(amounts, secrets, rs)
-
         assert len(proofs) > 0, ValueError("no proofs provided.")
 
         # potentially add witnesses to unlock provided proofs (if they indicate one)
@@ -1096,7 +1069,7 @@ class Wallet(LedgerAPI):
         await self._check_used_secrets(secrets)
 
         # construct outputs
-        outputs, rs = self._construct_outputs(amounts, secrets)
+        outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
         # Call /split API
         promises_fst, promises_snd = await super().split(
