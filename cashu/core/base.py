@@ -36,6 +36,13 @@ class Tags(BaseModel):
                 return tag[1]
         return None
 
+    def get_tag_all(self, tag_name: str) -> List[str]:
+        all_tags = []
+        for tag in self.__root__:
+            if tag[0] == tag_name:
+                all_tags.append(tag[1])
+        return all_tags
+
 
 class Secret(BaseModel):
     """Describes spending condition encoded in the secret field of a Proof."""
@@ -59,6 +66,8 @@ class Secret(BaseModel):
             data_dict["tags"] = self.tags.__root__
         if self.sigflag:
             data_dict["sigflag"] = self.sigflag
+        if self.n_sigs:
+            data_dict["n_sigs"] = self.n_sigs
         return json.dumps(
             [self.kind, data_dict],
         )
@@ -78,6 +87,10 @@ class Secret(BaseModel):
             str: pubkey to use for P2PK, empty string if anyone can spend (timelock passed)
         """
         pubkeys: List[str] = [self.data]  # for now we only support one pubkey
+        # get all additional pubkeys from tags for multisig
+        if self.tags and self.tags.get_tag("pubkey"):
+            pubkeys += self.tags.get_tag_all("pubkey")
+
         now = time.time()
         if self.timelock and self.timelock < now:
             logger.trace(f"p2pk timelock ran out ({self.timelock}<{now}).")

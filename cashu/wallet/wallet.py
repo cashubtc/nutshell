@@ -634,6 +634,14 @@ class Wallet(LedgerAPI):
         self.proofs += proofs
         return proofs
 
+    async def add_p2pk_witnesses_to_outputs(
+        self, outputs: List[BlindedMessage]
+    ) -> List[BlindedMessage]:
+        p2pk_signatures = await self.sign_p2pk_outputs(outputs)
+        for o, s in zip(outputs, p2pk_signatures):
+            o.p2pksigs = [s]
+        return outputs
+
     async def add_witnesses_to_outputs(
         self, proofs: List[Proof], outputs: List[BlindedMessage]
     ) -> List[BlindedMessage]:
@@ -655,10 +663,40 @@ class Wallet(LedgerAPI):
         if any(
             [Secret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs]
         ):
-            p2pk_signatures = await self.sign_p2pk_outputs(outputs)
-            for o, s in zip(outputs, p2pk_signatures):
-                o.p2pksigs = [s]
+            # p2pk_signatures = await self.sign_p2pk_outputs(outputs)
+            # for o, s in zip(outputs, p2pk_signatures):
+            #     o.p2pksigs = [s]
+            outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
         return outputs
+
+    async def add_p2sh_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
+        address = Secret.deserialize(proofs[0].secret).data
+        p2shscripts = await get_unused_locks(address, db=self.db)
+        assert len(p2shscripts) == 1, Exception("lock not found.")
+        p2sh_script, p2sh_signature = (
+            p2shscripts[0].script,
+            p2shscripts[0].signature,
+        )
+        logger.debug(f"Unlock script: {p2sh_script} signature: {p2sh_signature}")
+
+        # attach unlock scripts to proofs
+        for p in proofs:
+            p.p2shscript = P2SHScript(script=p2sh_script, signature=p2sh_signature)
+        return proofs
+
+    async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        p2pk_signatures = await self.sign_p2pk_proofs(proofs)
+        logger.debug(f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}")
+
+        # attach unlock signatures to proofs
+        assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
+        for p, s in zip(proofs, p2pk_signatures):
+            if p.p2pksigs:
+                p.p2pksigs.append(s)
+            else:
+                p.p2pksigs = [s]
+        return proofs
 
     async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
         """Adds witnesses to proofs for P2SH or P2PK redemption."""
@@ -679,34 +717,14 @@ class Wallet(LedgerAPI):
         # P2SH scripts
         if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
             logger.debug(f"P2SH redemption detected.")
-            # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
-            address = Secret.deserialize(proofs[0].secret).data
-            p2shscripts = await get_unused_locks(address, db=self.db)
-            assert len(p2shscripts) == 1, Exception("lock not found.")
-            p2sh_script, p2sh_signature = (
-                p2shscripts[0].script,
-                p2shscripts[0].signature,
-            )
-            logger.debug(f"Unlock script: {p2sh_script} signature: {p2sh_signature}")
-
-            # attach unlock scripts to proofs
-            for p in proofs:
-                p.p2shscript = P2SHScript(script=p2sh_script, signature=p2sh_signature)
+            proofs = await self.add_p2sh_witnesses_to_proofs(proofs)
 
         # P2PK signatures
         elif all(
             [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
         ):
             logger.debug(f"P2PK redemption detected.")
-            p2pk_signatures = await self.sign_p2pk_proofs(proofs)
-            logger.debug(
-                f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}"
-            )
-
-            # attach unlock signatures to proofs
-            assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
-            for p, s in zip(proofs, p2pk_signatures):
-                p.p2pksigs = [s]
+            proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
 
         return proofs
 
@@ -1121,6 +1139,7 @@ class Wallet(LedgerAPI):
         timelock: Optional[int] = None,
         tags: Optional[Tags] = None,
         sig_all: bool = False,
+        n_sigs: int = 1,
     ) -> Secret:
         return Secret(
             kind=SecretKind.P2PK,
@@ -1130,7 +1149,7 @@ class Wallet(LedgerAPI):
             else None,
             tags=tags,
             sigflag=SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS,
-            n_sigs=1,
+            n_sigs=n_sigs,
         )
 
     async def create_p2sh_lock(

@@ -270,6 +270,8 @@ class Ledger:
             # check if timelock is in the past
             now = time.time()
             pubkeys = secret.get_p2pk_pubkey_from_secret()
+            assert len(set(pubkeys)) == len(pubkeys), f"pubkeys must be unique."
+            logger.trace(f"pubkeys: {pubkeys}")
             # we will get an empty list if the timelock has passed and no refund pubkey is present
             if not pubkeys:
                 return True
@@ -280,6 +282,11 @@ class Ledger:
                 logger.error(f"no p2pk signatures in proof: {proof.p2pksigs}")
                 raise Exception("no p2pk signatures in proof.")
 
+            # we make sure that there are no duplicate signatures
+            assert len(set(proof.p2pksigs)) == len(
+                proof.p2pksigs
+            ), f"p2pk signatures must be unique."
+
             # we parse the secret as a P2PK commitment
             # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
 
@@ -287,6 +294,11 @@ class Ledger:
             # we expect the signature to be on the pubkey (=message) itself
             n_sigs_required = secret.n_sigs or 1
             assert n_sigs_required > 0, "n_sigs must be positive."
+
+            # check if enough signatures are present
+            assert (
+                len(proof.p2pksigs) >= n_sigs_required
+            ), f"not enough signatures provided: {len(proof.p2pksigs)} < {n_sigs_required}."
 
             n_valid_sigs_per_output = 0
             # loop over all signatures in output
@@ -302,10 +314,19 @@ class Ledger:
                             f"p2pk signature on input is valid: {input_sig} on {pubkey}."
                         )
                         continue
+                    else:
+                        logger.trace(
+                            f"p2pk signature on input is invalid: {input_sig} on {pubkey}."
+                        )
             # check if we have enough valid signatures
+            assert n_valid_sigs_per_output, "no valid signature provided for input."
             assert (
                 n_valid_sigs_per_output >= n_sigs_required
-            ), "not enough valid signatures."
+            ), f"signature threshold not met. {n_valid_sigs_per_output} < {n_sigs_required}."
+            logger.trace(
+                f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures found."
+            )
+
             logger.trace(proof.p2pksigs)
             logger.trace("p2pk signature on inputs is valid.")
 
@@ -341,11 +362,12 @@ class Ledger:
             len(set([tuple(pubs_output) for pubs_output in pubkeys_per_proof])) == 1
         ), "pubkeys in all proofs must match."
         pubkeys = pubkeys_per_proof[0]
+        logger.trace(f"pubkeys: {pubkeys}")
         # TODO: add limit for maximum number of pubkeys
 
         # for all proofs all n_sigs must be the same
         assert len(set(n_sigs)) == 1, "n_sigs in all proofs must match."
-        n_sig = n_sigs[0] or 1
+        n_sigs_required = n_sigs[0] or 1
 
         # first we check if all secrets are P2PK
         if not all(
@@ -382,9 +404,14 @@ class Ledger:
                         signature=bytes.fromhex(output_sig),
                     ):
                         n_valid_sigs_per_output += 1
-                assert n_valid_sigs_per_output >= n_sig, "not enough valid signatures."
-            logger.debug(f"{n_valid_sigs_per_output} valid signatures found.")
-
+            assert n_valid_sigs_per_output, "no valid signature provided for output."
+            assert (
+                n_valid_sigs_per_output >= n_sigs_required
+            ), f"signature threshold not met. {n_valid_sigs_per_output} < {n_sigs_required}."
+            logger.trace(
+                f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures found."
+            )
+            logger.trace(output.p2pksigs)
             logger.trace("p2pk signatures on output is valid.")
 
         return True

@@ -174,6 +174,7 @@ async def send(
                     lock.split(":")[1],
                     timelock=settings.timelock_delta_seconds,
                     sig_all=True,
+                    n_sigs=1,
                 )
 
     await wallet.load_proofs()
