@@ -430,18 +430,8 @@ class LedgerAPI:
         self,
         proofs: List[Proof],
         outputs: List[BlindedMessage],
-        secrets: List[str],
-        rs: List[PrivateKey],
-        amount: int,
-        secret_lock: Optional[Secret] = None,
     ) -> List[BlindedSignature]:
-        """Consume proofs and create new promises based on amount split.
-
-        If secret_lock is None, random secrets will be generated for the tokens to keep (frst_outputs)
-        and the promises to send (scnd_outputs).
-
-        If secret_lock is provided, the wallet will create blinded secrets with those to attach a
-        predefined spending condition to the tokens they want to send."""
+        """Consume proofs and create new promises based on amount split."""
         logger.debug("Calling split. POST /split")
         split_payload = PostSplitRequest(proofs=proofs, outputs=outputs)
 
@@ -691,7 +681,21 @@ class Wallet(LedgerAPI):
         proofs: List[Proof],
         amount: int,
         secret_lock: Optional[Secret] = None,
-    ):
+    ) -> Tuple[List[Proof], List[Proof]]:
+        """If secret_lock is None, random secrets will be generated for the tokens to keep (frst_outputs)
+        and the promises to send (scnd_outputs).
+
+        If secret_lock is provided, the wallet will create blinded secrets with those to attach a
+        predefined spending condition to the tokens they want to send.
+
+        Args:
+            proofs (List[Proof]): _description_
+            amount (int): _description_
+            secret_lock (Optional[Secret], optional): _description_. Defaults to None.
+
+        Returns:
+            _type_: _description_
+        """
         assert len(proofs) > 0, "no proofs provided."
         assert sum_proofs(proofs) >= amount, "amount too large."
         assert amount > 0, "amount must be positive."
@@ -732,9 +736,7 @@ class Wallet(LedgerAPI):
         outputs, rs = self._construct_outputs(amounts, secrets)
 
         # Call /split API
-        promises = await super().split(
-            proofs, outputs, secrets, rs, amount, secret_lock
-        )
+        promises = await super().split(proofs, outputs)
 
         # Construct proofs from returned promises (i.e., unblind the signatures)
         new_proofs = self._construct_proofs(promises, secrets, rs)

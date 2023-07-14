@@ -320,14 +320,6 @@ class Ledger:
             return False
         return True
 
-    def _verify_split_amount(self, amount: int) -> None:
-        """Split amount like output amount can't be negative or too big."""
-        try:
-            self._verify_amount(amount)
-        except:
-            # For better error message
-            raise Exception("invalid split amount: " + str(amount))
-
     def _verify_amount(self, amount: int) -> int:
         """Any amount used should be a positive integer not larger than 2^MAX_ORDER."""
         valid = (
@@ -900,7 +892,7 @@ class Ledger:
         try:
             logger.trace(f"verifying _verify_split_amount")
             # verify that amount is kosher
-            self._verify_split_amount(total_amount)
+            self._verify_amount(total_amount)
 
             # verify overspending attempt
             self._verify_equation_balanced(proofs, outputs)
@@ -912,17 +904,16 @@ class Ledger:
             if not self._verify_no_duplicate_outputs(outputs):
                 raise Exception("duplicate promises.")
             logger.trace(f"verified outputs")
+            # Mark proofs as used and prepare new promises
+            logger.trace(f"invalidating proofs")
+            await self._invalidate_proofs(proofs)
+            logger.trace(f"invalidated proofs")
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
         finally:
             # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
-
-        # Mark proofs as used and prepare new promises
-        logger.trace(f"invalidating proofs")
-        await self._invalidate_proofs(proofs)
-        logger.trace(f"invalidated proofs")
 
         # BEGIN backwards compatibility < 0.13.0
         if amount is not None:
