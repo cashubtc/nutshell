@@ -164,7 +164,8 @@ async def test_split_more_than_balance(wallet1: Wallet):
     await wallet1.mint(64)
     await assert_err(
         wallet1.split(wallet1.proofs, 128),
-        "Mint Error: inputs do not have same amount as outputs",
+        # "Mint Error: inputs do not have same amount as outputs",
+        "amount too large.",
     )
     assert wallet1.balance == 64
 

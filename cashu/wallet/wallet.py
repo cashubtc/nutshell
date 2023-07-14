@@ -693,7 +693,7 @@ class Wallet(LedgerAPI):
         secret_lock: Optional[Secret] = None,
     ):
         assert len(proofs) > 0, "no proofs provided."
-        assert sum_proofs(proofs) >= amount, "amount too high."
+        assert sum_proofs(proofs) >= amount, "amount too large."
         assert amount > 0, "amount must be positive."
 
         # potentially add witnesses to unlock provided proofs (if they indicate one)
