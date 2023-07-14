@@ -462,13 +462,13 @@ class LedgerAPI:
         promises_dict = resp.json()
         self.raise_on_error(promises_dict)
 
-        # BEGIN: backwards compatibility mints < 0.13.0 - nut06 amount deprecated
+        # BEGIN backwards compatibility mints < 0.13.0 - nut06 amount deprecated
         if promises_dict.get("fst") and promises_dict.get("snd"):
             logger.debug("Using backwards compatibility for split response")
             promises = [BlindedSignature(**p) for p in promises_dict["fst"]]
             promises += [BlindedSignature(**p) for p in promises_dict["snd"]]
         else:
-            # END: backwards compatibility mints < 0.13.0 - nut06 amount deprecated
+            # END backwards compatibility mints < 0.13.0 - nut06 amount deprecated
             mint_response = PostMintResponse.parse_obj(promises_dict)
             promises = [BlindedSignature(**p.dict()) for p in mint_response.promises]
 

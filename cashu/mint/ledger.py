@@ -870,6 +870,7 @@ class Ledger:
 
     async def split(
         self,
+        *,
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
@@ -933,10 +934,9 @@ class Ledger:
             B_fst = [od for od in outputs[: len(outs_fst)]]
             B_snd = [od for od in outputs[len(outs_fst) :]]
 
-            # # generate promises
-            prom_fst, prom_snd = await self._generate_promises(
-                B_fst, keyset
-            ), await self._generate_promises(B_snd, keyset)
+            # generate promises
+            prom_fst = await self._generate_promises(B_fst, keyset)
+            prom_snd = await self._generate_promises(B_snd, keyset)
             promises = prom_fst + prom_snd
         # END backwards compatibility < 0.13.0
         else:
