@@ -242,6 +242,7 @@ class PostSplitResponse(BaseModel):
 class PostSplitResponse_Deprecated(BaseModel):
     fst: List[BlindedSignature] = []
     snd: List[BlindedSignature] = []
+    deprecated: str = "The amount field is deprecated since 0.13.0"
 
 
 # ------- API: CHECK -------
