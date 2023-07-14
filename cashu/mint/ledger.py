@@ -1,6 +1,8 @@
 import asyncio
+import json
 import math
-from typing import Dict, List, Literal, Optional, Set, Union
+import time
+from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
 from loguru import logger
 
@@ -12,13 +14,16 @@ from ..core.base import (
     MintKeyset,
     MintKeysets,
     Proof,
+    Secret,
+    SecretKind,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.helpers import fee_reserve, sum_proofs
-from ..core.script import verify_script
+from ..core.p2pk import verify_p2pk_signature
+from ..core.script import verify_bitcoin_script
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import Wallet
@@ -181,11 +186,20 @@ class Ledger:
         """Checks whether the proof was already spent."""
         return not proof.secret in self.proofs_used
 
+    async def _check_pending(self, proofs: List[Proof]):
+        """Checks whether the proof is still pending."""
+        proofs_pending = await self.crud.get_proofs_pending(db=self.db)
+        pending_secrets = [pp.secret for pp in proofs_pending]
+        pending_states = [
+            True if p.secret in pending_secrets else False for p in proofs
+        ]
+        return pending_states
+
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""
         if proof.secret is None or proof.secret == "":
             raise Exception("no secret in proof.")
-        if len(proof.secret) > 64:
+        if len(proof.secret) > 512:
             raise Exception("secret too long.")
         return True
 
@@ -209,35 +223,90 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(private_key_amount, C, proof.secret)
 
-    def _verify_script(self, idx: int, proof: Proof) -> bool:
+    def _verify_spending_conditions(self, proof: Proof) -> bool:
         """
-        Verify bitcoin script in proof.script commited to by <address> in proof.secret.
-        proof.secret format: P2SH:<address>:<secret>
+        Verify spending conditions:
+         Condition: P2SH - Witnesses proof.p2shscript
+         Condition: P2PK - Witness: proof.p2pksig
+
         """
-        # if no script is given
-        if (
-            proof.script is None
-            or proof.script.script is None
-            or proof.script.signature is None
-        ):
-            if len(proof.secret.split("P2SH:")) == 2:
-                # secret indicates a script but no script is present
-                return False
-            else:
-                # secret indicates no script, so treat script as valid
+        # P2SH
+        try:
+            secret = Secret.deserialize(proof.secret)
+        except Exception as e:
+            # secret is not a spending condition so we treat is a normal secret
+            return True
+        if secret.kind == SecretKind.P2SH:
+            # check if timelock is in the past
+            now = time.time()
+            if secret.timelock and secret.timelock < now:
+                logger.trace(f"p2sh timelock ran out ({secret.timelock}<{now}).")
                 return True
-        # execute and verify P2SH
-        txin_p2sh_address, valid = verify_script(
-            proof.script.script, proof.script.signature
-        )
-        if valid:
+            logger.trace(f"p2sh timelock still active ({secret.timelock}>{now}).")
+
+            if (
+                proof.p2shscript is None
+                or proof.p2shscript.script is None
+                or proof.p2shscript.signature is None
+            ):
+                # no script present although secret indicates one
+                raise Exception("no script in proof.")
+
+            # execute and verify P2SH
+            txin_p2sh_address, valid = verify_bitcoin_script(
+                proof.p2shscript.script, proof.p2shscript.signature
+            )
+            if not valid:
+                raise Exception("script invalid.")
             # check if secret commits to script address
-            # format: P2SH:<address>:<secret>
-            assert len(proof.secret.split(":")) == 3, "secret format wrong."
-            assert proof.secret.split(":")[1] == str(
+            assert secret.data == str(
                 txin_p2sh_address
-            ), f"secret does not contain correct P2SH address: {proof.secret.split(':')[1]} is not {txin_p2sh_address}."
-        return valid
+            ), f"secret does not contain correct P2SH address: {secret.data} is not {txin_p2sh_address}."
+            return True
+
+        # P2PK
+        if secret.kind == SecretKind.P2PK:
+            # check if timelock is in the past
+            now = time.time()
+            if secret.timelock and secret.timelock < now:
+                logger.trace(f"p2pk timelock ran out ({secret.timelock}<{now}).")
+                # check tags if a refund pubkey is present.
+                # If yes, we demand the signature to be from the refund pubkey
+                if secret.tags and secret.tags.get_tag("refund"):
+                    signature_pubkey = secret.tags.get_tag("refund")
+                else:
+                    # if no refund pubkey is present and the timelock has expired
+                    # the token can be spent by anyone
+                    return True
+            else:
+                # the timelock is still active, therefore we demand the signature
+                # to be from the pubkey in the data field
+                signature_pubkey = secret.data
+            logger.trace(f"p2pk timelock still active ({secret.timelock}>{now}).")
+
+            # now we check the signature
+            if not proof.p2pksig:
+                # no signature present although secret indicates one
+                raise Exception("no p2pk signature in proof.")
+
+            # we parse the secret as a P2PK commitment
+            # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
+
+            # check signature proof.p2pksig against pubkey
+            # we expect the signature to be on the pubkey (=message) itself
+            assert signature_pubkey, "no signature pubkey present."
+            assert verify_p2pk_signature(
+                message=secret.serialize().encode("utf-8"),
+                pubkey=PublicKey(bytes.fromhex(signature_pubkey), raw=True),
+                signature=bytes.fromhex(proof.p2pksig),
+            ), "p2pk signature invalid."
+            logger.trace(proof.p2pksig)
+            logger.trace("p2pk signature valid.")
+
+            return True
+
+        # no spending contition
+        return True
 
     def _verify_no_duplicate_proofs(self, proofs: List[Proof]) -> bool:
         secrets = [p.secret for p in proofs]
@@ -504,7 +573,7 @@ class Ledger:
             Exception: BDHKE verification failed.
         """
         # Verify scripts
-        if not all([self._verify_script(i, p) for i, p in enumerate(proofs)]):
+        if not all([self._verify_spending_conditions(p) for p in proofs]):
             raise Exception("script validation failed.")
         # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):
@@ -750,12 +819,14 @@ class Ledger:
 
         return status, preimage, return_promises
 
-    async def check_spendable(self, proofs: List[Proof]):
-        """Checks if provided proofs are valid and have not been spent yet.
-        Used by wallets to check if their proofs have been redeemed by a receiver.
+    async def check_proof_state(
+        self, proofs: List[Proof]
+    ) -> Tuple[List[bool], List[bool]]:
+        """Checks if provided proofs are spend or are pending.
+        Used by wallets to check if their proofs have been redeemed by a receiver or they are still in-flight in a transaction.
 
-        Returns a list in the same order as the provided proofs. Wallet must match the list
-        to the proofs they have provided in order to figure out which proof is still spendable
+        Returns two lists that are in the same order as the provided proofs. Wallet must match the list
+        to the proofs they have provided in order to figure out which proof is spendable or pending
         and which isn't.
 
         Args:
@@ -763,8 +834,11 @@ class Ledger:
 
         Returns:
             List[bool]: List of which proof is still spendable (True if still spendable, else False)
+            List[bool]: List of which proof are pending (True if pending, else False)
         """
-        return [self._check_spendable(p) for p in proofs]
+        spendable = [self._check_spendable(p) for p in proofs]
+        pending = await self._check_pending(proofs)
+        return spendable, pending
 
     async def check_fees(self, pr: str):
         """Returns the fee reserve (in sat) that a wallet must add to its proofs

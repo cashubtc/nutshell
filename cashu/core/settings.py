@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.12.1"
+VERSION = "0.12.3"
 
 
 def find_env_file():
@@ -98,9 +98,15 @@ class WalletSettings(CashuSettings):
         ]
     )
 
+    timelock_delta_seconds: int = Field(default=86400)  # 1 day
+
 
 class Settings(
-    EnvSettings, MintSettings, MintInformation, WalletSettings, CashuSettings
+    EnvSettings,
+    MintSettings,
+    MintInformation,
+    WalletSettings,
+    CashuSettings,
 ):
     version: str = Field(default=VERSION)
 

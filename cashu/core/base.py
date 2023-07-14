@@ -9,13 +9,62 @@ from pydantic import BaseModel
 from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
+from .p2pk import sign_p2pk_sign
 
 # ------- PROOFS -------
 
 
+class SecretKind:
+    P2SH = "P2SH"
+    P2PK = "P2PK"
+
+
+class Tags(BaseModel):
+    __root__: List[List[str]]
+
+    def get_tag(self, tag_name: str) -> Union[str, None]:
+        for tag in self.__root__:
+            if tag[0] == tag_name:
+                return tag[1]
+        return None
+
+
+class Secret(BaseModel):
+    """Describes spending condition encoded in the secret field of a Proof."""
+
+    kind: str
+    data: str
+    nonce: Union[None, str] = None
+    timelock: Union[None, int] = None
+    tags: Union[None, Tags] = None
+
+    def serialize(self) -> str:
+        data_dict: Dict[str, Any] = {
+            "data": self.data,
+            "nonce": self.nonce or PrivateKey().serialize()[:32],
+        }
+        if self.timelock:
+            data_dict["timelock"] = self.timelock
+        if self.tags:
+            data_dict["tags"] = self.tags.__root__
+        logger.debug(
+            json.dumps(
+                [self.kind, data_dict],
+            )
+        )
+        return json.dumps(
+            [self.kind, data_dict],
+        )
+
+    @classmethod
+    def deserialize(cls, data: str):
+        kind, kwargs = json.loads(data)
+        return cls(kind=kind, **kwargs)
+
+
 class P2SHScript(BaseModel):
     """
-    Describes spending condition of a Proof
+    Unlocks P2SH spending condition of a Proof
     """
 
     script: str
@@ -34,7 +83,8 @@ class Proof(BaseModel):
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
-    script: Union[P2SHScript, None] = None  # P2SH spending condition
+    p2pksig: Optional[str] = None  # P2PK signature
+    p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
     reserved: Union[
         None, bool
     ] = False  # whether this proof is reserved for sending, used for coin management in the wallet
@@ -169,6 +219,19 @@ class PostSplitRequest(BaseModel):
     proofs: List[Proof]
     amount: Optional[int] = None  # deprecated since 0.13.0
     outputs: List[BlindedMessage]
+    # signature: Optional[str] = None
+
+    # def sign(self, private_key: PrivateKey):
+    #     """
+    #     Create a signed split request. The signature is over the `proofs` and `outputs` fields.
+    #     """
+    #     # message = json.dumps(self.proofs).encode("utf-8") + json.dumps(
+    #     #     self.outputs
+    #     # ).encode("utf-8")
+    #     message = json.dumps(self.dict(include={"proofs": ..., "outputs": ...})).encode(
+    #         "utf-8"
+    #     )
+    #     self.signature = sign_p2pk_sign(message, private_key)
 
 
 class PostSplitResponse(BaseModel):
@@ -190,6 +253,10 @@ class CheckSpendableRequest(BaseModel):
 
 class CheckSpendableResponse(BaseModel):
     spendable: List[bool]
+    pending: Optional[
+        List[bool]
+    ] = None  # TODO: Uncomment when all mints are updated to 0.12.3 and support /check
+    # with pending tokens (kept for backwards compatibility of new wallets with old mints)
 
 
 class CheckFeesRequest(BaseModel):
