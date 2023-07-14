@@ -172,7 +172,7 @@ async def test_p2pk_timelock_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
 
 
 @pytest.mark.asyncio
-async def test_p2pk_multisig_on_inputs(wallet1: Wallet, wallet2: Wallet):
+async def test_p2pk_multisig_2_of_2(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
