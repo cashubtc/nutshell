@@ -1145,7 +1145,7 @@ class Wallet(LedgerAPI):
             tags["locktime"] = str(
                 (datetime.now() + timedelta(seconds=locktime_seconds)).timestamp()
             )
-        tags["sig_all"] = SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS
+        tags["sigflag"] = SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS
         if n_sigs > 1:
             tags["n_sigs"] = str(n_sigs)
 

@@ -28,17 +28,21 @@ class SigFlags:
 
 
 class Tags(BaseModel):
-    __root__: Dict[str, str]
+    """
+    Tags are used to encode additional information in the Secret of a Proof.
+    """
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.__root__ = kwargs or {}
+    __root__: List[List[str]] = []
 
-    def __getitem__(self, key: str) -> str:
-        return self.__root__[key]
+    def __init__(self, tags: Optional[List[List[str]]] = None):
+        super().__init__()
+        self.__root__ = tags or []
 
-    def __setitem__(self, key: str, value: str):
-        self.__root__[key] = value
+    def __setitem__(self, key: str, value: str) -> None:
+        self.__root__.append([key, value])
+
+    def __getitem__(self, key: str) -> Union[str, None]:
+        return self.get_tag(key)
 
     def get_tag(self, tag_name: str) -> Union[str, None]:
         for tag in self.__root__:
@@ -52,10 +56,6 @@ class Tags(BaseModel):
             if tag[0] == tag_name:
                 all_tags.append(tag[1])
         return all_tags
-
-    def to_list(self) -> List[List[str]]:
-        # convert all tag values to strings
-        return [[key, value] for key, value in self.__root__.items()]
 
 
 class Secret(BaseModel):
@@ -72,7 +72,7 @@ class Secret(BaseModel):
             "nonce": self.nonce or PrivateKey().serialize()[:32],
         }
         if self.tags:
-            data_dict["tags"] = self.tags.to_list()
+            data_dict["tags"] = self.tags.__root__
         return json.dumps(
             [self.kind, data_dict],
         )

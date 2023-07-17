@@ -122,7 +122,7 @@ async def test_p2pk_locktime_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
         locktime_seconds=4,  # locktime
-        tags=Tags(refund=pubkey_wallet2),  # refund pubkey
+        tags=Tags([["refund", pubkey_wallet2]]),  # refund pubkey
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -150,7 +150,7 @@ async def test_p2pk_locktime_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
         locktime_seconds=4,  # locktime
-        tags=Tags(refund=garbage_pubkey_2.serialize().hex()),  # refund pubkey
+        tags=Tags([["refund", garbage_pubkey_2.serialize().hex()]]),  # refund pubkey
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -177,7 +177,7 @@ async def test_p2pk_multisig_2_of_2(wallet1: Wallet, wallet2: Wallet):
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags(pubkey=pubkey_wallet1), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet1]]), n_sigs=2
     )
 
     _, send_proofs = await wallet1.split_to_send(
@@ -197,7 +197,7 @@ async def test_p2pk_multisig_duplicate_signature(wallet1: Wallet, wallet2: Walle
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags(pubkey=pubkey_wallet1), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet1]]), n_sigs=2
     )
 
     _, send_proofs = await wallet1.split_to_send(
@@ -219,7 +219,7 @@ async def test_p2pk_multisig_quorum_not_met_1_of_2(wallet1: Wallet, wallet2: Wal
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags(pubkey=pubkey_wallet1), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet1]]), n_sigs=2
     )
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -238,7 +238,7 @@ async def test_p2pk_multisig_quorum_not_met_2_of_3(wallet1: Wallet, wallet2: Wal
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags(pubkey=pubkey_wallet1), n_sigs=3
+        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet1]]), n_sigs=3
     )
 
     _, send_proofs = await wallet1.split_to_send(
@@ -259,7 +259,7 @@ async def test_p2pk_multisig_with_duplicate_publickey(wallet1: Wallet, wallet2: 
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags(pubkey=pubkey_wallet2), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet2]]), n_sigs=2
     )
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -282,7 +282,7 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
 
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags(pubkey=wrong_public_key_hex), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkey", wrong_public_key_hex]]), n_sigs=2
     )
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -292,3 +292,29 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
     await assert_err(
         wallet2.redeem(send_proofs), "Mint Error: signature threshold not met. 1 < 2."
     )
+
+
+def test_tags():
+    tags = Tags([["key1", "value1"], ["key2", "value2"], ["key2", "value3"]])
+    assert tags.get_tag("key1") == "value1"
+    assert tags["key1"] == "value1"
+    assert tags.get_tag("key2") == "value2"
+    assert tags["key2"] == "value2"
+    assert tags.get_tag("key3") is None
+    assert tags["key3"] is None
+    assert tags.get_tag_all("key2") == ["value2", "value3"]
+
+
+@pytest.mark.asyncio
+async def test_secret_tags(wallet1: Wallet):
+    tags = Tags([["locktime", "100"], ["n_sigs", "3"], ["sigflag", "SIG_ALL"]])
+    pubkey = PrivateKey().pubkey
+    assert pubkey
+    secret = await wallet1.create_p2pk_lock(
+        pubkey=pubkey.serialize().hex(),
+        tags=tags,
+        n_sigs=3,
+        locktime_seconds=100,
+    )
+    assert secret.locktime
+    assert secret.locktime == 100
