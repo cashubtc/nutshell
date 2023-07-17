@@ -34,8 +34,8 @@ class Tags(BaseModel):
 
     __root__: List[List[str]] = []
 
-    def __init__(self, tags: Optional[List[List[str]]] = None):
-        super().__init__()
+    def __init__(self, tags: Optional[List[List[str]]] = None, **kwargs):
+        super().__init__(**kwargs)
         self.__root__ = tags or []
 
     def __setitem__(self, key: str, value: str) -> None:

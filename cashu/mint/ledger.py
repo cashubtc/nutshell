@@ -268,7 +268,6 @@ class Ledger:
         # P2PK
         if secret.kind == SecretKind.P2PK:
             # check if locktime is in the past
-            now = time.time()
             pubkeys = secret.get_p2pk_pubkey_from_secret()
             assert len(set(pubkeys)) == len(pubkeys), f"pubkeys must be unique."
             logger.trace(f"pubkeys: {pubkeys}")
