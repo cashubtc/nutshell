@@ -28,7 +28,17 @@ class SigFlags:
 
 
 class Tags(BaseModel):
-    __root__: List[List[str]]
+    __root__: Dict[str, str]
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.__root__ = kwargs or {}
+
+    def __getitem__(self, key: str) -> str:
+        return self.__root__[key]
+
+    def __setitem__(self, key: str, value: str):
+        self.__root__[key] = value
 
     def get_tag(self, tag_name: str) -> Union[str, None]:
         for tag in self.__root__:
@@ -43,6 +53,10 @@ class Tags(BaseModel):
                 all_tags.append(tag[1])
         return all_tags
 
+    def to_list(self) -> List[List[str]]:
+        # convert all tag values to strings
+        return [[key, value] for key, value in self.__root__.items()]
+
 
 class Secret(BaseModel):
     """Describes spending condition encoded in the secret field of a Proof."""
@@ -51,23 +65,14 @@ class Secret(BaseModel):
     data: str
     nonce: Union[None, str] = None
     tags: Union[None, Tags] = None
-    locktime: Union[None, int] = None
-    sigflag: Union[None, str] = None
-    n_sigs: Union[None, int] = None
 
     def serialize(self) -> str:
         data_dict: Dict[str, Any] = {
             "data": self.data,
             "nonce": self.nonce or PrivateKey().serialize()[:32],
         }
-        if self.locktime:
-            data_dict["locktime"] = self.locktime
         if self.tags:
-            data_dict["tags"] = self.tags.__root__
-        if self.sigflag:
-            data_dict["sigflag"] = self.sigflag
-        if self.n_sigs:
-            data_dict["n_sigs"] = self.n_sigs
+            data_dict["tags"] = self.tags.to_list()
         return json.dumps(
             [self.kind, data_dict],
         )
@@ -76,6 +81,30 @@ class Secret(BaseModel):
     def deserialize(cls, data: str):
         kind, kwargs = json.loads(data)
         return cls(kind=kind, **kwargs)
+
+    @property
+    def locktime(self) -> Union[None, int]:
+        if self.tags:
+            locktime = self.tags.get_tag("locktime")
+            if locktime:
+                return int(locktime)
+        return None
+
+    @property
+    def sigflag(self) -> Union[None, str]:
+        if self.tags:
+            sigflag = self.tags.get_tag("sigflag")
+            if sigflag:
+                return sigflag
+        return None
+
+    @property
+    def n_sigs(self) -> Union[None, int]:
+        if self.tags:
+            n_sigs = self.tags.get_tag("n_sigs")
+            if n_sigs:
+                return int(n_sigs)
+        return None
 
     def get_p2pk_pubkey_from_secret(self) -> List[str]:
         """Gets the P2PK pubkey from a Secret depending on the locktime
