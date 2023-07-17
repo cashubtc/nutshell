@@ -214,7 +214,11 @@ class LedgerAPI:
         """
         await self._load_mint_keys(keyset_id)
         await self._load_mint_keysets()
-        await self._load_mint_info()
+        try:
+            await self._load_mint_info()
+        except Exception as e:
+            logger.debug(f"Could not load mint info: {e}")
+            pass
 
         if keyset_id:
             assert keyset_id in self.keysets, f"keyset {keyset_id} not active on mint"
