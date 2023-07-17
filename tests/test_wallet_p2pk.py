@@ -82,9 +82,9 @@ async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wal
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # receiver side: wrong private key
-    wallet1.private_key = PrivateKey()  # wrong private key
+    wallet2.private_key = PrivateKey()  # wrong private key
     await assert_err(
-        wallet1.redeem(send_proofs),
+        wallet2.redeem(send_proofs),
         "Mint Error: no valid signature provided for input.",
     )
 
@@ -103,13 +103,16 @@ async def test_p2pk_short_locktime_receive_with_wrong_private_key(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # receiver side: wrong private key
-    wallet1.private_key = PrivateKey()  # wrong private key
+    wallet2.private_key = PrivateKey()  # wrong private key
+    send_proofs_copy = copy.deepcopy(send_proofs)
     await assert_err(
-        wallet1.redeem(send_proofs),
+        wallet2.redeem(send_proofs),
         "Mint Error: no valid signature provided for input.",
     )
     await asyncio.sleep(6)
-    await wallet1.redeem(send_proofs)
+    # should succeed because even with the wrong private key we
+    # can redeem the tokens after the locktime
+    await wallet2.redeem(send_proofs_copy)
 
 
 @pytest.mark.asyncio

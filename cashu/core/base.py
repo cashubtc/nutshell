@@ -71,16 +71,25 @@ class Secret(BaseModel):
             "data": self.data,
             "nonce": self.nonce or PrivateKey().serialize()[:32],
         }
-        if self.tags:
+        if self.tags and self.tags.__root__:
+            logger.debug(f"Serializing tags: {self.tags.__root__}")
             data_dict["tags"] = self.tags.__root__
         return json.dumps(
             [self.kind, data_dict],
         )
 
     @classmethod
-    def deserialize(cls, data: str):
-        kind, kwargs = json.loads(data)
-        return cls(kind=kind, **kwargs)
+    def deserialize(cls, from_proof: str):
+        kind, kwargs = json.loads(from_proof)
+        data = kwargs.pop("data")
+        nonce = kwargs.pop("nonce")
+        tags_list = kwargs.pop("tags", None)
+        if tags_list:
+            tags = Tags(tags=tags_list)
+        else:
+            tags = None
+        logger.debug(f"Deserialized Secret: {kind}, {data}, {nonce}, {tags}")
+        return cls(kind=kind, data=data, nonce=nonce, tags=tags)
 
     @property
     def locktime(self) -> Union[None, int]:
@@ -129,10 +138,8 @@ class Secret(BaseModel):
                 refund_pubkey = self.tags.get_tag("refund")
                 if refund_pubkey:
                     pubkeys = [refund_pubkey]
-            else:
-                # locktime has passed and no refund pubkey was provided
-                # that means anyone can spend
-                pubkeys = []
+                    return pubkeys
+            return []
         return pubkeys
 
 

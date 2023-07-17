@@ -688,7 +688,7 @@ class Wallet(LedgerAPI):
     async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
         p2pk_signatures = await self.sign_p2pk_proofs(proofs)
         logger.debug(f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}")
-
+        logger.debug(f"Proofs: {proofs}")
         # attach unlock signatures to proofs
         assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
         for p, s in zip(proofs, p2pk_signatures):
@@ -1137,18 +1137,22 @@ class Wallet(LedgerAPI):
         self,
         pubkey: str,
         locktime_seconds: Optional[int] = None,
-        tags: Tags = Tags(),
+        tags: Optional[Tags] = None,
         sig_all: bool = False,
         n_sigs: int = 1,
     ) -> Secret:
+        logger.debug(f"Provided tags: {tags}")
+        if not tags:
+            tags = Tags()
+            logger.debug(f"Before tags: {tags}")
         if locktime_seconds:
             tags["locktime"] = str(
-                (datetime.now() + timedelta(seconds=locktime_seconds)).timestamp()
+                int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
             )
         tags["sigflag"] = SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS
         if n_sigs > 1:
             tags["n_sigs"] = str(n_sigs)
-
+        logger.debug(f"After tags: {tags}")
         return Secret(
             kind=SecretKind.P2PK,
             data=pubkey,
@@ -1178,13 +1182,22 @@ class Wallet(LedgerAPI):
         ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
         private_key = self.private_key
         assert private_key.pubkey
-        return [
+        logger.trace(
+            f"Signing with private key: {private_key.serialize()} public key: {private_key.pubkey.serialize().hex()}"
+        )
+        for proof in proofs:
+            logger.trace(f"Signing proof: {proof}")
+            logger.trace(f"Signing message: {proof.secret}")
+
+        signatures = [
             sign_p2pk_sign(
                 message=proof.secret.encode("utf-8"),
                 private_key=private_key,
             )
             for proof in proofs
         ]
+        logger.debug(f"Signatures: {signatures}")
+        return signatures
 
     async def sign_p2pk_outputs(self, outputs: List[BlindedMessage]) -> List[str]:
         assert (

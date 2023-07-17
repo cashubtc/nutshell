@@ -234,6 +234,8 @@ class Ledger:
         # P2SH
         try:
             secret = Secret.deserialize(proof.secret)
+            logger.trace(f"proof.secret: {proof.secret}")
+            logger.trace(f"secret: {secret}")
         except Exception as e:
             # secret is not a spending condition so we treat is a normal secret
             return True
@@ -282,9 +284,8 @@ class Ledger:
                 raise Exception("no p2pk signatures in proof.")
 
             # we make sure that there are no duplicate signatures
-            assert len(set(proof.p2pksigs)) == len(
-                proof.p2pksigs
-            ), f"p2pk signatures must be unique."
+            if len(set(proof.p2pksigs)) != len(proof.p2pksigs):
+                raise Exception("p2pk signatures must be unique.")
 
             # we parse the secret as a P2PK commitment
             # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
@@ -303,6 +304,8 @@ class Ledger:
             # loop over all signatures in output
             for input_sig in proof.p2pksigs:
                 for pubkey in pubkeys:
+                    logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
+                    logger.trace(f"Message: {secret.serialize().encode('utf-8')}")
                     if verify_p2pk_signature(
                         message=secret.serialize().encode("utf-8"),
                         pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
@@ -355,12 +358,15 @@ class Ledger:
             except Exception as e:
                 # secret is not a spending condition so we treat is a normal secret
                 return True
-
         # for all proofs all pubkeys must be the same
         assert (
             len(set([tuple(pubs_output) for pubs_output in pubkeys_per_proof])) == 1
         ), "pubkeys in all proofs must match."
         pubkeys = pubkeys_per_proof[0]
+        if not pubkeys:
+            # no pubkeys present
+            return True
+
         logger.trace(f"pubkeys: {pubkeys}")
         # TODO: add limit for maximum number of pubkeys
 
