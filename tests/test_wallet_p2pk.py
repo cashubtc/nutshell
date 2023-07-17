@@ -6,7 +6,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof, Secret, SecretKind, Tags
+from cashu.core.base import Proof, Secret, SecretKind, Tags, SigFlags
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
@@ -309,15 +309,35 @@ def test_tags():
 
 
 @pytest.mark.asyncio
-async def test_secret_tags(wallet1: Wallet):
+async def test_secret_initialized_with_tags(wallet1: Wallet):
     tags = Tags([["locktime", "100"], ["n_sigs", "3"], ["sigflag", "SIG_ALL"]])
     pubkey = PrivateKey().pubkey
     assert pubkey
     secret = await wallet1.create_p2pk_lock(
         pubkey=pubkey.serialize().hex(),
         tags=tags,
-        n_sigs=3,
-        locktime_seconds=100,
     )
     assert secret.locktime
     assert secret.locktime == 100
+    assert secret.n_sigs
+    assert secret.n_sigs == 3
+    assert secret.sigflag
+    assert secret.sigflag == SigFlags.SIG_ALL
+
+
+@pytest.mark.asyncio
+async def test_secret_initialized_with_arguments(wallet1: Wallet):
+    pubkey = PrivateKey().pubkey
+    assert pubkey
+    secret = await wallet1.create_p2pk_lock(
+        pubkey=pubkey.serialize().hex(),
+        locktime_seconds=100,
+        n_sigs=3,
+        sig_all=True,
+    )
+    assert secret.locktime
+    assert secret.locktime > 1689000000
+    assert secret.n_sigs
+    assert secret.n_sigs == 3
+    assert secret.sigflag
+    assert secret.sigflag == SigFlags.SIG_ALL
