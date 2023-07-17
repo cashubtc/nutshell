@@ -163,16 +163,16 @@ async def send(
         if lock.startswith("P2PK:") or lock.startswith("P2SH:"):
             logger.debug(f"Locking token to: {lock}")
             logger.debug(
-                f"Adding a time lock of {settings.timelock_delta_seconds} seconds."
+                f"Adding a time lock of {settings.locktime_delta_seconds} seconds."
             )
             if lock.startswith("P2SH:"):
                 secret_lock = await wallet.create_p2sh_lock(
-                    lock.split(":")[1], timelock=settings.timelock_delta_seconds
+                    lock.split(":")[1], locktime=settings.locktime_delta_seconds
                 )
             elif lock.startswith("P2PK:"):
                 secret_lock = await wallet.create_p2pk_lock(
                     lock.split(":")[1],
-                    timelock=settings.timelock_delta_seconds,
+                    locktime=settings.locktime_delta_seconds,
                     sig_all=True,
                     n_sigs=1,
                 )

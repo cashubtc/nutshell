@@ -90,14 +90,14 @@ async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wal
 
 
 @pytest.mark.asyncio
-async def test_p2pk_short_timelock_receive_with_wrong_private_key(
+async def test_p2pk_short_locktime_receive_with_wrong_private_key(
     wallet1: Wallet, wallet2: Wallet
 ):
     await wallet1.mint(64)
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, timelock=4
+        pubkey_wallet2, locktime=4
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -113,7 +113,7 @@ async def test_p2pk_short_timelock_receive_with_wrong_private_key(
 
 
 @pytest.mark.asyncio
-async def test_p2pk_timelock_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet):
+async def test_p2pk_locktime_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
@@ -121,7 +121,7 @@ async def test_p2pk_timelock_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
     assert garbage_pubkey
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
-        timelock=4,  # timelock
+        locktime=4,  # locktime
         tags=Tags(__root__=[["refund", pubkey_wallet2]]),  # refund pubkey
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
@@ -134,12 +134,12 @@ async def test_p2pk_timelock_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
         "Mint Error: no valid signature provided for input.",
     )
     await asyncio.sleep(6)
-    # we can now redeem because of the refund timelock
+    # we can now redeem because of the refund locktime
     await wallet2.redeem(send_proofs_copy)
 
 
 @pytest.mark.asyncio
-async def test_p2pk_timelock_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: Wallet):
+async def test_p2pk_locktime_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
@@ -149,7 +149,7 @@ async def test_p2pk_timelock_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
     assert garbage_pubkey_2
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
-        timelock=4,  # timelock
+        locktime=4,  # locktime
         tags=Tags(
             __root__=[["refund", garbage_pubkey_2.serialize().hex()]]
         ),  # refund pubkey

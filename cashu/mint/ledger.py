@@ -238,12 +238,12 @@ class Ledger:
             # secret is not a spending condition so we treat is a normal secret
             return True
         if secret.kind == SecretKind.P2SH:
-            # check if timelock is in the past
+            # check if locktime is in the past
             now = time.time()
-            if secret.timelock and secret.timelock < now:
-                logger.trace(f"p2sh timelock ran out ({secret.timelock}<{now}).")
+            if secret.locktime and secret.locktime < now:
+                logger.trace(f"p2sh locktime ran out ({secret.locktime}<{now}).")
                 return True
-            logger.trace(f"p2sh timelock still active ({secret.timelock}>{now}).")
+            logger.trace(f"p2sh locktime still active ({secret.locktime}>{now}).")
 
             if (
                 proof.p2shscript is None
@@ -267,12 +267,12 @@ class Ledger:
 
         # P2PK
         if secret.kind == SecretKind.P2PK:
-            # check if timelock is in the past
+            # check if locktime is in the past
             now = time.time()
             pubkeys = secret.get_p2pk_pubkey_from_secret()
             assert len(set(pubkeys)) == len(pubkeys), f"pubkeys must be unique."
             logger.trace(f"pubkeys: {pubkeys}")
-            # we will get an empty list if the timelock has passed and no refund pubkey is present
+            # we will get an empty list if the locktime has passed and no refund pubkey is present
             if not pubkeys:
                 return True
 

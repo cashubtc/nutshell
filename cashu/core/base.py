@@ -50,8 +50,8 @@ class Secret(BaseModel):
     kind: str
     data: str
     nonce: Union[None, str] = None
-    timelock: Union[None, int] = None
     tags: Union[None, Tags] = None
+    locktime: Union[None, int] = None
     sigflag: Union[None, str] = None
     n_sigs: Union[None, int] = None
 
@@ -60,8 +60,8 @@ class Secret(BaseModel):
             "data": self.data,
             "nonce": self.nonce or PrivateKey().serialize()[:32],
         }
-        if self.timelock:
-            data_dict["timelock"] = self.timelock
+        if self.locktime:
+            data_dict["locktime"] = self.locktime
         if self.tags:
             data_dict["tags"] = self.tags.__root__
         if self.sigflag:
@@ -78,13 +78,13 @@ class Secret(BaseModel):
         return cls(kind=kind, **kwargs)
 
     def get_p2pk_pubkey_from_secret(self) -> List[str]:
-        """Gets the P2PK pubkey from a Secret depending on the timelock
+        """Gets the P2PK pubkey from a Secret depending on the locktime
 
         Args:
             secret (Secret): P2PK Secret in ecash token
 
         Returns:
-            str: pubkey to use for P2PK, empty string if anyone can spend (timelock passed)
+            str: pubkey to use for P2PK, empty string if anyone can spend (locktime passed)
         """
         pubkeys: List[str] = [self.data]  # for now we only support one pubkey
         # get all additional pubkeys from tags for multisig
@@ -92,8 +92,8 @@ class Secret(BaseModel):
             pubkeys += self.tags.get_tag_all("pubkey")
 
         now = time.time()
-        if self.timelock and self.timelock < now:
-            logger.trace(f"p2pk timelock ran out ({self.timelock}<{now}).")
+        if self.locktime and self.locktime < now:
+            logger.trace(f"p2pk locktime ran out ({self.locktime}<{now}).")
             # check tags if a refund pubkey is present.
             # If yes, we demand the signature to be from the refund pubkey
             if self.tags:
@@ -101,7 +101,7 @@ class Secret(BaseModel):
                 if refund_pubkey:
                     pubkeys = [refund_pubkey]
             else:
-                # timelock has passed and no refund pubkey was provided
+                # locktime has passed and no refund pubkey was provided
                 # that means anyone can spend
                 pubkeys = []
         return pubkeys

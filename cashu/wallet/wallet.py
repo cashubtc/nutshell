@@ -1136,7 +1136,7 @@ class Wallet(LedgerAPI):
     async def create_p2pk_lock(
         self,
         pubkey: str,
-        timelock: Optional[int] = None,
+        locktime: Optional[int] = None,
         tags: Optional[Tags] = None,
         sig_all: bool = False,
         n_sigs: int = 1,
@@ -1144,8 +1144,8 @@ class Wallet(LedgerAPI):
         return Secret(
             kind=SecretKind.P2PK,
             data=pubkey,
-            timelock=int((datetime.now() + timedelta(seconds=timelock)).timestamp())
-            if timelock
+            locktime=int((datetime.now() + timedelta(seconds=locktime)).timestamp())
+            if locktime
             else None,
             tags=tags,
             sigflag=SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS,
@@ -1155,14 +1155,14 @@ class Wallet(LedgerAPI):
     async def create_p2sh_lock(
         self,
         address: str,
-        timelock: Optional[int] = None,
+        locktime: Optional[int] = None,
         tags: Optional[Tags] = None,
     ) -> Secret:
         return Secret(
             kind=SecretKind.P2SH,
             data=address,
-            timelock=int((datetime.now() + timedelta(seconds=timelock)).timestamp())
-            if timelock
+            locktime=int((datetime.now() + timedelta(seconds=locktime)).timestamp())
+            if locktime
             else None,
             tags=tags,
         )
