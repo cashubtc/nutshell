@@ -1,13 +1,12 @@
 import base64
 import json
 import os
-from datetime import datetime, timedelta
 from typing import List, Optional
 
 import click
 from loguru import logger
 
-from ..core.base import Secret, SecretKind, TokenV1, TokenV2, TokenV3, TokenV3Token
+from ..core.base import TokenV1, TokenV2, TokenV3, TokenV3Token
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
@@ -159,19 +158,21 @@ async def send(
         if not lock.startswith("P2SH:") and not lock.startswith("P2PK:"):
             raise Exception("Error: lock has to start with P2SH: or P2PK:")
         # we add a time lock to the P2PK lock by appending the current unix time + 14 days
-        # we use datetime because it's easier to read
         if lock.startswith("P2PK:") or lock.startswith("P2SH:"):
             logger.debug(f"Locking token to: {lock}")
             logger.debug(
-                f"Adding a time lock of {settings.timelock_delta_seconds} seconds."
+                f"Adding a time lock of {settings.locktime_delta_seconds} seconds."
             )
             if lock.startswith("P2SH:"):
                 secret_lock = await wallet.create_p2sh_lock(
-                    lock.split(":")[1], timelock=settings.timelock_delta_seconds
+                    lock.split(":")[1], locktime=settings.locktime_delta_seconds
                 )
             elif lock.startswith("P2PK:"):
                 secret_lock = await wallet.create_p2pk_lock(
-                    lock.split(":")[1], timelock=settings.timelock_delta_seconds
+                    lock.split(":")[1],
+                    locktime_seconds=settings.locktime_delta_seconds,
+                    sig_all=True,
+                    n_sigs=1,
                 )
 
     await wallet.load_proofs()

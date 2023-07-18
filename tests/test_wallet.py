@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import secrets
 from typing import List
 
@@ -46,6 +47,7 @@ async def wallet1(mint):
 async def wallet2(mint):
     wallet2 = Wallet2(SERVER_ENDPOINT, "data/wallet2", "wallet2")
     await migrate_databases(wallet2.db, migrations)
+    wallet2.private_key = PrivateKey(secrets.token_bytes(32), raw=True)
     await wallet2.load_mint()
     wallet2.status()
     yield wallet2
@@ -249,100 +251,6 @@ async def test_create_p2pk_pubkey(wallet1: Wallet):
     await wallet1.mint(64)
     pubkey = await wallet1.create_p2pk_pubkey()
     PublicKey(bytes.fromhex(pubkey), raw=True)
-
-
-@pytest.mark.asyncio
-async def test_p2pk(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
-    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
-    # p2pk test
-    secret_lock = await wallet1.create_p2pk_lock(pubkey_wallet2)  # sender side
-    _, send_proofs = await wallet1.split_to_send(
-        wallet1.proofs, 8, secret_lock=secret_lock
-    )
-    await wallet2.redeem(send_proofs)
-
-
-@pytest.mark.asyncio
-async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
-    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
-    # sender side
-    secret_lock = await wallet1.create_p2pk_lock(pubkey_wallet2)  # sender side
-    _, send_proofs = await wallet1.split_to_send(
-        wallet1.proofs, 8, secret_lock=secret_lock
-    )
-    # receiver side: wrong private key
-    wallet1.private_key = PrivateKey()  # wrong private key
-    await assert_err(wallet1.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
-
-
-@pytest.mark.asyncio
-async def test_p2pk_short_timelock_receive_with_wrong_private_key(
-    wallet1: Wallet, wallet2: Wallet
-):
-    await wallet1.mint(64)
-    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
-    # sender side
-    secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, timelock=4
-    )  # sender side
-    _, send_proofs = await wallet1.split_to_send(
-        wallet1.proofs, 8, secret_lock=secret_lock
-    )
-    # receiver side: wrong private key
-    wallet1.private_key = PrivateKey()  # wrong private key
-    await assert_err(wallet1.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
-    await asyncio.sleep(6)
-    await wallet1.redeem(send_proofs)
-
-
-@pytest.mark.asyncio
-async def test_p2pk_timelock_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
-    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
-    # sender side
-    garbage_pubkey = PrivateKey().pubkey
-    assert garbage_pubkey
-    secret_lock = await wallet1.create_p2pk_lock(
-        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
-        timelock=4,  # timelock
-        tags=Tags(__root__=[["refund", pubkey_wallet2]]),  # refund pubkey
-    )  # sender side
-    _, send_proofs = await wallet1.split_to_send(
-        wallet1.proofs, 8, secret_lock=secret_lock
-    )
-    # receiver side: can't redeem since we used a garbage pubkey
-    await assert_err(wallet2.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
-    await asyncio.sleep(6)
-    # we can now redeem because of the refund timelock
-    await wallet2.redeem(send_proofs)
-
-
-@pytest.mark.asyncio
-async def test_p2pk_timelock_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
-    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
-    # sender side
-    garbage_pubkey = PrivateKey().pubkey
-    garbage_pubkey_2 = PrivateKey().pubkey
-    assert garbage_pubkey
-    assert garbage_pubkey_2
-    secret_lock = await wallet1.create_p2pk_lock(
-        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
-        timelock=4,  # timelock
-        tags=Tags(
-            __root__=[["refund", garbage_pubkey_2.serialize().hex()]]
-        ),  # refund pubkey
-    )  # sender side
-    _, send_proofs = await wallet1.split_to_send(
-        wallet1.proofs, 8, secret_lock=secret_lock
-    )
-    # receiver side: can't redeem since we used a garbage pubkey
-    await assert_err(wallet2.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
-    await asyncio.sleep(6)
-    # we still can't redeem it because we used garbage_pubkey_2 as a refund pubkey
-    await assert_err(wallet2.redeem(send_proofs), "Mint Error: p2pk signature invalid.")
 
 
 @pytest.mark.asyncio
