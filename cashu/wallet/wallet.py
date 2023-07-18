@@ -1023,9 +1023,6 @@ class Wallet(LedgerAPI):
             List[Proof]: List of proofs with witnesses added
         """
 
-        p2sh_script, p2sh_signature = None, None
-        p2pk_signatures = None
-
         # iterate through proofs and produce witnesses for each
 
         # first we check whether all tokens have serialized secrets as their secret

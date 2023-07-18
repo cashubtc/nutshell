@@ -1,17 +1,16 @@
 import base64
 import json
 import os
-from typing import List, Optional
 
 from loguru import logger
 
-from ..core.base import Secret, SecretKind, TokenV1, TokenV2, TokenV3, TokenV3Token
+from ..core.base import TokenV1, TokenV2, TokenV3, TokenV3Token
 from ..core.db import Database
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..wallet import migrations
-from ..wallet.crud import get_keyset, get_seed_and_mnemonic, get_unused_locks
+from ..wallet.crud import get_keyset
 from ..wallet.wallet import Wallet
 
 
