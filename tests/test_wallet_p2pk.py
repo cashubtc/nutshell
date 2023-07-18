@@ -6,7 +6,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof, Secret, SecretKind, Tags, SigFlags
+from cashu.core.base import Proof, Secret, SecretKind, SigFlags, Tags
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
