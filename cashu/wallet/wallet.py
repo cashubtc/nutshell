@@ -38,6 +38,7 @@ from ..core.base import (
     Proof,
     Secret,
     SecretKind,
+    SigFlags,
     Tags,
     TokenV2,
     TokenV2Mint,
@@ -309,7 +310,11 @@ class LedgerAPI(object):
         """
         await self._load_mint_keys(keyset_id)
         await self._load_mint_keysets()
-        await self._load_mint_info()
+        try:
+            await self._load_mint_info()
+        except Exception as e:
+            logger.debug(f"Could not load mint info: {e}")
+            pass
 
         if keyset_id:
             assert keyset_id in self.keysets, f"keyset {keyset_id} not active on mint"
@@ -517,7 +522,7 @@ class LedgerAPI(object):
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /split"""
-            proofs_include = {"id", "amount", "secret", "C", "p2shscript", "p2pksig"}
+            proofs_include = {"id", "amount", "secret", "C", "p2shscript", "p2pksigs"}
             return {
                 "amount": ...,
                 "outputs": ...,
@@ -936,6 +941,70 @@ class Wallet(LedgerAPI):
         self.proofs += proofs
         return proofs
 
+    async def add_p2pk_witnesses_to_outputs(
+        self, outputs: List[BlindedMessage]
+    ) -> List[BlindedMessage]:
+        p2pk_signatures = await self.sign_p2pk_outputs(outputs)
+        for o, s in zip(outputs, p2pk_signatures):
+            o.p2pksigs = [s]
+        return outputs
+
+    async def add_witnesses_to_outputs(
+        self, proofs: List[Proof], outputs: List[BlindedMessage]
+    ) -> List[BlindedMessage]:
+        """Adds witnesses to outputs if the inputs (proofs) indicate an appropriate signature flag
+
+        Args:
+            proofs (List[Proof]): _description_
+            outputs (List[BlindedMessage]): _description_
+        """
+        # first we check whether all tokens have serialized secrets as their secret
+        try:
+            for p in proofs:
+                Secret.deserialize(p.secret)
+        except:
+            # if not, we do not add witnesses (treat as regular token secret)
+            return outputs
+
+        # if any of the proofs provided require SIG_ALL, we must provide it
+        if any(
+            [Secret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs]
+        ):
+            # p2pk_signatures = await self.sign_p2pk_outputs(outputs)
+            # for o, s in zip(outputs, p2pk_signatures):
+            #     o.p2pksigs = [s]
+            outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
+        return outputs
+
+    async def add_p2sh_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
+        address = Secret.deserialize(proofs[0].secret).data
+        p2shscripts = await get_unused_locks(address, db=self.db)
+        assert len(p2shscripts) == 1, Exception("lock not found.")
+        p2sh_script, p2sh_signature = (
+            p2shscripts[0].script,
+            p2shscripts[0].signature,
+        )
+        logger.debug(f"Unlock script: {p2sh_script} signature: {p2sh_signature}")
+
+        # attach unlock scripts to proofs
+        for p in proofs:
+            p.p2shscript = P2SHScript(script=p2sh_script, signature=p2sh_signature)
+        return proofs
+
+    async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        p2pk_signatures = await self.sign_p2pk_proofs(proofs)
+        logger.debug(f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}")
+        logger.debug(f"Proofs: {proofs}")
+        # attach unlock signatures to proofs
+        assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
+        for p, s in zip(proofs, p2pk_signatures):
+            if p.p2pksigs:
+                p.p2pksigs.append(s)
+            else:
+                p.p2pksigs = [s]
+        return proofs
+
     async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
         """Adds witnesses to proofs for P2SH or P2PK redemption.
 
@@ -966,33 +1035,18 @@ class Wallet(LedgerAPI):
         except:
             # if not, we do not add witnesses (treat as regular token secret)
             return proofs
+        logger.debug(f"Spending conditions detected.")
         # P2SH scripts
         if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
-            # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
-            address = Secret.deserialize(proofs[0].secret).data
-            p2shscripts = await get_unused_locks(address, db=self.db)
-            assert len(p2shscripts) == 1, Exception("lock not found.")
-            p2sh_script, p2sh_signature = (
-                p2shscripts[0].script,
-                p2shscripts[0].signature,
-            )
-            logger.debug(f"Unlock script: {p2sh_script} signature: {p2sh_signature}")
-
-            # attach unlock scripts to proofs
-            for p in proofs:
-                p.p2shscript = P2SHScript(script=p2sh_script, signature=p2sh_signature)
+            logger.debug(f"P2SH redemption detected.")
+            proofs = await self.add_p2sh_witnesses_to_proofs(proofs)
 
         # P2PK signatures
         elif all(
             [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
         ):
-            p2pk_signatures = await self.sign_p2pk_proofs(proofs)
-            logger.debug(f"Unlock signature: {p2pk_signatures}")
-
-            # attach unlock signatures to proofs
-            assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
-            for p, s in zip(proofs, p2pk_signatures):
-                p.p2pksig = s
+            logger.debug(f"P2PK redemption detected.")
+            proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
 
         return proofs
 
@@ -1070,6 +1124,9 @@ class Wallet(LedgerAPI):
 
         # construct outputs
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
+
+        # potentially add witnesses to outputs based on what requirement the proofs indicate
+        outputs = await self.add_witnesses_to_outputs(proofs, outputs)
 
         # Call /split API
         promises_fst, promises_snd = await super().split(
@@ -1166,7 +1223,7 @@ class Wallet(LedgerAPI):
 
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
-        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}
+        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}  # type: ignore
 
     async def _get_proofs_per_minturl(
         self, proofs: List[Proof]
@@ -1484,30 +1541,43 @@ class Wallet(LedgerAPI):
     async def create_p2pk_lock(
         self,
         pubkey: str,
-        timelock: Optional[int] = None,
+        locktime_seconds: Optional[int] = None,
         tags: Optional[Tags] = None,
-    ):
+        sig_all: bool = False,
+        n_sigs: int = 1,
+    ) -> Secret:
+        logger.debug(f"Provided tags: {tags}")
+        if not tags:
+            tags = Tags()
+            logger.debug(f"Before tags: {tags}")
+        if locktime_seconds:
+            tags["locktime"] = str(
+                int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
+            )
+        tags["sigflag"] = SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS
+        if n_sigs > 1:
+            tags["n_sigs"] = str(n_sigs)
+        logger.debug(f"After tags: {tags}")
         return Secret(
             kind=SecretKind.P2PK,
             data=pubkey,
-            timelock=int((datetime.now() + timedelta(seconds=timelock)).timestamp())
-            if timelock
-            else None,
             tags=tags,
         )
 
     async def create_p2sh_lock(
         self,
         address: str,
-        timelock: Optional[int] = None,
-        tags: Optional[Tags] = None,
-    ):
+        locktime: Optional[int] = None,
+        tags: Tags = Tags(),
+    ) -> Secret:
+        if locktime:
+            tags["locktime"] = str(
+                (datetime.now() + timedelta(seconds=locktime)).timestamp()
+            )
+
         return Secret(
             kind=SecretKind.P2SH,
             data=address,
-            timelock=int((datetime.now() + timedelta(seconds=timelock)).timestamp())
-            if timelock
-            else None,
             tags=tags,
         )
 
@@ -1517,12 +1587,35 @@ class Wallet(LedgerAPI):
         ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
         private_key = self.private_key
         assert private_key.pubkey
-        return [
+        logger.trace(
+            f"Signing with private key: {private_key.serialize()} public key: {private_key.pubkey.serialize().hex()}"
+        )
+        for proof in proofs:
+            logger.trace(f"Signing proof: {proof}")
+            logger.trace(f"Signing message: {proof.secret}")
+
+        signatures = [
             sign_p2pk_sign(
                 message=proof.secret.encode("utf-8"),
                 private_key=private_key,
             )
             for proof in proofs
+        ]
+        logger.debug(f"Signatures: {signatures}")
+        return signatures
+
+    async def sign_p2pk_outputs(self, outputs: List[BlindedMessage]) -> List[str]:
+        assert (
+            self.private_key
+        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
+        private_key = self.private_key
+        assert private_key.pubkey
+        return [
+            sign_p2pk_sign(
+                message=output.B_.encode("utf-8"),
+                private_key=private_key,
+            )
+            for output in outputs
         ]
 
     # ---------- BALANCE CHECKS ----------

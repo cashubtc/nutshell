@@ -96,7 +96,7 @@ class WalletSettings(CashuSettings):
         ]
     )
 
-    timelock_delta_seconds: int = Field(default=86400)  # 1 day
+    locktime_delta_seconds: int = Field(default=86400)  # 1 day
 
 
 class Settings(
