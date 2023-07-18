@@ -1041,17 +1041,16 @@ class Ledger:
             logger.trace("verifying proofs: _verify_proofs_and_outputs")
             await self._verify_proofs_and_outputs(proofs, outputs)
             logger.trace(f"verified proofs and outputs")
+            # Mark proofs as used and prepare new promises
+            logger.trace(f"invalidating proofs")
+            await self._invalidate_proofs(proofs)
+            logger.trace(f"invalidated proofs")
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
         finally:
             # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
-
-        # Mark proofs as used and prepare new promises
-        logger.trace(f"invalidating proofs")
-        await self._invalidate_proofs(proofs)
-        logger.trace(f"invalidated proofs")
 
         # split outputs according to amount
         outs_fst = amount_split(total - amount)
