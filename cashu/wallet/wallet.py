@@ -722,7 +722,7 @@ class Wallet(LedgerAPI):
             )
         elif from_mnemonic:
             # or use the one provided
-            mnemonic_str = from_mnemonic
+            mnemonic_str = from_mnemonic.lower().strip()
         elif ret_db is not None:
             # if there is a seed in the database, use it
             _, mnemonic_str = ret_db[0], ret_db[1]
