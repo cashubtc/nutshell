@@ -1,9 +1,7 @@
 from os import listdir, path
-from typing import Union
 
 from genericpath import isdir
 
-from cashu.core.base import Proof
 from cashu.core.settings import settings
 from cashu.gui.src.mint_repository import MintRepository
 from cashu.gui.src.models.gui_mint import GuiMint
@@ -80,27 +78,6 @@ class WalletRepository:
             return
 
         await self._recreate_wallet(self._current_wallet.name, mint_name)
-
-    async def gen_invoice(self, amount: int) -> str:
-        if amount == None or amount < 0:
-            raise Exception("Amount must be greater than 0")
-
-        try:
-            invoice = await self._current_wallet.request_mint(amount)
-            if invoice.pr:
-                return invoice.pr
-        except:
-            raise
-
-    async def mint_tokens_by_invoice_hash(
-        self,
-        amount: int,
-        hash: Union[None, str] = None,
-    ) -> list[Proof]:
-        wallet = wallet if wallet != None else self._current_wallet
-
-        if amount and hash:
-            return await wallet.mint(amount, hash)
 
     def get_wallets(self) -> list[str]:
         return self._wallet_names

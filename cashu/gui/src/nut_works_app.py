@@ -1,16 +1,21 @@
 from sqlite3 import IntegrityError
 
 import flet as f
+import pyperclip
 
+from cashu.core.base import Invoice
 from cashu.gui.src.controls.confirm_pay_ln_invoice_dialog import (
     ConfirmPayLnInvoiceDialog,
 )
 from cashu.gui.src.controls.default_dialog import DefaultDialog
 from cashu.gui.src.controls.overview_card import OverviewCard
-from cashu.gui.src.controls.send_dialog import SendData, SendDialog, SendType
+from cashu.gui.src.controls.receive_dialog import ReceiveData, ReceiveDialog
+from cashu.gui.src.controls.send_dialog import SendData, SendDialog, TransactionType
 from cashu.gui.src.controls.show_text_dialog import ShowTextDialog
+from cashu.gui.src.invoice_watcher import InvoiceWatcher
 from cashu.gui.src.mint_repository import MintRepository
 from cashu.gui.src.wallet_repository import WalletRepository
+from cashu.wallet.helpers import deserialize_token_from_string, receive
 
 # TODO: Improve Dialog handling when Flet is updated with enhanced
 #       Dialog API. Should be available for next release.
@@ -27,11 +32,27 @@ class NutWorksApp:
         self._show_text_dlg = DefaultDialog()
         self._pay_invoice_dlg = DefaultDialog()
         self._send_dlg = DefaultDialog()
+        self._receive_dlg = DefaultDialog()
+        self._invoice_watcher = InvoiceWatcher()
+        self._invoice_watcher.add_callback(self._on_invoice_changed)
 
     async def init(self):
         await self.wallet_repo.init(self.mint_repo.default_mint)
         self.page.vertical_alignment = f.CrossAxisAlignment.START
         self._selected_mint = self.mint_repo.default_mint.name
+
+        await self._build_page()
+
+    async def _on_invoice_changed(self, invoice: Invoice):
+        await self.wallet_repo.wallet.init()
+        sb = f.SnackBar(
+            f.Text(f"An invoice was paid! Amount: {invoice.amount} sat"),
+            duration=3000,
+            action="Close",
+            on_action=lambda _: self._close_snackbar(),
+        )
+        self.page.snack_bar = sb
+        self.page.snack_bar.open = True
 
         await self._build_page()
 
@@ -127,14 +148,14 @@ class NutWorksApp:
     async def _on_send_confirmed(self, data: SendData):
         w = self.wallet_repo.wallet
 
-        if data.type == SendType.TOKEN:
+        if data.type == TransactionType.TOKEN:
             res = await w.get_token_string(data.amount_sat)
             await self._close_dlg(build_page=False)
             self._show_text_dlg = ShowTextDialog(on_dismiss=lambda: self._close_dlg())
             self._show_text_dlg.open(res)
             self.page.dialog = self._show_text_dlg
 
-        if data.type == SendType.LIGHTNING:
+        if data.type == TransactionType.LIGHTNING:
             amount, fees = await w.get_pay_amount_with_fees(data.invoice)
             await self._close_dlg(build_page=False)
             self._pay_invoice_dlg = ConfirmPayLnInvoiceDialog(
@@ -149,11 +170,42 @@ class NutWorksApp:
 
         await self._build_page()
 
-    def _on_receive_clicked(self, e: f.ControlEvent):
-        print("receive clicked")
+    async def _on_receive_clicked(self, e: f.ControlEvent):
+        self._receive_dlg = ReceiveDialog(
+            on_dismiss=lambda: self._close_dlg(),
+            on_confirm=self._on_receive_confirmed,
+        )
+        self.page.dialog = self._receive_dlg
+        self._receive_dlg.open()
+
+        await self._build_page()
+
+    async def _on_receive_confirmed(self, data: ReceiveData):
+        w = self.wallet_repo.wallet
+
+        if data.type == TransactionType.LIGHTNING:
+            i = await w.request_mint(data.amount_sat)
+            pyperclip.copy(i.pr)
+            self._invoice_watcher.add_invoice(i, w)
+            sb = f.SnackBar(
+                f.Text(f"Payment request copied to clipboard: {i.pr}"),
+                duration=3000,
+                action="Close",
+                on_action=lambda _: self._close_snackbar(),
+            )
+            self.page.snack_bar = sb
+            self.page.snack_bar.open = True
+
+        if data.type == TransactionType.TOKEN:
+            tokens = deserialize_token_from_string(data.token)
+            await receive(wallet=self.wallet_repo.wallet, tokenObj=tokens)
+            await self.wallet_repo.wallet.init()
+
+        await self._close_dlg()
 
     async def _close_dlg(self, build_page: bool = True):
         self._send_dlg.close()
+        self._receive_dlg.close()
         self._pay_invoice_dlg.close()
         self._show_text_dlg.close()
 
