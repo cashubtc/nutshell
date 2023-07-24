@@ -21,6 +21,17 @@ from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
+from ..core.errors import (
+    InvoiceNotPaidError,
+    KeysetError,
+    KeysetNotFoundError,
+    LightningError,
+    NoSecretInProofsError,
+    NotAllowedError,
+    SecretTooLongError,
+    TokenAlreadySpentError,
+    TransactionError,
+)
 from ..core.helpers import fee_reserve, sum_proofs
 from ..core.p2pk import verify_p2pk_signature
 from ..core.script import verify_bitcoin_script
@@ -202,15 +213,15 @@ class Ledger:
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""
         if proof.secret is None or proof.secret == "":
-            raise Exception("no secret in proof.")
+            raise NoSecretInProofsError()
         if len(proof.secret) > 512:
-            raise Exception("secret too long.")
+            raise SecretTooLongError()
         return True
 
     def _verify_proof_bdhke(self, proof: Proof):
         """Verifies that the proof of promise was issued by this ledger."""
         if not self._check_spendable(proof):
-            raise Exception(f"tokens already spent. Secret: {proof.secret}")
+            raise TokenAlreadySpentError()
         # if no keyset id is given in proof, assume the current one
         if not proof.id:
             private_key_amount = self.keyset.private_keys[proof.amount]
@@ -256,14 +267,14 @@ class Ledger:
                 or proof.p2shscript.signature is None
             ):
                 # no script present although secret indicates one
-                raise Exception("no script in proof.")
+                raise TransactionError("no script in proof.")
 
             # execute and verify P2SH
             txin_p2sh_address, valid = verify_bitcoin_script(
                 proof.p2shscript.script, proof.p2shscript.signature
             )
             if not valid:
-                raise Exception("script invalid.")
+                raise TransactionError("script invalid.")
             # check if secret commits to script address
             assert secret.data == str(
                 txin_p2sh_address
@@ -284,11 +295,11 @@ class Ledger:
             if not proof.p2pksigs:
                 # no signature present although secret indicates one
                 logger.error(f"no p2pk signatures in proof: {proof.p2pksigs}")
-                raise Exception("no p2pk signatures in proof.")
+                raise TransactionError("no p2pk signatures in proof.")
 
             # we make sure that there are no duplicate signatures
             if len(set(proof.p2pksigs)) != len(proof.p2pksigs):
-                raise Exception("p2pk signatures must be unique.")
+                raise TransactionError("p2pk signatures must be unique.")
 
             # we parse the secret as a P2PK commitment
             # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
@@ -450,7 +461,7 @@ class Ledger:
             self._verify_amount(amount)
         except:
             # For better error message
-            raise Exception("invalid split amount: " + str(amount))
+            raise NotAllowedError("invalid split amount: " + str(amount))
 
     def _verify_amount(self, amount: int) -> int:
         """Any amount used should be a positive integer not larger than 2^MAX_ORDER."""
@@ -459,7 +470,7 @@ class Ledger:
         )
         logger.trace(f"Verifying amount {amount} is valid: {valid}")
         if not valid:
-            raise Exception("invalid amount: " + str(amount))
+            raise NotAllowedError("invalid amount: " + str(amount))
         return amount
 
     def _verify_equation_balanced(
@@ -488,7 +499,7 @@ class Ledger:
         error, balance = await self.lightning.status()
         logger.trace(f"_request_lightning_invoice: Lightning wallet balance: {balance}")
         if error:
-            raise Exception(f"Lightning wallet not responding: {error}")
+            raise LightningError(f"Lightning wallet not responding: {error}")
         (
             ok,
             checking_id,
@@ -525,9 +536,9 @@ class Ledger:
         )
         logger.trace(f"crud: _check_lightning_invoice: invoice: {invoice}")
         if invoice is None:
-            raise Exception("invoice not found.")
+            raise LightningError("invoice not found.")
         if invoice.issued:
-            raise Exception("tokens already issued for this invoice.")
+            raise LightningError("tokens already issued for this invoice.")
         assert invoice.payment_hash, "invoice has no payment hash."
 
         # set this invoice as issued
@@ -539,7 +550,7 @@ class Ledger:
 
         try:
             if amount > invoice.amount:
-                raise Exception(
+                raise LightningError(
                     f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
                 )
             logger.trace(
@@ -552,7 +563,7 @@ class Ledger:
             if status.paid:
                 return status.paid
             else:
-                raise Exception("Lightning invoice not paid yet.")
+                raise InvoiceNotPaidError()
         except Exception as e:
             # unset issued
             logger.trace(f"crud: unsetting invoice {invoice.payment_hash} as issued")
@@ -579,7 +590,7 @@ class Ledger:
         error, balance = await self.lightning.status()
         logger.trace(f"_pay_lightning_invoice: Lightning wallet balance: {balance}")
         if error:
-            raise Exception(f"Lightning wallet not responding: {error}")
+            raise LightningError(f"Lightning wallet not responding: {error}")
         (
             ok,
             checking_id,
@@ -633,7 +644,7 @@ class Ledger:
                         f"crud: _set_proofs_pending proof {p.secret} set as pending"
                     )
                 except:
-                    raise Exception("proofs already pending.")
+                    raise TransactionError("proofs already pending.")
 
     async def _unset_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
@@ -676,7 +687,7 @@ class Ledger:
         for p in proofs:
             for pp in proofs_pending:
                 if p.secret == pp.secret:
-                    raise Exception("proofs are pending.")
+                    raise TransactionError("proofs are pending.")
 
     async def _verify_proofs_and_outputs(
         self, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
@@ -697,16 +708,16 @@ class Ledger:
 
         # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):
-            raise Exception("secrets do not match criteria.")
+            raise TransactionError("secrets do not match criteria.")
         # verify that only unique proofs were used
         if not self._verify_no_duplicate_proofs(proofs):
-            raise Exception("duplicate proofs.")
+            raise TransactionError("duplicate proofs.")
         # Verify input spending conditions
         if not all([self._verify_input_spending_conditions(p) for p in proofs]):
-            raise Exception("validation of input spending conditions failed.")
+            raise TransactionError("validation of input spending conditions failed.")
         # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
-            raise Exception("could not verify proofs.")
+            raise TransactionError("could not verify proofs.")
 
         if not outputs:
             return
@@ -715,12 +726,12 @@ class Ledger:
 
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
-            raise Exception("duplicate promises.")
+            raise TransactionError("duplicate promises.")
         if not self._verify_input_output_amounts(proofs, outputs):
-            raise Exception("input amounts less than output.")
+            raise TransactionError("input amounts less than output.")
         # Verify output spending conditions
         if outputs and not self._verify_output_spending_conditions(proofs, outputs):
-            raise Exception("validation of output spending conditions failed.")
+            raise TransactionError("validation of output spending conditions failed.")
 
     async def _generate_change_promises(
         self,
@@ -778,7 +789,7 @@ class Ledger:
             for i in range(len(outputs)):
                 outputs[i].amount = return_amounts_sorted[i]
             if not self._verify_no_duplicate_outputs(outputs):
-                raise Exception("duplicate promises.")
+                raise TransactionError("duplicate promises.")
             return_promises = await self._generate_promises(outputs, keyset)
             return return_promises
         else:
@@ -788,9 +799,9 @@ class Ledger:
     def get_keyset(self, keyset_id: Optional[str] = None):
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
         if keyset_id and keyset_id not in self.keysets.keysets:
-            raise Exception("keyset does not exist")
+            raise KeysetNotFoundError()
         keyset = self.keysets.keysets[keyset_id] if keyset_id else self.keyset
-        assert keyset.public_keys, Exception("no public keys for this keyset")
+        assert keyset.public_keys, KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
     async def request_mint(self, amount: int):
@@ -807,14 +818,16 @@ class Ledger:
         """
         logger.trace(f"called request_mint")
         if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
-            raise Exception(f"Maximum mint amount is {settings.mint_max_peg_in} sat.")
+            raise NotAllowedError(
+                f"Maximum mint amount is {settings.mint_max_peg_in} sat."
+            )
         if settings.mint_peg_out_only:
-            raise Exception("Mint does not allow minting new tokens.")
+            raise NotAllowedError("Mint does not allow minting new tokens.")
 
         logger.trace(f"requesting invoice for {amount} satoshis")
         payment_request, payment_hash = await self._request_lightning_invoice(amount)
         logger.trace(f"got invoice {payment_request} with hash {payment_hash}")
-        assert payment_request and payment_hash, Exception(
+        assert payment_request and payment_hash, LightningError(
             "could not fetch invoice from Lightning backend"
         )
 
@@ -858,7 +871,7 @@ class Ledger:
 
         if settings.lightning:
             if not hash:
-                raise Exception("no hash provided.")
+                raise NotAllowedError("no hash provided.")
             self.locks[hash] = (
                 self.locks.get(hash) or asyncio.Lock()
             )  # create a new lock if it doesn't exist
@@ -869,7 +882,7 @@ class Ledger:
 
         for amount in amounts:
             if amount not in [2**i for i in range(settings.max_order)]:
-                raise Exception(
+                raise NotAllowedError(
                     f"Can only mint amounts with 2^n up to {2**settings.max_order}."
                 )
 
@@ -906,13 +919,13 @@ class Ledger:
             invoice_obj = bolt11.decode(invoice)
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
             if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
-                raise Exception(
+                raise NotAllowedError(
                     f"Maximum melt amount is {settings.mint_max_peg_out} sat."
                 )
             fees_msat = await self.check_fees(invoice)
-            assert total_provided >= invoice_amount + fees_msat / 1000, Exception(
-                "provided proofs not enough for Lightning payment."
-            )
+            assert (
+                total_provided >= invoice_amount + fees_msat / 1000
+            ), TransactionError("provided proofs not enough for Lightning payment.")
 
             # promises to return for overpaid fees
             return_promises: List[BlindedSignature] = []
@@ -935,7 +948,7 @@ class Ledger:
                 await self._invalidate_proofs(proofs)
                 logger.trace("invalidated proofs")
                 # prepare change to compensate wallet for overpaid fees
-                assert fee_msat is not None, Exception("fees not valid")
+                assert fee_msat is not None, TransactionError("fees not valid")
                 if outputs:
                     return_promises = await self._generate_change_promises(
                         total_provided=total_provided,
@@ -945,7 +958,7 @@ class Ledger:
                     )
             else:
                 logger.trace("lightning payment unsuccessful")
-                raise Exception("Lightning payment unsuccessful.")
+                raise LightningError("Lightning payment unsuccessful.")
 
         except Exception as e:
             logger.trace(f"exception: {e}")
@@ -1039,7 +1052,7 @@ class Ledger:
             self._verify_split_amount(amount)
             # verify overspending attempt
             if amount > total:
-                raise Exception("split amount is higher than the total sum.")
+                raise TransactionError("split amount is higher than the total sum.")
 
             logger.trace("verifying proofs: _verify_proofs_and_outputs")
             await self._verify_proofs_and_outputs(proofs, outputs)

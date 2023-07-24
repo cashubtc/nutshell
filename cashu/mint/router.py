@@ -74,20 +74,17 @@ async def keys() -> KeysResponse:
     name="Keyset public keys",
     summary="Public keys of a specific keyset",
 )
-async def keyset_keys(idBase64Urlsafe: str) -> Union[KeysResponse, CashuError]:
+async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
     """
     Get the public keys of the mint from a specific keyset id.
     The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
     normal base64 before it can be processed (by the mint).
     """
     logger.trace(f"> GET /keys/{idBase64Urlsafe}")
-    try:
-        id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
-        keyset = ledger.get_keyset(keyset_id=id)
-        keys = KeysResponse.parse_obj(keyset)
-        return keys
-    except Exception as exc:
-        return CashuError(code=0, error=str(exc))
+    id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
+    keyset = ledger.get_keyset(keyset_id=id)
+    keys = KeysResponse.parse_obj(keyset)
+    return keys
 
 
 @router.get(
@@ -101,7 +98,7 @@ async def keysets() -> KeysetsResponse:
 
 
 @router.get("/mint", name="Request mint", summary="Request minting of new tokens")
-async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
+async def request_mint(amount: int = 0) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
@@ -110,16 +107,14 @@ async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
     """
     logger.trace(f"> GET /mint: amount={amount}")
     if amount > 21_000_000 * 100_000_000 or amount <= 0:
-        return CashuError(code=0, error="Amount must be a valid amount of sat.")
+        raise CashuError(code=0, detail="Amount must be a valid amount of sat.")
     if settings.mint_peg_out_only:
-        return CashuError(code=0, error="Mint does not allow minting new tokens.")
-    try:
-        payment_request, hash = await ledger.request_mint(amount)
-        resp = GetMintResponse(pr=payment_request, hash=hash)
-        logger.trace(f"< GET /mint: {resp}")
-        return resp
-    except Exception as exc:
-        return CashuError(code=0, error=str(exc))
+        raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
+
+    payment_request, hash = await ledger.request_mint(amount)
+    resp = GetMintResponse(pr=payment_request, hash=hash)
+    logger.trace(f"< GET /mint: {resp}")
+    return resp
 
 
 @router.post(
@@ -131,24 +126,23 @@ async def mint(
     payload: PostMintRequest,
     hash: Optional[str] = None,
     payment_hash: Optional[str] = None,
-) -> Union[PostMintResponse, CashuError]:
+) -> PostMintResponse:
     """
     Requests the minting of tokens belonging to a paid payment request.
 
     Call this endpoint after `GET /mint`.
     """
     logger.trace(f"> POST /mint: {payload}")
-    try:
-        # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
-        # We use the payment_hash to lookup the hash from the database and pass that one along.
-        hash = payment_hash or hash
-        # END: backwards compatibility < 0.12
-        promises = await ledger.mint(payload.outputs, hash=hash)
-        blinded_signatures = PostMintResponse(promises=promises)
-        logger.trace(f"< POST /mint: {blinded_signatures}")
-        return blinded_signatures
-    except Exception as exc:
-        return CashuError(code=0, error=str(exc))
+
+    # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
+    # We use the payment_hash to lookup the hash from the database and pass that one along.
+    hash = payment_hash or hash
+    # END: backwards compatibility < 0.12
+
+    promises = await ledger.mint(payload.outputs, hash=hash)
+    blinded_signatures = PostMintResponse(promises=promises)
+    logger.trace(f"< POST /mint: {blinded_signatures}")
+    return blinded_signatures
 
 
 @router.post(
@@ -156,20 +150,17 @@ async def mint(
     name="Melt tokens",
     summary="Melt tokens for a Bitcoin payment that the mint will make for the user in exchange",
 )
-async def melt(payload: PostMeltRequest) -> Union[CashuError, GetMeltResponse]:
+async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /melt: {payload}")
-    try:
-        ok, preimage, change_promises = await ledger.melt(
-            payload.proofs, payload.pr, payload.outputs
-        )
-        resp = GetMeltResponse(paid=ok, preimage=preimage, change=change_promises)
-        logger.trace(f"< POST /melt: {resp}")
-        return resp
-    except Exception as exc:
-        return CashuError(code=0, error=str(exc))
+    ok, preimage, change_promises = await ledger.melt(
+        payload.proofs, payload.pr, payload.outputs
+    )
+    resp = GetMeltResponse(paid=ok, preimage=preimage, change=change_promises)
+    logger.trace(f"< POST /melt: {resp}")
+    return resp
 
 
 @router.post(
@@ -208,7 +199,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
 @router.post("/split", name="Split", summary="Split proofs at a specified amount")
 async def split(
     payload: PostSplitRequest,
-) -> Union[CashuError, PostSplitResponse]:
+) -> PostSplitResponse:
     """
     Requetst a set of tokens with amount "total" to be split into two
     newly minted sets with amount "split" and "total-split".
@@ -218,14 +209,8 @@ async def split(
     """
     logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
-    try:
-        split_return = await ledger.split(
-            payload.proofs, payload.amount, payload.outputs
-        )
-    except Exception as exc:
-        return CashuError(code=0, error=str(exc))
-    if not split_return:
-        return CashuError(code=0, error="there was an error with the split")
+
+    split_return = await ledger.split(payload.proofs, payload.amount, payload.outputs)
     frst_promises, scnd_promises = split_return
     resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
     logger.trace(f"< POST /split: {resp}")
@@ -235,10 +220,7 @@ async def split(
 @router.post(
     "/restore", name="Restore", summary="Restores a blinded signature from a secret"
 )
-async def restore(payload: PostMintRequest) -> Union[CashuError, PostRestoreResponse]:
+async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
-    try:
-        outputs, promises = await ledger.restore(payload.outputs)
-    except Exception as exc:
-        return CashuError(code=0, error=str(exc))
+    outputs, promises = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, promises=promises)
