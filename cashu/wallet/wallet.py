@@ -777,7 +777,6 @@ class Wallet(LedgerAPI):
         Determinstically generates two secrets (one as the secret message,
         one as the blinding factor).
         """
-        assert self.mint_info.pubkey, "Mint info not loaded yet."
         assert self.bip32, "BIP32 not initialized yet."
         # integer keyset id modulo max number of bip32 child keys
         keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
