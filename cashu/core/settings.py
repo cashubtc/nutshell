@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.12.3"
+VERSION = "0.13.0"
 
 
 def find_env_file():
@@ -43,8 +43,6 @@ class CashuSettings(BaseSettings):
 class EnvSettings(CashuSettings):
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")
-    host: str = Field(default="127.0.0.1")
-    port: int = Field(default=3338)
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
 
 
@@ -98,7 +96,7 @@ class WalletSettings(CashuSettings):
         ]
     )
 
-    timelock_delta_seconds: int = Field(default=86400)  # 1 day
+    locktime_delta_seconds: int = Field(default=86400)  # 1 day
 
 
 class Settings(

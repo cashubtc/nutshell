@@ -176,3 +176,20 @@ async def m008_keysets_add_public_keys(db: Database):
     Stores public keys of mint in a new column of table keysets.
     """
     await db.execute("ALTER TABLE keysets ADD COLUMN public_keys TEXT")
+
+
+async def m009_privatekey_and_determinstic_key_derivation(db: Database):
+    await db.execute("ALTER TABLE keysets ADD COLUMN counter INTEGER DEFAULT 0")
+    await db.execute("ALTER TABLE proofs ADD COLUMN derivation_path TEXT")
+    await db.execute("ALTER TABLE proofs_used ADD COLUMN derivation_path TEXT")
+    await db.execute(
+        """
+            CREATE TABLE IF NOT EXISTS seed (
+            seed TEXT NOT NULL,
+            mnemonic TEXT NOT NULL,
+
+            UNIQUE (seed, mnemonic)
+            );
+        """
+    )
+    # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")

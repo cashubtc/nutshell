@@ -13,20 +13,15 @@ from tests.conftest import SERVER_ENDPOINT, mint
 
 @pytest.fixture(autouse=True, scope="session")
 def cli_prefix():
-    yield ["--wallet", "test_wallet", "--host", settings.mint_url]
-
-
-@pytest.fixture(scope="session")
-def wallet():
-    wallet = Wallet(settings.mint_host, "data/test_wallet", "wallet")
-    asyncio.run(migrate_databases(wallet.db, migrations))
-    asyncio.run(wallet.load_proofs())
-    yield wallet
+    yield ["--wallet", "test_cli_wallet", "--host", settings.mint_url, "--tests"]
 
 
 async def init_wallet():
-    wallet = Wallet(settings.mint_host, "data/test_wallet", "wallet")
-    await migrate_databases(wallet.db, migrations)
+    wallet = await Wallet.with_db(
+        url=settings.mint_host,
+        db="data/test_cli_wallet",
+        name="wallet",
+    )
     await wallet.load_proofs()
     return wallet
 
@@ -50,12 +45,26 @@ def test_info_with_mint(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "info", "-m"],
+        [*cli_prefix, "info", "--mint"],
     )
     assert result.exception is None
     print("INFO -M")
     print(result.output)
     assert "Mint name" in result.output
+    assert result.exit_code == 0
+
+
+@pytest.mark.asyncio
+def test_info_with_mnemonic(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "info", "--mnemonic"],
+    )
+    assert result.exception is None
+    print("INFO -M")
+    print(result.output)
+    assert "Mnemonic" in result.output
     assert result.exit_code == 0
 
 
@@ -113,7 +122,7 @@ def test_wallets(cli_prefix):
     print("WALLETS")
     # on github this is empty
     if len(result.output):
-        assert "test_wallet" in result.output
+        assert "test_cli_wallet" in result.output
     assert result.exit_code == 0
 
 

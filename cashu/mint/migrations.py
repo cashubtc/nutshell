@@ -159,3 +159,20 @@ async def m006_invoices_add_payment_hash(db: Database):
     await db.execute(
         f"UPDATE {table_with_schema(db, 'invoices')} SET payment_hash = hash"
     )
+
+
+async def m007_proofs_and_promises_store_id(db: Database):
+    """
+    Column that remembers the payment_hash as we're using
+    the column hash as a random identifier now
+    (see https://github.com/cashubtc/nuts/pull/14).
+    """
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN id TEXT"
+    )
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'proofs_pending')} ADD COLUMN id TEXT"
+    )
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN id TEXT"
+    )

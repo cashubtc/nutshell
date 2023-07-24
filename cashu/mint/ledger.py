@@ -1,5 +1,4 @@
 import asyncio
-import json
 import math
 import time
 from typing import Dict, List, Literal, Optional, Set, Tuple, Union
@@ -16,6 +15,7 @@ from ..core.base import (
     Proof,
     Secret,
     SecretKind,
+    SigFlags,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
@@ -177,7 +177,11 @@ class Ledger:
         C_ = b_dhke.step2_bob(B_, private_key_amount)
         logger.trace(f"crud: _generate_promise storing promise for {amount}")
         await self.crud.store_promise(
-            amount=amount, B_=B_.serialize().hex(), C_=C_.serialize().hex(), db=self.db
+            amount=amount,
+            B_=B_.serialize().hex(),
+            C_=C_.serialize().hex(),
+            id=keyset.id,
+            db=self.db,
         )
         logger.trace(f"crud: _generate_promise stored promise for {amount}")
         return BlindedSignature(id=keyset.id, amount=amount, C_=C_.serialize().hex())
@@ -223,26 +227,28 @@ class Ledger:
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(private_key_amount, C, proof.secret)
 
-    def _verify_spending_conditions(self, proof: Proof) -> bool:
+    def _verify_input_spending_conditions(self, proof: Proof) -> bool:
         """
         Verify spending conditions:
          Condition: P2SH - Witnesses proof.p2shscript
-         Condition: P2PK - Witness: proof.p2pksig
+         Condition: P2PK - Witness: proof.p2pksigs
 
         """
         # P2SH
         try:
             secret = Secret.deserialize(proof.secret)
+            logger.trace(f"proof.secret: {proof.secret}")
+            logger.trace(f"secret: {secret}")
         except Exception as e:
             # secret is not a spending condition so we treat is a normal secret
             return True
         if secret.kind == SecretKind.P2SH:
-            # check if timelock is in the past
+            # check if locktime is in the past
             now = time.time()
-            if secret.timelock and secret.timelock < now:
-                logger.trace(f"p2sh timelock ran out ({secret.timelock}<{now}).")
+            if secret.locktime and secret.locktime < now:
+                logger.trace(f"p2sh locktime ran out ({secret.locktime}<{now}).")
                 return True
-            logger.trace(f"p2sh timelock still active ({secret.timelock}>{now}).")
+            logger.trace(f"p2sh locktime still active ({secret.locktime}>{now}).")
 
             if (
                 proof.p2shscript is None
@@ -266,47 +272,165 @@ class Ledger:
 
         # P2PK
         if secret.kind == SecretKind.P2PK:
-            # check if timelock is in the past
-            now = time.time()
-            if secret.timelock and secret.timelock < now:
-                logger.trace(f"p2pk timelock ran out ({secret.timelock}<{now}).")
-                # check tags if a refund pubkey is present.
-                # If yes, we demand the signature to be from the refund pubkey
-                if secret.tags and secret.tags.get_tag("refund"):
-                    signature_pubkey = secret.tags.get_tag("refund")
-                else:
-                    # if no refund pubkey is present and the timelock has expired
-                    # the token can be spent by anyone
-                    return True
-            else:
-                # the timelock is still active, therefore we demand the signature
-                # to be from the pubkey in the data field
-                signature_pubkey = secret.data
-            logger.trace(f"p2pk timelock still active ({secret.timelock}>{now}).")
+            # check if locktime is in the past
+            pubkeys = secret.get_p2pk_pubkey_from_secret()
+            assert len(set(pubkeys)) == len(pubkeys), f"pubkeys must be unique."
+            logger.trace(f"pubkeys: {pubkeys}")
+            # we will get an empty list if the locktime has passed and no refund pubkey is present
+            if not pubkeys:
+                return True
 
             # now we check the signature
-            if not proof.p2pksig:
+            if not proof.p2pksigs:
                 # no signature present although secret indicates one
-                raise Exception("no p2pk signature in proof.")
+                logger.error(f"no p2pk signatures in proof: {proof.p2pksigs}")
+                raise Exception("no p2pk signatures in proof.")
+
+            # we make sure that there are no duplicate signatures
+            if len(set(proof.p2pksigs)) != len(proof.p2pksigs):
+                raise Exception("p2pk signatures must be unique.")
 
             # we parse the secret as a P2PK commitment
             # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
 
-            # check signature proof.p2pksig against pubkey
+            # INPUTS: check signatures proof.p2pksigs against pubkey
             # we expect the signature to be on the pubkey (=message) itself
-            assert signature_pubkey, "no signature pubkey present."
-            assert verify_p2pk_signature(
-                message=secret.serialize().encode("utf-8"),
-                pubkey=PublicKey(bytes.fromhex(signature_pubkey), raw=True),
-                signature=bytes.fromhex(proof.p2pksig),
-            ), "p2pk signature invalid."
-            logger.trace(proof.p2pksig)
-            logger.trace("p2pk signature valid.")
+            n_sigs_required = secret.n_sigs or 1
+            assert n_sigs_required > 0, "n_sigs must be positive."
+
+            # check if enough signatures are present
+            assert (
+                len(proof.p2pksigs) >= n_sigs_required
+            ), f"not enough signatures provided: {len(proof.p2pksigs)} < {n_sigs_required}."
+
+            n_valid_sigs_per_output = 0
+            # loop over all signatures in output
+            for input_sig in proof.p2pksigs:
+                for pubkey in pubkeys:
+                    logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
+                    logger.trace(f"Message: {secret.serialize().encode('utf-8')}")
+                    if verify_p2pk_signature(
+                        message=secret.serialize().encode("utf-8"),
+                        pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
+                        signature=bytes.fromhex(input_sig),
+                    ):
+                        n_valid_sigs_per_output += 1
+                        logger.trace(
+                            f"p2pk signature on input is valid: {input_sig} on {pubkey}."
+                        )
+                        continue
+                    else:
+                        logger.trace(
+                            f"p2pk signature on input is invalid: {input_sig} on {pubkey}."
+                        )
+            # check if we have enough valid signatures
+            assert n_valid_sigs_per_output, "no valid signature provided for input."
+            assert (
+                n_valid_sigs_per_output >= n_sigs_required
+            ), f"signature threshold not met. {n_valid_sigs_per_output} < {n_sigs_required}."
+            logger.trace(
+                f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures found."
+            )
+
+            logger.trace(proof.p2pksigs)
+            logger.trace("p2pk signature on inputs is valid.")
 
             return True
 
         # no spending contition
         return True
+
+    def _verify_output_spending_conditions(
+        self, proofs: List[Proof], outputs: List[BlindedMessage]
+    ) -> bool:
+        """
+        Verify spending conditions:
+         Condition: P2PK - Witness: output.p2pksigs
+
+        """
+        # P2SH
+        pubkeys_per_proof = []
+        n_sigs = []
+        for proof in proofs:
+            try:
+                secret = Secret.deserialize(proof.secret)
+                # get all p2pk pubkeys from secrets
+                pubkeys_per_proof.append(secret.get_p2pk_pubkey_from_secret())
+                # get signature threshold from secrets
+                n_sigs.append(secret.n_sigs)
+            except Exception as e:
+                # secret is not a spending condition so we treat is a normal secret
+                return True
+        # for all proofs all pubkeys must be the same
+        assert (
+            len(set([tuple(pubs_output) for pubs_output in pubkeys_per_proof])) == 1
+        ), "pubkeys in all proofs must match."
+        pubkeys = pubkeys_per_proof[0]
+        if not pubkeys:
+            # no pubkeys present
+            return True
+
+        logger.trace(f"pubkeys: {pubkeys}")
+        # TODO: add limit for maximum number of pubkeys
+
+        # for all proofs all n_sigs must be the same
+        assert len(set(n_sigs)) == 1, "n_sigs in all proofs must match."
+        n_sigs_required = n_sigs[0] or 1
+
+        # first we check if all secrets are P2PK
+        if not all(
+            [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
+        ):
+            # not all secrets are P2PK
+            return True
+
+        # now we check if any of the secrets has sigflag==SIG_ALL
+        if not any(
+            [Secret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs]
+        ):
+            # no secret has sigflag==SIG_ALL
+            return True
+
+        # loop over all outputs and check if the signatures are valid for pubkeys with a threshold of n_sig
+        for output in outputs:
+            # we expect the signature to be on the pubkey (=message) itself
+            assert output.p2pksigs, "no signatures in output."
+            # TODO: add limit for maximum number of signatures
+
+            # we check whether any signature is duplicate
+            assert len(set(output.p2pksigs)) == len(
+                output.p2pksigs
+            ), "duplicate signatures in output."
+
+            n_valid_sigs_per_output = 0
+            # loop over all signatures in output
+            for output_sig in output.p2pksigs:
+                for pubkey in pubkeys:
+                    if verify_p2pk_signature(
+                        message=output.B_.encode("utf-8"),
+                        pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
+                        signature=bytes.fromhex(output_sig),
+                    ):
+                        n_valid_sigs_per_output += 1
+            assert n_valid_sigs_per_output, "no valid signature provided for output."
+            assert (
+                n_valid_sigs_per_output >= n_sigs_required
+            ), f"signature threshold not met. {n_valid_sigs_per_output} < {n_sigs_required}."
+            logger.trace(
+                f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures found."
+            )
+            logger.trace(output.p2pksigs)
+            logger.trace("p2pk signatures on output is valid.")
+
+        return True
+
+    def _verify_input_output_amounts(
+        self, inputs: List[Proof], outputs: List[BlindedMessage]
+    ) -> bool:
+        """Verifies that inputs have at least the same amount as outputs"""
+        input_amount = sum([p.amount for p in inputs])
+        output_amount = sum([o.amount for o in outputs])
+        return input_amount >= output_amount
 
     def _verify_no_duplicate_proofs(self, proofs: List[Proof]) -> bool:
         secrets = [p.secret for p in proofs]
@@ -552,11 +676,14 @@ class Ledger:
                 if p.secret == pp.secret:
                     raise Exception("proofs are pending.")
 
-    async def _verify_proofs(self, proofs: List[Proof]):
-        """Checks a series of criteria for the verification of proofs.
+    async def _verify_proofs_and_outputs(
+        self, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
+    ):
+        """Checks all proofs and outputs for validity.
 
         Args:
             proofs (List[Proof]): List of proofs to check.
+            outputs (Optional[List[BlindedMessage]], optional): List of outputs to check. Must be provided for /split but not for /melt. Defaults to None.
 
         Raises:
             Exception: Scripts did not validate.
@@ -564,18 +691,34 @@ class Ledger:
             Exception: Duplicate proofs provided.
             Exception: BDHKE verification failed.
         """
-        # Verify scripts
-        if not all([self._verify_spending_conditions(p) for p in proofs]):
-            raise Exception("script validation failed.")
+        # Verify inputs
+
         # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):
             raise Exception("secrets do not match criteria.")
         # verify that only unique proofs were used
         if not self._verify_no_duplicate_proofs(proofs):
             raise Exception("duplicate proofs.")
-        # Verify proofs
+        # Verify input spending conditions
+        if not all([self._verify_input_spending_conditions(p) for p in proofs]):
+            raise Exception("validation of input spending conditions failed.")
+        # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
             raise Exception("could not verify proofs.")
+
+        if not outputs:
+            return
+
+        # Verify outputs
+
+        # verify that only unique outputs were used
+        if not self._verify_no_duplicate_outputs(outputs):
+            raise Exception("duplicate promises.")
+        if not self._verify_input_output_amounts(proofs, outputs):
+            raise Exception("input amounts less than output.")
+        # Verify output spending conditions
+        if outputs and not self._verify_output_spending_conditions(proofs, outputs):
+            raise Exception("validation of output spending conditions failed.")
 
     async def _generate_change_promises(
         self,
@@ -662,7 +805,7 @@ class Ledger:
         """
         logger.trace(f"called request_mint")
         if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
-            raise Exception(f"Maximum mint amount is {settings.mint_max_peg_in} sats.")
+            raise Exception(f"Maximum mint amount is {settings.mint_max_peg_in} sat.")
         if settings.mint_peg_out_only:
             raise Exception("Mint does not allow minting new tokens.")
 
@@ -754,7 +897,7 @@ class Ledger:
         await self._set_proofs_pending(proofs)
 
         try:
-            await self._verify_proofs(proofs)
+            await self._verify_proofs_and_outputs(proofs)
             logger.trace("verified proofs")
 
             total_provided = sum_proofs(proofs)
@@ -762,7 +905,7 @@ class Ledger:
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
             if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
                 raise Exception(
-                    f"Maximum melt amount is {settings.mint_max_peg_out} sats."
+                    f"Maximum melt amount is {settings.mint_max_peg_out} sat."
                 )
             fees_msat = await self.check_fees(invoice)
             assert total_provided >= invoice_amount + fees_msat / 1000, Exception(
@@ -897,13 +1040,9 @@ class Ledger:
             # verify overspending attempt
             self._verify_equation_balanced(proofs, outputs)
 
-            logger.trace("verifying proofs: _verify_proofs")
-            await self._verify_proofs(proofs)
-            logger.trace(f"verified proofs")
-            # verify that only unique outputs were used
-            if not self._verify_no_duplicate_outputs(outputs):
-                raise Exception("duplicate promises.")
-            logger.trace(f"verified outputs")
+            logger.trace("verifying proofs: _verify_proofs_and_outputs")
+            await self._verify_proofs_and_outputs(proofs, outputs)
+            logger.trace(f"verified proofs and outputs")
             # Mark proofs as used and prepare new promises
             logger.trace(f"invalidating proofs")
             await self._invalidate_proofs(proofs)
@@ -938,3 +1077,27 @@ class Ledger:
 
         logger.trace(f"split successful")
         return promises
+        return prom_fst, prom_snd
+
+    async def restore(
+        self, outputs: List[BlindedMessage]
+    ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
+        promises: List[BlindedSignature] = []
+        return_outputs: List[BlindedMessage] = []
+        async with self.db.connect() as conn:
+            for output in outputs:
+                logger.trace(f"looking for promise: {output}")
+                promise = await self.crud.get_promise(
+                    B_=output.B_, db=self.db, conn=conn
+                )
+                if promise is not None:
+                    # BEGIN backwards compatibility mints pre `m007_proofs_and_promises_store_id`
+                    # add keyset id to promise if not present only if the current keyset
+                    # is the only one ever used
+                    if not promise.id and len(self.keysets.keysets) == 1:
+                        promise.id = self.keyset.id
+                    # END backwards compatibility
+                    promises.append(promise)
+                    return_outputs.append(output)
+                    logger.trace(f"promise found: {promise}")
+        return return_outputs, promises

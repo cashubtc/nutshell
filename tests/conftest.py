@@ -37,7 +37,6 @@ class UvicornServer(multiprocessing.Process):
     def run(self, *args, **kwargs):
         settings.lightning = False
         settings.mint_lightning_backend = "FakeWallet"
-        settings.mint_listen_port = 3337
         settings.mint_database = "data/test_mint"
         settings.mint_private_key = self.private_key
         settings.mint_derivation_path = "0/0/0/0"
@@ -46,36 +45,24 @@ class UvicornServer(multiprocessing.Process):
         if dirpath.exists() and dirpath.is_dir():
             shutil.rmtree(dirpath)
 
-        dirpath = Path("data/test_wallet")
+        dirpath = Path("data/wallet1")
+        if dirpath.exists() and dirpath.is_dir():
+            shutil.rmtree(dirpath)
+
+        dirpath = Path("data/wallet2")
+        if dirpath.exists() and dirpath.is_dir():
+            shutil.rmtree(dirpath)
+
+        dirpath = Path("data/wallet3")
         if dirpath.exists() and dirpath.is_dir():
             shutil.rmtree(dirpath)
 
         self.server.run()
 
 
-@pytest.fixture(autouse=True, scope="session")
-def mint():
-    settings.mint_listen_port = 3337
-    settings.port = 3337
-    settings.mint_url = "http://localhost:3337"
-    settings.port = settings.mint_listen_port
-    settings.nostr_private_key = secrets.token_hex(32)  # wrong private key
-    config = uvicorn.Config(
-        "cashu.mint.app:app",
-        port=settings.mint_listen_port,
-        host="127.0.0.1",
-    )
-
-    server = UvicornServer(config=config)
-    server.start()
-    time.sleep(1)
-    yield server
-    server.stop()
-
-
 @pytest_asyncio.fixture(scope="function")
 async def ledger():
-    async def start_mint_init(ledger):
+    async def start_mint_init(ledger: Ledger):
         await migrate_databases(ledger.db, migrations_mint)
         await ledger.load_used_proofs()
         await ledger.init_keysets()
@@ -93,20 +80,18 @@ async def ledger():
     yield ledger
 
 
-# @pytest.fixture(autouse=True, scope="session")
-# def mint_3338():
-#     settings.mint_listen_port = 3338
-#     settings.port = 3338
-#     settings.mint_url = "http://localhost:3338"
-#     settings.port = settings.mint_listen_port
-#     config = uvicorn.Config(
-#         "cashu.mint.app:app",
-#         port=settings.mint_listen_port,
-#         host="127.0.0.1",
-#     )
+@pytest.fixture(autouse=True, scope="session")
+def mint():
+    settings.mint_listen_port = 3337
+    settings.mint_url = "http://localhost:3337"
+    config = uvicorn.Config(
+        "cashu.mint.app:app",
+        port=settings.mint_listen_port,
+        host="127.0.0.1",
+    )
 
-#     server = UvicornServer(config=config, private_key="SECOND_PRIVATE_KEY")
-#     server.start()
-#     time.sleep(1)
-#     yield server
-#     server.stop()
+    server = UvicornServer(config=config)
+    server.start()
+    time.sleep(1)
+    yield server
+    server.stop()

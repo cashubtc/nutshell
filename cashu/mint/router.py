@@ -19,6 +19,7 @@ from ..core.base import (
     PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
+    PostRestoreResponse,
     PostSplitRequest,
     PostSplitResponse,
     PostSplitResponse_Deprecated,
@@ -110,7 +111,7 @@ async def request_mint(amount: int = 0) -> Union[GetMintResponse, CashuError]:
     """
     logger.trace(f"> GET /mint: amount={amount}")
     if amount > 21_000_000 * 100_000_000 or amount <= 0:
-        return CashuError(code=0, error="Amount must be a valid amount of sats.")
+        return CashuError(code=0, error="Amount must be a valid amount of sat.")
     if settings.mint_peg_out_only:
         return CashuError(code=0, error="Mint does not allow minting new tokens.")
     try:
