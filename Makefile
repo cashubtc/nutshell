@@ -43,3 +43,14 @@ upload:
 	make clean
 	python setup.py sdist bdist_wheel
 	twine upload --repository pypi dist/*
+
+mint-backup:
+	mkdir -p data/backup
+	mkdir -p data/backup/mint
+	cp data/mint/mint.sqlite3 data/backup/mint/mint.sqlite3
+
+export-csv:
+	make mint-backup
+	mkdir -p data/export
+	sqlite3 -cmd ".mode csv" -cmd ".headers on" -cmd ".output 'data/export/burns.csv'" data/mint/mint.sqlite3 "SELECT amount, C, id FROM proofs_used;"
+	sqlite3 -cmd ".mode csv" -cmd ".headers on" -cmd ".output 'data/export/mints.csv'" data/mint/mint.sqlite3 "SELECT amount, B_b AS B_, C_b AS C_, id FROM promises;"
