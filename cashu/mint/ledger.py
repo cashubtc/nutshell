@@ -1056,6 +1056,9 @@ class Ledger:
 
         # BEGIN backwards compatibility < 0.13.0
         if amount is not None:
+            logger.debug(
+                "Split: Cashu provided `amount` - backwards compatibility response pre 0.13.0"
+            )
             # split outputs according to amount
             total = sum_proofs(proofs)
             if amount > total:
