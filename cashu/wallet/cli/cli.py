@@ -19,7 +19,12 @@ from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
-from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
+from ...wallet.crud import (
+    get_lightning_invoices,
+    get_reserved_proofs,
+    get_seed_and_mnemonic,
+    get_unused_locks,
+)
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
@@ -39,6 +44,15 @@ def run_api_server(ctx, param, daemon):
         return
     start_api_server()
     ctx.exit()
+
+
+# https://github.com/pallets/click/issues/85#issuecomment-503464628
+def coro(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        return asyncio.run(f(*args, **kwargs))
+
+    return wrapper
 
 
 @click.group(cls=NaturalOrderGroup)
@@ -64,8 +78,16 @@ def run_api_server(ctx, param, daemon):
     callback=run_api_server,
     help="Start server for wallet REST API",
 )
+@click.option(
+    "--tests",
+    "-t",
+    is_flag=True,
+    default=False,
+    help="Run in test mode (don't ask for CLI inputs)",
+)
 @click.pass_context
-def cli(ctx: Context, host: str, walletname: str):
+@coro
+async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     if settings.tor and not TorProxy().check_platform():
         error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
         error_str += "\n\n"
@@ -81,31 +103,38 @@ def cli(ctx: Context, host: str, walletname: str):
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host or settings.mint_url
     ctx.obj["WALLET_NAME"] = walletname
-    wallet = Wallet(
-        ctx.obj["HOST"], os.path.join(settings.cashu_dir, walletname), name=walletname
-    )
-    ctx.obj["WALLET"] = wallet
-    asyncio.run(init_wallet(ctx.obj["WALLET"], load_proofs=False))
+    settings.wallet_name = walletname
 
-    # MUTLIMINT: Select a wallet
+    db_path = os.path.join(settings.cashu_dir, walletname)
+    # if the command is "restore" we don't want to ask the user for a mnemonic
+    # otherwise it will create a mnemonic and store it in the database
+    if ctx.invoked_subcommand == "restore":
+        wallet = await Wallet.with_db(
+            ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
+        )
+    else:
+        # # we need to run the migrations before we load the wallet for the first time
+        # # otherwise the wallet will not be able to generate a new private key and store it
+        wallet = await Wallet.with_db(
+            ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
+        )
+        # now with the migrations done, we can load the wallet and generate a new mnemonic if needed
+        wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
+
+    assert wallet, "Wallet not found."
+    ctx.obj["WALLET"] = wallet
+    # await init_wallet(ctx.obj["WALLET"], load_proofs=False)
+
+    # ------ MUTLIMINT ------- : Select a wallet
     # only if a command is one of a subset that needs to specify a mint host
     # if a mint host is already specified as an argument `host`, use it
     if ctx.invoked_subcommand not in ["send", "invoice", "pay"] or host:
         return
     # else: we ask the user to select one
-    ctx.obj["WALLET"] = asyncio.run(
-        get_mint_wallet(ctx)
+    ctx.obj["WALLET"] = await get_mint_wallet(
+        ctx
     )  # select a specific wallet by CLI input
-    asyncio.run(init_wallet(ctx.obj["WALLET"], load_proofs=False))
-
-
-# https://github.com/pallets/click/issues/85#issuecomment-503464628
-def coro(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        return asyncio.run(f(*args, **kwargs))
-
-    return wrapper
+    await init_wallet(ctx.obj["WALLET"], load_proofs=False)
 
 
 @cli.command("pay", help="Pay Lightning invoice.")
@@ -227,7 +256,7 @@ async def swap(ctx: Context):
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    amount = int(input("Enter amount to swap in sats: "))
+    amount = int(input("Enter amount to swap in sat: "))
     assert amount > 0, "amount is not positive"
 
     # request invoice from incoming mint
@@ -550,6 +579,8 @@ async def locks(ctx):
     lock_str = f"P2PK:{pubkey}"
     print("---- Pay to public key (P2PK) lock ----\n")
     print(f"Lock: {lock_str}")
+    print("")
+    print("To see more information enter: cashu lock")
     # P2SH locks
     locks = await get_unused_locks(db=wallet.db)
     if len(locks):
@@ -561,8 +592,7 @@ async def locks(ctx):
             print(f"Signature: {l.signature}")
             print("")
             print(f"--------------------------\n")
-    else:
-        print("No locks found. Create one using: cashu lock")
+
     return True
 
 
@@ -616,7 +646,7 @@ async def wallets(ctx):
     for w in wallets:
         wallet = Wallet(ctx.obj["HOST"], os.path.join(settings.cashu_dir, w))
         try:
-            await init_wallet(wallet)
+            await wallet.load_proofs()
             if wallet.proofs and len(wallet.proofs):
                 active_wallet = False
                 if w == ctx.obj["WALLET_NAME"]:
@@ -629,12 +659,12 @@ async def wallets(ctx):
 
 
 @cli.command("info", help="Information about Cashu wallet.")
-@click.option(
-    "--mint", "-m", default=False, is_flag=True, help="Fetch mint information."
-)
+@click.option("--mint", default=False, is_flag=True, help="Fetch mint information.")
+@click.option("--mnemonic", default=False, is_flag=True, help="Show your mnemonic.")
 @click.pass_context
 @coro
-async def info(ctx: Context, mint: bool):
+async def info(ctx: Context, mint: bool, mnemonic: bool):
+    wallet: Wallet = ctx.obj["WALLET"]
     print(f"Version: {settings.version}")
     print(f"Wallet: {ctx.obj['WALLET_NAME']}")
     if settings.debug:
@@ -657,7 +687,6 @@ async def info(ctx: Context, mint: bool):
         print(f"HTTP proxy: {settings.http_proxy}")
     print(f"Mint URL: {ctx.obj['HOST']}")
     if mint:
-        wallet: Wallet = ctx.obj["WALLET"]
         mint_info: dict = (await wallet._load_mint_info()).dict()
         print("")
         print("Mint information:")
@@ -677,4 +706,52 @@ async def info(ctx: Context, mint: bool):
             if mint_info["parameter"]:
                 print(f"Parameter: {mint_info['parameter']}")
 
+    if mnemonic:
+        assert wallet.mnemonic
+        print(f"Mnemonic: {wallet.mnemonic}")
     return
+
+
+@cli.command("restore", help="Restore backups.")
+@click.option(
+    "--batch",
+    "-b",
+    default=25,
+    help="Batch size. Specifies how many proofs are restored in one batch.",
+    type=int,
+)
+@click.option(
+    "--to",
+    "-t",
+    default=2,
+    help="Number of empty batches to complete the restore process.",
+    type=int,
+)
+@click.pass_context
+@coro
+async def restore(ctx: Context, to: int, batch: int):
+    wallet: Wallet = ctx.obj["WALLET"]
+    # check if there is already a mnemonic in the database
+    ret = await get_seed_and_mnemonic(wallet.db)
+    if ret:
+        print(
+            "Wallet already has a mnemonic. You can't restore an already initialized wallet."
+        )
+        print("To restore a wallet, please delete the wallet directory and try again.")
+        print("")
+        print(
+            f"The wallet directory is: {os.path.join(settings.cashu_dir, ctx.obj['WALLET_NAME'])}"
+        )
+        return
+    # ask the user for a mnemonic but allow also no input
+    print("Please enter your mnemonic to restore your balance.")
+    mnemonic = input(
+        "Enter mnemonic: ",
+    )
+    if not mnemonic:
+        print("No mnemonic entered. Exiting.")
+        return
+
+    await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
+    await wallet.load_proofs()
+    wallet.status()

@@ -14,8 +14,11 @@ from tests.conftest import SERVER_ENDPOINT, mint
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet(mint):
-    wallet = Wallet(SERVER_ENDPOINT, "data/test_wallet_api", "wallet_api")
-    await migrate_databases(wallet.db, migrations)
+    wallet = await Wallet.with_db(
+        url=SERVER_ENDPOINT,
+        db="data/test_wallet_api",
+        name="wallet_api",
+    )
     await wallet.load_mint()
     wallet.status()
     yield wallet

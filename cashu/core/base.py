@@ -174,6 +174,7 @@ class Proof(BaseModel):
     ] = ""  # unique ID of send attempt, used for grouping pending tokens in the wallet
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
+    derivation_path: Union[None, str] = ""  # derivation path of the proof
 
     def to_dict(self):
         # dictionary without the fields that don't need to be send to Carol
@@ -347,6 +348,14 @@ class CheckFeesRequest(BaseModel):
 
 class CheckFeesResponse(BaseModel):
     fee: Union[int, None]
+
+
+# ------- API: RESTORE -------
+
+
+class PostRestoreResponse(BaseModel):
+    outputs: List[BlindedMessage] = []
+    promises: List[BlindedSignature] = []
 
 
 # ------- KEYSETS -------
@@ -571,7 +580,7 @@ class TokenV3(BaseModel):
         return list(set([p.id for p in self.get_proofs()]))
 
     @classmethod
-    def deserialize(cls, tokenv3_serialized: str):
+    def deserialize(cls, tokenv3_serialized: str) -> "TokenV3":
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """
@@ -583,7 +592,7 @@ class TokenV3(BaseModel):
         token = json.loads(base64.urlsafe_b64decode(token_base64))
         return cls.parse_obj(token)
 
-    def serialize(self):
+    def serialize(self) -> str:
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """

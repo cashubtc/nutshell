@@ -1,3 +1,4 @@
+import asyncio
 import os
 from datetime import datetime
 from itertools import groupby, islice
@@ -29,6 +30,7 @@ from .responses import (
     PayResponse,
     PendingResponse,
     ReceiveResponse,
+    RestoreResponse,
     SendResponse,
     SwapResponse,
     WalletsResponse,
@@ -40,12 +42,17 @@ router: APIRouter = APIRouter()
 def create_wallet(
     url=settings.mint_url, dir=settings.cashu_dir, name=settings.wallet_name
 ):
-    return Wallet(url, os.path.join(dir, name), name=name)
+    return Wallet(
+        url=url,
+        db=os.path.join(dir, name),
+        name=name,
+    )
 
 
 async def load_mint(wallet: Wallet, mint: Optional[str] = None):
     if mint:
         wallet = create_wallet(mint)
+    await init_wallet(wallet)
     await wallet.load_mint()
     return wallet
 
@@ -388,6 +395,19 @@ async def wallets():
         except:
             pass
     return WalletsResponse(wallets=result)
+
+
+@router.post("/restore", name="Restore wallet", response_model=RestoreResponse)
+async def restore(
+    to: int = Query(default=..., description="Counter to which restore the wallet"),
+):
+    if to < 0:
+        raise Exception("Counter must be positive")
+    await wallet.load_mint()
+    await wallet.restore_promises(0, to)
+    await wallet.invalidate(wallet.proofs)
+    wallet.status()
+    return RestoreResponse(balance=wallet.available_balance)
 
 
 @router.get("/info", name="Information about Cashu wallet", response_model=InfoResponse)

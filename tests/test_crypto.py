@@ -43,9 +43,11 @@ def test_step1():
     """"""
     B_, blinding_factor = step1_alice(
         "test_message",
-        blinding_factor=bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        ),  # 32 bytes
+        blinding_factor=PrivateKey(
+            privkey=bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            )  # 32 bytes
+        ),
     )
 
     assert (
@@ -60,9 +62,12 @@ def test_step1():
 def test_step2():
     B_, _ = step1_alice(
         "test_message",
-        blinding_factor=bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        ),  # 32 bytes
+        blinding_factor=PrivateKey(
+            privkey=bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            ),
+            raw=True,
+        ),
     )
     a = PrivateKey(
         privkey=bytes.fromhex(
