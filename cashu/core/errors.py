@@ -35,7 +35,7 @@ class TokenAlreadySpentError(TransactionError):
         super().__init__(self.detail, code=self.code)
 
 
-class SecretTooLongError(CashuError):
+class SecretTooLongError(TransactionError):
     detail = "Secret too long."
     code = 11003
 
@@ -43,7 +43,7 @@ class SecretTooLongError(CashuError):
         super().__init__(self.detail, code=self.code)
 
 
-class NoSecretInProofsError(CashuError):
+class NoSecretInProofsError(TransactionError):
     detail = "No secret in proofs."
     code = 11004
 
