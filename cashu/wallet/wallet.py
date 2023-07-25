@@ -32,9 +32,9 @@ from ..core.base import (
     PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
-    PostMintResponseLegacy,
     PostRestoreResponse,
     PostSplitRequest,
+    PostSplitResponse_Deprecated,
     Proof,
     Secret,
     SecretKind,
@@ -487,11 +487,7 @@ class LedgerAPI(object):
         reponse_dict = resp.json()
         self.raise_on_error(reponse_dict)
         logger.trace("Lightning invoice checked. POST /mint")
-        try:
-            # backwards compatibility: parse promises < 0.8.0 with no "promises" field
-            promises = PostMintResponseLegacy.parse_obj(reponse_dict).__root__
-        except:
-            promises = PostMintResponse.parse_obj(reponse_dict).promises
+        promises = PostMintResponse.parse_obj(reponse_dict).promises
 
         # bump secret counter in database
         await bump_secret_derivation(
@@ -504,27 +500,16 @@ class LedgerAPI(object):
         self,
         proofs: List[Proof],
         outputs: List[BlindedMessage],
-        secrets: List[str],
-        rs: List[PrivateKey],
-        amount: int,
-        secret_lock: Optional[Secret] = None,
-    ) -> Tuple[List[BlindedSignature], List[BlindedSignature]]:
-        """Consume proofs and create new promises based on amount split.
-
-        If secret_lock is None, random secrets will be generated for the tokens to keep (frst_outputs)
-        and the promises to send (scnd_outputs).
-
-        If secret_lock is provided, the wallet will create blinded secrets with those to attach a
-        predefined spending condition to the tokens they want to send."""
+    ) -> List[BlindedSignature]:
+        """Consume proofs and create new promises based on amount split."""
         logger.debug("Calling split. POST /split")
-        split_payload = PostSplitRequest(proofs=proofs, amount=amount, outputs=outputs)
+        split_payload = PostSplitRequest(proofs=proofs, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /split"""
             proofs_include = {"id", "amount", "secret", "C", "p2shscript", "p2pksigs"}
             return {
-                "amount": ...,
                 "outputs": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
@@ -537,13 +522,13 @@ class LedgerAPI(object):
         promises_dict = resp.json()
         self.raise_on_error(promises_dict)
 
-        promises_fst = [BlindedSignature(**p) for p in promises_dict["fst"]]
-        promises_snd = [BlindedSignature(**p) for p in promises_dict["snd"]]
+        mint_response = PostMintResponse.parse_obj(promises_dict)
+        promises = [BlindedSignature(**p.dict()) for p in mint_response.promises]
 
-        if len(promises_fst) == 0 and len(promises_snd) == 0:
+        if len(promises) == 0:
             raise Exception("received no splits.")
 
-        return promises_fst, promises_snd
+        return promises
 
     @async_set_requests
     async def check_proof_state(self, proofs: List[Proof]):
@@ -1065,21 +1050,23 @@ class Wallet(LedgerAPI):
         amount: int,
         secret_lock: Optional[Secret] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
-        """Split proofs into two sets of proofs at a given amount.
+        """If secret_lock is None, random secrets will be generated for the tokens to keep (frst_outputs)
+        and the promises to send (scnd_outputs).
+
+        If secret_lock is provided, the wallet will create blinded secrets with those to attach a
+        predefined spending condition to the tokens they want to send.
 
         Args:
-            proofs (List[Proof]): Input proofs to split.
-            amount (int): Amount to split at.
-            secret_lock (Optional[Secret], optional): Secret to lock outputs to. Defaults to None.
-
-        Raises:
-            Exception: Raises exception if no proofs have been provided
-            Exception: Raises exception if no proofs are returned after splitting
+            proofs (List[Proof]): _description_
+            amount (int): _description_
+            secret_lock (Optional[Secret], optional): _description_. Defaults to None.
 
         Returns:
-            Tuple[List[Proof], List[Proof]]: Two sets of proofs after splitting.
+            _type_: _description_
         """
-        assert len(proofs) > 0, ValueError("no proofs provided.")
+        assert len(proofs) > 0, "no proofs provided."
+        assert sum_proofs(proofs) >= amount, "amount too large."
+        assert amount > 0, "amount must be positive."
 
         # potentially add witnesses to unlock provided proofs (if they indicate one)
         proofs = await self.add_witnesses_to_proofs(proofs)
@@ -1125,36 +1112,25 @@ class Wallet(LedgerAPI):
         outputs = await self.add_witnesses_to_outputs(proofs, outputs)
 
         # Call /split API
-        promises_fst, promises_snd = await super().split(
-            proofs, outputs, secrets, rs, amount, secret_lock
-        )
+        promises = await super().split(proofs, outputs)
 
         # Construct proofs from returned promises (i.e., unblind the signatures)
-        frst_proofs = self._construct_proofs(
-            promises_fst,
-            secrets[: len(promises_fst)],
-            rs[: len(promises_fst)],
-            derivation_paths,
-        )
-        scnd_proofs = self._construct_proofs(
-            promises_snd,
-            secrets[len(promises_fst) :],
-            rs[len(promises_fst) :],
-            derivation_paths,
-        )
+        new_proofs = self._construct_proofs(promises, secrets, rs, derivation_paths)
 
         # remove used proofs from wallet and add new ones
         used_secrets = [p.secret for p in proofs]
         self.proofs = list(filter(lambda p: p.secret not in used_secrets, self.proofs))
         # add new proofs to wallet
-        self.proofs += frst_proofs + scnd_proofs
+        self.proofs += new_proofs
         # store new proofs in database
-        await self._store_proofs(frst_proofs + scnd_proofs)
-        # invalidate used proofs
-        async with self.db.connect() as conn:
-            for proof in proofs:
-                await invalidate_proof(proof, db=self.db, conn=conn)
-        return frst_proofs, scnd_proofs
+        await self._store_proofs(new_proofs)
+        # invalidate used proofs in database
+        for proof in proofs:
+            await invalidate_proof(proof, db=self.db)
+
+        keep_proofs = new_proofs[: len(frst_outputs)]
+        send_proofs = new_proofs[len(frst_outputs) :]
+        return keep_proofs, send_proofs
 
     async def pay_lightning(
         self, proofs: List[Proof], invoice: str, fee_reserve_sat: int

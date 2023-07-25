@@ -271,11 +271,6 @@ class PostMintRequest(BaseModel):
     outputs: List[BlindedMessage]
 
 
-class PostMintResponseLegacy(BaseModel):
-    # NOTE: Backwards compability for < 0.8.0 where we used a simple list and not a key-value dictionary
-    __root__: List[BlindedSignature] = []
-
-
 class PostMintResponse(BaseModel):
     promises: List[BlindedSignature] = []
 
@@ -305,7 +300,7 @@ class GetMeltResponse(BaseModel):
 
 class PostSplitRequest(BaseModel):
     proofs: List[Proof]
-    amount: int
+    amount: Optional[int] = None  # deprecated since 0.13.0
     outputs: List[BlindedMessage]
     # signature: Optional[str] = None
 
@@ -323,8 +318,14 @@ class PostSplitRequest(BaseModel):
 
 
 class PostSplitResponse(BaseModel):
-    fst: List[BlindedSignature]
-    snd: List[BlindedSignature]
+    promises: List[BlindedSignature]
+
+
+# deprecated since 0.13.0
+class PostSplitResponse_Deprecated(BaseModel):
+    fst: List[BlindedSignature] = []
+    snd: List[BlindedSignature] = []
+    deprecated: str = "The amount field is deprecated since 0.13.0"
 
 
 # ------- API: CHECK -------
