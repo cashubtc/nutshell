@@ -61,21 +61,25 @@ async def info() -> GetInfoResponse:
     "/keys",
     name="Mint public keys",
     summary="Get the public keys of the newest mint keyset",
+    response_description="A dictionary of all supported token values of the mint and their associated public key of the current keyset.",
+    response_model=KeysResponse,
 )
-async def keys() -> KeysResponse:
+async def keys():
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
     logger.trace(f"> GET /keys")
     keyset = ledger.get_keyset()
     keys = KeysResponse.parse_obj(keyset)
-    return keys
+    return keys.__root__
 
 
 @router.get(
     "/keys/{idBase64Urlsafe}",
     name="Keyset public keys",
     summary="Public keys of a specific keyset",
+    response_description="A dictionary of all supported token values of the mint and their associated public key for a specific keyset.",
+    response_model=KeysResponse,
 )
-async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
+async def keyset_keys(idBase64Urlsafe: str):
     """
     Get the public keys of the mint from a specific keyset id.
     The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
@@ -85,7 +89,7 @@ async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
     id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
     keyset = ledger.get_keyset(keyset_id=id)
     keys = KeysResponse.parse_obj(keyset)
-    return keys
+    return keys.__root__
 
 
 @router.get(
@@ -93,6 +97,7 @@ async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
     name="Active keysets",
     summary="Get all active keyset id of the mind",
     response_model=KeysetsResponse,
+    response_description="A list of all active keyset ids of the mint.",
 )
 async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
@@ -106,6 +111,7 @@ async def keysets() -> KeysetsResponse:
     name="Request mint",
     summary="Request minting of new tokens",
     response_model=GetMintResponse,
+    response_description="A Lightning invoice to be paid and a hash to request minting of new tokens after payment.",
 )
 async def request_mint(amount: int = 0) -> GetMintResponse:
     """
@@ -131,6 +137,7 @@ async def request_mint(amount: int = 0) -> GetMintResponse:
     name="Mint tokens",
     summary="Mint tokens in exchange for a Bitcoin paymemt that the user has made",
     response_model=PostMintResponse,
+    response_description="A list of blinded signatures that can be used to create proofs.",
 )
 async def mint(
     payload: PostMintRequest,
@@ -160,6 +167,7 @@ async def mint(
     name="Melt tokens",
     summary="Melt tokens for a Bitcoin payment that the mint will make for the user in exchange",
     response_model=GetMeltResponse,
+    response_description="The state of the payment, a preimage as proof of payment, and a list of promises for change.",
 )
 async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     """
@@ -179,6 +187,7 @@ async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     name="Check proof state",
     summary="Check whether a proof is spent already or is pending in a transaction",
     response_model=CheckSpendableResponse,
+    response_description="Two lists of booleans indicating whether the provided proofs are spendable or pending in a transaction respectively.",
 )
 async def check_spendable(
     payload: CheckSpendableRequest,
@@ -196,6 +205,7 @@ async def check_spendable(
     name="Check fees",
     summary="Check fee reserve for a Lightning payment",
     response_model=CheckFeesResponse,
+    response_description="The fees necessary to pay a Lightning invoice.",
 )
 async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     """
@@ -214,6 +224,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     name="Split",
     summary="Split proofs at a specified amount",
     response_model=PostSplitResponse,
+    response_description="A list of blinded signatures that can be used to create proofs.",
 )
 async def split(
     payload: PostSplitRequest,
@@ -260,6 +271,7 @@ async def split(
     name="Restore",
     summary="Restores a blinded signature from a secret",
     response_model=PostRestoreResponse,
+    response_description="Two lists with the first being the list of the provided outputs that have an associated blinded signature which is given in the second list.",
 )
 async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")

@@ -111,18 +111,23 @@ async def catch_exceptions(request: Request, call_next):
     try:
         return await call_next(request)
     except Exception as e:
+        try:
+            err_message = str(e)
+        except:
+            err_message = e.args[0] if e.args else "Unknown error"
+
         if isinstance(e, CashuError):
-            logger.error(f"CashuError: {e}")
+            logger.error(f"CashuError: {err_message}")
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={"detail": str(e), "code": e.code},
+                content={"detail": err_message, "code": e.code},
             )
-        logger.error(f"Exception: {e}")
+        logger.error(f"Exception: {err_message}")
         if settings.debug:
             print_exception(*sys.exc_info())
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"detail": str(e), "code": 0},
+            content={"detail": err_message, "code": 0},
         )
 
 
