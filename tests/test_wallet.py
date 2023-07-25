@@ -217,7 +217,8 @@ async def test_split_more_than_balance(wallet1: Wallet):
     await wallet1.mint(64)
     await assert_err(
         wallet1.split(wallet1.proofs, 128),
-        "Mint Error: split amount is higher than the total sum.",
+        # "Mint Error: inputs do not have same amount as outputs",
+        "amount too large.",
     )
     assert wallet1.balance == 64
 
@@ -293,7 +294,7 @@ async def test_split_invalid_amount(wallet1: Wallet):
     await wallet1.mint(64)
     await assert_err(
         wallet1.split(wallet1.proofs, -1),
-        "Mint Error: invalid split amount: -1",
+        "amount must be positive.",
     )
 
 

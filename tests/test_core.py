@@ -27,6 +27,13 @@ def test_tokenv3_deserialize_serialize():
     assert token.serialize() == token_str
 
 
+def test_tokenv3_deserialize_with_memo():
+    token_str = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIkplaFpMVTZuQ3BSZCIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIjBFN2lDazRkVmxSZjVQRjFnNFpWMnciLCAiQyI6ICIwM2FiNTgwYWQ5NTc3OGVkNTI5NmY4YmVlNjU1ZGJkN2Q2NDJmNWQzMmRlOGUyNDg0NzdlMGI0ZDZhYTg2M2ZjZDUifSwgeyJpZCI6ICJKZWhaTFU2bkNwUmQiLCAiYW1vdW50IjogOCwgInNlY3JldCI6ICJzNklwZXh3SGNxcXVLZDZYbW9qTDJnIiwgIkMiOiAiMDIyZDAwNGY5ZWMxNmE1OGFkOTAxNGMyNTliNmQ2MTRlZDM2ODgyOWYwMmMzODc3M2M0NzIyMWY0OTYxY2UzZjIzIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV0sICJtZW1vIjogIlRlc3QgbWVtbyJ9"
+    token = TokenV3.deserialize(token_str)
+    assert token.serialize() == token_str
+    assert token.memo == "Test memo"
+
+
 def test_calculate_number_of_blank_outputs():
     # Example from NUT-08 specification.
     fee_reserve_sat = 1000
