@@ -45,10 +45,12 @@ async def nip5_to_pubkey(wallet: Wallet, address: str):
 
 async def send_nostr(
     wallet: Wallet,
+    *,
     amount: int,
     pubkey: str,
     verbose: bool = False,
     yes: bool = True,
+    include_dleq=False,
 ):
     """
     Sends tokens via nostr.
@@ -62,7 +64,7 @@ async def send_nostr(
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, amount, set_reserved=True
     )
-    token = await wallet.serialize_proofs(send_proofs)
+    token = await wallet.serialize_proofs(send_proofs, include_dleq=include_dleq)
 
     if pubkey.startswith("npub"):
         pubkey_to = PublicKey().from_npub(pubkey)

@@ -188,7 +188,7 @@ class Proof(BaseModel):
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
 
-    def to_dict(self, include_dleq=True):
+    def to_dict(self, include_dleq=False):
         # dictionary without the fields that don't need to be send to Carol
         if not include_dleq:
             return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
@@ -577,7 +577,7 @@ class TokenV3Token(BaseModel):
     mint: Optional[str] = None
     proofs: List[Proof]
 
-    def to_dict(self, include_dleq=True):
+    def to_dict(self, include_dleq=False):
         return_dict = dict(proofs=[p.to_dict(include_dleq) for p in self.proofs])
         if self.mint:
             return_dict.update(dict(mint=self.mint))  # type: ignore
@@ -592,7 +592,7 @@ class TokenV3(BaseModel):
     token: List[TokenV3Token] = []
     memo: Optional[str] = None
 
-    def to_dict(self, include_dleq=True):
+    def to_dict(self, include_dleq=False):
         return_dict = dict(token=[t.to_dict(include_dleq) for t in self.token])
         if self.memo:
             return_dict.update(dict(memo=self.memo))  # type: ignore
@@ -620,7 +620,7 @@ class TokenV3(BaseModel):
         token = json.loads(base64.urlsafe_b64decode(token_base64))
         return cls.parse_obj(token)
 
-    def serialize(self, include_dleq=True) -> str:
+    def serialize(self, include_dleq=False) -> str:
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """

@@ -151,7 +151,13 @@ async def receive(
 
 
 async def send(
-    wallet: Wallet, amount: int, lock: str, legacy: bool, split: bool = True
+    wallet: Wallet,
+    *,
+    amount: int,
+    lock: str,
+    legacy: bool,
+    split: bool = True,
+    include_dleq: bool = False,
 ):
     """
     Prints token to send to stdout.
@@ -202,6 +208,7 @@ async def send(
     token = await wallet.serialize_proofs(
         send_proofs,
         include_mints=True,
+        include_dleq=include_dleq,
     )
     print(token)
 
@@ -212,6 +219,7 @@ async def send(
         token = await wallet.serialize_proofs(
             send_proofs,
             legacy=True,
+            include_dleq=include_dleq,
         )
         print(token)
 

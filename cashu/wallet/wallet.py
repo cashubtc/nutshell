@@ -143,15 +143,14 @@ class LedgerAPI(object):
         """Dummy function that can be called from outside to use LedgerAPI.s"""
         return
 
-        # ---------- DLEQ PROOFS ----------
+    # ---------- DLEQ PROOFS ----------
 
     def verify_proofs_dleq(self, proofs: List[Proof]):
         """Verifies DLEQ proofs in proofs."""
         for proof in proofs:
-            dleq = proof.dleq
             if not proof.dleq:
-                logger.debug("Warning: no DLEQ proof included.")
                 return
+            logger.debug("Verifying DLEQ proof.")
             assert self.keys.public_keys
             if not b_dhke.alice_verify_dleq(
                 bytes.fromhex(proof.dleq.e),
@@ -1070,6 +1069,10 @@ class Wallet(LedgerAPI):
         Args:
             proofs (List[Proof]): Proofs to be redeemed.
         """
+        # verify DLEQ of incoming proofs
+        logger.debug("Verifying DLEQ of incoming proofs.")
+        self.verify_proofs_dleq(proofs)
+        logger.debug("DLEQ verified.")
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
@@ -1302,7 +1305,7 @@ class Wallet(LedgerAPI):
         return token
 
     async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, include_dleq=True, legacy=False
+        self, proofs: List[Proof], include_mints=True, include_dleq=False, legacy=False
     ) -> str:
         """Produces sharable token with proofs and mint information.
 

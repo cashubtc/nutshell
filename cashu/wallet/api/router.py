@@ -216,11 +216,11 @@ async def send_command(
     global wallet
     if not nostr:
         balance, token = await send(
-            wallet, amount, lock, legacy=False, split=not nosplit
+            wallet, amount=amount, lock=lock, legacy=False, split=not nosplit
         )
         return SendResponse(balance=balance, token=token)
     else:
-        token, pubkey = await send_nostr(wallet, amount, nostr)
+        token, pubkey = await send_nostr(wallet, amount=amount, pubkey=nostr)
         return SendResponse(balance=wallet.available_balance, token=token, npub=pubkey)
 
 

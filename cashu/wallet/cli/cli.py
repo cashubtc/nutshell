@@ -378,9 +378,18 @@ async def send_command(
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     if not nostr and not nopt:
-        await send(wallet, amount, lock, legacy, split=not nosplit)
+        await send(
+            wallet,
+            amount=amount,
+            lock=lock,
+            legacy=legacy,
+            split=not nosplit,
+            include_dleq=dleq,
+        )
     else:
-        await send_nostr(wallet, amount, nostr or nopt, verbose, yes)
+        await send_nostr(
+            wallet, amount=amount, pubkey=nostr or nopt, verbose=verbose, yes=yes
+        )
 
 
 @cli.command("receive", help="Receive tokens.")
