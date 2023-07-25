@@ -49,13 +49,13 @@ async def test_api_keyset_keys(ledger):
 @pytest.mark.asyncio
 async def test_api_mint_validation(ledger):
     response = requests.get(f"{BASE_URL}/mint?amount=-21")
-    assert "error" in response.json()
+    assert "detail" in response.json()
     response = requests.get(f"{BASE_URL}/mint?amount=0")
-    assert "error" in response.json()
+    assert "detail" in response.json()
     response = requests.get(f"{BASE_URL}/mint?amount=2100000000000001")
-    assert "error" in response.json()
+    assert "detail" in response.json()
     response = requests.get(f"{BASE_URL}/mint?amount=1")
-    assert "error" not in response.json()
+    assert "detail" not in response.json()
 
 
 @pytest.mark.asyncio

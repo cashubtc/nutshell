@@ -15,6 +15,7 @@ import requests
 from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
+from requests import Response
 
 from ..core import bolt11 as bolt11
 from ..core.base import (
@@ -225,17 +226,24 @@ class LedgerAPI(object):
         return outputs, rs_return
 
     @staticmethod
-    def raise_on_error(resp_dict) -> None:
+    def raise_on_error(resp: Response) -> None:
         """Raises an exception if the response from the mint contains an error.
 
         Args:
-            resp_dict (_type_): Response dict (previously JSON) from mint
+            resp_dict (Response): Response dict (previously JSON) from mint
 
         Raises:
             Exception: if the response contains an error
         """
-        if "error" in resp_dict:
-            raise Exception("Mint Error: {}".format(resp_dict["error"]))
+        resp_dict = resp.json()
+        if "detail" in resp_dict:
+            logger.error(f"Error from mint: {resp_dict}")
+            error_message = f"Mint Error: {resp_dict['detail']}"
+            if "code" in resp_dict:
+                error_message += f" (Code: {resp_dict['code']})"
+            raise Exception(error_message)
+        # raise for status if no error
+        resp.raise_for_status()
 
     async def _load_mint_keys(self, keyset_id: str = "") -> WalletKeyset:
         """Loads keys from mint and stores them in the database.
@@ -347,7 +355,7 @@ class LedgerAPI(object):
         resp = self.s.get(
             url + "/keys",
         )
-        resp.raise_for_status()
+        self.raise_on_error(resp)
         keys: dict = resp.json()
         assert len(keys), Exception("did not receive any keys")
         keyset_keys = {
@@ -376,9 +384,8 @@ class LedgerAPI(object):
         resp = self.s.get(
             url + f"/keys/{keyset_id_urlsafe}",
         )
-        resp.raise_for_status()
+        self.raise_on_error(resp)
         keys = resp.json()
-        self.raise_on_error(keys)
         assert len(keys), Exception("did not receive any keys")
         keyset_keys = {
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
@@ -403,7 +410,7 @@ class LedgerAPI(object):
         resp = self.s.get(
             url + "/keysets",
         )
-        resp.raise_for_status()
+        self.raise_on_error(resp)
         keysets_dict = resp.json()
         keysets = KeysetsResponse.parse_obj(keysets_dict)
         assert len(keysets.keysets), Exception("did not receive any keysets")
@@ -425,7 +432,7 @@ class LedgerAPI(object):
         resp = self.s.get(
             url + "/info",
         )
-        resp.raise_for_status()
+        self.raise_on_error(resp)
         data: dict = resp.json()
         mint_info: GetInfoResponse = GetInfoResponse.parse_obj(data)
         return mint_info
@@ -445,9 +452,8 @@ class LedgerAPI(object):
         """
         logger.trace("Requesting mint: GET /mint")
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
-        resp.raise_for_status()
+        self.raise_on_error(resp)
         return_dict = resp.json()
-        self.raise_on_error(return_dict)
         mint_response = GetMintResponse.parse_obj(return_dict)
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
@@ -483,9 +489,8 @@ class LedgerAPI(object):
                 "payment_hash": hash,  # backwards compatibility pre 0.12.0
             },
         )
-        resp.raise_for_status()
+        self.raise_on_error(resp)
         reponse_dict = resp.json()
-        self.raise_on_error(reponse_dict)
         logger.trace("Lightning invoice checked. POST /mint")
         promises = PostMintResponse.parse_obj(reponse_dict).promises
 
@@ -518,10 +523,8 @@ class LedgerAPI(object):
             self.url + "/split",
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
-        resp.raise_for_status()
+        self.raise_on_error(resp)
         promises_dict = resp.json()
-        self.raise_on_error(promises_dict)
-
         mint_response = PostMintResponse.parse_obj(promises_dict)
         promises = [BlindedSignature(**p.dict()) for p in mint_response.promises]
 
@@ -547,9 +550,9 @@ class LedgerAPI(object):
             self.url + "/check",
             json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
         )
-        resp.raise_for_status()
+        self.raise_on_error(resp)
+
         return_dict = resp.json()
-        self.raise_on_error(return_dict)
         states = CheckSpendableResponse.parse_obj(return_dict)
         return states
 
@@ -561,9 +564,9 @@ class LedgerAPI(object):
             self.url + "/checkfees",
             json=payload.dict(),
         )
-        resp.raise_for_status()
+        self.raise_on_error(resp)
+
         return_dict = resp.json()
-        self.raise_on_error(return_dict)
         return return_dict
 
     @async_set_requests
@@ -589,9 +592,9 @@ class LedgerAPI(object):
             self.url + "/melt",
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
         )
-        resp.raise_for_status()
+        self.raise_on_error(resp)
         return_dict = resp.json()
-        self.raise_on_error(return_dict)
+
         return GetMeltResponse.parse_obj(return_dict)
 
     @async_set_requests
@@ -603,9 +606,8 @@ class LedgerAPI(object):
         """
         payload = PostMintRequest(outputs=outputs)
         resp = self.s.post(self.url + "/restore", json=payload.dict())
-        resp.raise_for_status()
+        self.raise_on_error(resp)
         reponse_dict = resp.json()
-        self.raise_on_error(reponse_dict)
         returnObj = PostRestoreResponse.parse_obj(reponse_dict)
         return returnObj.outputs, returnObj.promises
 

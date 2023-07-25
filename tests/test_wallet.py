@@ -2,7 +2,7 @@ import asyncio
 import shutil
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Union
 
 import pytest
 import pytest_asyncio
@@ -10,6 +10,18 @@ from mnemonic import Mnemonic
 
 from cashu.core.base import Proof, Secret, SecretKind, Tags
 from cashu.core.crypto.secp import PrivateKey, PublicKey
+from cashu.core.errors import (
+    CashuError,
+    InvoiceNotPaidError,
+    KeysetError,
+    KeysetNotFoundError,
+    LightningError,
+    NoSecretInProofsError,
+    NotAllowedError,
+    SecretTooLongError,
+    TokenAlreadySpentError,
+    TransactionError,
+)
 from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
@@ -20,13 +32,20 @@ from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT, mint
 
 
-async def assert_err(f, msg):
+async def assert_err(f, msg: Union[str, CashuError]):
     """Compute f() and expect an error message 'msg'."""
     try:
         await f
     except Exception as exc:
-        if str(exc.args[0]) != msg:
-            raise Exception(f"Expected error: {msg}, got: {exc.args[0]}")
+        error_message: str = str(exc.args[0])
+        if isinstance(msg, CashuError):
+            if msg.detail not in error_message:
+                raise Exception(
+                    f"CashuError. Expected error: {msg.detail}, got: {error_message}"
+                )
+            return
+        if msg not in error_message:
+            raise Exception(f"Expected error: {msg}, got: {error_message}")
         return
     raise Exception(f"Expected error: {msg}, got no error")
 
@@ -119,7 +138,7 @@ async def test_get_info(wallet1: Wallet):
 async def test_get_nonexistent_keyset(wallet1: Wallet):
     await assert_err(
         wallet1._get_keys_of_keyset(wallet1.url, "nonexistent"),
-        "Mint Error: keyset does not exist",
+        KeysetNotFoundError(),
     )
 
 
@@ -221,7 +240,7 @@ async def test_double_spend(wallet1: Wallet):
     await wallet1.split(wallet1.proofs, 20)
     await assert_err(
         wallet1.split(doublespend, 20),
-        f"Mint Error: tokens already spent. Secret: {doublespend[0]['secret']}",
+        f"Mint Error: Token already spent.",
     )
     assert wallet1.balance == 64
     assert wallet1.available_balance == 64
