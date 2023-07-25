@@ -37,7 +37,7 @@ router: APIRouter = APIRouter()
     response_model=GetInfoResponse,
     response_model_exclude_none=True,
 )
-async def info():
+async def info() -> GetInfoResponse:
     logger.trace(f"> GET /info")
     return GetInfoResponse(
         name=settings.mint_info_name,
@@ -88,7 +88,10 @@ async def keyset_keys(idBase64Urlsafe: str) -> KeysResponse:
 
 
 @router.get(
-    "/keysets", name="Active keysets", summary="Get all active keyset id of the mind"
+    "/keysets",
+    name="Active keysets",
+    summary="Get all active keyset id of the mind",
+    response_model=KeysetsResponse,
 )
 async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
@@ -97,7 +100,12 @@ async def keysets() -> KeysetsResponse:
     return keysets
 
 
-@router.get("/mint", name="Request mint", summary="Request minting of new tokens")
+@router.get(
+    "/mint",
+    name="Request mint",
+    summary="Request minting of new tokens",
+    response_model=GetMintResponse,
+)
 async def request_mint(amount: int = 0) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
@@ -121,6 +129,7 @@ async def request_mint(amount: int = 0) -> GetMintResponse:
     "/mint",
     name="Mint tokens",
     summary="Mint tokens in exchange for a Bitcoin paymemt that the user has made",
+    response_model=PostMintResponse,
 )
 async def mint(
     payload: PostMintRequest,
@@ -149,6 +158,7 @@ async def mint(
     "/melt",
     name="Melt tokens",
     summary="Melt tokens for a Bitcoin payment that the mint will make for the user in exchange",
+    response_model=GetMeltResponse,
 )
 async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     """
@@ -167,6 +177,7 @@ async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     "/check",
     name="Check proof state",
     summary="Check whether a proof is spent already or is pending in a transaction",
+    response_model=CheckSpendableResponse,
 )
 async def check_spendable(
     payload: CheckSpendableRequest,
@@ -183,6 +194,7 @@ async def check_spendable(
     "/checkfees",
     name="Check fees",
     summary="Check fee reserve for a Lightning payment",
+    response_model=CheckFeesResponse,
 )
 async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     """
@@ -196,7 +208,12 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     return CheckFeesResponse(fee=fees_sat)
 
 
-@router.post("/split", name="Split", summary="Split proofs at a specified amount")
+@router.post(
+    "/split",
+    name="Split",
+    summary="Split proofs at a specified amount",
+    response_model=PostSplitResponse,
+)
 async def split(
     payload: PostSplitRequest,
 ) -> PostSplitResponse:
@@ -218,7 +235,10 @@ async def split(
 
 
 @router.post(
-    "/restore", name="Restore", summary="Restores a blinded signature from a secret"
+    "/restore",
+    name="Restore",
+    summary="Restores a blinded signature from a secret",
+    response_model=PostRestoreResponse,
 )
 async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
