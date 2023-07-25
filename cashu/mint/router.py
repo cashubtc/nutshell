@@ -219,8 +219,7 @@ async def split(
     payload: PostSplitRequest,
 ) -> Union[PostSplitResponse, PostSplitResponse_Deprecated]:
     """
-    Requetst a set of tokens with amount "total" to be split into two
-    newly minted sets with amount "split" and "total-split".
+    Requests a set of Proofs to be split into two a new set of BlindedSignatures.
 
     This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
     It is then used by Carol (by setting split=total) to redeem the tokens.
@@ -228,11 +227,6 @@ async def split(
     logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
 
-    # split_return = await ledger.split(payload.proofs, payload.amount, payload.outputs)
-    # frst_promises, scnd_promises = split_return
-    # resp = PostSplitResponse(fst=frst_promises, snd=scnd_promises)
-    # logger.trace(f"< POST /split: {resp}")
-    # return resp
     promises = await ledger.split(
         proofs=payload.proofs, outputs=payload.outputs, amount=payload.amount
     )
