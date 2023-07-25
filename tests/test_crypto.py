@@ -1,15 +1,15 @@
 import pytest
 
-from cashu.core.b_dhke import (
-    alice_verify_dleq,
-    hash_e,
+from cashu.core.crypto.b_dhke import (
     hash_to_curve,
     step1_alice,
     step2_bob,
-    step2_bob_dleq,
     step3_alice,
+    alice_verify_dleq,
+    step2_bob_dleq,
+    hash_e,
 )
-from cashu.core.secp import PrivateKey, PublicKey
+from cashu.core.crypto.secp import PrivateKey, PublicKey
 
 
 def test_hash_to_curve():
@@ -51,9 +51,11 @@ def test_step1():
     """"""
     B_, blinding_factor = step1_alice(
         "test_message",
-        blinding_factor=bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        ),  # 32 bytes
+        blinding_factor=PrivateKey(
+            privkey=bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            )  # 32 bytes
+        ),
     )
 
     assert (
@@ -68,9 +70,12 @@ def test_step1():
 def test_step2():
     B_, _ = step1_alice(
         "test_message",
-        blinding_factor=bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        ),  # 32 bytes
+        blinding_factor=PrivateKey(
+            privkey=bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            ),
+            raw=True,
+        ),
     )
     a = PrivateKey(
         privkey=bytes.fromhex(
@@ -149,9 +154,12 @@ def test_dleq_hash_e():
 def test_dleq_step2_bob_dleq():
     B_, _ = step1_alice(
         "test_message",
-        blinding_factor=bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        ),  # 32 bytes
+        blinding_factor=PrivateKey(
+            privkey=bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            ),
+            raw=True,
+        ),
     )
     a = PrivateKey(
         privkey=bytes.fromhex(
@@ -227,9 +235,12 @@ def test_dleq_alice_verify_dleq():
 
     B_, _ = step1_alice(
         "test_message",
-        blinding_factor=bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        ),  # 32 bytes
+        blinding_factor=PrivateKey(
+            privkey=bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            ),
+            raw=True,
+        ),
     )
     a = PrivateKey(
         privkey=bytes.fromhex(

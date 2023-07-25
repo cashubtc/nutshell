@@ -1,9 +1,8 @@
 import time
 from typing import Any, List, Optional
 
-from ..core.base import Invoice, MintKeyset, Proof
-from ..core.db import Connection, Database
-from ..core.migrations import table_with_schema
+from ..core.base import BlindedSignature, Invoice, MintKeyset, Proof
+from ..core.db import Connection, Database, table_with_schema
 
 
 class LedgerCrud:
@@ -43,15 +42,20 @@ class LedgerCrud:
     async def store_promise(*args, **kwags):
         return await store_promise(*args, **kwags)  # type: ignore
 
+    async def get_promise(*args, **kwags):
+        return await get_promise(*args, **kwags)  # type: ignore
+
     async def update_lightning_invoice(*args, **kwags):
         return await update_lightning_invoice(*args, **kwags)  # type: ignore
 
 
 async def store_promise(
+    *,
     db: Database,
     amount: int,
     B_: str,
     C_: str,
+    id: str,
     e: str = "",
     s: str = "",
     conn: Optional[Connection] = None,
@@ -59,8 +63,8 @@ async def store_promise(
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'promises')}
-          (amount, B_b, C_b, e, s)
-        VALUES (?, ?, ?, ?, ?)
+          (amount, B_b, C_b, e, s, id)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             amount,
@@ -68,8 +72,24 @@ async def store_promise(
             C_,
             e,
             s,
+            id,
         ),
     )
+
+
+async def get_promise(
+    db: Database,
+    B_: str,
+    conn: Optional[Connection] = None,
+):
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT * from {table_with_schema(db, 'promises')}
+        WHERE B_b = ?
+        """,
+        (str(B_),),
+    )
+    return BlindedSignature(amount=row[0], C_=row[2], id=row[3]) if row else None
 
 
 async def get_proofs_used(
@@ -93,13 +113,14 @@ async def invalidate_proof(
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'proofs_used')}
-          (amount, C, secret)
-        VALUES (?, ?, ?)
+          (amount, C, secret, id)
+        VALUES (?, ?, ?, ?)
         """,
         (
             proof.amount,
             str(proof.C),
             str(proof.secret),
+            str(proof.id),
         ),
     )
 
@@ -158,14 +179,15 @@ async def store_lightning_invoice(
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'invoices')}
-          (amount, pr, hash, issued)
-        VALUES (?, ?, ?, ?)
+          (amount, pr, hash, issued, payment_hash)
+        VALUES (?, ?, ?, ?, ?)
         """,
         (
             invoice.amount,
             invoice.pr,
             invoice.hash,
             invoice.issued,
+            invoice.payment_hash,
         ),
     )
 
@@ -182,6 +204,7 @@ async def get_lightning_invoice(
         """,
         (hash,),
     )
+
     return Invoice(**row) if row else None
 
 

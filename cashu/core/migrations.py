@@ -1,10 +1,8 @@
 import re
 
-from ..core.db import COCKROACH, POSTGRES, SQLITE, Database
+from loguru import logger
 
-
-def table_with_schema(db, table: str):
-    return f"{db.references_schema if db.schema else ''}{table}"
+from ..core.db import COCKROACH, POSTGRES, SQLITE, Database, table_with_schema
 
 
 async def migrate_databases(db: Database, migrations_module):
@@ -26,6 +24,7 @@ async def migrate_databases(db: Database, migrations_module):
             if match:
                 version = int(match.group(1))
                 if version > current_versions.get(db_name, 0):
+                    logger.debug(f"Migrating {db_name} db: {key}")
                     await migrate(db)
 
                     if db.schema == None:
@@ -34,7 +33,7 @@ async def migrate_databases(db: Database, migrations_module):
                         async with db.connect() as conn:
                             await set_migration_version(conn, db_name, version)
 
-    async with db.connect() as conn:
+    async with db.connect() as conn:  # type: ignore
         exists = None
         if conn.type == SQLITE:
             exists = await conn.fetchone(

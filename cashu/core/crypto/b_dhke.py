@@ -51,6 +51,7 @@ If true, a in A = a*G must be equal to a in C' = a*B'
 """
 
 import hashlib
+from typing import Optional, Tuple
 
 from secp256k1 import PrivateKey, PublicKey
 
@@ -71,20 +72,16 @@ def hash_to_curve(message: bytes) -> PublicKey:
 
 
 def step1_alice(
-    secret_msg: str, blinding_factor: bytes = b""
+    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
 ) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    if blinding_factor:
-        r = PrivateKey(privkey=blinding_factor, raw=True)
-    else:
-        r = PrivateKey()
+    r = blinding_factor or PrivateKey()
     B_: PublicKey = Y + r.pubkey  # type: ignore
     return B_, r
 
 
-def step2_bob(B_: PublicKey, a: PrivateKey):
-    C_ = B_.mult(a)  # type: ignore
-
+def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, bytes, bytes]:
+    C_: PublicKey = B_.mult(a)  # type: ignore
     # produce dleq proof
     e, s = step2_bob_dleq(B_, a)
     return C_, e, s

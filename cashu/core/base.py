@@ -1,21 +1,151 @@
 import base64
 import json
+import time
 from sqlite3 import Row
-from typing import Any, Dict, List, Optional, TypedDict, Union
+from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
 from pydantic import BaseModel
 
-from ..core.crypto import derive_keys, derive_keyset_id, derive_pubkeys
-from ..core.secp import PrivateKey, PublicKey
+from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
+from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
+from .p2pk import sign_p2pk_sign
 
 # ------- PROOFS -------
 
 
+class SecretKind:
+    P2SH = "P2SH"
+    P2PK = "P2PK"
+
+
+class SigFlags:
+    SIG_INPUTS = (
+        "SIG_INPUTS"  # require signatures only on the inputs (default signature flag)
+    )
+    SIG_ALL = "SIG_ALL"  # require signatures on inputs and outputs
+
+
+class Tags(BaseModel):
+    """
+    Tags are used to encode additional information in the Secret of a Proof.
+    """
+
+    __root__: List[List[str]] = []
+
+    def __init__(self, tags: Optional[List[List[str]]] = None, **kwargs):
+        super().__init__(**kwargs)
+        self.__root__ = tags or []
+
+    def __setitem__(self, key: str, value: str) -> None:
+        self.__root__.append([key, value])
+
+    def __getitem__(self, key: str) -> Union[str, None]:
+        return self.get_tag(key)
+
+    def get_tag(self, tag_name: str) -> Union[str, None]:
+        for tag in self.__root__:
+            if tag[0] == tag_name:
+                return tag[1]
+        return None
+
+    def get_tag_all(self, tag_name: str) -> List[str]:
+        all_tags = []
+        for tag in self.__root__:
+            if tag[0] == tag_name:
+                all_tags.append(tag[1])
+        return all_tags
+
+
+class Secret(BaseModel):
+    """Describes spending condition encoded in the secret field of a Proof."""
+
+    kind: str
+    data: str
+    nonce: Union[None, str] = None
+    tags: Union[None, Tags] = None
+
+    def serialize(self) -> str:
+        data_dict: Dict[str, Any] = {
+            "data": self.data,
+            "nonce": self.nonce or PrivateKey().serialize()[:32],
+        }
+        if self.tags and self.tags.__root__:
+            logger.debug(f"Serializing tags: {self.tags.__root__}")
+            data_dict["tags"] = self.tags.__root__
+        return json.dumps(
+            [self.kind, data_dict],
+        )
+
+    @classmethod
+    def deserialize(cls, from_proof: str):
+        kind, kwargs = json.loads(from_proof)
+        data = kwargs.pop("data")
+        nonce = kwargs.pop("nonce")
+        tags_list = kwargs.pop("tags", None)
+        if tags_list:
+            tags = Tags(tags=tags_list)
+        else:
+            tags = None
+        logger.debug(f"Deserialized Secret: {kind}, {data}, {nonce}, {tags}")
+        return cls(kind=kind, data=data, nonce=nonce, tags=tags)
+
+    @property
+    def locktime(self) -> Union[None, int]:
+        if self.tags:
+            locktime = self.tags.get_tag("locktime")
+            if locktime:
+                return int(locktime)
+        return None
+
+    @property
+    def sigflag(self) -> Union[None, str]:
+        if self.tags:
+            sigflag = self.tags.get_tag("sigflag")
+            if sigflag:
+                return sigflag
+        return None
+
+    @property
+    def n_sigs(self) -> Union[None, int]:
+        if self.tags:
+            n_sigs = self.tags.get_tag("n_sigs")
+            if n_sigs:
+                return int(n_sigs)
+        return None
+
+    def get_p2pk_pubkey_from_secret(self) -> List[str]:
+        """Gets the P2PK pubkey from a Secret depending on the locktime
+
+        Args:
+            secret (Secret): P2PK Secret in ecash token
+
+        Returns:
+            str: pubkey to use for P2PK, empty string if anyone can spend (locktime passed)
+        """
+        pubkeys: List[str] = [self.data]  # for now we only support one pubkey
+        # get all additional pubkeys from tags for multisig
+        if self.tags and self.tags.get_tag("pubkey"):
+            pubkeys += self.tags.get_tag_all("pubkey")
+
+        now = time.time()
+        if self.locktime and self.locktime < now:
+            logger.trace(f"p2pk locktime ran out ({self.locktime}<{now}).")
+            # check tags if a refund pubkey is present.
+            # If yes, we demand the signature to be from the refund pubkey
+            if self.tags:
+                refund_pubkey = self.tags.get_tag("refund")
+                if refund_pubkey:
+                    pubkeys = [refund_pubkey]
+                    return pubkeys
+            return []
+        return pubkeys
+
+
 class P2SHScript(BaseModel):
     """
-    Describes spending condition of a Proof
+    Unlocks P2SH spending condition of a Proof
     """
 
     script: str
@@ -45,8 +175,9 @@ class Proof(BaseModel):
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
-    script: Union[P2SHScript, None] = None  # P2SH spending condition
     dleq: Union[DLEQ, None] = None  # DLEQ proof
+    p2pksigs: Union[List[str], None] = []  # P2PK signature
+    p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
     reserved: Union[
         None, bool
     ] = False  # whether this proof is reserved for sending, used for coin management in the wallet
@@ -55,6 +186,7 @@ class Proof(BaseModel):
     ] = ""  # unique ID of send attempt, used for grouping pending tokens in the wallet
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
+    derivation_path: Union[None, str] = ""  # derivation path of the proof
 
     def to_dict(self, include_dleq=True):
         # dictionary without the fields that don't need to be send to Carol
@@ -97,6 +229,7 @@ class BlindedMessage(BaseModel):
 
     amount: int
     B_: str  # Hex-encoded blinded message
+    p2pksigs: Union[List[str], None] = None  # signature for p2pk with SIG_ALL
 
 
 class BlindedSignature(BaseModel):
@@ -121,7 +254,8 @@ class BlindedMessages(BaseModel):
 class Invoice(BaseModel):
     amount: int
     pr: str
-    hash: Union[None, str] = None
+    hash: str
+    payment_hash: Union[None, str] = None
     preimage: Union[str, None] = None
     issued: Union[None, bool] = False
     paid: Union[None, bool] = False
@@ -143,6 +277,7 @@ class GetInfoResponse(BaseModel):
     contact: Optional[List[List[str]]] = None
     nuts: Optional[List[str]] = None
     motd: Optional[str] = None
+    parameter: Optional[dict] = None
 
 
 # ------- API: KEYS -------
@@ -161,11 +296,6 @@ class KeysetsResponse(BaseModel):
 
 class PostMintRequest(BaseModel):
     outputs: List[BlindedMessage]
-
-
-class PostMintResponseLegacy(BaseModel):
-    # NOTE: Backwards compability for < 0.8.0 where we used a simple list and not a key-value dictionary
-    __root__: List[BlindedSignature] = []
 
 
 class PostMintResponse(BaseModel):
@@ -197,13 +327,32 @@ class GetMeltResponse(BaseModel):
 
 class PostSplitRequest(BaseModel):
     proofs: List[Proof]
-    amount: int
+    amount: Optional[int] = None  # deprecated since 0.13.0
     outputs: List[BlindedMessage]
+    # signature: Optional[str] = None
+
+    # def sign(self, private_key: PrivateKey):
+    #     """
+    #     Create a signed split request. The signature is over the `proofs` and `outputs` fields.
+    #     """
+    #     # message = json.dumps(self.proofs).encode("utf-8") + json.dumps(
+    #     #     self.outputs
+    #     # ).encode("utf-8")
+    #     message = json.dumps(self.dict(include={"proofs": ..., "outputs": ...})).encode(
+    #         "utf-8"
+    #     )
+    #     self.signature = sign_p2pk_sign(message, private_key)
 
 
 class PostSplitResponse(BaseModel):
-    fst: List[BlindedSignature]
-    snd: List[BlindedSignature]
+    promises: List[BlindedSignature]
+
+
+# deprecated since 0.13.0
+class PostSplitResponse_Deprecated(BaseModel):
+    fst: List[BlindedSignature] = []
+    snd: List[BlindedSignature] = []
+    deprecated: str = "The amount field is deprecated since 0.13.0"
 
 
 # ------- API: CHECK -------
@@ -215,6 +364,10 @@ class CheckSpendableRequest(BaseModel):
 
 class CheckSpendableResponse(BaseModel):
     spendable: List[bool]
+    pending: Optional[
+        List[bool]
+    ] = None  # TODO: Uncomment when all mints are updated to 0.12.3 and support /check
+    # with pending tokens (kept for backwards compatibility of new wallets with old mints)
 
 
 class CheckFeesRequest(BaseModel):
@@ -223,6 +376,14 @@ class CheckFeesRequest(BaseModel):
 
 class CheckFeesResponse(BaseModel):
     fee: Union[int, None]
+
+
+# ------- API: RESTORE -------
+
+
+class PostRestoreResponse(BaseModel):
+    outputs: List[BlindedMessage] = []
+    promises: List[BlindedSignature] = []
 
 
 # ------- KEYSETS -------
@@ -243,8 +404,8 @@ class WalletKeyset:
     Contains the keyset from the wallets's perspective.
     """
 
-    id: Union[str, None]
-    public_keys: Union[Dict[int, PublicKey], None]
+    id: str
+    public_keys: Dict[int, PublicKey]
     mint_url: Union[str, None] = None
     valid_from: Union[str, None] = None
     valid_to: Union[str, None] = None
@@ -253,25 +414,48 @@ class WalletKeyset:
 
     def __init__(
         self,
-        public_keys=None,
-        mint_url=None,
+        public_keys: Dict[int, PublicKey],
         id=None,
+        mint_url=None,
         valid_from=None,
         valid_to=None,
         first_seen=None,
         active=None,
     ):
-        self.id = id
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = active
         self.mint_url = mint_url
-        if public_keys:
-            self.public_keys = public_keys
-            self.id = derive_keyset_id(self.public_keys)
-        if id:
-            assert id == self.id, "id must match derived id from public keys"
+
+        self.public_keys = public_keys
+        # overwrite id by deriving it from the public keys
+        self.id = derive_keyset_id(self.public_keys)
+
+    def serialize(self):
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
+
+    @classmethod
+    def from_row(cls, row: Row):
+        def deserialize(serialized: str):
+            return {
+                amount: PublicKey(bytes.fromhex(hex_key), raw=True)
+                for amount, hex_key in dict(json.loads(serialized)).items()
+            }
+
+        return cls(
+            id=row["id"],
+            public_keys=deserialize(str(row["public_keys"]))
+            if dict(row).get("public_keys")
+            else {},
+            mint_url=row["mint_url"],
+            valid_from=row["valid_from"],
+            valid_to=row["valid_to"],
+            first_seen=row["first_seen"],
+            active=row["active"],
+        )
 
 
 class MintKeyset:
@@ -279,7 +463,7 @@ class MintKeyset:
     Contains the keyset from the mint's perspective.
     """
 
-    id: Union[str, None]
+    id: str
     derivation_path: str
     private_keys: Dict[int, PrivateKey]
     public_keys: Union[Dict[int, PublicKey], None] = None
@@ -424,7 +608,7 @@ class TokenV3(BaseModel):
         return list(set([p.id for p in self.get_proofs()]))
 
     @classmethod
-    def deserialize(cls, tokenv3_serialized: str):
+    def deserialize(cls, tokenv3_serialized: str) -> "TokenV3":
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """
@@ -436,7 +620,7 @@ class TokenV3(BaseModel):
         token = json.loads(base64.urlsafe_b64decode(token_base64))
         return cls.parse_obj(token)
 
-    def serialize(self, include_dleq=True):
+    def serialize(self, include_dleq=True) -> str:
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """

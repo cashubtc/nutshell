@@ -1,26 +1,26 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
 from environs import Env  # type: ignore
-from pydantic import BaseSettings, Extra, Field, validator
+from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.12.0"
+VERSION = "0.13.0"
 
 
 def find_env_file():
     # env file: default to current dir, else home dir
-    ENV_FILE = os.path.join(os.getcwd(), ".env")
-    if not os.path.isfile(ENV_FILE):
-        ENV_FILE = os.path.join(str(Path.home()), ".cashu", ".env")
-    if os.path.isfile(ENV_FILE):
-        env.read_env(ENV_FILE)
+    env_file = os.path.join(os.getcwd(), ".env")
+    if not os.path.isfile(env_file):
+        env_file = os.path.join(str(Path.home()), ".cashu", ".env")
+    if os.path.isfile(env_file):
+        env.read_env(env_file)
     else:
-        ENV_FILE = ""
-    return ENV_FILE
+        env_file = ""
+    return env_file
 
 
 class CashuSettings(BaseSettings):
@@ -30,7 +30,7 @@ class CashuSettings(BaseSettings):
     lightning_reserve_fee_min: int = Field(default=2000)
     max_order: int = Field(default=64)
 
-    class Config:
+    class Config(BaseSettings.Config):
         env_file = find_env_file()
         env_file_encoding = "utf-8"
         case_sensitive = False
@@ -42,8 +42,7 @@ class CashuSettings(BaseSettings):
 
 class EnvSettings(CashuSettings):
     debug: bool = Field(default=False)
-    host: str = Field(default="127.0.0.1")
-    port: int = Field(default=3338)
+    log_level: str = Field(default="INFO")
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
 
 
@@ -55,6 +54,8 @@ class MintSettings(CashuSettings):
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
     mint_peg_out_only: bool = Field(default=False)
+    mint_max_peg_in: int = Field(default=None)
+    mint_max_peg_out: int = Field(default=None)
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
@@ -72,11 +73,17 @@ class MintInformation(CashuSettings):
 class WalletSettings(CashuSettings):
     lightning: bool = Field(default=True)
     tor: bool = Field(default=True)
-    socks_host: str = Field(default=None)
-    socks_port: int = Field(default=9050)
+    socks_host: str = Field(default=None)  # deprecated
+    socks_port: int = Field(default=9050)  # deprecated
+    socks_proxy: str = Field(default=None)
+    http_proxy: str = Field(default=None)
     mint_url: str = Field(default=None)
     mint_host: str = Field(default="8333.space")
     mint_port: int = Field(default=3338)
+    wallet_name: str = Field(default="wallet")
+
+    api_port: int = Field(default=4448)
+    api_host: str = Field(default="127.0.0.1")
 
     nostr_private_key: str = Field(default=None)
     nostr_relays: List[str] = Field(
@@ -89,9 +96,15 @@ class WalletSettings(CashuSettings):
         ]
     )
 
+    locktime_delta_seconds: int = Field(default=86400)  # 1 day
+
 
 class Settings(
-    EnvSettings, MintSettings, MintInformation, WalletSettings, CashuSettings
+    EnvSettings,
+    MintSettings,
+    MintInformation,
+    WalletSettings,
+    CashuSettings,
 ):
     version: str = Field(default=VERSION)
 
@@ -120,6 +133,10 @@ def startup_settings_tasks():
             settings.mint_url = f"http://{settings.mint_host}:{settings.mint_port}"
         else:
             settings.mint_url = f"https://{settings.mint_host}:{settings.mint_port}"
+
+    # backwards compatibility: set socks_proxy from socks_host and socks_port
+    if settings.socks_host and settings.socks_port:
+        settings.socks_proxy = f"socks5://{settings.socks_host}:{settings.socks_port}"
 
 
 startup_settings_tasks()

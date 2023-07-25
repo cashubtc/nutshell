@@ -1,7 +1,7 @@
 from ..core.db import Database
 
 
-async def m000_create_migrations_table(db):
+async def m000_create_migrations_table(db: Database):
     await db.execute(
         """
     CREATE TABLE IF NOT EXISTS dbversions (
@@ -14,9 +14,9 @@ async def m000_create_migrations_table(db):
 
 async def m001_initial(db: Database):
     await db.execute(
-        """
+        f"""
             CREATE TABLE IF NOT EXISTS proofs (
-                amount INTEGER NOT NULL,
+                amount {db.big_int} NOT NULL,
                 C TEXT NOT NULL,
                 secret TEXT NOT NULL,
 
@@ -27,9 +27,9 @@ async def m001_initial(db: Database):
     )
 
     await db.execute(
-        """
+        f"""
             CREATE TABLE IF NOT EXISTS proofs_used (
-                amount INTEGER NOT NULL,
+                amount {db.big_int} NOT NULL,
                 C TEXT NOT NULL,
                 secret TEXT NOT NULL,
 
@@ -62,7 +62,7 @@ async def m001_initial(db: Database):
     )
 
 
-async def m002_add_proofs_reserved(db):
+async def m002_add_proofs_reserved(db: Database):
     """
     Column for marking proofs as reserved when they are being sent.
     """
@@ -70,7 +70,7 @@ async def m002_add_proofs_reserved(db):
     await db.execute("ALTER TABLE proofs ADD COLUMN reserved BOOL")
 
 
-async def m003_add_proofs_sendid_and_timestamps(db):
+async def m003_add_proofs_sendid_and_timestamps(db: Database):
     """
     Column with unique ID for each initiated send attempt
     so proofs can be later grouped together for each send attempt.
@@ -169,3 +169,27 @@ async def m007_nostr(db: Database):
             None,
         ),
     )
+
+
+async def m008_keysets_add_public_keys(db: Database):
+    """
+    Stores public keys of mint in a new column of table keysets.
+    """
+    await db.execute("ALTER TABLE keysets ADD COLUMN public_keys TEXT")
+
+
+async def m009_privatekey_and_determinstic_key_derivation(db: Database):
+    await db.execute("ALTER TABLE keysets ADD COLUMN counter INTEGER DEFAULT 0")
+    await db.execute("ALTER TABLE proofs ADD COLUMN derivation_path TEXT")
+    await db.execute("ALTER TABLE proofs_used ADD COLUMN derivation_path TEXT")
+    await db.execute(
+        """
+            CREATE TABLE IF NOT EXISTS seed (
+            seed TEXT NOT NULL,
+            mnemonic TEXT NOT NULL,
+
+            UNIQUE (seed, mnemonic)
+            );
+        """
+    )
+    # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")

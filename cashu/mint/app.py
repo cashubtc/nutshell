@@ -1,12 +1,19 @@
 import logging
 import sys
+from traceback import print_exception
 
-from fastapi import FastAPI
+from fastapi import FastAPI, status
+from fastapi.responses import JSONResponse
+
+# from fastapi_profiler import PyInstrumentProfilerMiddleware
 from loguru import logger
 from starlette.middleware import Middleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
+from ..core.errors import CashuError
 from ..core.settings import settings
 from .router import router
 from .startup import start_mint_init
@@ -52,7 +59,9 @@ def create_app(config_object="core.settings") -> FastAPI:
                 logger.log(level, record.getMessage())
 
         logger.remove()
-        log_level: str = "DEBUG" if settings.debug else "INFO"
+        log_level = settings.log_level
+        if settings.debug and log_level == "INFO":
+            log_level = "DEBUG"
         formatter = Formatter()
         logger.add(sys.stderr, level=log_level, format=formatter.format)
 
@@ -88,14 +97,43 @@ def create_app(config_object="core.settings") -> FastAPI:
         },
         middleware=middleware,
     )
+
+    # app.add_middleware(PyInstrumentProfilerMiddleware)
+
     return app
 
 
 app = create_app()
 
-app.include_router(router=router)
+
+@app.middleware("http")
+async def catch_exceptions(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        try:
+            err_message = str(e)
+        except:
+            err_message = e.args[0] if e.args else "Unknown error"
+
+        if isinstance(e, CashuError):
+            logger.error(f"CashuError: {err_message}")
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"detail": err_message, "code": e.code},
+            )
+        logger.error(f"Exception: {err_message}")
+        if settings.debug:
+            print_exception(*sys.exc_info())
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": err_message, "code": 0},
+        )
 
 
 @app.on_event("startup")
 async def startup_mint():
     await start_mint_init()
+
+
+app.include_router(router=router)

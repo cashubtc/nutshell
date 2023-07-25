@@ -1,5 +1,6 @@
+import json
 import time
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from ..core.base import Invoice, KeyBase, P2SHScript, Proof, WalletKeyset
 from ..core.db import Connection, Database
@@ -13,10 +14,17 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (id, amount, C, secret, time_created)
-        VALUES (?, ?, ?, ?, ?)
+          (id, amount, C, secret, time_created, derivation_path)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (proof.id, proof.amount, str(proof.C), str(proof.secret), int(time.time())),
+        (
+            proof.id,
+            proof.amount,
+            str(proof.C),
+            str(proof.secret),
+            int(time.time()),
+            proof.derivation_path,
+        ),
     )
 
 
@@ -61,10 +69,17 @@ async def invalidate_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs_used
-          (amount, C, secret, time_used, id)
-        VALUES (?, ?, ?, ?, ?)
+          (amount, C, secret, time_used, id, derivation_path)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (proof.amount, str(proof.C), str(proof.secret), int(time.time()), proof.id),
+        (
+            proof.amount,
+            str(proof.C),
+            str(proof.secret),
+            int(time.time()),
+            proof.id,
+            proof.derivation_path,
+        ),
     )
 
 
@@ -184,8 +199,8 @@ async def store_keyset(
     await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
-          (id, mint_url, valid_from, valid_to, first_seen, active)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (id, mint_url, valid_from, valid_to, first_seen, active, public_keys)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             keyset.id,
@@ -194,6 +209,7 @@ async def store_keyset(
             keyset.valid_to or int(time.time()),
             keyset.first_seen or int(time.time()),
             True,
+            keyset.serialize(),
         ),
     )
 
@@ -225,7 +241,7 @@ async def get_keyset(
         """,
         tuple(values),
     )
-    return WalletKeyset(**row) if row is not None else None
+    return WalletKeyset.from_row(row) if row is not None else None
 
 
 async def store_lightning_invoice(
@@ -327,6 +343,52 @@ async def update_lightning_invoice(
     )
 
 
+async def bump_secret_derivation(
+    db: Database,
+    keyset_id: str,
+    by: int = 1,
+    skip: bool = False,
+    conn: Optional[Connection] = None,
+):
+    rows = await (conn or db).fetchone(
+        "SELECT counter from keysets WHERE id = ?", (keyset_id,)
+    )
+    # if no counter for this keyset, create one
+    if not rows:
+        await (conn or db).execute(
+            "UPDATE keysets SET counter = ? WHERE id = ?",
+            (
+                0,
+                keyset_id,
+            ),
+        )
+        counter = 0
+    else:
+        counter = int(rows[0])
+
+    if not skip:
+        await (conn or db).execute(
+            f"UPDATE keysets SET counter = counter + {by} WHERE id = ?",
+            (keyset_id,),
+        )
+    return counter
+
+
+async def set_secret_derivation(
+    db: Database,
+    keyset_id: str,
+    counter: int,
+    conn: Optional[Connection] = None,
+):
+    await (conn or db).execute(
+        "UPDATE keysets SET counter = ? WHERE id = ?",
+        (
+            counter,
+            keyset_id,
+        ),
+    )
+
+
 async def set_nostr_last_check_timestamp(
     db: Database,
     timestamp: int,
@@ -349,3 +411,41 @@ async def get_nostr_last_check_timestamp(
         ("dm",),
     )
     return row[0] if row else None
+
+
+async def get_seed_and_mnemonic(
+    db: Database,
+    conn: Optional[Connection] = None,
+) -> Optional[Tuple[str, str]]:
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT seed, mnemonic from seed
+        """,
+    )
+    return (
+        (
+            row[0],
+            row[1],
+        )
+        if row
+        else None
+    )
+
+
+async def store_seed_and_mnemonic(
+    db: Database,
+    seed: str,
+    mnemonic: str,
+    conn: Optional[Connection] = None,
+):
+    await (conn or db).execute(
+        f"""
+        INSERT INTO seed
+          (seed, mnemonic)
+        VALUES (?, ?)
+        """,
+        (
+            seed,
+            mnemonic,
+        ),
+    )

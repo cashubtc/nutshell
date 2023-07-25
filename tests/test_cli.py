@@ -14,20 +14,15 @@ from tests.conftest import SERVER_ENDPOINT, mint
 
 @pytest.fixture(autouse=True, scope="session")
 def cli_prefix():
-    yield ["--wallet", "test_wallet", "--host", settings.mint_url]
-
-
-@pytest.fixture(scope="session")
-def wallet():
-    wallet = Wallet(settings.mint_host, "data/test_wallet", "wallet")
-    asyncio.run(migrate_databases(wallet.db, migrations))
-    asyncio.run(wallet.load_proofs())
-    yield wallet
+    yield ["--wallet", "test_cli_wallet", "--host", settings.mint_url, "--tests"]
 
 
 async def init_wallet():
-    wallet = Wallet(settings.mint_host, "data/test_wallet", "wallet")
-    await migrate_databases(wallet.db, migrations)
+    wallet = await Wallet.with_db(
+        url=settings.mint_host,
+        db="data/test_cli_wallet",
+        name="wallet",
+    )
     await wallet.load_proofs()
     return wallet
 
@@ -43,6 +38,34 @@ def test_info(cli_prefix):
     print("INFO")
     print(result.output)
     result.output.startswith(f"Version: {settings.version}")
+    assert result.exit_code == 0
+
+
+@pytest.mark.asyncio
+def test_info_with_mint(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "info", "--mint"],
+    )
+    assert result.exception is None
+    print("INFO -M")
+    print(result.output)
+    assert "Mint name" in result.output
+    assert result.exit_code == 0
+
+
+@pytest.mark.asyncio
+def test_info_with_mnemonic(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "info", "--mnemonic"],
+    )
+    assert result.exception is None
+    print("INFO -M")
+    print(result.output)
+    assert "Mnemonic" in result.output
     assert result.exit_code == 0
 
 
@@ -71,9 +94,22 @@ def test_invoice(mint, cli_prefix):
     assert result.exception is None
     print("INVOICE")
     print(result.output)
-    # wallet = asyncio.run(init_wallet())
-    # assert f"Balance: {wallet.available_balance} sat" in result.output
+    wallet = asyncio.run(init_wallet())
+    # assert wallet.available_balance >= 1000
+    assert f"Balance: {wallet.available_balance} sat" in result.output
     assert result.exit_code == 0
+
+
+@pytest.mark.asyncio
+def test_invoice_with_split(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "10", "-s", "1"],
+    )
+    assert result.exception is None
+    # wallet = asyncio.run(init_wallet())
+    # assert wallet.proof_amounts.count(1) >= 10
 
 
 @pytest.mark.asyncio
@@ -87,7 +123,7 @@ def test_wallets(cli_prefix):
     print("WALLETS")
     # on github this is empty
     if len(result.output):
-        assert "test_wallet" in result.output
+        assert "test_cli_wallet" in result.output
     assert result.exit_code == 0
 
 
@@ -133,6 +169,29 @@ def test_send_legacy(mint, cli_prefix):
     # this is the legacy token in the output
     token_str = result.output.split("\n")[4]
     assert token_str.startswith("eyJwcm9v"), "output is not as expected"
+
+
+@pytest.mark.asyncio
+def test_send_without_split(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "2", "--nosplit"],
+    )
+    assert result.exception is None
+    print("SEND")
+    print(result.output)
+    assert "cashuA" in result.output, "output does not have a token"
+
+
+@pytest.mark.asyncio
+def test_send_without_split_but_wrong_amount(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--nosplit"],
+    )
+    assert "No proof with this amount found" in str(result.exception)
 
 
 @pytest.mark.asyncio
