@@ -220,7 +220,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
                     print(" Invoice paid.")
                 except Exception as e:
                     # TODO: user error codes!
-                    if "invoice not paid" in str(e):
+                    if "not paid" in str(e):
                         print(".", end="", flush=True)
                         continue
                     else:
