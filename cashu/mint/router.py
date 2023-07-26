@@ -223,7 +223,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     "/split",
     name="Split",
     summary="Split proofs at a specified amount",
-    response_model=PostSplitResponse,
+    response_model=Union[PostSplitResponse, PostSplitResponse_Deprecated],
     response_description="A list of blinded signatures that can be used to create proofs.",
 )
 async def split(

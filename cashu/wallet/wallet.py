@@ -237,7 +237,7 @@ class LedgerAPI(object):
         """
         resp_dict = resp.json()
         if "detail" in resp_dict:
-            logger.error(f"Error from mint: {resp_dict}")
+            logger.trace(f"Error from mint: {resp_dict}")
             error_message = f"Mint Error: {resp_dict['detail']}"
             if "code" in resp_dict:
                 error_message += f" (Code: {resp_dict['code']})"
