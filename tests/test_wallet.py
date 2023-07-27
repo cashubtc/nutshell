@@ -7,10 +7,7 @@ import pytest_asyncio
 
 from cashu.core.base import Proof
 from cashu.core.crypto.secp import PrivateKey, PublicKey
-from cashu.core.errors import (
-    CashuError,
-    KeysetNotFoundError,
-)
+from cashu.core.errors import CashuError, KeysetNotFoundError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
 from cashu.wallet.wallet import Wallet
