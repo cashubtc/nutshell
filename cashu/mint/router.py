@@ -1,9 +1,10 @@
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 from fastapi import APIRouter
 from loguru import logger
 
 from ..core.base import (
+    BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
     CheckSpendableRequest,
@@ -184,7 +185,10 @@ async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     name="Check proof state",
     summary="Check whether a proof is spent already or is pending in a transaction",
     response_model=CheckSpendableResponse,
-    response_description="Two lists of booleans indicating whether the provided proofs are spendable or pending in a transaction respectively.",
+    response_description=(
+        "Two lists of booleans indicating whether the provided proofs "
+        "are spendable or pending in a transaction respectively."
+    ),
 )
 async def check_spendable(
     payload: CheckSpendableRequest,
@@ -255,7 +259,8 @@ async def split(
             else:
                 frst_promises.insert(0, promise)  # and insert at the beginning
         logger.trace(
-            f"Split into keep: {len(frst_promises)}: {sum([p.amount for p in frst_promises])} sat and send: {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
+            f"Split into keep: {len(frst_promises)}: {sum([p.amount for p in frst_promises])} "
+            f"sat and send: {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
         )
         return PostSplitResponse_Deprecated(fst=frst_promises, snd=scnd_promises)
         # END backwards compatibility < 0.13
@@ -268,7 +273,10 @@ async def split(
     name="Restore",
     summary="Restores a blinded signature from a secret",
     response_model=PostRestoreResponse,
-    response_description="Two lists with the first being the list of the provided outputs that have an associated blinded signature which is given in the second list.",
+    response_description=(
+        "Two lists with the first being the list of the provided outputs that "
+        "have an associated blinded signature which is given in the second list."
+    ),
 )
 async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")

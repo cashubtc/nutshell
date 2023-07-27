@@ -10,7 +10,6 @@ from loguru import logger
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
 
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -115,7 +114,7 @@ async def catch_exceptions(request: Request, call_next):
     except Exception as e:
         try:
             err_message = str(e)
-        except:
+        except Exception:
             err_message = e.args[0] if e.args else "Unknown error"
 
         if isinstance(e, CashuError):

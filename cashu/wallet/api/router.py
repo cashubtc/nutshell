@@ -1,4 +1,3 @@
-import asyncio
 import os
 from datetime import datetime
 from itertools import groupby, islice

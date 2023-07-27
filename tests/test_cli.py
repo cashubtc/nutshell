@@ -3,9 +3,7 @@ import asyncio
 import pytest
 from click.testing import CliRunner
 
-from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
-from cashu.wallet import migrations
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
 

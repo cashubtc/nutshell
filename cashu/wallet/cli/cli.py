@@ -596,7 +596,7 @@ async def locks(ctx):
             print(f"Script: {lock.script}")
             print(f"Signature: {lock.signature}")
             print("")
-            print(f"--------------------------\n")
+            print("--------------------------\n")
 
     return True
 

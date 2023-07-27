@@ -2,9 +2,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
-from cashu.wallet import migrations
 from cashu.wallet.api.app import app
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT

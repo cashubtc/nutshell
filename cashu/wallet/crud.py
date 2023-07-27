@@ -417,7 +417,7 @@ async def get_seed_and_mnemonic(
     conn: Optional[Connection] = None,
 ) -> Optional[Tuple[str, str]]:
     row = await (conn or db).fetchone(
-        f"""
+        """
         SELECT seed, mnemonic from seed
         """,
     )
@@ -438,7 +438,7 @@ async def store_seed_and_mnemonic(
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
-        f"""
+        """
         INSERT INTO seed
           (seed, mnemonic)
         VALUES (?, ?)

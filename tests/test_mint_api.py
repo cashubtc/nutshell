@@ -2,7 +2,6 @@ import pytest
 import requests
 
 from cashu.core.base import CheckSpendableRequest, CheckSpendableResponse, Proof
-from cashu.core.settings import settings
 
 BASE_URL = "http://localhost:3337"
 

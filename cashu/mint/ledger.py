@@ -250,7 +250,7 @@ class Ledger:
             secret = Secret.deserialize(proof.secret)
             logger.trace(f"proof.secret: {proof.secret}")
             logger.trace(f"secret: {secret}")
-        except Exception as e:
+        except Exception:
             # secret is not a spending condition so we treat is a normal secret
             return True
         if secret.kind == SecretKind.P2SH:
@@ -285,7 +285,7 @@ class Ledger:
         if secret.kind == SecretKind.P2PK:
             # check if locktime is in the past
             pubkeys = secret.get_p2pk_pubkey_from_secret()
-            assert len(set(pubkeys)) == len(pubkeys), f"pubkeys must be unique."
+            assert len(set(pubkeys)) == len(pubkeys), "pubkeys must be unique."
             logger.trace(f"pubkeys: {pubkeys}")
             # we will get an empty list if the locktime has passed and no refund pubkey is present
             if not pubkeys:
@@ -369,7 +369,7 @@ class Ledger:
                 pubkeys_per_proof.append(secret.get_p2pk_pubkey_from_secret())
                 # get signature threshold from secrets
                 n_sigs.append(secret.n_sigs)
-            except Exception as e:
+            except Exception:
                 # secret is not a spending condition so we treat is a normal secret
                 return True
         # for all proofs all pubkeys must be the same
@@ -641,7 +641,7 @@ class Ledger:
                     logger.trace(
                         f"crud: _set_proofs_pending proof {p.secret} set as pending"
                     )
-                except:
+                except Exception:
                     raise TransactionError("proofs already pending.")
 
     async def _unset_proofs_pending(
@@ -694,7 +694,8 @@ class Ledger:
 
         Args:
             proofs (List[Proof]): List of proofs to check.
-            outputs (Optional[List[BlindedMessage]], optional): List of outputs to check. Must be provided for /split but not for /melt. Defaults to None.
+            outputs (Optional[List[BlindedMessage]], optional): List of outputs to check.
+            Must be provided for /split but not for /melt. Defaults to None.
 
         Raises:
             Exception: Scripts did not validate.

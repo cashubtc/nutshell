@@ -1,31 +1,18 @@
-import asyncio
 import shutil
-import time
 from pathlib import Path
 from typing import Dict, List, Union
 
 import pytest
 import pytest_asyncio
-from mnemonic import Mnemonic
 
-from cashu.core.base import Proof, Tags
+from cashu.core.base import Proof
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.errors import (
     CashuError,
-    InvoiceNotPaidError,
-    KeysetError,
     KeysetNotFoundError,
-    LightningError,
-    NoSecretInProofsError,
-    NotAllowedError,
-    SecretTooLongError,
-    TokenAlreadySpentError,
-    TransactionError,
 )
-from cashu.core.helpers import async_unwrap, sum_proofs
-from cashu.core.migrations import migrate_databases
+from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
-from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
@@ -240,7 +227,7 @@ async def test_double_spend(wallet1: Wallet):
     await wallet1.split(wallet1.proofs, 20)
     await assert_err(
         wallet1.split(doublespend, 20),
-        f"Mint Error: Token already spent.",
+        "Mint Error: Token already spent.",
     )
     assert wallet1.balance == 64
     assert wallet1.available_balance == 64
