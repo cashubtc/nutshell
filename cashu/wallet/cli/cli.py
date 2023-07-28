@@ -89,7 +89,11 @@ def coro(f):
 @coro
 async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     if settings.tor and not TorProxy().check_platform():
-        error_str = "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
+        error_str = (
+            "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install"
+            " Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by "
+            "setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
+        )
         error_str += "\n\n"
         if settings.env_file:
             error_str += f"Edit your Cashu config file here: {settings.env_file}"
@@ -156,7 +160,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
             default=True,
         )
 
-    print(f"Paying Lightning invoice ...")
+    print("Paying Lightning invoice ...")
     assert total_amount > 0, "amount is not positive"
     if wallet.available_balance < total_amount:
         print("Error: Balance too low.")
@@ -192,7 +196,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
         logger.debug(f"Requesting split with {n_splits} * {split} sat tokens.")
 
     if not settings.lightning:
-        r = await wallet.mint(amount, split=optional_split)
+        await wallet.mint(amount, split=optional_split)
     # user requests an invoice
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)
@@ -207,7 +211,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
             print(
-                f"Checking invoice ...",
+                "Checking invoice ...",
                 end="",
                 flush=True,
             )
@@ -310,7 +314,8 @@ async def balance(ctx: Context, verbose):
 
     if verbose:
         print(
-            f"Balance: {wallet.available_balance} sat (pending: {wallet.balance-wallet.available_balance} sat) in {len([p for p in wallet.proofs if not p.reserved])} tokens"
+            f"Balance: {wallet.available_balance} sat (pending: {wallet.balance-wallet.available_balance} sat) "
+            f"in {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
         print(f"Balance: {wallet.available_balance} sat")
@@ -498,7 +503,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
     wallet: Wallet = ctx.obj["WALLET"]
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
-        print(f"--------------------------\n")
+        print("--------------------------\n")
         sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))  # type: ignore
         if number:
             number += offset
@@ -532,7 +537,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                     legacy=True,
                 )
                 print(f"{token_legacy}\n")
-            print(f"--------------------------\n")
+            print("--------------------------\n")
         print("To remove all spent tokens use: cashu burn -a")
 
 
@@ -566,7 +571,7 @@ async def lock(ctx, p2sh):
         f"Anyone can send tokens to this lock:\n\ncashu send <amount> --lock {lock_str}"
     )
     print("")
-    print(f"Only you can receive tokens from this lock: cashu receive <token>")
+    print("Only you can receive tokens from this lock: cashu receive <token>")
 
 
 @cli.command("locks", help="Show unused receiving locks.")
@@ -586,12 +591,12 @@ async def locks(ctx):
     if len(locks):
         print("")
         print("---- Pay to script hash (P2SH) locks ----\n")
-        for l in locks:
-            print(f"Lock: P2SH:{l.address}")
-            print(f"Script: {l.script}")
-            print(f"Signature: {l.signature}")
+        for lock in locks:
+            print(f"Lock: P2SH:{lock.address}")
+            print(f"Script: {lock.script}")
+            print(f"Signature: {lock.signature}")
             print("")
-            print(f"--------------------------\n")
+            print("--------------------------\n")
 
     return True
 
@@ -604,7 +609,7 @@ async def invoices(ctx):
     invoices = await get_lightning_invoices(db=wallet.db)
     if len(invoices):
         print("")
-        print(f"--------------------------\n")
+        print("--------------------------\n")
         for invoice in invoices:
             print(f"Paid: {invoice.paid}")
             print(f"Incoming: {invoice.amount > 0}")
@@ -626,7 +631,7 @@ async def invoices(ctx):
             print("")
             print(f"Payment request: {invoice.pr}")
             print("")
-            print(f"--------------------------\n")
+            print("--------------------------\n")
     else:
         print("No invoices found.")
 
@@ -652,9 +657,10 @@ async def wallets(ctx):
                 if w == ctx.obj["WALLET_NAME"]:
                     active_wallet = True
                 print(
-                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: {sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
+                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: "
+                    f"{sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
                 )
-        except:
+        except Exception:
             pass
 
 
@@ -679,8 +685,8 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
             client = NostrClient(private_key=settings.nostr_private_key, connect=False)
             print(f"Nostr public key: {client.public_key.bech32()}")
             print(f"Nostr relays: {settings.nostr_relays}")
-        except:
-            print(f"Nostr: Error. Invalid key.")
+        except Exception:
+            print("Nostr: Error. Invalid key.")
     if settings.socks_proxy:
         print(f"Socks proxy: {settings.socks_proxy}")
     if settings.http_proxy:

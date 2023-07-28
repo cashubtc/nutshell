@@ -22,7 +22,7 @@ def hash_to_point_pre_0_3_3(secret_msg):
             _hash[0] = 0x02  # set first byte to represent even y coord
             _hash = bytes(_hash)
             point = PublicKey(_hash, raw=True)
-        except:
+        except Exception:
             msg = _hash
 
     return point

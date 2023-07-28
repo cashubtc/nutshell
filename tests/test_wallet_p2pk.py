@@ -6,16 +6,14 @@ from typing import List
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof, Secret, SecretKind, SigFlags, Tags
+from cashu.core.base import Proof, SigFlags, Tags
 from cashu.core.crypto.secp import PrivateKey, PublicKey
-from cashu.core.helpers import async_unwrap, sum_proofs
 from cashu.core.migrations import migrate_databases
-from cashu.core.settings import settings
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
-from tests.conftest import SERVER_ENDPOINT, mint
+from tests.conftest import SERVER_ENDPOINT
 
 
 async def assert_err(f, msg):
@@ -144,7 +142,7 @@ async def test_p2pk_locktime_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
 @pytest.mark.asyncio
 async def test_p2pk_locktime_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
+    await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
     garbage_pubkey = PrivateKey().pubkey
     garbage_pubkey_2 = PrivateKey().pubkey
@@ -275,7 +273,7 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
     wallet1: Wallet, wallet2: Wallet
 ):
     await wallet1.mint(64)
-    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     wrong_pubklic_key = PrivateKey().pubkey
     assert wrong_pubklic_key

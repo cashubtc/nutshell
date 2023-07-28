@@ -34,7 +34,7 @@ class LNbitsWallet(Wallet):
 
         try:
             data = r.json()
-        except:
+        except Exception:
             return StatusResponse(
                 f"Failed to connect to {self.endpoint}, got: '{r.text[:200]}...'", 0
             )
@@ -61,7 +61,7 @@ class LNbitsWallet(Wallet):
                 url=f"{self.endpoint}/api/v1/payments", json=data
             )
             r.raise_for_status()
-        except:
+        except Exception:
             return InvoiceResponse(False, None, None, r.json()["detail"])
         ok, checking_id, payment_request, error_message = (
             True,
@@ -83,20 +83,13 @@ class LNbitsWallet(Wallet):
                 timeout=None,
             )
             r.raise_for_status()
-        except:
+        except Exception:
             error_message = r.json()["detail"]
             return PaymentResponse(None, None, None, None, error_message)
         if r.status_code > 299:
             return PaymentResponse(None, None, None, None, f"HTTP status: {r.reason}")
         if "detail" in r.json():
             return PaymentResponse(None, None, None, None, r.json()["detail"])
-        ok, checking_id, fee_msat, preimage, error_message = (
-            True,
-            None,
-            None,
-            None,
-            None,
-        )
 
         data = r.json()
         checking_id = data["payment_hash"]
@@ -104,7 +97,7 @@ class LNbitsWallet(Wallet):
         # we do this to get the fee and preimage
         payment: PaymentStatus = await self.get_payment_status(checking_id)
 
-        return PaymentResponse(ok, checking_id, payment.fee_msat, payment.preimage)
+        return PaymentResponse(True, checking_id, payment.fee_msat, payment.preimage)
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         try:
@@ -112,7 +105,7 @@ class LNbitsWallet(Wallet):
                 url=f"{self.endpoint}/api/v1/payments/{checking_id}"
             )
             r.raise_for_status()
-        except:
+        except Exception:
             return PaymentStatus(None)
         if r.json().get("detail"):
             return PaymentStatus(None)
@@ -124,7 +117,7 @@ class LNbitsWallet(Wallet):
                 url=f"{self.endpoint}/api/v1/payments/{checking_id}"
             )
             r.raise_for_status()
-        except:
+        except Exception:
             return PaymentStatus(None)
         data = r.json()
         if "paid" not in data and "details" not in data:

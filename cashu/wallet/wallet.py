@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import hashlib
 import json
@@ -10,7 +9,6 @@ from datetime import datetime, timedelta
 from itertools import groupby
 from typing import Dict, List, Optional, Tuple, Union
 
-import click
 import requests
 from bip32 import BIP32
 from loguru import logger
@@ -35,7 +33,6 @@ from ..core.base import (
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
-    PostSplitResponse_Deprecated,
     Proof,
     Secret,
     SecretKind,
@@ -62,7 +59,6 @@ from ..core.script import (
 )
 from ..core.settings import settings
 from ..core.split import amount_split
-from ..nostr.nostr.client.client import NostrClient
 from ..tor.tor import TorProxy
 from ..wallet.crud import (
     bump_secret_derivation,
@@ -101,7 +97,7 @@ def async_set_requests(func):
         if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
             self.tor.run_daemon(verbose=True)
-            proxy_url = f"socks5://localhost:9050"
+            proxy_url = "socks5://localhost:9050"
         elif settings.socks_proxy:
             proxy_url = f"socks5://{settings.socks_proxy}"
         elif settings.http_proxy:
@@ -164,7 +160,7 @@ class LedgerAPI(object):
         Returns:
             List[Proof]: list of proofs that can be used as ecash
         """
-        logger.trace(f"Constructing proofs.")
+        logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
             logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
@@ -249,7 +245,8 @@ class LedgerAPI(object):
         """Loads keys from mint and stores them in the database.
 
         Args:
-            keyset_id (str, optional): keyset id to load. If given, requests keys for this keyset from the mint. If not given, requests current keyset of the mint. Defaults to "".
+            keyset_id (str, optional): keyset id to load. If given, requests keys for this keyset
+            from the mint. If not given, requests current keyset of the mint. Defaults to "".
 
         Raises:
             AssertionError: if mint URL is not set
@@ -297,7 +294,7 @@ class LedgerAPI(object):
         mint_keysets = []
         try:
             mint_keysets = await self._get_keyset_ids(self.url)
-        except:
+        except Exception:
             assert self.keys.id, "could not get keysets from mint, and do not have keys"
             pass
         self.keysets = mint_keysets or [self.keys.id]
@@ -735,7 +732,7 @@ class Wallet(LedgerAPI):
         try:
             self.bip32 = BIP32.from_seed(self.seed)
             self.private_key = PrivateKey(
-                self.bip32.get_privkey_from_path(f"m/129372'/0'/0'/0'")
+                self.bip32.get_privkey_from_path("m/129372'/0'/0'/0'")
             )
         except ValueError:
             raise ValueError("Invalid seed")
@@ -948,7 +945,7 @@ class Wallet(LedgerAPI):
         try:
             for p in proofs:
                 Secret.deserialize(p.secret)
-        except:
+        except Exception:
             # if not, we do not add witnesses (treat as regular token secret)
             return outputs
 
@@ -1015,20 +1012,20 @@ class Wallet(LedgerAPI):
         try:
             for p in proofs:
                 Secret.deserialize(p.secret)
-        except:
+        except Exception:
             # if not, we do not add witnesses (treat as regular token secret)
             return proofs
-        logger.debug(f"Spending conditions detected.")
+        logger.debug("Spending conditions detected.")
         # P2SH scripts
         if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
-            logger.debug(f"P2SH redemption detected.")
+            logger.debug("P2SH redemption detected.")
             proofs = await self.add_p2sh_witnesses_to_proofs(proofs)
 
         # P2PK signatures
         elif all(
             [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
         ):
-            logger.debug(f"P2PK redemption detected.")
+            logger.debug("P2PK redemption detected.")
             proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
 
         return proofs
@@ -1155,7 +1152,7 @@ class Wallet(LedgerAPI):
 
         status = await super().pay_lightning(proofs, invoice, outputs)
 
-        if status.paid == True:
+        if status.paid:
             # the payment was successful
             await self.invalidate(proofs)
             invoice_obj = Invoice(

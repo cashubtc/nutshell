@@ -1,8 +1,7 @@
-import json
 import time
 from typing import Any, List, Optional, Tuple
 
-from ..core.base import Invoice, KeyBase, P2SHScript, Proof, WalletKeyset
+from ..core.base import Invoice, P2SHScript, Proof, WalletKeyset
 from ..core.db import Connection, Database
 
 
@@ -59,7 +58,7 @@ async def invalidate_proof(
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
-        f"""
+        """
         DELETE FROM proofs
         WHERE secret = ?
         """,
@@ -250,7 +249,7 @@ async def store_lightning_invoice(
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
-        f"""
+        """
         INSERT INTO invoices
           (amount, pr, hash, preimage, paid, time_created, time_paid)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -395,7 +394,7 @@ async def set_nostr_last_check_timestamp(
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
-        f"UPDATE nostr SET last = ? WHERE type = ?",
+        "UPDATE nostr SET last = ? WHERE type = ?",
         (timestamp, "dm"),
     )
 
@@ -405,7 +404,7 @@ async def get_nostr_last_check_timestamp(
     conn: Optional[Connection] = None,
 ):
     row = await (conn or db).fetchone(
-        f"""
+        """
         SELECT last from nostr WHERE type = ?
         """,
         ("dm",),
@@ -418,7 +417,7 @@ async def get_seed_and_mnemonic(
     conn: Optional[Connection] = None,
 ) -> Optional[Tuple[str, str]]:
     row = await (conn or db).fetchone(
-        f"""
+        """
         SELECT seed, mnemonic from seed
         """,
     )
@@ -439,7 +438,7 @@ async def store_seed_and_mnemonic(
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
-        f"""
+        """
         INSERT INTO seed
           (seed, mnemonic)
         VALUES (?, ?)

@@ -45,7 +45,7 @@ def hash_to_curve(message: bytes) -> PublicKey:
         _hash = hashlib.sha256(msg_to_hash).digest()
         try:
             point = PublicKey(b"\x02" + _hash, raw=True)
-        except:
+        except Exception:
             msg_to_hash = _hash
     return point
 
@@ -74,7 +74,7 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     return C == Y.mult(a)  # type: ignore
 
 
-### Below is a test of a simple positive and negative case
+# Below is a test of a simple positive and negative case
 
 # # Alice's keys
 # a = PrivateKey()

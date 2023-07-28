@@ -1,4 +1,3 @@
-import time
 from typing import Any, List, Optional
 
 from ..core.base import BlindedSignature, Invoice, MintKeyset, Proof

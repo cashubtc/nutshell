@@ -102,7 +102,7 @@ class Database(Compat):
 
             def _parse_timestamp(value, _):
                 f = "%Y-%m-%d %H:%M:%S.%f"
-                if not "." in value:
+                if "." not in value:
                     f = "%Y-%m-%d %H:%M:%S"
                 return time.mktime(datetime.datetime.strptime(value, f).timetuple())
 

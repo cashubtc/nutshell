@@ -1,10 +1,10 @@
 import sys
 
-sys.tracebacklimit = None  # type: ignore
-
 from loguru import logger
 
 from ..core.settings import settings
+
+sys.tracebacklimit = None  # type: ignore
 
 # configure logger
 logger.remove()

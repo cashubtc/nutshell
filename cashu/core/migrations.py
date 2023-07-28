@@ -27,7 +27,7 @@ async def migrate_databases(db: Database, migrations_module):
                     logger.debug(f"Migrating {db_name} db: {key}")
                     await migrate(db)
 
-                    if db.schema == None:
+                    if db.schema is None:
                         await set_migration_version(db, db_name, version)
                     else:
                         async with db.connect() as conn:

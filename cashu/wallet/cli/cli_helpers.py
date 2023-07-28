@@ -1,21 +1,9 @@
 import os
-import urllib.parse
-from typing import List
 
 import click
 from click import Context
 from loguru import logger
 
-from ...core.base import (
-    Proof,
-    TokenV1,
-    TokenV2,
-    TokenV2Mint,
-    TokenV3,
-    TokenV3Token,
-    WalletKeyset,
-)
-from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...wallet.crud import get_keyset
 from ...wallet.wallet import Wallet as Wallet
@@ -114,7 +102,7 @@ async def verify_mint(mint_wallet: Wallet, url: str):
         print(f"Mint URL: {url}")
         print("\n")
         click.confirm(
-            f"Do you trust this mint and want to receive the tokens?",
+            "Do you trust this mint and want to receive the tokens?",
             abort=True,
             default=True,
         )
