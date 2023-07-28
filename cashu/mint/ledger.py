@@ -942,7 +942,7 @@ class Ledger:
                 f"status: {status}, preimage: {preimage}, fee_msat: {fee_msat}"
             )
 
-            if status is True:
+            if status:
                 logger.trace("invalidating proofs")
                 await self._invalidate_proofs(proofs)
                 logger.trace("invalidated proofs")
