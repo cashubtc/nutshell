@@ -8,15 +8,17 @@ black:
 	poetry run black . --exclude cashu/nostr
 
 black-check:
-	poetry run black --check . --exclude cashu/nostr
-
-format:
-	make isort
-	make black
-	make mypy
+	poetry run black . --exclude cashu/nostr --check
 
 mypy:
 	poetry run mypy cashu --ignore-missing
+
+flake8:
+	poetry run flake8
+
+format: isort black
+
+check: mypy flake8 isort-check black-check
 
 clean:
 	rm -r cashu.egg-info/ || true

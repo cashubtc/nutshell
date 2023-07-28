@@ -1,5 +1,3 @@
-import pytest
-
 from cashu.core.crypto.b_dhke import (
     alice_verify_dleq,
     hash_e,

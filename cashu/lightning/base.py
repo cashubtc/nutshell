@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, Coroutine, NamedTuple, Optional
+from typing import Coroutine, NamedTuple, Optional
 
 
 class StatusResponse(NamedTuple):
@@ -34,14 +34,14 @@ class PaymentStatus(NamedTuple):
 
     @property
     def failed(self) -> bool:
-        return self.paid == False
+        return self.paid is False
 
     def __str__(self) -> str:
-        if self.paid == True:
+        if self.paid is True:
             return "settled"
-        elif self.paid == False:
+        elif self.paid is False:
             return "failed"
-        elif self.paid == None:
+        elif self.paid is None:
             return "still pending"
         else:
             return "unknown (should never happen)"

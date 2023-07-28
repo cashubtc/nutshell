@@ -87,7 +87,7 @@ def deserialize_token_from_string(token: str) -> TokenV3:
         try:
             tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
             token = serialize_TokenV2_to_TokenV3(tokenv2)
-        except:
+        except Exception:
             pass
 
     # V1Tokens (<0.7) (W3siaWQ...)
@@ -95,7 +95,7 @@ def deserialize_token_from_string(token: str) -> TokenV3:
         try:
             tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
             token = serialize_TokenV1_to_TokenV3(tokenv1)
-        except:
+        except Exception:
             pass
 
     # ----- receive token -----

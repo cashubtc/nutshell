@@ -66,7 +66,7 @@ def hash_to_curve(message: bytes) -> PublicKey:
         try:
             # will error if point does not lie on curve
             point = PublicKey(b"\x02" + _hash, raw=True)
-        except:
+        except Exception:
             msg_to_hash = _hash
     return point
 

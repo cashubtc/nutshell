@@ -5,7 +5,7 @@ from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
 from loguru import logger
 
-from ..core import bolt11, legacy
+from ..core import bolt11
 from ..core.base import (
     DLEQ,
     BlindedMessage,
@@ -68,7 +68,7 @@ class Ledger:
 
     async def load_used_proofs(self):
         """Load all used proofs from database."""
-        logger.trace(f"crud: loading used proofs")
+        logger.trace("crud: loading used proofs")
         proofs_used = await self.crud.get_proofs_used(db=self.db)
         logger.trace(f"crud: loaded {len(proofs_used)} used proofs")
         self.proofs_used = set(proofs_used)
@@ -128,7 +128,7 @@ class Ledger:
             generated from `self.derivation_path`. Defaults to True.
         """
         # load all past keysets from db
-        logger.trace(f"crud: loading keysets")
+        logger.trace("crud: loading keysets")
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
         logger.trace(f"crud: loaded {len(tmp_keysets)} keysets")
         # add keysets from db to current keysets
@@ -208,7 +208,7 @@ class Ledger:
 
     def _check_spendable(self, proof: Proof):
         """Checks whether the proof was already spent."""
-        return not proof.secret in self.proofs_used
+        return proof.secret not in self.proofs_used
 
     async def _check_pending(self, proofs: List[Proof]):
         """Checks whether the proof is still pending."""
@@ -259,7 +259,7 @@ class Ledger:
             secret = Secret.deserialize(proof.secret)
             logger.trace(f"proof.secret: {proof.secret}")
             logger.trace(f"secret: {secret}")
-        except Exception as e:
+        except Exception:
             # secret is not a spending condition so we treat is a normal secret
             return True
         if secret.kind == SecretKind.P2SH:
@@ -294,7 +294,7 @@ class Ledger:
         if secret.kind == SecretKind.P2PK:
             # check if locktime is in the past
             pubkeys = secret.get_p2pk_pubkey_from_secret()
-            assert len(set(pubkeys)) == len(pubkeys), f"pubkeys must be unique."
+            assert len(set(pubkeys)) == len(pubkeys), "pubkeys must be unique."
             logger.trace(f"pubkeys: {pubkeys}")
             # we will get an empty list if the locktime has passed and no refund pubkey is present
             if not pubkeys:
@@ -378,7 +378,7 @@ class Ledger:
                 pubkeys_per_proof.append(secret.get_p2pk_pubkey_from_secret())
                 # get signature threshold from secrets
                 n_sigs.append(secret.n_sigs)
-            except Exception as e:
+            except Exception:
                 # secret is not a spending condition so we treat is a normal secret
                 return True
         # for all proofs all pubkeys must be the same
@@ -621,10 +621,10 @@ class Ledger:
         proof_msgs = set([p.secret for p in proofs])
         self.proofs_used |= proof_msgs
         # store in db
-        logger.trace(f"crud: storing proofs")
+        logger.trace("crud: storing proofs")
         for p in proofs:
             await self.crud.invalidate_proof(proof=p, db=self.db)
-        logger.trace(f"crud: stored proofs")
+        logger.trace("crud: stored proofs")
 
     async def _set_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
@@ -650,7 +650,7 @@ class Ledger:
                     logger.trace(
                         f"crud: _set_proofs_pending proof {p.secret} set as pending"
                     )
-                except:
+                except Exception:
                     raise TransactionError("proofs already pending.")
 
     async def _unset_proofs_pending(
@@ -688,9 +688,9 @@ class Ledger:
         Raises:
             Exception: At least one of the proofs is in the pending table.
         """
-        logger.trace(f"crud: _validate_proofs_pending validating proofs")
+        logger.trace("crud: _validate_proofs_pending validating proofs")
         proofs_pending = await self.crud.get_proofs_pending(db=self.db, conn=conn)
-        logger.trace(f"crud: _validate_proofs_pending got proofs pending")
+        logger.trace("crud: _validate_proofs_pending got proofs pending")
         for p in proofs:
             for pp in proofs_pending:
                 if p.secret == pp.secret:
@@ -703,7 +703,8 @@ class Ledger:
 
         Args:
             proofs (List[Proof]): List of proofs to check.
-            outputs (Optional[List[BlindedMessage]], optional): List of outputs to check. Must be provided for /split but not for /melt. Defaults to None.
+            outputs (Optional[List[BlindedMessage]], optional): List of outputs to check.
+            Must be provided for /split but not for /melt. Defaults to None.
 
         Raises:
             Exception: Scripts did not validate.
@@ -823,7 +824,7 @@ class Ledger:
         Returns:
             Tuple[str, str]: Bolt11 invoice and a hash (for looking it up later)
         """
-        logger.trace(f"called request_mint")
+        logger.trace("called request_mint")
         if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
             raise NotAllowedError(
                 f"Maximum mint amount is {settings.mint_max_peg_in} sat."
@@ -950,8 +951,8 @@ class Ledger:
                 f"status: {status}, preimage: {preimage}, fee_msat: {fee_msat}"
             )
 
-            if status == True:
-                logger.trace(f"invalidating proofs")
+            if status:
+                logger.trace("invalidating proofs")
                 await self._invalidate_proofs(proofs)
                 logger.trace("invalidated proofs")
                 # prepare change to compensate wallet for overpaid fees
@@ -1017,7 +1018,7 @@ class Ledger:
             )
             paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
             logger.trace(f"check_fees: paid: {paid}")
-            internal = paid.paid == False
+            internal = paid.paid is False
         else:
             amount = 0
             internal = True
@@ -1048,14 +1049,14 @@ class Ledger:
         Returns:
             Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
         """
-        logger.trace(f"split called")
+        logger.trace("split called")
 
         await self._set_proofs_pending(proofs)
 
         total_amount = sum_proofs(proofs)
 
         try:
-            logger.trace(f"verifying _verify_split_amount")
+            logger.trace("verifying _verify_split_amount")
             # verify that amount is kosher
             self._verify_amount(total_amount)
 
@@ -1064,11 +1065,11 @@ class Ledger:
 
             logger.trace("verifying proofs: _verify_proofs_and_outputs")
             await self._verify_proofs_and_outputs(proofs, outputs)
-            logger.trace(f"verified proofs and outputs")
+            logger.trace("verified proofs and outputs")
             # Mark proofs as used and prepare new promises
-            logger.trace(f"invalidating proofs")
+            logger.trace("invalidating proofs")
             await self._invalidate_proofs(proofs)
-            logger.trace(f"invalidated proofs")
+            logger.trace("invalidated proofs")
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
@@ -1100,7 +1101,7 @@ class Ledger:
         # verify amounts in produced promises
         self._verify_equation_balanced(proofs, promises)
 
-        logger.trace(f"split successful")
+        logger.trace("split successful")
         return promises
         return prom_fst, prom_snd
 

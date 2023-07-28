@@ -8,10 +8,8 @@ from fastapi.responses import JSONResponse
 # from fastapi_profiler import PyInstrumentProfilerMiddleware
 from loguru import logger
 from starlette.middleware import Middleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
 
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -40,7 +38,10 @@ def create_app(config_object="core.settings") -> FastAPI:
                 self.padding = 0
                 self.minimal_fmt: str = "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level}</level> | <level>{message}</level>\n"
                 if settings.debug:
-                    self.fmt: str = "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level: <4}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>\n"
+                    self.fmt: str = (
+                        "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level: <4}</level> | <cyan>{name}</cyan>:<cyan>"
+                        "{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>\n"
+                    )
                 else:
                     self.fmt: str = self.minimal_fmt
 
@@ -113,7 +114,7 @@ async def catch_exceptions(request: Request, call_next):
     except Exception as e:
         try:
             err_message = str(e)
-        except:
+        except Exception:
             err_message = e.args[0] if e.args else "Unknown error"
 
         if isinstance(e, CashuError):

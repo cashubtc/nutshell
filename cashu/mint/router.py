@@ -1,11 +1,9 @@
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 from fastapi import APIRouter
 from loguru import logger
-from secp256k1 import PublicKey
 
 from ..core.base import (
-    BlindedMessage,
     BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
@@ -39,7 +37,7 @@ router: APIRouter = APIRouter()
     response_model_exclude_none=True,
 )
 async def info() -> GetInfoResponse:
-    logger.trace(f"> GET /info")
+    logger.trace("> GET /info")
     return GetInfoResponse(
         name=settings.mint_info_name,
         pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
@@ -66,7 +64,7 @@ async def info() -> GetInfoResponse:
 )
 async def keys():
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
-    logger.trace(f"> GET /keys")
+    logger.trace("> GET /keys")
     keyset = ledger.get_keyset()
     keys = KeysResponse.parse_obj(keyset)
     return keys.__root__
@@ -101,7 +99,7 @@ async def keyset_keys(idBase64Urlsafe: str):
 )
 async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
-    logger.trace(f"> GET /keysets")
+    logger.trace("> GET /keysets")
     keysets = KeysetsResponse(keysets=ledger.keysets.get_ids())
     return keysets
 
@@ -187,7 +185,10 @@ async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     name="Check proof state",
     summary="Check whether a proof is spent already or is pending in a transaction",
     response_model=CheckSpendableResponse,
-    response_description="Two lists of booleans indicating whether the provided proofs are spendable or pending in a transaction respectively.",
+    response_description=(
+        "Two lists of booleans indicating whether the provided proofs "
+        "are spendable or pending in a transaction respectively."
+    ),
 )
 async def check_spendable(
     payload: CheckSpendableRequest,
@@ -223,7 +224,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     "/split",
     name="Split",
     summary="Split proofs at a specified amount",
-    response_model=PostSplitResponse,
+    response_model=Union[PostSplitResponse, PostSplitResponse_Deprecated],
     response_description="A list of blinded signatures that can be used to create proofs.",
 )
 async def split(
@@ -258,7 +259,8 @@ async def split(
             else:
                 frst_promises.insert(0, promise)  # and insert at the beginning
         logger.trace(
-            f"Split into keep: {len(frst_promises)}: {sum([p.amount for p in frst_promises])} sat and send: {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
+            f"Split into keep: {len(frst_promises)}: {sum([p.amount for p in frst_promises])} "
+            f"sat and send: {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
         )
         return PostSplitResponse_Deprecated(fst=frst_promises, snd=scnd_promises)
         # END backwards compatibility < 0.13
@@ -271,7 +273,10 @@ async def split(
     name="Restore",
     summary="Restores a blinded signature from a secret",
     response_model=PostRestoreResponse,
-    response_description="Two lists with the first being the list of the provided outputs that have an associated blinded signature which is given in the second list.",
+    response_description=(
+        "Two lists with the first being the list of the provided outputs that "
+        "have an associated blinded signature which is given in the second list."
+    ),
 )
 async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")

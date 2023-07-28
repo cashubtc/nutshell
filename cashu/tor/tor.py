@@ -91,7 +91,7 @@ class TorProxy:
         try:
             logger.debug(f"Setting permissions of {PATHS[platform.system()]} to 755")
             os.chmod(PATHS[platform.system()], 0o755)
-        except:
+        except Exception:
             logger.debug("Exception: could not set permissions of Tor binary")
         return PATHS[platform.system()]
 
@@ -138,7 +138,7 @@ class TorProxy:
             s.connect(location)
             s.close()
             return True
-        except Exception as e:
+        except Exception:
             return False
 
     def read_pid(self):
@@ -163,7 +163,7 @@ class TorProxy:
         pid = int(pid)
         try:
             os.kill(pid, signal)
-        except:
+        except Exception:
             return False
         else:
             return True
