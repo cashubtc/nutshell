@@ -136,7 +136,7 @@ def alice_verify_dleq(e: bytes, s: bytes, K: PublicKey, B_: bytes, C_: bytes):
     return e == hash_e(R1, R2, K, ck)
 
 
-### Below is a test of a simple positive and negative case
+# Below is a test of a simple positive and negative case
 
 # # Alice's keys
 # a = PrivateKey()
