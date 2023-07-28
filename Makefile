@@ -11,10 +11,10 @@ black-check:
 	poetry run black . --exclude cashu/nostr --check
 
 mypy:
-	poetry run mypy cashu --ignore-missing
+	poetry run mypy cashu tests --ignore-missing
 
 flake8:
-	poetry run flake8 cashu
+	poetry run flake8 cashu tests
 
 format: isort black
 
