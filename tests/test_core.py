@@ -45,7 +45,7 @@ def test_tokenv3_deserialize_serialize():
         "NzIyMWY0OTYxY2UzZjIzIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV19"
     )
     token = TokenV3.deserialize(token_str)
-    assert token.serialize(include_dleq=True) == token_str
+    assert token.serialize() == token_str
 
 
 def test_tokenv3_deserialize_serialize_no_dleq():
