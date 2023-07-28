@@ -24,7 +24,7 @@ async def init_wallet():
     return wallet
 
 
-@pytest.mark.asyncio
+
 def test_info(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -38,7 +38,7 @@ def test_info(cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.asyncio
+
 def test_info_with_mint(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -52,7 +52,7 @@ def test_info_with_mint(cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.asyncio
+
 def test_info_with_mnemonic(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -66,7 +66,7 @@ def test_info_with_mnemonic(cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.asyncio
+
 def test_balance(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -81,7 +81,7 @@ def test_balance(cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.asyncio
+
 def test_invoice(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -97,7 +97,7 @@ def test_invoice(mint, cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.asyncio
+
 def test_invoice_with_split(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -109,7 +109,7 @@ def test_invoice_with_split(mint, cli_prefix):
     # assert wallet.proof_amounts.count(1) >= 10
 
 
-@pytest.mark.asyncio
+
 def test_wallets(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -124,7 +124,7 @@ def test_wallets(cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.asyncio
+
 def test_send(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -139,7 +139,7 @@ def test_send(mint, cli_prefix):
     assert token.token[0].proofs[0].dleq is None, "dleq included"
 
 
-@pytest.mark.asyncio
+
 def test_send_with_dleq(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -154,7 +154,7 @@ def test_send_with_dleq(mint, cli_prefix):
     assert token.token[0].proofs[0].dleq is not None, "no dleq included"
 
 
-@pytest.mark.asyncio
+
 def test_send_legacy(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -168,7 +168,7 @@ def test_send_legacy(mint, cli_prefix):
     assert token_str.startswith("eyJwcm9v"), "output is not as expected"
 
 
-@pytest.mark.asyncio
+
 def test_send_without_split(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -181,7 +181,7 @@ def test_send_without_split(mint, cli_prefix):
     assert "cashuA" in result.output, "output does not have a token"
 
 
-@pytest.mark.asyncio
+
 def test_send_without_split_but_wrong_amount(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -191,7 +191,7 @@ def test_send_without_split_but_wrong_amount(mint, cli_prefix):
     assert "No proof with this amount found" in str(result.exception)
 
 
-@pytest.mark.asyncio
+
 def test_receive_tokenv3(mint, cli_prefix):
     runner = CliRunner()
     token = (
@@ -213,7 +213,7 @@ def test_receive_tokenv3(mint, cli_prefix):
     print(result.output)
 
 
-@pytest.mark.asyncio
+
 def test_receive_tokenv3_no_mint(mint, cli_prefix):
     # this test works only if the previous test succeeds because we simulate the case where the mint URL is not in the token
     # therefore, we need to know the mint keyset already and have the mint URL in the db
@@ -237,7 +237,7 @@ def test_receive_tokenv3_no_mint(mint, cli_prefix):
     print(result.output)
 
 
-@pytest.mark.asyncio
+
 def test_receive_tokenv2(mint, cli_prefix):
     runner = CliRunner()
     token = (
@@ -255,7 +255,7 @@ def test_receive_tokenv2(mint, cli_prefix):
     print(result.output)
 
 
-@pytest.mark.asyncio
+
 def test_receive_tokenv1(mint, cli_prefix):
     runner = CliRunner()
     token = (
@@ -272,7 +272,7 @@ def test_receive_tokenv1(mint, cli_prefix):
     print(result.output)
 
 
-@pytest.mark.asyncio()
+()
 def test_nostr_send(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -291,7 +291,7 @@ def test_nostr_send(mint, cli_prefix):
     print(result.output)
 
 
-@pytest.mark.asyncio
+
 def test_pending(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
