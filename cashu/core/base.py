@@ -476,7 +476,7 @@ class MintKeyset:
 
     def __init__(
         self,
-        id=None,
+        id="",
         valid_from=None,
         valid_to=None,
         first_seen=None,

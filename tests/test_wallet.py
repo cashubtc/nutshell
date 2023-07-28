@@ -93,8 +93,7 @@ async def test_get_keys(wallet1: Wallet):
     assert wallet1.keys.public_keys
     assert len(wallet1.keys.public_keys) == settings.max_order
     keyset = await wallet1._get_keys(wallet1.url)
-    assert keyset.id is not None
-    assert type(keyset.id) == str
+    assert keyset.id
     assert len(keyset.id) > 0
 
 
