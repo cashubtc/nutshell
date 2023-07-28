@@ -93,6 +93,7 @@ class WalletSettings(CashuSettings):
             "wss://nostr.zebedee.cloud",
             "wss://relay.snort.social",
             "wss://nostr.fmt.wiz.biz",
+            "wss://soloco.nl",
         ]
     )
 
