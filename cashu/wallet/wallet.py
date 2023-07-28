@@ -1152,7 +1152,7 @@ class Wallet(LedgerAPI):
 
         status = await super().pay_lightning(proofs, invoice, outputs)
 
-        if status.paid is True:
+        if status.paid:
             # the payment was successful
             await self.invalidate(proofs)
             invoice_obj = Invoice(
