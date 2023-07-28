@@ -14,11 +14,11 @@ mypy:
 	poetry run mypy cashu --ignore-missing
 
 flake8:
-	poetry run flake8
+	poetry run flake8 cashu
 
 format: isort black
 
-check: mypy flake8 isort-check black-check
+check: isort-check black-check flake8 mypy
 
 clean:
 	rm -r cashu.egg-info/ || true
