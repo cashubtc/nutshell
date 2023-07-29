@@ -161,8 +161,6 @@ class DLEQ(BaseModel):
 
     e: str
     s: str
-    B_: str
-    C_: str
 
 
 class Proof(BaseModel):

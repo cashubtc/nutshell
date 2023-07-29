@@ -202,7 +202,7 @@ class Ledger:
             amount=amount,
             C_=C_.serialize().hex(),
             dleq=DLEQ(
-                e=e.hex(), s=s.hex(), B_=B_.serialize().hex(), C_=C_.serialize().hex()
+                e=e.hex(), s=s.hex()
             ),
         )
 
