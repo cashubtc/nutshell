@@ -24,7 +24,6 @@ async def init_wallet():
     return wallet
 
 
-
 def test_info(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -36,7 +35,6 @@ def test_info(cli_prefix):
     print(result.output)
     result.output.startswith(f"Version: {settings.version}")
     assert result.exit_code == 0
-
 
 
 def test_info_with_mint(cli_prefix):
@@ -52,7 +50,6 @@ def test_info_with_mint(cli_prefix):
     assert result.exit_code == 0
 
 
-
 def test_info_with_mnemonic(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -64,7 +61,6 @@ def test_info_with_mnemonic(cli_prefix):
     print(result.output)
     assert "Mnemonic" in result.output
     assert result.exit_code == 0
-
 
 
 def test_balance(cli_prefix):
@@ -79,7 +75,6 @@ def test_balance(cli_prefix):
     w = asyncio.run(init_wallet())
     assert f"Balance: {w.available_balance} sat" in result.output
     assert result.exit_code == 0
-
 
 
 def test_invoice(mint, cli_prefix):
@@ -97,7 +92,6 @@ def test_invoice(mint, cli_prefix):
     assert result.exit_code == 0
 
 
-
 def test_invoice_with_split(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -107,7 +101,6 @@ def test_invoice_with_split(mint, cli_prefix):
     assert result.exception is None
     # wallet = asyncio.run(init_wallet())
     # assert wallet.proof_amounts.count(1) >= 10
-
 
 
 def test_wallets(cli_prefix):
@@ -124,7 +117,6 @@ def test_wallets(cli_prefix):
     assert result.exit_code == 0
 
 
-
 def test_send(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -137,7 +129,6 @@ def test_send(mint, cli_prefix):
     assert "cashuA" in token_str, "output does not have a token"
     token = TokenV3.deserialize(token_str)
     assert token.token[0].proofs[0].dleq is None, "dleq included"
-
 
 
 def test_send_with_dleq(mint, cli_prefix):
@@ -154,7 +145,6 @@ def test_send_with_dleq(mint, cli_prefix):
     assert token.token[0].proofs[0].dleq is not None, "no dleq included"
 
 
-
 def test_send_legacy(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -166,7 +156,6 @@ def test_send_legacy(mint, cli_prefix):
     # this is the legacy token in the output
     token_str = result.output.split("\n")[4]
     assert token_str.startswith("eyJwcm9v"), "output is not as expected"
-
 
 
 def test_send_without_split(mint, cli_prefix):
@@ -181,7 +170,6 @@ def test_send_without_split(mint, cli_prefix):
     assert "cashuA" in result.output, "output does not have a token"
 
 
-
 def test_send_without_split_but_wrong_amount(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -189,7 +177,6 @@ def test_send_without_split_but_wrong_amount(mint, cli_prefix):
         [*cli_prefix, "send", "10", "--nosplit"],
     )
     assert "No proof with this amount found" in str(result.exception)
-
 
 
 def test_receive_tokenv3(mint, cli_prefix):
@@ -211,7 +198,6 @@ def test_receive_tokenv3(mint, cli_prefix):
     assert result.exception is None
     print("RECEIVE")
     print(result.output)
-
 
 
 def test_receive_tokenv3_no_mint(mint, cli_prefix):
@@ -237,7 +223,6 @@ def test_receive_tokenv3_no_mint(mint, cli_prefix):
     print(result.output)
 
 
-
 def test_receive_tokenv2(mint, cli_prefix):
     runner = CliRunner()
     token = (
@@ -253,7 +238,6 @@ def test_receive_tokenv2(mint, cli_prefix):
     assert result.exception is None
     print("RECEIVE")
     print(result.output)
-
 
 
 def test_receive_tokenv1(mint, cli_prefix):
@@ -273,6 +257,8 @@ def test_receive_tokenv1(mint, cli_prefix):
 
 
 ()
+
+
 def test_nostr_send(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -289,7 +275,6 @@ def test_nostr_send(mint, cli_prefix):
     assert result.exception is None
     print("NOSTR_SEND")
     print(result.output)
-
 
 
 def test_pending(cli_prefix):

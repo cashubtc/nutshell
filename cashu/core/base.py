@@ -163,6 +163,18 @@ class DLEQ(BaseModel):
     s: str
 
 
+class DLEQWallet(BaseModel):
+    """
+    Discrete Log Equality (DLEQ) Proof
+    """
+
+    e: str
+    s: str
+    r: str  # blinding_factor, unknown to mint but sent from wallet to wallet for DLEQ proof
+    # B_: Union[str, None] = None  # blinded message, sent to the mint by the wallet
+    # C_: Union[str, None] = None  # blinded signature, received by the mint
+
+
 class Proof(BaseModel):
     """
     Value token
@@ -171,10 +183,12 @@ class Proof(BaseModel):
     id: Union[
         None, str
     ] = ""  # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
+
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
-    dleq: Union[DLEQ, None] = None  # DLEQ proof
+    dleq: Union[DLEQWallet, None] = None  # DLEQ proof
+
     p2pksigs: Union[List[str], None] = []  # P2PK signature
     p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
     reserved: Union[
@@ -193,6 +207,7 @@ class Proof(BaseModel):
             return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
         assert self.dleq, "DLEQ proof is missing"
+        print(self.dleq)
         return dict(
             id=self.id,
             amount=self.amount,

@@ -80,7 +80,7 @@ def step1_alice(
     return B_, r
 
 
-def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, bytes, bytes]:
+def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, PrivateKey]:
     C_: PublicKey = B_.mult(a)  # type: ignore
     # produce dleq proof
     e, s = step2_bob_dleq(B_, a)
@@ -97,7 +97,7 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     return C == Y.mult(a)  # type: ignore
 
 
-def hash_e(R1: PublicKey, R2: PublicKey, K: PublicKey, C_: PublicKey):
+def hash_e(R1: PublicKey, R2: PublicKey, K: PublicKey, C_: PublicKey) -> bytes:
     _R1 = R1.serialize(compressed=False).hex()
     _R2 = R2.serialize(compressed=False).hex()
     _K = K.serialize(compressed=False).hex()
@@ -107,7 +107,9 @@ def hash_e(R1: PublicKey, R2: PublicKey, K: PublicKey, C_: PublicKey):
     return e
 
 
-def step2_bob_dleq(B_: PublicKey, a: PrivateKey, p_bytes: bytes = b""):
+def step2_bob_dleq(
+    B_: PublicKey, a: PrivateKey, p_bytes: bytes = b""
+) -> Tuple[PrivateKey, PrivateKey]:
     if p_bytes:
         # deterministic p for testing
         p = PrivateKey(privkey=p_bytes, raw=True)
@@ -117,23 +119,42 @@ def step2_bob_dleq(B_: PublicKey, a: PrivateKey, p_bytes: bytes = b""):
 
     R1 = p.pubkey  # R1 = pG
     assert R1
-    R2 = B_.mult(p)  # R2 = pB_ # type: ignore
-    C_ = B_.mult(a)  # C_ = aB_ # type: ignore
-    K = a.pubkey
-    assert K
-    e = hash_e(R1, R2, K, C_)  # e = hash(R1, R2, K, C_)
+    R2: PublicKey = B_.mult(p)  # R2 = pB_ # type: ignore
+    C_: PublicKey = B_.mult(a)  # C_ = aB_ # type: ignore
+    A = a.pubkey
+    assert A
+    e = hash_e(R1, R2, A, C_)  # e = hash(R1, R2, A, C_)
     s = p.tweak_add(a.tweak_mul(e))  # s = p + ek
-    return e, s
-
-
-def alice_verify_dleq(e: bytes, s: bytes, K: PublicKey, B_: bytes, C_: bytes):
-    epk = PrivateKey(e, raw=True)
     spk = PrivateKey(s, raw=True)
-    bk = PublicKey(B_, raw=True)
-    ck = PublicKey(C_, raw=True)
-    R1 = spk.pubkey - K.mult(epk)  # type: ignore
-    R2 = bk.mult(spk) - ck.mult(epk)  # type: ignore
-    return e == hash_e(R1, R2, K, ck)
+    epk = PrivateKey(e, raw=True)
+    return epk, spk
+
+
+def alice_verify_dleq(
+    e: PrivateKey, s: PrivateKey, A: PublicKey, B_: PublicKey, C_: PublicKey
+):
+    R1 = s.pubkey - A.mult(e)  # type: ignore
+    R2 = B_.mult(s) - C_.mult(e)  # type: ignore
+    e_bytes = e.private_key
+    return e_bytes == hash_e(R1, R2, A, C_)
+
+
+def carol_verify_dleq(
+    secret_msg: str,
+    r: PrivateKey,
+    C: PublicKey,
+    e: PrivateKey,
+    s: PrivateKey,
+    A: PublicKey,
+):
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    C_: PublicKey = C + A.mult(r)  # type: ignore
+    B_: PublicKey = Y + r.pubkey  # type: ignore
+    return alice_verify_dleq(e, s, A, B_, C_)
+    # R1 = s.pubkey - A.mult(e)  # type: ignore
+    # R2 = B_.mult(s) - C_.mult(e)  # type: ignore
+    # e_bytes = e.private_key
+    # return e_bytes == hash_e(R1, R2, A, C_)
 
 
 # Below is a test of a simple positive and negative case

@@ -191,8 +191,8 @@ class Ledger:
             amount=amount,
             B_=B_.serialize().hex(),
             C_=C_.serialize().hex(),
-            e=e.hex(),
-            s=s.hex(),
+            e=e.serialize(),
+            s=s.serialize(),
             db=self.db,
             id=keyset.id,
         )
@@ -201,9 +201,7 @@ class Ledger:
             id=keyset.id,
             amount=amount,
             C_=C_.serialize().hex(),
-            dleq=DLEQ(
-                e=e.hex(), s=s.hex()
-            ),
+            dleq=DLEQ(e=e.serialize(), s=s.serialize()),
         )
 
     def _check_spendable(self, proof: Proof):

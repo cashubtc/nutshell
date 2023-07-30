@@ -22,6 +22,7 @@ from ..core.base import (
     CheckFeesRequest,
     CheckSpendableRequest,
     CheckSpendableResponse,
+    DLEQWallet,
     GetInfoResponse,
     GetMeltResponse,
     GetMintResponse,
@@ -148,12 +149,21 @@ class LedgerAPI(object):
                 return
             logger.debug("Verifying DLEQ proof.")
             assert self.keys.public_keys
-            if not b_dhke.alice_verify_dleq(
-                bytes.fromhex(proof.dleq.e),
-                bytes.fromhex(proof.dleq.s),
-                self.keys.public_keys[proof.amount],
-                bytes.fromhex(proof.dleq.B_),
-                bytes.fromhex(proof.dleq.C_),
+            # if not b_dhke.alice_verify_dleq(
+            #     e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
+            #     s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
+            #     A=self.keys.public_keys[proof.amount],
+            #     B_=PublicKey(bytes.fromhex(proof.B_), raw=True),
+            #     C_=PublicKey(bytes.fromhex(proof.C_), raw=True),
+            # ):
+            #     raise Exception("Alice: DLEQ proof invalid.")
+            if not b_dhke.carol_verify_dleq(
+                secret_msg=proof.secret,
+                C=PublicKey(bytes.fromhex(proof.C), raw=True),
+                r=PrivateKey(bytes.fromhex(proof.dleq.r), raw=True),
+                e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
+                s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
+                A=self.keys.public_keys[proof.amount],
             ):
                 raise Exception("DLEQ proof invalid.")
 
@@ -188,17 +198,22 @@ class LedgerAPI(object):
 
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
+            B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
 
             proof = Proof(
                 id=promise.id,
                 amount=promise.amount,
                 C=C.serialize().hex(),
                 secret=secret,
-                dleq=promise.dleq,
                 derivation_path=path,
             )
-            if proof.dleq:
-                proof.dleq.C_ = promise.C_
+
+            # if the mint returned a dleq proof, we add it to the proof
+            if promise.dleq:
+                proof.dleq = DLEQWallet(
+                    e=promise.dleq.e, s=promise.dleq.s, r=r.serialize()
+                )
+
             proofs.append(proof)
 
             logger.trace(
