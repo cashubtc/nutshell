@@ -146,8 +146,9 @@ class LedgerAPI(object):
         """Verifies DLEQ proofs in proofs."""
         for proof in proofs:
             if not proof.dleq:
+                logger.trace("No DLEQ proof in proof.")
                 return
-            logger.debug("Verifying DLEQ proof.")
+            logger.trace("Verifying DLEQ proof.")
             assert self.keys.public_keys
             # if not b_dhke.alice_verify_dleq(
             #     e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
@@ -166,6 +167,8 @@ class LedgerAPI(object):
                 A=self.keys.public_keys[proof.amount],
             ):
                 raise Exception("DLEQ proof invalid.")
+            else:
+                logger.debug("DLEQ proof valid.")
 
     def _construct_proofs(
         self,

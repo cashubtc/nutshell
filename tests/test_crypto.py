@@ -251,7 +251,7 @@ def test_dleq_alice_verify_dleq():
         raw=True,
     )
 
-    assert alice_verify_dleq(e, s, A, B_, C_)
+    assert alice_verify_dleq(B_, C_, e, s, A)
 
 
 def test_dleq_alice_direct_verify_dleq():
@@ -274,7 +274,7 @@ def test_dleq_alice_direct_verify_dleq():
         ),
     )
     C_, e, s = step2_bob(B_, a)
-    assert alice_verify_dleq(e, s, A, B_, C_)
+    assert alice_verify_dleq(B_, C_, e, s, A)
 
 
 def test_dleq_carol_varify_from_bob():
@@ -295,7 +295,7 @@ def test_dleq_carol_varify_from_bob():
     )
     B_, _ = step1_alice(secret_msg, r)
     C_, e, s = step2_bob(B_, a)
-    assert alice_verify_dleq(e, s, A, B_, C_)
+    assert alice_verify_dleq(B_, C_, e, s, A)
     C = step3_alice(C_, r, A)
 
     # carol does not know B_ and C_, but she receives C and r from Alice

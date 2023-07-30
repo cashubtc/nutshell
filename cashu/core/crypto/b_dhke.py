@@ -131,7 +131,7 @@ def step2_bob_dleq(
 
 
 def alice_verify_dleq(
-    e: PrivateKey, s: PrivateKey, A: PublicKey, B_: PublicKey, C_: PublicKey
+    B_: PublicKey, C_: PublicKey, e: PrivateKey, s: PrivateKey, A: PublicKey
 ):
     R1 = s.pubkey - A.mult(e)  # type: ignore
     R2 = B_.mult(s) - C_.mult(e)  # type: ignore
@@ -150,11 +150,7 @@ def carol_verify_dleq(
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     C_: PublicKey = C + A.mult(r)  # type: ignore
     B_: PublicKey = Y + r.pubkey  # type: ignore
-    return alice_verify_dleq(e, s, A, B_, C_)
-    # R1 = s.pubkey - A.mult(e)  # type: ignore
-    # R2 = B_.mult(s) - C_.mult(e)  # type: ignore
-    # e_bytes = e.private_key
-    # return e_bytes == hash_e(R1, R2, A, C_)
+    return alice_verify_dleq(B_, C_, e, s, A)
 
 
 # Below is a test of a simple positive and negative case
