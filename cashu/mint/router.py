@@ -21,6 +21,8 @@ from ..core.base import (
     PostSplitRequest,
     PostSplitResponse,
     PostSplitResponse_Deprecated,
+    PostStampRequest, 
+    PostStampResponse
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -282,3 +284,15 @@ async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, promises = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, promises=promises)
+
+@router.post(
+    "/stamp",
+    name="Stamp",
+    summary="Request signatures on proofs",
+    response_model=PostStampResponse,
+    response_description=("List of signatures on proofs."),
+)
+async def stamp(payload: PostStampRequest) -> PostStampResponse:
+    assert payload.proofs, Exception("no proofs provided")
+    signatures = await ledger.stamp(payload.proofs)
+    return PostStampResponse(sigs=signatures)

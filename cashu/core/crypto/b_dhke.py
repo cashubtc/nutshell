@@ -108,7 +108,7 @@ def stamp_step2_alice_verify(
     R1 = s.pubkey - A.mult(e)  # type: ignore
     e_bytes = e.private_key
     return e_bytes == hash_e(R1, Y, C, A)
-
+ 
 # Below is a test of a simple positive and negative case
 
 # # Alice's keys

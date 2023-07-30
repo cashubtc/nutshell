@@ -33,6 +33,8 @@ from ..core.base import (
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
+    PostStampRequest,
+    PostStampResponse,
     Proof,
     Secret,
     SecretKind,
@@ -608,6 +610,29 @@ class LedgerAPI(object):
         returnObj = PostRestoreResponse.parse_obj(reponse_dict)
         return returnObj.outputs, returnObj.promises
 
+    @async_set_requests
+    async def get_proofs_stamps(self, proofs: List[Proof]):
+        """
+        Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
+        """
+        payload = PostStampRequest(proofs=proofs)
+
+        def _get_proofs_stamps_include_fields(proofs):
+            """strips away fields from the model that aren't necessary for this endpoint"""
+            proofs_include = {"id", "amount", "secret", "C"}
+            return {
+                "proofs": {i: proofs_include for i in range(len(proofs))},
+            }
+
+        resp = self.s.post(
+            self.url + "/stamp",
+            json=payload.dict(include=_get_proofs_stamps_include_fields(proofs)),  # type: ignore
+        )
+        self.raise_on_error(resp)
+
+        return_dict = resp.json()
+        stamps = PostStampResponse.parse_obj(return_dict)
+        return stamps
 
 class Wallet(LedgerAPI):
     """Minimal wallet wrapper."""
@@ -1184,6 +1209,9 @@ class Wallet(LedgerAPI):
 
     async def check_proof_state(self, proofs):
         return await super().check_proof_state(proofs)
+    
+    async def get_proofs_stamps(self, proofs):
+        return await super().get_proofs_stamps(proofs)    
 
     # ---------- TOKEN MECHANIS ----------
 
