@@ -207,7 +207,6 @@ class Proof(BaseModel):
             return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
         assert self.dleq, "DLEQ proof is missing"
-        print(self.dleq)
         return dict(
             id=self.id,
             amount=self.amount,
