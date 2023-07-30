@@ -594,6 +594,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     await wallet3.invalidate(wallet3.proofs)
     assert wallet3.balance == 64
 
+
 @pytest.mark.asyncio
 async def test_stamp_proofs(wallet1: Wallet):
     await wallet1.mint(17)

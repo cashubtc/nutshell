@@ -634,6 +634,7 @@ class LedgerAPI(object):
         stamps = PostStampResponse.parse_obj(return_dict)
         return stamps
 
+
 class Wallet(LedgerAPI):
     """Minimal wallet wrapper."""
 
@@ -1209,9 +1210,9 @@ class Wallet(LedgerAPI):
 
     async def check_proof_state(self, proofs):
         return await super().check_proof_state(proofs)
-    
+
     async def get_proofs_stamps(self, proofs):
-        return await super().get_proofs_stamps(proofs)    
+        return await super().get_proofs_stamps(proofs)
 
     # ---------- TOKEN MECHANIS ----------
 

@@ -1120,9 +1120,7 @@ class Ledger:
                     logger.trace(f"promise found: {promise}")
         return return_outputs, promises
 
-    async def stamp(
-            self, proofs: List[Proof]
-    ) -> List[StampSignature]:
+    async def stamp(self, proofs: List[Proof]) -> List[StampSignature]:
         signatures: List[StampSignature] = []
         proof_is_valid: List[bool]
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
@@ -1132,6 +1130,10 @@ class Ledger:
             private_key_amount = self.keysets.keysets[proof.id].private_keys[
                 proof.amount
             ]
-            e, s = b_dhke.stamp_step1_bob(secret_msg=proof.secret, C=PublicKey(bytes.fromhex(proof.C), raw=True), a=private_key_amount)
+            e, s = b_dhke.stamp_step1_bob(
+                secret_msg=proof.secret,
+                C=PublicKey(bytes.fromhex(proof.C), raw=True),
+                a=private_key_amount,
+            )
             signatures.append(StampSignature(e=e.serialize(), s=s.serialize()))
         return signatures

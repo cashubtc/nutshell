@@ -73,7 +73,9 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     return C == Y.mult(a)  # type: ignore
 
+
 # stamps
+
 
 def hash_e(*args) -> bytes:
     e_ = ""
@@ -82,6 +84,7 @@ def hash_e(*args) -> bytes:
         e_ += pk.serialize(compressed=False).hex()
     e = hashlib.sha256(e_.encode("utf-8")).digest()
     return e
+
 
 def stamp_step1_bob(
     secret_msg: str, C: PublicKey, a: PrivateKey, p_bytes: bytes = b""
@@ -92,23 +95,30 @@ def stamp_step1_bob(
     else:
         # normally, we generate a random p
         p = PrivateKey()
-    R1 = p.pubkey  # R1 = pG
+    assert p.pubkey
+    R1: PublicKey = p.pubkey  # R1 = pG
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    A = a.pubkey
-    e = hash_e(R1, Y, C, A)
-    s = p.tweak_add(a.tweak_mul(e))  # s = p + ek
+    R2: PublicKey = Y.mult(p)  # type: ignore # R2 = pY
+    print(R1.serialize().hex(), R2.serialize().hex())
+    e = hash_e(R1, R2, Y, C)
+    s = p.tweak_add(a.tweak_mul(e))  # s = p + ea
     spk = PrivateKey(s, raw=True)
     epk = PrivateKey(e, raw=True)
     return epk, spk
 
+
 def stamp_step2_alice_verify(
-        secret_msg: str, C: PublicKey, s: PrivateKey, e: PrivateKey, A: PublicKey
+    secret_msg: str, C: PublicKey, s: PrivateKey, e: PrivateKey, A: PublicKey
 ) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    R1 = s.pubkey - A.mult(e)  # type: ignore
+    assert s.pubkey
+    R1: PublicKey = s.pubkey - A.mult(e)  # type: ignore # R1 = sG - eA
+    R2: PublicKey = Y.mult(s) - C.mult(e)  # type: ignore # R2 = sY - eC
+    print(R1.serialize().hex(), R2.serialize().hex())
     e_bytes = e.private_key
-    return e_bytes == hash_e(R1, Y, C, A)
- 
+    return e_bytes == hash_e(R1, R2, Y, C)
+
+
 # Below is a test of a simple positive and negative case
 
 # # Alice's keys

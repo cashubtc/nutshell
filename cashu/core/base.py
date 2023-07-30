@@ -362,15 +362,19 @@ class PostRestoreResponse(BaseModel):
 
 # ------- API: STAMP -------
 
+
 class StampSignature(BaseModel):
     e: str
     s: str
 
+
 class PostStampRequest(BaseModel):
     proofs: List[Proof]
 
+
 class PostStampResponse(BaseModel):
     sigs: List[StampSignature]
+
 
 # ------- KEYSETS -------
 

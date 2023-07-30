@@ -21,8 +21,8 @@ from ..core.base import (
     PostSplitRequest,
     PostSplitResponse,
     PostSplitResponse_Deprecated,
-    PostStampRequest, 
-    PostStampResponse
+    PostStampRequest,
+    PostStampResponse,
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -284,6 +284,7 @@ async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, promises = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, promises=promises)
+
 
 @router.post(
     "/stamp",
