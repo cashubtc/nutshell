@@ -31,7 +31,7 @@ If true, C must have originated from Bob
 """
 
 import hashlib
-from typing import Optional
+from typing import Optional, Tuple
 
 from secp256k1 import PrivateKey, PublicKey
 
@@ -73,6 +73,41 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     return C == Y.mult(a)  # type: ignore
 
+# stamps
+
+def hash_e(*args) -> bytes:
+    e_ = ""
+    for pk in args:
+        assert isinstance(pk, PublicKey), "object is not of type PublicKey"
+        e_ += pk.serialize(compressed=False).hex()
+    e = hashlib.sha256(e_.encode("utf-8")).digest()
+    return e
+
+def stamp_step1_bob(
+    secret_msg: str, C: PublicKey, a: PrivateKey, p_bytes: bytes = b""
+) -> Tuple[PrivateKey, PrivateKey]:
+    if p_bytes:
+        # deterministic p for testing
+        p = PrivateKey(privkey=p_bytes, raw=True)
+    else:
+        # normally, we generate a random p
+        p = PrivateKey()
+    R1 = p.pubkey  # R1 = pG
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    A = a.pubkey
+    e = hash_e(R1, Y, C, A)
+    s = p.tweak_add(a.tweak_mul(e))  # s = p + ek
+    spk = PrivateKey(s, raw=True)
+    epk = PrivateKey(e, raw=True)
+    return epk, spk
+
+def stamp_step2_alice_verify(
+        secret_msg: str, C: PublicKey, s: PrivateKey, e: PrivateKey, A: PublicKey
+) -> bool:
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    R1 = s.pubkey - A.mult(e)  # type: ignore
+    e_bytes = e.private_key
+    return e_bytes == hash_e(R1, Y, C, A)
 
 # Below is a test of a simple positive and negative case
 
