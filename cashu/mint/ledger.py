@@ -1122,7 +1122,6 @@ class Ledger:
 
     async def stamp(self, proofs: List[Proof]) -> List[StampSignature]:
         signatures: List[StampSignature] = []
-        proof_is_valid: List[bool]
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
             raise Exception("Some proofs are invalid")
         for proof in proofs:
