@@ -601,4 +601,3 @@ async def test_stamp_proofs(wallet1: Wallet):
     assert wallet1.balance == 17
     resp = await wallet1.get_proofs_stamps(wallet1.proofs)
     assert resp.dict()["sigs"]
-    sigs = resp.dict()["sigs"]

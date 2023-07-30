@@ -14,7 +14,7 @@ mypy:
 	poetry run mypy cashu --ignore-missing
 
 flake8:
-	poetry run flake8 cashu
+	poetry run flake8 cashu tests
 
 format: isort black
 
