@@ -180,7 +180,7 @@ class Proof(BaseModel):
     def to_dict(self):
         # dictionary without the fields that don't need to be sent to Carol
         return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
-    
+
     def __getitem__(self, key):
         return self.__getattribute__(key)
 
@@ -357,6 +357,7 @@ class PostRestoreResponse(BaseModel):
 
 
 # ------- API: STAMP -------
+
 
 class ProofY(BaseModel):
     """

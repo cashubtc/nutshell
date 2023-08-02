@@ -627,7 +627,7 @@ class LedgerAPI(object):
                     C=proof.C,
                 )
             )
-        
+
         payload = PostStampRequest(proofys=proofys)
 
         def _get_proofs_stamps_include_fields(proofs):
