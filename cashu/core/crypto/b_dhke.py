@@ -87,7 +87,7 @@ def hash_e(*args) -> bytes:
 
 
 def stamp_step1_bob(
-    secret_msg: str, C: PublicKey, a: PrivateKey, p_bytes: bytes = b""
+    Y: PublicKey, C: PublicKey, a: PrivateKey, p_bytes: bytes = b""
 ) -> Tuple[PrivateKey, PrivateKey]:
     if p_bytes:
         # deterministic p for testing
@@ -97,7 +97,6 @@ def stamp_step1_bob(
         p = PrivateKey()
     assert p.pubkey
     R1: PublicKey = p.pubkey  # R1 = pG
-    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     R2: PublicKey = Y.mult(p)  # type: ignore # R2 = pY
     print(R1.serialize().hex(), R2.serialize().hex())
     e = hash_e(R1, R2, Y, C)
@@ -108,9 +107,8 @@ def stamp_step1_bob(
 
 
 def stamp_step2_alice_verify(
-    secret_msg: str, C: PublicKey, s: PrivateKey, e: PrivateKey, A: PublicKey
+    Y: PublicKey, C: PublicKey, s: PrivateKey, e: PrivateKey, A: PublicKey
 ) -> bool:
-    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     assert s.pubkey
     R1: PublicKey = s.pubkey - A.mult(e)  # type: ignore # R1 = sG - eA
     R2: PublicKey = Y.mult(s) - C.mult(e)  # type: ignore # R2 = sY - eC

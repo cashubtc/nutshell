@@ -159,9 +159,7 @@ class Proof(BaseModel):
     Value token
     """
 
-    id: Union[
-        None, str
-    ] = ""  # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
+    id: str = ""  # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
@@ -178,12 +176,8 @@ class Proof(BaseModel):
     derivation_path: Union[None, str] = ""  # derivation path of the proof
 
     def to_dict(self):
-        # dictionary without the fields that don't need to be send to Carol
+        # dictionary without the fields that don't need to be sent to Carol
         return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
-
-    def to_dict_no_secret(self):
-        # dictionary but without the secret itself
-        return dict(id=self.id, amount=self.amount, C=self.C)
 
     def __getitem__(self, key):
         return self.__getattribute__(key)
@@ -363,13 +357,24 @@ class PostRestoreResponse(BaseModel):
 # ------- API: STAMP -------
 
 
+class ProofY(BaseModel):
+    """
+    ProofY is a proof that is used to stamp a token.
+    """
+
+    id: str
+    amount: int
+    C: str
+    Y: str
+
+
 class StampSignature(BaseModel):
     e: str
     s: str
 
 
 class PostStampRequest(BaseModel):
-    proofs: List[Proof]
+    proofys: List[ProofY]
 
 
 class PostStampResponse(BaseModel):

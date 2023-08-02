@@ -36,6 +36,7 @@ from ..core.base import (
     PostStampRequest,
     PostStampResponse,
     Proof,
+    ProofY,
     Secret,
     SecretKind,
     SigFlags,
@@ -615,13 +616,24 @@ class LedgerAPI(object):
         """
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
-        payload = PostStampRequest(proofs=proofs)
+        proofys: List[ProofY] = []
+        for proof in proofs:
+            proofys.append(
+                ProofY(
+                    id=proof.id,
+                    amount=proof.amount,
+                    Y=b_dhke.hash_to_curve(proof.secret.encode()).serialize().hex(),
+                    C=proof.C,
+                )
+            )
+
+        payload = PostStampRequest(proofys=proofys)
 
         def _get_proofs_stamps_include_fields(proofs):
             """strips away fields from the model that aren't necessary for this endpoint"""
-            proofs_include = {"id", "amount", "secret", "C"}
+            proofs_include = {"id", "amount", "Y", "C"}
             return {
-                "proofs": {i: proofs_include for i in range(len(proofs))},
+                "proofys": {i: proofs_include for i in range(len(proofs))},
             }
 
         resp = self.s.post(
@@ -1248,7 +1260,7 @@ class Wallet(LedgerAPI):
         Args:
             proofs (List[Proof]): List of proofs to get the keyset id's of
         """
-        keysets: List[str] = [proof.id for proof in proofs if proof.id]
+        keysets: List[str] = [proof.id for proof in proofs]
         return keysets
 
     async def _get_keyset_urls(self, keysets: List[str]) -> Dict[str, List[str]]:
@@ -1342,7 +1354,7 @@ class Wallet(LedgerAPI):
             # dummy object to hold information about the mint
             mints: Dict[str, TokenV2Mint] = {}
             # dummy object to hold all keyset id's we need to fetch from the db later
-            keysets: List[str] = [proof.id for proof in proofs if proof.id]
+            keysets: List[str] = [proof.id for proof in proofs]
             # iterate through unique keyset ids
             for id in set(keysets):
                 # load the keyset from the db

@@ -136,12 +136,14 @@ def test_stamp_sign_verify():
 
     C_ = step2_bob(B_, a)
     C = step3_alice(C_, r, A)
-    e, s = stamp_step1_bob(secret_msg=secret_msg, C=C, a=a)
-    assert stamp_step2_alice_verify(secret_msg=secret_msg, C=C, s=s, e=e, A=A)
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    e, s = stamp_step1_bob(Y=Y, C=C, a=a)
+    assert stamp_step2_alice_verify(Y=Y, C=C, s=s, e=e, A=A)
 
     # wrong secret
     secret_msg_wrong = secret_msg + "wrong"
-    assert not stamp_step2_alice_verify(secret_msg=secret_msg_wrong, C=C, s=s, e=e, A=A)
+    Y_wrong: PublicKey = hash_to_curve(secret_msg_wrong.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y_wrong, C=C, s=s, e=e, A=A)
 
     # wrong C
     C_wrong = PublicKey(
@@ -150,7 +152,8 @@ def test_stamp_sign_verify():
         ),
         raw=True,
     )
-    assert not stamp_step2_alice_verify(secret_msg=secret_msg, C=C_wrong, s=s, e=e, A=A)
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y, C=C_wrong, s=s, e=e, A=A)
 
     # wrong s
     s_wrong = PrivateKey(
@@ -159,7 +162,8 @@ def test_stamp_sign_verify():
         ),
         raw=True,
     )
-    assert not stamp_step2_alice_verify(secret_msg=secret_msg, C=C, s=s_wrong, e=e, A=A)
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y, C=C, s=s_wrong, e=e, A=A)
 
     # wrong e
     e_wrong = PrivateKey(
@@ -168,7 +172,8 @@ def test_stamp_sign_verify():
         ),
         raw=True,
     )
-    assert not stamp_step2_alice_verify(secret_msg=secret_msg, C=C, s=s, e=e_wrong, A=A)
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y, C=C, s=s, e=e_wrong, A=A)
 
     # wrong A
     a_wrong = PrivateKey(
@@ -178,6 +183,5 @@ def test_stamp_sign_verify():
         raw=True,
     )
     assert a_wrong.pubkey
-    assert not stamp_step2_alice_verify(
-        secret_msg=secret_msg, C=C, s=s, e=e, A=a_wrong.pubkey
-    )
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y, C=C, s=s, e=e, A=a_wrong.pubkey)

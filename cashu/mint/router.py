@@ -294,6 +294,6 @@ async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     response_description=("List of signatures on proofs."),
 )
 async def stamp(payload: PostStampRequest) -> PostStampResponse:
-    assert payload.proofs, Exception("no proofs provided")
-    signatures = await ledger.stamp(payload.proofs)
+    assert payload.proofys, Exception("no proofs provided")
+    signatures = await ledger.stamp(payload.proofys)
     return PostStampResponse(sigs=signatures)
