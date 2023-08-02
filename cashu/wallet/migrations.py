@@ -193,3 +193,10 @@ async def m009_privatekey_and_determinstic_key_derivation(db: Database):
         """
     )
     # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")
+
+
+async def m010_proofs_add_stamps(db: Database):
+    await db.execute("ALTER TABLE proofs ADD COLUMN stamp_e TEXT")
+    await db.execute("ALTER TABLE proofs ADD COLUMN stamp_r TEXT")
+    await db.execute("ALTER TABLE proofs_used ADD COLUMN stamp_e TEXT")
+    await db.execute("ALTER TABLE proofs_used ADD COLUMN stamp_r TEXT")

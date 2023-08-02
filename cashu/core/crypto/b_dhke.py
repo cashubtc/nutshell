@@ -75,9 +75,26 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
 
 
 # stamps
+""" 
+Proves that a in A = a*G is the same as a in C_ = a*Y
+
+Bob:
+R1 = rG
+R2 = rY
+e = hash(R1, R2, Y, C)
+s = r + e*a
+
+Alice/Carol:
+Y = hash_to_curve(x)
+R1 = sG - eA
+R2 = sY - eC
+e == hash(R1, R2, Y, C) (verification)
+
+"""
 
 
 def hash_e(*args) -> bytes:
+    """Hashes a list of public keys to a 32 byte value"""
     e_ = ""
     for pk in args:
         assert isinstance(pk, PublicKey), "object is not of type PublicKey"

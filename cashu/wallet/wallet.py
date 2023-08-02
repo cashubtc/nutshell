@@ -614,7 +614,10 @@ class LedgerAPI(object):
     @async_set_requests
     async def get_proofs_stamps(self, proofs: List[Proof]):
         """
-        Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
+        Sends a list of ProofYs (Proofs with Y but without secret) to the mint
+        and receives a list of signatures. These signatures can used by someone
+        Carol to ensure that they are from the same public key that also blind-
+        signed the ecash (with signatures Proof.C).
         """
         proofys: List[ProofY] = []
         for proof in proofs:
@@ -645,6 +648,9 @@ class LedgerAPI(object):
 
         return_dict = resp.json()
         stamps = PostStampResponse.parse_obj(return_dict)
+        assert len(proofs) == len(
+            stamps.stamps
+        ), "number of proofs and stamps do not match"
         return stamps
 
 
@@ -1224,8 +1230,30 @@ class Wallet(LedgerAPI):
     async def check_proof_state(self, proofs):
         return await super().check_proof_state(proofs)
 
-    async def get_proofs_stamps(self, proofs):
-        return await super().get_proofs_stamps(proofs)
+    async def get_proofs_stamps(self, proofs: List[Proof]):
+        """Sends a list of ProofYs (Proofs with Y but without secret) to the mint
+        and receives a list of stamps. These stamps can used by another ecash receiver
+        to veriify that the ecash they are receiving is indeed signed by the public
+        key of the mint without having to contact the mint.
+
+        Args:
+            proofs (List[Proof]): List of proofs to be stamped
+
+        Returns:
+            _type_: _description_
+        """
+
+        stamp_response = await super().get_proofs_stamps(proofs)
+        stamps = stamp_response.stamps
+        for proof, stamp in zip(proofs, stamps):
+            assert b_dhke.stamp_step2_alice_verify(
+                Y=b_dhke.hash_to_curve(proof.secret.encode()),
+                C=PublicKey(bytes.fromhex(proof.C), raw=True),
+                s=PrivateKey(bytes.fromhex(stamp.s), raw=True),
+                e=PrivateKey(bytes.fromhex(stamp.e), raw=True),
+                A=self.public_keys[proof.amount],
+            ), "stamp verification failed."
+        return True
 
     # ---------- TOKEN MECHANIS ----------
 
@@ -1315,7 +1343,11 @@ class Wallet(LedgerAPI):
         return token
 
     async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, legacy=False
+        self,
+        proofs: List[Proof],
+        include_mints=True,
+        legacy=False,
+        include_stamps=False,
     ) -> str:
         """Produces sharable token with proofs and mint information.
 
@@ -1340,8 +1372,8 @@ class Wallet(LedgerAPI):
             # ).decode()
 
         # V3 tokens
-        token = await self._make_token(proofs, include_mints)
-        return token.serialize()
+        token = await self._make_token(proofs=proofs, include_mints=include_mints)
+        return token.serialize(include_stamps=include_stamps)
 
     async def _make_token_v2(self, proofs: List[Proof], include_mints=True) -> TokenV2:
         """
