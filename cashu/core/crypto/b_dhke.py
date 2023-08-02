@@ -75,7 +75,7 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
 
 
 # stamps
-""" 
+"""
 Proves that a in A = a*G is the same as a in C_ = a*Y
 
 Bob:
