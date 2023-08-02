@@ -618,6 +618,7 @@ class LedgerAPI(object):
         """
         proofys: List[ProofY] = []
         for proof in proofs:
+            assert proof.id
             proofys.append(
                 ProofY(
                     id=proof.id,
@@ -626,7 +627,7 @@ class LedgerAPI(object):
                     C=proof.C,
                 )
             )
-
+        
         payload = PostStampRequest(proofys=proofys)
 
         def _get_proofs_stamps_include_fields(proofs):
@@ -1260,7 +1261,7 @@ class Wallet(LedgerAPI):
         Args:
             proofs (List[Proof]): List of proofs to get the keyset id's of
         """
-        keysets: List[str] = [proof.id for proof in proofs]
+        keysets: List[str] = [proof.id for proof in proofs if proof.id]
         return keysets
 
     async def _get_keyset_urls(self, keysets: List[str]) -> Dict[str, List[str]]:
@@ -1354,7 +1355,7 @@ class Wallet(LedgerAPI):
             # dummy object to hold information about the mint
             mints: Dict[str, TokenV2Mint] = {}
             # dummy object to hold all keyset id's we need to fetch from the db later
-            keysets: List[str] = [proof.id for proof in proofs]
+            keysets: List[str] = [proof.id for proof in proofs if proof.id]
             # iterate through unique keyset ids
             for id in set(keysets):
                 # load the keyset from the db
