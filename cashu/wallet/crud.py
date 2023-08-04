@@ -36,7 +36,7 @@ async def get_proofs(
         SELECT * from proofs
         """
     )
-    return [Proof(**dict(r)) for r in rows]
+    return [Proof.from_row(r) for r in rows]
 
 
 async def get_reserved_proofs(
@@ -82,10 +82,13 @@ async def invalidate_proof(
     )
 
 
-async def update_proof_reserved(
+async def update_proof(
     proof: Proof,
-    reserved: bool,
-    send_id: str = "",
+    *,
+    reserved: Optional[bool] = None,
+    send_id: Optional[str] = None,
+    stamp_e: Optional[str] = None,
+    stamp_s: Optional[str] = None,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
@@ -103,6 +106,11 @@ async def update_proof_reserved(
         clauses.append("time_reserved = ?")
         values.append(int(time.time()))
 
+    if stamp_e and stamp_s:
+        clauses.append("stamp_e = ?")
+        values.append(stamp_e)
+        clauses.append("stamp_s = ?")
+        values.append(stamp_s)
     await (conn or db).execute(  # type: ignore
         f"UPDATE proofs SET {', '.join(clauses)} WHERE secret = ?",
         (*values, str(proof.secret)),

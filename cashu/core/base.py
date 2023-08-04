@@ -204,6 +204,30 @@ class Proof(BaseModel):
             d["stamp"] = self.stamp.dict()
         return d
 
+    @classmethod
+    def from_row(cls, rowObj: Row):
+        row = dict(rowObj)
+        return cls(
+            id=row["id"],
+            amount=row["amount"],
+            secret=row["secret"],
+            C=row["C"],
+            stamp=StampSignature(e=row["stamp_e"], s=row["stamp_s"])
+            if row["stamp_e"] and row["stamp_s"]
+            else None,
+            # p2pksigs=json.loads(row["p2pksigs"]) if row["p2pksigs"] else None,
+            # p2shscript=P2SHScript(
+            #     script=row["script"], signature=row["signature"]
+            # )  # type: ignore
+            # if row["script"]
+            # else None,
+            reserved=row["reserved"],
+            send_id=row["send_id"],
+            time_created=row["time_created"],
+            time_reserved=row["time_reserved"],
+            derivation_path=row["derivation_path"],
+        )
+
     def __getitem__(self, key):
         return self.__getattribute__(key)
 

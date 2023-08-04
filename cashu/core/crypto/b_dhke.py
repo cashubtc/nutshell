@@ -76,7 +76,7 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
 
 # stamps
 """
-Proves that a in A = a*G is the same as a in C_ = a*Y
+Proves that a in A = a*G is the same as a in C = a*Y
 
 Bob:
 R1 = rG
@@ -88,8 +88,11 @@ Alice/Carol:
 Y = hash_to_curve(x)
 R1 = sG - eA
 R2 = sY - eC
+    (eaY = eC, since C' - rA = aY + arG - arG = aY = C)
+
 e == hash(R1, R2, Y, C) (verification)
 
+If true, C must have originated from Bob with private key a
 """
 
 
@@ -129,7 +132,6 @@ def stamp_step2_alice_verify(
     assert s.pubkey
     R1: PublicKey = s.pubkey - A.mult(e)  # type: ignore # R1 = sG - eA
     R2: PublicKey = Y.mult(s) - C.mult(e)  # type: ignore # R2 = sY - eC
-    print(R1.serialize().hex(), R2.serialize().hex())
     e_bytes = e.private_key
     return e_bytes == hash_e(R1, R2, Y, C)
 

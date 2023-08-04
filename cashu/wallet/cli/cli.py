@@ -761,3 +761,39 @@ async def restore(ctx: Context, to: int, batch: int):
     await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
     await wallet.load_proofs()
     wallet.status()
+
+
+@cli.command("stamp", help="Stamp tokens in wallet.")
+@click.option(
+    "--max-amount",
+    "-m",
+    default=None,
+    help="Maximum amount to stamp.",
+    type=int,
+)
+@click.pass_context
+@coro
+async def stamp(ctx: Context, max_amount: int):
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_mint()
+    await wallet.load_proofs()
+    proofs_without_stamp = [p for p in wallet.proofs if not p.stamp]
+    if len(proofs_without_stamp) == 0:
+        print("All tokens in wallet are stamped.")
+        return
+
+    if max_amount:
+        # sort proofs by amount and remove largest proofs until max_amount is reached
+        proofs_without_stamp = sorted(
+            proofs_without_stamp, key=lambda x: x.amount, reverse=True
+        )
+        while sum_proofs(proofs_without_stamp) > max_amount:
+            proofs_without_stamp.pop(0)
+    if len(proofs_without_stamp) == 0:
+        print(f"No tokens smaller than {max_amount} sat in wallet.")
+        return
+
+    print(
+        f"Requesting {len(proofs_without_stamp)} stamps for tokens worth {sum_proofs(proofs_without_stamp)} sat."
+    )
+    await wallet.get_proofs_stamps(proofs_without_stamp)

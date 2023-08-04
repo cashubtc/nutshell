@@ -78,7 +78,7 @@ from ..wallet.crud import (
     store_proof,
     store_seed_and_mnemonic,
     update_lightning_invoice,
-    update_proof_reserved,
+    update_proof,
 )
 from . import migrations
 
@@ -1244,6 +1244,7 @@ class Wallet(LedgerAPI):
         """
 
         stamp_response = await super().get_proofs_stamps(proofs)
+        logger.trace(stamp_response)
         stamps = stamp_response.stamps
         for proof, stamp in zip(proofs, stamps):
             assert b_dhke.stamp_step2_alice_verify(
@@ -1253,6 +1254,10 @@ class Wallet(LedgerAPI):
                 e=PrivateKey(bytes.fromhex(stamp.e), raw=True),
                 A=self.public_keys[proof.amount],
             ), "stamp verification failed."
+
+            await update_proof(
+                proof=proof, stamp_e=stamp.e, stamp_s=stamp.s, db=self.db
+            )
         return True
 
     # ---------- TOKEN MECHANIS ----------
@@ -1472,9 +1477,7 @@ class Wallet(LedgerAPI):
         uuid_str = str(uuid.uuid1())
         for proof in proofs:
             proof.reserved = True
-            await update_proof_reserved(
-                proof, reserved=reserved, send_id=uuid_str, db=self.db
-            )
+            await update_proof(proof, reserved=reserved, send_id=uuid_str, db=self.db)
 
     async def invalidate(
         self, proofs: List[Proof], check_spendable=True
