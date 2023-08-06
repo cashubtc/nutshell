@@ -81,4 +81,3 @@ def mint():
     time.sleep(1)
     yield server
     server.stop()
-    shutil.rmtree(settings.cashu_dir)

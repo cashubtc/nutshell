@@ -133,6 +133,7 @@ tor.pid
 
 # Default data directory
 /data
+/test_data
 
 # MacOS
 .DS_Store
