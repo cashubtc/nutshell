@@ -12,8 +12,8 @@ from tests.conftest import SERVER_ENDPOINT
 async def wallet(mint):
     wallet = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="test_data/test_wallet_api",
-        name="wallet_api",
+        db="test_data/wallet",
+        name="wallet",
     )
     await wallet.load_mint()
     wallet.status()
@@ -89,7 +89,7 @@ async def test_receive_all(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/receive?all=true")
         assert response.status_code == 200
-        assert response.json()["initial_balance"]
+        assert response.json()["initial_balance"] == 0
         assert response.json()["balance"]
 
 
@@ -100,7 +100,7 @@ async def test_burn_all(wallet: Wallet):
         assert response.status_code == 200
         response = client.post("/burn?all=true")
         assert response.status_code == 200
-        assert response.json()["balance"]
+        assert response.json()["balance"] == 0
 
 
 @pytest.mark.asyncio
