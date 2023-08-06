@@ -16,7 +16,7 @@ def cli_prefix():
 async def init_wallet():
     wallet = await Wallet.with_db(
         url=settings.mint_host,
-        db="data/test_cli_wallet",
+        db="test_data/test_cli_wallet",
         name="wallet",
     )
     await wallet.load_proofs()

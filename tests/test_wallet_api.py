@@ -12,7 +12,7 @@ from tests.conftest import SERVER_ENDPOINT
 async def wallet(mint):
     wallet = await Wallet.with_db(
         url=SERVER_ENDPOINT,
-        db="data/test_wallet_api",
+        db="test_data/test_wallet_api",
         name="wallet_api",
     )
     await wallet.load_mint()

@@ -50,7 +50,7 @@ async def reset_wallet_db(wallet: Wallet):
 async def wallet1(mint):
     wallet1 = await Wallet1.with_db(
         url=SERVER_ENDPOINT,
-        db="data/wallet1",
+        db="test_data/wallet1",
         name="wallet1",
     )
     await wallet1.load_mint()
@@ -62,7 +62,7 @@ async def wallet1(mint):
 async def wallet2(mint):
     wallet2 = await Wallet2.with_db(
         url=SERVER_ENDPOINT,
-        db="data/wallet2",
+        db="test_data/wallet2",
         name="wallet2",
     )
     await wallet2.load_mint()
@@ -72,13 +72,13 @@ async def wallet2(mint):
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet3(mint):
-    dirpath = Path("data/wallet3")
+    dirpath = Path("test_data/wallet3")
     if dirpath.exists() and dirpath.is_dir():
         shutil.rmtree(dirpath)
 
     wallet3 = await Wallet1.with_db(
         url=SERVER_ENDPOINT,
-        db="data/wallet3",
+        db="test_data/wallet3",
         name="wallet3",
     )
     await wallet3.db.execute("DELETE FROM proofs")
