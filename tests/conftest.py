@@ -16,7 +16,8 @@ from cashu.lightning.fake import FakeWallet
 from cashu.mint import migrations as migrations_mint
 from cashu.mint.ledger import Ledger
 
-SERVER_ENDPOINT = "http://localhost:3337"
+SERVER_PORT = 3337
+SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
 
 
 class UvicornServer(multiprocessing.Process):
@@ -77,8 +78,8 @@ async def ledger():
 
 @pytest.fixture(autouse=True, scope="session")
 def mint():
-    settings.mint_listen_port = 3337
-    settings.mint_url = "http://localhost:3337"
+    settings.mint_listen_port = SERVER_PORT
+    settings.mint_url = SERVER_ENDPOINT
     config = uvicorn.Config(
         "cashu.mint.app:app",
         port=settings.mint_listen_port,
