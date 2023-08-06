@@ -19,7 +19,7 @@ from cashu.mint.ledger import Ledger
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
 
-settings.cashu_dir= "./test_data/"
+settings.cashu_dir = "./test_data/"
 settings.mint_host = "localhost"
 settings.mint_port = SERVER_PORT
 settings.mint_host = "0.0.0.0"
@@ -32,6 +32,7 @@ settings.mint_database = "./test_data/test_mint"
 settings.mint_derivation_path = "0/0/0/0"
 settings.mint_private_key = "TEST_PRIVATE_KEY"
 
+
 class UvicornServer(multiprocessing.Process):
     def __init__(self, config: Config):
         super().__init__()
@@ -43,6 +44,7 @@ class UvicornServer(multiprocessing.Process):
 
     def run(self, *args, **kwargs):
         self.server.run()
+
 
 @pytest_asyncio.fixture(scope="function")
 async def ledger():
