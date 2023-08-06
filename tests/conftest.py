@@ -32,6 +32,9 @@ settings.mint_database = "./test_data/test_mint"
 settings.mint_derivation_path = "0/0/0/0"
 settings.mint_private_key = "TEST_PRIVATE_KEY"
 
+shutil.rmtree(settings.cashu_dir, ignore_errors=True)
+Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
+
 
 class UvicornServer(multiprocessing.Process):
     def __init__(self, config: Config):
@@ -74,8 +77,6 @@ def mint():
         host=settings.mint_listen_host,
     )
 
-    shutil.rmtree(settings.cashu_dir, ignore_errors=True)
-    Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
     server = UvicornServer(config=config)
     server.start()
     time.sleep(1)
