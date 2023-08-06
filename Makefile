@@ -32,8 +32,6 @@ package:
 	python setup.py sdist bdist_wheel
 
 test:
-	LIGHTNING=false \
-	TOR=false \
 	poetry run pytest tests --cov-report xml --cov cashu
 
 install:
