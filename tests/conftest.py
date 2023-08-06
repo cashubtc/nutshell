@@ -74,6 +74,7 @@ def mint():
         host=settings.mint_listen_host,
     )
 
+    shutil.rmtree(settings.cashu_dir)
     Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
     server = UvicornServer(config=config)
     server.start()
