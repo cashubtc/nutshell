@@ -55,3 +55,6 @@ build-backend = "poetry.core.masonry.api"
 mint = "cashu.mint.main:main"
 cashu = "cashu.wallet.cli.cli:cli"
 wallet-test = "tests.test_wallet:test"
+
+[tool.pytest.ini_options]
+log_cli = true
