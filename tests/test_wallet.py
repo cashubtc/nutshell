@@ -313,6 +313,7 @@ async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
     await assert_err(wallet2.redeem(send_proofs), "lock not found.")  # wrong receiver
 
 
+@pytest.mark.asyncio
 async def test_token_state(wallet1: Wallet):
     await wallet1.mint(64)
     assert wallet1.balance == 64
@@ -321,6 +322,7 @@ async def test_token_state(wallet1: Wallet):
     assert resp.dict()["pending"]
 
 
+@pytest.mark.asyncio
 async def test_bump_secret_derivation(wallet3: Wallet):
     await wallet3._init_private_key(
         "half depart obvious quality work element tank gorilla view sugar picture humble"
