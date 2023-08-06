@@ -32,11 +32,6 @@ package:
 	python setup.py sdist bdist_wheel
 
 test:
-	MINT_PORT=3337 \
-	MINT_LISTEN_PORT=3337 \
-	LIGHTNING=false \
-	TOR=false \
-	DEBUG=true \
 	poetry run pytest tests --cov-report xml --cov cashu
 
 install:
