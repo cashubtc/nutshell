@@ -11,11 +11,12 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import requests
 from bip32 import BIP32
+from bolt11.decode import decode
+from bolt11.types import Bolt11
 from loguru import logger
 from mnemonic import Mnemonic
 from requests import Response
 
-from ..core import bolt11 as bolt11
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
@@ -44,7 +45,6 @@ from ..core.base import (
     TokenV3Token,
     WalletKeyset,
 )
-from ..core.bolt11 import Invoice as InvoiceBolt11
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
@@ -1447,7 +1447,8 @@ class Wallet(LedgerAPI):
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
         """
-        decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)
+        decoded_invoice: Bolt11 = decode(invoice)
+        assert decoded_invoice.amount_msat, "Invoice has no amount."
         # check if it's an internal payment
         fees = int((await self.check_fees(invoice))["fee"])
         logger.debug(f"Mint wants {fees} sat as fee reserve.")

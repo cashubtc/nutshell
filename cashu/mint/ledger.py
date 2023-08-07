@@ -3,9 +3,9 @@ import math
 import time
 from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
+from bolt11.decode import decode
 from loguru import logger
 
-from ..core import bolt11
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
@@ -927,7 +927,8 @@ class Ledger:
             logger.trace("verified proofs")
 
             total_provided = sum_proofs(proofs)
-            invoice_obj = bolt11.decode(invoice)
+            invoice_obj = decode(invoice)
+            assert invoice_obj.amount_msat, "invoice has no amount"
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
             if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
                 raise NotAllowedError(
@@ -983,8 +984,8 @@ class Ledger:
     async def check_proof_state(
         self, proofs: List[Proof]
     ) -> Tuple[List[bool], List[bool]]:
-        """Checks if provided proofs are spend or are pending.
-        Used by wallets to check if their proofs have been redeemed by a receiver or they are still in-flight in a transaction.
+        """Checks if provided proofs are spend or are pending. Used by wallets to check
+        if their proofs have been redeemed by a receiver or they are still in-flight in a transaction.
 
         Returns two lists that are in the same order as the provided proofs. Wallet must match the list
         to the proofs they have provided in order to figure out which proof is spendable or pending
@@ -1014,7 +1015,9 @@ class Ledger:
         # hack: check if it's internal, if it exists, it will return paid = False,
         # if id does not exist (not internal), it returns paid = None
         if settings.lightning:
-            decoded_invoice = bolt11.decode(pr)
+            decoded_invoice = decode(pr)
+            assert decoded_invoice.amount_msat, "invoice has no amount"
+            assert decoded_invoice.payment_hash, "invoice has no payment hash"
             amount = math.ceil(decoded_invoice.amount_msat / 1000)
             logger.trace(
                 "check_fees: checking lightning invoice:"
@@ -1108,7 +1111,6 @@ class Ledger:
 
         logger.trace("split successful")
         return promises
-        return prom_fst, prom_snd
 
     async def restore(
         self, outputs: List[BlindedMessage]
