@@ -31,7 +31,7 @@ If true, C must have originated from Bob
 """
 
 import hashlib
-from typing import Optional
+from typing import Optional, Tuple
 
 from secp256k1 import PrivateKey, PublicKey
 
@@ -72,6 +72,68 @@ def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
 def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     return C == Y.mult(a)  # type: ignore
+
+
+# stamps
+"""
+Proves that a in A = a*G is the same as a in C = a*Y
+
+Bob:
+R1 = rG
+R2 = rY
+e = hash(R1, R2, Y, C)
+s = r + e*a
+
+Alice/Carol:
+Y = hash_to_curve(x)
+R1 = sG - eA
+R2 = sY - eC
+    (eaY = eC, since C' - rA = aY + arG - arG = aY = C)
+
+e == hash(R1, R2, Y, C) (verification)
+
+If true, C must have originated from Bob with private key a
+"""
+
+
+def hash_e(*args) -> bytes:
+    """Hashes a list of public keys to a 32 byte value"""
+    e_ = ""
+    for pk in args:
+        assert isinstance(pk, PublicKey), "object is not of type PublicKey"
+        e_ += pk.serialize(compressed=False).hex()
+    e = hashlib.sha256(e_.encode("utf-8")).digest()
+    return e
+
+
+def stamp_step1_bob(
+    Y: PublicKey, C: PublicKey, a: PrivateKey, p_bytes: bytes = b""
+) -> Tuple[PrivateKey, PrivateKey]:
+    if p_bytes:
+        # deterministic p for testing
+        p = PrivateKey(privkey=p_bytes, raw=True)
+    else:
+        # normally, we generate a random p
+        p = PrivateKey()
+    assert p.pubkey
+    R1: PublicKey = p.pubkey  # R1 = pG
+    R2: PublicKey = Y.mult(p)  # type: ignore # R2 = pY
+    print(R1.serialize().hex(), R2.serialize().hex())
+    e = hash_e(R1, R2, Y, C)
+    s = p.tweak_add(a.tweak_mul(e))  # s = p + ea
+    spk = PrivateKey(s, raw=True)
+    epk = PrivateKey(e, raw=True)
+    return epk, spk
+
+
+def stamp_step2_alice_verify(
+    Y: PublicKey, C: PublicKey, s: PrivateKey, e: PrivateKey, A: PublicKey
+) -> bool:
+    assert s.pubkey
+    R1: PublicKey = s.pubkey - A.mult(e)  # type: ignore # R1 = sG - eA
+    R2: PublicKey = Y.mult(s) - C.mult(e)  # type: ignore # R2 = sY - eC
+    e_bytes = e.private_key
+    return e_bytes == hash_e(R1, R2, Y, C)
 
 
 # Below is a test of a simple positive and negative case

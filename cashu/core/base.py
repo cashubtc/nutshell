@@ -154,6 +154,22 @@ class P2SHScript(BaseModel):
     address: Union[str, None] = None
 
 
+class ProofY(BaseModel):
+    """
+    ProofY is a proof that is used to stamp a token.
+    """
+
+    id: str
+    amount: int
+    C: str
+    Y: str
+
+
+class StampSignature(BaseModel):
+    e: str
+    s: str
+
+
 class Proof(BaseModel):
     """
     Value token
@@ -165,6 +181,7 @@ class Proof(BaseModel):
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
+    stamp: Union[StampSignature, None] = None  # stamp signature
     p2pksigs: Union[List[str], None] = []  # P2PK signature
     p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
     reserved: Union[
@@ -177,13 +194,39 @@ class Proof(BaseModel):
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
 
-    def to_dict(self):
-        # dictionary without the fields that don't need to be send to Carol
-        return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
+    def to_dict(self, include_stamps=False):
+        # dictionary without the fields that don't need to be sent to Carol
+        d: Dict[str, Any] = dict(
+            id=self.id, amount=self.amount, secret=self.secret, C=self.C
+        )
+        if include_stamps:
+            assert self.stamp, "Stamp signature is missing"
+            d["stamp"] = self.stamp.dict()
+        return d
 
-    def to_dict_no_secret(self):
-        # dictionary but without the secret itself
-        return dict(id=self.id, amount=self.amount, C=self.C)
+    @classmethod
+    def from_row(cls, rowObj: Row):
+        row = dict(rowObj)
+        return cls(
+            id=row["id"],
+            amount=row["amount"],
+            secret=row["secret"],
+            C=row["C"],
+            stamp=StampSignature(e=row["stamp_e"], s=row["stamp_s"])
+            if row["stamp_e"] and row["stamp_s"]
+            else None,
+            # p2pksigs=json.loads(row["p2pksigs"]) if row["p2pksigs"] else None,
+            # p2shscript=P2SHScript(
+            #     script=row["script"], signature=row["signature"]
+            # )  # type: ignore
+            # if row["script"]
+            # else None,
+            reserved=row["reserved"],
+            send_id=row["send_id"],
+            time_created=row["time_created"],
+            time_reserved=row["time_reserved"],
+            derivation_path=row["derivation_path"],
+        )
 
     def __getitem__(self, key):
         return self.__getattribute__(key)
@@ -358,6 +401,17 @@ class CheckFeesResponse(BaseModel):
 class PostRestoreResponse(BaseModel):
     outputs: List[BlindedMessage] = []
     promises: List[BlindedSignature] = []
+
+
+# ------- API: STAMP -------
+
+
+class PostStampRequest(BaseModel):
+    proofys: List[ProofY]
+
+
+class PostStampResponse(BaseModel):
+    stamps: List[StampSignature]
 
 
 # ------- KEYSETS -------
@@ -551,8 +605,10 @@ class TokenV3Token(BaseModel):
     mint: Optional[str] = None
     proofs: List[Proof]
 
-    def to_dict(self):
-        return_dict = dict(proofs=[p.to_dict() for p in self.proofs])
+    def to_dict(self, include_stamps=False):
+        return_dict = dict(
+            proofs=[p.to_dict(include_stamps=include_stamps) for p in self.proofs]
+        )
         if self.mint:
             return_dict.update(dict(mint=self.mint))  # type: ignore
         return return_dict
@@ -566,8 +622,10 @@ class TokenV3(BaseModel):
     token: List[TokenV3Token] = []
     memo: Optional[str] = None
 
-    def to_dict(self):
-        return_dict = dict(token=[t.to_dict() for t in self.token])
+    def to_dict(self, include_stamps=False):
+        return_dict = dict(
+            token=[t.to_dict(include_stamps=include_stamps) for t in self.token]
+        )
         if self.memo:
             return_dict.update(dict(memo=self.memo))  # type: ignore
         return return_dict
@@ -594,7 +652,7 @@ class TokenV3(BaseModel):
         token = json.loads(base64.urlsafe_b64decode(token_base64))
         return cls.parse_obj(token)
 
-    def serialize(self) -> str:
+    def serialize(self, include_stamps=False) -> str:
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """
@@ -602,6 +660,6 @@ class TokenV3(BaseModel):
         tokenv3_serialized = prefix
         # encode the token as a base64 string
         tokenv3_serialized += base64.urlsafe_b64encode(
-            json.dumps(self.to_dict()).encode()
+            json.dumps(self.to_dict(include_stamps=include_stamps)).encode()
         ).decode()
         return tokenv3_serialized

@@ -13,9 +13,11 @@ from ..core.base import (
     MintKeyset,
     MintKeysets,
     Proof,
+    ProofY,
     Secret,
     SecretKind,
     SigFlags,
+    StampSignature,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
@@ -1118,3 +1120,18 @@ class Ledger:
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")
         return return_outputs, promises
+
+    async def stamp(self, proofys: List[ProofY]) -> List[StampSignature]:
+        signatures: List[StampSignature] = []
+        for proofy in proofys:
+            assert proofy.id
+            private_key_amount = self.keysets.keysets[proofy.id].private_keys[
+                proofy.amount
+            ]
+            e, s = b_dhke.stamp_step1_bob(
+                Y=PublicKey(bytes.fromhex(proofy.Y), raw=True),
+                C=PublicKey(bytes.fromhex(proofy.C), raw=True),
+                a=private_key_amount,
+            )
+            signatures.append(StampSignature(e=e.serialize(), s=s.serialize()))
+        return signatures

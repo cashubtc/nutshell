@@ -33,7 +33,10 @@ from ..core.base import (
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
+    PostStampRequest,
+    PostStampResponse,
     Proof,
+    ProofY,
     Secret,
     SecretKind,
     SigFlags,
@@ -75,7 +78,7 @@ from ..wallet.crud import (
     store_proof,
     store_seed_and_mnemonic,
     update_lightning_invoice,
-    update_proof_reserved,
+    update_proof,
 )
 from . import migrations
 
@@ -607,6 +610,48 @@ class LedgerAPI(object):
         reponse_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(reponse_dict)
         return returnObj.outputs, returnObj.promises
+
+    @async_set_requests
+    async def get_proofs_stamps(self, proofs: List[Proof]):
+        """
+        Sends a list of ProofYs (Proofs with Y but without secret) to the mint
+        and receives a list of signatures. These signatures can used by someone
+        Carol to ensure that they are from the same public key that also blind-
+        signed the ecash (with signatures Proof.C).
+        """
+        proofys: List[ProofY] = []
+        for proof in proofs:
+            assert proof.id
+            proofys.append(
+                ProofY(
+                    id=proof.id,
+                    amount=proof.amount,
+                    Y=b_dhke.hash_to_curve(proof.secret.encode()).serialize().hex(),
+                    C=proof.C,
+                )
+            )
+
+        payload = PostStampRequest(proofys=proofys)
+
+        def _get_proofs_stamps_include_fields(proofs):
+            """strips away fields from the model that aren't necessary for this endpoint"""
+            proofs_include = {"id", "amount", "Y", "C"}
+            return {
+                "proofys": {i: proofs_include for i in range(len(proofs))},
+            }
+
+        resp = self.s.post(
+            self.url + "/stamp",
+            json=payload.dict(include=_get_proofs_stamps_include_fields(proofs)),  # type: ignore
+        )
+        self.raise_on_error(resp)
+
+        return_dict = resp.json()
+        stamps = PostStampResponse.parse_obj(return_dict)
+        assert len(proofs) == len(
+            stamps.stamps
+        ), "number of proofs and stamps do not match"
+        return stamps
 
 
 class Wallet(LedgerAPI):
@@ -1185,6 +1230,36 @@ class Wallet(LedgerAPI):
     async def check_proof_state(self, proofs):
         return await super().check_proof_state(proofs)
 
+    async def get_proofs_stamps(self, proofs: List[Proof]):
+        """Sends a list of ProofYs (Proofs with Y but without secret) to the mint
+        and receives a list of stamps. These stamps can used by another ecash receiver
+        to veriify that the ecash they are receiving is indeed signed by the public
+        key of the mint without having to contact the mint.
+
+        Args:
+            proofs (List[Proof]): List of proofs to be stamped
+
+        Returns:
+            _type_: _description_
+        """
+
+        stamp_response = await super().get_proofs_stamps(proofs)
+        logger.trace(stamp_response)
+        stamps = stamp_response.stamps
+        for proof, stamp in zip(proofs, stamps):
+            assert b_dhke.stamp_step2_alice_verify(
+                Y=b_dhke.hash_to_curve(proof.secret.encode()),
+                C=PublicKey(bytes.fromhex(proof.C), raw=True),
+                s=PrivateKey(bytes.fromhex(stamp.s), raw=True),
+                e=PrivateKey(bytes.fromhex(stamp.e), raw=True),
+                A=self.public_keys[proof.amount],
+            ), "stamp verification failed."
+
+            await update_proof(
+                proof=proof, stamp_e=stamp.e, stamp_s=stamp.s, db=self.db
+            )
+        return True
+
     # ---------- TOKEN MECHANIS ----------
 
     async def _store_proofs(self, proofs):
@@ -1273,7 +1348,11 @@ class Wallet(LedgerAPI):
         return token
 
     async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, legacy=False
+        self,
+        proofs: List[Proof],
+        include_mints=True,
+        legacy=False,
+        include_stamps=False,
     ) -> str:
         """Produces sharable token with proofs and mint information.
 
@@ -1298,8 +1377,8 @@ class Wallet(LedgerAPI):
             # ).decode()
 
         # V3 tokens
-        token = await self._make_token(proofs, include_mints)
-        return token.serialize()
+        token = await self._make_token(proofs=proofs, include_mints=include_mints)
+        return token.serialize(include_stamps=include_stamps)
 
     async def _make_token_v2(self, proofs: List[Proof], include_mints=True) -> TokenV2:
         """
@@ -1398,9 +1477,7 @@ class Wallet(LedgerAPI):
         uuid_str = str(uuid.uuid1())
         for proof in proofs:
             proof.reserved = True
-            await update_proof_reserved(
-                proof, reserved=reserved, send_id=uuid_str, db=self.db
-            )
+            await update_proof(proof, reserved=reserved, send_id=uuid_str, db=self.db)
 
     async def invalidate(
         self, proofs: List[Proof], check_spendable=True

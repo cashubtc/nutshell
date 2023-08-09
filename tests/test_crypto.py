@@ -1,4 +1,11 @@
-from cashu.core.crypto.b_dhke import hash_to_curve, step1_alice, step2_bob, step3_alice
+from cashu.core.crypto.b_dhke import (
+    hash_to_curve,
+    stamp_step1_bob,
+    stamp_step2_alice_verify,
+    step1_alice,
+    step2_bob,
+    step3_alice,
+)
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 
 
@@ -107,3 +114,74 @@ def test_step3():
         C.serialize().hex()
         == "03c724d7e6a5443b39ac8acf11f40420adc4f99a02e7cc1b57703d9391f6d129cd"
     )
+
+
+def test_stamp_sign_verify():
+    secret_msg = "test_message"
+    r = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),
+        raw=True,
+    )
+    B_, _ = step1_alice(secret_msg, blinding_factor=r)
+    a = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),
+        raw=True,
+    )
+    A = a.pubkey
+    assert A
+
+    C_ = step2_bob(B_, a)
+    C = step3_alice(C_, r, A)
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    e, s = stamp_step1_bob(Y=Y, C=C, a=a)
+    assert stamp_step2_alice_verify(Y=Y, C=C, s=s, e=e, A=A)
+
+    # wrong secret
+    secret_msg_wrong = secret_msg + "wrong"
+    Y_wrong: PublicKey = hash_to_curve(secret_msg_wrong.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y_wrong, C=C, s=s, e=e, A=A)
+
+    # wrong C
+    C_wrong = PublicKey(
+        bytes.fromhex(
+            "02c724d7e6a5443b39ac8acf11f40420adc4f99a02e7cc1b57703d9391f6d129cd"
+        ),
+        raw=True,
+    )
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y, C=C_wrong, s=s, e=e, A=A)
+
+    # wrong s
+    s_wrong = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),
+        raw=True,
+    )
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y, C=C, s=s_wrong, e=e, A=A)
+
+    # wrong e
+    e_wrong = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),
+        raw=True,
+    )
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y, C=C, s=s, e=e_wrong, A=A)
+
+    # wrong A
+    a_wrong = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000002"
+        ),
+        raw=True,
+    )
+    assert a_wrong.pubkey
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    assert not stamp_step2_alice_verify(Y=Y, C=C, s=s, e=e, A=a_wrong.pubkey)
