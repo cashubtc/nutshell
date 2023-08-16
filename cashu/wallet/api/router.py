@@ -14,7 +14,13 @@ from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
-from ...wallet.helpers import deserialize_token_from_string, init_wallet, receive, send
+from ...wallet.helpers import (
+    deserialize_token_from_string,
+    init_wallet,
+    list_mints,
+    receive,
+    send,
+)
 from ...wallet.nostr import receive_nostr, send_nostr
 from ...wallet.wallet import Wallet as Wallet
 from .api_helpers import verify_mints
@@ -426,12 +432,13 @@ async def info():
     else:
         nostr_public_key = None
         nostr_relays = []
+    mint_list = await list_mints(wallet)
     return InfoResponse(
         version=settings.version,
         wallet=wallet.name,
         debug=settings.debug,
         cashu_dir=settings.cashu_dir,
-        mint_url=settings.mint_url,
+        mint_urls=mint_list,
         settings=settings.env_file,
         tor=settings.tor,
         nostr_public_key=nostr_public_key,

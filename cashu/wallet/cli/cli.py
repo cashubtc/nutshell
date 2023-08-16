@@ -28,7 +28,13 @@ from ...wallet.crud import (
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
-from ..helpers import deserialize_token_from_string, init_wallet, receive, send
+from ..helpers import (
+    deserialize_token_from_string,
+    init_wallet,
+    list_mints,
+    receive,
+    send,
+)
 from ..nostr import receive_nostr, send_nostr
 
 
@@ -691,26 +697,30 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
         print(f"Socks proxy: {settings.socks_proxy}")
     if settings.http_proxy:
         print(f"HTTP proxy: {settings.http_proxy}")
-    print(f"Mint URL: {ctx.obj['HOST']}")
+    mint_list = await list_mints(wallet)
+    print(f"Mint URLs: {mint_list}")
     if mint:
-        mint_info: dict = (await wallet._load_mint_info()).dict()
-        print("")
-        print("Mint information:")
-        print("")
-        if mint_info:
-            print(f"Mint name: {mint_info['name']}")
-            if mint_info["description"]:
-                print(f"Description: {mint_info['description']}")
-            if mint_info["description_long"]:
-                print(f"Long description: {mint_info['description_long']}")
-            if mint_info["contact"]:
-                print(f"Contact: {mint_info['contact']}")
-            if mint_info["version"]:
-                print(f"Version: {mint_info['version']}")
-            if mint_info["motd"]:
-                print(f"Message of the day: {mint_info['motd']}")
-            if mint_info["parameter"]:
-                print(f"Parameter: {mint_info['parameter']}")
+        for mint_url in mint_list:
+            wallet.url = mint_url
+            mint_info: dict = (await wallet._load_mint_info()).dict()
+            print("")
+            print("Mint information:")
+            print("")
+            print(f"Mint URL: {mint_url}")
+            if mint_info:
+                print(f"Mint name: {mint_info['name']}")
+                if mint_info["description"]:
+                    print(f"Description: {mint_info['description']}")
+                if mint_info["description_long"]:
+                    print(f"Long description: {mint_info['description_long']}")
+                if mint_info["contact"]:
+                    print(f"Contact: {mint_info['contact']}")
+                if mint_info["version"]:
+                    print(f"Version: {mint_info['version']}")
+                if mint_info["motd"]:
+                    print(f"Message of the day: {mint_info['motd']}")
+                if mint_info["parameter"]:
+                    print(f"Parameter: {mint_info['parameter']}")
 
     if mnemonic:
         assert wallet.mnemonic
