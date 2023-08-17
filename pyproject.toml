@@ -57,7 +57,7 @@ wallet-test = "tests.test_wallet:test"
 
 
 [tool.black]
-line-length = 120
+line-length = 88
 
 # previously experimental-string-processing = true
 # this should autoformat string properly but does not work
