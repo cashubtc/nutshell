@@ -39,13 +39,12 @@ pgsql = ["psycopg2-binary"]
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^0.971"
-black = {version = "^22.8.0", allow-prereleases = true}
-isort = "^5.10.1"
 pytest-asyncio = "^0.19.0"
 pytest-cov = "^4.0.0"
 pytest = "^7.4.0"
-flake8 = "^6.0.0"
 pre-commit = "^3.3.3"
+ruff = "^0.0.284"
+black = "^23.7.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -55,3 +54,62 @@ build-backend = "poetry.core.masonry.api"
 mint = "cashu.mint.main:main"
 cashu = "cashu.wallet.cli.cli:cli"
 wallet-test = "tests.test_wallet:test"
+
+
+[tool.black]
+line-length = 120
+
+# previously experimental-string-processing = true
+# this should autoformat string properly but does not work
+preview = true
+
+
+[tool.ruff]
+# Same as Black. but black has a 10% overflow rule
+line-length = 150
+
+# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
+# (`I`) means isorting
+select = ["E", "F", "I"]
+ignore = []
+
+# Allow autofix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    "cashu/nostr",
+    "cashu/core/bolt11.py",
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+# Assume Python 3.8
+# target-version = "py38"
+
+[tool.ruff.mccabe]
+# Unlike Flake8, default to a complexity level of 10.
+max-complexity = 10

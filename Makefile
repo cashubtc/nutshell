@@ -1,8 +1,8 @@
-isort:
-	poetry run isort --profile black . --skip cashu/nostr
+ruff:
+	poetry run ruff check . --fix
 
-isort-check:
-	poetry run isort --profile black --check-only . --skip cashu/nostr
+ruff-check:
+	poetry run ruff check .
 
 black:
 	poetry run black . --exclude cashu/nostr
@@ -13,12 +13,9 @@ black-check:
 mypy:
 	poetry run mypy cashu --ignore-missing
 
-flake8:
-	poetry run flake8 cashu
+format: black ruff
 
-format: isort black
-
-check: isort-check black-check flake8 mypy
+check: black-check ruff-check mypy
 
 clean:
 	rm -r cashu.egg-info/ || true

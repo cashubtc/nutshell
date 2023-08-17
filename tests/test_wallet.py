@@ -24,9 +24,7 @@ async def assert_err(f, msg: Union[str, CashuError]):
         error_message: str = str(exc.args[0])
         if isinstance(msg, CashuError):
             if msg.detail not in error_message:
-                raise Exception(
-                    f"CashuError. Expected error: {msg.detail}, got: {error_message}"
-                )
+                raise Exception(f"CashuError. Expected error: {msg.detail}, got: {error_message}")
             return
         if msg not in error_message:
             raise Exception(f"Expected error: {msg}, got: {error_message}")
@@ -94,7 +92,7 @@ async def test_get_keys(wallet1: Wallet):
     assert len(wallet1.keys.public_keys) == settings.max_order
     keyset = await wallet1._get_keys(wallet1.url)
     assert keyset.id is not None
-    assert type(keyset.id) == str
+    assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
 
@@ -185,9 +183,7 @@ async def test_split(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_split_to_send(wallet1: Wallet):
     await wallet1.mint(64)
-    keep_proofs, spendable_proofs = await wallet1.split_to_send(
-        wallet1.proofs, 32, set_reserved=True
-    )
+    keep_proofs, spendable_proofs = await wallet1.split_to_send(wallet1.proofs, 32, set_reserved=True)
     get_spendable = await wallet1._select_proofs_to_send(wallet1.proofs, 32)
     assert keep_proofs == get_spendable
 
@@ -244,9 +240,7 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    _, spendable_proofs = await wallet1.split_to_send(  # type: ignore
-        wallet1.proofs, 32, set_reserved=True
-    )
+    _, spendable_proofs = await wallet1.split_to_send(wallet1.proofs, 32, set_reserved=True)  # type: ignore
     await wallet2.redeem(spendable_proofs)
     assert wallet2.balance == 32
 
@@ -307,9 +301,7 @@ async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
     wallet1_address = await wallet1.create_p2sh_address_and_store()  # receiver side
     secret_lock = await wallet1.create_p2sh_lock(wallet1_address)  # sender side
-    _, send_proofs = await wallet1.split_to_send(
-        wallet1.proofs, 8, secret_lock
-    )  # sender side
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock)  # sender side
     await assert_err(wallet2.redeem(send_proofs), "lock not found.")  # wrong receiver
 
 
@@ -324,9 +316,7 @@ async def test_token_state(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_bump_secret_derivation(wallet3: Wallet):
-    await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla view sugar picture humble"
-    )
+    await wallet3._init_private_key("half depart obvious quality work element tank gorilla view sugar picture humble")
     secrets1, rs1, derivaion_paths1 = await wallet3.generate_n_secrets(5)
     secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
@@ -350,9 +340,7 @@ async def test_bump_secret_derivation(wallet3: Wallet):
 
 @pytest.mark.asyncio
 async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
-    await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla view sugar picture humble"
-    )
+    await wallet3._init_private_key("half depart obvious quality work element tank gorilla view sugar picture humble")
     secrets1_1, rs1_1, derivaion_paths1 = await wallet3.generate_n_secrets(2)
     secrets1_2, rs1_2, derivaion_paths2 = await wallet3.generate_n_secrets(3)
     secrets1 = secrets1_1 + secrets1_2
@@ -364,9 +352,7 @@ async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
 
 @pytest.mark.asyncio
 async def test_generate_secrets_from_to(wallet3: Wallet):
-    await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla view sugar picture humble"
-    )
+    await wallet3._init_private_key("half depart obvious quality work element tank gorilla view sugar picture humble")
     secrets1, rs1, derivaion_paths1 = await wallet3.generate_secrets_from_to(0, 4)
     assert len(secrets1) == 5
     secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(2, 4)
@@ -391,26 +377,20 @@ async def test_restore_wallet_after_mint(wallet3: Wallet):
 @pytest.mark.asyncio
 async def test_restore_wallet_with_invalid_mnemonic(wallet3: Wallet):
     await assert_err(
-        wallet3._init_private_key(
-            "half depart obvious quality work element tank gorilla view sugar picture picture"
-        ),
+        wallet3._init_private_key("half depart obvious quality work element tank gorilla view sugar picture picture"),
         "Invalid mnemonic",
     )
 
 
 @pytest.mark.asyncio
 async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
-    await wallet3._init_private_key(
-        "half depart obvious quality work element tank gorilla view sugar picture humble"
-    )
+    await wallet3._init_private_key("half depart obvious quality work element tank gorilla view sugar picture humble")
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(64)
     assert wallet3.balance == 64
 
-    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
-        wallet3.proofs, 32, set_reserved=True
-    )
+    _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 32, set_reserved=True)  # type: ignore
 
     await reset_wallet_db(wallet3)
     await wallet3.load_proofs()
@@ -424,17 +404,13 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
 
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: Wallet):
-    await wallet3._init_private_key(
-        "hello rug want adapt talent together lunar method bean expose beef position"
-    )
+    await wallet3._init_private_key("hello rug want adapt talent together lunar method bean expose beef position")
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(64)
     assert wallet3.balance == 64
 
-    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
-        wallet3.proofs, 32, set_reserved=True
-    )
+    _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 32, set_reserved=True)  # type: ignore
 
     await wallet2.redeem(spendable_proofs)
 
@@ -464,17 +440,13 @@ class ProofBox:
 
 @pytest.mark.asyncio
 async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
-    await wallet3._init_private_key(
-        "lucky broken tell exhibit shuffle tomato ethics virus rabbit spread measure text"
-    )
+    await wallet3._init_private_key("lucky broken tell exhibit shuffle tomato ethics virus rabbit spread measure text")
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(64)
     assert wallet3.balance == 64
 
-    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
-        wallet3.proofs, 32, set_reserved=True
-    )
+    _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 32, set_reserved=True)  # type: ignore
 
     await wallet3.redeem(spendable_proofs)
 
@@ -500,9 +472,7 @@ async def test_restore_wallet_after_send_twice(
     box.add(wallet3.proofs)
     assert wallet3.balance == 2
 
-    keep_proofs, spendable_proofs = await wallet3.split_to_send(  # type: ignore
-        wallet3.proofs, 1, set_reserved=True
-    )
+    keep_proofs, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 1, set_reserved=True)  # type: ignore
     box.add(wallet3.proofs)
     assert wallet3.available_balance == 1
     await wallet3.redeem(spendable_proofs)
@@ -522,9 +492,7 @@ async def test_restore_wallet_after_send_twice(
 
     # again
 
-    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
-        wallet3.proofs, 1, set_reserved=True
-    )
+    _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 1, set_reserved=True)  # type: ignore
     box.add(wallet3.proofs)
 
     assert wallet3.available_balance == 1
@@ -548,18 +516,14 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     wallet3: Wallet,
 ):
     box = ProofBox()
-    await wallet3._init_private_key(
-        "casual demise flight cradle feature hub link slim remember anger front asthma"
-    )
+    await wallet3._init_private_key("casual demise flight cradle feature hub link slim remember anger front asthma")
     await reset_wallet_db(wallet3)
 
     await wallet3.mint(64)
     box.add(wallet3.proofs)
     assert wallet3.balance == 64
 
-    keep_proofs, spendable_proofs = await wallet3.split_to_send(  # type: ignore
-        wallet3.proofs, 10, set_reserved=True
-    )
+    keep_proofs, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 10, set_reserved=True)  # type: ignore
     box.add(wallet3.proofs)
 
     assert wallet3.available_balance == 64 - 10
@@ -579,9 +543,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
 
     # again
 
-    _, spendable_proofs = await wallet3.split_to_send(  # type: ignore
-        wallet3.proofs, 12, set_reserved=True
-    )
+    _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 12, set_reserved=True)  # type: ignore
 
     assert wallet3.available_balance == 64 - 12
     await wallet3.redeem(spendable_proofs)
