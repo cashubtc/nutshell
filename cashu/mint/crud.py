@@ -90,11 +90,9 @@ async def get_proofs_used(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-    rows = await (conn or db).fetchall(
-        f"""
+    rows = await (conn or db).fetchall(f"""
         SELECT secret from {table_with_schema(db, 'proofs_used')}
-        """
-    )
+        """)
     return [row[0] for row in rows]
 
 
@@ -123,11 +121,9 @@ async def get_proofs_pending(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-    rows = await (conn or db).fetchall(
-        f"""
+    rows = await (conn or db).fetchall(f"""
         SELECT * from {table_with_schema(db, 'proofs_pending')}
-        """
-    )
+        """)
     return [Proof(**r) for r in rows]
 
 

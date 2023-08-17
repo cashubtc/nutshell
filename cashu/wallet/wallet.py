@@ -702,7 +702,8 @@ class Wallet(LedgerAPI):
                 else ""
             )
             print(
-                f'Generated a new mnemonic{wallet_name}. To view it, run "cashu{wallet_command_prefix_str} info --mnemonic".'
+                f"Generated a new mnemonic{wallet_name}. To view it, run"
+                f' "cashu{wallet_command_prefix_str} info --mnemonic".'
             )
         elif from_mnemonic:
             # or use the one provided
@@ -1425,7 +1426,8 @@ class Wallet(LedgerAPI):
 
         if invalidated_proofs:
             logger.debug(
-                f"Invalidating {len(invalidated_proofs)} proofs worth {sum_proofs(invalidated_proofs)} sat."
+                f"Invalidating {len(invalidated_proofs)} proofs worth"
+                f" {sum_proofs(invalidated_proofs)} sat."
             )
 
         async with self.db.connect() as conn:
@@ -1559,7 +1561,8 @@ class Wallet(LedgerAPI):
         private_key = self.private_key
         assert private_key.pubkey
         logger.trace(
-            f"Signing with private key: {private_key.serialize()} public key: {private_key.pubkey.serialize().hex()}"
+            f"Signing with private key: {private_key.serialize()} public key:"
+            f" {private_key.pubkey.serialize().hex()}"
         )
         for proof in proofs:
             logger.trace(f"Signing proof: {proof}")

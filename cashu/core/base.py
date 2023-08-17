@@ -22,8 +22,8 @@ class SecretKind:
 
 
 class SigFlags:
-    SIG_INPUTS = (
-        "SIG_INPUTS"  # require signatures only on the inputs (default signature flag)
+    SIG_INPUTS = (  # require signatures only on the inputs (default signature flag)
+        "SIG_INPUTS"
     )
     SIG_ALL = "SIG_ALL"  # require signatures on inputs and outputs
 
@@ -161,18 +161,20 @@ class Proof(BaseModel):
 
     id: Union[
         None, str
-    ] = ""  # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
+    ] = (  # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
+        ""
+    )
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
     p2pksigs: Union[List[str], None] = []  # P2PK signature
     p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
-    reserved: Union[
-        None, bool
-    ] = False  # whether this proof is reserved for sending, used for coin management in the wallet
-    send_id: Union[
-        None, str
-    ] = ""  # unique ID of send attempt, used for grouping pending tokens in the wallet
+    reserved: Union[None, bool] = (
+        False  # whether this proof is reserved for sending, used for coin management in the wallet
+    )
+    send_id: Union[None, str] = (
+        ""  # unique ID of send attempt, used for grouping pending tokens in the wallet
+    )
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
@@ -338,9 +340,9 @@ class CheckSpendableRequest(BaseModel):
 
 class CheckSpendableResponse(BaseModel):
     spendable: List[bool]
-    pending: Optional[
-        List[bool]
-    ] = None  # TODO: Uncomment when all mints are updated to 0.12.3 and support /check
+    pending: Optional[List[bool]] = (
+        None  # TODO: Uncomment when all mints are updated to 0.12.3 and support /check
+    )
     # with pending tokens (kept for backwards compatibility of new wallets with old mints)
 
 
@@ -421,9 +423,11 @@ class WalletKeyset:
 
         return cls(
             id=row["id"],
-            public_keys=deserialize(str(row["public_keys"]))
-            if dict(row).get("public_keys")
-            else {},
+            public_keys=(
+                deserialize(str(row["public_keys"]))
+                if dict(row).get("public_keys")
+                else {}
+            ),
             mint_url=row["mint_url"],
             valid_from=row["valid_from"],
             valid_to=row["valid_to"],
@@ -489,7 +493,8 @@ class MintKeyset:
         self.id = derive_keyset_id(self.public_keys)  # type: ignore
         if backwards_compatibility_pre_0_12:
             logger.warning(
-                f"WARNING: Using weak key derivation for keyset {self.id} (backwards compatibility < 0.12)"
+                f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
+                " compatibility < 0.12)"
             )
 
 

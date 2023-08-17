@@ -59,7 +59,10 @@ async def info() -> GetInfoResponse:
     "/keys",
     name="Mint public keys",
     summary="Get the public keys of the newest mint keyset",
-    response_description="A dictionary of all supported token values of the mint and their associated public key of the current keyset.",
+    response_description=(
+        "A dictionary of all supported token values of the mint and their associated"
+        " public key of the current keyset."
+    ),
     response_model=KeysResponse,
 )
 async def keys():
@@ -74,7 +77,10 @@ async def keys():
     "/keys/{idBase64Urlsafe}",
     name="Keyset public keys",
     summary="Public keys of a specific keyset",
-    response_description="A dictionary of all supported token values of the mint and their associated public key for a specific keyset.",
+    response_description=(
+        "A dictionary of all supported token values of the mint and their associated"
+        " public key for a specific keyset."
+    ),
     response_model=KeysResponse,
 )
 async def keyset_keys(idBase64Urlsafe: str):
@@ -109,7 +115,10 @@ async def keysets() -> KeysetsResponse:
     name="Request mint",
     summary="Request minting of new tokens",
     response_model=GetMintResponse,
-    response_description="A Lightning invoice to be paid and a hash to request minting of new tokens after payment.",
+    response_description=(
+        "A Lightning invoice to be paid and a hash to request minting of new tokens"
+        " after payment."
+    ),
 )
 async def request_mint(amount: int = 0) -> GetMintResponse:
     """
@@ -135,7 +144,9 @@ async def request_mint(amount: int = 0) -> GetMintResponse:
     name="Mint tokens",
     summary="Mint tokens in exchange for a Bitcoin paymemt that the user has made",
     response_model=PostMintResponse,
-    response_description="A list of blinded signatures that can be used to create proofs.",
+    response_description=(
+        "A list of blinded signatures that can be used to create proofs."
+    ),
 )
 async def mint(
     payload: PostMintRequest,
@@ -163,9 +174,15 @@ async def mint(
 @router.post(
     "/melt",
     name="Melt tokens",
-    summary="Melt tokens for a Bitcoin payment that the mint will make for the user in exchange",
+    summary=(
+        "Melt tokens for a Bitcoin payment that the mint will make for the user in"
+        " exchange"
+    ),
     response_model=GetMeltResponse,
-    response_description="The state of the payment, a preimage as proof of payment, and a list of promises for change.",
+    response_description=(
+        "The state of the payment, a preimage as proof of payment, and a list of"
+        " promises for change."
+    ),
 )
 async def melt(payload: PostMeltRequest) -> GetMeltResponse:
     """
@@ -225,7 +242,9 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     name="Split",
     summary="Split proofs at a specified amount",
     response_model=Union[PostSplitResponse, PostSplitResponse_Deprecated],
-    response_description="A list of blinded signatures that can be used to create proofs.",
+    response_description=(
+        "A list of blinded signatures that can be used to create proofs."
+    ),
 )
 async def split(
     payload: PostSplitRequest,
@@ -259,8 +278,9 @@ async def split(
             else:
                 frst_promises.insert(0, promise)  # and insert at the beginning
         logger.trace(
-            f"Split into keep: {len(frst_promises)}: {sum([p.amount for p in frst_promises])} "
-            f"sat and send: {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
+            f"Split into keep: {len(frst_promises)}:"
+            f" {sum([p.amount for p in frst_promises])} sat and send:"
+            f" {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
         )
         return PostSplitResponse_Deprecated(fst=frst_promises, snd=scnd_promises)
         # END backwards compatibility < 0.13

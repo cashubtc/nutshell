@@ -134,7 +134,8 @@ if __name__ == "__main__":
     txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
     txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
     print(
-        f"Carol to Bob:\nscript: {txin_redeemScript.__repr__()}\nscript: {txin_redeemScript_b64}\nsignature: {txin_signature_b64}\n"
+        f"Carol to Bob:\nscript: {txin_redeemScript.__repr__()}\nscript:"
+        f" {txin_redeemScript_b64}\nsignature: {txin_signature_b64}\n"
     )
     print("")
     # ---------
@@ -155,7 +156,8 @@ if __name__ == "__main__":
     tx, _ = step1_bob_carol_create_tx(txin_p2sh_address)
 
     print(
-        f"Bob verifies:\nscript: {txin_redeemScript_b64}\nsignature: {txin_signature_b64}\n"
+        f"Bob verifies:\nscript: {txin_redeemScript_b64}\nsignature:"
+        f" {txin_signature_b64}\n"
     )
     script_valid = step3_bob_verify_script(txin_signature, txin_redeemScript, tx)
     # MINT redeems tokens and stores P2SH:txin_p2sh_address
