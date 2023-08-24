@@ -195,7 +195,8 @@ async def send(
                 send_proofs = [p]
                 break
         assert send_proofs, Exception(
-            f"No proof with this amount found. Available amounts: {set([p.amount for p in wallet.proofs])}"
+            "No proof with this amount found. Available amounts:"
+            f" {set([p.amount for p in wallet.proofs])}"
         )
         await wallet.set_reserved(send_proofs, reserved=True)
 

@@ -37,11 +37,13 @@ async def migrate_databases(db: Database, migrations_module):
         exists = None
         if conn.type == SQLITE:
             exists = await conn.fetchone(
-                f"SELECT * FROM sqlite_master WHERE type='table' AND name='{table_with_schema(db, 'dbversions')}'"
+                "SELECT * FROM sqlite_master WHERE type='table' AND"
+                f" name='{table_with_schema(db, 'dbversions')}'"
             )
         elif conn.type in {POSTGRES, COCKROACH}:
             exists = await conn.fetchone(
-                f"SELECT * FROM information_schema.tables WHERE table_name = '{table_with_schema(db, 'dbversions')}'"
+                "SELECT * FROM information_schema.tables WHERE table_name ="
+                f" '{table_with_schema(db, 'dbversions')}'"
             )
 
         if not exists:
