@@ -3,7 +3,7 @@ import math
 import time
 from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
-from bolt11.decode import decode
+from bolt11.decode import decode as bolt11_decode
 from loguru import logger
 
 from ..core.base import (
@@ -927,7 +927,7 @@ class Ledger:
             logger.trace("verified proofs")
 
             total_provided = sum_proofs(proofs)
-            invoice_obj = decode(invoice)
+            invoice_obj = bolt11_decode(invoice)
             assert invoice_obj.amount_msat, "invoice has no amount"
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
             if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
@@ -1015,7 +1015,7 @@ class Ledger:
         # hack: check if it's internal, if it exists, it will return paid = False,
         # if id does not exist (not internal), it returns paid = None
         if settings.lightning:
-            decoded_invoice = decode(pr)
+            decoded_invoice = bolt11_decode(pr)
             assert decoded_invoice.amount_msat, "invoice has no amount"
             amount = math.ceil(decoded_invoice.amount_msat / 1000)
             logger.trace(
