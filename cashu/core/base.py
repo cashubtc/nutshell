@@ -159,22 +159,17 @@ class Proof(BaseModel):
     Value token
     """
 
-    id: Union[
-        None, str
-    ] = (  # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
-        ""
-    )
+    # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
+    id: Union[None, str] = ""
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
     p2pksigs: Union[List[str], None] = []  # P2PK signature
     p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
-    reserved: Union[None, bool] = (
-        False  # whether this proof is reserved for sending, used for coin management in the wallet
-    )
-    send_id: Union[None, str] = (
-        ""  # unique ID of send attempt, used for grouping pending tokens in the wallet
-    )
+    # whether this proof is reserved for sending, used for coin management in the wallet
+    reserved: Union[None, bool] = False
+    # unique ID of send attempt, used for grouping pending tokens in the wallet
+    send_id: Union[None, str] = ""
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
