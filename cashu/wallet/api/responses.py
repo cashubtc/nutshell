@@ -74,7 +74,7 @@ class InfoResponse(BaseModel):
     wallet: str
     debug: bool
     cashu_dir: str
-    mint_url: str
+    mint_urls: List[str] = []
     settings: Optional[str]
     tor: bool
     nostr_public_key: Optional[str] = None
