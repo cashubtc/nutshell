@@ -33,7 +33,7 @@ psycopg2-binary = { version = "^2.9.7", optional = true }
 httpx = "^0.24.1"
 bip32 = "^3.4"
 mnemonic = "^0.20"
-bolt11 = "^2.0.0"
+bolt11 = "^2.0.4"
 
 [tool.poetry.extras]
 pgsql = ["psycopg2-binary"]
