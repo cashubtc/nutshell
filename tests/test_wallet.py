@@ -244,7 +244,9 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
-    _, spendable_proofs = await wallet1.split_to_send(wallet1.proofs, 32, set_reserved=True)  # type: ignore
+    _, spendable_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 32, set_reserved=True
+    )
     await wallet2.redeem(spendable_proofs)
     assert wallet2.balance == 32
 
