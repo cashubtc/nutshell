@@ -60,7 +60,7 @@ async def test_keysets(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_get_keyset(ledger: Ledger):
     keyset = ledger.get_keyset()
-    assert type(keyset) == dict
+    assert isinstance(keyset, dict)
     assert len(keyset) == settings.max_order
 
 
