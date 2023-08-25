@@ -1,3 +1,4 @@
+import asyncio
 from typing import List, Optional, Union
 
 from fastapi import APIRouter
@@ -184,15 +185,23 @@ async def mint(
         " promises for change."
     ),
 )
-async def melt(payload: PostMeltRequest) -> GetMeltResponse:
+async def melt(payload: PostMeltRequest, blocking: bool = True) -> GetMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /melt: {payload}")
-    ok, preimage, change_promises = await ledger.melt(
-        payload.proofs, payload.pr, payload.outputs
-    )
-    resp = GetMeltResponse(paid=ok, preimage=preimage, change=change_promises)
+
+    # run asynchronously if blocking is False
+    if not blocking:
+        asyncio.create_task(ledger.melt(payload.proofs, payload.pr, payload.outputs))
+        resp = GetMeltResponse(paid=False, preimage=None, change=None)
+    else:
+        # otherwise run synchronously
+        ok, preimage, change_promises = await ledger.melt(
+            payload.proofs, payload.pr, payload.outputs
+        )
+        resp = GetMeltResponse(paid=ok, preimage=preimage, change=change_promises)
+
     logger.trace(f"< POST /melt: {resp}")
     return resp
 
@@ -291,7 +300,7 @@ async def split(
 @router.post(
     "/restore",
     name="Restore",
-    summary="Restores a blinded signature from a secret",
+    summary="Reissues a blinded signature for a blinded secret",
     response_model=PostRestoreResponse,
     response_description=(
         "Two lists with the first being the list of the provided outputs that "

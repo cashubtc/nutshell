@@ -798,7 +798,7 @@ class Ledger:
             return_amounts_sorted = sorted(return_amounts, reverse=True)
             # we need to imprint these amounts into the blanket outputs
             for i in range(len(outputs)):
-                outputs[i].amount = return_amounts_sorted[i]
+                outputs[i].amount = return_amounts_sorted[i]  # type: ignore
             if not self._verify_no_duplicate_outputs(outputs):
                 raise TransactionError("duplicate promises.")
             return_promises = await self._generate_promises(outputs, keyset)
