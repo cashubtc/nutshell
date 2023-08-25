@@ -282,9 +282,9 @@ async def burn(
         wallet = await mint_wallet(mint)
     if not (all or token or force or delete) or (token and all):
         raise Exception(
-            "enter a token or use --all to burn all pending tokens, --force to check"
-            " all tokensor --delete with send ID to force-delete pending token from"
-            " list if mint is unavailable.",
+            "enter a token or use --all to burn all pending tokens, --force to"
+            " check all tokensor --delete with send ID to force-delete pending"
+            " token from list if mint is unavailable.",
         )
     if all:
         # check only those who are flagged as reserved
@@ -414,7 +414,7 @@ async def restore(
     if to < 0:
         raise Exception("Counter must be positive")
     await wallet.load_mint()
-    await wallet.restore_promises(0, to)
+    await wallet.restore_promises_from_to(0, to)
     await wallet.invalidate(wallet.proofs)
     wallet.status()
     return RestoreResponse(balance=wallet.available_balance)
