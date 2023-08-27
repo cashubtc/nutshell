@@ -88,6 +88,7 @@ async def pay(
 
     global wallet
     wallet = await mint_wallet(mint)
+    await wallet.load_proofs(reload=True)
 
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
     assert total_amount > 0, "amount has to be larger than zero."
