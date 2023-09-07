@@ -1,6 +1,7 @@
 from typing import Any, List, Optional
 
 from ..core.base import BlindedSignature, Invoice, MintKeyset, Proof
+from ..core.bolt11 import Invoice as bolt11_invoice
 from ..core.db import Connection, Database, table_with_schema
 
 
@@ -46,6 +47,9 @@ class LedgerCrud:
 
     async def update_lightning_invoice(*args, **kwags):
         return await update_lightning_invoice(*args, **kwags)  # type: ignore
+
+    async def store_invoice_and_proofs(*args, **kwargs):
+        return await store_invoice_and_proofs(*args, **kwargs)
 
 
 async def store_promise(
@@ -264,3 +268,26 @@ async def get_keyset(
         tuple(values),
     )
     return [MintKeyset(**row) for row in rows]
+
+
+async def store_invoice_and_proofs(
+    db: Database,
+    invoice: bolt11_invoice,
+    proof: Proof,
+    conn: Optional[Connection] = None,
+):
+    await (conn or db).execute(
+        f"""
+            INSERT INTO {table_with_schema(db, 'payments')}
+              (invoice_amount, date, payment_hash, proof_amount, proof_C, proof_secret)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+        (
+            invoice.amount_msat / 1000,
+            invoice.date,
+            invoice.payment_hash,
+            proof.amount,
+            proof.C,
+            proof.secret,
+        ),
+    )

@@ -955,6 +955,8 @@ class Ledger:
             )
 
             if status:
+                for p in proofs:
+                    await self.crud.store_invoice_and_proofs(self.db, invoice_obj, p)
                 logger.trace("invalidating proofs")
                 await self._invalidate_proofs(proofs)
                 logger.trace("invalidated proofs")

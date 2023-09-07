@@ -156,3 +156,22 @@ async def m007_proofs_and_promises_store_id(db: Database):
     await db.execute(
         f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN id TEXT"
     )
+
+
+async def m008_paid_invoices_and_proofs(db: Database):
+    """
+    Table to store invoices paid by the mint and corresponding proofs.
+    """
+    await db.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'payments')} (
+                    invoice_amount {db.big_int} NOT NULL,
+                    date TEXT NOT NULL,
+                    payment_hash TEXT NOT NULL,
+                    proof_amount TEXT NOT NULL,
+                    proof_C TEXT NOT NULL,
+                    proof_secret TEXT NOT NULL,
+
+                    UNIQUE (proof_secret)
+
+                );
+            """)
