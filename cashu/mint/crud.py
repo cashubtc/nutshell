@@ -273,19 +273,21 @@ async def get_keyset(
 async def store_invoice_and_proofs(
     db: Database,
     invoice: bolt11_invoice,
+    preimage: str,
     proof: Proof,
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
         f"""
             INSERT INTO {table_with_schema(db, 'payments')}
-              (invoice_amount, date, payment_hash, proof_amount, proof_C, proof_secret)
-            VALUES (?, ?, ?, ?, ?, ?)
+              (invoice_amount, date, payment_hash, preimage, proof_amount, proof_C, proof_secret)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
         (
             invoice.amount_msat / 1000,
             invoice.date,
             invoice.payment_hash,
+            preimage,
             proof.amount,
             proof.C,
             proof.secret,

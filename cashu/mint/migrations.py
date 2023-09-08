@@ -167,7 +167,8 @@ async def m008_paid_invoices_and_proofs(db: Database):
                     invoice_amount {db.big_int} NOT NULL,
                     date TEXT NOT NULL,
                     payment_hash TEXT NOT NULL,
-                    proof_amount TEXT NOT NULL,
+                    preimage TEXT NOT NULL,
+                    proof_amount {db.big_int} NOT NULL,
                     proof_C TEXT NOT NULL,
                     proof_secret TEXT NOT NULL,
 
