@@ -444,3 +444,21 @@ async def store_seed_and_mnemonic(
             mnemonic,
         ),
     )
+
+
+async def store_tx(
+    db: Database,
+    type: str,
+    amount: int,
+    token: str,
+    time: int,
+    conn: Optional[Connection] = None,
+):
+    await (conn or db).execute(
+        """
+        INSERT INTO tx_history
+          (type, amount, token, time)
+        VALUES (?, ?, ?, ?)
+        """,
+        (type, amount, token, time),
+    )
