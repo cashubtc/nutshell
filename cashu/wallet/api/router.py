@@ -13,7 +13,12 @@ from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
-from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
+from ...wallet.crud import (
+    get_lightning_invoices,
+    get_reserved_proofs,
+    get_tx_history,
+    get_unused_locks,
+)
 from ...wallet.helpers import (
     deserialize_token_from_string,
     init_wallet,
@@ -27,6 +32,7 @@ from .api_helpers import verify_mints
 from .responses import (
     BalanceResponse,
     BurnResponse,
+    HistoryResponse,
     InfoResponse,
     InvoiceResponse,
     InvoicesResponse,
@@ -446,3 +452,14 @@ async def info():
         nostr_relays=nostr_relays,
         socks_proxy=settings.socks_proxy,
     )
+
+
+@router.get("/history", name="Transaction history", response_model=HistoryResponse)
+async def history(
+    number: int = Query(default=None, description="Show only last n transactions"),
+):
+    txs = await get_tx_history(wallet.db)
+    txs = sorted(txs, key=itemgetter("time"), reverse=True)
+    if number:
+        txs = txs[:number]
+    return HistoryResponse(txs=txs)

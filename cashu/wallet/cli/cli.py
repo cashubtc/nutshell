@@ -23,6 +23,7 @@ from ...wallet.crud import (
     get_lightning_invoices,
     get_reserved_proofs,
     get_seed_and_mnemonic,
+    get_tx_history,
     get_unused_locks,
 )
 from ...wallet.wallet import Wallet as Wallet
@@ -790,3 +791,40 @@ async def restore(ctx: Context, to: int, batch: int):
     await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
     await wallet.load_proofs()
     wallet.status()
+
+
+@cli.command("history", help="Show transaction history.")
+@click.option(
+    "--detailed",
+    "-d",
+    default=False,
+    help="Show detailed information on transactions.",
+    is_flag=True,
+)
+@click.option(
+    "--number", "-n", default=None, help="Show only last n transactions.", type=int
+)
+@click.pass_context
+@coro
+async def history(ctx: Context, detailed: bool, number: int):
+    wallet: Wallet = ctx.obj["WALLET"]
+    txs = await get_tx_history(wallet.db)
+    txs = sorted(txs, key=itemgetter("time"), reverse=True)
+    if number:
+        txs = txs[:number]
+    print("----------------Transaction history----------------")
+    print("Tx type              Amount     Time")
+    print("---------------------------------------------------")
+    for row in txs:
+        tx_type, amount, token, hash, preimage, time = row
+        output = (
+            "{:<12}".format(tx_type)
+            + "{:>15}".format(amount)
+            + "\t"
+            + "{}".format(datetime.utcfromtimestamp(int(time)))
+        )
+        if detailed:
+            output += "\n" + "Token: " + token
+            if tx_type == "lightning":
+                output += "\n" + "Hash: " + hash
+        print(output)

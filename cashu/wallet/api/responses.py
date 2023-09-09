@@ -80,3 +80,7 @@ class InfoResponse(BaseModel):
     nostr_public_key: Optional[str] = None
     nostr_relays: List[str] = []
     socks_proxy: Optional[str] = None
+
+
+class HistoryResponse(BaseModel):
+    txs: List
