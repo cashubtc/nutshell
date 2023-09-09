@@ -1,5 +1,5 @@
 import time
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 from ..core.base import Invoice, P2SHScript, Proof, WalletKeyset
 from ..core.db import Connection, Database
@@ -452,7 +452,7 @@ async def store_tx(
     amount: int,
     token: str,
     hash: str,
-    preimage: str,
+    preimage: Union[str, None],
     time: int,
     conn: Optional[Connection] = None,
 ):

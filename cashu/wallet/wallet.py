@@ -1162,12 +1162,13 @@ class Wallet(LedgerAPI):
         if status.paid:
             # the payment was successful
             await self.invalidate(proofs)
+            time_paid = int(time.time())
             invoice_obj = Invoice(
                 amount=-sum_proofs(proofs),
                 pr=invoice,
                 preimage=status.preimage,
                 paid=True,
-                time_paid=time.time(),
+                time_paid=time_paid,
                 hash="",
             )
             # we have a unique constraint on the hash, so we generate a random one if it doesn't exist
@@ -1180,8 +1181,8 @@ class Wallet(LedgerAPI):
                 -sum_proofs(proofs),
                 token,
                 invoice_obj.hash,
-                invoice_obj.preimage,
-                invoice_obj.time_paid,
+                status.preimage,
+                time_paid,
             )
 
             # handle change and produce proofs
