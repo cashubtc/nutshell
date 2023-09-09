@@ -157,6 +157,13 @@ async def test_info():
 
 
 @pytest.mark.asyncio
+async def test_history():
+    with TestClient(app) as client:
+        response = client.get("/history")
+        assert response.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_flow(wallet: Wallet):
     with TestClient(app) as client:
         if not settings.lightning:

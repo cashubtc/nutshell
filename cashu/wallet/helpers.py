@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import time
 
 from loguru import logger
 
@@ -10,7 +11,7 @@ from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..wallet import migrations
-from ..wallet.crud import get_keyset
+from ..wallet.crud import get_keyset, store_tx
 from ..wallet.wallet import Wallet
 
 
@@ -40,6 +41,7 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
     """
+    amount = 0
     for t in token.token:
         assert t.mint, Exception(
             "redeem_TokenV3_multimint: multimint redeem without URL"
@@ -56,6 +58,8 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
             redeem_proofs = [p for p in t.proofs if p.id == keyset]
             _, _ = await mint_wallet.redeem(redeem_proofs)
             print(f"Received {sum_proofs(redeem_proofs)} sats")
+            amount += sum_proofs(redeem_proofs)
+    return amount
 
 
 def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
@@ -130,7 +134,7 @@ async def receive(
 
     if includes_mint_info:
         # redeem tokens with new wallet instances
-        await redeem_TokenV3_multimint(
+        amount = await redeem_TokenV3_multimint(
             wallet,
             tokenObj,
         )
@@ -151,7 +155,12 @@ async def receive(
         )
         await mint_wallet.load_mint(keyset_in_token)
         _, _ = await mint_wallet.redeem(proofs)
-        print(f"Received {sum_proofs(proofs)} sats")
+        amount = sum_proofs(proofs)
+        print(f"Received {amount} sats")
+
+    await store_tx(
+        wallet.db, "ecash", amount, tokenObj.serialize(), "NA", "NA", int(time.time())
+    )
 
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)
@@ -214,6 +223,8 @@ async def send(
         include_mints=True,
     )
     print(token)
+
+    await store_tx(wallet.db, "ecash", -amount, token, "NA", "NA", int(time.time()))
 
     if legacy:
         print("")

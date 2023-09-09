@@ -1,5 +1,5 @@
 import time
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 from ..core.base import Invoice, P2SHScript, Proof, WalletKeyset
 from ..core.db import Connection, Database
@@ -444,3 +444,33 @@ async def store_seed_and_mnemonic(
             mnemonic,
         ),
     )
+
+
+async def store_tx(
+    db: Database,
+    type: str,
+    amount: int,
+    token: str,
+    hash: str,
+    preimage: Union[str, None],
+    time: int,
+    conn: Optional[Connection] = None,
+):
+    await (conn or db).execute(
+        """
+        INSERT INTO tx_history
+          (type, amount, token, hash, preimage, time)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (type, amount, token, hash, preimage, time),
+    )
+
+
+async def get_tx_history(
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+    rows = await (conn or db).fetchall("""
+            SELECT * from tx_history
+            """)
+    return rows

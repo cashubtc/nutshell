@@ -173,3 +173,20 @@ async def m009_privatekey_and_determinstic_key_derivation(db: Database):
             );
         """)
     # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")
+
+
+async def m010_tx_history(db: Database):
+    """
+    Stores Lightning invoices.
+    """
+    await db.execute(f"""
+        CREATE TABLE IF NOT EXISTS tx_history (
+            type TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            token TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            preimage TEXT NOT NULL,
+            time TIMESTAMP DEFAULT {db.timestamp_now}
+
+        );
+    """)
