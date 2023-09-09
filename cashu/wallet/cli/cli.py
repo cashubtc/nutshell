@@ -169,9 +169,12 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     wallet.status()
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
     if not yes:
+        potential = (
+            f" ({total_amount} sat with potential fees)" if fee_reserve_sat else ""
+        )
+        message = f"Pay {total_amount - fee_reserve_sat} sat{potential}?"
         click.confirm(
-            f"Pay {total_amount - fee_reserve_sat} sat ({total_amount} sat with"
-            " potential fees)?",
+            message,
             abort=True,
             default=True,
         )
