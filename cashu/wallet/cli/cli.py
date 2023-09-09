@@ -216,14 +216,14 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
     # user requests an invoice
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)
-        if invoice.pr:
+        if invoice.bolt11:
             print(f"Pay invoice to mint {amount} sat:")
             print("")
-            print(f"Invoice: {invoice.pr}")
+            print(f"Invoice: {invoice.bolt11}")
             print("")
             print(
                 "If you abort this you can use this command to recheck the"
-                f" invoice:\ncashu invoice {amount} --hash {invoice.hash}"
+                f" invoice:\ncashu invoice {amount} --id {invoice.id}"
             )
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
@@ -236,7 +236,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
             while time.time() < check_until and not paid:
                 time.sleep(3)
                 try:
-                    await wallet.mint(amount, split=optional_split, hash=invoice.hash)
+                    await wallet.mint(amount, split=optional_split, hash=invoice.id)
                     paid = True
                     print(" Invoice paid.")
                 except Exception as e:
@@ -286,17 +286,17 @@ async def swap(ctx: Context):
 
     # pay invoice from outgoing mint
     total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
-        invoice.pr
+        invoice.bolt11
     )
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(send_proofs, invoice.pr, fee_reserve_sat)
+    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, hash=invoice.hash)
+    await incoming_wallet.mint(amount, hash=invoice.id)
 
     await incoming_wallet.load_proofs(reload=True)
     await print_mint_balances(incoming_wallet, show_mints=True)
@@ -636,8 +636,8 @@ async def invoices(ctx):
             print(f"Paid: {invoice.paid}")
             print(f"Incoming: {invoice.amount > 0}")
             print(f"Amount: {abs(invoice.amount)}")
-            if invoice.hash:
-                print(f"Hash: {invoice.hash}")
+            if invoice.id:
+                print(f"ID: {invoice.id}")
             if invoice.preimage:
                 print(f"Preimage: {invoice.preimage}")
             if invoice.time_created:
@@ -651,7 +651,7 @@ async def invoices(ctx):
                 )
                 print(f"Paid: {d}")
             print("")
-            print(f"Payment request: {invoice.pr}")
+            print(f"Payment request: {invoice.bolt11}")
             print("")
             print("--------------------------\n")
     else:

@@ -173,6 +173,12 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
+    mint_id: Union[None, str] = (
+        None  # holds the id of the mint operation that created this proof
+    )
+    melt_id: Union[None, str] = (
+        None  # holds the id of the melt operation that destroyed this proof
+    )
 
     def to_dict(self):
         # dictionary without the fields that don't need to be send to Carol
@@ -224,8 +230,9 @@ class BlindedMessages(BaseModel):
 
 class Invoice(BaseModel):
     amount: int
-    pr: str
-    hash: str
+    bolt11: str
+    id: str
+    out: Union[None, bool] = None
     payment_hash: Union[None, str] = None
     preimage: Union[str, None] = None
     issued: Union[None, bool] = False

@@ -169,30 +169,31 @@ async def store_lightning_invoice(
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'invoices')}
-          (amount, pr, hash, issued, payment_hash)
+          (amount, bolt11, id, issued, payment_hash, out)
         VALUES (?, ?, ?, ?, ?)
         """,
         (
             invoice.amount,
-            invoice.pr,
-            invoice.hash,
+            invoice.bolt11,
+            invoice.id,
             invoice.issued,
             invoice.payment_hash,
+            invoice.out,
         ),
     )
 
 
 async def get_lightning_invoice(
     db: Database,
-    hash: str,
+    id: str,
     conn: Optional[Connection] = None,
 ):
     row = await (conn or db).fetchone(
         f"""
         SELECT * from {table_with_schema(db, 'invoices')}
-        WHERE hash = ?
+        WHERE id = ?
         """,
-        (hash,),
+        (id,),
     )
 
     return Invoice(**row) if row else None
@@ -200,15 +201,15 @@ async def get_lightning_invoice(
 
 async def update_lightning_invoice(
     db: Database,
-    hash: str,
+    id: str,
     issued: bool,
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
-        f"UPDATE {table_with_schema(db, 'invoices')} SET issued = ? WHERE hash = ?",
+        f"UPDATE {table_with_schema(db, 'invoices')} SET issued = ? WHERE id = ?",
         (
             issued,
-            hash,
+            id,
         ),
     )
 

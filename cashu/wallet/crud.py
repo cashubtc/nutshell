@@ -13,8 +13,8 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (id, amount, C, secret, time_created, derivation_path)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (id, amount, C, secret, time_created, derivation_path, mint_id, melt_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             proof.id,
@@ -23,18 +23,41 @@ async def store_proof(
             str(proof.secret),
             int(time.time()),
             proof.derivation_path,
+            proof.mint_id,
+            proof.melt_id,
         ),
     )
 
 
 async def get_proofs(
     db: Database,
+    melt_id: str = "",
+    mint_id: str = "",
     conn: Optional[Connection] = None,
 ):
-    rows = await (conn or db).fetchall("""
-        SELECT * from proofs
-        """)
-    return [Proof(**dict(r)) for r in rows]
+    clauses = []
+    values: List[Any] = []
+
+    if melt_id:
+        clauses.append("melt_id = ?")
+        values.append(melt_id)
+    if mint_id:
+        clauses.append("mint_id = ?")
+        values.append(mint_id)
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
+    print(where)
+    rows = (
+        await (conn or db).fetchall(
+            f"""
+            SELECT * from proofs
+            {where}
+            """,
+            tuple(values),
+        ),
+    )
+    return [Proof(**dict(r)) for r in rows[0]] if rows else []
 
 
 async def get_reserved_proofs(
@@ -64,8 +87,8 @@ async def invalidate_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs_used
-          (amount, C, secret, time_used, id, derivation_path)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             proof.amount,
@@ -74,6 +97,8 @@ async def invalidate_proof(
             int(time.time()),
             proof.id,
             proof.derivation_path,
+            proof.mint_id,
+            proof.melt_id,
         ),
     )
 
@@ -247,31 +272,37 @@ async def store_lightning_invoice(
     await (conn or db).execute(
         """
         INSERT INTO invoices
-          (amount, pr, hash, preimage, paid, time_created, time_paid)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          (amount, bolt11, id, payment_hash, preimage, paid, time_created, time_paid, out)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             invoice.amount,
-            invoice.pr,
-            invoice.hash,
+            invoice.bolt11,
+            invoice.id,
+            invoice.payment_hash,
             invoice.preimage,
             invoice.paid,
             invoice.time_created,
             invoice.time_paid,
+            invoice.out,
         ),
     )
 
 
 async def get_lightning_invoice(
     db: Database,
-    hash: str = "",
+    id: str = "",
+    payment_hash: str = "",
     conn: Optional[Connection] = None,
 ):
     clauses = []
     values: List[Any] = []
-    if hash:
-        clauses.append("hash = ?")
-        values.append(hash)
+    if id:
+        clauses.append("id = ?")
+        values.append(id)
+    if payment_hash:
+        clauses.append("payment_hash = ?")
+        values.append(payment_hash)
 
     where = ""
     if clauses:
@@ -315,7 +346,7 @@ async def get_lightning_invoices(
 
 async def update_lightning_invoice(
     db: Database,
-    hash: str,
+    id: str,
     paid: bool,
     time_paid: Optional[int] = None,
     conn: Optional[Connection] = None,
@@ -330,10 +361,10 @@ async def update_lightning_invoice(
         values.append(time_paid)
 
     await (conn or db).execute(
-        f"UPDATE invoices SET {', '.join(clauses)} WHERE hash = ?",
+        f"UPDATE invoices SET {', '.join(clauses)} WHERE id = ?",
         (
             *values,
-            hash,
+            id,
         ),
     )
 

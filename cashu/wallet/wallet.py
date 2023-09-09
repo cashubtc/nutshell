@@ -452,7 +452,15 @@ class LedgerAPI(object):
         self.raise_on_error(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse.parse_obj(return_dict)
-        return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
+        decoded_invoice = bolt11.decode(mint_response.pr)
+        return Invoice(
+            amount=amount,
+            bolt11=mint_response.pr,
+            payment_hash=decoded_invoice.payment_hash,
+            id=mint_response.hash,
+            out=False,
+            time_created=int(time.time()),
+        )
 
     @async_set_requests
     async def mint(self, amounts: List[int], hash: Optional[str] = None) -> List[Proof]:
@@ -495,7 +503,11 @@ class LedgerAPI(object):
         await bump_secret_derivation(
             db=self.db, keyset_id=self.keyset_id, by=len(amounts)
         )
-        return self._construct_proofs(promises, secrets, rs, derivation_paths)
+        proofs = self._construct_proofs(promises, secrets, rs, derivation_paths)
+        # add invoice hash to proofs to store in db
+        for p in proofs:
+            p.mint_id = hash
+        return proofs
 
     @async_set_requests
     async def split(
@@ -877,7 +889,6 @@ class Wallet(LedgerAPI):
             Invoice: Lightning invoice
         """
         invoice = await super().request_mint(amount)
-        invoice.time_created = int(time.time())
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
@@ -920,7 +931,7 @@ class Wallet(LedgerAPI):
         await self._store_proofs(proofs)
         if hash:
             await update_lightning_invoice(
-                db=self.db, hash=hash, paid=True, time_paid=int(time.time())
+                db=self.db, id=hash, paid=True, time_paid=int(time.time())
             )
         self.proofs += proofs
         return proofs
@@ -1155,17 +1166,27 @@ class Wallet(LedgerAPI):
 
         if status.paid:
             # the payment was successful
-            await self.invalidate(proofs)
+            # generate a random ID for this transaction
+            melt_id = await self._generate_secret()
+
+            # store the ID in the melt_id of this proof
+            for p in proofs:
+                p.melt_id = melt_id
+
+            # we don't have to recheck the spendable sate of these tokens when invalidating
+            await self.invalidate(proofs, check_spendable=False)
+
+            decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)
             invoice_obj = Invoice(
                 amount=-sum_proofs(proofs),
-                pr=invoice,
+                bolt11=invoice,
+                payment_hash=decoded_invoice.payment_hash,
                 preimage=status.preimage,
                 paid=True,
-                time_paid=time.time(),
-                hash="",
+                time_paid=int(time.time()),
+                id=melt_id,  # store the same ID in the invoice
+                out=True,  # outgoing invoice
             )
-            # we have a unique constraint on the hash, so we generate a random one if it doesn't exist
-            invoice_obj.hash = invoice_obj.hash or await self._generate_secret()
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
             # handle change and produce proofs

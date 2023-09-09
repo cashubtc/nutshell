@@ -156,3 +156,23 @@ async def m007_proofs_and_promises_store_id(db: Database):
     await db.execute(
         f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN id TEXT"
     )
+
+
+async def m008_add_out_to_invoices(db: Database):
+    # column in invoices for marking whether the invoice is incoming (out=False) or outgoing (out=True)
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN out BOOL"
+    )
+    # rename column pr to bolt11
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN pr TO bolt11"
+    )
+    # rename column hash to payment_hash
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN hash TO id"
+    )
+
+    # add column payment_hash
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN payment_hash TEXT"
+    )

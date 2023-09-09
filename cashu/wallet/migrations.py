@@ -173,3 +173,19 @@ async def m009_privatekey_and_determinstic_key_derivation(db: Database):
             );
         """)
     # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")
+
+
+async def m010_add_ids_to_proofs_and_out_to_invoices(db: Database):
+    await db.execute("ALTER TABLE proofs ADD COLUMN mint_id TEXT")
+    await db.execute("ALTER TABLE proofs_used ADD COLUMN mint_id TEXT")
+    await db.execute("ALTER TABLE proofs ADD COLUMN melt_id TEXT")
+    await db.execute("ALTER TABLE proofs_used ADD COLUMN melt_id TEXT")
+
+    # column in invoices for marking whether the invoice is incoming (out=False) or outgoing (out=True)
+    await db.execute("ALTER TABLE invoices ADD COLUMN out BOOL")
+    # rename column pr to bolt11
+    await db.execute("ALTER TABLE invoices RENAME COLUMN pr TO bolt11")
+    # rename column hash to payment_hash
+    await db.execute("ALTER TABLE invoices RENAME COLUMN hash TO id")
+    # add column payment_hash
+    await db.execute("ALTER TABLE invoices ADD COLUMN payment_hash TEXT")

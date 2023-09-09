@@ -844,15 +844,15 @@ class Ledger:
 
         invoice = Invoice(
             amount=amount,
-            hash=random_hash(),
-            pr=payment_request,
+            id=random_hash(),
+            bolt11=payment_request,
             payment_hash=payment_hash,  # what we got from the backend
             issued=False,
         )
-        logger.trace(f"crud: storing invoice {invoice.hash} in db")
+        logger.trace(f"crud: storing invoice {invoice.id} in db")
         await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
-        logger.trace(f"crud: stored invoice {invoice.hash} in db")
-        return payment_request, invoice.hash
+        logger.trace(f"crud: stored invoice {invoice.id} in db")
+        return payment_request, invoice.id
 
     async def mint(
         self,
