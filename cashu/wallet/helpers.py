@@ -158,7 +158,9 @@ async def receive(
         amount = sum_proofs(proofs)
         print(f"Received {amount} sats")
 
-    await store_tx(wallet.db, "receive", amount, tokenObj.serialize(), int(time.time()))
+    await store_tx(
+        wallet.db, "ecash", amount, tokenObj.serialize(), "NA", "NA", int(time.time())
+    )
 
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)
@@ -222,7 +224,7 @@ async def send(
     )
     print(token)
 
-    await store_tx(wallet.db, "send", -amount, token, int(time.time()))
+    await store_tx(wallet.db, "ecash", -amount, token, "NA", "NA", int(time.time()))
 
     if legacy:
         print("")

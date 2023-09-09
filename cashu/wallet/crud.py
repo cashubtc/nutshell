@@ -451,14 +451,26 @@ async def store_tx(
     type: str,
     amount: int,
     token: str,
+    hash: str,
+    preimage: str,
     time: int,
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
         """
         INSERT INTO tx_history
-          (type, amount, token, time)
-        VALUES (?, ?, ?, ?)
+          (type, amount, token, hash, preimage, time)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (type, amount, token, time),
+        (type, amount, token, hash, preimage, time),
     )
+
+
+async def get_tx_history(
+    db: Database,
+    conn: Optional[Connection] = None,
+):
+    rows = await (conn or db).fetchall("""
+            SELECT * from tx_history
+            """)
+    return rows

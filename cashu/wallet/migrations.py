@@ -184,6 +184,8 @@ async def m010_tx_history(db: Database):
             type TEXT NOT NULL,
             amount INTEGER NOT NULL,
             token TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            preimage TEXT NOT NULL,
             time TIMESTAMP DEFAULT {db.timestamp_now}
 
         );

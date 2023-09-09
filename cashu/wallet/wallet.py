@@ -74,6 +74,7 @@ from ..wallet.crud import (
     store_p2sh,
     store_proof,
     store_seed_and_mnemonic,
+    store_tx,
     update_lightning_invoice,
     update_proof_reserved,
 )
@@ -919,8 +920,13 @@ class Wallet(LedgerAPI):
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
         if hash:
+            time_paid = int(time.time())
             await update_lightning_invoice(
-                db=self.db, hash=hash, paid=True, time_paid=int(time.time())
+                db=self.db, hash=hash, paid=True, time_paid=time_paid
+            )
+            token = await self.serialize_proofs(proofs)
+            await store_tx(
+                self.db, "lightning", amount, token, hash, "Unknown", time_paid
             )
         self.proofs += proofs
         return proofs
@@ -1167,6 +1173,16 @@ class Wallet(LedgerAPI):
             # we have a unique constraint on the hash, so we generate a random one if it doesn't exist
             invoice_obj.hash = invoice_obj.hash or await self._generate_secret()
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
+            token = await self.serialize_proofs(proofs)
+            await store_tx(
+                self.db,
+                "lightning",
+                -sum_proofs(proofs),
+                token,
+                invoice_obj.hash,
+                invoice_obj.preimage,
+                invoice_obj.time_paid,
+            )
 
             # handle change and produce proofs
             if status.change:
