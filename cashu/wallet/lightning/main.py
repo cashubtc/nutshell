@@ -14,7 +14,7 @@ async def main():
     print(await wallet.get_balance())
 
     print(invoice)
-    return
+    # return
     assert invoice.payment_hash
     print(await wallet.get_balance())
     for i in range(10):

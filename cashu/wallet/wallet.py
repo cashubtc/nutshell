@@ -1158,9 +1158,13 @@ class Wallet(LedgerAPI):
         # Generate a number of blank outputs for any overpaid fees. As described in
         # NUT-08, the mint will imprint these outputs with a value depending on the
         # amount of fees we overpaid.
-        n_return_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
-        secrets, rs, derivation_paths = await self.generate_n_secrets(n_return_outputs)
-        outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
+        outputs, secrets, rs, derivation_paths = None, None, None, None
+        if fee_reserve_sat > 0:
+            n_return_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
+            secrets, rs, derivation_paths = await self.generate_n_secrets(
+                n_return_outputs
+            )
+            outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
 
         status = await super().pay_lightning(proofs, invoice, outputs)
 
@@ -1190,7 +1194,7 @@ class Wallet(LedgerAPI):
             await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
             # handle change and produce proofs
-            if status.change:
+            if status.change and secrets and rs and derivation_paths:
                 change_proofs = self._construct_proofs(
                     status.change,
                     secrets[: len(status.change)],

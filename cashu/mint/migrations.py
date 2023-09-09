@@ -143,9 +143,7 @@ async def m006_invoices_add_payment_hash(db: Database):
 
 async def m007_proofs_and_promises_store_id(db: Database):
     """
-    Column that remembers the payment_hash as we're using
-    the column hash as a random identifier now
-    (see https://github.com/cashubtc/nuts/pull/14).
+    Column that stores the id of the proof or promise.
     """
     await db.execute(
         f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN id TEXT"
@@ -163,16 +161,13 @@ async def m008_add_out_to_invoices(db: Database):
     await db.execute(
         f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN out BOOL"
     )
-    # rename column pr to bolt11
-    await db.execute(
-        f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN pr TO bolt11"
-    )
-    # rename column hash to payment_hash
-    await db.execute(
-        f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN hash TO id"
-    )
 
-    # add column payment_hash
-    await db.execute(
-        f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN payment_hash TEXT"
-    )
+
+#     # rename column pr to bolt11
+#     await db.execute(
+#         f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN pr TO bolt11"
+#     )
+#     # rename column hash to payment_hash
+#     await db.execute(
+#         f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN hash TO id"
+#     )

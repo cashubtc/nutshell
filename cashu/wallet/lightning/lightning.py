@@ -16,7 +16,7 @@ class LightningWallet(Wallet):
         """Async init for lightning wallet"""
         settings.tor = False
         self = cls(*args, **kwargs)
-        self.__init__(*args, **kwargs)
+        # self.__init__(*args, **kwargs)
         self.wallet = await Wallet.with_db(*args, **kwargs)
         await self.wallet.load_proofs()
         await self.wallet.load_mint()
@@ -81,12 +81,14 @@ class LightningWallet(Wallet):
         )
         if not invoice:
             return "not found"
+        if invoice.paid:
+            return "paid"
         try:
             await self.wallet.mint(invoice.amount, hash=invoice.id)
             return "paid"
         except Exception as e:
             print(e)
-            return "failed"
+            return "pending"
 
     async def get_payment_status(self, payment_hash: str):
         """Get lightning payment status (outgoing)
@@ -97,6 +99,9 @@ class LightningWallet(Wallet):
         Returns:
             str: status
         """
+
+        # NOTE: consider adding this in wallet.py and update invoice state to paid in DB
+
         invoice = await get_lightning_invoice(
             db=self.wallet.db, payment_hash=payment_hash
         )

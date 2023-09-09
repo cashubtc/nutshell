@@ -539,7 +539,7 @@ class Ledger:
         """
         logger.trace(f"crud: _check_lightning_invoice: checking invoice {hash}")
         invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
-            hash=hash, db=self.db, conn=conn
+            id=hash, db=self.db, conn=conn
         )
         logger.trace(f"crud: _check_lightning_invoice: invoice: {invoice}")
         if invoice is None:
@@ -551,7 +551,7 @@ class Ledger:
         # set this invoice as issued
         logger.trace(f"crud: setting invoice {invoice.payment_hash} as issued")
         await self.crud.update_lightning_invoice(
-            hash=hash, issued=True, db=self.db, conn=conn
+            id=hash, issued=True, db=self.db, conn=conn
         )
         logger.trace(f"crud: invoice {invoice.payment_hash} set as issued")
 
@@ -577,7 +577,7 @@ class Ledger:
             # unset issued
             logger.trace(f"crud: unsetting invoice {invoice.payment_hash} as issued")
             await self.crud.update_lightning_invoice(
-                hash=hash, issued=False, db=self.db, conn=conn
+                id=hash, issued=False, db=self.db, conn=conn
             )
             logger.trace(f"crud: invoice {invoice.payment_hash} unset as issued")
             raise e
