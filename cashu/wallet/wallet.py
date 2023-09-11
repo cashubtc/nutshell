@@ -2,7 +2,6 @@ import base64
 import hashlib
 import json
 import math
-import secrets as scrts
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -90,11 +89,8 @@ def async_set_httpx_client(func):
     """
 
     async def wrapper(self, *args, **kwargs):
-        self.httpx.headers.update({"Client-version": settings.version})
-        if settings.debug:
-            self.httpx.verify = False
-
         # set proxy
+        proxies_dict = {}
         proxy_url: Union[str, None] = None
         if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
@@ -105,10 +101,17 @@ def async_set_httpx_client(func):
         elif settings.http_proxy:
             proxy_url = settings.http_proxy
         if proxy_url:
-            self.httpx.proxies.update({"http": proxy_url})
-            self.httpx.proxies.update({"https": proxy_url})
+            proxies_dict.update({"http": proxy_url})
+            proxies_dict.update({"https": proxy_url})
 
-        self.httpx.headers.update({"User-Agent": scrts.token_urlsafe(8)})
+        headers_dict = {"Client-version": settings.version}
+
+        self.httpx = httpx.AsyncClient(
+            verify=not settings.debug,
+            proxies=proxies_dict,
+            headers=headers_dict,
+            base_url=self.url,
+        )
         return await func(self, *args, **kwargs)
 
     return wrapper
@@ -120,12 +123,11 @@ class LedgerAPI(object):
     public_keys: Dict[int, PublicKey]  # holds public keys of
     mint_info: GetInfoResponse  # holds info about mint
     tor: TorProxy
-    # s: requests.Session
     db: Database
+    httpx: httpx.AsyncClient
 
     def __init__(self, url: str, db: Database):
         self.url = url
-        self.httpx = httpx.AsyncClient(verify=not settings.debug)
         self.db = db
 
     async def generate_n_secrets(
@@ -450,7 +452,7 @@ class LedgerAPI(object):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: GET /mint")
-        resp = await self.httpx.get(self.url + "/mint", params={"amount": amount})
+        resp = await self.httpx.get("/mint", params={"amount": amount})
         self.raise_on_error(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse.parse_obj(return_dict)
@@ -489,7 +491,7 @@ class LedgerAPI(object):
         outputs_payload = PostMintRequest(outputs=outputs)
         logger.trace("Checking Lightning invoice. POST /mint")
         resp = await self.httpx.post(
-            self.url + "/mint",
+            "/mint",
             json=outputs_payload.dict(),
             params={
                 "hash": hash,
@@ -531,7 +533,7 @@ class LedgerAPI(object):
             }
 
         resp = await self.httpx.post(
-            self.url + "/split",
+            "/split",
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
         self.raise_on_error(resp)
@@ -558,7 +560,7 @@ class LedgerAPI(object):
             }
 
         resp = await self.httpx.post(
-            self.url + "/check",
+            "/check",
             json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
         )
         self.raise_on_error(resp)
@@ -572,7 +574,7 @@ class LedgerAPI(object):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
         resp = await self.httpx.post(
-            self.url + "/checkfees",
+            "/checkfees",
             json=payload.dict(),
         )
         self.raise_on_error(resp)
@@ -601,7 +603,7 @@ class LedgerAPI(object):
             }
 
         resp = await self.httpx.post(
-            self.url + "/melt",
+            "/melt",
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
         )
         self.raise_on_error(resp)
@@ -617,7 +619,7 @@ class LedgerAPI(object):
         Asks the mint to restore promises corresponding to outputs.
         """
         payload = PostMintRequest(outputs=outputs)
-        resp = await self.httpx.post(self.url + "/restore", json=payload.dict())
+        resp = await self.httpx.post("/restore", json=payload.dict())
         self.raise_on_error(resp)
         reponse_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(reponse_dict)

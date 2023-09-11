@@ -17,9 +17,12 @@ async def main():
     assert invoice.payment_hash
     print("balance", await wallet.get_balance())
     state = ""
-    while state != "paid":
+    while not state.startswith("paid"):
+        print("checking invoice state")
         state = await wallet.get_invoice_status(invoice.payment_hash)
         await asyncio.sleep(1)
+        print("state:", state)
+
     print("balance", await wallet.get_balance())
 
     invoice2 = await wallet.create_invoice(10, "test outgoing")
