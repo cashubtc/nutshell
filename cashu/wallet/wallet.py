@@ -82,7 +82,7 @@ from ..wallet.crud import (
 from . import migrations
 
 
-def async_set_requests(func):
+def async_set_httpx_client(func):
     """
     Decorator that wraps around any async class method of LedgerAPI that makes
     API calls. Sets some HTTP headers and starts a Tor instance if none is
@@ -136,7 +136,7 @@ class LedgerAPI(object):
     async def _generate_secret(self, skip_bump: bool = False) -> str:
         return await self._generate_secret(skip_bump)
 
-    @async_set_requests
+    @async_set_httpx_client
     async def _init_s(self):
         """Dummy function that can be called from outside to use LedgerAPI.s"""
         return
@@ -338,7 +338,7 @@ class LedgerAPI(object):
     ENDPOINTS
     """
 
-    @async_set_requests
+    @async_set_httpx_client
     async def _get_keys(self, url: str) -> WalletKeyset:
         """API that gets the current keys of the mint
 
@@ -364,7 +364,7 @@ class LedgerAPI(object):
         keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
         return keyset
 
-    @async_set_requests
+    @async_set_httpx_client
     async def _get_keys_of_keyset(self, url: str, keyset_id: str) -> WalletKeyset:
         """API that gets the keys of a specific keyset from the mint.
 
@@ -393,7 +393,7 @@ class LedgerAPI(object):
         keyset = WalletKeyset(id=keyset_id, public_keys=keyset_keys, mint_url=url)
         return keyset
 
-    @async_set_requests
+    @async_set_httpx_client
     async def _get_keyset_ids(self, url: str) -> List[str]:
         """API that gets a list of all active keysets of the mint.
 
@@ -415,7 +415,7 @@ class LedgerAPI(object):
         assert len(keysets.keysets), Exception("did not receive any keysets")
         return keysets.keysets
 
-    @async_set_requests
+    @async_set_httpx_client
     async def _get_info(self, url: str) -> GetInfoResponse:
         """API that gets the mint info.
 
@@ -436,7 +436,7 @@ class LedgerAPI(object):
         mint_info: GetInfoResponse = GetInfoResponse.parse_obj(data)
         return mint_info
 
-    @async_set_requests
+    @async_set_httpx_client
     async def request_mint(self, amount) -> Invoice:
         """Requests a mint from the server and returns Lightning invoice.
 
@@ -464,7 +464,7 @@ class LedgerAPI(object):
             time_created=int(time.time()),
         )
 
-    @async_set_requests
+    @async_set_httpx_client
     async def mint(self, amounts: List[int], hash: Optional[str] = None) -> List[Proof]:
         """Mints new coins and returns a proof of promise.
 
@@ -511,7 +511,7 @@ class LedgerAPI(object):
             p.mint_id = hash
         return proofs
 
-    @async_set_requests
+    @async_set_httpx_client
     async def split(
         self,
         proofs: List[Proof],
@@ -544,7 +544,7 @@ class LedgerAPI(object):
 
         return promises
 
-    @async_set_requests
+    @async_set_httpx_client
     async def check_proof_state(self, proofs: List[Proof]):
         """
         Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
@@ -567,7 +567,7 @@ class LedgerAPI(object):
         states = CheckSpendableResponse.parse_obj(return_dict)
         return states
 
-    @async_set_requests
+    @async_set_httpx_client
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
@@ -580,7 +580,7 @@ class LedgerAPI(object):
         return_dict = resp.json()
         return return_dict
 
-    @async_set_requests
+    @async_set_httpx_client
     async def pay_lightning(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
     ):
@@ -609,7 +609,7 @@ class LedgerAPI(object):
 
         return GetMeltResponse.parse_obj(return_dict)
 
-    @async_set_requests
+    @async_set_httpx_client
     async def restore_promises(
         self, outputs: List[BlindedMessage]
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
