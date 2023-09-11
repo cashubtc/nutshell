@@ -1174,7 +1174,6 @@ class Wallet(LedgerAPI):
         # store the ID in the melt_id of this proof
         for p in proofs:
             p.melt_id = melt_id
-            print(f"Updating proof {p.secret} with melt_id {melt_id}")
             await update_proof(p, melt_id=melt_id, db=self.db)
 
         decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)

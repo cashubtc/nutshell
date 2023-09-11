@@ -10,9 +10,7 @@ async def main():
     wallet = await LightningWallet().async_init(
         url="http://localhost:3338", db="data/lightning.db"
     )
-    print("balance", await wallet.get_balance())
     invoice = await wallet.create_invoice(1000, "test incoming")
-    print("balance", await wallet.get_balance())
 
     print(invoice)
     # return
@@ -29,16 +27,11 @@ async def main():
     invoice_obj = bolt11.decode(pr)
     print("paying invoice", pr)
 
-    print("creating task")
     asyncio.create_task(wallet.pay_invoice(pr=pr))
-    print("task created")
 
     await asyncio.sleep(2)
     state = ""
     while not state.startswith("paid"):
-        print("checking state")
-        print("balance", await wallet.get_balance())
-        print("calling wallet.get_payment_status")
         state = await wallet.get_payment_status(invoice_obj.payment_hash)
         print(state)
         await asyncio.sleep(1)

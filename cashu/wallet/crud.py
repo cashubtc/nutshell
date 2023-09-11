@@ -279,7 +279,6 @@ async def store_lightning_invoice(
     invoice: Invoice,
     conn: Optional[Connection] = None,
 ):
-    print("storing invoice", invoice)
     await (conn or db).execute(
         """
         INSERT INTO invoices

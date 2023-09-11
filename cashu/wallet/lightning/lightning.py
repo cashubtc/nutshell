@@ -80,12 +80,13 @@ class LightningWallet(Wallet):
             db=self.wallet.db, payment_hash=payment_hash, out=False
         )
         if not invoice:
-            return "not found"
+            return "not found (in db)"
         if invoice.paid:
-            return "paid"
+            return "paid (in db)"
         try:
+            # to check the invoice state, we try minting tokens
             await self.wallet.mint(invoice.amount, hash=invoice.id)
-            return "paid"
+            return "paid (with check)"
         except Exception as e:
             print(e)
             return "pending"
@@ -120,7 +121,7 @@ class LightningWallet(Wallet):
             or not proofs_states.pending
         ):
             return "states not fount"
-        print(proofs_states)
+
         if all(proofs_states.spendable) and all(proofs_states.pending):
             return "pending (with check)"
         if not any(proofs_states.spendable) and not any(proofs_states.pending):
