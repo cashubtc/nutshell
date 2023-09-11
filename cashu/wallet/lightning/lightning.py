@@ -64,7 +64,7 @@ class LightningWallet(Wallet):
             await self.wallet.pay_lightning(send_proofs, pr, fee_reserve_sat)
             return True
         except Exception as e:
-            print(e)
+            print("Exception:", e)
             return False
 
     async def get_invoice_status(self, payment_hash: str):

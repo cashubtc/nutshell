@@ -32,11 +32,10 @@ async def main():
 
     asyncio.create_task(wallet.pay_invoice(pr=pr))
 
-    await asyncio.sleep(2)
     state = ""
     while not state.startswith("paid"):
         state = await wallet.get_payment_status(invoice_obj.payment_hash)
-        print(state)
+        print("state", state)
         await asyncio.sleep(1)
 
 

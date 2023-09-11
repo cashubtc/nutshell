@@ -603,8 +603,9 @@ class LedgerAPI(object):
             }
 
         resp = await self.httpx.post(
-            "/melt",
+            self.url + "/melt",
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
+            timeout=None,
         )
         self.raise_on_error(resp)
         return_dict = resp.json()
@@ -1190,6 +1191,7 @@ class Wallet(LedgerAPI):
             out=True,  # outgoing invoice
         )
         await store_lightning_invoice(db=self.db, invoice=invoice_obj)
+
         status = await super().pay_lightning(proofs, invoice, outputs)
 
         if not status.paid:
@@ -1200,7 +1202,7 @@ class Wallet(LedgerAPI):
         await self.invalidate(proofs, check_spendable=False)
 
         # update paid status in db
-        logger.debug(f"Settings invoice {melt_id} to paid.")
+        logger.trace(f"Settings invoice {melt_id} to paid.")
         await update_lightning_invoice(
             db=self.db,
             id=melt_id,
@@ -1219,7 +1221,6 @@ class Wallet(LedgerAPI):
             )
             logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
             await self._store_proofs(change_proofs)
-
         return status.paid
 
     async def check_proof_state(self, proofs):
