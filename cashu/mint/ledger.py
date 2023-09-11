@@ -920,6 +920,7 @@ class Ledger:
 
         logger.trace("melt called")
 
+        # set proofs to pending to avoid race conditions
         await self._set_proofs_pending(proofs)
 
         try:

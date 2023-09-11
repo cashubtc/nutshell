@@ -9,11 +9,13 @@ from datetime import datetime, timedelta
 from itertools import groupby
 from typing import Dict, List, Optional, Tuple, Union
 
-import requests
+import httpx
+
+# import requests
 from bip32 import BIP32
+from httpx import Response
 from loguru import logger
 from mnemonic import Mnemonic
-from requests import Response
 
 from ..core import bolt11 as bolt11
 from ..core.base import (
@@ -75,7 +77,7 @@ from ..wallet.crud import (
     store_proof,
     store_seed_and_mnemonic,
     update_lightning_invoice,
-    update_proof_reserved,
+    update_proof,
 )
 from . import migrations
 
@@ -84,13 +86,13 @@ def async_set_requests(func):
     """
     Decorator that wraps around any async class method of LedgerAPI that makes
     API calls. Sets some HTTP headers and starts a Tor instance if none is
-    already running and  and sets local proxy to use it.
+    already running and and sets local proxy to use it.
     """
 
     async def wrapper(self, *args, **kwargs):
-        self.s.headers.update({"Client-version": settings.version})
+        self.httpx.headers.update({"Client-version": settings.version})
         if settings.debug:
-            self.s.verify = False
+            self.httpx.verify = False
 
         # set proxy
         proxy_url: Union[str, None] = None
@@ -103,10 +105,10 @@ def async_set_requests(func):
         elif settings.http_proxy:
             proxy_url = settings.http_proxy
         if proxy_url:
-            self.s.proxies.update({"http": proxy_url})
-            self.s.proxies.update({"https": proxy_url})
+            self.httpx.proxies.update({"http": proxy_url})
+            self.httpx.proxies.update({"https": proxy_url})
 
-        self.s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
+        self.httpx.headers.update({"User-Agent": scrts.token_urlsafe(8)})
         return await func(self, *args, **kwargs)
 
     return wrapper
@@ -118,12 +120,12 @@ class LedgerAPI(object):
     public_keys: Dict[int, PublicKey]  # holds public keys of
     mint_info: GetInfoResponse  # holds info about mint
     tor: TorProxy
-    s: requests.Session
+    # s: requests.Session
     db: Database
 
     def __init__(self, url: str, db: Database):
         self.url = url
-        self.s = requests.Session()
+        self.httpx = httpx.AsyncClient(verify=not settings.debug)
         self.db = db
 
     async def generate_n_secrets(
@@ -349,7 +351,7 @@ class LedgerAPI(object):
         Raises:
             Exception: If no keys are received from the mint
         """
-        resp = self.s.get(
+        resp = await self.httpx.get(
             url + "/keys",
         )
         self.raise_on_error(resp)
@@ -378,7 +380,7 @@ class LedgerAPI(object):
             Exception: If no keys are received from the mint
         """
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
-        resp = self.s.get(
+        resp = await self.httpx.get(
             url + f"/keys/{keyset_id_urlsafe}",
         )
         self.raise_on_error(resp)
@@ -404,7 +406,7 @@ class LedgerAPI(object):
         Raises:
             Exception: If no keysets are received from the mint
         """
-        resp = self.s.get(
+        resp = await self.httpx.get(
             url + "/keysets",
         )
         self.raise_on_error(resp)
@@ -426,7 +428,7 @@ class LedgerAPI(object):
         Raises:
             Exception: If the mint info request fails
         """
-        resp = self.s.get(
+        resp = await self.httpx.get(
             url + "/info",
         )
         self.raise_on_error(resp)
@@ -448,7 +450,7 @@ class LedgerAPI(object):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: GET /mint")
-        resp = self.s.get(self.url + "/mint", params={"amount": amount})
+        resp = await self.httpx.get(self.url + "/mint", params={"amount": amount})
         self.raise_on_error(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse.parse_obj(return_dict)
@@ -486,7 +488,7 @@ class LedgerAPI(object):
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
         outputs_payload = PostMintRequest(outputs=outputs)
         logger.trace("Checking Lightning invoice. POST /mint")
-        resp = self.s.post(
+        resp = await self.httpx.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
             params={
@@ -528,7 +530,7 @@ class LedgerAPI(object):
                 "proofs": {i: proofs_include for i in range(len(proofs))},
             }
 
-        resp = self.s.post(
+        resp = await self.httpx.post(
             self.url + "/split",
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
@@ -555,7 +557,7 @@ class LedgerAPI(object):
                 "proofs": {i: {"secret"} for i in range(len(proofs))},
             }
 
-        resp = self.s.post(
+        resp = await self.httpx.post(
             self.url + "/check",
             json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
         )
@@ -569,7 +571,7 @@ class LedgerAPI(object):
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
-        resp = self.s.post(
+        resp = await self.httpx.post(
             self.url + "/checkfees",
             json=payload.dict(),
         )
@@ -587,6 +589,7 @@ class LedgerAPI(object):
         """
 
         payload = PostMeltRequest(proofs=proofs, pr=invoice, outputs=outputs)
+        logger.debug("Calling melt. POST /melt")
 
         def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
@@ -597,7 +600,7 @@ class LedgerAPI(object):
                 "outputs": ...,
             }
 
-        resp = self.s.post(
+        resp = await self.httpx.post(
             self.url + "/melt",
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
         )
@@ -614,7 +617,7 @@ class LedgerAPI(object):
         Asks the mint to restore promises corresponding to outputs.
         """
         payload = PostMintRequest(outputs=outputs)
-        resp = self.s.post(self.url + "/restore", json=payload.dict())
+        resp = await self.httpx.post(self.url + "/restore", json=payload.dict())
         self.raise_on_error(resp)
         reponse_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(reponse_dict)
@@ -1164,46 +1167,58 @@ class Wallet(LedgerAPI):
         secrets, rs, derivation_paths = await self.generate_n_secrets(n_return_outputs)
         outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
 
+        # we store the invoice object in the database to later be able to check the invoice state
+        # generate a random ID for this transaction
+        melt_id = await self._generate_secret()
+
+        # store the ID in the melt_id of this proof
+        for p in proofs:
+            p.melt_id = melt_id
+            print(f"Updating proof {p.secret} with melt_id {melt_id}")
+            await update_proof(p, melt_id=melt_id, db=self.db)
+
+        decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)
+        invoice_obj = Invoice(
+            amount=-sum_proofs(proofs),
+            bolt11=invoice,
+            payment_hash=decoded_invoice.payment_hash,
+            # preimage=status.preimage,
+            paid=False,
+            time_paid=int(time.time()),
+            id=melt_id,  # store the same ID in the invoice
+            out=True,  # outgoing invoice
+        )
+        await store_lightning_invoice(db=self.db, invoice=invoice_obj)
         status = await super().pay_lightning(proofs, invoice, outputs)
 
-        if status.paid:
-            # the payment was successful
-            # generate a random ID for this transaction
-            melt_id = await self._generate_secret()
-
-            # store the ID in the melt_id of this proof
-            for p in proofs:
-                p.melt_id = melt_id
-
-            # we don't have to recheck the spendable sate of these tokens when invalidating
-            await self.invalidate(proofs, check_spendable=False)
-
-            decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)
-            invoice_obj = Invoice(
-                amount=-sum_proofs(proofs),
-                bolt11=invoice,
-                payment_hash=decoded_invoice.payment_hash,
-                preimage=status.preimage,
-                paid=True,
-                time_paid=int(time.time()),
-                id=melt_id,  # store the same ID in the invoice
-                out=True,  # outgoing invoice
-            )
-            await store_lightning_invoice(db=self.db, invoice=invoice_obj)
-
-            # handle change and produce proofs
-            if status.change:
-                change_proofs = self._construct_proofs(
-                    status.change,
-                    secrets[: len(status.change)],
-                    rs[: len(status.change)],
-                    derivation_paths[: len(status.change)],
-                )
-                logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
-                await self._store_proofs(change_proofs)
-
-        else:
+        if not status.paid:
             raise Exception("could not pay invoice.")
+
+        # invoice was paid successfully
+        # we don't have to recheck the spendable sate of these tokens when invalidating
+        await self.invalidate(proofs, check_spendable=False)
+
+        # update paid status in db
+        logger.debug(f"Settings invoice {melt_id} to paid.")
+        await update_lightning_invoice(
+            db=self.db,
+            id=melt_id,
+            paid=True,
+            time_paid=int(time.time()),
+            preimage=status.preimage,
+        )
+
+        # handle change and produce proofs
+        if status.change:
+            change_proofs = self._construct_proofs(
+                status.change,
+                secrets[: len(status.change)],
+                rs[: len(status.change)],
+                derivation_paths[: len(status.change)],
+            )
+            logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
+            await self._store_proofs(change_proofs)
+
         return status.paid
 
     async def check_proof_state(self, proofs):
@@ -1409,7 +1424,7 @@ class Wallet(LedgerAPI):
             proof_to_add = sorted_proofs_of_current_keyset.pop()
             send_proofs.append(proof_to_add)
 
-        logger.debug(f"selected proof amounts: {[p.amount for p in send_proofs]}")
+        logger.trace(f"selected proof amounts: {[p.amount for p in send_proofs]}")
         return send_proofs
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool) -> None:
@@ -1422,9 +1437,7 @@ class Wallet(LedgerAPI):
         uuid_str = str(uuid.uuid1())
         for proof in proofs:
             proof.reserved = True
-            await update_proof_reserved(
-                proof, reserved=reserved, send_id=uuid_str, db=self.db
-            )
+            await update_proof(proof, reserved=reserved, send_id=uuid_str, db=self.db)
 
     async def invalidate(
         self, proofs: List[Proof], check_spendable=True

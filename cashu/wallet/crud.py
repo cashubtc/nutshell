@@ -33,6 +33,7 @@ async def get_proofs(
     db: Database,
     melt_id: str = "",
     mint_id: str = "",
+    table: str = "proofs",
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -47,11 +48,10 @@ async def get_proofs(
     where = ""
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
-    print(where)
     rows = (
         await (conn or db).fetchall(
             f"""
-            SELECT * from proofs
+            SELECT * from {table}
             {where}
             """,
             tuple(values),
@@ -103,10 +103,13 @@ async def invalidate_proof(
     )
 
 
-async def update_proof_reserved(
+async def update_proof(
     proof: Proof,
-    reserved: bool,
-    send_id: str = "",
+    *,
+    reserved: Optional[bool] = None,
+    send_id: Optional[str] = None,
+    mint_id: Optional[str] = None,
+    melt_id: Optional[str] = None,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ):
@@ -115,14 +118,21 @@ async def update_proof_reserved(
     clauses.append("reserved = ?")
     values.append(reserved)
 
-    if send_id:
+    if send_id is not None:
         clauses.append("send_id = ?")
         values.append(send_id)
 
-    if reserved:
-        # set the time of reserving
+    if reserved is not None:
         clauses.append("time_reserved = ?")
         values.append(int(time.time()))
+
+    if mint_id is not None:
+        clauses.append("mint_id = ?")
+        values.append(mint_id)
+
+    if melt_id is not None:
+        clauses.append("melt_id = ?")
+        values.append(melt_id)
 
     await (conn or db).execute(  # type: ignore
         f"UPDATE proofs SET {', '.join(clauses)} WHERE secret = ?",
@@ -269,6 +279,7 @@ async def store_lightning_invoice(
     invoice: Invoice,
     conn: Optional[Connection] = None,
 ):
+    print("storing invoice", invoice)
     await (conn or db).execute(
         """
         INSERT INTO invoices
@@ -293,6 +304,7 @@ async def get_lightning_invoice(
     db: Database,
     id: str = "",
     payment_hash: str = "",
+    out: Optional[bool] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -303,19 +315,22 @@ async def get_lightning_invoice(
     if payment_hash:
         clauses.append("payment_hash = ?")
         values.append(payment_hash)
+    if out is not None:
+        clauses.append("out = ?")
+        values.append(out)
 
     where = ""
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
-
-    row = await (conn or db).fetchone(
-        f"""
+    query = f"""
         SELECT * from invoices
         {where}
-        """,
+        """
+    row = await (conn or db).fetchone(
+        query,
         tuple(values),
     )
-    return Invoice(**row)
+    return Invoice(**row) if row else None
 
 
 async def get_lightning_invoices(
@@ -349,6 +364,7 @@ async def update_lightning_invoice(
     id: str,
     paid: bool,
     time_paid: Optional[int] = None,
+    preimage: Optional[str] = None,
     conn: Optional[Connection] = None,
 ):
     clauses = []
@@ -359,6 +375,9 @@ async def update_lightning_invoice(
     if time_paid:
         clauses.append("time_paid = ?")
         values.append(time_paid)
+    if preimage:
+        clauses.append("preimage = ?")
+        values.append(preimage)
 
     await (conn or db).execute(
         f"UPDATE invoices SET {', '.join(clauses)} WHERE id = ?",

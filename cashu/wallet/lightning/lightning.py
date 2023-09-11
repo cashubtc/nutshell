@@ -77,7 +77,7 @@ class LightningWallet(Wallet):
             str: status
         """
         invoice = await get_lightning_invoice(
-            db=self.wallet.db, payment_hash=payment_hash
+            db=self.wallet.db, payment_hash=payment_hash, out=False
         )
         if not invoice:
             return "not found"
@@ -103,27 +103,31 @@ class LightningWallet(Wallet):
         # NOTE: consider adding this in wallet.py and update invoice state to paid in DB
 
         invoice = await get_lightning_invoice(
-            db=self.wallet.db, payment_hash=payment_hash
+            db=self.wallet.db, payment_hash=payment_hash, out=True
         )
+
         if not invoice:
-            return "not found"
+            return "invoice not found (in db)"
+        if invoice.paid:
+            return "paid (in db)"
         proofs = await get_proofs(db=self.wallet.db, melt_id=invoice.id)
         if not proofs:
-            return "not fount"
+            return "proofs not fount (in db)"
         proofs_states = await self.wallet.check_proof_state(proofs)
         if (
             not proofs_states
             or not proofs_states.spendable
             or not proofs_states.pending
         ):
-            return "not fount"
-
+            return "states not fount"
+        print(proofs_states)
         if all(proofs_states.spendable) and all(proofs_states.pending):
-            return "pending"
+            return "pending (with check)"
         if not any(proofs_states.spendable) and not any(proofs_states.pending):
-            return "paid"
+            # NOTE: consider adding this check in wallet.py and mark the invoice as paid if all proofs are spent
+            return "paid (with check)"
         if all(proofs_states.spendable) and not any(proofs_states.pending):
-            return "failed"
+            return "failed (with check)"
         return "undefined state"
 
     async def get_balance(self):
