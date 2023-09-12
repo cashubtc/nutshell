@@ -14,7 +14,13 @@ from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
-from ...wallet.helpers import deserialize_token_from_string, init_wallet, receive, send
+from ...wallet.helpers import (
+    deserialize_token_from_string,
+    init_wallet,
+    list_mints,
+    receive,
+    send,
+)
 from ...wallet.nostr import receive_nostr, send_nostr
 from ...wallet.wallet import Wallet as Wallet
 from .api_helpers import verify_mints
@@ -38,32 +44,35 @@ from .responses import (
 router: APIRouter = APIRouter()
 
 
-def create_wallet(
-    url=settings.mint_url, dir=settings.cashu_dir, name=settings.wallet_name
-):
-    return Wallet(
-        url=url,
-        db=os.path.join(dir, name),
-        name=name,
+async def mint_wallet(mint_url: Optional[str] = None):
+    wallet: Wallet = await Wallet.with_db(
+        mint_url or settings.mint_url,
+        db=os.path.join(settings.cashu_dir, settings.wallet_name),
+        name=settings.wallet_name,
     )
-
-
-async def load_mint(wallet: Wallet, mint: Optional[str] = None):
-    if mint:
-        wallet = create_wallet(mint)
-    await init_wallet(wallet)
     await wallet.load_mint()
     return wallet
 
 
-wallet = create_wallet()
+wallet: Wallet = Wallet(
+    settings.mint_url,
+    db=os.path.join(settings.cashu_dir, settings.wallet_name),
+    name=settings.wallet_name,
+)
 
 
 @router.on_event("startup")
 async def start_wallet():
+    global wallet
+    wallet = await Wallet.with_db(
+        settings.mint_url,
+        db=os.path.join(settings.cashu_dir, settings.wallet_name),
+        name=settings.wallet_name,
+    )
+
     if settings.tor and not TorProxy().check_platform():
         raise Exception("tor not working.")
-    await init_wallet(wallet)
+    await wallet.load_mint()
 
 
 @router.post("/pay", name="Pay lightning invoice", response_model=PayResponse)
@@ -78,7 +87,8 @@ async def pay(
         raise Exception("lightning not enabled.")
 
     global wallet
-    wallet = await load_mint(wallet, mint)
+    wallet = await mint_wallet(mint)
+    await wallet.load_proofs(reload=True)
 
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
     assert total_amount > 0, "amount has to be larger than zero."
@@ -116,7 +126,7 @@ async def invoice(
         print(f"Requesting split with {n_splits}*{split} sat tokens.")
 
     global wallet
-    wallet = await load_mint(wallet, mint)
+    wallet = await mint_wallet(mint)
     if not settings.lightning:
         await wallet.mint(amount, split=optional_split)
         return InvoiceResponse(
@@ -150,8 +160,8 @@ async def swap(
 ):
     if not settings.lightning:
         raise Exception("lightning not supported")
-    incoming_wallet = await load_mint(wallet, mint=incoming_mint)
-    outgoing_wallet = await load_mint(wallet, mint=outgoing_mint)
+    incoming_wallet = await mint_wallet(incoming_mint)
+    outgoing_wallet = await mint_wallet(outgoing_mint)
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
@@ -159,7 +169,7 @@ async def swap(
     invoice = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
-    await outgoing_wallet.load_proofs()
+    await outgoing_wallet.load_proofs(reload=True)
     total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
         invoice.pr
     )
@@ -174,7 +184,7 @@ async def swap(
 
     # mint token in incoming mint
     await incoming_wallet.mint(amount, hash=invoice.hash)
-    await incoming_wallet.load_proofs()
+    await incoming_wallet.load_proofs(reload=True)
     mint_balances = await incoming_wallet.balance_per_minturl()
     return SwapResponse(
         outgoing_mint=outgoing_mint,
@@ -191,7 +201,7 @@ async def swap(
     response_model=BalanceResponse,
 )
 async def balance():
-    await wallet.load_proofs()
+    await wallet.load_proofs(reload=True)
     keyset_balances = wallet.balance_per_keyset()
     mint_balances = await wallet.balance_per_minturl()
     return BalanceResponse(
@@ -229,6 +239,7 @@ async def receive_command(
     nostr: bool = Query(default=False, description="Receive tokens via nostr"),
     all: bool = Query(default=False, description="Receive all pending tokens"),
 ):
+    wallet = await mint_wallet()
     initial_balance = wallet.available_balance
     if token:
         tokenObj: TokenV3 = deserialize_token_from_string(token)
@@ -269,11 +280,12 @@ async def burn(
 ):
     global wallet
     if not delete:
-        wallet = await load_mint(wallet, mint)
+        wallet = await mint_wallet(mint)
     if not (all or token or force or delete) or (token and all):
         raise Exception(
-            "enter a token or use --all to burn all pending tokens, --force to check all tokens"
-            "or --delete with send ID to force-delete pending token from list if mint is unavailable.",
+            "enter a token or use --all to burn all pending tokens, --force to"
+            " check all tokensor --delete with send ID to force-delete pending"
+            " token from list if mint is unavailable.",
         )
     if all:
         # check only those who are flagged as reserved
@@ -403,7 +415,7 @@ async def restore(
     if to < 0:
         raise Exception("Counter must be positive")
     await wallet.load_mint()
-    await wallet.restore_promises(0, to)
+    await wallet.restore_promises_from_to(0, to)
     await wallet.invalidate(wallet.proofs)
     wallet.status()
     return RestoreResponse(balance=wallet.available_balance)
@@ -422,12 +434,13 @@ async def info():
     else:
         nostr_public_key = None
         nostr_relays = []
+    mint_list = await list_mints(wallet)
     return InfoResponse(
         version=settings.version,
         wallet=wallet.name,
         debug=settings.debug,
         cashu_dir=settings.cashu_dir,
-        mint_url=settings.mint_url,
+        mint_urls=mint_list,
         settings=settings.env_file,
         tor=settings.tor,
         nostr_public_key=nostr_public_key,

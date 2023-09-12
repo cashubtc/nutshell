@@ -742,7 +742,8 @@ class Wallet(LedgerAPI):
                 else ""
             )
             print(
-                f'Generated a new mnemonic{wallet_name}. To view it, run "cashu{wallet_command_prefix_str} info --mnemonic".'
+                f"Generated a new mnemonic{wallet_name}. To view it, run"
+                f' "cashu{wallet_command_prefix_str} info --mnemonic".'
             )
         elif from_mnemonic:
             # or use the one provided
@@ -1470,7 +1471,8 @@ class Wallet(LedgerAPI):
 
         if invalidated_proofs:
             logger.debug(
-                f"Invalidating {len(invalidated_proofs)} proofs worth {sum_proofs(invalidated_proofs)} sat."
+                f"Invalidating {len(invalidated_proofs)} proofs worth"
+                f" {sum_proofs(invalidated_proofs)} sat."
             )
 
         async with self.db.connect() as conn:
@@ -1604,7 +1606,8 @@ class Wallet(LedgerAPI):
         private_key = self.private_key
         assert private_key.pubkey
         logger.trace(
-            f"Signing with private key: {private_key.serialize()} public key: {private_key.pubkey.serialize().hex()}"
+            f"Signing with private key: {private_key.serialize()} public key:"
+            f" {private_key.pubkey.serialize().hex()}"
         )
         for proof in proofs:
             logger.trace(f"Signing proof: {proof}")
@@ -1697,7 +1700,7 @@ class Wallet(LedgerAPI):
         n_last_restored_proofs = 0
         while stop_counter < to:
             print(f"Restoring token {i} to {i + batch}...")
-            restored_proofs = await self.restore_promises(i, i + batch - 1)
+            restored_proofs = await self.restore_promises_from_to(i, i + batch - 1)
             if len(restored_proofs) == 0:
                 stop_counter += 1
             spendable_proofs = await self.invalidate(restored_proofs)
@@ -1721,7 +1724,9 @@ class Wallet(LedgerAPI):
             print("No tokens restored.")
             return
 
-    async def restore_promises(self, from_counter: int, to_counter: int) -> List[Proof]:
+    async def restore_promises_from_to(
+        self, from_counter: int, to_counter: int
+    ) -> List[Proof]:
         """Restores promises from a given range of counters. This is for restoring a wallet from a mnemonic.
 
         Args:
@@ -1740,14 +1745,42 @@ class Wallet(LedgerAPI):
         # we generate outptus from deterministic secrets and rs
         regenerated_outputs, _ = self._construct_outputs(amounts_dummy, secrets, rs)
         # we ask the mint to reissue the promises
-        # restored_outputs is there so we can match the promises to the secrets and rs
-        restored_outputs, restored_promises = await super().restore_promises(
-            regenerated_outputs
+        proofs = await self.restore_promises(
+            outputs=regenerated_outputs,
+            secrets=secrets,
+            rs=rs,
+            derivation_paths=derivation_paths,
         )
+
+        await set_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id, counter=to_counter + 1
+        )
+        return proofs
+
+    async def restore_promises(
+        self,
+        outputs: List[BlindedMessage],
+        secrets: List[str],
+        rs: List[PrivateKey],
+        derivation_paths: List[str],
+    ) -> List[Proof]:
+        """Restores proofs from a list of outputs, secrets, rs and derivation paths.
+
+        Args:
+            outputs (List[BlindedMessage]): Outputs for which we request promises
+            secrets (List[str]): Secrets generated for the outputs
+            rs (List[PrivateKey]): Random blinding factors generated for the outputs
+            derivation_paths (List[str]): Derivation paths for the secrets
+
+        Returns:
+            List[Proof]: List of restored proofs
+        """
+        # restored_outputs is there so we can match the promises to the secrets and rs
+        restored_outputs, restored_promises = await super().restore_promises(outputs)
         # now we need to filter out the secrets and rs that had a match
         matching_indices = [
             idx
-            for idx, val in enumerate(regenerated_outputs)
+            for idx, val in enumerate(outputs)
             if val.B_ in [o.B_ for o in restored_outputs]
         ]
         secrets = [secrets[i] for i in matching_indices]
@@ -1763,8 +1796,4 @@ class Wallet(LedgerAPI):
         for proof in proofs:
             if proof.secret not in [p.secret for p in self.proofs]:
                 self.proofs.append(proof)
-
-        await set_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, counter=to_counter + 1
-        )
         return proofs

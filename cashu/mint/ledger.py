@@ -283,9 +283,10 @@ class Ledger:
             if not valid:
                 raise TransactionError("script invalid.")
             # check if secret commits to script address
-            assert secret.data == str(
-                txin_p2sh_address
-            ), f"secret does not contain correct P2SH address: {secret.data} is not {txin_p2sh_address}."
+            assert secret.data == str(txin_p2sh_address), (
+                f"secret does not contain correct P2SH address: {secret.data} is not"
+                f" {txin_p2sh_address}."
+            )
             return True
 
         # P2PK
@@ -317,9 +318,10 @@ class Ledger:
             assert n_sigs_required > 0, "n_sigs must be positive."
 
             # check if enough signatures are present
-            assert (
-                len(proof.p2pksigs) >= n_sigs_required
-            ), f"not enough signatures provided: {len(proof.p2pksigs)} < {n_sigs_required}."
+            assert len(proof.p2pksigs) >= n_sigs_required, (
+                f"not enough signatures provided: {len(proof.p2pksigs)} <"
+                f" {n_sigs_required}."
+            )
 
             n_valid_sigs_per_output = 0
             # loop over all signatures in output
@@ -334,20 +336,24 @@ class Ledger:
                     ):
                         n_valid_sigs_per_output += 1
                         logger.trace(
-                            f"p2pk signature on input is valid: {input_sig} on {pubkey}."
+                            f"p2pk signature on input is valid: {input_sig} on"
+                            f" {pubkey}."
                         )
                         continue
                     else:
                         logger.trace(
-                            f"p2pk signature on input is invalid: {input_sig} on {pubkey}."
+                            f"p2pk signature on input is invalid: {input_sig} on"
+                            f" {pubkey}."
                         )
             # check if we have enough valid signatures
             assert n_valid_sigs_per_output, "no valid signature provided for input."
-            assert (
-                n_valid_sigs_per_output >= n_sigs_required
-            ), f"signature threshold not met. {n_valid_sigs_per_output} < {n_sigs_required}."
+            assert n_valid_sigs_per_output >= n_sigs_required, (
+                f"signature threshold not met. {n_valid_sigs_per_output} <"
+                f" {n_sigs_required}."
+            )
             logger.trace(
-                f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures found."
+                f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures"
+                " found."
             )
 
             logger.trace(proof.p2pksigs)
@@ -431,11 +437,13 @@ class Ledger:
                     ):
                         n_valid_sigs_per_output += 1
             assert n_valid_sigs_per_output, "no valid signature provided for output."
-            assert (
-                n_valid_sigs_per_output >= n_sigs_required
-            ), f"signature threshold not met. {n_valid_sigs_per_output} < {n_sigs_required}."
+            assert n_valid_sigs_per_output >= n_sigs_required, (
+                f"signature threshold not met. {n_valid_sigs_per_output} <"
+                f" {n_sigs_required}."
+            )
             logger.trace(
-                f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures found."
+                f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures"
+                " found."
             )
             logger.trace(output.p2pksigs)
             logger.trace("p2pk signatures on output is valid.")
@@ -499,7 +507,8 @@ class Ledger:
             Tuple[str, str]: Bolt11 invoice and payment hash (for lookup)
         """
         logger.trace(
-            f"_request_lightning_invoice: Requesting Lightning invoice for {amount} satoshis."
+            "_request_lightning_invoice: Requesting Lightning invoice for"
+            f" {amount} satoshis."
         )
         error, balance = await self.lightning.status()
         logger.trace(f"_request_lightning_invoice: Lightning wallet balance: {balance}")
@@ -556,14 +565,16 @@ class Ledger:
         try:
             if amount > invoice.amount:
                 raise LightningError(
-                    f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
+                    f"requested amount too high: {amount}. Invoice amount:"
+                    f" {invoice.amount}"
                 )
             logger.trace(
                 f"_check_lightning_invoice: checking invoice {invoice.payment_hash}"
             )
             status = await self.lightning.get_invoice_status(invoice.payment_hash)
             logger.trace(
-                f"_check_lightning_invoice: invoice {invoice.payment_hash} status: {status}"
+                f"_check_lightning_invoice: invoice {invoice.payment_hash} status:"
+                f" {status}"
             )
             if status.paid:
                 return status.paid
@@ -665,7 +676,8 @@ class Ledger:
             try:
                 for p in proofs:
                     logger.trace(
-                        f"crud: _unset_proofs_pending unsetting proof {p.secret} as pending"
+                        f"crud: _unset_proofs_pending unsetting proof {p.secret} as"
+                        " pending"
                     )
                     await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
                     logger.trace(
@@ -1012,7 +1024,8 @@ class Ledger:
             decoded_invoice = bolt11.decode(pr)
             amount = math.ceil(decoded_invoice.amount_msat / 1000)
             logger.trace(
-                f"check_fees: checking lightning invoice: {decoded_invoice.payment_hash}"
+                "check_fees: checking lightning invoice:"
+                f" {decoded_invoice.payment_hash}"
             )
             paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
             logger.trace(f"check_fees: paid: {paid}")
@@ -1078,7 +1091,8 @@ class Ledger:
         # BEGIN backwards compatibility < 0.13.0
         if amount is not None:
             logger.debug(
-                "Split: Client provided `amount` - backwards compatibility response pre 0.13.0"
+                "Split: Client provided `amount` - backwards compatibility response pre"
+                " 0.13.0"
             )
             # split outputs according to amount
             total = sum_proofs(proofs)

@@ -24,9 +24,7 @@ jobs:
         run: poetry install
       - name: Check black
         run: make black-check
-      - name: Check isort
-        run: make isort-check
-  linting:
+  mypy:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -49,5 +47,8 @@ jobs:
         run: yes | poetry run mypy cashu --install-types || true
       - name: Run mypy
         run: poetry run mypy cashu --ignore-missing
-      - name: Run flake8
-        run: poetry run flake8
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: chartboost/ruff-action@v1

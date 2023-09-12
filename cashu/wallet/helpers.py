@@ -26,6 +26,15 @@ async def init_wallet(wallet: Wallet, load_proofs: bool = True):
         await wallet.load_proofs(reload=True)
 
 
+async def list_mints(wallet: Wallet):
+    await wallet.load_proofs()
+    balances = await wallet.balance_per_minturl()
+    mints = list(balances.keys())
+    if wallet.url not in mints:
+        mints.append(wallet.url)
+    return mints
+
+
 async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
@@ -201,7 +210,8 @@ async def send(
                 send_proofs = [p]
                 break
         assert send_proofs, Exception(
-            f"No proof with this amount found. Available amounts: {set([p.amount for p in wallet.proofs])}"
+            "No proof with this amount found. Available amounts:"
+            f" {set([p.amount for p in wallet.proofs])}"
         )
         await wallet.set_reserved(send_proofs, reserved=True)
 

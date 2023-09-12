@@ -34,7 +34,9 @@ def assert_amt(proofs: List[Proof], expected: int):
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet1(mint):
-    wallet1 = await Wallet1.with_db(SERVER_ENDPOINT, "data/wallet_p2pk_1", "wallet1")
+    wallet1 = await Wallet1.with_db(
+        SERVER_ENDPOINT, "test_data/wallet_p2pk_1", "wallet1"
+    )
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
     wallet1.status()
@@ -43,7 +45,9 @@ async def wallet1(mint):
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet2(mint):
-    wallet2 = await Wallet2.with_db(SERVER_ENDPOINT, "data/wallet_p2pk_2", "wallet2")
+    wallet2 = await Wallet2.with_db(
+        SERVER_ENDPOINT, "test_data/wallet_p2pk_2", "wallet2"
+    )
     await migrate_databases(wallet2.db, migrations)
     wallet2.private_key = PrivateKey(secrets.token_bytes(32), raw=True)
     await wallet2.load_mint()
@@ -95,7 +99,7 @@ async def test_p2pk_short_locktime_receive_with_wrong_private_key(
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
     # sender side
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, locktime_seconds=4
+        pubkey_wallet2, locktime_seconds=2
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -107,7 +111,7 @@ async def test_p2pk_short_locktime_receive_with_wrong_private_key(
         wallet2.redeem(send_proofs),
         "Mint Error: no valid signature provided for input.",
     )
-    await asyncio.sleep(6)
+    await asyncio.sleep(2)
     # should succeed because even with the wrong private key we
     # can redeem the tokens after the locktime
     await wallet2.redeem(send_proofs_copy)
@@ -122,7 +126,7 @@ async def test_p2pk_locktime_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
     assert garbage_pubkey
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
-        locktime_seconds=4,  # locktime
+        locktime_seconds=2,  # locktime
         tags=Tags([["refund", pubkey_wallet2]]),  # refund pubkey
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
@@ -134,7 +138,7 @@ async def test_p2pk_locktime_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
         wallet2.redeem(send_proofs),
         "Mint Error: no valid signature provided for input.",
     )
-    await asyncio.sleep(6)
+    await asyncio.sleep(2)
     # we can now redeem because of the refund locktime
     await wallet2.redeem(send_proofs_copy)
 
@@ -150,7 +154,7 @@ async def test_p2pk_locktime_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
     assert garbage_pubkey_2
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
-        locktime_seconds=4,  # locktime
+        locktime_seconds=2,  # locktime
         tags=Tags([["refund", garbage_pubkey_2.serialize().hex()]]),  # refund pubkey
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
@@ -162,7 +166,7 @@ async def test_p2pk_locktime_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
         wallet2.redeem(send_proofs),
         "Mint Error: no valid signature provided for input.",
     )
-    await asyncio.sleep(6)
+    await asyncio.sleep(2)
     # we still can't redeem it because we used garbage_pubkey_2 as a refund pubkey
     await assert_err(
         wallet2.redeem(send_proofs_copy),

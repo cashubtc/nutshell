@@ -78,7 +78,8 @@ async def print_mint_balances(wallet, show_mints=False):
         print("")
         for i, (k, v) in enumerate(mint_balances.items()):
             print(
-                f"Mint {i+1}: Balance: {v['available']} sat (pending: {v['balance']-v['available']} sat) URL: {k}"
+                f"Mint {i+1}: Balance: {v['available']} sat (pending:"
+                f" {v['balance']-v['available']} sat) URL: {k}"
             )
         print("")
 

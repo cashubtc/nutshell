@@ -2,19 +2,16 @@ from ..core.db import Database
 
 
 async def m000_create_migrations_table(db: Database):
-    await db.execute(
-        """
+    await db.execute("""
     CREATE TABLE IF NOT EXISTS dbversions (
         db TEXT PRIMARY KEY,
         version INT NOT NULL
     )
-    """
-    )
+    """)
 
 
 async def m001_initial(db: Database):
-    await db.execute(
-        f"""
+    await db.execute(f"""
             CREATE TABLE IF NOT EXISTS proofs (
                 amount {db.big_int} NOT NULL,
                 C TEXT NOT NULL,
@@ -23,11 +20,9 @@ async def m001_initial(db: Database):
                 UNIQUE (secret)
 
             );
-        """
-    )
+        """)
 
-    await db.execute(
-        f"""
+    await db.execute(f"""
             CREATE TABLE IF NOT EXISTS proofs_used (
                 amount {db.big_int} NOT NULL,
                 C TEXT NOT NULL,
@@ -36,30 +31,25 @@ async def m001_initial(db: Database):
                 UNIQUE (secret)
 
             );
-        """
-    )
+        """)
 
-    await db.execute(
-        """
+    await db.execute("""
         CREATE VIEW IF NOT EXISTS balance AS
         SELECT COALESCE(SUM(s), 0) AS balance FROM (
             SELECT SUM(amount) AS s
             FROM proofs
             WHERE amount > 0
         );
-    """
-    )
+    """)
 
-    await db.execute(
-        """
+    await db.execute("""
         CREATE VIEW IF NOT EXISTS balance_used AS
         SELECT COALESCE(SUM(s), 0) AS used FROM (
             SELECT SUM(amount) AS s
             FROM proofs_used
             WHERE amount > 0
         );
-    """
-    )
+    """)
 
 
 async def m002_add_proofs_reserved(db: Database):
@@ -85,8 +75,7 @@ async def m004_p2sh_locks(db: Database):
     """
     Stores P2SH addresses and unlock scripts.
     """
-    await db.execute(
-        """
+    await db.execute("""
             CREATE TABLE IF NOT EXISTS p2sh (
                 address TEXT NOT NULL,
                 script TEXT NOT NULL,
@@ -96,16 +85,14 @@ async def m004_p2sh_locks(db: Database):
                 UNIQUE (address, script, signature)
 
             );
-        """
-    )
+        """)
 
 
 async def m005_wallet_keysets(db: Database):
     """
     Stores mint keysets from different mints and epochs.
     """
-    await db.execute(
-        f"""
+    await db.execute(f"""
             CREATE TABLE IF NOT EXISTS keysets (
                 id TEXT,
                 mint_url TEXT,
@@ -117,8 +104,7 @@ async def m005_wallet_keysets(db: Database):
                 UNIQUE (id, mint_url)
 
             );
-        """
-    )
+        """)
 
     await db.execute("ALTER TABLE proofs ADD COLUMN id TEXT")
     await db.execute("ALTER TABLE proofs_used ADD COLUMN id TEXT")
@@ -128,8 +114,7 @@ async def m006_invoices(db: Database):
     """
     Stores Lightning invoices.
     """
-    await db.execute(
-        f"""
+    await db.execute(f"""
         CREATE TABLE IF NOT EXISTS invoices (
             amount INTEGER NOT NULL,
             pr TEXT NOT NULL,
@@ -142,22 +127,19 @@ async def m006_invoices(db: Database):
             UNIQUE (hash)
 
         );
-    """
-    )
+    """)
 
 
 async def m007_nostr(db: Database):
     """
     Stores timestamps of nostr operations.
     """
-    await db.execute(
-        """
+    await db.execute("""
         CREATE TABLE IF NOT EXISTS nostr (
             type TEXT NOT NULL,
             last TIMESTAMP DEFAULT NULL
         )
-        """
-    )
+        """)
     await db.execute(
         """
         INSERT INTO nostr
@@ -182,14 +164,12 @@ async def m009_privatekey_and_determinstic_key_derivation(db: Database):
     await db.execute("ALTER TABLE keysets ADD COLUMN counter INTEGER DEFAULT 0")
     await db.execute("ALTER TABLE proofs ADD COLUMN derivation_path TEXT")
     await db.execute("ALTER TABLE proofs_used ADD COLUMN derivation_path TEXT")
-    await db.execute(
-        """
+    await db.execute("""
             CREATE TABLE IF NOT EXISTS seed (
             seed TEXT NOT NULL,
             mnemonic TEXT NOT NULL,
 
             UNIQUE (seed, mnemonic)
             );
-        """
-    )
+        """)
     # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")
