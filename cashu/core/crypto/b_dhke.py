@@ -97,12 +97,11 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     return C == Y.mult(a)  # type: ignore
 
 
-def hash_e(R1: PublicKey, R2: PublicKey, K: PublicKey, C_: PublicKey) -> bytes:
-    _R1 = R1.serialize(compressed=False).hex()
-    _R2 = R2.serialize(compressed=False).hex()
-    _K = K.serialize(compressed=False).hex()
-    _C_ = C_.serialize(compressed=False).hex()
-    e_ = f"{_R1}{_R2}{_K}{_C_}"
+def hash_e(*publickeys: PublicKey) -> bytes:
+    e_ = ""
+    for p in publickeys:
+        _p = p.serialize(compressed=False).hex()
+        e_ += str(_p)
     e = hashlib.sha256(e_.encode("utf-8")).digest()
     return e
 
@@ -130,8 +129,13 @@ def step2_bob_dleq(
     return epk, spk
 
 
-def alice_verify_dleq(
-    B_: PublicKey, C_: PublicKey, e: PrivateKey, s: PrivateKey, A: PublicKey
+def verify_dleq(
+    *,
+    B_: PublicKey,
+    C_: PublicKey,
+    e: PrivateKey,
+    s: PrivateKey,
+    A: PublicKey,
 ):
     R1 = s.pubkey - A.mult(e)  # type: ignore
     R2 = B_.mult(s) - C_.mult(e)  # type: ignore
@@ -140,6 +144,28 @@ def alice_verify_dleq(
 
 
 def carol_verify_dleq(
+    *,
+    B_: PublicKey,
+    C_: PublicKey,
+    e: PrivateKey,
+    s: PrivateKey,
+    A: PublicKey,
+    f: PrivateKey,
+    t: PrivateKey,
+    C: PublicKey,
+    secret_msg: str,
+):
+    # verify dleq proof that mint signature is valid
+    assert verify_dleq(B_=B_, C_=C_, e=e, s=s, A=A)
+    # verify schnorr proof that Alice sent us valid C_ and B_
+    assert carol_schnorr_r_verify(
+        A=A, B_=B_, secret_msg=secret_msg, C=C, C_=C_, f=f, t=t
+    )
+    return True
+
+
+def alice_verify_dleq(
+    *,
     secret_msg: str,
     r: PrivateKey,
     C: PublicKey,
@@ -150,7 +176,54 @@ def carol_verify_dleq(
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     C_: PublicKey = C + A.mult(r)  # type: ignore
     B_: PublicKey = Y + r.pubkey  # type: ignore
-    return alice_verify_dleq(B_, C_, e, s, A)
+    return verify_dleq(B_=B_, C_=C_, e=e, s=s, A=A)
+
+
+def alice_schnorr_r(
+    r: PrivateKey,
+    A: PublicKey,
+    B_: PublicKey,
+    C_: PublicKey,
+    C: PublicKey,
+    secret_msg: str,
+    k_bytes: bytes = b"",
+) -> Tuple[PrivateKey, PrivateKey]:
+    if k_bytes:
+        # deterministic k for testing
+        k = PrivateKey(privkey=k_bytes, raw=True)
+    else:
+        # normally, we generate a random p
+        k = PrivateKey()
+
+    K1 = k.pubkey  # K1 = kG
+    assert K1
+    K2 = A.mult(k)  # K2 = kA # type: ignore
+
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    f = hash_e(K1, K2, A, B_, C_, Y, C)
+    t = k.tweak_add(r.tweak_mul(f))  # t = p + fk
+    tpk = PrivateKey(t, raw=True)
+    fpk = PrivateKey(f, raw=True)
+    return fpk, tpk
+
+
+def carol_schnorr_r_verify(
+    *,
+    A: PublicKey,
+    B_: PublicKey,
+    secret_msg: str,
+    C: PublicKey,
+    C_: PublicKey,
+    f: PrivateKey,
+    t: PrivateKey,
+):
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    K1 = t.pubkey - B_.mult(f) + Y.mult(f)  # type: ignore
+    K2 = A.mult(t) - C_.mult(f) + C.mult(f)  # type: ignore
+
+    f_bytes = f.private_key
+
+    return f_bytes == hash_e(K1, K2, A, B_, C_, Y, C)
 
 
 # Below is a test of a simple positive and negative case

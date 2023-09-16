@@ -1,12 +1,12 @@
 from cashu.core.crypto.b_dhke import (
     alice_verify_dleq,
-    carol_verify_dleq,
     hash_e,
     hash_to_curve,
     step1_alice,
     step2_bob,
     step2_bob_dleq,
     step3_alice,
+    verify_dleq,
 )
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 
@@ -251,7 +251,7 @@ def test_dleq_alice_verify_dleq():
         raw=True,
     )
 
-    assert alice_verify_dleq(B_, C_, e, s, A)
+    assert verify_dleq(B_=B_, C_=C_, e=e, s=s, A=A)
 
 
 def test_dleq_alice_direct_verify_dleq():
@@ -274,7 +274,7 @@ def test_dleq_alice_direct_verify_dleq():
         ),
     )
     C_, e, s = step2_bob(B_, a)
-    assert alice_verify_dleq(B_, C_, e, s, A)
+    assert verify_dleq(B_=B_, C_=C_, e=e, s=s, A=A)
 
 
 def test_dleq_carol_varify_from_bob():
@@ -295,8 +295,8 @@ def test_dleq_carol_varify_from_bob():
     )
     B_, _ = step1_alice(secret_msg, r)
     C_, e, s = step2_bob(B_, a)
-    assert alice_verify_dleq(B_, C_, e, s, A)
+    assert verify_dleq(B_=B_, C_=C_, e=e, s=s, A=A)
     C = step3_alice(C_, r, A)
 
     # carol does not know B_ and C_, but she receives C and r from Alice
-    assert carol_verify_dleq(secret_msg=secret_msg, C=C, r=r, e=e, s=s, A=A)
+    assert alice_verify_dleq(secret_msg=secret_msg, C=C, r=r, e=e, s=s, A=A)

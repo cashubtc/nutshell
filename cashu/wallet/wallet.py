@@ -142,33 +142,48 @@ class LedgerAPI(object):
 
     # ---------- DLEQ PROOFS ----------
 
-    def verify_proofs_dleq(self, proofs: List[Proof]):
+    def alice_verify_proofs_dleq(self, proofs: List[Proof], rs: List[PrivateKey]):
         """Verifies DLEQ proofs in proofs."""
-        for proof in proofs:
+        for r, proof in zip(rs, proofs):
             if not proof.dleq:
                 logger.trace("No DLEQ proof in proof.")
                 return
-            logger.trace("Verifying DLEQ proof.")
+            logger.trace("Alice: Verifying DLEQ proof.")
             assert self.keys.public_keys
-            # if not b_dhke.alice_verify_dleq(
-            #     e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
-            #     s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
-            #     A=self.keys.public_keys[proof.amount],
-            #     B_=PublicKey(bytes.fromhex(proof.B_), raw=True),
-            #     C_=PublicKey(bytes.fromhex(proof.C_), raw=True),
-            # ):
-            #     raise Exception("Alice: DLEQ proof invalid.")
-            if not b_dhke.carol_verify_dleq(
+            if not b_dhke.alice_verify_dleq(
                 secret_msg=proof.secret,
                 C=PublicKey(bytes.fromhex(proof.C), raw=True),
-                r=PrivateKey(bytes.fromhex(proof.dleq.r), raw=True),
+                r=r,
                 e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
                 s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
                 A=self.keys.public_keys[proof.amount],
             ):
                 raise Exception("DLEQ proof invalid.")
             else:
-                logger.debug("DLEQ proof valid.")
+                logger.debug("Alice: DLEQ proof valid.")
+
+    def carol_verify_proofs_dleq(self, proofs: List[Proof]):
+        """Verifies DLEQ proofs in proofs."""
+        for proof in proofs:
+            if not proof.dleq:
+                logger.debug("No DLEQ proof in proof.")
+                return
+            logger.trace("Carol: Verifying DLEQ proof.")
+            assert self.keys.public_keys
+            if not b_dhke.carol_verify_dleq(
+                e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
+                s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
+                A=self.keys.public_keys[proof.amount],
+                B_=PublicKey(bytes.fromhex(proof.dleq.B_), raw=True),
+                C_=PublicKey(bytes.fromhex(proof.dleq.C_), raw=True),
+                C=PublicKey(bytes.fromhex(proof.C), raw=True),
+                f=PrivateKey(bytes.fromhex(proof.dleq.f), raw=True),
+                t=PrivateKey(bytes.fromhex(proof.dleq.t), raw=True),
+                secret_msg=proof.secret,
+            ):
+                raise Exception("Carol: DLEQ proof invalid.")
+            else:
+                logger.debug("Carol: DLEQ proof valid.")
 
     def _construct_proofs(
         self,
@@ -213,18 +228,32 @@ class LedgerAPI(object):
 
             # if the mint returned a dleq proof, we add it to the proof
             if promise.dleq:
+                # create schnorr proof for r
+                f, t = b_dhke.alice_schnorr_r(
+                    r=r,
+                    A=self.public_keys[promise.amount],
+                    B_=B_,
+                    C_=C_,
+                    C=C,
+                    secret_msg=secret,
+                )
+
                 proof.dleq = DLEQWallet(
-                    e=promise.dleq.e, s=promise.dleq.s, r=r.serialize()
+                    e=promise.dleq.e,
+                    s=promise.dleq.s,
+                    B_=B_.serialize().hex(),
+                    C_=C_.serialize().hex(),
+                    f=f.serialize(),
+                    t=t.serialize(),
                 )
 
             proofs.append(proof)
-
             logger.trace(
                 f"Created proof: {proof}, r: {r.serialize()} out of promise {promise}"
             )
 
         # DLEQ verify
-        self.verify_proofs_dleq(proofs)
+        self.alice_verify_proofs_dleq(proofs, rs)
 
         logger.trace(f"Constructed {len(proofs)} proofs.")
         return proofs
@@ -1086,7 +1115,7 @@ class Wallet(LedgerAPI):
         """
         # verify DLEQ of incoming proofs
         logger.debug("Verifying DLEQ of incoming proofs.")
-        self.verify_proofs_dleq(proofs)
+        self.carol_verify_proofs_dleq(proofs)
         logger.debug("DLEQ verified.")
         return await self.split(proofs, sum_proofs(proofs))
 
