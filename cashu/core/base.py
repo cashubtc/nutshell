@@ -171,7 +171,6 @@ class DLEQWallet(BaseModel):
     # DLEQ proof of equality of a (mint private key)
     e: str
     s: str
-    # r: str  # blinding_factor, unknown to mint but sent from wallet to wallet for DLEQ proof
     B_: str  # blinded message, sent to the mint by the wallet
     C_: str  # blinded signature, received by the mint
 

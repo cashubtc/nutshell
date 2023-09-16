@@ -48,6 +48,22 @@ R2 = s*B' - e*C'
 e == hash(R1,R2,A,C')
 
 If true, a in A = a*G must be equal to a in C' = a*B'
+
+# Schnorr Proof - sub-proof of DLEQ proof
+
+Alice:
+k = random nonce
+K1 = k*G
+K2 = k*A
+f = hash(K1,K2,B',C',Y,C)
+t = k + t*k
+return f, t
+
+Carol:
+Y = hash_to_curve(secret)
+K1 = t*G - f*B' + f*Y
+K2 = t*A - f*C' + f*C
+f == hash(K1,K2,B',C',Y,C)
 """
 
 import hashlib
@@ -192,7 +208,7 @@ def alice_schnorr_r(
         # deterministic k for testing
         k = PrivateKey(privkey=k_bytes, raw=True)
     else:
-        # normally, we generate a random p
+        # normally, we generate a random k
         k = PrivateKey()
 
     K1 = k.pubkey  # K1 = kG
@@ -224,24 +240,3 @@ def carol_schnorr_r_verify(
     f_bytes = f.private_key
 
     return f_bytes == hash_e(K1, K2, A, B_, C_, Y, C)
-
-
-# Below is a test of a simple positive and negative case
-
-# # Alice's keys
-# a = PrivateKey()
-# A = a.pubkey
-# secret_msg = "test"
-# B_, r = step1_alice(secret_msg)
-# C_ = step2_bob(B_, a)
-# C = step3_alice(C_, r, A)
-# print("C:{}, secret_msg:{}".format(C, secret_msg))
-# assert verify(a, C, secret_msg)
-# assert verify(a, C + C, secret_msg) == False  # adding C twice shouldn't pass
-# assert verify(a, A, secret_msg) == False  # A shouldn't pass
-
-# # Test operations
-# b = PrivateKey()
-# B = b.pubkey
-# assert -A -A + A == -A  # neg
-# assert B.mult(a) == A.mult(b)  # a*B = A*b
