@@ -132,7 +132,7 @@ def step2_bob_dleq(
 
 def alice_verify_dleq(
     B_: PublicKey, C_: PublicKey, e: PrivateKey, s: PrivateKey, A: PublicKey
-):
+) -> bool:
     R1 = s.pubkey - A.mult(e)  # type: ignore
     R2 = B_.mult(s) - C_.mult(e)  # type: ignore
     e_bytes = e.private_key
@@ -146,7 +146,7 @@ def carol_verify_dleq(
     e: PrivateKey,
     s: PrivateKey,
     A: PublicKey,
-):
+) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     C_: PublicKey = C + A.mult(r)  # type: ignore
     B_: PublicKey = Y + r.pubkey  # type: ignore

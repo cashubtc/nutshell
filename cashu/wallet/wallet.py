@@ -150,14 +150,6 @@ class LedgerAPI(object):
                 return
             logger.trace("Verifying DLEQ proof.")
             assert self.keys.public_keys
-            # if not b_dhke.alice_verify_dleq(
-            #     e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
-            #     s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
-            #     A=self.keys.public_keys[proof.amount],
-            #     B_=PublicKey(bytes.fromhex(proof.B_), raw=True),
-            #     C_=PublicKey(bytes.fromhex(proof.C_), raw=True),
-            # ):
-            #     raise Exception("Alice: DLEQ proof invalid.")
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
                 C=PublicKey(bytes.fromhex(proof.C), raw=True),
