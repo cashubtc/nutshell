@@ -28,6 +28,7 @@ from ..core.base import (
     GetMintResponse,
     Invoice,
     KeysetsResponse,
+    P2PKSecret,
     P2SHScript,
     PostMeltRequest,
     PostMintRequest,
@@ -987,7 +988,10 @@ class Wallet(LedgerAPI):
 
         # if any of the proofs provided require SIG_ALL, we must provide it
         if any(
-            [Secret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs]
+            [
+                P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL
+                for p in proofs
+            ]
         ):
             # p2pk_signatures = await self.sign_p2pk_outputs(outputs)
             # for o, s in zip(outputs, p2pk_signatures):
@@ -1558,7 +1562,7 @@ class Wallet(LedgerAPI):
         tags: Optional[Tags] = None,
         sig_all: bool = False,
         n_sigs: int = 1,
-    ) -> Secret:
+    ) -> P2PKSecret:
         logger.debug(f"Provided tags: {tags}")
         if not tags:
             tags = Tags()
@@ -1571,7 +1575,7 @@ class Wallet(LedgerAPI):
         if n_sigs > 1:
             tags["n_sigs"] = str(n_sigs)
         logger.debug(f"After tags: {tags}")
-        return Secret(
+        return P2PKSecret(
             kind=SecretKind.P2PK,
             data=pubkey,
             tags=tags,
