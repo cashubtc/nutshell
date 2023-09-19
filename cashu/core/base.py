@@ -171,8 +171,6 @@ class DLEQWallet(BaseModel):
     e: str
     s: str
     r: str  # blinding_factor, unknown to mint but sent from wallet to wallet for DLEQ proof
-    # B_: Union[str, None] = None  # blinded message, sent to the mint by the wallet
-    # C_: Union[str, None] = None  # blinded signature, received by the mint
 
 
 class Proof(BaseModel):
