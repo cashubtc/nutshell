@@ -101,8 +101,9 @@ async def receive_nostr(
 ):
     if settings.nostr_private_key is None:
         print(
-            "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in your .env file. "
-            "I will create a random private key for this session but I will not remember it."
+            "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in"
+            " your .env file. I will create a random private key for this session but I"
+            " will not remember it."
         )
         print("")
     client = NostrClient(

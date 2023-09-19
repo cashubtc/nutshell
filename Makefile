@@ -1,8 +1,8 @@
-isort:
-	poetry run isort --profile black . --skip cashu/nostr
+ruff:
+	poetry run ruff check . --fix
 
-isort-check:
-	poetry run isort --profile black --check-only . --skip cashu/nostr
+ruff-check:
+	poetry run ruff check .
 
 black:
 	poetry run black . --exclude cashu/nostr
@@ -13,12 +13,9 @@ black-check:
 mypy:
 	poetry run mypy cashu tests --ignore-missing
 
-flake8:
-	poetry run flake8 cashu tests
+format: black ruff
 
-format: isort black
-
-check: isort-check black-check flake8 mypy
+check: black-check ruff-check mypy
 
 clean:
 	rm -r cashu.egg-info/ || true
@@ -32,8 +29,6 @@ package:
 	python setup.py sdist bdist_wheel
 
 test:
-	LIGHTNING=false \
-	TOR=false \
 	poetry run pytest tests --cov-report xml --cov cashu
 
 install:

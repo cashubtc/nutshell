@@ -17,7 +17,7 @@ def cli_prefix():
 async def init_wallet():
     wallet = await Wallet.with_db(
         url=settings.mint_host,
-        db="data/test_cli_wallet",
+        db="test_data/test_cli_wallet",
         name="wallet",
     )
     await wallet.load_proofs()
@@ -201,8 +201,9 @@ def test_receive_tokenv3(mint, cli_prefix):
 
 
 def test_receive_tokenv3_no_mint(mint, cli_prefix):
-    # this test works only if the previous test succeeds because we simulate the case where the mint URL is not in the token
-    # therefore, we need to know the mint keyset already and have the mint URL in the db
+    # this test works only if the previous test succeeds because we simulate the case
+    # where the mint URL is not in the token therefore, we need to know the mint keyset
+    # already and have the mint URL in the db
     runner = CliRunner()
     token = (
         "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjFjQ05JQVoyWC93MSIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIi1oM0ZXMFFoX1FYLW9ac1V2c0RuNlEiLC"
@@ -254,9 +255,6 @@ def test_receive_tokenv1(mint, cli_prefix):
     assert result.exception is None
     print("RECEIVE")
     print(result.output)
-
-
-()
 
 
 def test_nostr_send(mint, cli_prefix):

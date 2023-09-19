@@ -1,8 +1,0 @@
-[flake8]
-max-line-length = 150
-exclude = cashu/nostr, cashu/core/bolt11.py
-ignore =
-    # E203 whitespace before ':' black does not like it
-    E203,
-    # W503: line break before binary operator
-    W503,

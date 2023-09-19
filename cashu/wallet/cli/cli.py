@@ -28,7 +28,13 @@ from ...wallet.crud import (
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
 from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
-from ..helpers import deserialize_token_from_string, init_wallet, receive, send
+from ..helpers import (
+    deserialize_token_from_string,
+    init_wallet,
+    list_mints,
+    receive,
+    send,
+)
 from ..nostr import receive_nostr, send_nostr
 
 
@@ -90,18 +96,27 @@ def coro(f):
 async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     if settings.tor and not TorProxy().check_platform():
         error_str = (
-            "Your settings say TOR=true but the built-in Tor bundle is not supported on your system. You have two options: Either install"
-            " Tor manually and set TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu config (recommended). Or turn off Tor by "
-            "setting TOR=false (not recommended). Cashu will not work until you edit your config file accordingly."
+            "Your settings say TOR=true but the built-in Tor bundle is not supported on"
+            " your system. You have two options: Either install Tor manually and set"
+            " TOR=FALSE and SOCKS_HOST=localhost and SOCKS_PORT=9050 in your Cashu"
+            " config (recommended). Or turn off Tor by setting TOR=false (not"
+            " recommended). Cashu will not work until you edit your config file"
+            " accordingly."
         )
         error_str += "\n\n"
         if settings.env_file:
             error_str += f"Edit your Cashu config file here: {settings.env_file}"
             env_path = settings.env_file
         else:
-            error_str += f"Ceate a new Cashu config file here: {os.path.join(settings.cashu_dir, '.env')}"
+            error_str += (
+                "Ceate a new Cashu config file here:"
+                f" {os.path.join(settings.cashu_dir, '.env')}"
+            )
             env_path = os.path.join(settings.cashu_dir, ".env")
-        error_str += f'\n\nYou can turn off Tor with this command: echo "TOR=FALSE" >> {env_path}'
+        error_str += (
+            '\n\nYou can turn off Tor with this command: echo "TOR=FALSE" >>'
+            f" {env_path}"
+        )
         raise Exception(error_str)
 
     ctx.ensure_object(dict)
@@ -155,7 +170,8 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
     if not yes:
         click.confirm(
-            f"Pay {total_amount - fee_reserve_sat} sat ({total_amount} sat with potential fees)?",
+            f"Pay {total_amount - fee_reserve_sat} sat ({total_amount} sat with"
+            " potential fees)?",
             abort=True,
             default=True,
         )
@@ -206,7 +222,8 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
             print(f"Invoice: {invoice.pr}")
             print("")
             print(
-                f"If you abort this you can use this command to recheck the invoice:\ncashu invoice {amount} --hash {invoice.hash}"
+                "If you abort this you can use this command to recheck the"
+                f" invoice:\ncashu invoice {amount} --hash {invoice.hash}"
             )
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
@@ -232,7 +249,8 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
             if not paid:
                 print("\n")
                 print(
-                    "Invoice is not paid yet, stopping check. Use the command above to recheck after the invoice has been paid."
+                    "Invoice is not paid yet, stopping check. Use the command above to"
+                    " recheck after the invoice has been paid."
                 )
 
     # user paid invoice and want to check it
@@ -306,7 +324,8 @@ async def balance(ctx: Context, verbose):
             print("")
             for k, v in keyset_balances.items():
                 print(
-                    f"Keyset: {k} - Balance: {v['available']} sat (pending: {v['balance']-v['available']} sat)"
+                    f"Keyset: {k} - Balance: {v['available']} sat (pending:"
+                    f" {v['balance']-v['available']} sat)"
                 )
             print("")
 
@@ -314,8 +333,9 @@ async def balance(ctx: Context, verbose):
 
     if verbose:
         print(
-            f"Balance: {wallet.available_balance} sat (pending: {wallet.balance-wallet.available_balance} sat) "
-            f"in {len([p for p in wallet.proofs if not p.reserved])} tokens"
+            f"Balance: {wallet.available_balance} sat (pending:"
+            f" {wallet.balance-wallet.available_balance} sat) in"
+            f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
         print(f"Balance: {wallet.available_balance} sat")
@@ -404,7 +424,7 @@ async def send_command(
     "-n",
     default=False,
     is_flag=True,
-    help="Receive tokens via nostr." "receive",
+    help="Receive tokens via nostr.receive",
 )
 @click.option(
     "--all", "-a", default=False, is_flag=True, help="Receive all pending tokens."
@@ -472,8 +492,9 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         await wallet.load_mint()
     if not (all or token or force or delete) or (token and all):
         print(
-            "Error: enter a token or use --all to burn all pending tokens, --force to check all tokens "
-            "or --delete with send ID to force-delete pending token from list if mint is unavailable."
+            "Error: enter a token or use --all to burn all pending tokens, --force to"
+            " check all tokens or --delete with send ID to force-delete pending token"
+            " from list if mint is unavailable."
         )
         return
     if all:
@@ -546,7 +567,8 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time: {reserved_date} ID: {key}  Mint: {mint}\n"
+                f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time:"
+                f" {reserved_date} ID: {key}  Mint: {mint}\n"
             )
             print(f"{token}\n")
 
@@ -676,7 +698,8 @@ async def wallets(ctx):
                 if w == ctx.obj["WALLET_NAME"]:
                     active_wallet = True
                 print(
-                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat (available: "
+                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat"
+                    " (available: "
                     f"{sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
                 )
         except Exception:
@@ -710,26 +733,30 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
         print(f"Socks proxy: {settings.socks_proxy}")
     if settings.http_proxy:
         print(f"HTTP proxy: {settings.http_proxy}")
-    print(f"Mint URL: {ctx.obj['HOST']}")
+    mint_list = await list_mints(wallet)
+    print(f"Mint URLs: {mint_list}")
     if mint:
-        mint_info: dict = (await wallet._load_mint_info()).dict()
-        print("")
-        print("Mint information:")
-        print("")
-        if mint_info:
-            print(f"Mint name: {mint_info['name']}")
-            if mint_info["description"]:
-                print(f"Description: {mint_info['description']}")
-            if mint_info["description_long"]:
-                print(f"Long description: {mint_info['description_long']}")
-            if mint_info["contact"]:
-                print(f"Contact: {mint_info['contact']}")
-            if mint_info["version"]:
-                print(f"Version: {mint_info['version']}")
-            if mint_info["motd"]:
-                print(f"Message of the day: {mint_info['motd']}")
-            if mint_info["parameter"]:
-                print(f"Parameter: {mint_info['parameter']}")
+        for mint_url in mint_list:
+            wallet.url = mint_url
+            mint_info: dict = (await wallet._load_mint_info()).dict()
+            print("")
+            print("Mint information:")
+            print("")
+            print(f"Mint URL: {mint_url}")
+            if mint_info:
+                print(f"Mint name: {mint_info['name']}")
+                if mint_info["description"]:
+                    print(f"Description: {mint_info['description']}")
+                if mint_info["description_long"]:
+                    print(f"Long description: {mint_info['description_long']}")
+                if mint_info["contact"]:
+                    print(f"Contact: {mint_info['contact']}")
+                if mint_info["version"]:
+                    print(f"Version: {mint_info['version']}")
+                if mint_info["motd"]:
+                    print(f"Message of the day: {mint_info['motd']}")
+                if mint_info["parameter"]:
+                    print(f"Parameter: {mint_info['parameter']}")
 
     if mnemonic:
         assert wallet.mnemonic
@@ -760,12 +787,14 @@ async def restore(ctx: Context, to: int, batch: int):
     ret = await get_seed_and_mnemonic(wallet.db)
     if ret:
         print(
-            "Wallet already has a mnemonic. You can't restore an already initialized wallet."
+            "Wallet already has a mnemonic. You can't restore an already initialized"
+            " wallet."
         )
         print("To restore a wallet, please delete the wallet directory and try again.")
         print("")
         print(
-            f"The wallet directory is: {os.path.join(settings.cashu_dir, ctx.obj['WALLET_NAME'])}"
+            "The wallet directory is:"
+            f" {os.path.join(settings.cashu_dir, ctx.obj['WALLET_NAME'])}"
         )
         return
     # ask the user for a mnemonic but allow also no input

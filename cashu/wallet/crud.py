@@ -31,11 +31,9 @@ async def get_proofs(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-    rows = await (conn or db).fetchall(
-        """
+    rows = await (conn or db).fetchall("""
         SELECT * from proofs
-        """
-    )
+        """)
     return [Proof(**dict(r)) for r in rows]
 
 
@@ -43,12 +41,10 @@ async def get_reserved_proofs(
     db: Database,
     conn: Optional[Connection] = None,
 ):
-    rows = await (conn or db).fetchall(
-        """
+    rows = await (conn or db).fetchall("""
         SELECT * from proofs
         WHERE reserved
-        """
-    )
+        """)
     return [Proof(**r) for r in rows]
 
 

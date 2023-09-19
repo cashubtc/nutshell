@@ -3,6 +3,10 @@ import sys
 from traceback import print_exception
 
 from fastapi import FastAPI, status
+from fastapi.exception_handlers import (
+    request_validation_exception_handler as _request_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 # from fastapi_profiler import PyInstrumentProfilerMiddleware
@@ -36,14 +40,19 @@ def create_app(config_object="core.settings") -> FastAPI:
         class Formatter:
             def __init__(self):
                 self.padding = 0
-                self.minimal_fmt: str = "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level}</level> | <level>{message}</level>\n"
+                self.minimal_fmt = (
+                    "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> |"
+                    " <level>{level}</level> | <level>{message}</level>\n"
+                )
                 if settings.debug:
-                    self.fmt: str = (
-                        "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level: <4}</level> | <cyan>{name}</cyan>:<cyan>"
-                        "{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>\n"
+                    self.fmt = (
+                        "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level:"
+                        " <4}</level> |"
+                        " <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>"
+                        " | <level>{message}</level>\n"
                     )
                 else:
-                    self.fmt: str = self.minimal_fmt
+                    self.fmt = self.minimal_fmt
 
             def format(self, record):
                 function = "{function}".format(**record)
@@ -109,6 +118,12 @@ app = create_app()
 
 @app.middleware("http")
 async def catch_exceptions(request: Request, call_next):
+    CORS_HEADERS = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+        "Access-Control-Allow-Credentials": "true",
+    }
     try:
         return await call_next(request)
     except Exception as e:
@@ -119,17 +134,38 @@ async def catch_exceptions(request: Request, call_next):
 
         if isinstance(e, CashuError):
             logger.error(f"CashuError: {err_message}")
+            # return with cors headers
             return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 content={"detail": err_message, "code": e.code},
+                headers=CORS_HEADERS,
             )
         logger.error(f"Exception: {err_message}")
         if settings.debug:
             print_exception(*sys.exc_info())
         return JSONResponse(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_400_BAD_REQUEST,
             content={"detail": err_message, "code": 0},
+            headers=CORS_HEADERS,
         )
+
+
+async def request_validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """
+    This is a wrapper to the default RequestValidationException handler of FastAPI.
+    This function will be called when client input is not valid.
+    """
+    query_params = request.query_params._dict
+    detail = {
+        "errors": exc.errors(),
+        "query_params": query_params,
+    }
+    # log the error
+    logger.error(detail)
+    # pass on
+    return await _request_validation_exception_handler(request, exc)
 
 
 @app.on_event("startup")
@@ -138,3 +174,4 @@ async def startup_mint():
 
 
 app.include_router(router=router)
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)

@@ -8,8 +8,6 @@ from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 
-SERVER_ENDPOINT = "http://localhost:3338"
-
 
 async def assert_err(f, msg):
     """Compute f() and expect an error message 'msg'."""
@@ -62,7 +60,7 @@ async def test_keysets(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_get_keyset(ledger: Ledger):
     keyset = ledger.get_keyset()
-    assert type(keyset) == dict
+    assert isinstance(keyset, dict)
     assert len(keyset) == settings.max_order
 
 
