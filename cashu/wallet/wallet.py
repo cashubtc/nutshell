@@ -964,6 +964,14 @@ class Wallet(LedgerAPI):
     async def add_p2pk_witnesses_to_outputs(
         self, outputs: List[BlindedMessage]
     ) -> List[BlindedMessage]:
+        """Takes a list of outputs and adds a P2PK signatures to each.
+
+        Args:
+            outputs (List[BlindedMessage]): Outputs to add P2PK signatures to
+
+        Returns:
+            List[BlindedMessage]: Outputs with P2PK signatures added
+        """
         p2pk_signatures = await self.sign_p2pk_outputs(outputs)
         for o, s in zip(outputs, p2pk_signatures):
             o.p2pksigs = [s]
@@ -975,8 +983,11 @@ class Wallet(LedgerAPI):
         """Adds witnesses to outputs if the inputs (proofs) indicate an appropriate signature flag
 
         Args:
-            proofs (List[Proof]): _description_
-            outputs (List[BlindedMessage]): _description_
+            proofs (List[Proof]): Inputs to the transaction
+            outputs (List[BlindedMessage]): Outputs to add witnesses to
+
+        Returns:
+            List[BlindedMessage]: Outputs with signatures added
         """
         # first we check whether all tokens have serialized secrets as their secret
         try:
@@ -993,9 +1004,6 @@ class Wallet(LedgerAPI):
                 for p in proofs
             ]
         ):
-            # p2pk_signatures = await self.sign_p2pk_outputs(outputs)
-            # for o, s in zip(outputs, p2pk_signatures):
-            #     o.p2pksigs = [s]
             outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
         return outputs
 
