@@ -54,7 +54,7 @@ from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.p2pk import sign_p2pk_sign
 from ..core.script import (
-    step0_carol_checksig_redeemscrip,
+    step0_carol_checksig_redeemscript,
     step0_carol_privkey,
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
@@ -787,11 +787,11 @@ class Wallet(LedgerAPI):
             db=self.db, keyset_id=self.keyset_id
         )
         logger.trace(f"secret_counter: {secret_counter}")
-        s, _, _ = await self.generate_determinstic_secret(secret_counter)
+        s, _, _ = await self.generate_deterministic_secret(secret_counter)
         # return s.decode("utf-8")
         return hashlib.sha256(s).hexdigest()
 
-    async def generate_determinstic_secret(
+    async def generate_deterministic_secret(
         self, counter: int
     ) -> Tuple[bytes, bytes, str]:
         """
@@ -840,7 +840,7 @@ class Wallet(LedgerAPI):
             f"Generating secret nr {secret_counters[0]} to {secret_counters[-1]}."
         )
         secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
+            await self.generate_deterministic_secret(s) for s in secret_counters
         ]
         # secrets are supplied as str
         secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
@@ -874,7 +874,7 @@ class Wallet(LedgerAPI):
         ), "from_counter must be smaller than to_counter"
         secret_counters = [c for c in range(from_counter, to_counter + 1)]
         secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
+            await self.generate_deterministic_secret(s) for s in secret_counters
         ]
         # secrets are supplied as str
         secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
@@ -1532,7 +1532,7 @@ class Wallet(LedgerAPI):
     async def create_p2sh_address_and_store(self) -> str:
         """Creates a P2SH lock script and stores the script and signature in the database."""
         alice_privkey = step0_carol_privkey()
-        txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
+        txin_redeemScript = step0_carol_checksig_redeemscript(alice_privkey.pub)
         txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
         txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
         txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
