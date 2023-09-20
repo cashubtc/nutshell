@@ -55,7 +55,8 @@ class Tags(BaseModel):
         all_tags = []
         for tag in self.__root__:
             if tag[0] == tag_name:
-                all_tags.append(tag[1])
+                for t in tag[1:]:
+                    all_tags.append(t)
         return all_tags
 
 
@@ -92,6 +93,40 @@ class Secret(BaseModel):
         logger.debug(f"Deserialized Secret: {kind}, {data}, {nonce}, {tags}")
         return cls(kind=kind, data=data, nonce=nonce, tags=tags)
 
+
+class P2PKSecret(Secret):
+    @classmethod
+    def from_secret(cls, secret: Secret):
+        assert secret.kind == SecretKind.P2PK, "Secret is not a P2PK secret"
+        return cls(**secret.dict())
+
+    def get_p2pk_pubkey_from_secret(self) -> List[str]:
+        """Gets the P2PK pubkey from a Secret depending on the locktime
+
+        Args:
+            secret (Secret): P2PK Secret in ecash token
+
+        Returns:
+            str: pubkey to use for P2PK, empty string if anyone can spend (locktime passed)
+        """
+        pubkeys: List[str] = [self.data]  # for now we only support one pubkey
+        # get all additional pubkeys from tags for multisig
+        if self.tags and self.tags.get_tag("pubkeys"):
+            pubkeys += self.tags.get_tag_all("pubkeys")
+
+        now = time.time()
+        if self.locktime and self.locktime < now:
+            logger.trace(f"p2pk locktime ran out ({self.locktime}<{now}).")
+            # check tags if a refund pubkey is present.
+            # If yes, we demand the signature to be from the refund pubkey
+            if self.tags:
+                refund_pubkey = self.tags.get_tag("refund")
+                if refund_pubkey:
+                    pubkeys = [refund_pubkey]
+                    return pubkeys
+            return []
+        return pubkeys
+
     @property
     def locktime(self) -> Union[None, int]:
         if self.tags:
@@ -115,33 +150,6 @@ class Secret(BaseModel):
             if n_sigs:
                 return int(n_sigs)
         return None
-
-    def get_p2pk_pubkey_from_secret(self) -> List[str]:
-        """Gets the P2PK pubkey from a Secret depending on the locktime
-
-        Args:
-            secret (Secret): P2PK Secret in ecash token
-
-        Returns:
-            str: pubkey to use for P2PK, empty string if anyone can spend (locktime passed)
-        """
-        pubkeys: List[str] = [self.data]  # for now we only support one pubkey
-        # get all additional pubkeys from tags for multisig
-        if self.tags and self.tags.get_tag("pubkey"):
-            pubkeys += self.tags.get_tag_all("pubkey")
-
-        now = time.time()
-        if self.locktime and self.locktime < now:
-            logger.trace(f"p2pk locktime ran out ({self.locktime}<{now}).")
-            # check tags if a refund pubkey is present.
-            # If yes, we demand the signature to be from the refund pubkey
-            if self.tags:
-                refund_pubkey = self.tags.get_tag("refund")
-                if refund_pubkey:
-                    pubkeys = [refund_pubkey]
-                    return pubkeys
-            return []
-        return pubkeys
 
 
 class P2SHScript(BaseModel):
