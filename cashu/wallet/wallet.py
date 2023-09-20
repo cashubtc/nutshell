@@ -523,9 +523,9 @@ class LedgerAPI(object):
             },
         )
         self.raise_on_error(resp)
-        reponse_dict = resp.json()
+        response_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /mint")
-        promises = PostMintResponse.parse_obj(reponse_dict).promises
+        promises = PostMintResponse.parse_obj(response_dict).promises
 
         # bump secret counter in database
         await bump_secret_derivation(
@@ -672,7 +672,7 @@ class Wallet(LedgerAPI):
         self.name = name
 
         super().__init__(url=url, db=self.db)
-        logger.debug(f"Wallet initalized with mint URL {url}")
+        logger.debug(f"Wallet initialized with mint URL {url}")
 
     @classmethod
     async def with_db(
@@ -1133,9 +1133,9 @@ class Wallet(LedgerAPI):
             logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
             assert len(secret_locks) == len(
                 scnd_outputs
-            ), "number of secret_locks does not match number of ouptus."
+            ), "number of secret_locks does not match number of outputs."
             # append predefined secrets (to send) to random secrets (to keep)
-            # generate sercets to keep
+            # generate secrets to keep
             secrets = [
                 await self._generate_secret() for s in range(len(frst_outputs))
             ] + secret_locks
@@ -1681,7 +1681,7 @@ class Wallet(LedgerAPI):
 
         Args:
             mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.
-            to (int, optional): The number of consecutive empty reponses to stop restoring. Defaults to 2.
+            to (int, optional): The number of consecutive empty responses to stop restoring. Defaults to 2.
             batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
         """
         await self._init_private_key(mnemonic)
@@ -1741,7 +1741,7 @@ class Wallet(LedgerAPI):
         )
         # we don't know the amount but luckily the mint will tell us so we use a dummy amount here
         amounts_dummy = [1] * len(secrets)
-        # we generate outptus from deterministic secrets and rs
+        # we generate outputs from deterministic secrets and rs
         regenerated_outputs, _ = self._construct_outputs(amounts_dummy, secrets, rs)
         # we ask the mint to reissue the promises
         proofs = await self.restore_promises(
