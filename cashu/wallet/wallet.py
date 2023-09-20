@@ -569,7 +569,7 @@ class LedgerAPI(object):
     @async_set_requests
     async def check_proof_state(self, proofs: List[Proof]):
         """
-        Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
+        Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
         payload = CheckSpendableRequest(proofs=proofs)
 
@@ -640,8 +640,8 @@ class LedgerAPI(object):
         payload = PostMintRequest(outputs=outputs)
         resp = self.s.post(self.url + "/restore", json=payload.dict())
         self.raise_on_error(resp)
-        reponse_dict = resp.json()
-        returnObj = PostRestoreResponse.parse_obj(reponse_dict)
+        response_dict = resp.json()
+        returnObj = PostRestoreResponse.parse_obj(response_dict)
         return returnObj.outputs, returnObj.promises
 
 
@@ -795,16 +795,16 @@ class Wallet(LedgerAPI):
         self, counter: int
     ) -> Tuple[bytes, bytes, str]:
         """
-        Determinstically generates two secrets (one as the secret message,
+        Deterministically generates two secrets (one as the secret message,
         one as the blinding factor).
         """
         assert self.bip32, "BIP32 not initialized yet."
         # integer keyset id modulo max number of bip32 child keys
-        keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
+        keyset_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
             2**31 - 1
         )
-        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id}")
-        token_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'"
+        logger.trace(f"keyset id: {self.keyset_id} becomes {keyset_id}")
+        token_derivation_path = f"m/129372'/0'/{keyset_id}'/{counter}'"
         # for secret
         secret_derivation_path = f"{token_derivation_path}/0"
         logger.trace(f"secret derivation path: {secret_derivation_path}")
