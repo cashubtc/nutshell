@@ -13,7 +13,6 @@ from ..core.base import (
     Invoice,
     MintKeyset,
     MintKeysets,
-    P2PKSecret,
     Proof,
     Secret,
     SecretKind,
@@ -262,13 +261,12 @@ class Ledger:
             # secret is not a spending condition so we treat is a normal secret
             return True
         if secret.kind == SecretKind.P2SH:
-            p2pk_secret = P2PKSecret.from_secret(secret)
             # check if locktime is in the past
             now = time.time()
-            if p2pk_secret.locktime and p2pk_secret.locktime < now:
-                logger.trace(f"p2sh locktime ran out ({p2pk_secret.locktime}<{now}).")
+            if secret.locktime and secret.locktime < now:
+                logger.trace(f"p2sh locktime ran out ({secret.locktime}<{now}).")
                 return True
-            logger.trace(f"p2sh locktime still active ({p2pk_secret.locktime}>{now}).")
+            logger.trace(f"p2sh locktime still active ({secret.locktime}>{now}).")
 
             if (
                 proof.p2shscript is None
@@ -293,9 +291,8 @@ class Ledger:
 
         # P2PK
         if secret.kind == SecretKind.P2PK:
-            p2pk_secret = P2PKSecret.from_secret(secret)
             # check if locktime is in the past
-            pubkeys = p2pk_secret.get_p2pk_pubkey_from_secret()
+            pubkeys = secret.get_p2pk_pubkey_from_secret()
             assert len(set(pubkeys)) == len(pubkeys), "pubkeys must be unique."
             logger.trace(f"pubkeys: {pubkeys}")
             # we will get an empty list if the locktime has passed and no refund pubkey is present
@@ -317,7 +314,7 @@ class Ledger:
 
             # INPUTS: check signatures proof.p2pksigs against pubkey
             # we expect the signature to be on the pubkey (=message) itself
-            n_sigs_required = p2pk_secret.n_sigs or 1
+            n_sigs_required = secret.n_sigs or 1
             assert n_sigs_required > 0, "n_sigs must be positive."
 
             # check if enough signatures are present
@@ -331,9 +328,9 @@ class Ledger:
             for input_sig in proof.p2pksigs:
                 for pubkey in pubkeys:
                     logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
-                    logger.trace(f"Message: {p2pk_secret.serialize().encode('utf-8')}")
+                    logger.trace(f"Message: {secret.serialize().encode('utf-8')}")
                     if verify_p2pk_signature(
-                        message=p2pk_secret.serialize().encode("utf-8"),
+                        message=secret.serialize().encode("utf-8"),
                         pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
                         signature=bytes.fromhex(input_sig),
                     ):
@@ -380,7 +377,7 @@ class Ledger:
         n_sigs = []
         for proof in proofs:
             try:
-                secret = P2PKSecret.deserialize(proof.secret)
+                secret = Secret.deserialize(proof.secret)
                 # get all p2pk pubkeys from secrets
                 pubkeys_per_proof.append(secret.get_p2pk_pubkey_from_secret())
                 # get signature threshold from secrets
@@ -413,10 +410,7 @@ class Ledger:
 
         # now we check if any of the secrets has sigflag==SIG_ALL
         if not any(
-            [
-                P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL
-                for p in proofs
-            ]
+            [Secret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs]
         ):
             # no secret has sigflag==SIG_ALL
             return True
