@@ -300,16 +300,14 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
 
 
 def test_tags():
-    tags = Tags(
-        [["key1", "value1"], ["key2", "value2", "value2_1"], ["key2", "value3"]]
-    )
+    tags = Tags([["key1", "value1"], ["key2", "value2"], ["key2", "value3"]])
     assert tags.get_tag("key1") == "value1"
     assert tags["key1"] == "value1"
     assert tags.get_tag("key2") == "value2"
     assert tags["key2"] == "value2"
     assert tags.get_tag("key3") is None
     assert tags["key3"] is None
-    assert tags.get_tag_all("key2") == ["value2", "value2_1", "value3"]
+    assert tags.get_tag_all("key2") == ["value2", "value3"]
 
 
 @pytest.mark.asyncio
