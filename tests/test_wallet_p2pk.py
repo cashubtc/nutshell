@@ -182,15 +182,15 @@ async def test_p2pk_multisig_2_of_2(wallet1: Wallet, wallet2: Wallet):
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet1]]), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkeys", pubkey_wallet1]]), n_sigs=2
     )
 
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
-    # add signatures of wallet2
+    # add signatures of wallet1
     send_proofs = await wallet1.add_p2pk_witnesses_to_proofs(send_proofs)
-    # here we add the signatures of wallet1
+    # here we add the signatures of wallet2
     await wallet2.redeem(send_proofs)
 
 
@@ -202,15 +202,15 @@ async def test_p2pk_multisig_duplicate_signature(wallet1: Wallet, wallet2: Walle
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet1]]), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkeys", pubkey_wallet1]]), n_sigs=2
     )
 
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
-    # add signatures of wallet2
+    # add signatures of wallet2 – this is a duplicate signature
     send_proofs = await wallet2.add_p2pk_witnesses_to_proofs(send_proofs)
-    # here we add the signatures of wallet1
+    # here we add the signatures of wallet2
     await assert_err(
         wallet2.redeem(send_proofs), "Mint Error: p2pk signatures must be unique."
     )
@@ -224,7 +224,7 @@ async def test_p2pk_multisig_quorum_not_met_1_of_2(wallet1: Wallet, wallet2: Wal
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet1]]), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkeys", pubkey_wallet1]]), n_sigs=2
     )
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -243,7 +243,7 @@ async def test_p2pk_multisig_quorum_not_met_2_of_3(wallet1: Wallet, wallet2: Wal
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet1]]), n_sigs=3
+        pubkey_wallet2, tags=Tags([["pubkeys", pubkey_wallet1]]), n_sigs=3
     )
 
     _, send_proofs = await wallet1.split_to_send(
@@ -264,7 +264,7 @@ async def test_p2pk_multisig_with_duplicate_publickey(wallet1: Wallet, wallet2: 
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags([["pubkey", pubkey_wallet2]]), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkeys", pubkey_wallet2]]), n_sigs=2
     )
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -287,7 +287,7 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
 
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags([["pubkey", wrong_public_key_hex]]), n_sigs=2
+        pubkey_wallet2, tags=Tags([["pubkeys", wrong_public_key_hex]]), n_sigs=2
     )
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -300,14 +300,16 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
 
 
 def test_tags():
-    tags = Tags([["key1", "value1"], ["key2", "value2"], ["key2", "value3"]])
+    tags = Tags(
+        [["key1", "value1"], ["key2", "value2", "value2_1"], ["key2", "value3"]]
+    )
     assert tags.get_tag("key1") == "value1"
     assert tags["key1"] == "value1"
     assert tags.get_tag("key2") == "value2"
     assert tags["key2"] == "value2"
     assert tags.get_tag("key3") is None
     assert tags["key3"] is None
-    assert tags.get_tag_all("key2") == ["value2", "value3"]
+    assert tags.get_tag_all("key2") == ["value2", "value2_1", "value3"]
 
 
 @pytest.mark.asyncio
