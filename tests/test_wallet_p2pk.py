@@ -188,9 +188,9 @@ async def test_p2pk_multisig_2_of_2(wallet1: Wallet, wallet2: Wallet):
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
-    # add signatures of wallet1
+    # add signatures of wallet2
     send_proofs = await wallet1.add_p2pk_witnesses_to_proofs(send_proofs)
-    # here we add the signatures of wallet2
+    # here we add the signatures of wallet1
     await wallet2.redeem(send_proofs)
 
 
@@ -208,9 +208,9 @@ async def test_p2pk_multisig_duplicate_signature(wallet1: Wallet, wallet2: Walle
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
-    # add signatures of wallet2 – this is a duplicate signature
+    # add signatures of wallet2
     send_proofs = await wallet2.add_p2pk_witnesses_to_proofs(send_proofs)
-    # here we add the signatures of wallet2
+    # here we add the signatures of wallet1
     await assert_err(
         wallet2.redeem(send_proofs), "Mint Error: p2pk signatures must be unique."
     )
