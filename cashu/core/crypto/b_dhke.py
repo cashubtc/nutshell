@@ -97,12 +97,11 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     return C == Y.mult(a)  # type: ignore
 
 
-def hash_e(R1: PublicKey, R2: PublicKey, K: PublicKey, C_: PublicKey) -> bytes:
-    _R1 = R1.serialize(compressed=False).hex()
-    _R2 = R2.serialize(compressed=False).hex()
-    _K = K.serialize(compressed=False).hex()
-    _C_ = C_.serialize(compressed=False).hex()
-    e_ = f"{_R1}{_R2}{_K}{_C_}"
+def hash_e(*publickeys: PublicKey) -> bytes:
+    e_ = ""
+    for p in publickeys:
+        _p = p.serialize(compressed=False).hex()
+        e_ += str(_p)
     e = hashlib.sha256(e_.encode("utf-8")).digest()
     return e
 
