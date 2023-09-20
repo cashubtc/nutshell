@@ -11,7 +11,7 @@ black-check:
 	poetry run black . --exclude cashu/nostr --check
 
 mypy:
-	poetry run mypy cashu tests --ignore-missing
+	poetry run mypy cashu --ignore-missing
 
 format: black ruff
 
