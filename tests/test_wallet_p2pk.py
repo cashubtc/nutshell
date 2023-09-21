@@ -135,6 +135,7 @@ async def test_p2pk_locktime_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
     )
     send_proofs_copy = copy.deepcopy(send_proofs)
     # receiver side: can't redeem since we used a garbage pubkey
+    # and locktime has not passed
     await assert_err(
         wallet2.redeem(send_proofs),
         "Mint Error: no valid signature provided for input.",
@@ -163,6 +164,7 @@ async def test_p2pk_locktime_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
     )
     send_proofs_copy = copy.deepcopy(send_proofs)
     # receiver side: can't redeem since we used a garbage pubkey
+    # and locktime has not passed
     await assert_err(
         wallet2.redeem(send_proofs),
         "Mint Error: no valid signature provided for input.",
@@ -173,6 +175,38 @@ async def test_p2pk_locktime_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
         wallet2.redeem(send_proofs_copy),
         "Mint Error: no valid signature provided for input.",
     )
+
+
+@pytest.mark.asyncio
+async def test_p2pk_locktime_with_second_refund_pubkey(
+    wallet1: Wallet, wallet2: Wallet
+):
+    await wallet1.mint(64)
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()  # receiver side
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
+    # sender side
+    garbage_pubkey = PrivateKey().pubkey
+    assert garbage_pubkey
+    secret_lock = await wallet1.create_p2pk_lock(
+        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
+        locktime_seconds=2,  # locktime
+        tags=Tags(
+            [["refund", pubkey_wallet2, pubkey_wallet1]]
+        ),  # multiple refund pubkeys
+    )  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
+    )
+    send_proofs_copy = copy.deepcopy(send_proofs)
+    # receiver side: can't redeem since we used a garbage pubkey
+    # and locktime has not passed
+    await assert_err(
+        wallet1.redeem(send_proofs),
+        "Mint Error: no valid signature provided for input.",
+    )
+    await asyncio.sleep(2)
+    # we can now redeem because of the refund locktime
+    await wallet1.redeem(send_proofs_copy)
 
 
 @pytest.mark.asyncio
