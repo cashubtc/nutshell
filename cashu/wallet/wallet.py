@@ -30,7 +30,6 @@ from ..core.base import (
     PostRestoreResponse,
     PostSplitRequest,
     Proof,
-    Secret,
     TokenV2,
     TokenV2Mint,
     TokenV3,
@@ -43,6 +42,7 @@ from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
 from ..core.migrations import migrate_databases
+from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..tor.tor import TorProxy

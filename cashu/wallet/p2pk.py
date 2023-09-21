@@ -7,17 +7,19 @@ from loguru import logger
 from ..core import bolt11 as bolt11
 from ..core.base import (
     BlindedMessage,
+    Proof,
+)
+from ..core.crypto.secp import PrivateKey
+from ..core.db import Database
+from ..core.p2pk import (
     P2PKSecret,
     P2SHScript,
-    Proof,
     Secret,
     SecretKind,
     SigFlags,
     Tags,
+    sign_p2pk_sign,
 )
-from ..core.crypto.secp import PrivateKey
-from ..core.db import Database
-from ..core.p2pk import sign_p2pk_sign
 from ..core.script import (
     step0_carol_checksig_redeemscrip,
     step0_carol_privkey,

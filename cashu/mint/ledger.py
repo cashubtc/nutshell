@@ -12,11 +12,7 @@ from ..core.base import (
     Invoice,
     MintKeyset,
     MintKeysets,
-    P2PKSecret,
     Proof,
-    Secret,
-    SecretKind,
-    SigFlags,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
@@ -34,7 +30,13 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.helpers import fee_reserve, sum_proofs
-from ..core.p2pk import verify_p2pk_signature
+from ..core.p2pk import (
+    P2PKSecret,
+    Secret,
+    SecretKind,
+    SigFlags,
+    verify_p2pk_signature,
+)
 from ..core.script import verify_bitcoin_script
 from ..core.settings import settings
 from ..core.split import amount_split
