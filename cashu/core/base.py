@@ -26,6 +26,7 @@ class Proof(BaseModel):
     C: str = ""  # signature on secret, unblinded by wallet
     p2pksigs: Union[List[str], None] = []  # P2PK signature
     p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
+    htlcpreimage: Union[str, None] = None  # HTLC unlocking preimage
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
     # unique ID of send attempt, used for grouping pending tokens in the wallet

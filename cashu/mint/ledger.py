@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import math
 import time
 from typing import Dict, List, Literal, Optional, Set, Tuple, Union
@@ -30,14 +31,14 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.helpers import fee_reserve, sum_proofs
+from ..core.htlc import HTLCSecret
 from ..core.p2pk import (
     P2PKSecret,
-    Secret,
-    SecretKind,
     SigFlags,
     verify_p2pk_signature,
 )
 from ..core.script import verify_bitcoin_script
+from ..core.secret import Secret, SecretKind
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import Wallet
@@ -75,7 +76,7 @@ class Ledger:
         logger.trace(f"crud: loaded {len(proofs_used)} used proofs")
         self.proofs_used = set(proofs_used)
 
-    async def load_keyset(self, derivation_path, autosave=True):
+    async def load_keyset(self, derivation_path, autosave=True) -> MintKeyset:
         """Load the keyset for a derivation path if it already exists. If not generate new one and store in the db.
 
         Args:
@@ -358,6 +359,37 @@ class Ledger:
             logger.trace("p2pk signature on inputs is valid.")
 
             return True
+
+        # P2PK
+        if secret.kind == SecretKind.HTLC:
+            htlc_secret = HTLCSecret.from_secret(secret)
+
+            # first we check whether a correct preimage was included
+            if proof.htlcpreimage and hashlib.sha256(
+                bytes.fromhex(proof.htlcpreimage)
+            ).digest() == bytes.fromhex(htlc_secret.data):
+                return True
+
+            # check if locktime is in the past
+            pubkeys = htlc_secret.get_htlc_pubkey_from_secret()
+            assert len(set(pubkeys)) == len(pubkeys), "pubkeys must be unique."
+            logger.trace(f"pubkeys: {pubkeys}")
+            if pubkeys:
+                assert proof.htlcpreimage, "no HTLC preimage provided"
+                for pubkey in pubkeys:
+                    try:
+                        if verify_p2pk_signature(
+                            message=htlc_secret.serialize().encode("utf-8"),
+                            pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
+                            signature=bytes.fromhex(proof.htlcpreimage),
+                        ):
+                            # signature matches
+                            return True
+                    except Exception:
+                        pass
+                # none of the signatures match
+                raise TransactionError("HTLC signatures did not match.")
+            # no pubkeys given in secret, anyone can spend
 
         # no spending contition
         return True

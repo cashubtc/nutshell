@@ -9,7 +9,8 @@ import pytest_asyncio
 from cashu.core.base import Proof
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.migrations import migrate_databases
-from cashu.core.p2pk import SigFlags, Tags
+from cashu.core.p2pk import SigFlags
+from cashu.core.secret import Tags
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1

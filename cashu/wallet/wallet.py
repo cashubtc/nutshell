@@ -60,6 +60,7 @@ from ..wallet.crud import (
     update_proof_reserved,
 )
 from . import migrations
+from .htlc import WalletHTLC
 from .p2pk import WalletP2PK
 from .secrets import WalletSecrets
 
@@ -483,7 +484,15 @@ class LedgerAPI(object):
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /split"""
-            proofs_include = {"id", "amount", "secret", "C", "p2shscript", "p2pksigs"}
+            proofs_include = {
+                "id",
+                "amount",
+                "secret",
+                "C",
+                "p2shscript",
+                "p2pksigs",
+                "htlcpreimage",
+            }
             return {
                 "outputs": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
@@ -582,7 +591,7 @@ class LedgerAPI(object):
         return returnObj.outputs, returnObj.promises
 
 
-class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
+class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
     """Minimal wallet wrapper."""
 
     mnemonic: str  # holds mnemonic of the wallet
