@@ -1,18 +1,15 @@
 import base64
-import hashlib
 import json
 import math
 import secrets as scrts
 import time
 import uuid
-from datetime import datetime, timedelta
 from itertools import groupby
 from typing import Dict, List, Optional, Tuple, Union
 
 import requests
 from bip32 import BIP32
 from loguru import logger
-from mnemonic import Mnemonic
 from requests import Response
 
 from ..core import bolt11 as bolt11
@@ -27,17 +24,12 @@ from ..core.base import (
     GetMintResponse,
     Invoice,
     KeysetsResponse,
-    P2SHScript,
     PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
     Proof,
-    Secret,
-    SecretKind,
-    SigFlags,
-    Tags,
     TokenV2,
     TokenV2Mint,
     TokenV3,
@@ -50,13 +42,7 @@ from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
 from ..core.migrations import migrate_databases
-from ..core.p2pk import sign_p2pk_sign
-from ..core.script import (
-    step0_carol_checksig_redeemscrip,
-    step0_carol_privkey,
-    step1_carol_create_p2sh_address,
-    step2_carol_sign_tx,
-)
+from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..tor.tor import TorProxy
@@ -64,20 +50,18 @@ from ..wallet.crud import (
     bump_secret_derivation,
     get_keyset,
     get_proofs,
-    get_seed_and_mnemonic,
-    get_unused_locks,
     invalidate_proof,
     secret_used,
     set_secret_derivation,
     store_keyset,
     store_lightning_invoice,
-    store_p2sh,
     store_proof,
-    store_seed_and_mnemonic,
     update_lightning_invoice,
     update_proof_reserved,
 )
 from . import migrations
+from .p2pk import WalletP2PK
+from .secrets import WalletSecrets
 
 
 def async_set_requests(func):
@@ -126,13 +110,13 @@ class LedgerAPI(object):
         self.s = requests.Session()
         self.db = db
 
-    async def generate_n_secrets(
-        self, n: int = 1, skip_bump: bool = False
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        return await self.generate_n_secrets(n, skip_bump)
+    # async def generate_n_secrets(
+    #     self, n: int = 1, skip_bump: bool = False
+    # ) -> Tuple[List[str], List[PrivateKey], List[str]]:
+    #     return await self.generate_n_secrets(n, skip_bump)
 
-    async def _generate_secret(self, skip_bump: bool = False) -> str:
-        return await self._generate_secret(skip_bump)
+    # async def _generate_secret(self, skip_bump: bool = False) -> str:
+    #     return await self._generate_secret(skip_bump)
 
     @async_set_requests
     async def _init_s(self):
@@ -455,11 +439,13 @@ class LedgerAPI(object):
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
     @async_set_requests
-    async def mint(self, amounts: List[int], hash: Optional[str] = None) -> List[Proof]:
+    async def mint(
+        self, outputs: List[BlindedMessage], hash: Optional[str] = None
+    ) -> List[BlindedSignature]:
         """Mints new coins and returns a proof of promise.
 
         Args:
-            amounts (List[int]): Amounts of tokens to mint
+            outputs (List[BlindedMessage]): Outputs to mint new tokens with
             hash (str, optional): Hash of the paid invoice. Defaults to None.
 
         Returns:
@@ -468,14 +454,6 @@ class LedgerAPI(object):
         Raises:
             Exception: If the minting fails
         """
-        # quirk: we skip bumping the secret counter in the database since we are
-        # not sure if the minting will succeed. If it succeeds, we will bump it
-        # in the next step.
-        secrets, rs, derivation_paths = await self.generate_n_secrets(
-            len(amounts), skip_bump=True
-        )
-        await self._check_used_secrets(secrets)
-        outputs, rs = self._construct_outputs(amounts, secrets, rs)
         outputs_payload = PostMintRequest(outputs=outputs)
         logger.trace("Checking Lightning invoice. POST /mint")
         resp = self.s.post(
@@ -490,12 +468,7 @@ class LedgerAPI(object):
         reponse_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /mint")
         promises = PostMintResponse.parse_obj(reponse_dict).promises
-
-        # bump secret counter in database
-        await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=len(amounts)
-        )
-        return self._construct_proofs(promises, secrets, rs, derivation_paths)
+        return promises
 
     @async_set_requests
     async def split(
@@ -609,14 +582,14 @@ class LedgerAPI(object):
         return returnObj.outputs, returnObj.promises
 
 
-class Wallet(LedgerAPI):
+class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
     """Minimal wallet wrapper."""
 
     mnemonic: str  # holds mnemonic of the wallet
     seed: bytes  # holds private key of the wallet generated from the mnemonic
-    db: Database
+    # db: Database
     bip32: BIP32
-    private_key: Optional[PrivateKey] = None
+    # private_key: Optional[PrivateKey] = None
 
     def __init__(
         self,
@@ -668,184 +641,6 @@ class Wallet(LedgerAPI):
             await migrate_databases(self.db, migrations)
         except Exception as e:
             logger.error(f"Could not run migrations: {e}")
-
-    async def _init_private_key(self, from_mnemonic: Optional[str] = None) -> None:
-        """Initializes the private key of the wallet from the mnemonic.
-        There are three ways to initialize the private key:
-        1. If the database does not contain a seed, and no mnemonic is given, a new seed is generated.
-        2. If the database does not contain a seed, and a mnemonic is given, the seed is generated from the mnemonic.
-        3. If the database contains a seed, the seed is loaded from the database.
-
-        If the mnemonic was not loaded from the database, the seed and mnemonic are stored in the database.
-
-        Args:
-            from_mnemonic (Optional[str], optional): Mnemonic to use. Defaults to None.
-
-        Raises:
-            ValueError: If the mnemonic is not BIP39 compliant.
-        """
-        ret_db = await get_seed_and_mnemonic(self.db)
-
-        mnemo = Mnemonic("english")
-
-        if ret_db is None and from_mnemonic is None:
-            # if there is no seed in the database, generate a new one
-            mnemonic_str = mnemo.generate()
-            wallet_command_prefix_str = (
-                f" --wallet {settings.wallet_name}"
-                if settings.wallet_name != "wallet"
-                else ""
-            )
-            wallet_name = (
-                f' for wallet "{settings.wallet_name}"'
-                if settings.wallet_name != "wallet"
-                else ""
-            )
-            print(
-                f"Generated a new mnemonic{wallet_name}. To view it, run"
-                f' "cashu{wallet_command_prefix_str} info --mnemonic".'
-            )
-        elif from_mnemonic:
-            # or use the one provided
-            mnemonic_str = from_mnemonic.lower().strip()
-        elif ret_db is not None:
-            # if there is a seed in the database, use it
-            _, mnemonic_str = ret_db[0], ret_db[1]
-        else:
-            logger.debug("No mnemonic provided")
-            return
-
-        if not mnemo.check(mnemonic_str):
-            raise ValueError("Invalid mnemonic")
-
-        self.seed = mnemo.to_seed(mnemonic_str)
-        self.mnemonic = mnemonic_str
-
-        logger.debug(f"Using seed: {self.seed.hex()}")
-        logger.debug(f"Using mnemonic: {mnemonic_str}")
-
-        # if no mnemonic was in the database, store the new one
-        if ret_db is None:
-            await store_seed_and_mnemonic(
-                self.db, seed=self.seed.hex(), mnemonic=mnemonic_str
-            )
-
-        try:
-            self.bip32 = BIP32.from_seed(self.seed)
-            self.private_key = PrivateKey(
-                self.bip32.get_privkey_from_path("m/129372'/0'/0'/0'")
-            )
-        except ValueError:
-            raise ValueError("Invalid seed")
-        except Exception as e:
-            logger.error(e)
-
-    async def _generate_secret(self, randombits=128) -> str:
-        """Returns base64 encoded deterministic random string.
-
-        NOTE: This method should probably retire after `deterministic_secrets`. We are
-        deriving secrets from a counter but don't store the respective blinding factor.
-        We won't be able to restore any ecash generated with these secrets.
-        """
-        secret_counter = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id
-        )
-        logger.trace(f"secret_counter: {secret_counter}")
-        s, _, _ = await self.generate_determinstic_secret(secret_counter)
-        # return s.decode("utf-8")
-        return hashlib.sha256(s).hexdigest()
-
-    async def generate_determinstic_secret(
-        self, counter: int
-    ) -> Tuple[bytes, bytes, str]:
-        """
-        Determinstically generates two secrets (one as the secret message,
-        one as the blinding factor).
-        """
-        assert self.bip32, "BIP32 not initialized yet."
-        # integer keyset id modulo max number of bip32 child keys
-        keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
-            2**31 - 1
-        )
-        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id}")
-        token_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'"
-        # for secret
-        secret_derivation_path = f"{token_derivation_path}/0"
-        logger.trace(f"secret derivation path: {secret_derivation_path}")
-        secret = self.bip32.get_privkey_from_path(secret_derivation_path)
-        # blinding factor
-        r_derivation_path = f"{token_derivation_path}/1"
-        logger.trace(f"r derivation path: {r_derivation_path}")
-        r = self.bip32.get_privkey_from_path(r_derivation_path)
-        return secret, r, token_derivation_path
-
-    async def generate_n_secrets(
-        self, n: int = 1, skip_bump: bool = False
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        """Generates n secrets and blinding factors and returns a tuple of secrets,
-        blinding factors, and derivation paths.
-
-        Args:
-            n (int, optional): Number of secrets to generate. Defaults to 1.
-            skip_bump (bool, optional): Skip increment of secret counter in the database.
-            You want to set this to false if you don't know whether the following operation
-            will succeed or not (like a POST /mint request). Defaults to False.
-
-        Returns:
-            Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
-
-        """
-        secret_counters_start = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump
-        )
-        logger.trace(f"secret_counters_start: {secret_counters_start}")
-        secret_counters = list(range(secret_counters_start, secret_counters_start + n))
-        logger.trace(
-            f"Generating secret nr {secret_counters[0]} to {secret_counters[-1]}."
-        )
-        secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
-        ]
-        # secrets are supplied as str
-        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
-        # rs are supplied as PrivateKey
-        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
-
-        derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
-        # sanity check to make sure we're not reusing secrets
-        # NOTE: this step is probably wasting more resources than it helps
-        await self._check_used_secrets(secrets)
-
-        return secrets, rs, derivation_paths
-
-    async def generate_secrets_from_to(
-        self, from_counter: int, to_counter: int
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        """Generates secrets and blinding factors from `from_counter` to `to_counter`
-
-        Args:
-            from_counter (int): Start counter
-            to_counter (int): End counter
-
-        Returns:
-            Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
-
-        Raises:
-            ValueError: If `from_counter` is larger than `to_counter`
-        """
-        assert (
-            from_counter <= to_counter
-        ), "from_counter must be smaller than to_counter"
-        secret_counters = [c for c in range(from_counter, to_counter + 1)]
-        secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
-        ]
-        # secrets are supplied as str
-        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
-        # rs are supplied as PrivateKey
-        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
-        derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
-        return secrets, rs, derivation_paths
 
     # ---------- API ----------
 
@@ -914,7 +709,25 @@ class Wallet(LedgerAPI):
 
         # if no split was specified, we use the canonical split
         amounts = split or amount_split(amount)
-        proofs = await super().mint(amounts, hash)
+
+        # quirk: we skip bumping the secret counter in the database since we are
+        # not sure if the minting will succeed. If it succeeds, we will bump it
+        # in the next step.
+        secrets, rs, derivation_paths = await self.generate_n_secrets(
+            len(amounts), skip_bump=True
+        )
+        await self._check_used_secrets(secrets)
+        outputs, rs = self._construct_outputs(amounts, secrets, rs)
+
+        # will raise exception if mint is unsuccessful
+        promises = await super().mint(outputs, hash)
+
+        # success, bump secret counter in database
+        await bump_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id, by=len(amounts)
+        )
+        proofs = self._construct_proofs(promises, secrets, rs, derivation_paths)
+
         if proofs == []:
             raise Exception("received no proofs.")
         await self._store_proofs(proofs)
@@ -923,112 +736,6 @@ class Wallet(LedgerAPI):
                 db=self.db, hash=hash, paid=True, time_paid=int(time.time())
             )
         self.proofs += proofs
-        return proofs
-
-    async def add_p2pk_witnesses_to_outputs(
-        self, outputs: List[BlindedMessage]
-    ) -> List[BlindedMessage]:
-        p2pk_signatures = await self.sign_p2pk_outputs(outputs)
-        for o, s in zip(outputs, p2pk_signatures):
-            o.p2pksigs = [s]
-        return outputs
-
-    async def add_witnesses_to_outputs(
-        self, proofs: List[Proof], outputs: List[BlindedMessage]
-    ) -> List[BlindedMessage]:
-        """Adds witnesses to outputs if the inputs (proofs) indicate an appropriate signature flag
-
-        Args:
-            proofs (List[Proof]): _description_
-            outputs (List[BlindedMessage]): _description_
-        """
-        # first we check whether all tokens have serialized secrets as their secret
-        try:
-            for p in proofs:
-                Secret.deserialize(p.secret)
-        except Exception:
-            # if not, we do not add witnesses (treat as regular token secret)
-            return outputs
-
-        # if any of the proofs provided require SIG_ALL, we must provide it
-        if any(
-            [Secret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs]
-        ):
-            # p2pk_signatures = await self.sign_p2pk_outputs(outputs)
-            # for o, s in zip(outputs, p2pk_signatures):
-            #     o.p2pksigs = [s]
-            outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
-        return outputs
-
-    async def add_p2sh_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
-        address = Secret.deserialize(proofs[0].secret).data
-        p2shscripts = await get_unused_locks(address, db=self.db)
-        assert len(p2shscripts) == 1, Exception("lock not found.")
-        p2sh_script, p2sh_signature = (
-            p2shscripts[0].script,
-            p2shscripts[0].signature,
-        )
-        logger.debug(f"Unlock script: {p2sh_script} signature: {p2sh_signature}")
-
-        # attach unlock scripts to proofs
-        for p in proofs:
-            p.p2shscript = P2SHScript(script=p2sh_script, signature=p2sh_signature)
-        return proofs
-
-    async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        p2pk_signatures = await self.sign_p2pk_proofs(proofs)
-        logger.debug(f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}")
-        logger.debug(f"Proofs: {proofs}")
-        # attach unlock signatures to proofs
-        assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
-        for p, s in zip(proofs, p2pk_signatures):
-            if p.p2pksigs:
-                p.p2pksigs.append(s)
-            else:
-                p.p2pksigs = [s]
-        return proofs
-
-    async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        """Adds witnesses to proofs for P2SH or P2PK redemption.
-
-        This method parses the secret of each proof and determines the correct
-        witness type and adds it to the proof if we have it available.
-
-        Note: In order for this method to work, all proofs must have the same secret type.
-        This is because we use a single P2SH script and signature pair for all tokens in proofs.
-
-        For P2PK, we use an individual signature for each token in proofs.
-
-        Args:
-            proofs (List[Proof]): List of proofs to add witnesses to
-
-        Returns:
-            List[Proof]: List of proofs with witnesses added
-        """
-
-        # iterate through proofs and produce witnesses for each
-
-        # first we check whether all tokens have serialized secrets as their secret
-        try:
-            for p in proofs:
-                Secret.deserialize(p.secret)
-        except Exception:
-            # if not, we do not add witnesses (treat as regular token secret)
-            return proofs
-        logger.debug("Spending conditions detected.")
-        # P2SH scripts
-        if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
-            logger.debug("P2SH redemption detected.")
-            proofs = await self.add_p2sh_witnesses_to_proofs(proofs)
-
-        # P2PK signatures
-        elif all(
-            [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
-        ):
-            logger.debug("P2PK redemption detected.")
-            proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
-
         return proofs
 
     async def redeem(
@@ -1186,7 +893,7 @@ class Wallet(LedgerAPI):
     async def check_proof_state(self, proofs):
         return await super().check_proof_state(proofs)
 
-    # ---------- TOKEN MECHANIS ----------
+    # ---------- TOKEN MECHANICS ----------
 
     async def _store_proofs(self, proofs):
         async with self.db.connect() as conn:
@@ -1482,115 +1189,6 @@ class Wallet(LedgerAPI):
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
         return keep_proofs, send_proofs
-
-    # ---------- P2SH and P2PK ----------
-
-    async def create_p2sh_address_and_store(self) -> str:
-        """Creates a P2SH lock script and stores the script and signature in the database."""
-        alice_privkey = step0_carol_privkey()
-        txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
-        txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
-        txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
-        txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
-        txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
-        p2shScript = P2SHScript(
-            script=txin_redeemScript_b64,
-            signature=txin_signature_b64,
-            address=str(txin_p2sh_address),
-        )
-        await store_p2sh(p2shScript, db=self.db)
-        assert p2shScript.address
-        return p2shScript.address
-
-    async def create_p2pk_pubkey(self):
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
-        public_key = self.private_key.pubkey
-        # logger.debug(f"Private key: {self.private_key.bech32()}")
-        assert public_key
-        return public_key.serialize().hex()
-
-    async def create_p2pk_lock(
-        self,
-        pubkey: str,
-        locktime_seconds: Optional[int] = None,
-        tags: Optional[Tags] = None,
-        sig_all: bool = False,
-        n_sigs: int = 1,
-    ) -> Secret:
-        logger.debug(f"Provided tags: {tags}")
-        if not tags:
-            tags = Tags()
-            logger.debug(f"Before tags: {tags}")
-        if locktime_seconds:
-            tags["locktime"] = str(
-                int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
-            )
-        tags["sigflag"] = SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS
-        if n_sigs > 1:
-            tags["n_sigs"] = str(n_sigs)
-        logger.debug(f"After tags: {tags}")
-        return Secret(
-            kind=SecretKind.P2PK,
-            data=pubkey,
-            tags=tags,
-        )
-
-    async def create_p2sh_lock(
-        self,
-        address: str,
-        locktime: Optional[int] = None,
-        tags: Tags = Tags(),
-    ) -> Secret:
-        if locktime:
-            tags["locktime"] = str(
-                (datetime.now() + timedelta(seconds=locktime)).timestamp()
-            )
-
-        return Secret(
-            kind=SecretKind.P2SH,
-            data=address,
-            tags=tags,
-        )
-
-    async def sign_p2pk_proofs(self, proofs: List[Proof]) -> List[str]:
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
-        private_key = self.private_key
-        assert private_key.pubkey
-        logger.trace(
-            f"Signing with private key: {private_key.serialize()} public key:"
-            f" {private_key.pubkey.serialize().hex()}"
-        )
-        for proof in proofs:
-            logger.trace(f"Signing proof: {proof}")
-            logger.trace(f"Signing message: {proof.secret}")
-
-        signatures = [
-            sign_p2pk_sign(
-                message=proof.secret.encode("utf-8"),
-                private_key=private_key,
-            )
-            for proof in proofs
-        ]
-        logger.debug(f"Signatures: {signatures}")
-        return signatures
-
-    async def sign_p2pk_outputs(self, outputs: List[BlindedMessage]) -> List[str]:
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
-        private_key = self.private_key
-        assert private_key.pubkey
-        return [
-            sign_p2pk_sign(
-                message=output.B_.encode("utf-8"),
-                private_key=private_key,
-            )
-            for output in outputs
-        ]
 
     # ---------- BALANCE CHECKS ----------
 
