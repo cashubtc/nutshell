@@ -65,15 +65,15 @@ class Secret(BaseModel):
 
     kind: str
     data: str
+    tags: Tags
     nonce: Union[None, str] = None
-    tags: Union[None, Tags] = None
 
     def serialize(self) -> str:
         data_dict: Dict[str, Any] = {
             "data": self.data,
             "nonce": self.nonce or PrivateKey().serialize()[:32],
         }
-        if self.tags and self.tags.__root__:
+        if self.tags.__root__:
             logger.debug(f"Serializing tags: {self.tags.__root__}")
             data_dict["tags"] = self.tags.__root__
         return json.dumps(
@@ -85,11 +85,8 @@ class Secret(BaseModel):
         kind, kwargs = json.loads(from_proof)
         data = kwargs.pop("data")
         nonce = kwargs.pop("nonce")
-        tags_list = kwargs.pop("tags", None)
-        if tags_list:
-            tags = Tags(tags=tags_list)
-        else:
-            tags = None
+        tags_list: List = kwargs.pop("tags", None)
+        tags = Tags(tags=tags_list)
         logger.debug(f"Deserialized Secret: {kind}, {data}, {nonce}, {tags}")
         return cls(kind=kind, data=data, nonce=nonce, tags=tags)
 
@@ -111,47 +108,35 @@ class P2PKSecret(Secret):
         Returns:
             str: pubkey to use for P2PK, empty string if anyone can spend (locktime passed)
         """
-        pubkeys: List[str] = [self.data]  # for now we only support one pubkey
-        # get all additional pubkeys from tags for multisig
-        if self.tags and self.tags.get_tag("pubkeys"):
-            pubkeys += self.tags.get_tag_all("pubkeys")
+        # the pubkey in the data field is the pubkey to use for P2PK
+        pubkeys: List[str] = [self.data]
 
+        # get all additional pubkeys from tags for multisig
+        pubkeys += self.tags.get_tag_all("pubkeys")
+
+        # check if locktime is passed and if so, only return refund pubkeys
         now = time.time()
         if self.locktime and self.locktime < now:
             logger.trace(f"p2pk locktime ran out ({self.locktime}<{now}).")
             # check tags if a refund pubkey is present.
             # If yes, we demand the signature to be from the refund pubkey
-            if self.tags:
-                refund_pubkey = self.tags.get_tag("refund")
-                if refund_pubkey:
-                    pubkeys = [refund_pubkey]
-                    return pubkeys
-            return []
+            return self.tags.get_tag_all("refund")
+
         return pubkeys
 
     @property
     def locktime(self) -> Union[None, int]:
-        if self.tags:
-            locktime = self.tags.get_tag("locktime")
-            if locktime:
-                return int(locktime)
-        return None
+        locktime = self.tags.get_tag("locktime")
+        return int(locktime) if locktime else None
 
     @property
     def sigflag(self) -> Union[None, str]:
-        if self.tags:
-            sigflag = self.tags.get_tag("sigflag")
-            if sigflag:
-                return sigflag
-        return None
+        return self.tags.get_tag("sigflag")
 
     @property
     def n_sigs(self) -> Union[None, int]:
-        if self.tags:
-            n_sigs = self.tags.get_tag("n_sigs")
-            if n_sigs:
-                return int(n_sigs)
-        return None
+        n_sigs = self.tags.get_tag("n_sigs")
+        return int(n_sigs) if n_sigs else None
 
 
 class P2SHScript(BaseModel):
