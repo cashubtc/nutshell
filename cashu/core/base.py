@@ -1,8 +1,7 @@
 import base64
 import json
-import time
 from sqlite3 import Row
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from loguru import logger
 from pydantic import BaseModel
@@ -10,148 +9,7 @@ from pydantic import BaseModel
 from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
-
-# from .p2pk import sign_p2pk_sign
-
-# ------- PROOFS -------
-
-
-class SecretKind:
-    P2SH = "P2SH"
-    P2PK = "P2PK"
-
-
-class SigFlags:
-    SIG_INPUTS = (  # require signatures only on the inputs (default signature flag)
-        "SIG_INPUTS"
-    )
-    SIG_ALL = "SIG_ALL"  # require signatures on inputs and outputs
-
-
-class Tags(BaseModel):
-    """
-    Tags are used to encode additional information in the Secret of a Proof.
-    """
-
-    __root__: List[List[str]] = []
-
-    def __init__(self, tags: Optional[List[List[str]]] = None, **kwargs):
-        super().__init__(**kwargs)
-        self.__root__ = tags or []
-
-    def __setitem__(self, key: str, value: str) -> None:
-        self.__root__.append([key, value])
-
-    def __getitem__(self, key: str) -> Union[str, None]:
-        return self.get_tag(key)
-
-    def get_tag(self, tag_name: str) -> Union[str, None]:
-        for tag in self.__root__:
-            if tag[0] == tag_name:
-                return tag[1]
-        return None
-
-    def get_tag_all(self, tag_name: str) -> List[str]:
-        all_tags = []
-        for tag in self.__root__:
-            if tag[0] == tag_name:
-                all_tags.append(tag[1])
-        return all_tags
-
-
-class Secret(BaseModel):
-    """Describes spending condition encoded in the secret field of a Proof."""
-
-    kind: str
-    data: str
-    nonce: Union[None, str] = None
-    tags: Union[None, Tags] = None
-
-    def serialize(self) -> str:
-        data_dict: Dict[str, Any] = {
-            "data": self.data,
-            "nonce": self.nonce or PrivateKey().serialize()[:32],
-        }
-        if self.tags and self.tags.__root__:
-            logger.debug(f"Serializing tags: {self.tags.__root__}")
-            data_dict["tags"] = self.tags.__root__
-        return json.dumps(
-            [self.kind, data_dict],
-        )
-
-    @classmethod
-    def deserialize(cls, from_proof: str):
-        kind, kwargs = json.loads(from_proof)
-        data = kwargs.pop("data")
-        nonce = kwargs.pop("nonce")
-        tags_list = kwargs.pop("tags", None)
-        if tags_list:
-            tags = Tags(tags=tags_list)
-        else:
-            tags = None
-        logger.debug(f"Deserialized Secret: {kind}, {data}, {nonce}, {tags}")
-        return cls(kind=kind, data=data, nonce=nonce, tags=tags)
-
-    @property
-    def locktime(self) -> Union[None, int]:
-        if self.tags:
-            locktime = self.tags.get_tag("locktime")
-            if locktime:
-                return int(locktime)
-        return None
-
-    @property
-    def sigflag(self) -> Union[None, str]:
-        if self.tags:
-            sigflag = self.tags.get_tag("sigflag")
-            if sigflag:
-                return sigflag
-        return None
-
-    @property
-    def n_sigs(self) -> Union[None, int]:
-        if self.tags:
-            n_sigs = self.tags.get_tag("n_sigs")
-            if n_sigs:
-                return int(n_sigs)
-        return None
-
-    def get_p2pk_pubkey_from_secret(self) -> List[str]:
-        """Gets the P2PK pubkey from a Secret depending on the locktime
-
-        Args:
-            secret (Secret): P2PK Secret in ecash token
-
-        Returns:
-            str: pubkey to use for P2PK, empty string if anyone can spend (locktime passed)
-        """
-        pubkeys: List[str] = [self.data]  # for now we only support one pubkey
-        # get all additional pubkeys from tags for multisig
-        if self.tags and self.tags.get_tag("pubkey"):
-            pubkeys += self.tags.get_tag_all("pubkey")
-
-        now = time.time()
-        if self.locktime and self.locktime < now:
-            logger.trace(f"p2pk locktime ran out ({self.locktime}<{now}).")
-            # check tags if a refund pubkey is present.
-            # If yes, we demand the signature to be from the refund pubkey
-            if self.tags:
-                refund_pubkey = self.tags.get_tag("refund")
-                if refund_pubkey:
-                    pubkeys = [refund_pubkey]
-                    return pubkeys
-            return []
-        return pubkeys
-
-
-class P2SHScript(BaseModel):
-    """
-    Unlocks P2SH spending condition of a Proof
-    """
-
-    script: str
-    signature: str
-    address: Union[str, None] = None
+from .p2pk import P2SHScript
 
 
 class DLEQ(BaseModel):
@@ -171,6 +29,9 @@ class DLEQWallet(BaseModel):
     e: str
     s: str
     r: str  # blinding_factor, unknown to mint but sent from wallet to wallet for DLEQ proof
+
+
+# ------- PROOFS -------
 
 
 class Proof(BaseModel):
