@@ -94,11 +94,14 @@ async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet)
     await wallet1.mint(64)
     preimage = "00000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-    secret = await wallet1.create_htlc_lock(preimage[:-1] + "1")
+    secret = await wallet1.create_htlc_lock(
+        preimage[:-1] + "1", hacklock_pubkey=preimage
+    )
+    print(secret)
     # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     for p in send_proofs:
         p.htlcpreimage = preimage
     await assert_err(
-        wallet2.redeem(send_proofs), "Mint Error: HTLC signatures did not match."
+        wallet2.redeem(send_proofs), "Mint Error: HTLC preimage does not match"
     )
