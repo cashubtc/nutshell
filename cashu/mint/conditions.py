@@ -149,19 +149,17 @@ class LedgerSpendingConditions:
             if htlc_secret.locktime and htlc_secret.locktime < time.time():
                 refund_pubkeys = htlc_secret.tags.get_tag_all("refund")
                 if refund_pubkeys:
-                    assert proof.htlcpreimage, "no HTLC preimage provided"
+                    assert proof.htlcsignature, TransactionError(
+                        "no HTLC refund signature provided"
+                    )
                     for pubkey in refund_pubkeys:
                         if verify_p2pk_signature(
                             message=htlc_secret.serialize().encode("utf-8"),
                             pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
-                            signature=bytes.fromhex(proof.htlcpreimage),
+                            signature=bytes.fromhex(proof.htlcsignature),
                         ):
                             # a signature matches
                             return True
-                    if refund_pubkeys:
-                        # none of the pubkeys had a match
-                        return False
-                    # none of the signatures match
                     raise TransactionError("HTLC refund signatures did not match.")
                 # no pubkeys given in secret, anyone can spend
                 return True

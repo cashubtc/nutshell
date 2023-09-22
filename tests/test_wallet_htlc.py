@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import secrets
 from typing import List
@@ -164,3 +165,74 @@ async def test_htlc_redeem_with_correct_signature(wallet1: Wallet, wallet2: Wall
         p.htlcsignature = s
 
     await wallet2.redeem(send_proofs)
+
+
+@pytest.mark.asyncio
+async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
+    wallet1: Wallet, wallet2: Wallet
+):
+    await wallet1.mint(64)
+    preimage = "00000000000000000000000000000000"
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
+    secret = await wallet1.create_htlc_lock(
+        preimage=preimage,
+        hacklock_pubkey=pubkey_wallet2,
+        locktime_seconds=5,
+        locktime_pubkey=pubkey_wallet1,
+    )
+    # p2pk test
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
+
+    signatures = await wallet1.sign_p2pk_proofs(send_proofs)
+    for p, s in zip(send_proofs, signatures):
+        p.htlcpreimage = preimage
+        p.htlcsignature = s
+
+    # should error because we used wallet2 signatures for the hash lock
+    await assert_err(
+        wallet1.redeem(send_proofs),
+        "Mint Error: HTLC hash lock signatures did not match.",
+    )
+
+    await asyncio.sleep(5)
+    # should succeed since lock time has passed and we provided wallet1 signature for timelock
+    await wallet1.redeem(send_proofs)
+
+
+@pytest.mark.asyncio
+async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
+    wallet1: Wallet, wallet2: Wallet
+):
+    await wallet1.mint(64)
+    preimage = "00000000000000000000000000000000"
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
+    secret = await wallet1.create_htlc_lock(
+        preimage=preimage,
+        hacklock_pubkey=pubkey_wallet2,
+        locktime_seconds=5,
+        locktime_pubkey=pubkey_wallet1,
+    )
+    # p2pk test
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
+
+    signatures = await wallet1.sign_p2pk_proofs(send_proofs)
+    for p, s in zip(send_proofs, signatures):
+        p.htlcpreimage = preimage
+        p.htlcsignature = s[:-1] + "1"  # wrong signature
+
+    # should error because we used wallet2 signatures for the hash lock
+    await assert_err(
+        wallet1.redeem(send_proofs),
+        "Mint Error: HTLC hash lock signatures did not match.",
+    )
+
+    await asyncio.sleep(5)
+    # should fail since lock time has passed and we provided a wrong signature for timelock
+    await assert_err(
+        wallet1.redeem(send_proofs),
+        "Mint Error: HTLC refund signatures did not match.",
+    )
