@@ -600,11 +600,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         await self._set_proofs_pending(proofs)
 
         try:
-            self._check_proofs_spendable(proofs)
-
-            await self._verify_proofs_and_outputs(proofs)
-            logger.trace("verified proofs")
-
+            # verify amounts
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
@@ -613,13 +609,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     f"Maximum melt amount is {settings.mint_max_peg_out} sat."
                 )
             fees_msat = await self.check_fees(invoice)
+            # verify overspending attempt
             assert (
                 total_provided >= invoice_amount + fees_msat / 1000
             ), TransactionError("provided proofs not enough for Lightning payment.")
 
+            # verify that proofs have not been spent yet
+            self._check_proofs_spendable(proofs)
+            # verify spending inputs, outputs, and spending conditions
+            await self._verify_proofs_and_outputs(proofs, outputs)
+
             # promises to return for overpaid fees
             return_promises: List[BlindedSignature] = []
-
             if settings.lightning:
                 logger.trace("paying lightning invoice")
                 status, preimage, fee_msat = await self._pay_lightning_invoice(
@@ -739,13 +740,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         total_amount = sum_proofs(proofs)
 
         try:
-            self._check_proofs_spendable(proofs)
-
             # verify that amount is kosher
             self._verify_amount(total_amount)
-
             # verify overspending attempt
             self._verify_equation_balanced(proofs, outputs)
+            # verify that proofs have not been spent yet
+            self._check_proofs_spendable(proofs)
+            # verify spending inputs, outputs, and spending conditions
             await self._verify_proofs_and_outputs(proofs, outputs)
             # Mark proofs as used and prepare new promises
             await self._invalidate_proofs(proofs)

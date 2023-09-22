@@ -28,7 +28,7 @@ class LedgerSpendingConditions:
         Verify spending conditions:
          Condition: P2SH - Witnesses proof.p2shscript
          Condition: P2PK - Witness: proof.p2pksigs
-
+         Condition: HTLC - Witness: proof.htlcpreimage, proof.htlcsignature
         """
         # P2SH
         try:
@@ -201,9 +201,9 @@ class LedgerSpendingConditions:
         """
         Verify spending conditions:
          Condition: P2PK - Witness: output.p2pksigs
-
         """
-        # P2SH
+
+        # P2PK
         pubkeys_per_proof = []
         n_sigs = []
         for proof in proofs:
