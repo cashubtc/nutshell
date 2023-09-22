@@ -19,19 +19,20 @@ class WalletHTLC(SupportsDb):
 
     async def create_htlc_lock(
         self,
+        *,
         preimage: Optional[str] = None,
         preimage_hash: Optional[str] = None,
         hacklock_pubkey: Optional[str] = None,
         locktime_seconds: Optional[int] = None,
-        timelock_pubkey: Optional[str] = None,
+        locktime_pubkey: Optional[str] = None,
     ) -> HTLCSecret:
         tags = Tags()
         if locktime_seconds:
             tags["locktime"] = str(
                 int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
             )
-        if timelock_pubkey:
-            tags["pubkeys"] = timelock_pubkey
+        if locktime_pubkey:
+            tags["refund"] = locktime_pubkey
 
         if not preimage_hash and preimage:
             preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -39,7 +40,7 @@ class WalletHTLC(SupportsDb):
         assert preimage_hash, "preimage_hash or preimage must be provided"
 
         if hacklock_pubkey:
-            tags["refund"] = hacklock_pubkey
+            tags["pubkeys"] = hacklock_pubkey
 
         return HTLCSecret(
             kind=SecretKind.HTLC,

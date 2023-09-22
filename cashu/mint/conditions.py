@@ -177,17 +177,20 @@ class LedgerSpendingConditions:
 
             # then we check whether a signature is required
             hashlock_pubkeys = htlc_secret.tags.get_tag_all("pubkeys")
+            if hashlock_pubkeys and not proof.htlcsignature:
+                # none of the pubkeys had a match
+                raise TransactionError("HTLC no hash lock signatures provided.")
             for pubkey in hashlock_pubkeys:
                 if verify_p2pk_signature(
                     message=htlc_secret.serialize().encode("utf-8"),
                     pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
-                    signature=bytes.fromhex(proof.htlcpreimage),
+                    signature=bytes.fromhex(proof.htlcsignature),
                 ):
                     # a signature matches
                     return True
             if hashlock_pubkeys:
                 # none of the pubkeys had a match
-                raise TransactionError("HTLC pubkey signatures did not match.")
+                raise TransactionError("HTLC hash lock signatures did not match.")
             # no pubkeys were included, anyone can spend
             return True
 

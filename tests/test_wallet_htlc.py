@@ -60,7 +60,7 @@ async def test_create_htlc_secret(wallet1: Wallet):
     await wallet1.mint(64)
     preimage = "00000000000000000000000000000000"
     preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-    secret = await wallet1.create_htlc_lock(preimage)
+    secret = await wallet1.create_htlc_lock(preimage=preimage)
     assert secret.data == preimage_hash
 
 
@@ -69,7 +69,7 @@ async def test_htlc_split(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
     preimage = "00000000000000000000000000000000"
     preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-    secret = await wallet1.create_htlc_lock(preimage)
+    secret = await wallet1.create_htlc_lock(preimage=preimage)
     # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     for p in send_proofs:
@@ -81,7 +81,7 @@ async def test_htlc_redeem_with_preimage(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64)
     preimage = "00000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-    secret = await wallet1.create_htlc_lock(preimage)
+    secret = await wallet1.create_htlc_lock(preimage=preimage)
     # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     for p in send_proofs:
@@ -94,10 +94,7 @@ async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet)
     await wallet1.mint(64)
     preimage = "00000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-    secret = await wallet1.create_htlc_lock(
-        preimage[:-1] + "1", hacklock_pubkey=preimage
-    )
-    print(secret)
+    secret = await wallet1.create_htlc_lock(preimage=preimage[:-1] + "1")
     # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     for p in send_proofs:
@@ -105,3 +102,65 @@ async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet)
     await assert_err(
         wallet2.redeem(send_proofs), "Mint Error: HTLC preimage does not match"
     )
+
+
+@pytest.mark.asyncio
+async def test_htlc_redeem_with_no_signature(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    preimage = "00000000000000000000000000000000"
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
+    secret = await wallet1.create_htlc_lock(
+        preimage=preimage, hacklock_pubkey=pubkey_wallet1
+    )
+    # p2pk test
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
+    for p in send_proofs:
+        p.htlcpreimage = preimage
+    await assert_err(
+        wallet2.redeem(send_proofs),
+        "Mint Error: HTLC no hash lock signatures provided.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_htlc_redeem_with_wrong_signature(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    preimage = "00000000000000000000000000000000"
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
+    secret = await wallet1.create_htlc_lock(
+        preimage=preimage, hacklock_pubkey=pubkey_wallet1
+    )
+    # p2pk test
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
+
+    signatures = await wallet1.sign_p2pk_proofs(send_proofs)
+    for p, s in zip(send_proofs, signatures):
+        p.htlcpreimage = preimage
+        p.htlcsignature = s[:-1] + "1"  # wrong signature
+
+    await assert_err(
+        wallet2.redeem(send_proofs),
+        "Mint Error: HTLC hash lock signatures did not match.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_htlc_redeem_with_correct_signature(wallet1: Wallet, wallet2: Wallet):
+    await wallet1.mint(64)
+    preimage = "00000000000000000000000000000000"
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
+    secret = await wallet1.create_htlc_lock(
+        preimage=preimage, hacklock_pubkey=pubkey_wallet1
+    )
+    # p2pk test
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
+
+    signatures = await wallet1.sign_p2pk_proofs(send_proofs)
+    for p, s in zip(send_proofs, signatures):
+        p.htlcpreimage = preimage
+        p.htlcsignature = s
+
+    await wallet2.redeem(send_proofs)

@@ -784,7 +784,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         logger.trace("split successful")
         return promises
-        return prom_fst, prom_snd
 
     async def restore(
         self, outputs: List[BlindedMessage]

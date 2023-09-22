@@ -492,6 +492,7 @@ class LedgerAPI(object):
                 "p2shscript",
                 "p2pksigs",
                 "htlcpreimage",
+                "htlcsignature",
             }
             return {
                 "outputs": ...,
