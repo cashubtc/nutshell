@@ -27,7 +27,7 @@ def step0_carol_privkey():
 
 def step0_carol_checksig_redeemscript(carol_pubkey):
     """Create script"""
-    txin_redeemScript = CScript([carol_pubkey, OP_CHECKSIG])
+    txin_redeemScript = CScript([carol_pubkey, OP_CHECKSIG])  # type: ignore
     # txin_redeemScript = CScript([-123, OP_CHECKLOCKTIMEVERIFY])
     # txin_redeemScript = CScript([3, 3, OP_LESSTHAN, OP_VERIFY])
     return txin_redeemScript
@@ -58,7 +58,7 @@ def step2_carol_sign_tx(txin_redeemScript, privatekey):
     tx, txin = step1_bob_carol_create_tx(txin_p2sh_address)
     sighash = SignatureHash(txin_redeemScript, tx, 0, SIGHASH_ALL)
     sig = privatekey.sign(sighash) + bytes([SIGHASH_ALL])
-    txin.scriptSig = CScript([sig, txin_redeemScript])
+    txin.scriptSig = CScript([sig, txin_redeemScript])  # type: ignore
     return txin
 
 

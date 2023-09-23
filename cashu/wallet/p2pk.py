@@ -14,10 +14,7 @@ from ..core.db import Database
 from ..core.p2pk import (
     P2PKSecret,
     P2SHScript,
-    Secret,
-    SecretKind,
     SigFlags,
-    Tags,
     sign_p2pk_sign,
 )
 from ..core.script import (
@@ -26,6 +23,7 @@ from ..core.script import (
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
 )
+from ..core.secret import Secret, SecretKind, Tags
 from ..wallet.crud import (
     get_unused_locks,
     store_p2sh,

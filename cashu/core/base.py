@@ -48,6 +48,8 @@ class Proof(BaseModel):
 
     p2pksigs: Union[List[str], None] = []  # P2PK signature
     p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
+    htlcpreimage: Union[str, None] = None  # HTLC unlocking preimage
+    htlcsignature: Union[str, None] = None  # HTLC unlocking signature
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
     # unique ID of send attempt, used for grouping pending tokens in the wallet
