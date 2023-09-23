@@ -213,7 +213,6 @@ async def send(
             "No proof with this amount found. Available amounts:"
             f" {set([p.amount for p in wallet.proofs])}"
         )
-        await wallet.set_reserved(send_proofs, reserved=True)
 
     token = await wallet.serialize_proofs(
         send_proofs,
@@ -221,7 +220,7 @@ async def send(
         include_dleq=include_dleq,
     )
     print(token)
-
+    await wallet.set_reserved(send_proofs, reserved=True)
     if legacy:
         print("")
         print("Old token format:")
