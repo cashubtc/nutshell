@@ -21,7 +21,7 @@ from ..core.p2pk import (
     sign_p2pk_sign,
 )
 from ..core.script import (
-    step0_carol_checksig_redeemscrip,
+    step0_carol_checksig_redeemscript,
     step0_carol_privkey,
     step1_carol_create_p2sh_address,
     step2_carol_sign_tx,
@@ -41,7 +41,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
     async def create_p2sh_address_and_store(self) -> str:
         """Creates a P2SH lock script and stores the script and signature in the database."""
         alice_privkey = step0_carol_privkey()
-        txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
+        txin_redeemScript = step0_carol_checksig_redeemscript(alice_privkey.pub)
         txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
         txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
         txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()

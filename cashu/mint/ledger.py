@@ -7,6 +7,7 @@ from loguru import logger
 
 from ..core import bolt11
 from ..core.base import (
+    DLEQ,
     BlindedMessage,
     BlindedSignature,
     Invoice,
@@ -117,8 +118,7 @@ class Ledger:
                 logger.trace(f"crud: stored new keyset {keyset.id}.")
 
         # store the new keyset in the current keysets
-        if keyset.id:
-            self.keysets.keysets[keyset.id] = keyset
+        self.keysets.keysets[keyset.id] = keyset
         logger.debug(f"Loaded keyset {keyset.id}.")
         return keyset
 
@@ -188,17 +188,24 @@ class Ledger:
         keyset = keyset if keyset else self.keyset
         logger.trace(f"Generating promise with keyset {keyset.id}.")
         private_key_amount = keyset.private_keys[amount]
-        C_ = b_dhke.step2_bob(B_, private_key_amount)
+        C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
         logger.trace(f"crud: _generate_promise storing promise for {amount}")
         await self.crud.store_promise(
             amount=amount,
             B_=B_.serialize().hex(),
             C_=C_.serialize().hex(),
-            id=keyset.id,
+            e=e.serialize(),
+            s=s.serialize(),
             db=self.db,
+            id=keyset.id,
         )
         logger.trace(f"crud: _generate_promise stored promise for {amount}")
-        return BlindedSignature(id=keyset.id, amount=amount, C_=C_.serialize().hex())
+        return BlindedSignature(
+            id=keyset.id,
+            amount=amount,
+            C_=C_.serialize().hex(),
+            dleq=DLEQ(e=e.serialize(), s=s.serialize()),
+        )
 
     def _check_spendable(self, proof: Proof):
         """Checks whether the proof was already spent."""

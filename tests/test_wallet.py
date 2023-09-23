@@ -172,6 +172,7 @@ async def test_mint_amounts_wrong_order(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_split(wallet1: Wallet):
     await wallet1.mint(64)
+    assert wallet1.balance == 64
     p1, p2 = await wallet1.split(wallet1.proofs, 20)
     assert wallet1.balance == 64
     assert sum_proofs(p1) == 44

@@ -49,23 +49,28 @@ class LedgerCrud:
 
 
 async def store_promise(
+    *,
     db: Database,
     amount: int,
     B_: str,
     C_: str,
     id: str,
+    e: str = "",
+    s: str = "",
     conn: Optional[Connection] = None,
 ):
     await (conn or db).execute(
         f"""
         INSERT INTO {table_with_schema(db, 'promises')}
-          (amount, B_b, C_b, id)
-        VALUES (?, ?, ?, ?)
+          (amount, B_b, C_b, e, s, id)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             amount,
-            str(B_),
-            str(C_),
+            B_,
+            C_,
+            e,
+            s,
             id,
         ),
     )

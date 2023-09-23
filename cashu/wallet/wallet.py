@@ -19,6 +19,7 @@ from ..core.base import (
     CheckFeesRequest,
     CheckSpendableRequest,
     CheckSpendableResponse,
+    DLEQWallet,
     GetInfoResponse,
     GetMeltResponse,
     GetMintResponse,
@@ -110,100 +111,10 @@ class LedgerAPI(object):
         self.s = requests.Session()
         self.db = db
 
-    # async def generate_n_secrets(
-    #     self, n: int = 1, skip_bump: bool = False
-    # ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-    #     return await self.generate_n_secrets(n, skip_bump)
-
-    # async def _generate_secret(self, skip_bump: bool = False) -> str:
-    #     return await self._generate_secret(skip_bump)
-
     @async_set_requests
     async def _init_s(self):
         """Dummy function that can be called from outside to use LedgerAPI.s"""
         return
-
-    def _construct_proofs(
-        self,
-        promises: List[BlindedSignature],
-        secrets: List[str],
-        rs: List[PrivateKey],
-        derivation_paths: List[str],
-    ) -> List[Proof]:
-        """Constructs proofs from promises, secrets, rs and derivation paths.
-
-        This method is called after the user has received blind signatures from
-        the mint. The results are proofs that can be used as ecash.
-
-        Args:
-            promises (List[BlindedSignature]): blind signatures from mint
-            secrets (List[str]): secrets that were previously used to create blind messages (that turned into promises)
-            rs (List[PrivateKey]): blinding factors that were previously used to create blind messages (that turned into promises)
-            derivation_paths (List[str]): derivation paths that were used to generate secrets and blinding factors
-
-        Returns:
-            List[Proof]: list of proofs that can be used as ecash
-        """
-        logger.trace("Constructing proofs.")
-        proofs: List[Proof] = []
-        for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
-            logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
-            assert (
-                self.keyset_id == promise.id
-            ), "our keyset id does not match promise id."
-
-            C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
-            C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
-
-            proof = Proof(
-                id=promise.id,
-                amount=promise.amount,
-                C=C.serialize().hex(),
-                secret=secret,
-                derivation_path=path,
-            )
-            proofs.append(proof)
-            logger.trace(
-                f"Created proof: {proof}, r: {r.serialize()} out of promise {promise}"
-            )
-
-        logger.trace(f"Constructed {len(proofs)} proofs.")
-        return proofs
-
-    @staticmethod
-    def _construct_outputs(
-        amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
-    ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
-        """Takes a list of amounts and secrets and returns outputs.
-        Outputs are blinded messages `outputs` and blinding factors `rs`
-
-        Args:
-            amounts (List[int]): list of amounts
-            secrets (List[str]): list of secrets
-            rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
-
-        Returns:
-            List[BlindedMessage]: list of blinded messages that can be sent to the mint
-            List[PrivateKey]: list of blinding factors that can be used to construct proofs after receiving blind signatures from the mint
-
-        Raises:
-            AssertionError: if len(amounts) != len(secrets)
-        """
-        assert len(amounts) == len(
-            secrets
-        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
-        outputs: List[BlindedMessage] = []
-
-        rs_ = [None] * len(amounts) if not rs else rs
-        rs_return: List[PrivateKey] = []
-        for secret, amount, r in zip(secrets, amounts, rs_):
-            B_, r = b_dhke.step1_alice(secret, r or None)
-            rs_return.append(r)
-            output = BlindedMessage(amount=amount, B_=B_.serialize().hex())
-            outputs.append(output)
-            logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
-
-        return outputs, rs_return
 
     @staticmethod
     def raise_on_error(resp: Response) -> None:
@@ -465,9 +376,9 @@ class LedgerAPI(object):
             },
         )
         self.raise_on_error(resp)
-        reponse_dict = resp.json()
+        response_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /mint")
-        promises = PostMintResponse.parse_obj(reponse_dict).promises
+        promises = PostMintResponse.parse_obj(response_dict).promises
         return promises
 
     @async_set_requests
@@ -506,7 +417,7 @@ class LedgerAPI(object):
     @async_set_requests
     async def check_proof_state(self, proofs: List[Proof]):
         """
-        Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
+        Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
         payload = CheckSpendableRequest(proofs=proofs)
 
@@ -577,8 +488,8 @@ class LedgerAPI(object):
         payload = PostMintRequest(outputs=outputs)
         resp = self.s.post(self.url + "/restore", json=payload.dict())
         self.raise_on_error(resp)
-        reponse_dict = resp.json()
-        returnObj = PostRestoreResponse.parse_obj(reponse_dict)
+        response_dict = resp.json()
+        returnObj = PostRestoreResponse.parse_obj(response_dict)
         return returnObj.outputs, returnObj.promises
 
 
@@ -609,7 +520,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
         self.name = name
 
         super().__init__(url=url, db=self.db)
-        logger.debug(f"Wallet initalized with mint URL {url}")
+        logger.debug(f"Wallet initialized with mint URL {url}")
 
     @classmethod
     async def with_db(
@@ -726,16 +637,12 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
         await bump_secret_derivation(
             db=self.db, keyset_id=self.keyset_id, by=len(amounts)
         )
-        proofs = self._construct_proofs(promises, secrets, rs, derivation_paths)
+        proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
 
-        if proofs == []:
-            raise Exception("received no proofs.")
-        await self._store_proofs(proofs)
         if hash:
             await update_lightning_invoice(
                 db=self.db, hash=hash, paid=True, time_paid=int(time.time())
             )
-        self.proofs += proofs
         return proofs
 
     async def redeem(
@@ -749,6 +656,10 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
         Args:
             proofs (List[Proof]): Proofs to be redeemed.
         """
+        # verify DLEQ of incoming proofs
+        logger.debug("Verifying DLEQ of incoming proofs.")
+        self.verify_proofs_dleq(proofs)
+        logger.debug("DLEQ verified.")
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
@@ -797,9 +708,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
             logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
             assert len(secret_locks) == len(
                 scnd_outputs
-            ), "number of secret_locks does not match number of ouptus."
+            ), "number of secret_locks does not match number of outputs."
             # append predefined secrets (to send) to random secrets (to keep)
-            # generate sercets to keep
+            # generate secrets to keep
             secrets = [
                 await self._generate_secret() for s in range(len(frst_outputs))
             ] + secret_locks
@@ -822,18 +733,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
         promises = await super().split(proofs, outputs)
 
         # Construct proofs from returned promises (i.e., unblind the signatures)
-        new_proofs = self._construct_proofs(promises, secrets, rs, derivation_paths)
+        new_proofs = await self._construct_proofs(
+            promises, secrets, rs, derivation_paths
+        )
 
-        # remove used proofs from wallet and add new ones
-        used_secrets = [p.secret for p in proofs]
-        self.proofs = list(filter(lambda p: p.secret not in used_secrets, self.proofs))
-        # add new proofs to wallet
-        self.proofs += new_proofs
-        # store new proofs in database
-        await self._store_proofs(new_proofs)
-        # invalidate used proofs in database
-        for proof in proofs:
-            await invalidate_proof(proof, db=self.db)
+        await self.invalidate(proofs)
 
         keep_proofs = new_proofs[: len(frst_outputs)]
         send_proofs = new_proofs[len(frst_outputs) :]
@@ -862,7 +766,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
 
         if status.paid:
             # the payment was successful
-            await self.invalidate(proofs)
             invoice_obj = Invoice(
                 amount=-sum_proofs(proofs),
                 pr=invoice,
@@ -877,14 +780,15 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
 
             # handle change and produce proofs
             if status.change:
-                change_proofs = self._construct_proofs(
+                change_proofs = await self._construct_proofs(
                     status.change,
                     secrets[: len(status.change)],
                     rs[: len(status.change)],
                     derivation_paths[: len(status.change)],
                 )
                 logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
-                await self._store_proofs(change_proofs)
+
+            await self.invalidate(proofs)
 
         else:
             raise Exception("could not pay invoice.")
@@ -895,10 +799,137 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
 
     # ---------- TOKEN MECHANICS ----------
 
+    # ---------- DLEQ PROOFS ----------
+
+    def verify_proofs_dleq(self, proofs: List[Proof]):
+        """Verifies DLEQ proofs in proofs."""
+        for proof in proofs:
+            if not proof.dleq:
+                logger.trace("No DLEQ proof in proof.")
+                return
+            logger.trace("Verifying DLEQ proof.")
+            assert self.keys.public_keys
+            if not b_dhke.carol_verify_dleq(
+                secret_msg=proof.secret,
+                C=PublicKey(bytes.fromhex(proof.C), raw=True),
+                r=PrivateKey(bytes.fromhex(proof.dleq.r), raw=True),
+                e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
+                s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
+                A=self.keys.public_keys[proof.amount],
+            ):
+                raise Exception("DLEQ proof invalid.")
+            else:
+                logger.debug("DLEQ proof valid.")
+
+    async def _construct_proofs(
+        self,
+        promises: List[BlindedSignature],
+        secrets: List[str],
+        rs: List[PrivateKey],
+        derivation_paths: List[str],
+    ) -> List[Proof]:
+        """Constructs proofs from promises, secrets, rs and derivation paths.
+
+        This method is called after the user has received blind signatures from
+        the mint. The results are proofs that can be used as ecash.
+
+        Args:
+            promises (List[BlindedSignature]): blind signatures from mint
+            secrets (List[str]): secrets that were previously used to create blind messages (that turned into promises)
+            rs (List[PrivateKey]): blinding factors that were previously used to create blind messages (that turned into promises)
+            derivation_paths (List[str]): derivation paths that were used to generate secrets and blinding factors
+
+        Returns:
+            List[Proof]: list of proofs that can be used as ecash
+        """
+        logger.trace("Constructing proofs.")
+        proofs: List[Proof] = []
+        for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
+            logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
+            assert (
+                self.keyset_id == promise.id
+            ), "our keyset id does not match promise id."
+
+            C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
+            C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
+            B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+
+            proof = Proof(
+                id=promise.id,
+                amount=promise.amount,
+                C=C.serialize().hex(),
+                secret=secret,
+                derivation_path=path,
+            )
+
+            # if the mint returned a dleq proof, we add it to the proof
+            if promise.dleq:
+                proof.dleq = DLEQWallet(
+                    e=promise.dleq.e, s=promise.dleq.s, r=r.serialize()
+                )
+
+            proofs.append(proof)
+
+            logger.trace(
+                f"Created proof: {proof}, r: {r.serialize()} out of promise {promise}"
+            )
+
+        # DLEQ verify
+        self.verify_proofs_dleq(proofs)
+
+        logger.trace(f"Constructed {len(proofs)} proofs.")
+
+        # add new proofs to wallet
+        self.proofs += proofs
+        # store new proofs in database
+        await self._store_proofs(proofs)
+
+        return proofs
+
+    @staticmethod
+    def _construct_outputs(
+        amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
+    ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
+        """Takes a list of amounts and secrets and returns outputs.
+        Outputs are blinded messages `outputs` and blinding factors `rs`
+
+        Args:
+            amounts (List[int]): list of amounts
+            secrets (List[str]): list of secrets
+            rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
+
+        Returns:
+            List[BlindedMessage]: list of blinded messages that can be sent to the mint
+            List[PrivateKey]: list of blinding factors that can be used to construct proofs after receiving blind signatures from the mint
+
+        Raises:
+            AssertionError: if len(amounts) != len(secrets)
+        """
+        assert len(amounts) == len(
+            secrets
+        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        outputs: List[BlindedMessage] = []
+
+        rs_ = [None] * len(amounts) if not rs else rs
+        rs_return: List[PrivateKey] = []
+        for secret, amount, r in zip(secrets, amounts, rs_):
+            B_, r = b_dhke.step1_alice(secret, r or None)
+            rs_return.append(r)
+            output = BlindedMessage(amount=amount, B_=B_.serialize().hex())
+            outputs.append(output)
+            logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
+
+        return outputs, rs_return
+
     async def _store_proofs(self, proofs):
-        async with self.db.connect() as conn:
-            for proof in proofs:
-                await store_proof(proof, db=self.db, conn=conn)
+        try:
+            async with self.db.connect() as conn:  # type: ignore
+                for proof in proofs:
+                    await store_proof(proof, db=self.db, conn=conn)
+        except Exception as e:
+            logger.error(f"Could not store proofs in database: {e}")
+            logger.error(proofs)
+            raise e
 
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
@@ -981,7 +1012,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
         return token
 
     async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, legacy=False
+        self, proofs: List[Proof], include_mints=True, include_dleq=False, legacy=False
     ) -> str:
         """Produces sharable token with proofs and mint information.
 
@@ -1007,7 +1038,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
 
         # V3 tokens
         token = await self._make_token(proofs, include_mints)
-        return token.serialize()
+        return token.serialize(include_dleq)
 
     async def _make_token_v2(self, proofs: List[Proof], include_mints=True) -> TokenV2:
         """
@@ -1016,6 +1047,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
         """
         # build token
         token = TokenV2(proofs=proofs)
+
         # add mint information to the token, if requested
         if include_mints:
             # dummy object to hold information about the mint
@@ -1132,7 +1164,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
             invalidated_proofs = proofs
 
         if invalidated_proofs:
-            logger.debug(
+            logger.trace(
                 f"Invalidating {len(invalidated_proofs)} proofs worth"
                 f" {sum_proofs(invalidated_proofs)} sat."
             )
@@ -1235,7 +1267,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
 
         Args:
             mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.
-            to (int, optional): The number of consecutive empty reponses to stop restoring. Defaults to 2.
+            to (int, optional): The number of consecutive empty responses to stop restoring. Defaults to 2.
             batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
         """
         await self._init_private_key(mnemonic)
@@ -1295,7 +1327,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
         )
         # we don't know the amount but luckily the mint will tell us so we use a dummy amount here
         amounts_dummy = [1] * len(secrets)
-        # we generate outptus from deterministic secrets and rs
+        # we generate outputs from deterministic secrets and rs
         regenerated_outputs, _ = self._construct_outputs(amounts_dummy, secrets, rs)
         # we ask the mint to reissue the promises
         proofs = await self.restore_promises(
@@ -1339,14 +1371,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
         secrets = [secrets[i] for i in matching_indices]
         rs = [rs[i] for i in matching_indices]
         # now we can construct the proofs with the secrets and rs
-        proofs = self._construct_proofs(
+        proofs = await self._construct_proofs(
             restored_promises, secrets, rs, derivation_paths
         )
         logger.debug(f"Restored {len(restored_promises)} promises")
-        await self._store_proofs(proofs)
-
-        # append proofs to proofs in memory so the balance updates
-        for proof in proofs:
-            if proof.secret not in [p.secret for p in self.proofs]:
-                self.proofs.append(proof)
         return proofs

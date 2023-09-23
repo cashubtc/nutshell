@@ -156,3 +156,15 @@ async def m007_proofs_and_promises_store_id(db: Database):
     await db.execute(
         f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN id TEXT"
     )
+
+
+async def m008_promises_dleq(db: Database):
+    """
+    Add columns for DLEQ proof to promises table.
+    """
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN e TEXT"
+    )
+    await db.execute(
+        f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN s TEXT"
+    )

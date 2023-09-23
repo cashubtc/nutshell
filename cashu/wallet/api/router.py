@@ -225,11 +225,11 @@ async def send_command(
     global wallet
     if not nostr:
         balance, token = await send(
-            wallet, amount, lock, legacy=False, split=not nosplit
+            wallet, amount=amount, lock=lock, legacy=False, split=not nosplit
         )
         return SendResponse(balance=balance, token=token)
     else:
-        token, pubkey = await send_nostr(wallet, amount, nostr)
+        token, pubkey = await send_nostr(wallet, amount=amount, pubkey=nostr)
         return SendResponse(balance=wallet.available_balance, token=token, npub=pubkey)
 
 
@@ -325,7 +325,7 @@ async def pending(
             enumerate(
                 groupby(
                     sorted_proofs,
-                    key=itemgetter("send_id"),
+                    key=itemgetter("send_id"),  # type: ignore
                 )
             ),
             offset,
@@ -334,9 +334,9 @@ async def pending(
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
             tokenObj = deserialize_token_from_string(token)
-            mint = [t.mint for t in tokenObj.token][0]
+            mint = [t.mint for t in tokenObj.token if t.mint][0]
             reserved_date = datetime.utcfromtimestamp(
-                int(grouped_proofs[0].time_reserved)
+                int(grouped_proofs[0].time_reserved)  # type: ignore
             ).strftime("%Y-%m-%d %H:%M:%S")
             result.update(
                 {

@@ -107,6 +107,12 @@ async def test_generate_promises(ledger: Ledger):
         promises[0].C_
         == "037074c4f53e326ee14ed67125f387d160e0e729351471b69ad41f7d5d21071e15"
     )
+    assert promises[0].amount == 8
+
+    # DLEQ proof present
+    assert promises[0].dleq
+    assert promises[0].dleq.s
+    assert promises[0].dleq.e
 
 
 @pytest.mark.asyncio

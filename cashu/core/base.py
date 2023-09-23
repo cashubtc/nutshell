@@ -11,6 +11,26 @@ from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 from .p2pk import P2SHScript
 
+
+class DLEQ(BaseModel):
+    """
+    Discrete Log Equality (DLEQ) Proof
+    """
+
+    e: str
+    s: str
+
+
+class DLEQWallet(BaseModel):
+    """
+    Discrete Log Equality (DLEQ) Proof
+    """
+
+    e: str
+    s: str
+    r: str  # blinding_factor, unknown to mint but sent from wallet to wallet for DLEQ proof
+
+
 # ------- PROOFS -------
 
 
@@ -24,6 +44,8 @@ class Proof(BaseModel):
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
+    dleq: Union[DLEQWallet, None] = None  # DLEQ proof
+
     p2pksigs: Union[List[str], None] = []  # P2PK signature
     p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
     # whether this proof is reserved for sending, used for coin management in the wallet
@@ -34,7 +56,28 @@ class Proof(BaseModel):
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
 
-    def to_dict(self):
+    @classmethod
+    def from_dict(cls, proof_dict: dict):
+        if proof_dict.get("dleq"):
+            proof_dict["dleq"] = DLEQWallet(**json.loads(proof_dict["dleq"]))
+        c = cls(**proof_dict)
+        return c
+
+    def to_dict(self, include_dleq=False):
+        # dictionary without the fields that don't need to be send to Carol
+        if not include_dleq:
+            return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
+
+        assert self.dleq, "DLEQ proof is missing"
+        return dict(
+            id=self.id,
+            amount=self.amount,
+            secret=self.secret,
+            C=self.C,
+            dleq=self.dleq.dict(),
+        )
+
+    def to_dict_no_dleq(self):
         # dictionary without the fields that don't need to be send to Carol
         return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
@@ -69,9 +112,10 @@ class BlindedSignature(BaseModel):
     Blinded signature or "promise" which is the signature on a `BlindedMessage`
     """
 
-    id: Union[str, None] = None
+    id: str
     amount: int
     C_: str  # Hex-encoded signature
+    dleq: Optional[DLEQ] = None  # DLEQ proof
 
 
 class BlindedMessages(BaseModel):
@@ -296,7 +340,7 @@ class MintKeyset:
     Contains the keyset from the mint's perspective.
     """
 
-    id: Union[str, None]
+    id: str
     derivation_path: str
     private_keys: Dict[int, PrivateKey]
     public_keys: Union[Dict[int, PublicKey], None] = None
@@ -308,7 +352,7 @@ class MintKeyset:
 
     def __init__(
         self,
-        id=None,
+        id="",
         valid_from=None,
         valid_to=None,
         first_seen=None,
@@ -411,8 +455,8 @@ class TokenV3Token(BaseModel):
     mint: Optional[str] = None
     proofs: List[Proof]
 
-    def to_dict(self):
-        return_dict = dict(proofs=[p.to_dict() for p in self.proofs])
+    def to_dict(self, include_dleq=False):
+        return_dict = dict(proofs=[p.to_dict(include_dleq) for p in self.proofs])
         if self.mint:
             return_dict.update(dict(mint=self.mint))  # type: ignore
         return return_dict
@@ -426,8 +470,8 @@ class TokenV3(BaseModel):
     token: List[TokenV3Token] = []
     memo: Optional[str] = None
 
-    def to_dict(self):
-        return_dict = dict(token=[t.to_dict() for t in self.token])
+    def to_dict(self, include_dleq=False):
+        return_dict = dict(token=[t.to_dict(include_dleq) for t in self.token])
         if self.memo:
             return_dict.update(dict(memo=self.memo))  # type: ignore
         return return_dict
@@ -454,7 +498,7 @@ class TokenV3(BaseModel):
         token = json.loads(base64.urlsafe_b64decode(token_base64))
         return cls.parse_obj(token)
 
-    def serialize(self) -> str:
+    def serialize(self, include_dleq=False) -> str:
         """
         Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
         """
@@ -462,6 +506,6 @@ class TokenV3(BaseModel):
         tokenv3_serialized = prefix
         # encode the token as a base64 string
         tokenv3_serialized += base64.urlsafe_b64encode(
-            json.dumps(self.to_dict()).encode()
+            json.dumps(self.to_dict(include_dleq)).encode()
         ).decode()
         return tokenv3_serialized

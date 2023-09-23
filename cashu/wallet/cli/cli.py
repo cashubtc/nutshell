@@ -353,6 +353,14 @@ async def balance(ctx: Context, verbose):
 )
 @click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
 @click.option(
+    "--dleq",
+    "-d",
+    default=False,
+    is_flag=True,
+    help="Send with DLEQ proof.",
+    type=bool,
+)
+@click.option(
     "--legacy",
     "-l",
     default=False,
@@ -387,6 +395,7 @@ async def send_command(
     nostr: str,
     nopt: str,
     lock: str,
+    dleq: bool,
     legacy: bool,
     verbose: bool,
     yes: bool,
@@ -394,9 +403,18 @@ async def send_command(
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     if not nostr and not nopt:
-        await send(wallet, amount, lock, legacy, split=not nosplit)
+        await send(
+            wallet,
+            amount=amount,
+            lock=lock,
+            legacy=legacy,
+            split=not nosplit,
+            include_dleq=dleq,
+        )
     else:
-        await send_nostr(wallet, amount, nostr or nopt, verbose, yes)
+        await send_nostr(
+            wallet, amount=amount, pubkey=nostr or nopt, verbose=verbose, yes=yes
+        )
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -532,14 +550,15 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             enumerate(
                 groupby(
                     sorted_proofs,
-                    key=itemgetter("send_id"),
+                    key=itemgetter("send_id"),  # type: ignore
                 )
             ),
             offset,
             number,
         ):
             grouped_proofs = list(value)
-            token = await wallet.serialize_proofs(grouped_proofs)
+            # TODO: we can't return DLEQ because we don't store it
+            token = await wallet.serialize_proofs(grouped_proofs, include_dleq=False)
             tokenObj = deserialize_token_from_string(token)
             mint = [t.mint for t in tokenObj.token][0]
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
