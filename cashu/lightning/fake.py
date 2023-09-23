@@ -76,6 +76,9 @@ class FakeWallet(Wallet):
         return InvoiceResponse(True, checking_id, payment_request)
 
     async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
+        # artificial sleep
+        await asyncio.sleep(5)
+
         invoice = decode(bolt11)
 
         if invoice.payment_hash[:6] == self.privkey[:6] or BRR:

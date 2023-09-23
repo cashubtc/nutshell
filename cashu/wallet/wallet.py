@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import json
 import math
@@ -541,7 +542,11 @@ class LedgerAPI(object):
 
     @async_set_requests
     async def pay_lightning(
-        self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
+        self,
+        proofs: List[Proof],
+        invoice: str,
+        outputs: Optional[List[BlindedMessage]],
+        blocking: bool = True,
     ):
         """
         Accepts proofs and a lightning invoice to pay in exchange.
@@ -561,10 +566,10 @@ class LedgerAPI(object):
         resp = self.s.post(
             self.url + "/melt",
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
+            params={"blocking": blocking},
         )
         self.raise_on_error(resp)
         return_dict = resp.json()
-
         return GetMeltResponse.parse_obj(return_dict)
 
     @async_set_requests
@@ -858,37 +863,39 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
         secrets, rs, derivation_paths = await self.generate_n_secrets(n_return_outputs)
         outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
 
-        status = await super().pay_lightning(proofs, invoice, outputs)
+        # pay_lightning returns immediatelly
+        _ = await super().pay_lightning(proofs, invoice, outputs, blocking=False)
 
-        if status.paid:
-            # the payment was successful
-            await self.invalidate(proofs)
-            invoice_obj = Invoice(
-                amount=-sum_proofs(proofs),
-                pr=invoice,
-                preimage=status.preimage,
-                paid=True,
-                time_paid=time.time(),
-                hash="",
-            )
-            # we have a unique constraint on the hash, so we generate a random one if it doesn't exist
-            invoice_obj.hash = invoice_obj.hash or await self._generate_secret()
-            await store_lightning_invoice(db=self.db, invoice=invoice_obj)
+        # we check the state of the proofs until they are spent
+        await asyncio.sleep(2)
+        spent = False
+        while not spent:
+            state = await self.check_proof_state(proofs)
+            assert state.pending, "pending response is empty."
+            spent = not any(state.pending) and not any(state.spendable)
+            await asyncio.sleep(1)
 
-            # handle change and produce proofs
-            if status.change:
-                change_proofs = self._construct_proofs(
-                    status.change,
-                    secrets[: len(status.change)],
-                    rs[: len(status.change)],
-                    derivation_paths[: len(status.change)],
-                )
-                logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
-                await self._store_proofs(change_proofs)
+        # the payment was successful
+        await self.invalidate(proofs)
+        invoice_obj = Invoice(
+            amount=-sum_proofs(proofs),
+            pr=invoice,
+            # preimage=status.preimage,
+            paid=True,
+            time_paid=time.time(),
+            hash="",
+        )
+        # we have a unique constraint on the hash, so we generate a random one if it doesn't exist
+        invoice_obj.hash = invoice_obj.hash or await self._generate_secret()
+        await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
-        else:
-            raise Exception("could not pay invoice.")
-        return status.paid
+        # request change for overpaid feeds
+        change_proofs = await self.restore_promises(
+            outputs=outputs, secrets=secrets, rs=rs, derivation_paths=derivation_paths
+        )
+        logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
+
+        return True
 
     async def check_proof_state(self, proofs):
         return await super().check_proof_state(proofs)
