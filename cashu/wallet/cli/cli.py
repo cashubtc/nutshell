@@ -550,7 +550,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             enumerate(
                 groupby(
                     sorted_proofs,
-                    key=itemgetter("send_id"),
+                    key=itemgetter("send_id"),  # type: ignore
                 )
             ),
             offset,
