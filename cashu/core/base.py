@@ -56,6 +56,13 @@ class Proof(BaseModel):
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
 
+    @classmethod
+    def from_dict(cls, proof_dict: dict):
+        if proof_dict.get("dleq"):
+            proof_dict["dleq"] = DLEQWallet(**json.loads(proof_dict["dleq"]))
+        c = cls(**proof_dict)
+        return c
+
     def to_dict(self, include_dleq=False):
         # dictionary without the fields that don't need to be send to Carol
         if not include_dleq:

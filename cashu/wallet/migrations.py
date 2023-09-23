@@ -173,3 +173,10 @@ async def m009_privatekey_and_determinstic_key_derivation(db: Database):
             );
         """)
     # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")
+
+
+async def m010_add_proofs_dleq(db: Database):
+    """
+    Columns to store DLEQ proofs for proofs.
+    """
+    await db.execute("ALTER TABLE proofs ADD COLUMN dleq TEXT")

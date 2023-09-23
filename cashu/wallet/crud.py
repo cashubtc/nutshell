@@ -1,3 +1,4 @@
+import json
 import time
 from typing import Any, List, Optional, Tuple
 
@@ -9,12 +10,12 @@ async def store_proof(
     proof: Proof,
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> None:
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (id, amount, C, secret, time_created, derivation_path)
-        VALUES (?, ?, ?, ?, ?, ?)
+          (id, amount, C, secret, time_created, derivation_path, dleq)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             proof.id,
@@ -23,6 +24,7 @@ async def store_proof(
             str(proof.secret),
             int(time.time()),
             proof.derivation_path,
+            json.dumps(proof.dleq.dict()) if proof.dleq else "",
         ),
     )
 
@@ -30,29 +32,29 @@ async def store_proof(
 async def get_proofs(
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> List[Proof]:
     rows = await (conn or db).fetchall("""
         SELECT * from proofs
         """)
-    return [Proof(**dict(r)) for r in rows]
+    return [Proof.from_dict(dict(r)) for r in rows]
 
 
 async def get_reserved_proofs(
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> List[Proof]:
     rows = await (conn or db).fetchall("""
         SELECT * from proofs
         WHERE reserved
         """)
-    return [Proof(**r) for r in rows]
+    return [Proof.from_dict(dict(r)) for r in rows]
 
 
 async def invalidate_proof(
     proof: Proof,
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> None:
     await (conn or db).execute(
         """
         DELETE FROM proofs
@@ -84,7 +86,7 @@ async def update_proof_reserved(
     send_id: str = "",
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
-):
+) -> None:
     clauses = []
     values: List[Any] = []
     clauses.append("reserved = ?")
@@ -109,7 +111,7 @@ async def secret_used(
     secret: str,
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> bool:
     rows = await (conn or db).fetchone(
         """
         SELECT * from proofs
@@ -124,7 +126,7 @@ async def store_p2sh(
     p2sh: P2SHScript,
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> None:
     await (conn or db).execute(
         """
         INSERT INTO p2sh
@@ -144,7 +146,7 @@ async def get_unused_locks(
     address: str = "",
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
-):
+) -> List[P2SHScript]:
     clause: List[str] = []
     args: List[str] = []
 
@@ -173,7 +175,7 @@ async def update_p2sh_used(
     used: bool,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
-):
+) -> None:
     clauses = []
     values = []
     clauses.append("used = ?")
@@ -190,7 +192,7 @@ async def store_keyset(
     mint_url: str = "",
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
-):
+) -> None:
     await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
@@ -243,7 +245,7 @@ async def store_lightning_invoice(
     db: Database,
     invoice: Invoice,
     conn: Optional[Connection] = None,
-):
+) -> None:
     await (conn or db).execute(
         """
         INSERT INTO invoices
@@ -266,7 +268,7 @@ async def get_lightning_invoice(
     db: Database,
     hash: str = "",
     conn: Optional[Connection] = None,
-):
+) -> Invoice:
     clauses = []
     values: List[Any] = []
     if hash:
@@ -291,7 +293,7 @@ async def get_lightning_invoices(
     db: Database,
     paid: Optional[bool] = None,
     conn: Optional[Connection] = None,
-):
+) -> List[Invoice]:
     clauses: List[Any] = []
     values: List[Any] = []
 
@@ -319,7 +321,7 @@ async def update_lightning_invoice(
     paid: bool,
     time_paid: Optional[int] = None,
     conn: Optional[Connection] = None,
-):
+) -> None:
     clauses = []
     values: List[Any] = []
     clauses.append("paid = ?")
@@ -344,7 +346,7 @@ async def bump_secret_derivation(
     by: int = 1,
     skip: bool = False,
     conn: Optional[Connection] = None,
-):
+) -> int:
     rows = await (conn or db).fetchone(
         "SELECT counter from keysets WHERE id = ?", (keyset_id,)
     )
@@ -374,7 +376,7 @@ async def set_secret_derivation(
     keyset_id: str,
     counter: int,
     conn: Optional[Connection] = None,
-):
+) -> None:
     await (conn or db).execute(
         "UPDATE keysets SET counter = ? WHERE id = ?",
         (
@@ -388,7 +390,7 @@ async def set_nostr_last_check_timestamp(
     db: Database,
     timestamp: int,
     conn: Optional[Connection] = None,
-):
+) -> None:
     await (conn or db).execute(
         "UPDATE nostr SET last = ? WHERE type = ?",
         (timestamp, "dm"),
@@ -398,7 +400,7 @@ async def set_nostr_last_check_timestamp(
 async def get_nostr_last_check_timestamp(
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> Optional[int]:
     row = await (conn or db).fetchone(
         """
         SELECT last from nostr WHERE type = ?
@@ -432,7 +434,7 @@ async def store_seed_and_mnemonic(
     seed: str,
     mnemonic: str,
     conn: Optional[Connection] = None,
-):
+) -> None:
     await (conn or db).execute(
         """
         INSERT INTO seed

@@ -111,134 +111,10 @@ class LedgerAPI(object):
         self.s = requests.Session()
         self.db = db
 
-    # async def generate_n_secrets(
-    #     self, n: int = 1, skip_bump: bool = False
-    # ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-    #     return await self.generate_n_secrets(n, skip_bump)
-
-    # async def _generate_secret(self, skip_bump: bool = False) -> str:
-    #     return await self._generate_secret(skip_bump)
-
     @async_set_requests
     async def _init_s(self):
         """Dummy function that can be called from outside to use LedgerAPI.s"""
         return
-
-    # # ---------- DLEQ PROOFS ----------
-
-    # def verify_proofs_dleq(self, proofs: List[Proof]):
-    #     """Verifies DLEQ proofs in proofs."""
-    #     for proof in proofs:
-    #         if not proof.dleq:
-    #             logger.trace("No DLEQ proof in proof.")
-    #             return
-    #         logger.trace("Verifying DLEQ proof.")
-    #         assert self.keys.public_keys
-    #         if not b_dhke.carol_verify_dleq(
-    #             secret_msg=proof.secret,
-    #             C=PublicKey(bytes.fromhex(proof.C), raw=True),
-    #             r=PrivateKey(bytes.fromhex(proof.dleq.r), raw=True),
-    #             e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
-    #             s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
-    #             A=self.keys.public_keys[proof.amount],
-    #         ):
-    #             raise Exception("DLEQ proof invalid.")
-    #         else:
-    #             logger.debug("DLEQ proof valid.")
-
-    # def _construct_proofs(
-    #     self,
-    #     promises: List[BlindedSignature],
-    #     secrets: List[str],
-    #     rs: List[PrivateKey],
-    #     derivation_paths: List[str],
-    # ) -> List[Proof]:
-    #     """Constructs proofs from promises, secrets, rs and derivation paths.
-
-    #     This method is called after the user has received blind signatures from
-    #     the mint. The results are proofs that can be used as ecash.
-
-    #     Args:
-    #         promises (List[BlindedSignature]): blind signatures from mint
-    #         secrets (List[str]): secrets that were previously used to create blind messages (that turned into promises)
-    #         rs (List[PrivateKey]): blinding factors that were previously used to create blind messages (that turned into promises)
-    #         derivation_paths (List[str]): derivation paths that were used to generate secrets and blinding factors
-
-    #     Returns:
-    #         List[Proof]: list of proofs that can be used as ecash
-    #     """
-    #     logger.trace("Constructing proofs.")
-    #     proofs: List[Proof] = []
-    #     for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
-    #         logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
-    #         assert (
-    #             self.keyset_id == promise.id
-    #         ), "our keyset id does not match promise id."
-
-    #         C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
-    #         C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
-    #         B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
-
-    #         proof = Proof(
-    #             id=promise.id,
-    #             amount=promise.amount,
-    #             C=C.serialize().hex(),
-    #             secret=secret,
-    #             derivation_path=path,
-    #         )
-
-    #         # if the mint returned a dleq proof, we add it to the proof
-    #         if promise.dleq:
-    #             proof.dleq = DLEQWallet(
-    #                 e=promise.dleq.e, s=promise.dleq.s, r=r.serialize()
-    #             )
-
-    #         proofs.append(proof)
-
-    #         logger.trace(
-    #             f"Created proof: {proof}, r: {r.serialize()} out of promise {promise}"
-    #         )
-
-    #     # DLEQ verify
-    #     self.verify_proofs_dleq(proofs)
-
-    #     logger.trace(f"Constructed {len(proofs)} proofs.")
-    #     return proofs
-
-    # @staticmethod
-    # def _construct_outputs(
-    #     amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
-    # ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
-    #     """Takes a list of amounts and secrets and returns outputs.
-    #     Outputs are blinded messages `outputs` and blinding factors `rs`
-
-    #     Args:
-    #         amounts (List[int]): list of amounts
-    #         secrets (List[str]): list of secrets
-    #         rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
-
-    #     Returns:
-    #         List[BlindedMessage]: list of blinded messages that can be sent to the mint
-    #         List[PrivateKey]: list of blinding factors that can be used to construct proofs after receiving blind signatures from the mint
-
-    #     Raises:
-    #         AssertionError: if len(amounts) != len(secrets)
-    #     """
-    #     assert len(amounts) == len(
-    #         secrets
-    #     ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
-    #     outputs: List[BlindedMessage] = []
-
-    #     rs_ = [None] * len(amounts) if not rs else rs
-    #     rs_return: List[PrivateKey] = []
-    #     for secret, amount, r in zip(secrets, amounts, rs_):
-    #         B_, r = b_dhke.step1_alice(secret, r or None)
-    #         rs_return.append(r)
-    #         output = BlindedMessage(amount=amount, B_=B_.serialize().hex())
-    #         outputs.append(output)
-    #         logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
-
-    #     return outputs, rs_return
 
     @staticmethod
     def raise_on_error(resp: Response) -> None:
@@ -1047,7 +923,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletSecrets):
 
     async def _store_proofs(self, proofs):
         try:
-            async with self.db.connect() as conn:
+            async with self.db.connect() as conn:  # type: ignore
                 for proof in proofs:
                     await store_proof(proof, db=self.db, conn=conn)
         except Exception as e:
