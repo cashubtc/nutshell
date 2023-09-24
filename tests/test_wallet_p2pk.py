@@ -360,6 +360,12 @@ def test_tags():
     assert tags["key3"] is None
     assert tags.get_tag_all("key2") == ["value2", "value2_1", "value3"]
 
+    # set multiple values of the same key
+    tags["key3"] = "value3"
+    assert tags.get_tag_all("key3") == ["value3"]
+    tags["key4"] = ["value4", "value4_2"]
+    assert tags.get_tag_all("key4") == ["value4", "value4_2"]
+
 
 @pytest.mark.asyncio
 async def test_secret_initialized_with_tags(wallet1: Wallet):
@@ -370,11 +376,8 @@ async def test_secret_initialized_with_tags(wallet1: Wallet):
         pubkey=pubkey.serialize().hex(),
         tags=tags,
     )
-    assert secret.locktime
     assert secret.locktime == 100
-    assert secret.n_sigs
     assert secret.n_sigs == 3
-    assert secret.sigflag
     assert secret.sigflag == SigFlags.SIG_ALL
 
 
@@ -390,7 +393,5 @@ async def test_secret_initialized_with_arguments(wallet1: Wallet):
     )
     assert secret.locktime
     assert secret.locktime > 1689000000
-    assert secret.n_sigs
     assert secret.n_sigs == 3
-    assert secret.sigflag
     assert secret.sigflag == SigFlags.SIG_ALL

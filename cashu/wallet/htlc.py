@@ -22,7 +22,7 @@ class WalletHTLC(SupportsDb):
         *,
         preimage: Optional[str] = None,
         preimage_hash: Optional[str] = None,
-        hacklock_pubkey: Optional[str] = None,
+        hashlock_pubkey: Optional[str] = None,
         locktime_seconds: Optional[int] = None,
         locktime_pubkey: Optional[str] = None,
     ) -> HTLCSecret:
@@ -39,8 +39,8 @@ class WalletHTLC(SupportsDb):
 
         assert preimage_hash, "preimage_hash or preimage must be provided"
 
-        if hacklock_pubkey:
-            tags["pubkeys"] = hacklock_pubkey
+        if hashlock_pubkey:
+            tags["pubkeys"] = hashlock_pubkey
 
         return HTLCSecret(
             kind=SecretKind.HTLC,
