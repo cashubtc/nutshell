@@ -360,6 +360,12 @@ def test_tags():
     assert tags["key3"] is None
     assert tags.get_tag_all("key2") == ["value2", "value2_1", "value3"]
 
+    # set multiple values of the same key
+    tags["key3"] = "value3"
+    assert tags.get_tag_all("key3") == ["value3"]
+    tags["key3"] = "value4"
+    assert tags.get_tag_all("key3") == ["value3", "value4"]
+
 
 @pytest.mark.asyncio
 async def test_secret_initialized_with_tags(wallet1: Wallet):

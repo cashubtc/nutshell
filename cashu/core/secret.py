@@ -25,7 +25,12 @@ class Tags(BaseModel):
         self.__root__ = tags or []
 
     def __setitem__(self, key: str, value: str) -> None:
-        self.__root__.append([key, value])
+        if self.get_tag(key) is None:
+            self.__root__.append([key, value])
+        else:
+            for tag in self.__root__:
+                if tag[0] == key:
+                    tag.append(value)
 
     def __getitem__(self, key: str) -> Union[str, None]:
         return self.get_tag(key)
