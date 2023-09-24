@@ -76,7 +76,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             derivation_path=derivation_path,
             version=settings.version,
         )
-        # load the keyest from db
+        # load the keyset from db
         logger.trace(f"crud: loading keyset for {derivation_path}")
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
             derivation_path=derivation_path, db=self.db
@@ -107,7 +107,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.debug(f"Loaded keyset {keyset.id}.")
         return keyset
 
-    async def init_keysets(self, autosave=True):
+    async def init_keysets(self, autosave=True) -> None:
         """Initializes all keysets of the mint from the db. Loads all past keysets and generate their keys. Then load the current keyset.
 
         Args:
@@ -138,7 +138,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
 
-    def get_keyset(self, keyset_id: Optional[str] = None):
+    def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
         if keyset_id and keyset_id not in self.keysets.keysets:
             raise KeysetNotFoundError()
@@ -148,7 +148,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     # ------- LIGHTNING -------
 
-    async def _request_lightning_invoice(self, amount: int):
+    async def _request_lightning_invoice(self, amount: int) -> Tuple[str, str]:
         """Generate a Lightning invoice using the funding source backend.
 
         Args:
@@ -176,6 +176,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         ) = await self.lightning.create_invoice(amount, "Cashu deposit")
         logger.trace(
             f"_request_lightning_invoice: Lightning invoice: {payment_request}"
+        )
+
+        if not ok:
+            raise LightningError(f"Lightning wallet error: {error_message}")
+        assert payment_request and checking_id, LightningError(
+            "could not fetch invoice from Lightning backend"
         )
         return payment_request, checking_id
 
@@ -249,7 +255,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     # ------- ECASH -------
 
-    async def _invalidate_proofs(self, proofs: List[Proof]):
+    async def _invalidate_proofs(self, proofs: List[Proof]) -> None:
         """Adds secrets of proofs to the list of known secrets and stores them in the db.
         Removes proofs from pending table. This is executed if the ecash has been redeemed.
 
@@ -270,7 +276,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         ln_fee_msat: int,
         outputs: Optional[List[BlindedMessage]],
         keyset: Optional[MintKeyset] = None,
-    ):
+    ) -> List[BlindedSignature]:
         """Generates a set of new promises (blinded signatures) from a set of blank outputs
         (outputs with no or ignored amount) by looking at the difference between the Lightning
         fee reserve provided by the wallet and the actual Lightning fee paid by the mint.
@@ -327,7 +333,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     # ------- TRANSACTIONS -------
 
-    async def request_mint(self, amount: int):
+    async def request_mint(self, amount: int) -> Tuple[str, str]:
         """Returns Lightning invoice and stores it in the db.
 
         Args:
@@ -371,7 +377,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         B_s: List[BlindedMessage],
         hash: Optional[str] = None,
         keyset: Optional[MintKeyset] = None,
-    ):
+    ) -> List[BlindedSignature]:
         """Mints a promise for coins for B_.
 
         Args:
@@ -416,7 +422,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     async def melt(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
-    ):
+    ) -> Tuple[bool, str, List[BlindedSignature]]:
         """Invalidates proofs and pays a Lightning invoice.
 
         Args:
@@ -459,6 +465,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 status, preimage, fee_msat = await self._pay_lightning_invoice(
                     invoice, fees_sat * 1000
                 )
+                preimage = preimage or ""
                 logger.trace("paid lightning invoice")
             else:
                 status, preimage, fee_msat = True, "preimage", 0
@@ -668,18 +675,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     # ------- PROOFS -------
 
-    async def load_used_proofs(self):
+    async def load_used_proofs(self) -> None:
         """Load all used proofs from database."""
         logger.trace("crud: loading used proofs")
         secrets_used = await self.crud.get_secrets_used(db=self.db)
         logger.trace(f"crud: loaded {len(secrets_used)} used proofs")
         self.secrets_used = set(secrets_used)
 
-    def _check_spendable(self, proof: Proof):
+    def _check_spendable(self, proof: Proof) -> bool:
         """Checks whether the proof was already spent."""
         return proof.secret not in self.secrets_used
 
-    async def _check_pending(self, proofs: List[Proof]):
+    async def _check_pending(self, proofs: List[Proof]) -> List[bool]:
         """Checks whether the proof is still pending."""
         proofs_pending = await self.crud.get_proofs_pending(db=self.db)
         pending_secrets = [pp.secret for pp in proofs_pending]
@@ -711,7 +718,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     async def _set_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
-    ):
+    ) -> None:
         """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
         the list of pending proofs or removes them. Used as a mutex for proofs.
 
@@ -732,7 +739,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     async def _unset_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
-    ):
+    ) -> None:
         """Deletes proofs from pending table.
 
         Args:
@@ -744,7 +751,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     async def _validate_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
-    ):
+    ) -> None:
         """Checks if any of the provided proofs is in the pending proofs table.
 
         Args:
