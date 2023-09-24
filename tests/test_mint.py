@@ -66,13 +66,14 @@ async def test_get_keyset(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint(ledger: Ledger):
+    invoice, payment_hash = await ledger.request_mint(8)
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
             B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
         )
     ]
-    promises = await ledger.mint(blinded_messages_mock)
+    promises = await ledger.mint(blinded_messages_mock, hash=payment_hash)
     assert len(promises)
     assert promises[0].amount == 8
     assert (
@@ -83,6 +84,7 @@ async def test_mint(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint_invalid_blinded_message(ledger: Ledger):
+    invoice, payment_hash = await ledger.request_mint(8)
     blinded_messages_mock_invalid_key = [
         BlindedMessage(
             amount=8,
@@ -90,7 +92,8 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
         )
     ]
     await assert_err(
-        ledger.mint(blinded_messages_mock_invalid_key), "invalid public key"
+        ledger.mint(blinded_messages_mock_invalid_key, hash=payment_hash),
+        "invalid public key",
     )
 
 
