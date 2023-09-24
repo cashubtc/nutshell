@@ -136,15 +136,17 @@ async def test_get_keyset_ids(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_mint(wallet1: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     assert wallet1.balance == 64
 
 
 @pytest.mark.asyncio
 async def test_mint_amounts(wallet1: Wallet):
     """Mint predefined amounts"""
+    invoice = await wallet1.request_mint(64)
     amts = [1, 1, 1, 2, 2, 4, 16]
-    await wallet1.mint(amount=sum(amts), split=amts)
+    await wallet1.mint(amount=sum(amts), split=amts, hash=invoice.hash)
     assert wallet1.balance == 27
     assert wallet1.proof_amounts == amts
 
@@ -171,7 +173,8 @@ async def test_mint_amounts_wrong_order(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_split(wallet1: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     assert wallet1.balance == 64
     p1, p2 = await wallet1.split(wallet1.proofs, 20)
     assert wallet1.balance == 64
@@ -185,7 +188,8 @@ async def test_split(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_split_to_send(wallet1: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     keep_proofs, spendable_proofs = await wallet1.split_to_send(
         wallet1.proofs, 32, set_reserved=True
     )
@@ -199,7 +203,8 @@ async def test_split_to_send(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_split_more_than_balance(wallet1: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     await assert_err(
         wallet1.split(wallet1.proofs, 128),
         # "Mint Error: inputs do not have same amount as outputs",
@@ -209,8 +214,26 @@ async def test_split_more_than_balance(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_melt(wallet1: Wallet):
+    # mint twice so we have enough to pay the second invoice back
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
+    assert wallet1.balance == 128
+    total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(invoice.pr)
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
+
+    await wallet1.pay_lightning(
+        send_proofs, invoice=invoice.pr, fee_reserve_sat=fee_reserve_sat
+    )
+    assert wallet1.balance == 128 - total_amount
+
+
+@pytest.mark.asyncio
 async def test_split_to_send_more_than_balance(wallet1: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     await assert_err(
         wallet1.split_to_send(wallet1.proofs, 128, set_reserved=True),
         "balance too low.",
@@ -221,7 +244,8 @@ async def test_split_to_send_more_than_balance(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_double_spend(wallet1: Wallet):
-    doublespend = await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    doublespend = await wallet1.mint(64, hash=invoice.hash)
     await wallet1.split(wallet1.proofs, 20)
     await assert_err(
         wallet1.split(doublespend, 20),
@@ -233,7 +257,8 @@ async def test_double_spend(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_duplicate_proofs_double_spent(wallet1: Wallet):
-    doublespend = await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    doublespend = await wallet1.mint(64, hash=invoice.hash)
     await assert_err(
         wallet1.split(wallet1.proofs + doublespend, 20),
         "Mint Error: proofs already pending.",
@@ -244,7 +269,8 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     _, spendable_proofs = await wallet1.split_to_send(
         wallet1.proofs, 32, set_reserved=True
     )
@@ -261,7 +287,8 @@ async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_invalidate_unspent_proofs(wallet1: Wallet):
     """Try to invalidate proofs that have not been spent yet. Should not work!"""
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     await wallet1.invalidate(wallet1.proofs)
     assert wallet1.balance == 64
 
@@ -269,14 +296,16 @@ async def test_invalidate_unspent_proofs(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_invalidate_unspent_proofs_without_checking(wallet1: Wallet):
     """Try to invalidate proofs that have not been spent yet but force no check."""
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     await wallet1.invalidate(wallet1.proofs, check_spendable=False)
     assert wallet1.balance == 0
 
 
 @pytest.mark.asyncio
 async def test_split_invalid_amount(wallet1: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     await assert_err(
         wallet1.split(wallet1.proofs, -1),
         "amount must be positive.",
@@ -285,14 +314,16 @@ async def test_split_invalid_amount(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_create_p2pk_pubkey(wallet1: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     pubkey = await wallet1.create_p2pk_pubkey()
     PublicKey(bytes.fromhex(pubkey), raw=True)
 
 
 @pytest.mark.asyncio
 async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     _ = await wallet1.create_p2sh_address_and_store()  # receiver side
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8)  # sender side
 
@@ -305,7 +336,8 @@ async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
 
 @pytest.mark.asyncio
 async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     wallet1_address = await wallet1.create_p2sh_address_and_store()  # receiver side
     secret_lock = await wallet1.create_p2sh_lock(wallet1_address)  # sender side
     _, send_proofs = await wallet1.split_to_send(
@@ -316,7 +348,8 @@ async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
 
 @pytest.mark.asyncio
 async def test_token_state(wallet1: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     assert wallet1.balance == 64
     resp = await wallet1.check_proof_state(wallet1.proofs)
     assert resp.dict()["spendable"]
@@ -329,11 +362,11 @@ async def test_bump_secret_derivation(wallet3: Wallet):
         "half depart obvious quality work element tank gorilla view sugar picture"
         " humble"
     )
-    secrets1, rs1, derivaion_paths1 = await wallet3.generate_n_secrets(5)
-    secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(0, 4)
+    secrets1, rs1, derivation_paths1 = await wallet3.generate_n_secrets(5)
+    secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
-    assert derivaion_paths1 == derivaion_paths2
+    assert derivation_paths1 == derivation_paths2
     assert secrets1 == [
         "9bfb12704297fe90983907d122838940755fcce370ce51e9e00a4275a347c3fe",
         "dbc5e05f2b1f24ec0e2ab6e8312d5e13f57ada52594d4caf429a697d9c742490",
@@ -341,7 +374,7 @@ async def test_bump_secret_derivation(wallet3: Wallet):
         "652d08c804bd2c5f2c1f3e3d8895860397df394b30473753227d766affd15e89",
         "654e5997f8a20402f7487296b6f7e463315dd52fc6f6cc5a4e35c7f6ccac77e0",
     ]
-    assert derivaion_paths1 == [
+    assert derivation_paths1 == [
         "m/129372'/0'/2004500376'/0'",
         "m/129372'/0'/2004500376'/1'",
         "m/129372'/0'/2004500376'/2'",
@@ -356,11 +389,11 @@ async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
         "half depart obvious quality work element tank gorilla view sugar picture"
         " humble"
     )
-    secrets1_1, rs1_1, derivaion_paths1 = await wallet3.generate_n_secrets(2)
-    secrets1_2, rs1_2, derivaion_paths2 = await wallet3.generate_n_secrets(3)
+    secrets1_1, rs1_1, derivation_paths1 = await wallet3.generate_n_secrets(2)
+    secrets1_2, rs1_2, derivation_paths2 = await wallet3.generate_n_secrets(3)
     secrets1 = secrets1_1 + secrets1_2
     rs1 = rs1_1 + rs1_2
-    secrets2, rs2, derivaion_paths = await wallet3.generate_secrets_from_to(0, 4)
+    secrets2, rs2, derivation_paths = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
 
@@ -371,9 +404,9 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
         "half depart obvious quality work element tank gorilla view sugar picture"
         " humble"
     )
-    secrets1, rs1, derivaion_paths1 = await wallet3.generate_secrets_from_to(0, 4)
+    secrets1, rs1, derivation_paths1 = await wallet3.generate_secrets_from_to(0, 4)
     assert len(secrets1) == 5
-    secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(2, 4)
+    secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(2, 4)
     assert len(secrets2) == 3
     assert secrets1[2:] == secrets2
     assert [r.private_key for r in rs1[2:]] == [r.private_key for r in rs2]
@@ -382,7 +415,8 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
 @pytest.mark.asyncio
 async def test_restore_wallet_after_mint(wallet3: Wallet):
     await reset_wallet_db(wallet3)
-    await wallet3.mint(64)
+    invoice = await wallet3.request_mint(64)
+    await wallet3.mint(64, hash=invoice.hash)
     assert wallet3.balance == 64
     await reset_wallet_db(wallet3)
     await wallet3.load_proofs()
@@ -411,7 +445,8 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
     )
     await reset_wallet_db(wallet3)
 
-    await wallet3.mint(64)
+    invoice = await wallet3.request_mint(64)
+    await wallet3.mint(64, hash=invoice.hash)
     assert wallet3.balance == 64
 
     _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 32, set_reserved=True)  # type: ignore
@@ -432,8 +467,8 @@ async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: W
         "hello rug want adapt talent together lunar method bean expose beef position"
     )
     await reset_wallet_db(wallet3)
-
-    await wallet3.mint(64)
+    invoice = await wallet3.request_mint(64)
+    await wallet3.mint(64, hash=invoice.hash)
     assert wallet3.balance == 64
 
     _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 32, set_reserved=True)  # type: ignore
@@ -472,7 +507,8 @@ async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
     )
     await reset_wallet_db(wallet3)
 
-    await wallet3.mint(64)
+    invoice = await wallet3.request_mint(64)
+    await wallet3.mint(64, hash=invoice.hash)
     assert wallet3.balance == 64
 
     _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 32, set_reserved=True)  # type: ignore
@@ -497,7 +533,8 @@ async def test_restore_wallet_after_send_twice(
     wallet3.private_key = PrivateKey()
     await reset_wallet_db(wallet3)
 
-    await wallet3.mint(2)
+    invoice = await wallet3.request_mint(2)
+    await wallet3.mint(2, hash=invoice.hash)
     box.add(wallet3.proofs)
     assert wallet3.balance == 2
 
@@ -550,7 +587,8 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     )
     await reset_wallet_db(wallet3)
 
-    await wallet3.mint(64)
+    invoice = await wallet3.request_mint(64)
+    await wallet3.mint(64, hash=invoice.hash)
     box.add(wallet3.proofs)
     assert wallet3.balance == 64
 

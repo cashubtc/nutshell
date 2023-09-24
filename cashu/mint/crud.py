@@ -17,8 +17,8 @@ class LedgerCrud:
     async def get_lightning_invoice(*args, **kwags):
         return await get_lightning_invoice(*args, **kwags)  # type: ignore
 
-    async def get_proofs_used(*args, **kwags):
-        return await get_proofs_used(*args, **kwags)  # type: ignore
+    async def get_secrets_used(*args, **kwags):
+        return await get_secrets_used(*args, **kwags)  # type: ignore
 
     async def invalidate_proof(*args, **kwags):
         return await invalidate_proof(*args, **kwags)  # type: ignore
@@ -91,7 +91,7 @@ async def get_promise(
     return BlindedSignature(amount=row[0], C_=row[2], id=row[3]) if row else None
 
 
-async def get_proofs_used(
+async def get_secrets_used(
     db: Database,
     conn: Optional[Connection] = None,
 ):

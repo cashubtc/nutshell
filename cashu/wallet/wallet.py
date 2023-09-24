@@ -1220,6 +1220,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
             is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
             displayed to the user to be then sent to someone else. Defaults to False.
+
+        Returns:
+            Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
         """
         if secret_lock:
             logger.debug(f"Spending conditions: {secret_lock}")

@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional, Union
+from typing import List, Literal, Optional, Set, Union
 
 from loguru import logger
 
@@ -15,6 +15,7 @@ from ..core.errors import (
     NoSecretInProofsError,
     NotAllowedError,
     SecretTooLongError,
+    TokenAlreadySpentError,
     TransactionError,
 )
 from ..core.settings import settings
@@ -27,8 +28,9 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
 
     keyset: MintKeyset
     keysets: MintKeysets
+    secrets_used: Set[str]
 
-    async def _verify_proofs_and_outputs(
+    async def verify_inputs_and_outputs(
         self, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
     ):
         """Checks all proofs and outputs for validity.
@@ -45,33 +47,50 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
             Exception: BDHKE verification failed.
         """
         # Verify inputs
-
+        # Verify proofs are spendable
+        self._check_proofs_spendable(proofs)
+        # Verify amounts of inputs
+        if not all([self._verify_amount(p.amount) for p in proofs]):
+            raise TransactionError("invalid amount.")
         # Verify secret criteria
         if not all([self._verify_secret_criteria(p) for p in proofs]):
             raise TransactionError("secrets do not match criteria.")
         # verify that only unique proofs were used
         if not self._verify_no_duplicate_proofs(proofs):
             raise TransactionError("duplicate proofs.")
-        # Verify input spending conditions
-        if not all([self._verify_input_spending_conditions(p) for p in proofs]):
-            raise TransactionError("validation of input spending conditions failed.")
         # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
             raise TransactionError("could not verify proofs.")
+        # Verify input spending conditions
+        if not all([self._verify_input_spending_conditions(p) for p in proofs]):
+            raise TransactionError("validation of input spending conditions failed.")
 
         if not outputs:
             return
 
         # Verify outputs
+        self._verify_outputs(outputs)
 
-        # verify that only unique outputs were used
-        if not self._verify_no_duplicate_outputs(outputs):
-            raise TransactionError("duplicate promises.")
+        # Verify inputs and outputs together
         if not self._verify_input_output_amounts(proofs, outputs):
             raise TransactionError("input amounts less than output.")
         # Verify output spending conditions
         if outputs and not self._verify_output_spending_conditions(proofs, outputs):
             raise TransactionError("validation of output spending conditions failed.")
+
+    def _verify_outputs(self, outputs: List[BlindedMessage]):
+        """Verify that the outputs are valid."""
+        # Verify amounts of outputs
+        if not all([self._verify_amount(o.amount) for o in outputs]):
+            raise TransactionError("invalid amount.")
+        # verify that only unique outputs were used
+        if not self._verify_no_duplicate_outputs(outputs):
+            raise TransactionError("duplicate outputs.")
+
+    def _check_proofs_spendable(self, proofs: List[Proof]):
+        """Checks whether the proofs were already spent."""
+        if not all([p.secret not in self.secrets_used for p in proofs]):
+            raise TokenAlreadySpentError()
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""

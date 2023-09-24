@@ -56,14 +56,16 @@ async def wallet2(mint):
 
 @pytest.mark.asyncio
 async def test_create_p2pk_pubkey(wallet1: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     pubkey = await wallet1.create_p2pk_pubkey()
     PublicKey(bytes.fromhex(pubkey), raw=True)
 
 
 @pytest.mark.asyncio
 async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     _ = await wallet1.create_p2sh_address_and_store()  # receiver side
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8)  # sender side
 
@@ -76,7 +78,8 @@ async def test_p2sh(wallet1: Wallet, wallet2: Wallet):
 
 @pytest.mark.asyncio
 async def test_p2sh_receive_with_wrong_wallet(wallet1: Wallet, wallet2: Wallet):
-    await wallet1.mint(64)
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
     wallet1_address = await wallet1.create_p2sh_address_and_store()  # receiver side
     secret_lock = await wallet1.create_p2sh_lock(wallet1_address)  # sender side
     _, send_proofs = await wallet1.split_to_send(
