@@ -363,8 +363,8 @@ def test_tags():
     # set multiple values of the same key
     tags["key3"] = "value3"
     assert tags.get_tag_all("key3") == ["value3"]
-    tags["key3"] = "value4"
-    assert tags.get_tag_all("key3") == ["value3", "value4"]
+    tags["key4"] = ["value4", "value4_2"]
+    assert tags.get_tag_all("key4") == ["value4", "value4_2"]
 
 
 @pytest.mark.asyncio

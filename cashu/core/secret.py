@@ -24,13 +24,11 @@ class Tags(BaseModel):
         super().__init__(**kwargs)
         self.__root__ = tags or []
 
-    def __setitem__(self, key: str, value: str) -> None:
-        if self.get_tag(key) is None:
+    def __setitem__(self, key: str, value: Union[str, List[str]]) -> None:
+        if isinstance(value, str):
             self.__root__.append([key, value])
-        else:
-            for tag in self.__root__:
-                if tag[0] == key:
-                    tag.append(value)
+        elif isinstance(value, list):
+            self.__root__.append([key, *value])
 
     def __getitem__(self, key: str) -> Union[str, None]:
         return self.get_tag(key)
