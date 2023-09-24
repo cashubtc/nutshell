@@ -102,6 +102,8 @@ class FakeWallet(Wallet):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
+        # paid = random.random() > 0.7
+        # return PaymentStatus(paid)
         paid = checking_id in self.paid_invoices or BRR
         return PaymentStatus(paid or None)
 

@@ -88,6 +88,7 @@ async def pay(
 
     global wallet
     wallet = await mint_wallet(mint)
+    await wallet.load_proofs(reload=True)
 
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
     assert total_amount > 0, "amount has to be larger than zero."
@@ -224,11 +225,11 @@ async def send_command(
     global wallet
     if not nostr:
         balance, token = await send(
-            wallet, amount, lock, legacy=False, split=not nosplit
+            wallet, amount=amount, lock=lock, legacy=False, split=not nosplit
         )
         return SendResponse(balance=balance, token=token)
     else:
-        token, pubkey = await send_nostr(wallet, amount, nostr)
+        token, pubkey = await send_nostr(wallet, amount=amount, pubkey=nostr)
         return SendResponse(balance=wallet.available_balance, token=token, npub=pubkey)
 
 
@@ -282,9 +283,9 @@ async def burn(
         wallet = await mint_wallet(mint)
     if not (all or token or force or delete) or (token and all):
         raise Exception(
-            "enter a token or use --all to burn all pending tokens, --force to check"
-            " all tokensor --delete with send ID to force-delete pending token from"
-            " list if mint is unavailable.",
+            "enter a token or use --all to burn all pending tokens, --force to"
+            " check all tokensor --delete with send ID to force-delete pending"
+            " token from list if mint is unavailable.",
         )
     if all:
         # check only those who are flagged as reserved
@@ -324,7 +325,7 @@ async def pending(
             enumerate(
                 groupby(
                     sorted_proofs,
-                    key=itemgetter("send_id"),
+                    key=itemgetter("send_id"),  # type: ignore
                 )
             ),
             offset,
@@ -333,9 +334,9 @@ async def pending(
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
             tokenObj = deserialize_token_from_string(token)
-            mint = [t.mint for t in tokenObj.token][0]
+            mint = [t.mint for t in tokenObj.token if t.mint][0]
             reserved_date = datetime.utcfromtimestamp(
-                int(grouped_proofs[0].time_reserved)
+                int(grouped_proofs[0].time_reserved)  # type: ignore
             ).strftime("%Y-%m-%d %H:%M:%S")
             result.update(
                 {
@@ -414,7 +415,7 @@ async def restore(
     if to < 0:
         raise Exception("Counter must be positive")
     await wallet.load_mint()
-    await wallet.restore_promises(0, to)
+    await wallet.restore_promises_from_to(0, to)
     await wallet.invalidate(wallet.proofs)
     wallet.status()
     return RestoreResponse(balance=wallet.available_balance)

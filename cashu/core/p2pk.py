@@ -1,6 +1,77 @@
 import hashlib
+import time
+from typing import List, Union
+
+from loguru import logger
+from pydantic import BaseModel
 
 from .crypto.secp import PrivateKey, PublicKey
+from .secret import Secret, SecretKind
+
+
+class SigFlags:
+    SIG_INPUTS = (  # require signatures only on the inputs (default signature flag)
+        "SIG_INPUTS"
+    )
+    SIG_ALL = "SIG_ALL"  # require signatures on inputs and outputs
+
+
+class P2PKSecret(Secret):
+    @classmethod
+    def from_secret(cls, secret: Secret):
+        assert secret.kind == SecretKind.P2PK, "Secret is not a P2PK secret"
+        # NOTE: exclude tags in .dict() because it doesn't deserialize it properly
+        # need to add it back in manually with tags=secret.tags
+        return cls(**secret.dict(exclude={"tags"}), tags=secret.tags)
+
+    def get_p2pk_pubkey_from_secret(self) -> List[str]:
+        """Gets the P2PK pubkey from a Secret depending on the locktime
+
+        Args:
+            secret (Secret): P2PK Secret in ecash token
+
+        Returns:
+            str: pubkey to use for P2PK, empty string if anyone can spend (locktime passed)
+        """
+        # the pubkey in the data field is the pubkey to use for P2PK
+        pubkeys: List[str] = [self.data]
+
+        # get all additional pubkeys from tags for multisig
+        pubkeys += self.tags.get_tag_all("pubkeys")
+
+        # check if locktime is passed and if so, only return refund pubkeys
+        now = time.time()
+        if self.locktime and self.locktime < now:
+            logger.trace(f"p2pk locktime ran out ({self.locktime}<{now}).")
+            # check tags if a refund pubkey is present.
+            # If yes, we demand the signature to be from the refund pubkey
+            return self.tags.get_tag_all("refund")
+
+        return pubkeys
+
+    @property
+    def locktime(self) -> Union[None, int]:
+        locktime = self.tags.get_tag("locktime")
+        return int(locktime) if locktime else None
+
+    @property
+    def sigflag(self) -> Union[None, str]:
+        return self.tags.get_tag("sigflag")
+
+    @property
+    def n_sigs(self) -> Union[None, int]:
+        n_sigs = self.tags.get_tag("n_sigs")
+        return int(n_sigs) if n_sigs else None
+
+
+class P2SHScript(BaseModel):
+    """
+    Unlocks P2SH spending condition of a Proof
+    """
+
+    script: str
+    signature: str
+    address: Union[str, None] = None
 
 
 def sign_p2pk_sign(message: bytes, private_key: PrivateKey):

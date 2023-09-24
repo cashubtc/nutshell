@@ -31,15 +31,77 @@ def test_tokenv3_get_proofs():
     assert len(token.get_proofs()) == 2
 
 
+def test_tokenv3_deserialize_serialize_with_dleq():
+    token_str = (
+        "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjFjQ05JQVoyWC93M"
+        "SIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIjZmZjFiY2VlOGUzMzk2NGE4ZDNjNGQ5NzYwNzdiZ"
+        "DI4ZGVkZWJkODYyMDU0MDQzNDY4ZjU5ZDFiZjI1OTQzN2QiLCAiQyI6ICIwM2I3ZD"
+        "lkMzIzYTAxOWJlNTE4NzRlOGE5OGY1NDViOTg3Y2JmNmU5MWUwMDc1YTFhZjQ3MjY2NDMxOGRlZ"
+        "TQzZTUiLCAiZGxlcSI6IHsiZSI6ICI1ZjkxMGQ4NTc0M2U0OTI0ZjRiNjlkNzhjM"
+        "jFjYTc1ZjEzNzg3Zjc3OTE1NWRmMjMzMjJmYTA1YjU5ODdhYzNmIiwgInMiOiAiZTc4Y2U0MzNiZ"
+        "WNlZTNjNGU1NzM4ZDdjMzRlNDQyZWQ0MmJkMzk0MjI0ZTc3MjE4OGFjMmI5MzZmM"
+        "jA2Y2QxYSIsICJyIjogIjI3MzM3ODNmOTQ4MWZlYzAxNzdlYmM4ZjBhOTI2OWVjOGFkNzU5MDU2ZT"
+        "k3MTRiMWEwYTEwMDQ3MmY2Y2Y5YzIifX0sIHsiaWQiOiAiMWNDTklBWjJYL3cxIi"
+        "wgImFtb3VudCI6IDgsICJzZWNyZXQiOiAiMmFkNDMyZDRkNTg2MzJiMmRlMzI0ZmQxYmE5OTcyZmE"
+        "4MDljNmU3ZGE1ZTkyZWVmYjBiNjYxMmQ5M2Q3ZTAwMCIsICJDIjogIjAzMmFmYjg"
+        "zOWQwMmRmMWNhOGY5ZGZjNTI1NzUxN2Q0MzY4YjdiMTc0MzgzM2JlYWUzZDQzNmExYmQwYmJkYjVk"
+        "OCIsICJkbGVxIjogeyJlIjogImY0NjM2MzU5YTUzZGQxNGEyNmUyNTMyMDQxZWIx"
+        "MDE2OTk1ZTg4NzgwODY0OWFlY2VlNTcwZTA5ZTk2NTU3YzIiLCAicyI6ICJmZWYzMGIzMDcwMDJkMW"
+        "VjNWZiZjg0ZGZhZmRkMGEwOTdkNDJlMDYxNTZiNzdiMTMzMmNjNGZjNGNjYWEyOD"
+        "JmIiwgInIiOiAiODQ5MjQxNzBlYzc3ZjhjMDNmZDRlZTkyZTA3MjdlMzYyNTliZjRhYTc4NTBjZTc2"
+        "NDExMDQ0MmNlNmVlM2FjYyJ9fV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCJ9XX0="
+    )
+    token = TokenV3.deserialize(token_str)
+    assert token.serialize(include_dleq=True) == token_str
+
+
 def test_tokenv3_deserialize_serialize():
     token_str = (
-        "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIkplaFpMVTZuQ3BSZCIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIjBFN2lDazRkVmxSZjVQRjFnNFpWMnci"
-        "LCAiQyI6ICIwM2FiNTgwYWQ5NTc3OGVkNTI5NmY4YmVlNjU1ZGJkN2Q2NDJmNWQzMmRlOGUyNDg0NzdlMGI0ZDZhYTg2M2ZjZDUifSwgeyJpZCI6ICJKZWhaTFU2bkNwUmQiLCAiYW"
-        "1vdW50IjogOCwgInNlY3JldCI6ICJzNklwZXh3SGNxcXVLZDZYbW9qTDJnIiwgIkMiOiAiMDIyZDAwNGY5ZWMxNmE1OGFkOTAxNGMyNTliNmQ2MTRlZDM2ODgyOWYwMmMzODc3M2M0"
+        "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIkplaFpMVTZuQ3BSZCIsICJh"
+        "bW91bnQiOiAyLCAic2VjcmV0IjogIjBFN2lDazRkVmxSZjVQRjFnNFpWMnci"
+        "LCAiQyI6ICIwM2FiNTgwYWQ5NTc3OGVkNTI5NmY4YmVlNjU1ZGJkN2Q2NDJmNWQzMmRlOG"
+        "UyNDg0NzdlMGI0ZDZhYTg2M2ZjZDUifSwgeyJpZCI6ICJKZWhaTFU2bkNwUmQiLCAiYW"
+        "1vdW50IjogOCwgInNlY3JldCI6ICJzNklwZXh3SGNxcXVLZDZYbW9qTDJnIiwgIkMiOiAiM"
+        "DIyZDAwNGY5ZWMxNmE1OGFkOTAxNGMyNTliNmQ2MTRlZDM2ODgyOWYwMmMzODc3M2M0"
         "NzIyMWY0OTYxY2UzZjIzIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV19"
     )
     token = TokenV3.deserialize(token_str)
     assert token.serialize() == token_str
+
+
+def test_tokenv3_deserialize_serialize_no_dleq():
+    token_str = (
+        "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjFjQ05JQVoyWC93MSIsICJhb"
+        "W91bnQiOiAyLCAic2VjcmV0IjogIjZmZjFiY2VlOGUzMzk2NGE4ZDNjNGQ5NzYwNzdiZ"
+        "DI4ZGVkZWJkODYyMDU0MDQzNDY4ZjU5ZDFiZjI1OTQzN2QiLCAiQyI6ICIwM2I3ZDlkMzIzY"
+        "TAxOWJlNTE4NzRlOGE5OGY1NDViOTg3Y2JmNmU5MWUwMDc1YTFhZjQ3MjY2NDMxOGRlZ"
+        "TQzZTUiLCAiZGxlcSI6IHsiZSI6ICI1ZjkxMGQ4NTc0M2U0OTI0ZjRiNjlkNzhjMjFjYTc1Z"
+        "jEzNzg3Zjc3OTE1NWRmMjMzMjJmYTA1YjU5ODdhYzNmIiwgInMiOiAiZTc4Y2U0MzNiZ"
+        "WNlZTNjNGU1NzM4ZDdjMzRlNDQyZWQ0MmJkMzk0MjI0ZTc3MjE4OGFjMmI5MzZmMjA2Y2QxY"
+        "SIsICJyIjogIjI3MzM3ODNmOTQ4MWZlYzAxNzdlYmM4ZjBhOTI2OWVjOGFkNzU5MDU2ZT"
+        "k3MTRiMWEwYTEwMDQ3MmY2Y2Y5YzIifX0sIHsiaWQiOiAiMWNDTklBWjJYL3cxIiwgImFtb3"
+        "VudCI6IDgsICJzZWNyZXQiOiAiMmFkNDMyZDRkNTg2MzJiMmRlMzI0ZmQxYmE5OTcyZmE"
+        "4MDljNmU3ZGE1ZTkyZWVmYjBiNjYxMmQ5M2Q3ZTAwMCIsICJDIjogIjAzMmFmYjgzOWQwMmR"
+        "mMWNhOGY5ZGZjNTI1NzUxN2Q0MzY4YjdiMTc0MzgzM2JlYWUzZDQzNmExYmQwYmJkYjVk"
+        "OCIsICJkbGVxIjogeyJlIjogImY0NjM2MzU5YTUzZGQxNGEyNmUyNTMyMDQxZWIxMDE2OTk1"
+        "ZTg4NzgwODY0OWFlY2VlNTcwZTA5ZTk2NTU3YzIiLCAicyI6ICJmZWYzMGIzMDcwMDJkMW"
+        "VjNWZiZjg0ZGZhZmRkMGEwOTdkNDJlMDYxNTZiNzdiMTMzMmNjNGZjNGNjYWEyODJmIiwgIn"
+        "IiOiAiODQ5MjQxNzBlYzc3ZjhjMDNmZDRlZTkyZTA3MjdlMzYyNTliZjRhYTc4NTBjZTc2"
+        "NDExMDQ0MmNlNmVlM2FjYyJ9fV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzOCJ9XX0="
+    )
+    token_str_no_dleq = (
+        "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjFjQ05JQVoyWC93MSIsICJhbW91bn"
+        "QiOiAyLCAic2VjcmV0IjogIjZmZjFiY2VlOGUzMzk2NGE4ZDNjNGQ5NzYwNzdiZDI4"
+        "ZGVkZWJkODYyMDU0MDQzNDY4ZjU5ZDFiZjI1OTQzN2QiLCAiQyI6ICIwM2I3ZDlkMzIzYTAxOWJlN"
+        "TE4NzRlOGE5OGY1NDViOTg3Y2JmNmU5MWUwMDc1YTFhZjQ3MjY2NDMxOGRlZTQzZTU"
+        "ifSwgeyJpZCI6ICIxY0NOSUFaMlgvdzEiLCAiYW1vdW50IjogOCwgInNlY3JldCI6ICIyYWQ0MzJkN"
+        "GQ1ODYzMmIyZGUzMjRmZDFiYTk5NzJmYTgwOWM2ZTdkYTVlOTJlZWZiMGI2NjEyZD"
+        "kzZDdlMDAwIiwgIkMiOiAiMDMyYWZiODM5ZDAyZGYxY2E4ZjlkZmM1MjU3NTE3ZDQzNjhiN2IxNzQz"
+        "ODMzYmVhZTNkNDM2YTFiZDBiYmRiNWQ4In1dLCAibWludCI6ICJodHRwOi8vbG9jY"
+        "Wxob3N0OjMzMzgifV19"
+    )
+    token = TokenV3.deserialize(token_str)
+    assert token.serialize(include_dleq=False) == token_str_no_dleq
 
 
 def test_tokenv3_deserialize_with_memo():

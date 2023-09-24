@@ -47,7 +47,7 @@ def main(
         host=host,
         ssl_keyfile=ssl_keyfile,
         ssl_certfile=ssl_certfile,
-        **d,
+        **d,  # type: ignore
     )
     server = uvicorn.Server(config)
     server.run()

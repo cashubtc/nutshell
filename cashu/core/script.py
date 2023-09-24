@@ -25,9 +25,9 @@ def step0_carol_privkey():
     return seckey
 
 
-def step0_carol_checksig_redeemscrip(carol_pubkey):
+def step0_carol_checksig_redeemscript(carol_pubkey):
     """Create script"""
-    txin_redeemScript = CScript([carol_pubkey, OP_CHECKSIG])
+    txin_redeemScript = CScript([carol_pubkey, OP_CHECKSIG])  # type: ignore
     # txin_redeemScript = CScript([-123, OP_CHECKLOCKTIMEVERIFY])
     # txin_redeemScript = CScript([3, 3, OP_LESSTHAN, OP_VERIFY])
     return txin_redeemScript
@@ -58,7 +58,7 @@ def step2_carol_sign_tx(txin_redeemScript, privatekey):
     tx, txin = step1_bob_carol_create_tx(txin_p2sh_address)
     sighash = SignatureHash(txin_redeemScript, tx, 0, SIGHASH_ALL)
     sig = privatekey.sign(sighash) + bytes([SIGHASH_ALL])
-    txin.scriptSig = CScript([sig, txin_redeemScript])
+    txin.scriptSig = CScript([sig, txin_redeemScript])  # type: ignore
     return txin
 
 
@@ -111,7 +111,7 @@ if __name__ == "__main__":
     # ---------
     # CAROL defines scripthash and ALICE mints them
     alice_privkey = step0_carol_privkey()
-    txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
+    txin_redeemScript = step0_carol_checksig_redeemscript(alice_privkey.pub)
     print("Script:", txin_redeemScript.__repr__())
     txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
     print(f"Carol sends Alice secret = P2SH:{txin_p2sh_address}")
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     # CAROL redeems with MINT
 
     # CAROL PRODUCES txin_redeemScript and txin_signature to send to MINT
-    txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
+    txin_redeemScript = step0_carol_checksig_redeemscript(alice_privkey.pub)
     txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
 
     txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
