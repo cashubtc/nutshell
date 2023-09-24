@@ -198,50 +198,26 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             bool: True if invoice has been paid, else False
         """
-        logger.trace(f"crud: _check_lightning_invoice: checking invoice {hash}")
         invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
             hash=hash, db=self.db, conn=conn
         )
-        logger.trace(f"crud: _check_lightning_invoice: invoice: {invoice}")
         if invoice is None:
             raise LightningError("invoice not found.")
         if invoice.issued:
             raise LightningError("tokens already issued for this invoice.")
+        if amount > invoice.amount:
+            raise LightningError(
+                f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
+            )
         assert invoice.payment_hash, "invoice has no payment hash."
-
-        # set this invoice as issued
-        logger.trace(f"crud: setting invoice {invoice.payment_hash} as issued")
-        await self.crud.update_lightning_invoice(
-            hash=hash, issued=True, db=self.db, conn=conn
+        status = await self.lightning.get_invoice_status(invoice.payment_hash)
+        logger.trace(
+            f"_check_lightning_invoice: invoice {invoice.payment_hash} status: {status}"
         )
-        logger.trace(f"crud: invoice {invoice.payment_hash} set as issued")
+        if not status.paid:
+            raise InvoiceNotPaidError()
 
-        try:
-            if amount > invoice.amount:
-                raise LightningError(
-                    f"requested amount too high: {amount}. Invoice amount:"
-                    f" {invoice.amount}"
-                )
-            logger.trace(
-                f"_check_lightning_invoice: checking invoice {invoice.payment_hash}"
-            )
-            status = await self.lightning.get_invoice_status(invoice.payment_hash)
-            logger.trace(
-                f"_check_lightning_invoice: invoice {invoice.payment_hash} status:"
-                f" {status}"
-            )
-            if status.paid:
-                return status.paid
-            else:
-                raise InvoiceNotPaidError()
-        except Exception as e:
-            # unset issued
-            logger.trace(f"crud: unsetting invoice {invoice.payment_hash} as issued")
-            await self.crud.update_lightning_invoice(
-                hash=hash, issued=False, db=self.db, conn=conn
-            )
-            logger.trace(f"crud: invoice {invoice.payment_hash} unset as issued")
-            raise e
+        return status.paid
 
     async def _pay_lightning_invoice(self, invoice: str, fee_limit_msat: int):
         """Pays a Lightning invoice via the funding source backend.
@@ -413,8 +389,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             List[BlindedSignature]: Signatures on the outputs.
         """
         logger.trace("called mint")
-        amounts = [b.amount for b in B_s]
-        amount = sum(amounts)
+        amount_outputs = sum([b.amount for b in B_s])
 
         if settings.lightning:
             if not hash:
@@ -423,15 +398,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 self.locks.get(hash) or asyncio.Lock()
             )  # create a new lock if it doesn't exist
             async with self.locks[hash]:
-                # will raise an exception if the invoice is not paid or tokens are already issued
-                await self._check_lightning_invoice(amount, hash)
+                # will raise an exception if the invoice is not paid or tokens are
+                # already issued or the requested amount is too high
+                await self._check_lightning_invoice(amount_outputs, hash)
+
+                logger.trace(f"crud: setting invoice {hash} as issued")
+                await self.crud.update_lightning_invoice(
+                    hash=hash, issued=True, db=self.db
+                )
             del self.locks[hash]
 
-        for amount in amounts:
-            if amount not in [2**i for i in range(settings.max_order)]:
-                raise NotAllowedError(
-                    f"Can only mint amounts with 2^n up to {2**settings.max_order}."
-                )
+        self._verify_outputs(B_s)
 
         promises = await self._generate_promises(B_s, keyset)
         logger.trace("generated promises")
@@ -470,7 +447,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             fees_sat = await self.get_melt_fees(invoice)
             # verify overspending attempt
             assert total_provided >= invoice_amount + fees_sat, TransactionError(
-                "provided proofs not enough for Lightning payment."
+                "provided proofs not enough for Lightning payment. Provided:"
+                f" {total_provided}, needed: {invoice_amount + fees_sat}"
             )
 
             # verify spending inputs, outputs, and spending conditions

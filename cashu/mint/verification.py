@@ -69,17 +69,23 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
             return
 
         # Verify outputs
-        # Verify amounts of outputs
-        if not all([self._verify_amount(o.amount) for o in outputs]):
-            raise TransactionError("invalid amount.")
-        # verify that only unique outputs were used
-        if not self._verify_no_duplicate_outputs(outputs):
-            raise TransactionError("duplicate promises.")
+        self._verify_outputs(outputs)
+
+        # Verify inputs and outputs together
         if not self._verify_input_output_amounts(proofs, outputs):
             raise TransactionError("input amounts less than output.")
         # Verify output spending conditions
         if outputs and not self._verify_output_spending_conditions(proofs, outputs):
             raise TransactionError("validation of output spending conditions failed.")
+
+    def _verify_outputs(self, outputs: List[BlindedMessage]):
+        """Verify that the outputs are valid."""
+        # Verify amounts of outputs
+        if not all([self._verify_amount(o.amount) for o in outputs]):
+            raise TransactionError("invalid amount.")
+        # verify that only unique outputs were used
+        if not self._verify_no_duplicate_outputs(outputs):
+            raise TransactionError("duplicate outputs.")
 
     def _check_proofs_spendable(self, proofs: List[Proof]):
         """Checks whether the proofs were already spent."""

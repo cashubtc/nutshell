@@ -148,6 +148,9 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
 
         """
+        if n < 1:
+            return [], [], []
+
         secret_counters_start = await bump_secret_derivation(
             db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump
         )
