@@ -376,11 +376,8 @@ async def test_secret_initialized_with_tags(wallet1: Wallet):
         pubkey=pubkey.serialize().hex(),
         tags=tags,
     )
-    assert secret.locktime
     assert secret.locktime == 100
-    assert secret.n_sigs
     assert secret.n_sigs == 3
-    assert secret.sigflag
     assert secret.sigflag == SigFlags.SIG_ALL
 
 
@@ -396,7 +393,5 @@ async def test_secret_initialized_with_arguments(wallet1: Wallet):
     )
     assert secret.locktime
     assert secret.locktime > 1689000000
-    assert secret.n_sigs
     assert secret.n_sigs == 3
-    assert secret.sigflag
     assert secret.sigflag == SigFlags.SIG_ALL
