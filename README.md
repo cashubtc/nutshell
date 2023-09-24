@@ -60,7 +60,7 @@ curl https://pyenv.run | bash
 pyenv init
 
 # restart your shell (or source your .rc file), then install python:
-pyenv install 3.9.13
+pyenv install 3.10.4
 
 # install poetry
 curl -sSL https://install.python-poetry.org | python3 -
@@ -72,7 +72,7 @@ source ~/.bashrc
 # install cashu
 git clone https://github.com/callebtc/cashu.git --recurse-submodules
 cd cashu
-pyenv local 3.9.13
+pyenv local 3.10.4
 poetry install
 ```
 
