@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional, Union
+from typing import List, Literal, Optional, Set, Union
 
 from loguru import logger
 
@@ -28,7 +28,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
 
     keyset: MintKeyset
     keysets: MintKeysets
-    proofs_used: List[Proof]
+    secrets_used: Set[str]
 
     async def verify_inputs_and_outputs(
         self, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
@@ -83,7 +83,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
 
     def _check_proofs_spendable(self, proofs: List[Proof]):
         """Checks whether the proofs were already spent."""
-        if not all([p.secret not in self.proofs_used for p in proofs]):
+        if not all([p.secret not in self.secrets_used for p in proofs]):
             raise TokenAlreadySpentError()
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
