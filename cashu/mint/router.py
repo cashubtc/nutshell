@@ -232,7 +232,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
     """
     logger.trace(f"> POST /checkfees: {payload}")
-    fees_sat = await ledger.check_fees(payload.pr)
+    fees_sat = await ledger.get_melt_fees(payload.pr)
     logger.trace(f"< POST /checkfees: {fees_sat}")
     return CheckFeesResponse(fee=fees_sat)
 

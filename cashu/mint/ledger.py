@@ -24,7 +24,6 @@ from ..core.errors import (
     KeysetNotFoundError,
     LightningError,
     NotAllowedError,
-    TokenAlreadySpentError,
     TransactionError,
 )
 from ..core.helpers import fee_reserve, sum_proofs
@@ -198,11 +197,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             dleq=DLEQ(e=e.serialize(), s=s.serialize()),
         )
 
-    def _check_proofs_spendable(self, proofs: List[Proof]):
-        """Checks whether the proofs were already spent."""
-        if not all([p.secret not in self.proofs_used for p in proofs]):
-            raise TokenAlreadySpentError()
-
     def _check_spendable(self, proof: Proof):
         """Checks whether the proof was already spent."""
         return proof.secret not in self.proofs_used
@@ -324,9 +318,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             Tuple[bool, string, int]: Returns payment status, preimage of invoice, paid fees (in Millisatoshi)
         """
-        logger.trace(f"_pay_lightning_invoice: paying Lightning invoice {invoice}")
         error, balance = await self.lightning.status()
-        logger.trace(f"_pay_lightning_invoice: Lightning wallet balance: {balance}")
         if error:
             raise LightningError(f"Lightning wallet not responding: {error}")
         (
@@ -352,10 +344,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         proof_msgs = set([p.secret for p in proofs])
         self.proofs_used |= proof_msgs
         # store in db
-        logger.trace("crud: storing proofs")
         for p in proofs:
             await self.crud.invalidate_proof(proof=p, db=self.db)
-        logger.trace("crud: stored proofs")
 
     async def _set_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
@@ -374,13 +364,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             await self._validate_proofs_pending(proofs, conn)
             for p in proofs:
                 try:
-                    logger.trace(
-                        f"crud: _set_proofs_pending setting proof {p.secret} as pending"
-                    )
                     await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
-                    logger.trace(
-                        f"crud: _set_proofs_pending proof {p.secret} set as pending"
-                    )
                 except Exception:
                     raise TransactionError("proofs already pending.")
 
@@ -392,22 +376,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Args:
             proofs (List[Proof]): Proofs to delete.
         """
-        # we try: except: this block in order to avoid that any errors here
-        # could block the _invalidate_proofs() call that happens afterwards.
         async with self.proofs_pending_lock:
-            try:
-                for p in proofs:
-                    logger.trace(
-                        f"crud: _unset_proofs_pending unsetting proof {p.secret} as"
-                        " pending"
-                    )
-                    await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
-                    logger.trace(
-                        f"crud: _unset_proofs_pending proof {p.secret} unset as pending"
-                    )
-            except Exception as e:
-                print(e)
-                pass
+            for p in proofs:
+                await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
 
     async def _validate_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
@@ -420,9 +391,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Raises:
             Exception: At least one of the proofs is in the pending table.
         """
-        logger.trace("crud: _validate_proofs_pending validating proofs")
         proofs_pending = await self.crud.get_proofs_pending(db=self.db, conn=conn)
-        logger.trace("crud: _validate_proofs_pending got proofs pending")
         for p in proofs:
             for pp in proofs_pending:
                 if p.secret == pp.secret:
@@ -615,48 +584,43 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 raise NotAllowedError(
                     f"Maximum melt amount is {settings.mint_max_peg_out} sat."
                 )
-            fees_msat = await self.check_fees(invoice)
+            fees_sat = await self.get_melt_fees(invoice)
             # verify overspending attempt
-            assert (
-                total_provided >= invoice_amount + fees_msat / 1000
-            ), TransactionError("provided proofs not enough for Lightning payment.")
+            assert total_provided >= invoice_amount + fees_sat, TransactionError(
+                "provided proofs not enough for Lightning payment."
+            )
 
-            # verify that proofs have not been spent yet
-            self._check_proofs_spendable(proofs)
             # verify spending inputs, outputs, and spending conditions
-            await self._verify_proofs_and_outputs(proofs, outputs)
+            await self.verify_inputs_and_outputs(proofs, outputs)
 
-            # promises to return for overpaid fees
-            return_promises: List[BlindedSignature] = []
             if settings.lightning:
                 logger.trace("paying lightning invoice")
                 status, preimage, fee_msat = await self._pay_lightning_invoice(
-                    invoice, fees_msat
+                    invoice, fees_sat * 1000
                 )
                 logger.trace("paid lightning invoice")
             else:
                 status, preimage, fee_msat = True, "preimage", 0
 
-            logger.trace(
-                f"status: {status}, preimage: {preimage}, fee_msat: {fee_msat}"
+            logger.debug(
+                f"Melt status: {status}, preimage: {preimage}, fee_msat: {fee_msat}"
             )
 
-            if status:
-                logger.trace("invalidating proofs")
-                await self._invalidate_proofs(proofs)
-                logger.trace("invalidated proofs")
-                # prepare change to compensate wallet for overpaid fees
-                assert fee_msat is not None, TransactionError("fees not valid")
-                if outputs:
-                    return_promises = await self._generate_change_promises(
-                        total_provided=total_provided,
-                        invoice_amount=invoice_amount,
-                        ln_fee_msat=fee_msat,
-                        outputs=outputs,
-                    )
-            else:
-                logger.trace("lightning payment unsuccessful")
+            if not status:
                 raise LightningError("Lightning payment unsuccessful.")
+
+            # melt successful, invalidate proofs
+            await self._invalidate_proofs(proofs)
+
+            # prepare change to compensate wallet for overpaid fees
+            return_promises: List[BlindedSignature] = []
+            if outputs and fee_msat:
+                return_promises = await self._generate_change_promises(
+                    total_provided=total_provided,
+                    invoice_amount=invoice_amount,
+                    ln_fee_msat=fee_msat,
+                    outputs=outputs,
+                )
 
         except Exception as e:
             logger.trace(f"exception: {e}")
@@ -688,7 +652,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         pending = await self._check_pending(proofs)
         return spendable, pending
 
-    async def check_fees(self, pr: str):
+    async def get_melt_fees(self, pr: str) -> int:
         """Returns the fee reserve (in sat) that a wallet must add to its proofs
         in order to pay a Lightning invoice.
 
@@ -702,18 +666,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # if id does not exist (not internal), it returns paid = None
         if settings.lightning:
             decoded_invoice = bolt11.decode(pr)
-            amount = math.ceil(decoded_invoice.amount_msat / 1000)
+            amount_msat = decoded_invoice.amount_msat
             logger.trace(
-                "check_fees: checking lightning invoice:"
+                "get_melt_fees: checking lightning invoice:"
                 f" {decoded_invoice.payment_hash}"
             )
             paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
-            logger.trace(f"check_fees: paid: {paid}")
+            logger.trace(f"get_melt_fees: paid: {paid}")
             internal = paid.paid is False
         else:
-            amount = 0
+            amount_msat = 0
             internal = True
-        fees_msat = fee_reserve(amount * 1000, internal)
+        fees_msat = fee_reserve(amount_msat, internal)
         fee_sat = math.ceil(fees_msat / 1000)
         return fee_sat
 
@@ -743,21 +707,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.trace("split called")
 
         await self._set_proofs_pending(proofs)
-
-        total_amount = sum_proofs(proofs)
-
         try:
-            # verify that amount is kosher
-            self._verify_amount(total_amount)
-            # verify overspending attempt
-            self._verify_equation_balanced(proofs, outputs)
-            # verify that proofs have not been spent yet
-            self._check_proofs_spendable(proofs)
             # verify spending inputs, outputs, and spending conditions
-            await self._verify_proofs_and_outputs(proofs, outputs)
+            await self.verify_inputs_and_outputs(proofs, outputs)
             # Mark proofs as used and prepare new promises
             await self._invalidate_proofs(proofs)
-
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
