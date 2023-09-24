@@ -362,11 +362,11 @@ async def test_bump_secret_derivation(wallet3: Wallet):
         "half depart obvious quality work element tank gorilla view sugar picture"
         " humble"
     )
-    secrets1, rs1, derivaion_paths1 = await wallet3.generate_n_secrets(5)
-    secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(0, 4)
+    secrets1, rs1, derivation_paths1 = await wallet3.generate_n_secrets(5)
+    secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
-    assert derivaion_paths1 == derivaion_paths2
+    assert derivation_paths1 == derivation_paths2
     assert secrets1 == [
         "9bfb12704297fe90983907d122838940755fcce370ce51e9e00a4275a347c3fe",
         "dbc5e05f2b1f24ec0e2ab6e8312d5e13f57ada52594d4caf429a697d9c742490",
@@ -374,7 +374,7 @@ async def test_bump_secret_derivation(wallet3: Wallet):
         "652d08c804bd2c5f2c1f3e3d8895860397df394b30473753227d766affd15e89",
         "654e5997f8a20402f7487296b6f7e463315dd52fc6f6cc5a4e35c7f6ccac77e0",
     ]
-    assert derivaion_paths1 == [
+    assert derivation_paths1 == [
         "m/129372'/0'/2004500376'/0'",
         "m/129372'/0'/2004500376'/1'",
         "m/129372'/0'/2004500376'/2'",
@@ -389,11 +389,11 @@ async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
         "half depart obvious quality work element tank gorilla view sugar picture"
         " humble"
     )
-    secrets1_1, rs1_1, derivaion_paths1 = await wallet3.generate_n_secrets(2)
-    secrets1_2, rs1_2, derivaion_paths2 = await wallet3.generate_n_secrets(3)
+    secrets1_1, rs1_1, derivation_paths1 = await wallet3.generate_n_secrets(2)
+    secrets1_2, rs1_2, derivation_paths2 = await wallet3.generate_n_secrets(3)
     secrets1 = secrets1_1 + secrets1_2
     rs1 = rs1_1 + rs1_2
-    secrets2, rs2, derivaion_paths = await wallet3.generate_secrets_from_to(0, 4)
+    secrets2, rs2, derivation_paths = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
 
@@ -404,9 +404,9 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
         "half depart obvious quality work element tank gorilla view sugar picture"
         " humble"
     )
-    secrets1, rs1, derivaion_paths1 = await wallet3.generate_secrets_from_to(0, 4)
+    secrets1, rs1, derivation_paths1 = await wallet3.generate_secrets_from_to(0, 4)
     assert len(secrets1) == 5
-    secrets2, rs2, derivaion_paths2 = await wallet3.generate_secrets_from_to(2, 4)
+    secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(2, 4)
     assert len(secrets2) == 3
     assert secrets1[2:] == secrets2
     assert [r.private_key for r in rs1[2:]] == [r.private_key for r in rs2]

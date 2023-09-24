@@ -455,7 +455,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             await self.verify_inputs_and_outputs(proofs, outputs)
 
             if settings.lightning:
-                logger.trace("paying lightning invoice")
+                logger.trace(f"paying lightning invoice {invoice}")
                 status, preimage, fee_msat = await self._pay_lightning_invoice(
                     invoice, fees_sat * 1000
                 )
@@ -464,7 +464,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 status, preimage, fee_msat = True, "preimage", 0
 
             logger.debug(
-                f"Melt status: {status}, preimage: {preimage}, fee_msat: {fee_msat}"
+                f"Melt status: {status}: preimage: {preimage}, fee_msat: {fee_msat}"
             )
 
             if not status:
