@@ -99,7 +99,7 @@ async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet)
     await wallet1.mint(64, hash=invoice.hash)
     preimage = "00000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-    secret = await wallet1.create_htlc_lock(preimage=preimage[:-1] + "1")
+    secret = await wallet1.create_htlc_lock(preimage=preimage[:-5] + "11111")
     # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     for p in send_proofs:
@@ -145,7 +145,7 @@ async def test_htlc_redeem_with_wrong_signature(wallet1: Wallet, wallet2: Wallet
     signatures = await wallet1.sign_p2pk_proofs(send_proofs)
     for p, s in zip(send_proofs, signatures):
         p.htlcpreimage = preimage
-        p.htlcsignature = s[:-1] + "1"  # wrong signature
+        p.htlcsignature = s[:-5] + "11111"  # wrong signature
 
     await assert_err(
         wallet2.redeem(send_proofs),
@@ -231,7 +231,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
     signatures = await wallet1.sign_p2pk_proofs(send_proofs)
     for p, s in zip(send_proofs, signatures):
         p.htlcpreimage = preimage
-        p.htlcsignature = s[:-1] + "1"  # wrong signature
+        p.htlcsignature = s[:-5] + "11111"  # wrong signature
 
     # should error because we used wallet2 signatures for the hash lock
     await assert_err(
