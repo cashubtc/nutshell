@@ -4,12 +4,13 @@ import requests
 from cashu.tor.tor import TorProxy
 
 
-@pytest.mark.skip(reason="Tor is not installed on CI")
+# @pytest.mark.skip(reason="Tor is not installed on CI")
 def test_tor_setup():
     s = requests.Session()
 
     tor = TorProxy(timeout=False)
     tor.run_daemon()
+    assert tor.is_running()
     socks_host, socks_port = "localhost", 9050
 
     proxies = {
@@ -20,3 +21,5 @@ def test_tor_setup():
 
     resp = s.get("https://google.com")
     resp.raise_for_status()
+
+    tor.stop_daemon()
