@@ -12,4 +12,3 @@ WORKDIR /app
 COPY . .
 RUN poetry config virtualenvs.create false
 RUN poetry install --no-dev --no-root
-EXPOSE 3338 4448
