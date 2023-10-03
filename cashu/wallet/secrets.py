@@ -163,7 +163,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             await self.generate_determinstic_secret(s) for s in secret_counters
         ]
         # secrets are supplied as str
-        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
+        secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
         # rs are supplied as PrivateKey
         rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
 
@@ -194,7 +194,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             await self.generate_determinstic_secret(s) for s in secret_counters
         ]
         # secrets are supplied as str
-        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
+        secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
         # rs are supplied as PrivateKey
         rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
         derivation_paths = [s[2] for s in secrets_rs_derivationpaths]

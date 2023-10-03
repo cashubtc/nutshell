@@ -99,11 +99,11 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert derivation_paths1 == derivation_paths2
     assert secrets1 == [
-        "9bfb12704297fe90983907d122838940755fcce370ce51e9e00a4275a347c3fe",
-        "dbc5e05f2b1f24ec0e2ab6e8312d5e13f57ada52594d4caf429a697d9c742490",
-        "06a29fa8081b3a620b50b473fc80cde9a575c3b94358f3513c03007f8b66321e",
-        "652d08c804bd2c5f2c1f3e3d8895860397df394b30473753227d766affd15e89",
-        "654e5997f8a20402f7487296b6f7e463315dd52fc6f6cc5a4e35c7f6ccac77e0",
+        "9d32fc57e6fa2942d05ee475d28ba6a56839b8cb8a3f174b05ed0ed9d3a420f6",
+        "1c0f2c32e7438e7cc992612049e9dfcdbffd454ea460901f24cc429921437802",
+        "327c606b761af03cbe26fa13c4b34a6183b868c52cda059fe57fdddcb4e1e1e7",
+        "53476919560398b56c0fdc5dd92cf8628b1e06de6f2652b0f7d6e8ac319de3b7",
+        "b2f5d632229378a716be6752fc79ac8c2b43323b820859a7956f2dfe5432b7b4",
     ]
     assert derivation_paths1 == [
         "m/129372'/0'/2004500376'/0'",
