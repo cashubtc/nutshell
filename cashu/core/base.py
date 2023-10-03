@@ -160,12 +160,24 @@ class GetInfoResponse(BaseModel):
 # ------- API: KEYS -------
 
 
+class KeysResponseKeyset(BaseModel):
+    id: str
+    symbol: str
+    keys: Dict[str, str]
+
+
 class KeysResponse(BaseModel):
-    __root__: Dict[str, str]
+    keysets: List[KeysResponseKeyset]
+
+
+class KeysetsResponseKeyset(BaseModel):
+    id: str
+    symbol: str
+    active: bool
 
 
 class KeysetsResponse(BaseModel):
-    keysets: list[str]
+    keysets: list[KeysetsResponseKeyset]
 
 
 # ------- API: MINT -------
@@ -350,10 +362,12 @@ class MintKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: Union[bool, None] = True
+    symbol: str = "sat"
     version: Union[str, None] = None
 
     def __init__(
         self,
+        *,
         id="",
         valid_from=None,
         valid_to=None,
@@ -361,6 +375,7 @@ class MintKeyset:
         active=None,
         seed: str = "",
         derivation_path: str = "",
+        symbol: str = "sat",
         version: str = "1",
     ):
         self.derivation_path = derivation_path
@@ -369,10 +384,19 @@ class MintKeyset:
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = active
+        self.symbol = symbol
         self.version = version
         # generate keys from seed
         if seed:
             self.generate_keys(seed)
+
+    @property
+    def public_keys_hex(self) -> Dict[int, str]:
+        assert self.public_keys, "public keys not set"
+        return {
+            int(amount): key.serialize().hex()
+            for amount, key in self.public_keys.items()
+        }
 
     def generate_keys(self, seed):
         """Generates keys of a keyset from a seed."""

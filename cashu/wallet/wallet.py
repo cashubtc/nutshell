@@ -25,6 +25,7 @@ from ..core.base import (
     GetMintResponse,
     Invoice,
     KeysetsResponse,
+    KeysResponse,
     PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
@@ -249,11 +250,12 @@ class LedgerAPI(object):
             url + "/keys",
         )
         self.raise_on_error(resp)
-        keys: dict = resp.json()
-        assert len(keys), Exception("did not receive any keys")
+        keys_dict: dict = resp.json()
+        assert len(keys_dict), Exception("did not receive any keys")
+        keys = KeysResponse.parse_obj(keys_dict)
         keyset_keys = {
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
-            for amt, val in keys.items()
+            for amt, val in keys.keysets[0].keys.items()
         }
         keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
         return keyset
@@ -278,11 +280,12 @@ class LedgerAPI(object):
             url + f"/keys/{keyset_id_urlsafe}",
         )
         self.raise_on_error(resp)
-        keys = resp.json()
-        assert len(keys), Exception("did not receive any keys")
+        keys_dict = resp.json()
+        assert len(keys_dict), Exception("did not receive any keys")
+        keys = KeysResponse.parse_obj(keys_dict)
         keyset_keys = {
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
-            for amt, val in keys.items()
+            for amt, val in keys.keysets[0].keys.items()
         }
         keyset = WalletKeyset(id=keyset_id, public_keys=keyset_keys, mint_url=url)
         return keyset
@@ -307,7 +310,7 @@ class LedgerAPI(object):
         keysets_dict = resp.json()
         keysets = KeysetsResponse.parse_obj(keysets_dict)
         assert len(keysets.keysets), Exception("did not receive any keysets")
-        return keysets.keysets
+        return [k.id for k in keysets.keysets]
 
     @async_set_requests
     async def _get_info(self, url: str) -> GetInfoResponse:

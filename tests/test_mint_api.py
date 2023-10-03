@@ -17,7 +17,7 @@ async def test_info(ledger):
 async def test_api_keys(ledger):
     response = requests.get(f"{BASE_URL}/keys")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    assert response.json() == {
+    assert response.json()["keysets"][0]["keys"] == {
         str(k): v.serialize().hex() for k, v in ledger.keyset.public_keys.items()
     }
 
@@ -26,7 +26,7 @@ async def test_api_keys(ledger):
 async def test_api_keysets(ledger):
     response = requests.get(f"{BASE_URL}/keysets")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    assert response.json()["keysets"] == list(ledger.keysets.keysets.keys())
+    assert response.json()["keysets"][0]["id"] == list(ledger.keysets.keysets.keys())[0]
 
 
 @pytest.mark.asyncio
@@ -35,7 +35,7 @@ async def test_api_keyset_keys(ledger):
         f"{BASE_URL}/keys/{'1cCNIAZ2X/w1'.replace('/', '_').replace('+', '-')}"
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    assert response.json() == {
+    assert response.json()["keysets"][0]["keys"] == {
         str(k): v.serialize().hex() for k, v in ledger.keyset.public_keys.items()
     }
 

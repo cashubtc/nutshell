@@ -13,7 +13,9 @@ from ..core.base import (
     GetMeltResponse,
     GetMintResponse,
     KeysetsResponse,
+    KeysetsResponseKeyset,
     KeysResponse,
+    KeysResponseKeyset,
     PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
@@ -68,9 +70,13 @@ async def info() -> GetInfoResponse:
 async def keys():
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
     logger.trace("> GET /keys")
-    keyset = ledger.get_keyset()
-    keys = KeysResponse.parse_obj(keyset)
-    return keys.__root__
+    keyset = ledger.keyset
+    keyset_for_response = KeysResponseKeyset(
+        id=keyset.id,
+        symbol=keyset.symbol,
+        keys={str(k): v for k, v in keyset.public_keys_hex.items()},
+    )
+    return KeysResponse(keysets=[keyset_for_response])
 
 
 @router.get(
@@ -92,8 +98,15 @@ async def keyset_keys(idBase64Urlsafe: str):
     logger.trace(f"> GET /keys/{idBase64Urlsafe}")
     id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
     keyset = ledger.get_keyset(keyset_id=id)
-    keys = KeysResponse.parse_obj(keyset)
-    return keys.__root__
+    keyset = ledger.keysets.keysets.get(id)
+    if not keyset:
+        raise CashuError(code=0, detail="Keyset not found.")
+    keyset_for_response = KeysResponseKeyset(
+        id=keyset.id,
+        symbol=keyset.symbol,
+        keys={str(k): v for k, v in keyset.public_keys_hex.items()},
+    )
+    return KeysResponse(keysets=[keyset_for_response])
 
 
 @router.get(
@@ -106,8 +119,12 @@ async def keyset_keys(idBase64Urlsafe: str):
 async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
     logger.trace("> GET /keysets")
-    keysets = KeysetsResponse(keysets=ledger.keysets.get_ids())
-    return keysets
+    keysets = []
+    for keyset in ledger.keysets.keysets.values():
+        keysets.append(
+            KeysetsResponseKeyset(id=keyset.id, symbol=keyset.symbol, active=True)
+        )
+    return KeysetsResponse(keysets=keysets)
 
 
 @router.get(
