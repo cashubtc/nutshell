@@ -284,3 +284,14 @@ def test_pending(cli_prefix):
     assert result.exception is None
     print(result.output)
     assert result.exit_code == 0
+
+
+def test_selfpay(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "selfpay"],
+    )
+    assert result.exception is None
+    print(result.output)
+    assert result.exit_code == 0
