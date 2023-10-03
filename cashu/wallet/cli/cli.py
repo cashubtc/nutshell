@@ -809,3 +809,30 @@ async def restore(ctx: Context, to: int, batch: int):
     await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
     await wallet.load_proofs()
     wallet.status()
+
+
+@cli.command("selfpay", help="Refresh tokens.")
+# @click.option("--all", default=False, is_flag=True, help="Execute on all available mints.")
+@click.pass_context
+@coro
+async def selfpay(ctx: Context, all: bool = False):
+    wallet = await get_mint_wallet(ctx, force_select=True)
+    await wallet.load_mint()
+
+    # get balance on this mint
+    mint_balance_dict = await wallet.balance_per_minturl()
+    mint_balance = mint_balance_dict[wallet.url]["available"]
+    # send balance once to mark as reserved
+    await wallet.split_to_send(wallet.proofs, mint_balance, None, set_reserved=True)
+    # load all reserved proofs (including the one we just sent)
+    reserved_proofs = await get_reserved_proofs(wallet.db)
+    if not len(reserved_proofs):
+        print("No balance on this mint.")
+        return
+
+    token = await wallet.serialize_proofs(reserved_proofs)
+    print(f"Selfpay token for mint {wallet.url}:")
+    print("")
+    print(token)
+    tokenObj = TokenV3.deserialize(token)
+    await receive(wallet, tokenObj)

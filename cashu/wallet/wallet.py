@@ -1368,7 +1368,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             outputs (List[BlindedMessage]): Outputs for which we request promises
             secrets (List[str]): Secrets generated for the outputs
             rs (List[PrivateKey]): Random blinding factors generated for the outputs
-            derivation_paths (List[str]): Derivation paths for the secrets
+            derivation_paths (List[str]): Derivation paths used for the secrets necessary to unblind the promises
 
         Returns:
             List[Proof]: List of restored proofs
