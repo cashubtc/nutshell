@@ -31,9 +31,7 @@ async def test_api_keysets(ledger):
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys(ledger):
-    response = requests.get(
-        f"{BASE_URL}/keys/{'1cCNIAZ2X/w1'.replace('/', '_').replace('+', '-')}"
-    )
+    response = requests.get(f"{BASE_URL}/keys/d5c08d2006765ffc")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert response.json()["keysets"][0]["keys"] == {
         str(k): v.serialize().hex() for k, v in ledger.keyset.public_keys.items()

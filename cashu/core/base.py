@@ -6,7 +6,12 @@ from typing import Dict, List, Optional, Union
 from loguru import logger
 from pydantic import BaseModel
 
-from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
+from .crypto.keys import (
+    derive_keys,
+    derive_keyset_id,
+    derive_keyset_id_deprecated,
+    derive_pubkeys,
+)
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 from .p2pk import P2SHScript
@@ -320,6 +325,7 @@ class WalletKeyset:
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
         self.id = derive_keyset_id(self.public_keys)
+        self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)
 
     def serialize(self):
         return json.dumps(
@@ -400,27 +406,37 @@ class MintKeyset:
 
     def generate_keys(self, seed):
         """Generates keys of a keyset from a seed."""
-        backwards_compatibility_pre_0_12 = False
         if (
             self.version
             and len(self.version.split(".")) > 1
             and int(self.version.split(".")[0]) == 0
             and int(self.version.split(".")[1]) <= 11
         ):
-            backwards_compatibility_pre_0_12 = True
             # WARNING: Broken key derivation for backwards compatibility with < 0.12
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
                 seed, self.derivation_path
             )
-        else:
-            self.private_keys = derive_keys(seed, self.derivation_path)
-        self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-        self.id = derive_keyset_id(self.public_keys)  # type: ignore
-        if backwards_compatibility_pre_0_12:
             logger.warning(
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
+        else:
+            self.private_keys = derive_keys(seed, self.derivation_path)
+        self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+
+        if (
+            self.version
+            and len(self.version.split(".")) > 1
+            and int(self.version.split(".")[0]) == 0
+            and int(self.version.split(".")[1]) <= 13
+        ):
+            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+            logger.warning(
+                "WARNING: Using deriving keyset id with old base64 format"
+                f" {self.id} (backwards compatibility < 0.14)"
+            )
+        else:
+            self.id = derive_keyset_id(self.public_keys)  # type: ignore
 
 
 class MintKeysets:

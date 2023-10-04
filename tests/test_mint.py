@@ -54,7 +54,7 @@ async def test_privatekeys(ledger: Ledger):
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets.keysets)
     assert len(ledger.keysets.get_ids())
-    assert ledger.keyset.id == "1cCNIAZ2X/w1"
+    assert ledger.keyset.id == "d5c08d2006765ffc"
 
 
 @pytest.mark.asyncio
