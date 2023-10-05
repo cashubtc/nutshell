@@ -106,6 +106,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         self.keysets.keysets[keyset.id] = keyset
         # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
         self.keysets.keysets[keyset.id_deprecated] = keyset
+        self.keysets.keysets[keyset.id_deprecated].id = keyset.id_deprecated
         # END BACKWARDS COMPATIBILITY < 0.14.0
         logger.debug(f"Loaded keyset {keyset.id}.")
         return keyset
