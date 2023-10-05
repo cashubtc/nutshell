@@ -324,6 +324,7 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=None,
+        deprecated_id=False,
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
@@ -336,6 +337,8 @@ class WalletKeyset:
         self.id = derive_keyset_id(self.public_keys)
         # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
         self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)
+        if deprecated_id:
+            self.id = self.id_deprecated
         # END BACKWARDS COMPATIBILITY < 0.14.0
 
     def serialize(self):

@@ -5,7 +5,7 @@ import secrets as scrts
 import time
 import uuid
 from itertools import groupby
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import requests
 from bip32 import BIP32
@@ -122,15 +122,11 @@ class LedgerAPI(LedgerAPIDeprecated, object):
     @staticmethod
     def raise_on_error(
         resp: Response,
-        call_404: Optional[Callable] = None,
-        call_args: List = [],
-        call_kwargs: Dict = {},
     ) -> None:
         """Raises an exception if the response from the mint contains an error.
 
         Args:
             resp_dict (Response): Response dict (previously JSON) from mint
-            call_instead (Callable): Function to call instead of raising an exception
 
         Raises:
             Exception: if the response contains an error
@@ -141,11 +137,6 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             error_message = f"Mint Error: {resp_dict['detail']}"
             if "code" in resp_dict:
                 error_message += f" (Code: {resp_dict['code']})"
-            # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
-            # if the error is a 404, we assume that the mint is not upgraded yet
-            if call_404 and resp.status_code == 404:
-                return call_404(*call_args, **call_kwargs)
-            # END BACKWARDS COMPATIBILITY < 0.14.0
             raise Exception(error_message)
         # raise for status if no error
         resp.raise_for_status()
@@ -172,8 +163,8 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             # get current keyset
             keyset = await self._get_keys(self.url)
 
-        assert keyset.public_keys
-        assert keyset.id
+        assert keyset.public_keys, f"did not receive keys from mint: {keyset}"
+        assert keyset.id, f"did not receive keyset id from mint: {keyset}"
         assert len(keyset.public_keys) > 0, "did not receive keys from mint."
 
         # check if current keyset is in db
@@ -261,11 +252,13 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         resp = self.s.get(
             url + "/v1/keys",
         )
-        self.raise_on_error(
-            resp,
-            call_404=self._get_keys_deprecated,  # backwards compatibility < 0.14.0
-            call_args=[url],
-        )
+        # BEGIN backwards compatibility < 0.14.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self._get_keys_deprecated(url)
+            return ret
+        # END backwards compatibility < 0.14.0
+        self.raise_on_error(resp)
         keys_dict: dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
@@ -295,11 +288,16 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         resp = self.s.get(
             url + f"/v1/keys/{keyset_id_urlsafe}",
         )
-        self.raise_on_error(
-            resp,
-            call_404=self._get_keys_of_keyset_deprecated,  # backwards compatibility < 0.14.0
-            call_args=[url, keyset_id],
-        )
+        # BEGIN backwards compatibility < 0.14.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self._get_keys_of_keyset_deprecated(url, keyset_id)
+            return ret
+        # END backwards compatibility < 0.14.0
+        r = self.raise_on_error(resp)
+        if r:
+            return r  # backwards compatibility < 0.14.0
+
         keys_dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
@@ -326,11 +324,16 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         resp = self.s.get(
             url + "/v1/keysets",
         )
-        self.raise_on_error(
-            resp,
-            call_404=self._get_keyset_ids_deprecated,  # backwards compatibility < 0.14.0
-            call_args=[url],
-        )
+        # BEGIN backwards compatibility < 0.14.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self._get_keyset_ids_deprecated(url)
+            return ret
+        # END backwards compatibility < 0.14.0
+        r = self.raise_on_error(resp)
+        if r:
+            return r  # backwards compatibility < 0.14.0
+
         keysets_dict = resp.json()
         keysets = KeysetsResponse.parse_obj(keysets_dict)
         assert len(keysets.keysets), Exception("did not receive any keysets")
@@ -883,9 +886,10 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         proofs: List[Proof] = []
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
             logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
-            assert (
-                self.keyset_id == promise.id
-            ), "our keyset id does not match promise id."
+            assert self.keyset_id == promise.id, (
+                f"our keyset id does not match promise id: {self.keyset_id} !="
+                f" {promise.id}"
+            )
 
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
