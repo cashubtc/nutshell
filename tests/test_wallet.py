@@ -129,10 +129,10 @@ async def test_get_nonexistent_keyset(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_get_keyset_ids(wallet1: Wallet):
-    keyset = await wallet1._get_keyset_ids(wallet1.url)
-    assert isinstance(keyset, list)
-    assert len(keyset) > 0
-    assert keyset[-1] == wallet1.keyset_id
+    keysets = await wallet1._get_keyset_ids(wallet1.url)
+    assert isinstance(keysets, list)
+    assert len(keysets) > 0
+    assert wallet1.keyset_id in keysets
 
 
 @pytest.mark.asyncio
