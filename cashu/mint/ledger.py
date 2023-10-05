@@ -104,6 +104,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # store the new keyset in the current keysets
         self.keysets.keysets[keyset.id] = keyset
+        # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+        self.keysets.keysets[keyset.id_deprecated] = keyset
+        # END BACKWARDS COMPATIBILITY < 0.14.0
         logger.debug(f"Loaded keyset {keyset.id}.")
         return keyset
 
@@ -131,6 +134,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 continue
             logger.debug(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
+
+            # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+            # we store all keysets also by their deprecated id
+            logger.debug(f"Loading deprecated keyset {v.id_deprecated} (new: {v.id})")
+            self.keysets.keysets[v.id_deprecated] = v
+            # END BACKWARDS COMPATIBILITY < 0.14.0
 
         logger.debug(
             f"Initialized {len(self.keysets.keysets)} keysets from the database."

@@ -185,6 +185,14 @@ class KeysetsResponse(BaseModel):
     keysets: list[KeysetsResponseKeyset]
 
 
+class KeysResponse_deprecated(BaseModel):
+    __root__: Dict[str, str]
+
+
+class KeysetsResponse_deprecated(BaseModel):
+    keysets: list[str]
+
+
 # ------- API: MINT -------
 
 
@@ -299,6 +307,7 @@ class WalletKeyset:
     """
 
     id: str
+    id_deprecated: str  # deprecated since 0.14.0
     public_keys: Dict[int, PublicKey]
     mint_url: Union[str, None] = None
     valid_from: Union[str, None] = None
@@ -325,7 +334,9 @@ class WalletKeyset:
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
         self.id = derive_keyset_id(self.public_keys)
+        # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
         self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)
+        # END BACKWARDS COMPATIBILITY < 0.14.0
 
     def serialize(self):
         return json.dumps(
@@ -361,6 +372,7 @@ class MintKeyset:
     """
 
     id: str
+    id_deprecated: str  # deprecated since 0.14.0
     derivation_path: str
     private_keys: Dict[int, PrivateKey]
     public_keys: Union[Dict[int, PublicKey], None] = None
@@ -424,19 +436,10 @@ class MintKeyset:
             self.private_keys = derive_keys(seed, self.derivation_path)
         self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
 
-        if (
-            self.version
-            and len(self.version.split(".")) > 1
-            and int(self.version.split(".")[0]) == 0
-            and int(self.version.split(".")[1]) <= 13
-        ):
-            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
-            logger.warning(
-                "WARNING: Using deriving keyset id with old base64 format"
-                f" {self.id} (backwards compatibility < 0.14)"
-            )
-        else:
-            self.id = derive_keyset_id(self.public_keys)  # type: ignore
+        self.id = derive_keyset_id(self.public_keys)  # type: ignore
+        # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+        self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+        # END BACKWARDS COMPATIBILITY < 0.14.0
 
 
 class MintKeysets:

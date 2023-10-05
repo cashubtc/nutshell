@@ -142,7 +142,7 @@ async def receive(
         assert keyset_in_token
         # we get the keyset from the db
         mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
-        assert mint_keysets, Exception("we don't know this keyset")
+        assert mint_keysets, Exception(f"we don't know this keyset: {keyset_in_token}")
         assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
         # now we have the URL
         mint_wallet = await Wallet.with_db(

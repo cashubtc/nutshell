@@ -1,5 +1,7 @@
 from typing import Protocol
 
+import requests
+
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 
@@ -14,3 +16,7 @@ class SupportsDb(Protocol):
 
 class SupportsKeysets(Protocol):
     keyset_id: str
+
+
+class SupportsRequests(Protocol):
+    s: requests.Session

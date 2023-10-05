@@ -1,6 +1,6 @@
 from typing import List, Optional, Union
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from loguru import logger
 
 from ..core.base import (
@@ -13,8 +13,10 @@ from ..core.base import (
     GetMeltResponse,
     GetMintResponse,
     KeysetsResponse,
+    KeysetsResponse_deprecated,
     KeysetsResponseKeyset,
     KeysResponse,
+    KeysResponse_deprecated,
     KeysResponseKeyset,
     PostMeltRequest,
     PostMintRequest,
@@ -58,7 +60,7 @@ async def info() -> GetInfoResponse:
 
 
 @router.get(
-    "/keys",
+    "/v1/keys",
     name="Mint public keys",
     summary="Get the public keys of the newest mint keyset",
     response_description=(
@@ -80,7 +82,7 @@ async def keys():
 
 
 @router.get(
-    "/keys/{idBase64Urlsafe}",
+    "/v1/keys/{keyset_id}",
     name="Keyset public keys",
     summary="Public keys of a specific keyset",
     response_description=(
@@ -89,18 +91,23 @@ async def keys():
     ),
     response_model=KeysResponse,
 )
-async def keyset_keys(idBase64Urlsafe: str):
+async def keyset_keys(keyset_id: str, request: Request):
     """
     Get the public keys of the mint from a specific keyset id.
-    The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
-    normal base64 before it can be processed (by the mint).
     """
-    logger.trace(f"> GET /keys/{idBase64Urlsafe}")
-    id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
-    keyset = ledger.get_keyset(keyset_id=id)
-    keyset = ledger.keysets.keysets.get(id)
+    logger.trace(f"> GET /keys/{keyset_id}")
+    # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+    # if keyset_id is not hex, we assume it is base64 and sanitize it
+    try:
+        int(keyset_id, 16)
+    except ValueError:
+        keyset_id = keyset_id.replace("-", "+").replace("_", "/")
+    # END BACKWARDS COMPATIBILITY < 0.14.0
+    keyset = ledger.get_keyset(keyset_id=keyset_id)
+    keyset = ledger.keysets.keysets.get(keyset_id)
     if not keyset:
         raise CashuError(code=0, detail="Keyset not found.")
+
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
         symbol=keyset.symbol,
@@ -110,7 +117,7 @@ async def keyset_keys(idBase64Urlsafe: str):
 
 
 @router.get(
-    "/keysets",
+    "/v1/keysets",
     name="Active keysets",
     summary="Get all active keyset id of the mind",
     response_model=KeysetsResponse,
@@ -120,11 +127,73 @@ async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
     logger.trace("> GET /keysets")
     keysets = []
-    for keyset in ledger.keysets.keysets.values():
-        keysets.append(
-            KeysetsResponseKeyset(id=keyset.id, symbol=keyset.symbol, active=True)
-        )
+    for id, keyset in ledger.keysets.keysets.items():
+        keysets.append(KeysetsResponseKeyset(id=id, symbol=keyset.symbol, active=True))
     return KeysetsResponse(keysets=keysets)
+
+
+# DEPRECATED
+
+
+@router.get(
+    "/keys",
+    name="Mint public keys",
+    summary="Get the public keys of the newest mint keyset",
+    response_description=(
+        "A dictionary of all supported token values of the mint and their associated"
+        " public key of the current keyset."
+    ),
+    response_model=KeysResponse_deprecated,
+    deprecated=True,
+)
+async def keys_deprecated():
+    """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
+    logger.trace("> GET /keys")
+    keyset = ledger.get_keyset()
+    keys = KeysResponse_deprecated.parse_obj(keyset)
+    return keys.__root__
+
+
+@router.get(
+    "/keys/{idBase64Urlsafe}",
+    name="Keyset public keys",
+    summary="Public keys of a specific keyset",
+    response_description=(
+        "A dictionary of all supported token values of the mint and their associated"
+        " public key for a specific keyset."
+    ),
+    response_model=KeysResponse_deprecated,
+    deprecated=True,
+)
+async def keyset_deprecated(idBase64Urlsafe: str):
+    """
+    Get the public keys of the mint from a specific keyset id.
+    The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
+    normal base64 before it can be processed (by the mint).
+    """
+    logger.trace(f"> GET /keys/{idBase64Urlsafe}")
+    id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
+    keyset = ledger.get_keyset(keyset_id=id)
+    keys = KeysResponse_deprecated.parse_obj(keyset)
+    return keys.__root__
+
+
+@router.get(
+    "/keysets",
+    name="Active keysets",
+    summary="Get all active keyset id of the mind",
+    response_model=KeysetsResponse_deprecated,
+    response_description="A list of all active keyset ids of the mint.",
+    deprecated=True,
+)
+async def keysets_deprecated() -> KeysetsResponse_deprecated:
+    """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
+    logger.trace("> GET /keysets")
+    keysets = KeysetsResponse_deprecated(keysets=ledger.keysets.get_ids())
+    return keysets
+
+
+# END DEPRECATED
 
 
 @router.get(

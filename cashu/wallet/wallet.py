@@ -5,7 +5,7 @@ import secrets as scrts
 import time
 import uuid
 from itertools import groupby
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import requests
 from bip32 import BIP32
@@ -62,6 +62,7 @@ from ..wallet.crud import (
     update_proof_reserved,
 )
 from . import migrations
+from .deprecated import LedgerAPIDeprecated
 from .htlc import WalletHTLC
 from .p2pk import WalletP2PK
 from .secrets import WalletSecrets
@@ -99,7 +100,7 @@ def async_set_requests(func):
     return wrapper
 
 
-class LedgerAPI(object):
+class LedgerAPI(LedgerAPIDeprecated, object):
     keys: WalletKeyset  # holds current keys of mint
     keyset_id: str  # holds id of current keyset
     public_keys: Dict[int, PublicKey]  # holds public keys of
@@ -119,11 +120,17 @@ class LedgerAPI(object):
         return
 
     @staticmethod
-    def raise_on_error(resp: Response) -> None:
+    def raise_on_error(
+        resp: Response,
+        call_404: Optional[Callable] = None,
+        call_args: List = [],
+        call_kwargs: Dict = {},
+    ) -> None:
         """Raises an exception if the response from the mint contains an error.
 
         Args:
             resp_dict (Response): Response dict (previously JSON) from mint
+            call_instead (Callable): Function to call instead of raising an exception
 
         Raises:
             Exception: if the response contains an error
@@ -134,6 +141,11 @@ class LedgerAPI(object):
             error_message = f"Mint Error: {resp_dict['detail']}"
             if "code" in resp_dict:
                 error_message += f" (Code: {resp_dict['code']})"
+            # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+            # if the error is a 404, we assume that the mint is not upgraded yet
+            if call_404 and resp.status_code == 404:
+                return call_404(*call_args, **call_kwargs)
+            # END BACKWARDS COMPATIBILITY < 0.14.0
             raise Exception(error_message)
         # raise for status if no error
         resp.raise_for_status()
@@ -247,9 +259,13 @@ class LedgerAPI(object):
             Exception: If no keys are received from the mint
         """
         resp = self.s.get(
-            url + "/keys",
+            url + "/v1/keys",
         )
-        self.raise_on_error(resp)
+        self.raise_on_error(
+            resp,
+            call_404=self._get_keys_deprecated,  # backwards compatibility < 0.14.0
+            call_args=[url],
+        )
         keys_dict: dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
@@ -277,9 +293,13 @@ class LedgerAPI(object):
         """
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = self.s.get(
-            url + f"/keys/{keyset_id_urlsafe}",
+            url + f"/v1/keys/{keyset_id_urlsafe}",
         )
-        self.raise_on_error(resp)
+        self.raise_on_error(
+            resp,
+            call_404=self._get_keys_of_keyset_deprecated,  # backwards compatibility < 0.14.0
+            call_args=[url, keyset_id],
+        )
         keys_dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
@@ -304,9 +324,13 @@ class LedgerAPI(object):
             Exception: If no keysets are received from the mint
         """
         resp = self.s.get(
-            url + "/keysets",
+            url + "/v1/keysets",
         )
-        self.raise_on_error(resp)
+        self.raise_on_error(
+            resp,
+            call_404=self._get_keyset_ids_deprecated,  # backwards compatibility < 0.14.0
+            call_args=[url],
+        )
         keysets_dict = resp.json()
         keysets = KeysetsResponse.parse_obj(keysets_dict)
         assert len(keysets.keysets), Exception("did not receive any keysets")
