@@ -124,7 +124,7 @@ def encode(options):
     """Convert options into LnAddr and pass it to the encoder"""
     addr = LnAddr()
     addr.currency = options["currency"]
-    addr.fallback = options["fallback"] if options["fallback"] else None
+    # addr.fallback = options["fallback"] if options["fallback"] else None
     if options["amount"]:
         addr.amount = options["amount"]
     if options["timestamp"]:
@@ -174,7 +174,7 @@ def lnencode(addr, privkey):
     else:
         amount = addr.currency if addr.currency else ""
 
-    hrp = "ln" + amount + "0n"
+    hrp = "ln" + str(amount) + "0n"
 
     # Start with the timestamp
     data = bitstring.pack("uint:35", addr.date)
@@ -203,8 +203,8 @@ def lnencode(addr, privkey):
                     + bitstring.pack("intbe:16", cltv)
                 )
             data += tagged("r", route)
-        elif k == "f":
-            data += encode_fallback(v, addr.currency)
+        # elif k == "f":
+        #     data += encode_fallback(v, addr.currency)
         elif k == "d":
             data += tagged_bytes("d", v.encode())
         elif k == "x":
@@ -257,13 +257,13 @@ class LnAddr(object):
         self.currency = currency
         self.amount = amount
 
-    def __str__(self):
-        return "LnAddr[{}, amount={}{} tags=[{}]]".format(
-            hexlify(self.pubkey.serialize()).decode("utf-8"),
-            self.amount,
-            self.currency,
-            ", ".join([k + "=" + str(v) for k, v in self.tags]),
-        )
+    # def __str__(self):
+    #     return "LnAddr[{}, amount={}{} tags=[{}]]".format(
+    #         hexlify(self.pubkey.serialize()).decode("utf-8"),
+    #         self.amount,
+    #         self.currency,
+    #         ", ".join([k + "=" + str(v) for k, v in self.tags]),
+    #     )
 
 
 def shorten_amount(amount):
@@ -271,6 +271,7 @@ def shorten_amount(amount):
     # Convert to pico initially
     amount = int(amount * 10**12)
     units = ["p", "n", "u", "m", ""]
+    unit = ""
     for unit in units:
         if amount % 1000 == 0:
             amount //= 1000
@@ -309,12 +310,12 @@ def _pull_tagged(stream):
     return (CHARSET[tag], stream.read(length * 5), stream)
 
 
-def is_p2pkh(currency, prefix):
-    return prefix == base58_prefix_map[currency][0]
+# def is_p2pkh(currency, prefix):
+#     return prefix == base58_prefix_map[currency][0]
 
 
-def is_p2sh(currency, prefix):
-    return prefix == base58_prefix_map[currency][1]
+# def is_p2sh(currency, prefix):
+#     return prefix == base58_prefix_map[currency][1]
 
 
 # Tagged field containing BitArray
