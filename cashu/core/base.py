@@ -324,7 +324,7 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=None,
-        deprecated_id=False,
+        use_deprecated_id=False,
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
@@ -337,7 +337,7 @@ class WalletKeyset:
         self.id = derive_keyset_id(self.public_keys)
         # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
         self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)
-        if deprecated_id:
+        if use_deprecated_id:
             self.id = self.id_deprecated
         # END BACKWARDS COMPATIBILITY < 0.14.0
 
@@ -536,7 +536,7 @@ class TokenV3(BaseModel):
     @classmethod
     def deserialize(cls, tokenv3_serialized: str) -> "TokenV3":
         """
-        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
+        Ingesta a serialized "cashuA<json_urlsafe_base64>" token and returns a TokenV3.
         """
         prefix = "cashuA"
         assert tokenv3_serialized.startswith(prefix), Exception(

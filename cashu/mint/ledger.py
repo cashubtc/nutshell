@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import math
 from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
@@ -105,7 +106,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # store the new keyset in the current keysets
         self.keysets.keysets[keyset.id] = keyset
         # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
-        self.keysets.keysets[keyset.id_deprecated] = keyset
+        self.keysets.keysets[keyset.id_deprecated] = copy.copy(keyset)
         self.keysets.keysets[keyset.id_deprecated].id = keyset.id_deprecated
         # END BACKWARDS COMPATIBILITY < 0.14.0
         logger.debug(f"Loaded keyset {keyset.id}.")
