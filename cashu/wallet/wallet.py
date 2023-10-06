@@ -21,13 +21,13 @@ from ..core.base import (
     CheckSpendableResponse,
     DLEQWallet,
     GetInfoResponse,
-    GetMeltResponse,
-    GetMintResponse,
+    GetMintResponse_deprecated,
     Invoice,
     KeysetsResponse,
     KeysResponse,
-    PostMeltRequest,
-    PostMintRequest,
+    PostMeltRequest_deprecated,
+    PostMeltResponse_deprecated,
+    PostMintRequest_deprecated,
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
@@ -377,7 +377,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         resp = self.s.get(self.url + "/mint", params={"amount": amount})
         self.raise_on_error(resp)
         return_dict = resp.json()
-        mint_response = GetMintResponse.parse_obj(return_dict)
+        mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
         return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
 
     @async_set_requests
@@ -396,7 +396,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             Exception: If the minting fails
         """
-        outputs_payload = PostMintRequest(outputs=outputs)
+        outputs_payload = PostMintRequest_deprecated(outputs=outputs)
         logger.trace("Checking Lightning invoice. POST /mint")
         resp = self.s.post(
             self.url + "/mint",
@@ -498,7 +498,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Accepts proofs and a lightning invoice to pay in exchange.
         """
 
-        payload = PostMeltRequest(proofs=proofs, pr=invoice, outputs=outputs)
+        payload = PostMeltRequest_deprecated(proofs=proofs, pr=invoice, outputs=outputs)
 
         def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
@@ -516,7 +516,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         self.raise_on_error(resp)
         return_dict = resp.json()
 
-        return GetMeltResponse.parse_obj(return_dict)
+        return PostMeltResponse_deprecated.parse_obj(return_dict)
 
     @async_set_requests
     async def restore_promises(
@@ -525,7 +525,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         Asks the mint to restore promises corresponding to outputs.
         """
-        payload = PostMintRequest(outputs=outputs)
+        payload = PostMintRequest_deprecated(outputs=outputs)
         resp = self.s.post(self.url + "/restore", json=payload.dict())
         self.raise_on_error(resp)
         response_dict = resp.json()

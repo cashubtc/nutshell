@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Union
 
 from fastapi import APIRouter, Request
 from loguru import logger
@@ -10,16 +10,16 @@ from ..core.base import (
     CheckSpendableRequest,
     CheckSpendableResponse,
     GetInfoResponse,
-    GetMeltResponse,
+    GetMintRequest,
     GetMintResponse,
     KeysetsResponse,
-    KeysetsResponse_deprecated,
     KeysetsResponseKeyset,
     KeysResponse,
-    KeysResponse_deprecated,
     KeysResponseKeyset,
     PostMeltRequest,
+    PostMeltResponse,
     PostMintRequest,
+    PostMintRequest_deprecated,
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
@@ -103,9 +103,9 @@ async def keyset_keys(keyset_id: str, request: Request):
     except ValueError:
         keyset_id = keyset_id.replace("-", "+").replace("_", "/")
     # END BACKWARDS COMPATIBILITY < 0.14.0
-    keyset = ledger.get_keyset(keyset_id=keyset_id)
+
     keyset = ledger.keysets.keysets.get(keyset_id)
-    if not keyset:
+    if keyset is None:
         raise CashuError(code=0, detail="Keyset not found.")
 
     keyset_for_response = KeysResponseKeyset(
@@ -132,72 +132,8 @@ async def keysets() -> KeysetsResponse:
     return KeysetsResponse(keysets=keysets)
 
 
-# DEPRECATED
-
-
 @router.get(
-    "/keys",
-    name="Mint public keys",
-    summary="Get the public keys of the newest mint keyset",
-    response_description=(
-        "A dictionary of all supported token values of the mint and their associated"
-        " public key of the current keyset."
-    ),
-    response_model=KeysResponse_deprecated,
-    deprecated=True,
-)
-async def keys_deprecated():
-    """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
-    logger.trace("> GET /keys")
-    keyset = ledger.get_keyset()
-    keys = KeysResponse_deprecated.parse_obj(keyset)
-    return keys.__root__
-
-
-@router.get(
-    "/keys/{idBase64Urlsafe}",
-    name="Keyset public keys",
-    summary="Public keys of a specific keyset",
-    response_description=(
-        "A dictionary of all supported token values of the mint and their associated"
-        " public key for a specific keyset."
-    ),
-    response_model=KeysResponse_deprecated,
-    deprecated=True,
-)
-async def keyset_deprecated(idBase64Urlsafe: str):
-    """
-    Get the public keys of the mint from a specific keyset id.
-    The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
-    normal base64 before it can be processed (by the mint).
-    """
-    logger.trace(f"> GET /keys/{idBase64Urlsafe}")
-    id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
-    keyset = ledger.get_keyset(keyset_id=id)
-    keys = KeysResponse_deprecated.parse_obj(keyset)
-    return keys.__root__
-
-
-@router.get(
-    "/keysets",
-    name="Active keysets",
-    summary="Get all active keyset id of the mind",
-    response_model=KeysetsResponse_deprecated,
-    response_description="A list of all active keyset ids of the mint.",
-    deprecated=True,
-)
-async def keysets_deprecated() -> KeysetsResponse_deprecated:
-    """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
-    logger.trace("> GET /keysets")
-    keysets = KeysetsResponse_deprecated(keysets=ledger.keysets.get_ids())
-    return keysets
-
-
-# END DEPRECATED
-
-
-@router.get(
-    "/mint",
+    "/v1/mint",
     name="Request mint",
     summary="Request minting of new tokens",
     response_model=GetMintResponse,
@@ -206,29 +142,35 @@ async def keysets_deprecated() -> KeysetsResponse_deprecated:
         " after payment."
     ),
 )
-async def request_mint(amount: int = 0) -> GetMintResponse:
+async def request_mint(payload: GetMintRequest) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
 
     Call `POST /mint` after paying the invoice.
     """
-    logger.trace(f"> GET /mint: amount={amount}")
-    if amount > 21_000_000 * 100_000_000 or amount <= 0:
+    logger.trace(f"> GET /mint: amount={payload.amount}")
+    if payload.amount > 21_000_000 * 100_000_000 or payload.amount <= 0:
         raise CashuError(code=0, detail="Amount must be a valid amount of sat.")
     if settings.mint_peg_out_only:
         raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
 
-    payment_request, hash = await ledger.request_mint(amount)
-    resp = GetMintResponse(pr=payment_request, hash=hash)
+    payment_request, id = await ledger.request_mint(payload.amount)
+    resp = GetMintResponse(
+        request=payment_request,
+        id=id,
+        method="bolt11",
+        symbol="sat",
+        amount=payload.amount,
+    )
     logger.trace(f"< GET /mint: {resp}")
     return resp
 
 
 @router.post(
-    "/mint",
+    "/v1/mint",
     name="Mint tokens",
-    summary="Mint tokens in exchange for a Bitcoin paymemt that the user has made",
+    summary="Mint tokens in exchange for a Bitcoin payment that the user has made",
     response_model=PostMintResponse,
     response_description=(
         "A list of blinded signatures that can be used to create proofs."
@@ -236,8 +178,6 @@ async def request_mint(amount: int = 0) -> GetMintResponse:
 )
 async def mint(
     payload: PostMintRequest,
-    hash: Optional[str] = None,
-    payment_hash: Optional[str] = None,
 ) -> PostMintResponse:
     """
     Requests the minting of tokens belonging to a paid payment request.
@@ -246,39 +186,34 @@ async def mint(
     """
     logger.trace(f"> POST /mint: {payload}")
 
-    # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
-    # We use the payment_hash to lookup the hash from the database and pass that one along.
-    hash = payment_hash or hash
-    # END: backwards compatibility < 0.12
-
-    promises = await ledger.mint(payload.outputs, hash=hash)
+    promises = await ledger.mint(payload.outputs, id=payload.id)
     blinded_signatures = PostMintResponse(promises=promises)
     logger.trace(f"< POST /mint: {blinded_signatures}")
     return blinded_signatures
 
 
 @router.post(
-    "/melt",
+    "/v1/melt",
     name="Melt tokens",
     summary=(
         "Melt tokens for a Bitcoin payment that the mint will make for the user in"
         " exchange"
     ),
-    response_model=GetMeltResponse,
+    response_model=PostMeltResponse,
     response_description=(
         "The state of the payment, a preimage as proof of payment, and a list of"
         " promises for change."
     ),
 )
-async def melt(payload: PostMeltRequest) -> GetMeltResponse:
+async def melt(payload: PostMeltRequest) -> PostMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /melt: {payload}")
     ok, preimage, change_promises = await ledger.melt(
-        payload.proofs, payload.pr, payload.outputs
+        payload.proofs, payload.request, payload.outputs
     )
-    resp = GetMeltResponse(paid=ok, preimage=preimage, change=change_promises)
+    resp = PostMeltResponse(paid=ok, proof=preimage, change=change_promises)
     logger.trace(f"< POST /melt: {resp}")
     return resp
 
@@ -384,7 +319,7 @@ async def split(
         "have an associated blinded signature which is given in the second list."
     ),
 )
-async def restore(payload: PostMintRequest) -> PostRestoreResponse:
+async def restore(payload: PostMintRequest_deprecated) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, promises = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, promises=promises)

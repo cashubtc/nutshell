@@ -1,7 +1,7 @@
 import asyncio
 import copy
 import math
-from typing import Dict, List, Literal, Optional, Set, Tuple, Union
+from typing import Dict, List, Literal, Optional, Set, Tuple
 
 from loguru import logger
 
@@ -31,7 +31,7 @@ from ..core.helpers import fee_reserve, sum_proofs
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import Wallet
-from ..mint.crud import LedgerCrud
+from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
 from .verification import LedgerVerification
 
@@ -48,7 +48,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         seed: str,
         lightning: Wallet,
         derivation_path="",
-        crud=LedgerCrud,
+        crud=LedgerCrudSqlite,
     ):
         self.secrets_used: Set[str] = set()
         self.master_key = seed
@@ -215,8 +215,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             bool: True if invoice has been paid, else False
         """
-        invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
-            hash=hash, db=self.db, conn=conn
+        invoice = await self.crud.get_lightning_invoice(
+            db=self.db, hash=hash, conn=conn
         )
         if invoice is None:
             raise LightningError("invoice not found.")
@@ -386,18 +386,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     async def mint(
         self,
         B_s: List[BlindedMessage],
-        hash: Optional[str] = None,
+        id: Optional[str] = None,
         keyset: Optional[MintKeyset] = None,
     ) -> List[BlindedSignature]:
         """Mints a promise for coins for B_.
 
         Args:
             B_s (List[BlindedMessage]): Outputs (blinded messages) to sign.
-            hash (Optional[str], optional): Hash of (paid) Lightning invoice. Defaults to None.
+            id (Optional[str], optional): Id of (paid) Lightning invoice. Defaults to None.
             keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
 
         Raises:
-            Exception: Lightning invvoice is not paid.
+            Exception: Lightning invoice is not paid.
             Exception: Lightning is turned on but no payment hash is provided.
             Exception: Something went wrong with the invoice check.
             Exception: Amount too large.
@@ -409,21 +409,21 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         amount_outputs = sum([b.amount for b in B_s])
 
         if settings.lightning:
-            if not hash:
+            if not id:
                 raise NotAllowedError("no hash provided.")
-            self.locks[hash] = (
-                self.locks.get(hash) or asyncio.Lock()
+            self.locks[id] = (
+                self.locks.get(id) or asyncio.Lock()
             )  # create a new lock if it doesn't exist
-            async with self.locks[hash]:
+            async with self.locks[id]:
                 # will raise an exception if the invoice is not paid or tokens are
                 # already issued or the requested amount is too high
-                await self._check_lightning_invoice(amount_outputs, hash)
+                await self._check_lightning_invoice(amount_outputs, id)
 
-                logger.trace(f"crud: setting invoice {hash} as issued")
+                logger.trace(f"crud: setting invoice {id} as issued")
                 await self.crud.update_lightning_invoice(
-                    hash=hash, issued=True, db=self.db
+                    hash=id, issued=True, db=self.db
                 )
-            del self.locks[hash]
+            del self.locks[id]
 
         self._verify_outputs(B_s)
 
@@ -739,7 +739,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Raises:
             Exception: At least one proof already in pending table.
         """
-        # first we check whether these proofs are pending aready
+        # first we check whether these proofs are pending already
         async with self.proofs_pending_lock:
             await self._validate_proofs_pending(proofs, conn)
             for p in proofs:

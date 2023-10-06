@@ -1,5 +1,5 @@
 import secrets as scrts
-from typing import Callable, Dict, List, Optional, Union
+from typing import List, Union
 
 import requests
 from loguru import logger
@@ -56,15 +56,11 @@ class LedgerAPIDeprecated(SupportsRequests):
     @staticmethod
     def raise_on_error(
         resp: Response,
-        call_404: Optional[Callable] = None,
-        call_args: List = [],
-        call_kwargs: Dict = {},
     ) -> None:
         """Raises an exception if the response from the mint contains an error.
 
         Args:
             resp_dict (Response): Response dict (previously JSON) from mint
-            call_instead (Callable): Function to call instead of raising an exception
 
         Raises:
             Exception: if the response contains an error
@@ -75,11 +71,6 @@ class LedgerAPIDeprecated(SupportsRequests):
             error_message = f"Mint Error: {resp_dict['detail']}"
             if "code" in resp_dict:
                 error_message += f" (Code: {resp_dict['code']})"
-            # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
-            # if the error is a 404, we assume that the mint is not upgraded yet
-            if call_404 and resp.status_code == 404:
-                return call_404(*call_args, **call_kwargs)
-            # END BACKWARDS COMPATIBILITY < 0.14.0
             raise Exception(error_message)
         # raise for status if no error
         resp.raise_for_status()

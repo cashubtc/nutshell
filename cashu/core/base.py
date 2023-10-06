@@ -196,7 +196,31 @@ class KeysetsResponse_deprecated(BaseModel):
 # ------- API: MINT -------
 
 
+class GetMintRequest(BaseModel):
+    amount: int
+    method: str
+    symbol: str
+
+
+class GetMintResponse(BaseModel):
+    request: str  # payment request
+    method: str  # payment method
+    symbol: str  # payment symbol
+    amount: int  # amount of payment
+    id: str  # payment lookup id
+
+
 class PostMintRequest(BaseModel):
+    id: str  # payment lookup id
+    outputs: List[BlindedMessage]
+
+
+class GetMintResponse_deprecated(BaseModel):
+    pr: str
+    hash: str
+
+
+class PostMintRequest_deprecated(BaseModel):
     outputs: List[BlindedMessage]
 
 
@@ -204,21 +228,29 @@ class PostMintResponse(BaseModel):
     promises: List[BlindedSignature] = []
 
 
-class GetMintResponse(BaseModel):
-    pr: str
-    hash: str
-
-
 # ------- API: MELT -------
 
 
 class PostMeltRequest(BaseModel):
     proofs: List[Proof]
+    method: str
+    request: str
+    outputs: Union[List[BlindedMessage], None]
+
+
+class PostMeltResponse(BaseModel):
+    paid: Union[bool, None]
+    proof: Union[str, None]
+    change: Union[List[BlindedSignature], None] = None
+
+
+class PostMeltRequest_deprecated(BaseModel):
+    proofs: List[Proof]
     pr: str
     outputs: Union[List[BlindedMessage], None]
 
 
-class GetMeltResponse(BaseModel):
+class PostMeltResponse_deprecated(BaseModel):
     paid: Union[bool, None]
     preimage: Union[str, None]
     change: Union[List[BlindedSignature], None] = None

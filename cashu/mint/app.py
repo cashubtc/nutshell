@@ -18,6 +18,7 @@ from starlette.requests import Request
 from ..core.errors import CashuError
 from ..core.settings import settings
 from .router import router
+from .router_deprecated import router_deprecated
 from .startup import start_mint_init
 
 # from starlette_context import context
@@ -173,5 +174,9 @@ async def startup_mint():
     await start_mint_init()
 
 
-app.include_router(router=router)
+app.include_router(
+    router=router,
+    tags=["Mint"],
+)
+app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
