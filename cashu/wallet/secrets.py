@@ -74,8 +74,8 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         self.seed = mnemo.to_seed(mnemonic_str)
         self.mnemonic = mnemonic_str
 
-        logger.debug(f"Using seed: {self.seed.hex()}")
-        logger.debug(f"Using mnemonic: {mnemonic_str}")
+        # logger.debug(f"Using seed: {self.seed.hex()}")
+        # logger.debug(f"Using mnemonic: {mnemonic_str}")
 
         # if no mnemonic was in the database, store the new one
         if ret_db is None:

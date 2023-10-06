@@ -55,7 +55,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         self.derivation_path = derivation_path
 
         self.db = db
-        self.crud = crud
+        self.crud = crud()
         self.lightning = lightning
         self.pubkey = derive_pubkey(self.master_key)
         self.keysets = MintKeysets([])
@@ -385,14 +385,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     async def mint(
         self,
-        B_s: List[BlindedMessage],
+        *,
+        outputs: List[BlindedMessage],
         id: Optional[str] = None,
         keyset: Optional[MintKeyset] = None,
     ) -> List[BlindedSignature]:
-        """Mints a promise for coins for B_.
+        """Mints new coins if payment `id` was successful. Ingest blind messages `outputs` and returns blind signatures `promises`.
 
         Args:
-            B_s (List[BlindedMessage]): Outputs (blinded messages) to sign.
+            outputs (List[BlindedMessage]): Outputs (blinded messages) to sign.
             id (Optional[str], optional): Id of (paid) Lightning invoice. Defaults to None.
             keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
 
@@ -406,7 +407,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             List[BlindedSignature]: Signatures on the outputs.
         """
         logger.trace("called mint")
-        amount_outputs = sum([b.amount for b in B_s])
+        amount_outputs = sum([b.amount for b in outputs])
 
         if settings.lightning:
             if not id:
@@ -425,9 +426,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 )
             del self.locks[id]
 
-        self._verify_outputs(B_s)
+        self._verify_outputs(outputs)
 
-        promises = await self._generate_promises(B_s, keyset)
+        promises = await self._generate_promises(outputs, keyset)
         logger.trace("generated promises")
         return promises
 

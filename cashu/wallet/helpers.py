@@ -48,7 +48,7 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
             t.mint, os.path.join(settings.cashu_dir, wallet.name)
         )
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
-        logger.debug(f"Keysets in tokens: {keysets}")
+        logger.trace(f"Keysets in tokens: {keysets}")
         # loop over all keysets
         for keyset in set(keysets):
             await mint_wallet.load_mint()

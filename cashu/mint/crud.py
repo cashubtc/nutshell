@@ -17,37 +17,47 @@ class LedgerCrud(ABC):
         pass
 
     @abstractmethod
-    async def get_lightning_invoice(self, *args, **kwags):
+    async def get_lightning_invoice(self, *args, **kwags) -> Optional[Invoice]:
         pass
 
-    async def get_secrets_used(self, *args, **kwags):
+    @abstractmethod
+    async def get_secrets_used(self, *args, **kwags) -> List[str]:
         pass
 
-    async def invalidate_proof(self, *args, **kwags):
+    @abstractmethod
+    async def invalidate_proof(self, *args, **kwags) -> None:
         pass
 
-    async def get_proofs_pending(self, *args, **kwags):
+    @abstractmethod
+    async def get_proofs_pending(self, *args, **kwags) -> List[Proof]:
         pass
 
-    async def set_proof_pending(self, *args, **kwags):
+    @abstractmethod
+    async def set_proof_pending(self, *args, **kwags) -> None:
         pass
 
-    async def unset_proof_pending(self, *args, **kwags):
+    @abstractmethod
+    async def unset_proof_pending(self, *args, **kwags) -> None:
         pass
 
-    async def store_keyset(self, *args, **kwags):
+    @abstractmethod
+    async def store_keyset(self, *args, **kwags) -> None:
         pass
 
-    async def store_lightning_invoice(self, *args, **kwags):
+    @abstractmethod
+    async def store_lightning_invoice(self, *args, **kwags) -> None:
         pass
 
-    async def store_promise(self, *args, **kwags):
+    @abstractmethod
+    async def store_promise(self, *args, **kwags) -> None:
         pass
 
-    async def get_promise(self, *args, **kwags):
+    @abstractmethod
+    async def get_promise(self, *args, **kwags) -> Optional[BlindedSignature]:
         pass
 
-    async def update_lightning_invoice(self, *args, **kwags):
+    @abstractmethod
+    async def update_lightning_invoice(self, *args, **kwags) -> None:
         pass
 
 
@@ -63,7 +73,7 @@ class LedgerCrudSqlite(LedgerCrud):
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
-    ):
+    ) -> None:
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'promises')}
