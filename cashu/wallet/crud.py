@@ -216,7 +216,7 @@ async def get_keyset(
     mint_url: str = "",
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
-):
+) -> WalletKeyset | None:
     clauses = []
     values: List[Any] = []
     clauses.append("active = ?")

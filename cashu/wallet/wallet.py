@@ -154,8 +154,21 @@ class LedgerAPI(object):
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
 
+        keyset_local: Union[WalletKeyset, None] = None
         if keyset_id:
-            # get requested keyset
+            # check if current keyset is in db
+            keyset_local = await get_keyset(keyset_id, db=self.db)
+            if keyset_local:
+                logger.debug(f"Found keyset {keyset_id} in database.")
+            else:
+                logger.debug(
+                    f"Cannot find keyset {keyset_id} in database. Loading keyset from"
+                    " mint."
+                )
+            keyset = keyset_local
+
+        if keyset_local is None and keyset_id:
+            # get requested keyset from mint
             keyset = await self._get_keys_of_keyset(self.url, keyset_id)
         else:
             # get current keyset
@@ -165,20 +178,19 @@ class LedgerAPI(object):
         assert keyset.id
         assert len(keyset.public_keys) > 0, "did not receive keys from mint."
 
-        if keyset_id != keyset.id:
+        if keyset_id and keyset_id != keyset.id:
             # NOTE: Because of the upcoming change of how to calculate keyset ids
             # with version 0.14.0, we overwrite the calculated keyset id with the
             # requested one. This is a temporary fix and should be removed once all
             # ecash is transitioned to 0.14.0.
             logger.debug(
-                "Keyset ID mismatch. This can happen due to a version upgrade."
+                f"Keyset ID mismatch: {keyset_id} != {keyset.id}. This can happen due"
+                " to a version upgrade."
             )
             keyset.id = keyset_id or keyset.id
 
-        # check if current keyset is in db
-        keyset_local: Optional[WalletKeyset] = await get_keyset(keyset.id, db=self.db)
         # if not, store it
-        if keyset_local is None:
+        if keyset_id and keyset_local is None:
             logger.debug(f"Storing new mint keyset: {keyset.id}")
             await store_keyset(keyset=keyset, db=self.db)
 
