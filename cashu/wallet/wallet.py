@@ -99,11 +99,9 @@ def async_set_requests(func):
 
 
 class LedgerAPI(object):
-    keysets: Dict[str, WalletKeyset]  # holds keysets of mint
-    mint_keyset_ids: List[str]  # holds ids of keysets of mint
-    # keys: WalletKeyset  # holds current keys of mint
-    keyset_id: str  # holds id of current keyset
-    # public_keys: Dict[int, PublicKey]  # holds public keys of current keyset
+    keyset_id: str  # holds current keyset id
+    keysets: Dict[str, WalletKeyset]  # holds keysets
+    mint_keyset_ids: List[str]  # holds active keyset ids of the mint
 
     mint_info: GetInfoResponse  # holds info about mint
     tor: TorProxy
