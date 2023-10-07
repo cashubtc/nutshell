@@ -89,8 +89,8 @@ async def wallet3(mint):
 
 @pytest.mark.asyncio
 async def test_get_keys(wallet1: Wallet):
-    assert wallet1.keys.public_keys
-    assert len(wallet1.keys.public_keys) == settings.max_order
+    assert wallet1.keysets[wallet1.keyset_id].public_keys
+    assert len(wallet1.keysets[wallet1.keyset_id].public_keys) == settings.max_order
     keyset = await wallet1._get_keys(wallet1.url)
     assert keyset.id is not None
     assert keyset.id == "1cCNIAZ2X/w1"
@@ -100,8 +100,8 @@ async def test_get_keys(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_get_keyset(wallet1: Wallet):
-    assert wallet1.keys.public_keys
-    assert len(wallet1.keys.public_keys) == settings.max_order
+    assert wallet1.keysets[wallet1.keyset_id].public_keys
+    assert len(wallet1.keysets[wallet1.keyset_id].public_keys) == settings.max_order
     # let's get the keys first so we can get a keyset ID that we use later
     keys1 = await wallet1._get_keys(wallet1.url)
     # gets the keys of a specific keyset
