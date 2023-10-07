@@ -210,17 +210,12 @@ class GetMintResponse(BaseModel):
     id: str  # payment lookup id
 
 
-class PostMintRequest(BaseModel):
-    id: str  # payment lookup id
-    outputs: List[BlindedMessage]
-
-
 class GetMintResponse_deprecated(BaseModel):
     pr: str
     hash: str
 
 
-class PostMintRequest_deprecated(BaseModel):
+class PostMintRequest(BaseModel):
     outputs: List[BlindedMessage]
 
 

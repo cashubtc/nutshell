@@ -21,13 +21,14 @@ from ..core.base import (
     CheckSpendableResponse,
     DLEQWallet,
     GetInfoResponse,
-    GetMintResponse_deprecated,
+    GetMintRequest,
+    GetMintResponse,
     Invoice,
     KeysetsResponse,
     KeysResponse,
-    PostMeltRequest_deprecated,
-    PostMeltResponse_deprecated,
-    PostMintRequest_deprecated,
+    PostMeltRequest,
+    PostMeltResponse,
+    PostMintRequest,
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
@@ -294,9 +295,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             ret = await self._get_keys_of_keyset_deprecated(url, keyset_id)
             return ret
         # END backwards compatibility < 0.14.0
-        r = self.raise_on_error(resp)
-        if r:
-            return r  # backwards compatibility < 0.14.0
+        self.raise_on_error(resp)
 
         keys_dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
@@ -330,9 +329,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             ret = await self._get_keyset_ids_deprecated(url)
             return ret
         # END backwards compatibility < 0.14.0
-        r = self.raise_on_error(resp)
-        if r:
-            return r  # backwards compatibility < 0.14.0
+        self.raise_on_error(resp)
 
         keysets_dict = resp.json()
         keysets = KeysetsResponse.parse_obj(keysets_dict)
@@ -373,12 +370,19 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             Exception: If the mint request fails
         """
-        logger.trace("Requesting mint: GET /mint")
-        resp = self.s.get(self.url + "/mint", params={"amount": amount})
+        logger.trace("Requesting mint: GET /v1/mint")
+        payload = GetMintRequest(amount=amount, method="bolt11", symbol="sat")
+        resp = self.s.get(self.url + "/v1/mint", data=payload.json())
+        # BEGIN backwards compatibility < 0.14.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.request_mint_deprecated(amount)
+            return ret
+        # END backwards compatibility < 0.14.0
         self.raise_on_error(resp)
         return_dict = resp.json()
-        mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
-        return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
+        mint_response = GetMintResponse.parse_obj(return_dict)
+        return Invoice(amount=amount, pr=mint_response.request, hash=mint_response.id)
 
     @async_set_requests
     async def mint(
@@ -396,19 +400,25 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             Exception: If the minting fails
         """
-        outputs_payload = PostMintRequest_deprecated(outputs=outputs)
-        logger.trace("Checking Lightning invoice. POST /mint")
+        outputs_payload = PostMintRequest(outputs=outputs)
+        logger.trace("Checking Lightning invoice. POST /v1/mint")
         resp = self.s.post(
-            self.url + "/mint",
+            self.url + "/v1/mint",
             json=outputs_payload.dict(),
             params={
                 "hash": hash,
                 "payment_hash": hash,  # backwards compatibility pre 0.12.0
             },
         )
+        # BEGIN backwards compatibility < 0.14.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.mint_deprecated(outputs, hash)
+            return ret
+        # END backwards compatibility < 0.14.0
         self.raise_on_error(resp)
         response_dict = resp.json()
-        logger.trace("Lightning invoice checked. POST /mint")
+        logger.trace("Lightning invoice checked. POST /v1/mint")
         promises = PostMintResponse.parse_obj(response_dict).promises
         return promises
 
@@ -498,25 +508,28 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Accepts proofs and a lightning invoice to pay in exchange.
         """
 
-        payload = PostMeltRequest_deprecated(proofs=proofs, pr=invoice, outputs=outputs)
+        payload = PostMeltRequest(
+            proofs=proofs, method="bolt11", request=invoice, outputs=outputs
+        )
 
         def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "script"}
             return {
                 "proofs": {i: proofs_include for i in range(len(proofs))},
-                "pr": ...,
+                "method": ...,
+                "request": ...,
                 "outputs": ...,
             }
 
         resp = self.s.post(
-            self.url + "/melt",
+            self.url + "/v1/melt",
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
         )
         self.raise_on_error(resp)
         return_dict = resp.json()
 
-        return PostMeltResponse_deprecated.parse_obj(return_dict)
+        return PostMeltResponse.parse_obj(return_dict)
 
     @async_set_requests
     async def restore_promises(
@@ -525,7 +538,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         Asks the mint to restore promises corresponding to outputs.
         """
-        payload = PostMintRequest_deprecated(outputs=outputs)
+        payload = PostMintRequest(outputs=outputs)
         resp = self.s.post(self.url + "/restore", json=payload.dict())
         self.raise_on_error(resp)
         response_dict = resp.json()
@@ -809,7 +822,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             invoice_obj = Invoice(
                 amount=-sum_proofs(proofs),
                 pr=invoice,
-                preimage=status.preimage,
+                preimage=status.proof,
                 paid=True,
                 time_paid=time.time(),
                 hash="",

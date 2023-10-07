@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Optional, Union
 
 from fastapi import APIRouter, Request
 from loguru import logger
@@ -19,7 +19,6 @@ from ..core.base import (
     PostMeltRequest,
     PostMeltResponse,
     PostMintRequest,
-    PostMintRequest_deprecated,
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
@@ -178,6 +177,8 @@ async def request_mint(payload: GetMintRequest) -> GetMintResponse:
 )
 async def mint(
     payload: PostMintRequest,
+    id: Optional[str] = None,
+    hash: Optional[str] = None,
 ) -> PostMintResponse:
     """
     Requests the minting of tokens belonging to a paid payment request.
@@ -186,7 +187,7 @@ async def mint(
     """
     logger.trace(f"> POST /mint: {payload}")
 
-    promises = await ledger.mint(outputs=payload.outputs, id=payload.id)
+    promises = await ledger.mint(outputs=payload.outputs, id=id or hash)
     blinded_signatures = PostMintResponse(promises=promises)
     logger.trace(f"< POST /mint: {blinded_signatures}")
     return blinded_signatures
@@ -319,7 +320,7 @@ async def split(
         "have an associated blinded signature which is given in the second list."
     ),
 )
-async def restore(payload: PostMintRequest_deprecated) -> PostRestoreResponse:
+async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, promises = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, promises=promises)

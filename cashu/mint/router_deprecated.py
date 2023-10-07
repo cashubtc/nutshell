@@ -9,7 +9,7 @@ from ..core.base import (
     KeysResponse_deprecated,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
-    PostMintRequest_deprecated,
+    PostMintRequest,
     PostMintResponse,
 )
 from ..core.errors import CashuError
@@ -118,7 +118,7 @@ async def request_mint_deprecated(amount: int = 0) -> GetMintResponse_deprecated
     deprecated=True,
 )
 async def mint_deprecated(
-    payload: PostMintRequest_deprecated,
+    payload: PostMintRequest,
     hash: Optional[str] = None,
     payment_hash: Optional[str] = None,
 ) -> PostMintResponse:

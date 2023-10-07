@@ -1,5 +1,5 @@
 import secrets as scrts
-from typing import List, Union
+from typing import List, Optional, Tuple, Union
 
 import requests
 from loguru import logger
@@ -7,13 +7,23 @@ from requests import Response
 
 from ..core import bolt11 as bolt11
 from ..core.base import (
+    BlindedMessage,
+    BlindedSignature,
+    GetMintResponse_deprecated,
+    Invoice,
     KeysetsResponse_deprecated,
+    PostMeltRequest_deprecated,
+    PostMeltResponse_deprecated,
+    PostMintRequest,
+    PostMintResponse,
+    PostRestoreResponse,
+    Proof,
     WalletKeyset,
 )
 from ..core.crypto.secp import PublicKey
 from ..core.settings import settings
 from ..tor.tor import TorProxy
-from .protocols import SupportsRequests
+from .protocols import SupportsMintURL, SupportsRequests
 
 
 def async_set_requests(func):
@@ -48,10 +58,11 @@ def async_set_requests(func):
     return wrapper
 
 
-class LedgerAPIDeprecated(SupportsRequests):
+class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
     """Deprecated wallet class, will be removed in the future."""
 
     s: requests.Session
+    url: str
 
     @staticmethod
     def raise_on_error(
@@ -160,3 +171,97 @@ class LedgerAPIDeprecated(SupportsRequests):
         keysets = KeysetsResponse_deprecated.parse_obj(keysets_dict)
         assert len(keysets.keysets), Exception("did not receive any keysets")
         return keysets.keysets
+
+    @async_set_requests
+    async def request_mint_deprecated(self, amount) -> Invoice:
+        """Requests a mint from the server and returns Lightning invoice.
+
+        Args:
+            amount (int): Amount of tokens to mint
+
+        Returns:
+            Invoice: Lightning invoice
+
+        Raises:
+            Exception: If the mint request fails
+        """
+        logger.trace("Requesting mint: GET /mint")
+        resp = self.s.get(self.url + "/mint", params={"amount": amount})
+        self.raise_on_error(resp)
+        return_dict = resp.json()
+        mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
+        return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
+
+    @async_set_requests
+    async def mint_deprecated(
+        self, outputs: List[BlindedMessage], hash: Optional[str] = None
+    ) -> List[BlindedSignature]:
+        """Mints new coins and returns a proof of promise.
+
+        Args:
+            outputs (List[BlindedMessage]): Outputs to mint new tokens with
+            hash (str, optional): Hash of the paid invoice. Defaults to None.
+
+        Returns:
+            list[Proof]: List of proofs.
+
+        Raises:
+            Exception: If the minting fails
+        """
+        outputs_payload = PostMintRequest(outputs=outputs)
+        logger.trace("Checking Lightning invoice. POST /mint")
+        resp = self.s.post(
+            self.url + "/mint",
+            json=outputs_payload.dict(),
+            params={
+                "hash": hash,
+                "payment_hash": hash,  # backwards compatibility pre 0.12.0
+            },
+        )
+        self.raise_on_error(resp)
+        response_dict = resp.json()
+        logger.trace("Lightning invoice checked. POST /mint")
+        promises = PostMintResponse.parse_obj(response_dict).promises
+        return promises
+
+    @async_set_requests
+    async def pay_lightning_deprecated(
+        self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
+    ):
+        """
+        Accepts proofs and a lightning invoice to pay in exchange.
+        """
+
+        payload = PostMeltRequest_deprecated(proofs=proofs, pr=invoice, outputs=outputs)
+
+        def _meltrequest_include_fields(proofs: List[Proof]):
+            """strips away fields from the model that aren't necessary for the /melt"""
+            proofs_include = {"id", "amount", "secret", "C", "script"}
+            return {
+                "proofs": {i: proofs_include for i in range(len(proofs))},
+                "pr": ...,
+                "outputs": ...,
+            }
+
+        resp = self.s.post(
+            self.url + "/melt",
+            json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
+        )
+        self.raise_on_error(resp)
+        return_dict = resp.json()
+
+        return PostMeltResponse_deprecated.parse_obj(return_dict)
+
+    @async_set_requests
+    async def restore_promises(
+        self, outputs: List[BlindedMessage]
+    ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
+        """
+        Asks the mint to restore promises corresponding to outputs.
+        """
+        payload = PostMintRequest(outputs=outputs)
+        resp = self.s.post(self.url + "/restore", json=payload.dict())
+        self.raise_on_error(resp)
+        response_dict = resp.json()
+        returnObj = PostRestoreResponse.parse_obj(response_dict)
+        return returnObj.outputs, returnObj.promises

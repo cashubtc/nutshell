@@ -20,3 +20,7 @@ class SupportsKeysets(Protocol):
 
 class SupportsRequests(Protocol):
     s: requests.Session
+
+
+class SupportsMintURL(Protocol):
+    url: str
