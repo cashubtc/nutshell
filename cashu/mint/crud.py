@@ -62,6 +62,12 @@ class LedgerCrud(ABC):
 
 
 class LedgerCrudSqlite(LedgerCrud):
+    """Implementation of LedgerCrud for sqlite.
+
+    Args:
+        LedgerCrud (ABC): Abstract base class for LedgerCrud.
+    """
+
     async def store_promise(
         self,
         *,

@@ -48,14 +48,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         seed: str,
         lightning: Wallet,
         derivation_path="",
-        crud=LedgerCrudSqlite,
+        crud=LedgerCrudSqlite(),
     ):
         self.secrets_used: Set[str] = set()
         self.master_key = seed
         self.derivation_path = derivation_path
 
         self.db = db
-        self.crud = crud()
+        self.crud = crud
         self.lightning = lightning
         self.pubkey = derive_pubkey(self.master_key)
         self.keysets = MintKeysets([])
@@ -109,7 +109,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         self.keysets.keysets[keyset.id_deprecated] = copy.copy(keyset)
         self.keysets.keysets[keyset.id_deprecated].id = keyset.id_deprecated
         # END BACKWARDS COMPATIBILITY < 0.14.0
-        logger.debug(f"Loaded keyset {keyset.id}.")
+
+        logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
 
     async def init_keysets(self, autosave=True) -> None:
@@ -121,9 +122,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             generated from `self.derivation_path`. Defaults to True.
         """
         # load all past keysets from db
-        logger.trace("crud: loading keysets")
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
-        logger.trace(f"crud: loaded {len(tmp_keysets)} keysets")
+        logger.debug(
+            f"Loaded {len(tmp_keysets)} keysets from database. Generating keys..."
+        )
         # add keysets from db to current keysets
         for k in tmp_keysets:
             if k.id and k.id not in self.keysets.keysets:
@@ -134,20 +136,23 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # we already generated the keys for this keyset
             if v.id and v.public_keys and len(v.public_keys):
                 continue
-            logger.debug(f"Generating keys for keyset {v.id}")
+            logger.trace(f"Generating keys for keyset {v.id}")
             v.generate_keys(self.master_key)
 
-            # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
-            # we store all keysets also by their deprecated id
-            logger.debug(f"Loading deprecated keyset {v.id_deprecated} (new: {v.id})")
+        # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+        keyset_ids = list(self.keysets.keysets.values())
+        for v in keyset_ids:
+            # we duplicate all keysets also by their deprecated id
+            logger.trace(f"Loading deprecated keyset {v.id_deprecated} (new: {v.id})")
             self.keysets.keysets[v.id_deprecated] = v
-            # END BACKWARDS COMPATIBILITY < 0.14.0
+        # END BACKWARDS COMPATIBILITY < 0.14.0
 
-        logger.debug(
+        logger.info(
             f"Initialized {len(self.keysets.keysets)} keysets from the database."
         )
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
+        logger.info(f"Current keyset: {self.keyset.id}")
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""

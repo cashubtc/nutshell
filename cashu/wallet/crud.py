@@ -264,29 +264,29 @@ async def store_lightning_invoice(
     )
 
 
-async def get_lightning_invoice(
-    db: Database,
-    hash: str = "",
-    conn: Optional[Connection] = None,
-) -> Invoice:
-    clauses = []
-    values: List[Any] = []
-    if hash:
-        clauses.append("hash = ?")
-        values.append(hash)
+# async def get_lightning_invoice(
+#     db: Database,
+#     hash: str = "",
+#     conn: Optional[Connection] = None,
+# ) -> Invoice:
+#     clauses = []
+#     values: List[Any] = []
+#     if hash:
+#         clauses.append("hash = ?")
+#         values.append(hash)
 
-    where = ""
-    if clauses:
-        where = f"WHERE {' AND '.join(clauses)}"
+#     where = ""
+#     if clauses:
+#         where = f"WHERE {' AND '.join(clauses)}"
 
-    row = await (conn or db).fetchone(
-        f"""
-        SELECT * from invoices
-        {where}
-        """,
-        tuple(values),
-    )
-    return Invoice(**row)
+#     row = await (conn or db).fetchone(
+#         f"""
+#         SELECT * from invoices
+#         {where}
+#         """,
+#         tuple(values),
+#     )
+#     return Invoice(**row)
 
 
 async def get_lightning_invoices(
