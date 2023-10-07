@@ -134,7 +134,7 @@ async def mint_deprecated(
     hash = payment_hash or hash
     # END: backwards compatibility < 0.12
 
-    promises = await ledger.mint(payload.outputs, id=hash)
+    promises = await ledger.mint(outputs=payload.outputs, id=hash)
     blinded_signatures = PostMintResponse(promises=promises)
     logger.trace(f"< POST /mint: {blinded_signatures}")
     return blinded_signatures

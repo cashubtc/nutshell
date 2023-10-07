@@ -390,7 +390,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         id: Optional[str] = None,
         keyset: Optional[MintKeyset] = None,
     ) -> List[BlindedSignature]:
-        """Mints new coins if payment `id` was successful. Ingest blind messages `outputs` and returns blind signatures `promises`.
+        """Mints new coins if payment `id` was made. Ingest blind messages `outputs` and returns blind signatures `promises`.
 
         Args:
             outputs (List[BlindedMessage]): Outputs (blinded messages) to sign.

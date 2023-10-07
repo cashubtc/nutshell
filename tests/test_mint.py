@@ -84,7 +84,7 @@ async def test_mint(ledger: Ledger):
             B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
         )
     ]
-    promises = await ledger.mint(blinded_messages_mock, hash=payment_hash)
+    promises = await ledger.mint(outputs=blinded_messages_mock, id=payment_hash)
     assert len(promises)
     assert promises[0].amount == 8
     assert (
@@ -103,7 +103,7 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
         )
     ]
     await assert_err(
-        ledger.mint(blinded_messages_mock_invalid_key, hash=payment_hash),
+        ledger.mint(outputs=blinded_messages_mock_invalid_key, id=payment_hash),
         "invalid public key",
     )
 
