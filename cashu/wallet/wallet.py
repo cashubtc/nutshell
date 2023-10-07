@@ -834,6 +834,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 return
             logger.trace("Verifying DLEQ proof.")
             assert proof.id
+            assert (
+                proof.id in self.keysets
+            ), f"Keyset {proof.id} not known, can not verify DLEQ."
             if not b_dhke.carol_verify_dleq(
                 secret_msg=proof.secret,
                 C=PublicKey(bytes.fromhex(proof.C), raw=True),
