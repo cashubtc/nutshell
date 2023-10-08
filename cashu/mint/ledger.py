@@ -420,16 +420,22 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.trace("generated promises")
         return promises
 
-    async def getmelt(self, invoice: str) -> PaymentQuote:
+    async def getmelt(self, bolt11: str) -> PaymentQuote:
         """_summary_
 
         Args:
-            invoice (str): Lightning invoice to get the amount of
+            bolt11 (str): Lightning invoice to get the amount of
 
         Returns:
             int: Amount to pay
         """
-        quote = await self.lightning.get_invoice_quote(invoice)
+        quote = await self.lightning.get_invoice_quote(bolt11)
+        invoice = Invoice(
+            amount=quote.amount,
+            hash=quote.id,
+            pr=bolt11,
+        )
+        await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
         return quote
 
     async def melt(
@@ -455,19 +461,20 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         try:
             # verify amounts
-            # total_provided = sum_proofs(proofs)
-            # invoice_obj = bolt11.decode(invoice)
-            # invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
-            # if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
-            #     raise NotAllowedError(
-            #         f"Maximum melt amount is {settings.mint_max_peg_out} sat."
-            #     )
-            # fees_sat = 0  # await self.get_melt_fees(invoice)
-            # # verify overspending attempt
-            # assert total_provided >= invoice_amount + fees_sat, TransactionError(
-            #     "provided proofs not enough for Lightning payment. Provided:"
-            #     f" {total_provided}, needed: {invoice_amount + fees_sat}"
-            # )
+            total_provided = sum_proofs(proofs)
+            invoiceObj = await self.crud.get_lightning_invoice(hash=invoice, db=self.db)
+            assert invoiceObj, "Invoice not found"
+            invoice_amount = invoiceObj.amount
+            if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
+                raise NotAllowedError(
+                    f"Maximum melt amount is {settings.mint_max_peg_out} sat."
+                )
+            fees_sat = 0  # await self.get_melt_fees(invoice)
+            # verify overspending attempt
+            assert total_provided >= invoice_amount + fees_sat, TransactionError(
+                "provided proofs not enough for Lightning payment. Provided:"
+                f" {total_provided}, needed: {invoice_amount + fees_sat}"
+            )
 
             # verify spending inputs, outputs, and spending conditions
             await self.verify_inputs_and_outputs(proofs, outputs)

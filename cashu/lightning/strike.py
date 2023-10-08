@@ -112,7 +112,7 @@ class StrikeUSDWallet(Wallet):
             )
             r.raise_for_status()
         except Exception:
-            error_message = r.json()["detail"]
+            error_message = r.json()["data"]["message"]
             return PaymentResponse(None, None, None, None, error_message)
         data = r.json()
 
@@ -128,7 +128,7 @@ class StrikeUSDWallet(Wallet):
             )
             r.raise_for_status()
         except Exception:
-            error_message = r.json()["detail"]
+            error_message = r.json()["data"]["message"]
             return PaymentResponse(None, None, None, None, error_message)
 
         data = r.json()
