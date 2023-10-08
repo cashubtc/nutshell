@@ -46,6 +46,7 @@ from ..core.migrations import migrate_databases
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
+from ..lightning.base import PaymentQuote
 from ..tor.tor import TorProxy
 from ..wallet.crud import (
     bump_secret_derivation,
@@ -753,6 +754,23 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         send_proofs = new_proofs[len(frst_outputs) :]
         return keep_proofs, send_proofs
 
+    async def quote_lightning(self, invoice: str) -> PaymentQuote:
+        """Gets the amount for a Lightning invoice from the mint
+
+        Args:
+            invoice (str): Lightning invoice
+
+        Returns:
+            int: Amount for invoice
+        """
+        logger.debug("Calling quote. GET /quote")
+        resp = self.s.get(self.url + "/melt", params={"invoice": invoice})
+        self.raise_on_error(resp)
+        return_dict = resp.json()
+        print(return_dict)
+        quote = PaymentQuote(id=return_dict[0], amount=return_dict[1])
+        return quote
+
     async def pay_lightning(
         self, proofs: List[Proof], invoice: str, fee_reserve_sat: int
     ) -> bool:
@@ -1251,7 +1269,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         return [p.amount for p in sorted(self.proofs, key=lambda p: p.amount)]
 
     def status(self):
-        print(f"Balance: {self.available_balance} sat")
+        print(f"Balance: {self.available_balance} cents")
 
     def balance_per_keyset(self):
         return {

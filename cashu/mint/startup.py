@@ -53,11 +53,11 @@ async def start_mint_init():
         error_message, balance = await ledger.lightning.status()
         if error_message:
             logger.warning(
-                f"The backend for {ledger.lightning.__class__.__name__} isn't working"
-                f" properly: '{error_message}'",
+                f"The backend for {ledger.lightning.__class__.__name__} isn't"
+                f" working properly: '{error_message}'",
                 RuntimeWarning,
             )
-        logger.info(f"Lightning balance: {balance} msat")
+        logger.info(f"Backend balance: {balance} cent")
 
     logger.info(f"Data dir: {settings.cashu_dir}")
     logger.info("Mint started.")

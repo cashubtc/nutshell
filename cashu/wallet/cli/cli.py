@@ -167,22 +167,18 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
-    total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
+    quote = await wallet.quote_lightning(invoice)
     if not yes:
         click.confirm(
-            f"Pay {total_amount - fee_reserve_sat} sat ({total_amount} sat with"
-            " potential fees)?",
+            f"Pay {quote.amount} cents?",
             abort=True,
             default=True,
         )
 
     print("Paying Lightning invoice ...")
-    assert total_amount > 0, "amount is not positive"
-    if wallet.available_balance < total_amount:
-        print("Error: Balance too low.")
-        return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
-    await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
+
+    _, send_proofs = await wallet.split_to_send(wallet.proofs, quote.amount)
+    await wallet.pay_lightning(send_proofs, quote.id, 0)
     wallet.status()
 
 
@@ -333,12 +329,12 @@ async def balance(ctx: Context, verbose):
 
     if verbose:
         print(
-            f"Balance: {wallet.available_balance} sat (pending:"
-            f" {wallet.balance-wallet.available_balance} sat) in"
+            f"Balance: {wallet.available_balance} cent (pending:"
+            f" {wallet.balance-wallet.available_balance} cent) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
-        print(f"Balance: {wallet.available_balance} sat")
+        print(f"Balance: {wallet.available_balance} cent")
 
 
 @cli.command("send", help="Send tokens.")

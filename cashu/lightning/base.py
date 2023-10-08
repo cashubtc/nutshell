@@ -14,6 +14,11 @@ class InvoiceResponse(NamedTuple):
     error_message: Optional[str] = None
 
 
+class PaymentQuote(NamedTuple):
+    id: str
+    amount: int
+
+
 class PaymentResponse(NamedTuple):
     # when ok is None it means we don't know if this succeeded
     ok: Optional[bool] = None
@@ -59,6 +64,10 @@ class Wallet(ABC):
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
     ) -> Coroutine[None, None, InvoiceResponse]:
+        pass
+
+    @abstractmethod
+    def get_invoice_quote(self, bolt11: str) -> Coroutine[None, None, PaymentQuote]:
         pass
 
     @abstractmethod
