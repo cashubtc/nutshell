@@ -10,9 +10,9 @@
 Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding ([protocol specs](https://github.com/cashubtc/nuts)). Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics in Cashu Nutshell and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
 
 <p align="center">
-<a href="#cashu-client-protocol">Cashu protocol</a> ·
+<a href="#the-cashu-protocol">Cashu protocol</a> ·
 <a href="#easy-install">Quick Install</a> ·
-<a href="#hard-install-poetry">Manual install</a> ·
+<a href="#manual-install-poetry">Manual install</a> ·
 <a href="#configuration">Configuration</a> ·
 <a href="#using-cashu">Using Cashu</a> ·
 <a href="#running-a-mint">Run a mint</a>
@@ -50,7 +50,7 @@ If you have problems running the command above on Ubuntu, run `sudo apt install 
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 
-## Advanced install: Poetry
+## Manual install: Poetry
 These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Install Cashu](#poetry-install-cashu).
 
 #### Poetry: Prerequisites
