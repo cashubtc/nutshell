@@ -20,16 +20,22 @@ Cashu is an Ecash implementation based on David Wagner's variant of Chaumian bli
 
 ### Feature overview of Nutshell
 
-- Full Bitcoin Lightning support
-- CLI Cashu wallet and mint server
-- Include the wallet and mint library into other Python projects
-- PostgreSQL and SQLite database support
-- Wallet: Builtin Tor for hiding IPs
-- Wallet: Multimint support
-- Wallet: Send and receive tokens on nostr
+- Bitcoin Lightning support
+- Standalone Cashu CLI  wallet and mint server
+- Wallet and mint library to include in Python projects
+- PostgreSQL and SQLite
+- Wallet with builtin Tor
+- Use multiple mints in one wallet
+- Send and receive tokens on nostr
+
+### Advanced features
+- Deterministic wallet with seed phrase backup
+- Programmable ecash with, e.g., Pay-to-Pubkey support
+- Wallet and mint support for keyset rotations
+- DLEQ proofs for offline transactions
 
 ## The Cashu protocol
-There are ongoing efforts to implement alternative Cashu clients that use the same protocol. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in helping with Cashu development, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts).
+Different Cashu clients and mints use the same protocol to achieve interoperability. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in developing on your own Cashu project, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts).
 
 ## Easy Install
 
@@ -44,7 +50,7 @@ If you have problems running the command above on Ubuntu, run `sudo apt install 
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 
-## Hard install: Poetry
+## Advanced install: Poetry
 These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Install Cashu](#poetry-install-cashu).
 
 #### Poetry: Prerequisites
@@ -148,7 +154,7 @@ cashu send 69
 ```
 You should see the encoded token. Copy the token and send it to another user such as via email or a messenger. The token looks like this:
 ```bash
-eyJwcm9vZnMiOiBbey...
+cashuAeyJwcm9vZnMiOiBbey...
 ```
 
 You can now see that your available balance has dropped by the amount that you reserved for sending if you enter `cashu balance`:
@@ -159,7 +165,7 @@ Balance: 420 sat
 #### Receive tokens
 To receive tokens, another user enters:
 ```bash
-cashu receive eyJwcm9vZnMiOiBbey...
+cashu receive cashuAeyJwcm9vZnMiOiBbey...
 ```
 You should see the balance increase:
 ```bash
