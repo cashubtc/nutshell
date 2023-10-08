@@ -183,7 +183,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 
 
 @cli.command("invoice", help="Create Lighting invoice.")
-@click.argument("amount", type=int)
+@click.argument("amount", type=float)
 @click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
 @click.option(
     "--split",
@@ -194,7 +194,9 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 )
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: int, hash: str, split: int):
+async def invoice(ctx: Context, amount: float, hash: str, split: int):
+    # USD to cent
+    amount = int(amount * 100)
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -213,13 +215,13 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
     elif amount and not hash:
         invoice = await wallet.request_mint(amount)
         if invoice.pr:
-            print(f"Pay invoice to mint {amount} sat:")
+            print(f"Pay invoice to mint {invoice.amount/100:.2f} USD:")
             print("")
             print(f"Invoice: {invoice.pr}")
             print("")
             print(
                 "If you abort this you can use this command to recheck the"
-                f" invoice:\ncashu invoice {amount} --hash {invoice.hash}"
+                f" invoice:\ncashu invoice {amount/100:.2f} --hash {invoice.hash}"
             )
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
@@ -329,12 +331,12 @@ async def balance(ctx: Context, verbose):
 
     if verbose:
         print(
-            f"Balance: {wallet.available_balance} cent (pending:"
-            f" {wallet.balance-wallet.available_balance} cent) in"
+            f"Balance: {wallet.available_balance/100:.2f} USD (pending:"
+            f" {(wallet.balance-wallet.available_balance)/100:.2f} cent) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
-        print(f"Balance: {wallet.available_balance} cent")
+        print(f"Balance: {wallet.available_balance/100:.2f} USD")
 
 
 @cli.command("send", help="Send tokens.")

@@ -1269,7 +1269,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         return [p.amount for p in sorted(self.proofs, key=lambda p: p.amount)]
 
     def status(self):
-        print(f"Balance: {self.available_balance} cents")
+        print(f"Balance: {self.available_balance/100:.2f} USD")
 
     def balance_per_keyset(self):
         return {

@@ -430,6 +430,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             int: Amount to pay
         """
         quote = await self.lightning.get_invoice_quote(bolt11)
+        if "error_message" in quote:
+            raise LightningError(quote["error_message"])
         invoice = Invoice(
             amount=quote.amount,
             hash=quote.id,
