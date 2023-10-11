@@ -174,9 +174,9 @@ class LedgerAPI(object):
             # get current keyset
             keyset = await self._get_keys(self.url)
 
-        assert keyset.public_keys
-        assert keyset.id
         assert len(keyset.public_keys) > 0, "did not receive keys from mint."
+        assert keyset
+        assert keyset.id
 
         if keyset_id and keyset_id != keyset.id:
             # NOTE: Because of the upcoming change of how to calculate keyset ids
