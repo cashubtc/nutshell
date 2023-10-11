@@ -189,10 +189,12 @@ class LedgerAPI(object):
             )
             keyset.id = keyset_id or keyset.id
 
-        # if not, store it
-        if keyset_id and keyset_local is None:
-            logger.debug(f"Storing new mint keyset: {keyset.id}")
-            await store_keyset(keyset=keyset, db=self.db)
+        # if the keyset is not in the database, store it
+        if keyset_local is None:
+            keyset_local_from_mint = await get_keyset(keyset.id, db=self.db)
+            if not keyset_local_from_mint:
+                logger.debug(f"Storing new mint keyset: {keyset.id}")
+                await store_keyset(keyset=keyset, db=self.db)
 
         # set current keyset id
         self.keyset_id = keyset.id
@@ -985,7 +987,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             if id is None:
                 continue
             keyset_crud = await get_keyset(id=id, db=self.db)
-            assert keyset_crud is not None, "keyset not found"
+            assert keyset_crud is not None, f"keyset {id} not found"
             keyset: WalletKeyset = keyset_crud
             assert keyset.mint_url
             if keyset.mint_url not in ret:
