@@ -170,7 +170,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     quote = await wallet.quote_lightning(invoice)
     if not yes:
         click.confirm(
-            f"Pay {quote.amount} cents?",
+            f"Pay {quote.amount/100:.2f} USD?",
             abort=True,
             default=True,
         )

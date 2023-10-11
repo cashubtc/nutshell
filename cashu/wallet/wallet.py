@@ -767,7 +767,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         resp = self.s.get(self.url + "/melt", params={"invoice": invoice})
         self.raise_on_error(resp)
         return_dict = resp.json()
-        print(return_dict)
         quote = PaymentQuote(id=return_dict[0], amount=return_dict[1])
         return quote
 
