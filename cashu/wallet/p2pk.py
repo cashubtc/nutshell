@@ -6,6 +6,7 @@ from loguru import logger
 from ..core import bolt11 as bolt11
 from ..core.base import (
     BlindedMessage,
+    P2PKWitness,
     Proof,
 )
 from ..core.crypto.secp import PrivateKey
@@ -108,7 +109,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         """
         p2pk_signatures = await self.sign_p2pk_outputs(outputs)
         for o, s in zip(outputs, p2pk_signatures):
-            o.p2pksigs = [s]
+            o.witness = P2PKWitness(signatures=[s]).json()
         return outputs
 
     async def add_witnesses_to_outputs(
@@ -147,10 +148,12 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         # attach unlock signatures to proofs
         assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
         for p, s in zip(proofs, p2pk_signatures):
-            if p.p2pksigs:
-                p.p2pksigs.append(s)
+            # if there are already signatures, append
+            if p.witness and P2PKWitness.from_witness(p.witness).signatures:
+                signatures = P2PKWitness.from_witness(p.witness).signatures
+                p.witness = P2PKWitness(signatures=signatures + [s]).json()
             else:
-                p.p2pksigs = [s]
+                p.witness = P2PKWitness(signatures=[s]).json()
         return proofs
 
     async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:

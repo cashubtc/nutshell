@@ -79,6 +79,21 @@ async def test_p2pk(wallet1: Wallet, wallet2: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_p2pk_sig_all(wallet1: Wallet, wallet2: Wallet):
+    invoice = await wallet1.request_mint(64)
+    await wallet1.mint(64, hash=invoice.hash)
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    # p2pk test
+    secret_lock = await wallet1.create_p2pk_lock(
+        pubkey_wallet2, sig_all=True
+    )  # sender side
+    _, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
+    )
+    await wallet2.redeem(send_proofs)
+
+
+@pytest.mark.asyncio
 async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
     await wallet1.mint(64, hash=invoice.hash)

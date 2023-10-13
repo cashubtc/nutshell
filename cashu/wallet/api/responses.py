@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
-from ...core.base import Invoice
+from ...core.base import Invoice, P2SHWitness
 
 
 class PayResponse(BaseModel):
@@ -54,7 +54,7 @@ class LockResponse(BaseModel):
 
 
 class LocksResponse(BaseModel):
-    locks: List[str]
+    locks: List[P2SHWitness]
 
 
 class InvoicesResponse(BaseModel):
