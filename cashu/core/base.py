@@ -97,7 +97,7 @@ class Proof(BaseModel):
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
-        if proof_dict.get("dleq"):
+        if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], str):
             proof_dict["dleq"] = DLEQWallet(**json.loads(proof_dict["dleq"]))
         c = cls(**proof_dict)
         return c
