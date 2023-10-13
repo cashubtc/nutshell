@@ -2,7 +2,7 @@ import json
 import time
 from typing import Any, List, Optional, Tuple
 
-from ..core.base import Invoice, P2SHScript, Proof, WalletKeyset
+from ..core.base import Invoice, P2SHWitness, Proof, WalletKeyset
 from ..core.db import Connection, Database
 
 
@@ -123,7 +123,7 @@ async def secret_used(
 
 
 async def store_p2sh(
-    p2sh: P2SHScript,
+    p2sh: P2SHWitness,
     db: Database,
     conn: Optional[Connection] = None,
 ) -> None:
@@ -146,7 +146,7 @@ async def get_unused_locks(
     address: str = "",
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
-) -> List[P2SHScript]:
+) -> List[P2SHWitness]:
     clause: List[str] = []
     args: List[str] = []
 
@@ -167,11 +167,11 @@ async def get_unused_locks(
         """,
         tuple(args),
     )
-    return [P2SHScript(**r) for r in rows]
+    return [P2SHWitness(**r) for r in rows]
 
 
 async def update_p2sh_used(
-    p2sh: P2SHScript,
+    p2sh: P2SHWitness,
     used: bool,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,

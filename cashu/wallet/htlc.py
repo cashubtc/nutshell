@@ -3,9 +3,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 
 from ..core import bolt11 as bolt11
-from ..core.base import (
-    Proof,
-)
+from ..core.base import HTLCWitness, Proof
 from ..core.db import Database
 from ..core.htlc import (
     HTLCSecret,
@@ -51,6 +49,6 @@ class WalletHTLC(SupportsDb):
     async def add_htlc_preimage_to_proofs(
         self, proofs: List[Proof], preimage: str
     ) -> List[Proof]:
-        for p, s in zip(proofs, preimage):
-            p.htlcpreimage = s
+        for p in proofs:
+            p.witness = HTLCWitness(preimage=preimage).json()
         return proofs

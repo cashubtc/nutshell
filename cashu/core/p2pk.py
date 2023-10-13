@@ -3,7 +3,6 @@ import time
 from typing import List, Union
 
 from loguru import logger
-from pydantic import BaseModel
 
 from .crypto.secp import PrivateKey, PublicKey
 from .secret import Secret, SecretKind
@@ -62,16 +61,6 @@ class P2PKSecret(Secret):
     def n_sigs(self) -> Union[None, int]:
         n_sigs = self.tags.get_tag("n_sigs")
         return int(n_sigs) if n_sigs else None
-
-
-class P2SHScript(BaseModel):
-    """
-    Unlocks P2SH spending condition of a Proof
-    """
-
-    script: str
-    signature: str
-    address: Union[str, None] = None
 
 
 def sign_p2pk_sign(message: bytes, private_key: PrivateKey):

@@ -4,10 +4,7 @@ from typing import List
 
 from loguru import logger
 
-from ..core.base import (
-    BlindedMessage,
-    Proof,
-)
+from ..core.base import BlindedMessage, HTLCWitness, Proof
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
     TransactionError,
@@ -149,14 +146,16 @@ class LedgerSpendingConditions:
             if htlc_secret.locktime and htlc_secret.locktime < time.time():
                 refund_pubkeys = htlc_secret.tags.get_tag_all("refund")
                 if refund_pubkeys:
-                    assert proof.htlcsignature, TransactionError(
+                    assert proof.witness, TransactionError("no HTLC refund signature.")
+                    signature = HTLCWitness.from_witness(proof.witness).signature
+                    assert signature, TransactionError(
                         "no HTLC refund signature provided"
                     )
                     for pubkey in refund_pubkeys:
                         if verify_p2pk_signature(
                             message=htlc_secret.serialize().encode("utf-8"),
                             pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
-                            signature=bytes.fromhex(proof.htlcsignature),
+                            signature=bytes.fromhex(signature),
                         ):
                             # a signature matches
                             return True
@@ -176,14 +175,16 @@ class LedgerSpendingConditions:
             # then we check whether a signature is required
             hashlock_pubkeys = htlc_secret.tags.get_tag_all("pubkeys")
             if hashlock_pubkeys:
-                assert proof.htlcsignature, TransactionError(
+                assert proof.witness, TransactionError("no HTLC hash lock signature.")
+                signature = HTLCWitness.from_witness(proof.witness).signature
+                assert signature, TransactionError(
                     "HTLC no hash lock signatures provided."
                 )
                 for pubkey in hashlock_pubkeys:
                     if verify_p2pk_signature(
                         message=htlc_secret.serialize().encode("utf-8"),
                         pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
-                        signature=bytes.fromhex(proof.htlcsignature),
+                        signature=bytes.fromhex(signature),
                     ):
                         # a signature matches
                         return True
