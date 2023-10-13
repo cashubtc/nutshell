@@ -7,13 +7,14 @@ from loguru import logger
 from ..core import bolt11 as bolt11
 from ..core.base import (
     BlindedMessage,
+    P2PKWitness,
+    P2SHWitness,
     Proof,
 )
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from ..core.p2pk import (
     P2PKSecret,
-    P2SHScript,
     SigFlags,
     sign_p2pk_sign,
 )
@@ -44,7 +45,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
         txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
         txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
-        p2shScript = P2SHScript(
+        p2shScript = P2SHWitness(
             script=txin_redeemScript_b64,
             signature=txin_signature_b64,
             address=str(txin_p2sh_address),
@@ -154,7 +155,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         """
         p2pk_signatures = await self.sign_p2pk_outputs(outputs)
         for o, s in zip(outputs, p2pk_signatures):
-            o.p2pksigs = [s]
+            o.witness = P2PKWitness(signatures=[s]).json()
         return outputs
 
     async def add_witnesses_to_outputs(
@@ -201,7 +202,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
 
         # attach unlock scripts to proofs
         for p in proofs:
-            p.p2shscript = P2SHScript(script=p2sh_script, signature=p2sh_signature)
+            p.witness = P2SHWitness(script=p2sh_script, signature=p2sh_signature).json()
         return proofs
 
     async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
@@ -211,10 +212,12 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         # attach unlock signatures to proofs
         assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
         for p, s in zip(proofs, p2pk_signatures):
-            if p.p2pksigs:
-                p.p2pksigs.append(s)
+            # if there are already signatures, append
+            if p.witness and P2PKWitness.from_witness(p.witness).signatures:
+                signatures = P2PKWitness.from_witness(p.witness).signatures
+                p.witness = P2PKWitness(signatures=signatures + [s]).json()
             else:
-                p.p2pksigs = [s]
+                p.witness = P2PKWitness(signatures=[s]).json()
         return proofs
 
     async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
