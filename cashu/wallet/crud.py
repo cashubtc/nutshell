@@ -59,8 +59,7 @@ async def get_proofs(
             tuple(values),
         ),
     )
-    print(rows)
-    return [Proof(**dict(r)) for r in rows[0]] if rows else []
+    return [Proof.from_dict(dict(r)) for r in rows[0]] if rows else []
 
 
 async def get_reserved_proofs(
