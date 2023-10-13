@@ -13,7 +13,7 @@ from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
-from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
+from ...wallet.crud import get_lightning_invoices, get_reserved_proofs
 from ...wallet.helpers import (
     deserialize_token_from_string,
     init_wallet,
@@ -213,7 +213,7 @@ async def balance():
 async def send_command(
     amount: int = Query(default=..., description="Amount to send"),
     nostr: str = Query(default=None, description="Send to nostr pubkey"),
-    lock: str = Query(default=None, description="Lock tokens (P2SH)"),
+    lock: str = Query(default=None, description="Lock tokens (P2PK)"),
     mint: str = Query(
         default=None,
         description="Mint URL to send from (None for default mint)",
@@ -354,14 +354,14 @@ async def pending(
 
 @router.get("/lock", name="Generate receiving lock", response_model=LockResponse)
 async def lock():
-    address = await wallet.create_p2sh_address_and_store()
-    return LockResponse(P2SH=address)
+    pubkey = await wallet.create_p2pk_pubkey()
+    return LockResponse(P2PK=pubkey)
 
 
 @router.get("/locks", name="Show unused receiving locks", response_model=LocksResponse)
 async def locks():
-    locks = await get_unused_locks(db=wallet.db)
-    return LocksResponse(locks=locks)
+    pubkey = await wallet.create_p2pk_pubkey()
+    return LocksResponse(locks=[pubkey])
 
 
 @router.get(

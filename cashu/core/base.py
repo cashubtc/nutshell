@@ -79,12 +79,8 @@ class Proof(BaseModel):
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
     dleq: Union[DLEQWallet, None] = None  # DLEQ proof
-
     witness: Union[None, str] = ""  # witness for spending condition
-    # p2pksigs: Union[List[str], None] = []  # P2PK signature
-    # p2shscript: Union[P2SHWitness, None] = None  # P2SH spending condition
-    # htlcpreimage: Union[str, None] = None  # HTLC unlocking preimage
-    # htlcsignature: Union[str, None] = None  # HTLC unlocking signature
+
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
     # unique ID of send attempt, used for grouping pending tokens in the wallet

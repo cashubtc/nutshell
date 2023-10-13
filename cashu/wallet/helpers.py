@@ -176,25 +176,20 @@ async def send(
         assert len(lock) > 21, Exception(
             "Error: lock has to be at least 22 characters long."
         )
-        if not lock.startswith("P2SH:") and not lock.startswith("P2PK:"):
-            raise Exception("Error: lock has to start with P2SH: or P2PK:")
+        if not lock.startswith("P2PK:"):
+            raise Exception("Error: lock has to start with P2PK:")
         # we add a time lock to the P2PK lock by appending the current unix time + 14 days
-        if lock.startswith("P2PK:") or lock.startswith("P2SH:"):
+        else:
             logger.debug(f"Locking token to: {lock}")
             logger.debug(
                 f"Adding a time lock of {settings.locktime_delta_seconds} seconds."
             )
-            if lock.startswith("P2SH:"):
-                secret_lock = await wallet.create_p2sh_lock(
-                    lock.split(":")[1], locktime=settings.locktime_delta_seconds
-                )
-            elif lock.startswith("P2PK:"):
-                secret_lock = await wallet.create_p2pk_lock(
-                    lock.split(":")[1],
-                    locktime_seconds=settings.locktime_delta_seconds,
-                    sig_all=True,
-                    n_sigs=1,
-                )
+            secret_lock = await wallet.create_p2pk_lock(
+                lock.split(":")[1],
+                locktime_seconds=settings.locktime_delta_seconds,
+                sig_all=True,
+                n_sigs=1,
+            )
 
     await wallet.load_proofs()
     if split:

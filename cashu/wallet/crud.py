@@ -2,7 +2,7 @@ import json
 import time
 from typing import Any, List, Optional, Tuple
 
-from ..core.base import Invoice, P2SHWitness, Proof, WalletKeyset
+from ..core.base import Invoice, Proof, WalletKeyset
 from ..core.db import Connection, Database
 
 
@@ -120,71 +120,6 @@ async def secret_used(
         (secret,),
     )
     return rows is not None
-
-
-async def store_p2sh(
-    p2sh: P2SHWitness,
-    db: Database,
-    conn: Optional[Connection] = None,
-) -> None:
-    await (conn or db).execute(
-        """
-        INSERT INTO p2sh
-          (address, script, signature, used)
-        VALUES (?, ?, ?, ?)
-        """,
-        (
-            p2sh.address,
-            p2sh.script,
-            p2sh.signature,
-            False,
-        ),
-    )
-
-
-async def get_unused_locks(
-    address: str = "",
-    db: Optional[Database] = None,
-    conn: Optional[Connection] = None,
-) -> List[P2SHWitness]:
-    clause: List[str] = []
-    args: List[str] = []
-
-    clause.append("used = 0")
-
-    if address:
-        clause.append("address = ?")
-        args.append(address)
-
-    where = ""
-    if clause:
-        where = f"WHERE {' AND '.join(clause)}"
-
-    rows = await (conn or db).fetchall(  # type: ignore
-        f"""
-        SELECT * from p2sh
-        {where}
-        """,
-        tuple(args),
-    )
-    return [P2SHWitness(**r) for r in rows]
-
-
-async def update_p2sh_used(
-    p2sh: P2SHWitness,
-    used: bool,
-    db: Optional[Database] = None,
-    conn: Optional[Connection] = None,
-) -> None:
-    clauses = []
-    values = []
-    clauses.append("used = ?")
-    values.append(used)
-
-    await (conn or db).execute(  # type: ignore
-        f"UPDATE proofs SET {', '.join(clauses)} WHERE address = ?",
-        (*values, str(p2sh.address)),
-    )
 
 
 async def store_keyset(

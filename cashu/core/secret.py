@@ -8,7 +8,6 @@ from .crypto.secp import PrivateKey
 
 
 class SecretKind:
-    P2SH = "P2SH"
     P2PK = "P2PK"
     HTLC = "HTLC"
 

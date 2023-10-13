@@ -1,4 +1,3 @@
-import base64
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -8,7 +7,6 @@ from ..core import bolt11 as bolt11
 from ..core.base import (
     BlindedMessage,
     P2PKWitness,
-    P2SHWitness,
     Proof,
 )
 from ..core.crypto.secp import PrivateKey
@@ -18,41 +16,14 @@ from ..core.p2pk import (
     SigFlags,
     sign_p2pk_sign,
 )
-from ..core.script import (
-    step0_carol_checksig_redeemscript,
-    step0_carol_privkey,
-    step1_carol_create_p2sh_address,
-    step2_carol_sign_tx,
-)
 from ..core.secret import Secret, SecretKind, Tags
-from ..wallet.crud import (
-    get_unused_locks,
-    store_p2sh,
-)
 from .protocols import SupportsDb, SupportsPrivateKey
 
 
 class WalletP2PK(SupportsPrivateKey, SupportsDb):
     db: Database
     private_key: Optional[PrivateKey] = None
-    # ---------- P2SH and P2PK ----------
-
-    async def create_p2sh_address_and_store(self) -> str:
-        """Creates a P2SH lock script and stores the script and signature in the database."""
-        alice_privkey = step0_carol_privkey()
-        txin_redeemScript = step0_carol_checksig_redeemscript(alice_privkey.pub)
-        txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
-        txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
-        txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
-        txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
-        p2shScript = P2SHWitness(
-            script=txin_redeemScript_b64,
-            signature=txin_signature_b64,
-            address=str(txin_p2sh_address),
-        )
-        await store_p2sh(p2shScript, db=self.db)
-        assert p2shScript.address
-        return p2shScript.address
+    # ---------- P2PK ----------
 
     async def create_p2pk_pubkey(self):
         assert (
@@ -86,23 +57,6 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         return P2PKSecret(
             kind=SecretKind.P2PK,
             data=pubkey,
-            tags=tags,
-        )
-
-    async def create_p2sh_lock(
-        self,
-        address: str,
-        locktime: Optional[int] = None,
-        tags: Tags = Tags(),
-    ) -> Secret:
-        if locktime:
-            tags["locktime"] = str(
-                (datetime.now() + timedelta(seconds=locktime)).timestamp()
-            )
-
-        return Secret(
-            kind=SecretKind.P2SH,
-            data=address,
             tags=tags,
         )
 
@@ -187,24 +141,6 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
         return outputs
 
-    async def add_p2sh_witnesses_to_proofs(
-        self: SupportsDb, proofs: List[Proof]
-    ) -> List[Proof]:
-        # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
-        address = Secret.deserialize(proofs[0].secret).data
-        p2shscripts = await get_unused_locks(address, db=self.db)
-        assert len(p2shscripts) == 1, Exception("lock not found.")
-        p2sh_script, p2sh_signature = (
-            p2shscripts[0].script,
-            p2shscripts[0].signature,
-        )
-        logger.debug(f"Unlock script: {p2sh_script} signature: {p2sh_signature}")
-
-        # attach unlock scripts to proofs
-        for p in proofs:
-            p.witness = P2SHWitness(script=p2sh_script, signature=p2sh_signature).json()
-        return proofs
-
     async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
         p2pk_signatures = await self.sign_p2pk_proofs(proofs)
         logger.debug(f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}")
@@ -221,14 +157,12 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         return proofs
 
     async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        """Adds witnesses to proofs for P2SH or P2PK redemption.
+        """Adds witnesses to proofs for P2PK redemption.
 
         This method parses the secret of each proof and determines the correct
         witness type and adds it to the proof if we have it available.
 
         Note: In order for this method to work, all proofs must have the same secret type.
-        This is because we use a single P2SH script and signature pair for all tokens in proofs.
-
         For P2PK, we use an individual signature for each token in proofs.
 
         Args:
@@ -248,15 +182,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             # if not, we do not add witnesses (treat as regular token secret)
             return proofs
         logger.debug("Spending conditions detected.")
-        # P2SH scripts
-        if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
-            logger.debug("P2SH redemption detected.")
-            proofs = await self.add_p2sh_witnesses_to_proofs(proofs)
-
         # P2PK signatures
-        elif all(
-            [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
-        ):
+        if all([Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]):
             logger.debug("P2PK redemption detected.")
             proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
 

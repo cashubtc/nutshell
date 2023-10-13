@@ -30,7 +30,6 @@ pycparser==2.21 ; python_full_version >= "3.8.1" and python_full_version < "4.0.
 pycryptodomex==3.18.0 ; python_full_version >= "3.8.1" and python_full_version < "4.0.0"
 pydantic==1.10.12 ; python_full_version >= "3.8.1" and python_full_version < "4.0.0"
 pysocks==1.7.1 ; python_full_version >= "3.8.1" and python_full_version < "4.0.0"
-python-bitcoinlib==0.12.2 ; python_full_version >= "3.8.1" and python_full_version < "4.0.0"
 python-dotenv==1.0.0 ; python_full_version >= "3.8.1" and python_full_version < "4.0.0"
 represent==1.6.0.post0 ; python_full_version >= "3.8.1" and python_full_version < "4.0.0"
 requests==2.31.0 ; python_full_version >= "3.8.1" and python_full_version < "4.0.0"
