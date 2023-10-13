@@ -156,7 +156,12 @@ class BlindedMessage(BaseModel):
 
     amount: int
     B_: str  # Hex-encoded blinded message
-    p2pksigs: Union[List[str], None] = None  # signature for p2pk with SIG_ALL
+    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
+
+    @property
+    def p2pksigs(self) -> List[str]:
+        assert self.witness, "Witness is missing"
+        return P2PKWitness.from_witness(self.witness).signatures
 
 
 class BlindedSignature(BaseModel):

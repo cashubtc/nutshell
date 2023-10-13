@@ -155,7 +155,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         """
         p2pk_signatures = await self.sign_p2pk_outputs(outputs)
         for o, s in zip(outputs, p2pk_signatures):
-            o.p2pksigs = [s]
+            o.witness = P2PKWitness(signatures=[s]).json()
         return outputs
 
     async def add_witnesses_to_outputs(
