@@ -18,7 +18,6 @@ from ..core.p2pk import (
     SigFlags,
     verify_p2pk_signature,
 )
-from ..core.script import verify_bitcoin_script
 from ..core.secret import Secret, SecretKind
 
 
@@ -26,46 +25,16 @@ class LedgerSpendingConditions:
     def _verify_input_spending_conditions(self, proof: Proof) -> bool:
         """
         Verify spending conditions:
-         Condition: P2SH - Witnesses proof.p2shscript
          Condition: P2PK - Witness: proof.p2pksigs
          Condition: HTLC - Witness: proof.htlcpreimage, proof.htlcsignature
         """
-        # P2SH
+
         try:
             secret = Secret.deserialize(proof.secret)
             logger.trace(f"proof.secret: {proof.secret}")
             logger.trace(f"secret: {secret}")
         except Exception:
             # secret is not a spending condition so we treat is a normal secret
-            return True
-        if secret.kind == SecretKind.P2SH:
-            p2pk_secret = P2PKSecret.from_secret(secret)
-            # check if locktime is in the past
-            now = time.time()
-            if p2pk_secret.locktime and p2pk_secret.locktime < now:
-                logger.trace(f"p2sh locktime ran out ({p2pk_secret.locktime}<{now}).")
-                return True
-            logger.trace(f"p2sh locktime still active ({p2pk_secret.locktime}>{now}).")
-
-            if (
-                proof.p2shscript is None
-                or proof.p2shscript.script is None
-                or proof.p2shscript.signature is None
-            ):
-                # no script present although secret indicates one
-                raise TransactionError("no script in proof.")
-
-            # execute and verify P2SH
-            txin_p2sh_address, valid = verify_bitcoin_script(
-                proof.p2shscript.script, proof.p2shscript.signature
-            )
-            if not valid:
-                raise TransactionError("script invalid.")
-            # check if secret commits to script address
-            assert secret.data == str(txin_p2sh_address), (
-                f"secret does not contain correct P2SH address: {secret.data} is not"
-                f" {txin_p2sh_address}."
-            )
             return True
 
         # P2PK

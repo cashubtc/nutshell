@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
-from .p2pk import P2SHScript
 
 
 class DLEQ(BaseModel):
@@ -47,7 +46,6 @@ class Proof(BaseModel):
     dleq: Union[DLEQWallet, None] = None  # DLEQ proof
 
     p2pksigs: Union[List[str], None] = []  # P2PK signature
-    p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
     htlcpreimage: Union[str, None] = None  # HTLC unlocking preimage
     htlcsignature: Union[str, None] = None  # HTLC unlocking signature
     # whether this proof is reserved for sending, used for coin management in the wallet

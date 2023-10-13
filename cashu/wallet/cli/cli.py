@@ -23,7 +23,6 @@ from ...wallet.crud import (
     get_lightning_invoices,
     get_reserved_proofs,
     get_seed_and_mnemonic,
-    get_unused_locks,
 )
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
@@ -351,7 +350,7 @@ async def balance(ctx: Context, verbose):
     help="Send to nostr pubkey.",
     type=str,
 )
-@click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
+@click.option("--lock", "-l", default=None, help="Lock tokens (P2PK).", type=str)
 @click.option(
     "--dleq",
     "-d",
@@ -583,26 +582,14 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
 
 
 @cli.command("lock", help="Generate receiving lock.")
-@click.option(
-    "--p2sh",
-    "-p",
-    default=False,
-    is_flag=True,
-    help="Create P2SH lock.",
-    type=bool,
-)
 @click.pass_context
 @coro
-async def lock(ctx, p2sh):
+async def lock(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    if p2sh:
-        address = await wallet.create_p2sh_address_and_store()
-        lock_str = f"P2SH:{address}"
-        print("---- Pay to script hash (P2SH) ----\n")
-    else:
-        pubkey = await wallet.create_p2pk_pubkey()
-        lock_str = f"P2PK:{pubkey}"
-        print("---- Pay to public key (P2PK) ----\n")
+
+    pubkey = await wallet.create_p2pk_pubkey()
+    lock_str = f"P2PK:{pubkey}"
+    print("---- Pay to public key (P2PK) ----\n")
 
     print("Use a lock to receive tokens that only you can unlock.")
     print("")
@@ -626,19 +613,6 @@ async def locks(ctx):
     print("---- Pay to public key (P2PK) lock ----\n")
     print(f"Lock: {lock_str}")
     print("")
-    print("To see more information enter: cashu lock")
-    # P2SH locks
-    locks = await get_unused_locks(db=wallet.db)
-    if len(locks):
-        print("")
-        print("---- Pay to script hash (P2SH) locks ----\n")
-        for lock in locks:
-            print(f"Lock: P2SH:{lock.address}")
-            print(f"Script: {lock.script}")
-            print(f"Signature: {lock.signature}")
-            print("")
-            print("--------------------------\n")
-
     return True
 
 

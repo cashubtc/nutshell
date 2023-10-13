@@ -400,7 +400,6 @@ class LedgerAPI(object):
                 "amount",
                 "secret",
                 "C",
-                "p2shscript",
                 "p2pksigs",
                 "htlcpreimage",
                 "htlcsignature",
@@ -710,7 +709,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         if secret_lock is None:
             secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
         else:
-            # NOTE: we use random blinding factors for P2SH, we won't be able to
+            # NOTE: we use random blinding factors for locks, we won't be able to
             # restore these tokens from a backup
             rs = []
             # generate secrets for receiver

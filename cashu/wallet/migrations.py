@@ -73,19 +73,19 @@ async def m003_add_proofs_sendid_and_timestamps(db: Database):
 
 async def m004_p2sh_locks(db: Database):
     """
-    Stores P2SH addresses and unlock scripts.
+    DEPRECATED: Stores P2SH addresses and unlock scripts.
     """
-    await db.execute("""
-            CREATE TABLE IF NOT EXISTS p2sh (
-                address TEXT NOT NULL,
-                script TEXT NOT NULL,
-                signature TEXT NOT NULL,
-                used BOOL NOT NULL,
+    # await db.execute("""
+    #         CREATE TABLE IF NOT EXISTS p2sh (
+    #             address TEXT NOT NULL,
+    #             script TEXT NOT NULL,
+    #             signature TEXT NOT NULL,
+    #             used BOOL NOT NULL,
 
-                UNIQUE (address, script, signature)
+    #             UNIQUE (address, script, signature)
 
-            );
-        """)
+    #         );
+    #     """)
 
 
 async def m005_wallet_keysets(db: Database):
