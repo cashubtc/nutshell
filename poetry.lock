@@ -1228,6 +1228,7 @@ pytest = ">=4.6"
 testing = ["fields", "hunter", "process-tests", "pytest-xdist", "six", "virtualenv"]
 
 [[package]]
+<<<<<<< HEAD
 name = "python-bitcoinlib"
 version = "0.12.2"
 description = "The Swiss Army Knife of the Bitcoin protocol."
@@ -1240,6 +1241,8 @@ files = [
 ]
 
 [[package]]
+=======
+>>>>>>> main
 name = "python-dotenv"
 version = "1.0.0"
 description = "Read key-value pairs from a .env file and set them as environment variables"
@@ -1724,4 +1727,8 @@ pgsql = ["psycopg2-binary"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8.1"
+<<<<<<< HEAD
 content-hash = "8451ced2d2ad05bcc4a7acc3d820304f158ff085f9225e1b2e2c9833b5c6b500"
+=======
+content-hash = "c8a62986bb458c849aabdd3e2f1e1534e4af6093863177fc27630fc9daa5410a"
+>>>>>>> main

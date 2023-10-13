@@ -1,20 +1,15 @@
 import base64
-import hashlib
 import json
 import math
 import time
 import uuid
-from datetime import datetime, timedelta
 from itertools import groupby
 from typing import Dict, List, Optional, Tuple, Union
 
 import httpx
-
-# import requests
 from bip32 import BIP32
 from httpx import Response
 from loguru import logger
-from mnemonic import Mnemonic
 
 from ..core import bolt11 as bolt11
 from ..core.base import (
@@ -23,22 +18,18 @@ from ..core.base import (
     CheckFeesRequest,
     CheckSpendableRequest,
     CheckSpendableResponse,
+    DLEQWallet,
     GetInfoResponse,
     GetMeltResponse,
     GetMintResponse,
     Invoice,
     KeysetsResponse,
-    P2SHScript,
     PostMeltRequest,
     PostMintRequest,
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
     Proof,
-    Secret,
-    SecretKind,
-    SigFlags,
-    Tags,
     TokenV2,
     TokenV2Mint,
     TokenV3,
@@ -51,13 +42,7 @@ from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
 from ..core.migrations import migrate_databases
-from ..core.p2pk import sign_p2pk_sign
-from ..core.script import (
-    step0_carol_checksig_redeemscrip,
-    step0_carol_privkey,
-    step1_carol_create_p2sh_address,
-    step2_carol_sign_tx,
-)
+from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..tor.tor import TorProxy
@@ -65,20 +50,19 @@ from ..wallet.crud import (
     bump_secret_derivation,
     get_keyset,
     get_proofs,
-    get_seed_and_mnemonic,
-    get_unused_locks,
     invalidate_proof,
     secret_used,
     set_secret_derivation,
     store_keyset,
     store_lightning_invoice,
-    store_p2sh,
     store_proof,
-    store_seed_and_mnemonic,
     update_lightning_invoice,
     update_proof,
 )
 from . import migrations
+from .htlc import WalletHTLC
+from .p2pk import WalletP2PK
+from .secrets import WalletSecrets
 
 
 def async_set_httpx_client(func):
@@ -118,9 +102,10 @@ def async_set_httpx_client(func):
 
 
 class LedgerAPI(object):
-    keys: WalletKeyset  # holds current keys of mint
-    keyset_id: str  # holds id of current keyset
-    public_keys: Dict[int, PublicKey]  # holds public keys of
+    keyset_id: str  # holds current keyset id
+    keysets: Dict[str, WalletKeyset]  # holds keysets
+    mint_keyset_ids: List[str]  # holds active keyset ids of the mint
+
     mint_info: GetInfoResponse  # holds info about mint
     tor: TorProxy
     db: Database
@@ -129,101 +114,12 @@ class LedgerAPI(object):
     def __init__(self, url: str, db: Database):
         self.url = url
         self.db = db
-
-    async def generate_n_secrets(
-        self, n: int = 1, skip_bump: bool = False
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        return await self.generate_n_secrets(n, skip_bump)
-
-    async def _generate_secret(self, skip_bump: bool = False) -> str:
-        return await self._generate_secret(skip_bump)
+        self.keysets = {}
 
     @async_set_httpx_client
     async def _init_s(self):
         """Dummy function that can be called from outside to use LedgerAPI.s"""
         return
-
-    def _construct_proofs(
-        self,
-        promises: List[BlindedSignature],
-        secrets: List[str],
-        rs: List[PrivateKey],
-        derivation_paths: List[str],
-    ) -> List[Proof]:
-        """Constructs proofs from promises, secrets, rs and derivation paths.
-
-        This method is called after the user has received blind signatures from
-        the mint. The results are proofs that can be used as ecash.
-
-        Args:
-            promises (List[BlindedSignature]): blind signatures from mint
-            secrets (List[str]): secrets that were previously used to create blind messages (that turned into promises)
-            rs (List[PrivateKey]): blinding factors that were previously used to create blind messages (that turned into promises)
-            derivation_paths (List[str]): derivation paths that were used to generate secrets and blinding factors
-
-        Returns:
-            List[Proof]: list of proofs that can be used as ecash
-        """
-        logger.trace("Constructing proofs.")
-        proofs: List[Proof] = []
-        for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
-            logger.trace(f"Creating proof with keyset {self.keyset_id} = {promise.id}")
-            assert (
-                self.keyset_id == promise.id
-            ), "our keyset id does not match promise id."
-
-            C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
-            C = b_dhke.step3_alice(C_, r, self.public_keys[promise.amount])
-
-            proof = Proof(
-                id=promise.id,
-                amount=promise.amount,
-                C=C.serialize().hex(),
-                secret=secret,
-                derivation_path=path,
-            )
-            proofs.append(proof)
-            logger.trace(
-                f"Created proof: {proof}, r: {r.serialize()} out of promise {promise}"
-            )
-
-        logger.trace(f"Constructed {len(proofs)} proofs.")
-        return proofs
-
-    @staticmethod
-    def _construct_outputs(
-        amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
-    ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
-        """Takes a list of amounts and secrets and returns outputs.
-        Outputs are blinded messages `outputs` and blinding factors `rs`
-
-        Args:
-            amounts (List[int]): list of amounts
-            secrets (List[str]): list of secrets
-            rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
-
-        Returns:
-            List[BlindedMessage]: list of blinded messages that can be sent to the mint
-            List[PrivateKey]: list of blinding factors that can be used to construct proofs after receiving blind signatures from the mint
-
-        Raises:
-            AssertionError: if len(amounts) != len(secrets)
-        """
-        assert len(amounts) == len(
-            secrets
-        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
-        outputs: List[BlindedMessage] = []
-
-        rs_ = [None] * len(amounts) if not rs else rs
-        rs_return: List[PrivateKey] = []
-        for secret, amount, r in zip(secrets, amounts, rs_):
-            B_, r = b_dhke.step1_alice(secret, r or None)
-            rs_return.append(r)
-            output = BlindedMessage(amount=amount, B_=B_.serialize().hex())
-            outputs.append(output)
-            logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
-
-        return outputs, rs_return
 
     @staticmethod
     def raise_on_error(resp: Response) -> None:
@@ -245,7 +141,7 @@ class LedgerAPI(object):
         # raise for status if no error
         resp.raise_for_status()
 
-    async def _load_mint_keys(self, keyset_id: str = "") -> WalletKeyset:
+    async def _load_mint_keys(self, keyset_id: Optional[str] = None) -> None:
         """Loads keys from mint and stores them in the database.
 
         Args:
@@ -260,31 +156,54 @@ class LedgerAPI(object):
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
 
+        keyset_local: Union[WalletKeyset, None] = None
         if keyset_id:
-            # get requested keyset
+            # check if current keyset is in db
+            keyset_local = await get_keyset(keyset_id, db=self.db)
+            if keyset_local:
+                logger.debug(f"Found keyset {keyset_id} in database.")
+            else:
+                logger.debug(
+                    f"Cannot find keyset {keyset_id} in database. Loading keyset from"
+                    " mint."
+                )
+            keyset = keyset_local
+
+        if keyset_local is None and keyset_id:
+            # get requested keyset from mint
             keyset = await self._get_keys_of_keyset(self.url, keyset_id)
         else:
             # get current keyset
             keyset = await self._get_keys(self.url)
 
-        assert keyset.public_keys
+        assert keyset
         assert keyset.id
         assert len(keyset.public_keys) > 0, "did not receive keys from mint."
 
-        # check if current keyset is in db
-        keyset_local: Optional[WalletKeyset] = await get_keyset(keyset.id, db=self.db)
-        # if not, store it
-        if keyset_local is None:
-            logger.debug(f"Storing new mint keyset: {keyset.id}")
-            await store_keyset(keyset=keyset, db=self.db)
+        if keyset_id and keyset_id != keyset.id:
+            # NOTE: Because of the upcoming change of how to calculate keyset ids
+            # with version 0.14.0, we overwrite the calculated keyset id with the
+            # requested one. This is a temporary fix and should be removed once all
+            # ecash is transitioned to 0.14.0.
+            logger.debug(
+                f"Keyset ID mismatch: {keyset_id} != {keyset.id}. This can happen due"
+                " to a version upgrade."
+            )
+            keyset.id = keyset_id or keyset.id
 
-        self.keys = keyset
-        assert self.keys.public_keys
-        self.public_keys = self.keys.public_keys
-        assert self.keys.id
-        self.keyset_id = self.keys.id
-        logger.debug(f"Current mint keyset: {self.keys.id}")
-        return self.keys
+        # if the keyset is not in the database, store it
+        if keyset_local is None:
+            keyset_local_from_mint = await get_keyset(keyset.id, db=self.db)
+            if not keyset_local_from_mint:
+                logger.debug(f"Storing new mint keyset: {keyset.id}")
+                await store_keyset(keyset=keyset, db=self.db)
+
+        # set current keyset id
+        self.keyset_id = keyset.id
+        logger.debug(f"Current mint keyset: {self.keyset_id}")
+
+        # add keyset to keysets dict
+        self.keysets[keyset.id] = keyset
 
     async def _load_mint_keysets(self) -> List[str]:
         """Loads the keyset IDs of the mint.
@@ -299,11 +218,13 @@ class LedgerAPI(object):
         try:
             mint_keysets = await self._get_keyset_ids(self.url)
         except Exception:
-            assert self.keys.id, "could not get keysets from mint, and do not have keys"
+            assert self.keysets[
+                self.keyset_id
+            ].id, "could not get keysets from mint, and do not have keys"
             pass
-        self.keysets = mint_keysets or [self.keys.id]
-        logger.debug(f"Mint keysets: {self.keysets}")
-        return self.keysets
+        self.mint_keyset_ids = mint_keysets or [self.keysets[self.keyset_id].id]
+        logger.debug(f"Mint keysets: {self.mint_keyset_ids}")
+        return self.mint_keyset_ids
 
     async def _load_mint_info(self) -> GetInfoResponse:
         """Loads the mint info from the mint."""
@@ -315,7 +236,7 @@ class LedgerAPI(object):
         """
         Loads the public keys of the mint. Either gets the keys for the specified
         `keyset_id` or gets the keys of the active keyset from the mint.
-        Gets the active keyset ids of the mint and stores in `self.keysets`.
+        Gets the active keyset ids of the mint and stores in `self.mint_keyset_ids`.
         """
         await self._load_mint_keys(keyset_id)
         await self._load_mint_keysets()
@@ -326,7 +247,9 @@ class LedgerAPI(object):
             pass
 
         if keyset_id:
-            assert keyset_id in self.keysets, f"keyset {keyset_id} not active on mint"
+            assert (
+                keyset_id in self.mint_keyset_ids
+            ), f"keyset {keyset_id} not active on mint"
 
     async def _check_used_secrets(self, secrets):
         """Checks if any of the secrets have already been used"""
@@ -467,11 +390,13 @@ class LedgerAPI(object):
         )
 
     @async_set_httpx_client
-    async def mint(self, amounts: List[int], hash: Optional[str] = None) -> List[Proof]:
+    async def mint(
+        self, outputs: List[BlindedMessage], hash: Optional[str] = None
+    ) -> List[BlindedSignature]:
         """Mints new coins and returns a proof of promise.
 
         Args:
-            amounts (List[int]): Amounts of tokens to mint
+            outputs (List[BlindedMessage]): Outputs to mint new tokens with
             hash (str, optional): Hash of the paid invoice. Defaults to None.
 
         Returns:
@@ -480,14 +405,6 @@ class LedgerAPI(object):
         Raises:
             Exception: If the minting fails
         """
-        # quirk: we skip bumping the secret counter in the database since we are
-        # not sure if the minting will succeed. If it succeeds, we will bump it
-        # in the next step.
-        secrets, rs, derivation_paths = await self.generate_n_secrets(
-            len(amounts), skip_bump=True
-        )
-        await self._check_used_secrets(secrets)
-        outputs, rs = self._construct_outputs(amounts, secrets, rs)
         outputs_payload = PostMintRequest(outputs=outputs)
         logger.trace("Checking Lightning invoice. POST /mint")
         resp = await self.httpx.post(
@@ -499,19 +416,10 @@ class LedgerAPI(object):
             },
         )
         self.raise_on_error(resp)
-        reponse_dict = resp.json()
+        response_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /mint")
-        promises = PostMintResponse.parse_obj(reponse_dict).promises
-
-        # bump secret counter in database
-        await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=len(amounts)
-        )
-        proofs = self._construct_proofs(promises, secrets, rs, derivation_paths)
-        # add invoice hash to proofs to store in db
-        for p in proofs:
-            p.mint_id = hash
-        return proofs
+        promises = PostMintResponse.parse_obj(response_dict).promises
+        return promises
 
     @async_set_httpx_client
     async def split(
@@ -526,7 +434,13 @@ class LedgerAPI(object):
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /split"""
-            proofs_include = {"id", "amount", "secret", "C", "p2shscript", "p2pksigs"}
+            proofs_include = {
+                "id",
+                "amount",
+                "secret",
+                "C",
+                "witness",
+            }
             return {
                 "outputs": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
@@ -549,7 +463,7 @@ class LedgerAPI(object):
     @async_set_httpx_client
     async def check_proof_state(self, proofs: List[Proof]):
         """
-        Cheks whether the secrets in proofs are already spent or not and returns a list of booleans.
+        Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
         payload = CheckSpendableRequest(proofs=proofs)
 
@@ -595,7 +509,7 @@ class LedgerAPI(object):
 
         def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
-            proofs_include = {"id", "amount", "secret", "C", "script"}
+            proofs_include = {"id", "amount", "secret", "C", "witness"}
             return {
                 "proofs": {i: proofs_include for i in range(len(proofs))},
                 "pr": ...,
@@ -622,19 +536,19 @@ class LedgerAPI(object):
         payload = PostMintRequest(outputs=outputs)
         resp = await self.httpx.post("/restore", json=payload.dict())
         self.raise_on_error(resp)
-        reponse_dict = resp.json()
-        returnObj = PostRestoreResponse.parse_obj(reponse_dict)
+        response_dict = resp.json()
+        returnObj = PostRestoreResponse.parse_obj(response_dict)
         return returnObj.outputs, returnObj.promises
 
 
-class Wallet(LedgerAPI):
+class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
     """Minimal wallet wrapper."""
 
     mnemonic: str  # holds mnemonic of the wallet
     seed: bytes  # holds private key of the wallet generated from the mnemonic
-    db: Database
+    # db: Database
     bip32: BIP32
-    private_key: Optional[PrivateKey] = None
+    # private_key: Optional[PrivateKey] = None
 
     def __init__(
         self,
@@ -654,7 +568,7 @@ class Wallet(LedgerAPI):
         self.name = name
 
         super().__init__(url=url, db=self.db)
-        logger.debug(f"Wallet initalized with mint URL {url}")
+        logger.debug(f"Wallet initialized with mint URL {url}")
 
     @classmethod
     async def with_db(
@@ -687,192 +601,12 @@ class Wallet(LedgerAPI):
         except Exception as e:
             logger.error(f"Could not run migrations: {e}")
 
-    async def _init_private_key(self, from_mnemonic: Optional[str] = None) -> None:
-        """Initializes the private key of the wallet from the mnemonic.
-        There are three ways to initialize the private key:
-        1. If the database does not contain a seed, and no mnemonic is given, a new seed is generated.
-        2. If the database does not contain a seed, and a mnemonic is given, the seed is generated from the mnemonic.
-        3. If the database contains a seed, the seed is loaded from the database.
-
-        If the mnemonic was not loaded from the database, the seed and mnemonic are stored in the database.
-
-        Args:
-            from_mnemonic (Optional[str], optional): Mnemonic to use. Defaults to None.
-
-        Raises:
-            ValueError: If the mnemonic is not BIP39 compliant.
-        """
-        ret_db = await get_seed_and_mnemonic(self.db)
-
-        mnemo = Mnemonic("english")
-
-        if ret_db is None and from_mnemonic is None:
-            # if there is no seed in the database, generate a new one
-            mnemonic_str = mnemo.generate()
-            wallet_command_prefix_str = (
-                f" --wallet {settings.wallet_name}"
-                if settings.wallet_name != "wallet"
-                else ""
-            )
-            wallet_name = (
-                f' for wallet "{settings.wallet_name}"'
-                if settings.wallet_name != "wallet"
-                else ""
-            )
-            print(
-                f"Generated a new mnemonic{wallet_name}. To view it, run"
-                f' "cashu{wallet_command_prefix_str} info --mnemonic".'
-            )
-        elif from_mnemonic:
-            # or use the one provided
-            mnemonic_str = from_mnemonic.lower().strip()
-        elif ret_db is not None:
-            # if there is a seed in the database, use it
-            _, mnemonic_str = ret_db[0], ret_db[1]
-        else:
-            logger.debug("No mnemonic provided")
-            return
-
-        if not mnemo.check(mnemonic_str):
-            raise ValueError("Invalid mnemonic")
-
-        self.seed = mnemo.to_seed(mnemonic_str)
-        self.mnemonic = mnemonic_str
-
-        logger.debug(f"Using seed: {self.seed.hex()}")
-        logger.debug(f"Using mnemonic: {mnemonic_str}")
-
-        # if no mnemonic was in the database, store the new one
-        if ret_db is None:
-            await store_seed_and_mnemonic(
-                self.db, seed=self.seed.hex(), mnemonic=mnemonic_str
-            )
-
-        try:
-            self.bip32 = BIP32.from_seed(self.seed)
-            self.private_key = PrivateKey(
-                self.bip32.get_privkey_from_path("m/129372'/0'/0'/0'")
-            )
-        except ValueError:
-            raise ValueError("Invalid seed")
-        except Exception as e:
-            logger.error(e)
-
-    async def _generate_secret(self, randombits=128) -> str:
-        """Returns base64 encoded deterministic random string.
-
-        NOTE: This method should probably retire after `deterministic_secrets`. We are
-        deriving secrets from a counter but don't store the respective blinding factor.
-        We won't be able to restore any ecash generated with these secrets.
-        """
-        secret_counter = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id
-        )
-        logger.trace(f"secret_counter: {secret_counter}")
-        s, _, _ = await self.generate_determinstic_secret(secret_counter)
-        # return s.decode("utf-8")
-        return hashlib.sha256(s).hexdigest()
-
-    async def generate_determinstic_secret(
-        self, counter: int
-    ) -> Tuple[bytes, bytes, str]:
-        """
-        Determinstically generates two secrets (one as the secret message,
-        one as the blinding factor).
-        """
-        assert self.bip32, "BIP32 not initialized yet."
-        # integer keyset id modulo max number of bip32 child keys
-        keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
-            2**31 - 1
-        )
-        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id}")
-        token_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'"
-        # for secret
-        secret_derivation_path = f"{token_derivation_path}/0"
-        logger.trace(f"secret derivation path: {secret_derivation_path}")
-        secret = self.bip32.get_privkey_from_path(secret_derivation_path)
-        # blinding factor
-        r_derivation_path = f"{token_derivation_path}/1"
-        logger.trace(f"r derivation path: {r_derivation_path}")
-        r = self.bip32.get_privkey_from_path(r_derivation_path)
-        return secret, r, token_derivation_path
-
-    async def generate_n_secrets(
-        self, n: int = 1, skip_bump: bool = False
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        """Generates n secrets and blinding factors and returns a tuple of secrets,
-        blinding factors, and derivation paths.
-
-        Args:
-            n (int, optional): Number of secrets to generate. Defaults to 1.
-            skip_bump (bool, optional): Skip increment of secret counter in the database.
-            You want to set this to false if you don't know whether the following operation
-            will succeed or not (like a POST /mint request). Defaults to False.
-
-        Returns:
-            Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
-
-        """
-        if n < 1:
-            return [], [], []
-        secret_counters_start = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump
-        )
-        logger.trace(f"secret_counters_start: {secret_counters_start}")
-        secret_counters = list(range(secret_counters_start, secret_counters_start + n))
-        logger.trace(
-            f"Generating secret nr {secret_counters[0]} to {secret_counters[-1]}."
-        )
-        secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
-        ]
-        # secrets are supplied as str
-        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
-        # rs are supplied as PrivateKey
-        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
-
-        derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
-        # sanity check to make sure we're not reusing secrets
-        # NOTE: this step is probably wasting more resources than it helps
-        await self._check_used_secrets(secrets)
-
-        return secrets, rs, derivation_paths
-
-    async def generate_secrets_from_to(
-        self, from_counter: int, to_counter: int
-    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
-        """Generates secrets and blinding factors from `from_counter` to `to_counter`
-
-        Args:
-            from_counter (int): Start counter
-            to_counter (int): End counter
-
-        Returns:
-            Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
-
-        Raises:
-            ValueError: If `from_counter` is larger than `to_counter`
-        """
-        assert (
-            from_counter <= to_counter
-        ), "from_counter must be smaller than to_counter"
-        secret_counters = [c for c in range(from_counter, to_counter + 1)]
-        secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
-        ]
-        # secrets are supplied as str
-        secrets = [hashlib.sha256(s[0]).hexdigest() for s in secrets_rs_derivationpaths]
-        # rs are supplied as PrivateKey
-        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
-        derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
-        return secrets, rs, derivation_paths
-
     # ---------- API ----------
 
     async def load_mint(self, keyset_id: str = ""):
         """Load a mint's keys with a given keyset_id if specified or else
         loads the active keyset of the mint into self.keys.
-        Also loads all keyset ids into self.keysets.
+        Also loads all keyset ids into self.mint_keyset_ids.
 
         Args:
             keyset_id (str, optional): _description_. Defaults to "".
@@ -933,121 +667,29 @@ class Wallet(LedgerAPI):
 
         # if no split was specified, we use the canonical split
         amounts = split or amount_split(amount)
-        proofs = await super().mint(amounts, hash)
-        if proofs == []:
-            raise Exception("received no proofs.")
-        await self._store_proofs(proofs)
+
+        # quirk: we skip bumping the secret counter in the database since we are
+        # not sure if the minting will succeed. If it succeeds, we will bump it
+        # in the next step.
+        secrets, rs, derivation_paths = await self.generate_n_secrets(
+            len(amounts), skip_bump=True
+        )
+        await self._check_used_secrets(secrets)
+        outputs, rs = self._construct_outputs(amounts, secrets, rs)
+
+        # will raise exception if mint is unsuccessful
+        promises = await super().mint(outputs, hash)
+
+        # success, bump secret counter in database
+        await bump_secret_derivation(
+            db=self.db, keyset_id=self.keyset_id, by=len(amounts)
+        )
+        proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
+
         if hash:
             await update_lightning_invoice(
                 db=self.db, id=hash, paid=True, time_paid=int(time.time())
             )
-        self.proofs += proofs
-        return proofs
-
-    async def add_p2pk_witnesses_to_outputs(
-        self, outputs: List[BlindedMessage]
-    ) -> List[BlindedMessage]:
-        p2pk_signatures = await self.sign_p2pk_outputs(outputs)
-        for o, s in zip(outputs, p2pk_signatures):
-            o.p2pksigs = [s]
-        return outputs
-
-    async def add_witnesses_to_outputs(
-        self, proofs: List[Proof], outputs: List[BlindedMessage]
-    ) -> List[BlindedMessage]:
-        """Adds witnesses to outputs if the inputs (proofs) indicate an appropriate signature flag
-
-        Args:
-            proofs (List[Proof]): _description_
-            outputs (List[BlindedMessage]): _description_
-        """
-        # first we check whether all tokens have serialized secrets as their secret
-        try:
-            for p in proofs:
-                Secret.deserialize(p.secret)
-        except Exception:
-            # if not, we do not add witnesses (treat as regular token secret)
-            return outputs
-
-        # if any of the proofs provided require SIG_ALL, we must provide it
-        if any(
-            [Secret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs]
-        ):
-            # p2pk_signatures = await self.sign_p2pk_outputs(outputs)
-            # for o, s in zip(outputs, p2pk_signatures):
-            #     o.p2pksigs = [s]
-            outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
-        return outputs
-
-    async def add_p2sh_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        # Quirk: we use a single P2SH script and signature pair for all tokens in proofs
-        address = Secret.deserialize(proofs[0].secret).data
-        p2shscripts = await get_unused_locks(address, db=self.db)
-        assert len(p2shscripts) == 1, Exception("lock not found.")
-        p2sh_script, p2sh_signature = (
-            p2shscripts[0].script,
-            p2shscripts[0].signature,
-        )
-        logger.debug(f"Unlock script: {p2sh_script} signature: {p2sh_signature}")
-
-        # attach unlock scripts to proofs
-        for p in proofs:
-            p.p2shscript = P2SHScript(script=p2sh_script, signature=p2sh_signature)
-        return proofs
-
-    async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        p2pk_signatures = await self.sign_p2pk_proofs(proofs)
-        logger.debug(f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}")
-        logger.debug(f"Proofs: {proofs}")
-        # attach unlock signatures to proofs
-        assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
-        for p, s in zip(proofs, p2pk_signatures):
-            if p.p2pksigs:
-                p.p2pksigs.append(s)
-            else:
-                p.p2pksigs = [s]
-        return proofs
-
-    async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        """Adds witnesses to proofs for P2SH or P2PK redemption.
-
-        This method parses the secret of each proof and determines the correct
-        witness type and adds it to the proof if we have it available.
-
-        Note: In order for this method to work, all proofs must have the same secret type.
-        This is because we use a single P2SH script and signature pair for all tokens in proofs.
-
-        For P2PK, we use an individual signature for each token in proofs.
-
-        Args:
-            proofs (List[Proof]): List of proofs to add witnesses to
-
-        Returns:
-            List[Proof]: List of proofs with witnesses added
-        """
-
-        # iterate through proofs and produce witnesses for each
-
-        # first we check whether all tokens have serialized secrets as their secret
-        try:
-            for p in proofs:
-                Secret.deserialize(p.secret)
-        except Exception:
-            # if not, we do not add witnesses (treat as regular token secret)
-            return proofs
-        logger.debug("Spending conditions detected.")
-        # P2SH scripts
-        if all([Secret.deserialize(p.secret).kind == SecretKind.P2SH for p in proofs]):
-            logger.debug("P2SH redemption detected.")
-            proofs = await self.add_p2sh_witnesses_to_proofs(proofs)
-
-        # P2PK signatures
-        elif all(
-            [Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]
-        ):
-            logger.debug("P2PK redemption detected.")
-            proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
-
         return proofs
 
     async def redeem(
@@ -1061,6 +703,10 @@ class Wallet(LedgerAPI):
         Args:
             proofs (List[Proof]): Proofs to be redeemed.
         """
+        # verify DLEQ of incoming proofs
+        logger.debug("Verifying DLEQ of incoming proofs.")
+        self.verify_proofs_dleq(proofs)
+        logger.debug("DLEQ verified.")
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
@@ -1101,7 +747,7 @@ class Wallet(LedgerAPI):
         if secret_lock is None:
             secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
         else:
-            # NOTE: we use random blinding factors for P2SH, we won't be able to
+            # NOTE: we use random blinding factors for locks, we won't be able to
             # restore these tokens from a backup
             rs = []
             # generate secrets for receiver
@@ -1109,9 +755,9 @@ class Wallet(LedgerAPI):
             logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
             assert len(secret_locks) == len(
                 scnd_outputs
-            ), "number of secret_locks does not match number of ouptus."
+            ), "number of secret_locks does not match number of outputs."
             # append predefined secrets (to send) to random secrets (to keep)
-            # generate sercets to keep
+            # generate secrets to keep
             secrets = [
                 await self._generate_secret() for s in range(len(frst_outputs))
             ] + secret_locks
@@ -1134,18 +780,11 @@ class Wallet(LedgerAPI):
         promises = await super().split(proofs, outputs)
 
         # Construct proofs from returned promises (i.e., unblind the signatures)
-        new_proofs = self._construct_proofs(promises, secrets, rs, derivation_paths)
+        new_proofs = await self._construct_proofs(
+            promises, secrets, rs, derivation_paths
+        )
 
-        # remove used proofs from wallet and add new ones
-        used_secrets = [p.secret for p in proofs]
-        self.proofs = list(filter(lambda p: p.secret not in used_secrets, self.proofs))
-        # add new proofs to wallet
-        self.proofs += new_proofs
-        # store new proofs in database
-        await self._store_proofs(new_proofs)
-        # invalidate used proofs in database
-        for proof in proofs:
-            await invalidate_proof(proof, db=self.db)
+        await self.invalidate(proofs)
 
         keep_proofs = new_proofs[: len(frst_outputs)]
         send_proofs = new_proofs[len(frst_outputs) :]
@@ -1213,7 +852,7 @@ class Wallet(LedgerAPI):
 
         # handle change and produce proofs
         if status.change:
-            change_proofs = self._construct_proofs(
+            change_proofs = await self._construct_proofs(
                 status.change,
                 secrets[: len(status.change)],
                 rs[: len(status.change)],
@@ -1226,12 +865,144 @@ class Wallet(LedgerAPI):
     async def check_proof_state(self, proofs):
         return await super().check_proof_state(proofs)
 
-    # ---------- TOKEN MECHANIS ----------
+    # ---------- TOKEN MECHANICS ----------
+
+    # ---------- DLEQ PROOFS ----------
+
+    def verify_proofs_dleq(self, proofs: List[Proof]):
+        """Verifies DLEQ proofs in proofs."""
+        for proof in proofs:
+            if not proof.dleq:
+                logger.trace("No DLEQ proof in proof.")
+                return
+            logger.trace("Verifying DLEQ proof.")
+            assert proof.id
+            assert (
+                proof.id in self.keysets
+            ), f"Keyset {proof.id} not known, can not verify DLEQ."
+            if not b_dhke.carol_verify_dleq(
+                secret_msg=proof.secret,
+                C=PublicKey(bytes.fromhex(proof.C), raw=True),
+                r=PrivateKey(bytes.fromhex(proof.dleq.r), raw=True),
+                e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
+                s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
+                A=self.keysets[proof.id].public_keys[proof.amount],
+            ):
+                raise Exception("DLEQ proof invalid.")
+            else:
+                logger.debug("DLEQ proof valid.")
+
+    async def _construct_proofs(
+        self,
+        promises: List[BlindedSignature],
+        secrets: List[str],
+        rs: List[PrivateKey],
+        derivation_paths: List[str],
+    ) -> List[Proof]:
+        """Constructs proofs from promises, secrets, rs and derivation paths.
+
+        This method is called after the user has received blind signatures from
+        the mint. The results are proofs that can be used as ecash.
+
+        Args:
+            promises (List[BlindedSignature]): blind signatures from mint
+            secrets (List[str]): secrets that were previously used to create blind messages (that turned into promises)
+            rs (List[PrivateKey]): blinding factors that were previously used to create blind messages (that turned into promises)
+            derivation_paths (List[str]): derivation paths that were used to generate secrets and blinding factors
+
+        Returns:
+            List[Proof]: list of proofs that can be used as ecash
+        """
+        logger.trace("Constructing proofs.")
+        proofs: List[Proof] = []
+        for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
+            if promise.id not in self.keysets:
+                # we don't have the keyset for this promise, so we load it
+                await self._load_mint_keys(promise.id)
+                assert promise.id in self.keysets, "Could not load keyset."
+
+            C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
+            C = b_dhke.step3_alice(
+                C_, r, self.keysets[promise.id].public_keys[promise.amount]
+            )
+            B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+
+            proof = Proof(
+                id=promise.id,
+                amount=promise.amount,
+                C=C.serialize().hex(),
+                secret=secret,
+                derivation_path=path,
+            )
+
+            # if the mint returned a dleq proof, we add it to the proof
+            if promise.dleq:
+                proof.dleq = DLEQWallet(
+                    e=promise.dleq.e, s=promise.dleq.s, r=r.serialize()
+                )
+
+            proofs.append(proof)
+
+            logger.trace(
+                f"Created proof: {proof}, r: {r.serialize()} out of promise {promise}"
+            )
+
+        # DLEQ verify
+        self.verify_proofs_dleq(proofs)
+
+        logger.trace(f"Constructed {len(proofs)} proofs.")
+
+        # add new proofs to wallet
+        self.proofs += proofs
+        # store new proofs in database
+        await self._store_proofs(proofs)
+
+        return proofs
+
+    @staticmethod
+    def _construct_outputs(
+        amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
+    ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
+        """Takes a list of amounts and secrets and returns outputs.
+        Outputs are blinded messages `outputs` and blinding factors `rs`
+
+        Args:
+            amounts (List[int]): list of amounts
+            secrets (List[str]): list of secrets
+            rs (List[PrivateKey], optional): list of blinding factors. If not given, `rs` are generated in step1_alice. Defaults to [].
+
+        Returns:
+            List[BlindedMessage]: list of blinded messages that can be sent to the mint
+            List[PrivateKey]: list of blinding factors that can be used to construct proofs after receiving blind signatures from the mint
+
+        Raises:
+            AssertionError: if len(amounts) != len(secrets)
+        """
+        assert len(amounts) == len(
+            secrets
+        ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        outputs: List[BlindedMessage] = []
+
+        rs_ = [None] * len(amounts) if not rs else rs
+        rs_return: List[PrivateKey] = []
+        for secret, amount, r in zip(secrets, amounts, rs_):
+            B_, r = b_dhke.step1_alice(secret, r or None)
+            rs_return.append(r)
+            output = BlindedMessage(amount=amount, B_=B_.serialize().hex())
+            outputs.append(output)
+            logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
+
+        return outputs, rs_return
 
     async def _store_proofs(self, proofs):
-        async with self.db.connect() as conn:
-            for proof in proofs:
-                await store_proof(proof, db=self.db, conn=conn)
+        try:
+            async with self.db.connect() as conn:  # type: ignore
+                for proof in proofs:
+                    await store_proof(proof, db=self.db, conn=conn)
+        except Exception as e:
+            logger.error(f"Could not store proofs in database: {e}")
+            logger.error(proofs)
+            raise e
 
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
@@ -1245,7 +1016,7 @@ class Wallet(LedgerAPI):
             if id is None:
                 continue
             keyset_crud = await get_keyset(id=id, db=self.db)
-            assert keyset_crud is not None, "keyset not found"
+            assert keyset_crud is not None, f"keyset {id} not found"
             keyset: WalletKeyset = keyset_crud
             assert keyset.mint_url
             if keyset.mint_url not in ret:
@@ -1314,7 +1085,7 @@ class Wallet(LedgerAPI):
         return token
 
     async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, legacy=False
+        self, proofs: List[Proof], include_mints=True, include_dleq=False, legacy=False
     ) -> str:
         """Produces sharable token with proofs and mint information.
 
@@ -1340,7 +1111,7 @@ class Wallet(LedgerAPI):
 
         # V3 tokens
         token = await self._make_token(proofs, include_mints)
-        return token.serialize()
+        return token.serialize(include_dleq)
 
     async def _make_token_v2(self, proofs: List[Proof], include_mints=True) -> TokenV2:
         """
@@ -1349,6 +1120,7 @@ class Wallet(LedgerAPI):
         """
         # build token
         token = TokenV2(proofs=proofs)
+
         # add mint information to the token, if requested
         if include_mints:
             # dummy object to hold information about the mint
@@ -1395,7 +1167,7 @@ class Wallet(LedgerAPI):
 
         Rules:
         1) Proofs that are not marked as reserved
-        2) Proofs that have a keyset id that is in self.keysets (all active keysets of mint)
+        2) Proofs that have a keyset id that is in self.mint_keyset_ids (all active keysets of mint)
         3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
         4) If the target amount is not reached, add proofs of the current keyset until it is.
         """
@@ -1405,19 +1177,23 @@ class Wallet(LedgerAPI):
         proofs = [p for p in proofs if not p.reserved]
 
         # select proofs that are in the active keysets of the mint
-        proofs = [p for p in proofs if p.id in self.keysets or not p.id]
+        proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
 
         # check that enough spendable proofs exist
         if sum_proofs(proofs) < amount_to_send:
             raise Exception("balance too low.")
 
         # add all proofs that have an older keyset than the current keyset of the mint
-        proofs_old_epochs = [p for p in proofs if p.id != self.keys.id]
+        proofs_old_epochs = [
+            p for p in proofs if p.id != self.keysets[self.keyset_id].id
+        ]
         send_proofs += proofs_old_epochs
 
         # coinselect based on amount only from the current keyset
         # start with the proofs with the largest amount and add them until the target amount is reached
-        proofs_current_epoch = [p for p in proofs if p.id == self.keys.id]
+        proofs_current_epoch = [
+            p for p in proofs if p.id == self.keysets[self.keyset_id].id
+        ]
         sorted_proofs_of_current_keyset = sorted(
             proofs_current_epoch, key=lambda p: p.amount
         )
@@ -1463,7 +1239,7 @@ class Wallet(LedgerAPI):
             invalidated_proofs = proofs
 
         if invalidated_proofs:
-            logger.debug(
+            logger.trace(
                 f"Invalidating {len(invalidated_proofs)} proofs worth"
                 f" {sum_proofs(invalidated_proofs)} sat."
             )
@@ -1509,6 +1285,9 @@ class Wallet(LedgerAPI):
             set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
             is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
             displayed to the user to be then sent to someone else. Defaults to False.
+
+        Returns:
+            Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
         """
         if secret_lock:
             logger.debug(f"Spending conditions: {secret_lock}")
@@ -1520,115 +1299,6 @@ class Wallet(LedgerAPI):
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
         return keep_proofs, send_proofs
-
-    # ---------- P2SH and P2PK ----------
-
-    async def create_p2sh_address_and_store(self) -> str:
-        """Creates a P2SH lock script and stores the script and signature in the database."""
-        alice_privkey = step0_carol_privkey()
-        txin_redeemScript = step0_carol_checksig_redeemscrip(alice_privkey.pub)
-        txin_p2sh_address = step1_carol_create_p2sh_address(txin_redeemScript)
-        txin_signature = step2_carol_sign_tx(txin_redeemScript, alice_privkey).scriptSig
-        txin_redeemScript_b64 = base64.urlsafe_b64encode(txin_redeemScript).decode()
-        txin_signature_b64 = base64.urlsafe_b64encode(txin_signature).decode()
-        p2shScript = P2SHScript(
-            script=txin_redeemScript_b64,
-            signature=txin_signature_b64,
-            address=str(txin_p2sh_address),
-        )
-        await store_p2sh(p2shScript, db=self.db)
-        assert p2shScript.address
-        return p2shScript.address
-
-    async def create_p2pk_pubkey(self):
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
-        public_key = self.private_key.pubkey
-        # logger.debug(f"Private key: {self.private_key.bech32()}")
-        assert public_key
-        return public_key.serialize().hex()
-
-    async def create_p2pk_lock(
-        self,
-        pubkey: str,
-        locktime_seconds: Optional[int] = None,
-        tags: Optional[Tags] = None,
-        sig_all: bool = False,
-        n_sigs: int = 1,
-    ) -> Secret:
-        logger.debug(f"Provided tags: {tags}")
-        if not tags:
-            tags = Tags()
-            logger.debug(f"Before tags: {tags}")
-        if locktime_seconds:
-            tags["locktime"] = str(
-                int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
-            )
-        tags["sigflag"] = SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS
-        if n_sigs > 1:
-            tags["n_sigs"] = str(n_sigs)
-        logger.debug(f"After tags: {tags}")
-        return Secret(
-            kind=SecretKind.P2PK,
-            data=pubkey,
-            tags=tags,
-        )
-
-    async def create_p2sh_lock(
-        self,
-        address: str,
-        locktime: Optional[int] = None,
-        tags: Tags = Tags(),
-    ) -> Secret:
-        if locktime:
-            tags["locktime"] = str(
-                (datetime.now() + timedelta(seconds=locktime)).timestamp()
-            )
-
-        return Secret(
-            kind=SecretKind.P2SH,
-            data=address,
-            tags=tags,
-        )
-
-    async def sign_p2pk_proofs(self, proofs: List[Proof]) -> List[str]:
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
-        private_key = self.private_key
-        assert private_key.pubkey
-        logger.trace(
-            f"Signing with private key: {private_key.serialize()} public key:"
-            f" {private_key.pubkey.serialize().hex()}"
-        )
-        for proof in proofs:
-            logger.trace(f"Signing proof: {proof}")
-            logger.trace(f"Signing message: {proof.secret}")
-
-        signatures = [
-            sign_p2pk_sign(
-                message=proof.secret.encode("utf-8"),
-                private_key=private_key,
-            )
-            for proof in proofs
-        ]
-        logger.debug(f"Signatures: {signatures}")
-        return signatures
-
-    async def sign_p2pk_outputs(self, outputs: List[BlindedMessage]) -> List[str]:
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
-        private_key = self.private_key
-        assert private_key.pubkey
-        return [
-            sign_p2pk_sign(
-                message=output.B_.encode("utf-8"),
-                private_key=private_key,
-            )
-            for output in outputs
-        ]
 
     # ---------- BALANCE CHECKS ----------
 
@@ -1675,7 +1345,7 @@ class Wallet(LedgerAPI):
 
         Args:
             mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.
-            to (int, optional): The number of consecutive empty reponses to stop restoring. Defaults to 2.
+            to (int, optional): The number of consecutive empty responses to stop restoring. Defaults to 2.
             batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
         """
         await self._init_private_key(mnemonic)
@@ -1735,7 +1405,7 @@ class Wallet(LedgerAPI):
         )
         # we don't know the amount but luckily the mint will tell us so we use a dummy amount here
         amounts_dummy = [1] * len(secrets)
-        # we generate outptus from deterministic secrets and rs
+        # we generate outputs from deterministic secrets and rs
         regenerated_outputs, _ = self._construct_outputs(amounts_dummy, secrets, rs)
         # we ask the mint to reissue the promises
         proofs = await self.restore_promises(
@@ -1763,7 +1433,7 @@ class Wallet(LedgerAPI):
             outputs (List[BlindedMessage]): Outputs for which we request promises
             secrets (List[str]): Secrets generated for the outputs
             rs (List[PrivateKey]): Random blinding factors generated for the outputs
-            derivation_paths (List[str]): Derivation paths for the secrets
+            derivation_paths (List[str]): Derivation paths used for the secrets necessary to unblind the promises
 
         Returns:
             List[Proof]: List of restored proofs
@@ -1779,14 +1449,8 @@ class Wallet(LedgerAPI):
         secrets = [secrets[i] for i in matching_indices]
         rs = [rs[i] for i in matching_indices]
         # now we can construct the proofs with the secrets and rs
-        proofs = self._construct_proofs(
+        proofs = await self._construct_proofs(
             restored_promises, secrets, rs, derivation_paths
         )
         logger.debug(f"Restored {len(restored_promises)} promises")
-        await self._store_proofs(proofs)
-
-        # append proofs to proofs in memory so the balance updates
-        for proof in proofs:
-            if proof.secret not in [p.secret for p in self.proofs]:
-                self.proofs.append(proof)
         return proofs

@@ -1,0 +1,23 @@
+version: "3"
+services:
+  mint:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mint
+    ports:
+      - "3338:3338"
+    command: ["poetry", "run", "mint", "--port", "3338", "--host", "0.0.0.0"]
+  wallet:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wallet
+    ports:
+      - "4448:4448"
+    depends_on:
+      - mint
+    environment:
+      - MINT_URL=http://mint:3338
+      - API_HOST=0.0.0.0
+    command: ["poetry", "run", "cashu", "-d"]

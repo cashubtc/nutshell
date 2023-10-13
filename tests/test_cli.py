@@ -3,6 +3,7 @@ import asyncio
 import pytest
 from click.testing import CliRunner
 
+from cashu.core.base import TokenV3
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
@@ -123,9 +124,38 @@ def test_send(mint, cli_prefix):
         [*cli_prefix, "send", "10"],
     )
     assert result.exception is None
-    print("SEND")
     print(result.output)
-    assert "cashuA" in result.output, "output does not have a token"
+    token_str = result.output.split("\n")[0]
+    assert "cashuA" in token_str, "output does not have a token"
+    token = TokenV3.deserialize(token_str)
+    assert token.token[0].proofs[0].dleq is None, "dleq included"
+
+
+def test_send_with_dleq(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--dleq"],
+    )
+    assert result.exception is None
+    print(result.output)
+    token_str = result.output.split("\n")[0]
+    assert "cashuA" in token_str, "output does not have a token"
+    token = TokenV3.deserialize(token_str)
+    assert token.token[0].proofs[0].dleq is not None, "no dleq included"
+
+
+def test_send_legacy(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--legacy"],
+    )
+    assert result.exception is None
+    print(result.output)
+    # this is the legacy token in the output
+    token_str = result.output.split("\n")[4]
+    assert token_str.startswith("eyJwcm9v"), "output is not as expected"
 
 
 def test_send_without_split(mint, cli_prefix):
@@ -243,3 +273,25 @@ def test_nostr_send(mint, cli_prefix):
     assert result.exception is None
     print("NOSTR_SEND")
     print(result.output)
+
+
+def test_pending(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "pending"],
+    )
+    assert result.exception is None
+    print(result.output)
+    assert result.exit_code == 0
+
+
+def test_selfpay(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "selfpay"],
+    )
+    assert result.exception is None
+    print(result.output)
+    assert result.exit_code == 0

@@ -23,7 +23,6 @@ from ...wallet.crud import (
     get_lightning_invoices,
     get_reserved_proofs,
     get_seed_and_mnemonic,
-    get_unused_locks,
 )
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
@@ -354,7 +353,15 @@ async def balance(ctx: Context, verbose):
     help="Send to nostr pubkey.",
     type=str,
 )
-@click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
+@click.option("--lock", "-l", default=None, help="Lock tokens (P2PK).", type=str)
+@click.option(
+    "--dleq",
+    "-d",
+    default=False,
+    is_flag=True,
+    help="Send with DLEQ proof.",
+    type=bool,
+)
 @click.option(
     "--legacy",
     "-l",
@@ -390,6 +397,7 @@ async def send_command(
     nostr: str,
     nopt: str,
     lock: str,
+    dleq: bool,
     legacy: bool,
     verbose: bool,
     yes: bool,
@@ -397,9 +405,18 @@ async def send_command(
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     if not nostr and not nopt:
-        await send(wallet, amount, lock, legacy, split=not nosplit)
+        await send(
+            wallet,
+            amount=amount,
+            lock=lock,
+            legacy=legacy,
+            split=not nosplit,
+            include_dleq=dleq,
+        )
     else:
-        await send_nostr(wallet, amount, nostr or nopt, verbose, yes)
+        await send_nostr(
+            wallet, amount=amount, pubkey=nostr or nopt, verbose=verbose, yes=yes
+        )
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -535,14 +552,15 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             enumerate(
                 groupby(
                     sorted_proofs,
-                    key=itemgetter("send_id"),
+                    key=itemgetter("send_id"),  # type: ignore
                 )
             ),
             offset,
             number,
         ):
             grouped_proofs = list(value)
-            token = await wallet.serialize_proofs(grouped_proofs)
+            # TODO: we can't return DLEQ because we don't store it
+            token = await wallet.serialize_proofs(grouped_proofs, include_dleq=False)
             tokenObj = deserialize_token_from_string(token)
             mint = [t.mint for t in tokenObj.token][0]
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
@@ -567,26 +585,14 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
 
 
 @cli.command("lock", help="Generate receiving lock.")
-@click.option(
-    "--p2sh",
-    "-p",
-    default=False,
-    is_flag=True,
-    help="Create P2SH lock.",
-    type=bool,
-)
 @click.pass_context
 @coro
-async def lock(ctx, p2sh):
+async def lock(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    if p2sh:
-        address = await wallet.create_p2sh_address_and_store()
-        lock_str = f"P2SH:{address}"
-        print("---- Pay to script hash (P2SH) ----\n")
-    else:
-        pubkey = await wallet.create_p2pk_pubkey()
-        lock_str = f"P2PK:{pubkey}"
-        print("---- Pay to public key (P2PK) ----\n")
+
+    pubkey = await wallet.create_p2pk_pubkey()
+    lock_str = f"P2PK:{pubkey}"
+    print("---- Pay to public key (P2PK) ----\n")
 
     print("Use a lock to receive tokens that only you can unlock.")
     print("")
@@ -610,19 +616,6 @@ async def locks(ctx):
     print("---- Pay to public key (P2PK) lock ----\n")
     print(f"Lock: {lock_str}")
     print("")
-    print("To see more information enter: cashu lock")
-    # P2SH locks
-    locks = await get_unused_locks(db=wallet.db)
-    if len(locks):
-        print("")
-        print("---- Pay to script hash (P2SH) locks ----\n")
-        for lock in locks:
-            print(f"Lock: P2SH:{lock.address}")
-            print(f"Script: {lock.script}")
-            print(f"Signature: {lock.signature}")
-            print("")
-            print("--------------------------\n")
-
     return True
 
 
@@ -793,3 +786,30 @@ async def restore(ctx: Context, to: int, batch: int):
     await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
     await wallet.load_proofs()
     wallet.status()
+
+
+@cli.command("selfpay", help="Refresh tokens.")
+# @click.option("--all", default=False, is_flag=True, help="Execute on all available mints.")
+@click.pass_context
+@coro
+async def selfpay(ctx: Context, all: bool = False):
+    wallet = await get_mint_wallet(ctx, force_select=True)
+    await wallet.load_mint()
+
+    # get balance on this mint
+    mint_balance_dict = await wallet.balance_per_minturl()
+    mint_balance = mint_balance_dict[wallet.url]["available"]
+    # send balance once to mark as reserved
+    await wallet.split_to_send(wallet.proofs, mint_balance, None, set_reserved=True)
+    # load all reserved proofs (including the one we just sent)
+    reserved_proofs = await get_reserved_proofs(wallet.db)
+    if not len(reserved_proofs):
+        print("No balance on this mint.")
+        return
+
+    token = await wallet.serialize_proofs(reserved_proofs)
+    print(f"Selfpay token for mint {wallet.url}:")
+    print("")
+    print(token)
+    tokenObj = TokenV3.deserialize(token)
+    await receive(wallet, tokenObj)

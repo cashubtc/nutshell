@@ -73,19 +73,19 @@ async def m003_add_proofs_sendid_and_timestamps(db: Database):
 
 async def m004_p2sh_locks(db: Database):
     """
-    Stores P2SH addresses and unlock scripts.
+    DEPRECATED: Stores P2SH addresses and unlock scripts.
     """
-    await db.execute("""
-            CREATE TABLE IF NOT EXISTS p2sh (
-                address TEXT NOT NULL,
-                script TEXT NOT NULL,
-                signature TEXT NOT NULL,
-                used BOOL NOT NULL,
+    # await db.execute("""
+    #         CREATE TABLE IF NOT EXISTS p2sh (
+    #             address TEXT NOT NULL,
+    #             script TEXT NOT NULL,
+    #             signature TEXT NOT NULL,
+    #             used BOOL NOT NULL,
 
-                UNIQUE (address, script, signature)
+    #             UNIQUE (address, script, signature)
 
-            );
-        """)
+    #         );
+    #     """)
 
 
 async def m005_wallet_keysets(db: Database):
@@ -175,7 +175,17 @@ async def m009_privatekey_and_determinstic_key_derivation(db: Database):
     # await db.execute("INSERT INTO secret_derivation (counter) VALUES (0)")
 
 
+async def m010_add_proofs_dleq(db: Database):
+    """
+    Columns to store DLEQ proofs for proofs.
+    """
+    await db.execute("ALTER TABLE proofs ADD COLUMN dleq TEXT")
+
+
 async def m010_add_ids_to_proofs_and_out_to_invoices(db: Database):
+    """
+    Columns that store mint and melt id for proofs and invoices.
+    """
     await db.execute("ALTER TABLE proofs ADD COLUMN mint_id TEXT")
     await db.execute("ALTER TABLE proofs_used ADD COLUMN mint_id TEXT")
     await db.execute("ALTER TABLE proofs ADD COLUMN melt_id TEXT")

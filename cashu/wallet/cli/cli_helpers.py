@@ -46,12 +46,11 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
         mint_url = wallet.url
 
     # load this mint_url into a wallet
-    mint_wallet = Wallet(
+    mint_wallet = await Wallet.with_db(
         mint_url,
         os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
         name=wallet.name,
     )
-    # await mint_wallet.load_mint()
     await mint_wallet.load_proofs(reload=True)
 
     return mint_wallet
