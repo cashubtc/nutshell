@@ -7,10 +7,11 @@ from cashu.wallet.lightning import LightningWallet
 async def main():
     # wallet = LightningWallet("http://localhost:3338", "data/lightning.db")
     # await wallet.async_init("http://localhost:3338", "data/lightning.db")
-    wallet = await LightningWallet().async_init(
+    wallet = await LightningWallet().with_db(
         url="http://localhost:3338", db="data/lightning.db"
     )
-    invoice = await wallet.create_invoice(1000, "test incoming")
+    await wallet.async_init()
+    invoice = await wallet.create_invoice(1000)
 
     print(invoice)
     # return
@@ -25,7 +26,7 @@ async def main():
 
     print("balance", await wallet.get_balance())
 
-    invoice2 = await wallet.create_invoice(10, "test outgoing")
+    invoice2 = await wallet.create_invoice(10)
     pr = invoice2.bolt11
     invoice_obj = bolt11.decode(pr)
     print("paying invoice", pr)

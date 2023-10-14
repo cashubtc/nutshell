@@ -6,9 +6,7 @@ from ...core.base import Invoice
 
 
 class PayResponse(BaseModel):
-    amount: int
-    fee: int
-    amount_with_fee: int
+    ok: bool
 
 
 class InvoiceResponse(BaseModel):

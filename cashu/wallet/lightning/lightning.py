@@ -9,38 +9,28 @@ class LightningWallet(Wallet):
     Lightning wallet interface for Cashu
     """
 
-    wallet: Wallet
+    # wallet: Wallet
 
-    @classmethod
-    async def async_init(cls, *args, **kwargs):
+    async def async_init(self):
         """Async init for lightning wallet"""
         settings.tor = False
-        self = cls(*args, **kwargs)
-        # self.__init__(*args, **kwargs)
-        self.wallet = await Wallet.with_db(*args, **kwargs)
-        await self.wallet.load_proofs()
-        await self.wallet.load_mint()
-        return self
+        await self.load_proofs()
+        await self.load_mint()
 
     def __init__(self, *args, **kwargs):
-        pass
-        # settings.tor = False
-        # print(kwargs)
-        # super().__init__(*args, **kwargs)
+        if not args and not kwargs:
+            pass
+        super().__init__(*args, **kwargs)
 
-        # asyncio.run(self.async_init(url, db, *args, **kwargs))
-
-    async def create_invoice(self, amount: int, memo: str) -> Invoice:
+    async def create_invoice(self, amount: int) -> Invoice:
         """Create lightning invoice
 
         Args:
             amount (int): amount in satoshis
-            memo (str): memo for the invoice
-
         Returns:
             str: invoice
         """
-        invoice = await self.wallet.request_mint(amount)
+        invoice = await self.request_mint(amount)
         return invoice
 
     async def pay_invoice(self, pr: str) -> bool:
@@ -52,16 +42,14 @@ class LightningWallet(Wallet):
         Returns:
             bool: True if successful
         """
-        total_amount, fee_reserve_sat = await self.wallet.get_pay_amount_with_fees(pr)
+        total_amount, fee_reserve_sat = await self.get_pay_amount_with_fees(pr)
         assert total_amount > 0, "amount is not positive"
-        if self.wallet.available_balance < total_amount:
+        if self.available_balance < total_amount:
             print("Error: Balance too low.")
             return False
-        _, send_proofs = await self.wallet.split_to_send(
-            self.wallet.proofs, total_amount
-        )
+        _, send_proofs = await self.split_to_send(self.proofs, total_amount)
         try:
-            await self.wallet.pay_lightning(send_proofs, pr, fee_reserve_sat)
+            await self.pay_lightning(send_proofs, pr, fee_reserve_sat)
             return True
         except Exception as e:
             print("Exception:", e)
@@ -77,7 +65,7 @@ class LightningWallet(Wallet):
             str: status
         """
         invoice = await get_lightning_invoice(
-            db=self.wallet.db, payment_hash=payment_hash, out=False
+            db=self.db, payment_hash=payment_hash, out=False
         )
         if not invoice:
             return "not found (in db)"
@@ -85,7 +73,7 @@ class LightningWallet(Wallet):
             return "paid (in db)"
         try:
             # to check the invoice state, we try minting tokens
-            await self.wallet.mint(invoice.amount, hash=invoice.id)
+            await self.mint(invoice.amount, id=invoice.id)
             return "paid (with check)"
         except Exception as e:
             print(e)
@@ -104,17 +92,17 @@ class LightningWallet(Wallet):
         # NOTE: consider adding this in wallet.py and update invoice state to paid in DB
 
         invoice = await get_lightning_invoice(
-            db=self.wallet.db, payment_hash=payment_hash, out=True
+            db=self.db, payment_hash=payment_hash, out=True
         )
 
         if not invoice:
             return "invoice not found (in db)"
         if invoice.paid:
             return "paid (in db)"
-        proofs = await get_proofs(db=self.wallet.db, melt_id=invoice.id)
+        proofs = await get_proofs(db=self.db, melt_id=invoice.id)
         if not proofs:
             return "proofs not fount (in db)"
-        proofs_states = await self.wallet.check_proof_state(proofs)
+        proofs_states = await self.check_proof_state(proofs)
         if (
             not proofs_states
             or not proofs_states.spendable
@@ -137,4 +125,4 @@ class LightningWallet(Wallet):
         Returns:
             int: balance in satoshis
         """
-        return self.wallet.available_balance
+        return self.available_balance

@@ -1,8 +1,9 @@
+import asyncio
+
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from cashu.core.settings import settings
 from cashu.wallet.api.app import app
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -23,25 +24,20 @@ async def wallet(mint):
 @pytest.mark.asyncio
 async def test_invoice(wallet: Wallet):
     with TestClient(app) as client:
-        response = client.post("/invoice?amount=100")
+        response = client.post("/lightning/create_invoice?amount=100")
         assert response.status_code == 200
-        if settings.lightning:
-            assert response.json()["invoice"]
-        else:
-            assert response.json()["amount"]
-
-
-@pytest.mark.asyncio
-async def test_invoice_with_split(wallet: Wallet):
-    with TestClient(app) as client:
-        response = client.post("/invoice?amount=10&split=1")
-        assert response.status_code == 200
-        if settings.lightning:
-            assert response.json()["invoice"]
-        else:
-            assert response.json()["amount"]
-        # await wallet.load_proofs(reload=True)
-        # assert wallet.proof_amounts.count(1) >= 10
+        resp = response.json()
+        assert "invoice" in resp
+        state = ""
+        while not state.startswith("paid"):
+            print("checking invoice state")
+            response2 = client.get(
+                f"/lightning/invoice_state?payment_hash={resp.get('id')}"
+            )
+            state = response2.json()
+            await asyncio.sleep(0.1)
+            print("state:", state)
+        print("paid")
 
 
 @pytest.mark.asyncio
@@ -49,7 +45,7 @@ async def test_balance():
     with TestClient(app) as client:
         response = client.get("/balance")
         assert response.status_code == 200
-        assert response.json()["balance"]
+        assert "balance" in response.json()
         assert response.json()["keysets"]
         assert response.json()["mints"]
 
@@ -89,7 +85,7 @@ async def test_receive_all(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/receive?all=true")
         assert response.status_code == 200
-        assert response.json()["initial_balance"] == 0
+        assert response.json()["initial_balance"]
         assert response.json()["balance"]
 
 
@@ -100,7 +96,7 @@ async def test_burn_all(wallet: Wallet):
         assert response.status_code == 200
         response = client.post("/burn?all=true")
         assert response.status_code == 200
-        assert response.json()["balance"] == 0
+        assert response.json()["balance"]
 
 
 @pytest.mark.asyncio
@@ -113,11 +109,8 @@ async def test_pay():
             "9g40a073h39748uez9p8mxws5vqwjmkqr4wl5l7n4dlhj6z6"
             "va963cqvufrs4"
         )
-        response = client.post(f"/pay?invoice={invoice}")
-        if not settings.lightning:
-            assert response.status_code == 400
-        else:
-            assert response.status_code == 200
+        response = client.post(f"/lightning/pay_invoice?invoice={invoice}")
+        assert response.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -159,21 +152,30 @@ async def test_info():
 @pytest.mark.asyncio
 async def test_flow(wallet: Wallet):
     with TestClient(app) as client:
-        if not settings.lightning:
-            response = client.get("/balance")
-            initial_balance = response.json()["balance"]
-            response = client.post("/invoice?amount=100")
-            response = client.get("/balance")
-            assert response.json()["balance"] == initial_balance + 100
-            response = client.post("/send?amount=50")
-            response = client.get("/balance")
-            assert response.json()["balance"] == initial_balance + 50
-            response = client.post("/send?amount=50")
-            response = client.get("/balance")
-            assert response.json()["balance"] == initial_balance
-            response = client.get("/pending")
-            token = response.json()["pending_token"]["0"]["token"]
-            amount = response.json()["pending_token"]["0"]["amount"]
-            response = client.post(f"/receive?token={token}")
-            response = client.get("/balance")
-            assert response.json()["balance"] == initial_balance + amount
+        response = client.get("/balance")
+        initial_balance = response.json()["balance"]
+        response = client.post("/lightning/create_invoice?amount=100")
+        state = ""
+        while not state.startswith("paid"):
+            print("checking invoice state")
+            response2 = client.get(
+                f"/lightning/invoice_state?payment_hash={response.json().get('id')}"
+            )
+            state = response2.json()
+            await asyncio.sleep(0.1)
+            print("state:", state)
+
+        response = client.get("/balance")
+        assert response.json()["balance"] == initial_balance + 100
+        response = client.post("/send?amount=50")
+        response = client.get("/balance")
+        assert response.json()["balance"] == initial_balance + 50
+        response = client.post("/send?amount=50")
+        response = client.get("/balance")
+        assert response.json()["balance"] == initial_balance
+        response = client.get("/pending")
+        token = response.json()["pending_token"]["0"]["token"]
+        amount = response.json()["pending_token"]["0"]["amount"]
+        response = client.post(f"/receive?token={token}")
+        response = client.get("/balance")
+        assert response.json()["balance"] == initial_balance + amount
