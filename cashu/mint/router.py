@@ -24,6 +24,7 @@ from ..core.base import (
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
+from ..lightning.base import PaymentQuote
 from ..mint.startup import ledger
 
 router: APIRouter = APIRouter()
@@ -169,6 +170,12 @@ async def mint(
     blinded_signatures = PostMintResponse(promises=promises)
     logger.trace(f"< POST /mint: {blinded_signatures}")
     return blinded_signatures
+
+
+@router.get("/melt", name="Request melt", summary="Request melting of tokens")
+async def getmelt(invoice: str) -> PaymentQuote:
+    quote = await ledger.getmelt(invoice)
+    return quote
 
 
 @router.post(

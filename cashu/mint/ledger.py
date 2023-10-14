@@ -29,7 +29,7 @@ from ..core.errors import (
 from ..core.helpers import fee_reserve, sum_proofs
 from ..core.settings import settings
 from ..core.split import amount_split
-from ..lightning.base import Wallet
+from ..lightning.base import PaymentQuote, Wallet
 from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
 from .verification import LedgerVerification
@@ -420,6 +420,26 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.trace("generated promises")
         return promises
 
+    async def getmelt(self, bolt11: str) -> PaymentQuote:
+        """_summary_
+
+        Args:
+            bolt11 (str): Lightning invoice to get the amount of
+
+        Returns:
+            int: Amount to pay
+        """
+        quote = await self.lightning.get_invoice_quote(bolt11)
+        if "error_message" in quote:
+            raise LightningError(quote["error_message"])
+        invoice = Invoice(
+            amount=quote.amount,
+            hash=quote.id,
+            pr=bolt11,
+        )
+        await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
+        return quote
+
     async def melt(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
     ) -> Tuple[bool, str, List[BlindedSignature]]:
@@ -444,13 +464,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         try:
             # verify amounts
             total_provided = sum_proofs(proofs)
-            invoice_obj = bolt11.decode(invoice)
-            invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
+            invoiceObj = await self.crud.get_lightning_invoice(hash=invoice, db=self.db)
+            assert invoiceObj, "Invoice not found"
+            invoice_amount = invoiceObj.amount
             if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
                 raise NotAllowedError(
                     f"Maximum melt amount is {settings.mint_max_peg_out} sat."
                 )
-            fees_sat = await self.get_melt_fees(invoice)
+            fees_sat = 0  # await self.get_melt_fees(invoice)
             # verify overspending attempt
             assert total_provided >= invoice_amount + fees_sat, TransactionError(
                 "provided proofs not enough for Lightning payment. Provided:"
@@ -463,7 +484,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             if settings.lightning:
                 logger.trace(f"paying lightning invoice {invoice}")
                 status, preimage, fee_msat = await self._pay_lightning_invoice(
-                    invoice, fees_sat * 1000
+                    invoice, 0
                 )
                 preimage = preimage or ""
                 logger.trace("paid lightning invoice")
@@ -482,13 +503,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []
-            if outputs and fee_msat:
-                return_promises = await self._generate_change_promises(
-                    total_provided=total_provided,
-                    invoice_amount=invoice_amount,
-                    ln_fee_msat=fee_msat,
-                    outputs=outputs,
-                )
+            # if outputs and fee_msat:
+            #     return_promises = await self._generate_change_promises(
+            #         total_provided=total_provided,
+            #         invoice_amount=invoice_amount,
+            #         ln_fee_msat=fee_msat,
+            #         outputs=outputs,
+            #     )
 
         except Exception as e:
             logger.trace(f"exception: {e}")

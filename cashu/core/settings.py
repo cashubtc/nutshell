@@ -60,6 +60,8 @@ class MintSettings(CashuSettings):
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
 
+    mint_strike_key: str = Field(default=None)
+
 
 class MintInformation(CashuSettings):
     mint_info_name: str = Field(default="Cashu mint")
