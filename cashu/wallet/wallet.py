@@ -4,6 +4,7 @@ import math
 import time
 import uuid
 from itertools import groupby
+from posixpath import join
 from typing import Dict, List, Optional, Tuple, Union
 
 import httpx
@@ -277,7 +278,7 @@ class LedgerAPI(object):
             Exception: If no keys are received from the mint
         """
         resp = await self.httpx.get(
-            url + "/keys",
+            join(url, "keys"),
         )
         self.raise_on_error(resp)
         keys: dict = resp.json()
@@ -306,7 +307,7 @@ class LedgerAPI(object):
         """
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = await self.httpx.get(
-            url + f"/keys/{keyset_id_urlsafe}",
+            join(url, f"keys/{keyset_id_urlsafe}"),
         )
         self.raise_on_error(resp)
         keys = resp.json()
@@ -332,7 +333,7 @@ class LedgerAPI(object):
             Exception: If no keysets are received from the mint
         """
         resp = await self.httpx.get(
-            url + "/keysets",
+            join(url, "keysets"),
         )
         self.raise_on_error(resp)
         keysets_dict = resp.json()
@@ -354,7 +355,7 @@ class LedgerAPI(object):
             Exception: If the mint info request fails
         """
         resp = await self.httpx.get(
-            url + "/info",
+            join(url, "info"),
         )
         self.raise_on_error(resp)
         data: dict = resp.json()
@@ -375,7 +376,7 @@ class LedgerAPI(object):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: GET /mint")
-        resp = await self.httpx.get("/mint", params={"amount": amount})
+        resp = await self.httpx.get(join(self.url, "mint"), params={"amount": amount})
         self.raise_on_error(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse.parse_obj(return_dict)
@@ -408,7 +409,7 @@ class LedgerAPI(object):
         outputs_payload = PostMintRequest(outputs=outputs)
         logger.trace("Checking Lightning invoice. POST /mint")
         resp = await self.httpx.post(
-            "/mint",
+            join(self.url, "mint"),
             json=outputs_payload.dict(),
             params={
                 "hash": id,
@@ -447,7 +448,7 @@ class LedgerAPI(object):
             }
 
         resp = await self.httpx.post(
-            "/split",
+            join(self.url, "split"),
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
         self.raise_on_error(resp)
@@ -474,7 +475,7 @@ class LedgerAPI(object):
             }
 
         resp = await self.httpx.post(
-            "/check",
+            join(self.url, "check"),
             json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
         )
         self.raise_on_error(resp)
@@ -488,7 +489,7 @@ class LedgerAPI(object):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
         resp = await self.httpx.post(
-            "/checkfees",
+            join(self.url, "checkfees"),
             json=payload.dict(),
         )
         self.raise_on_error(resp)
@@ -517,7 +518,7 @@ class LedgerAPI(object):
             }
 
         resp = await self.httpx.post(
-            self.url + "/melt",
+            join(self.url, "melt"),
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
             timeout=None,
         )
@@ -534,7 +535,7 @@ class LedgerAPI(object):
         Asks the mint to restore promises corresponding to outputs.
         """
         payload = PostMintRequest(outputs=outputs)
-        resp = await self.httpx.post("/restore", json=payload.dict())
+        resp = await self.httpx.post(join(self.url, "restore"), json=payload.dict())
         self.raise_on_error(resp)
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)
