@@ -107,7 +107,7 @@ async def pay(
 )
 async def invoice(
     amount: int = Query(default=..., description="Amount to request in invoice"),
-    hash: str = Query(default=None, description="Hash of paid invoice"),
+    id: str = Query(default=None, description="Id of paid invoice"),
     mint: str = Query(
         default=None,
         description="Mint URL to create an invoice at (None for default mint)",
@@ -132,17 +132,17 @@ async def invoice(
         return InvoiceResponse(
             amount=amount,
         )
-    elif amount and not hash:
+    elif amount and not id:
         invoice = await wallet.request_mint(amount)
         return InvoiceResponse(
             amount=amount,
             invoice=invoice,
         )
-    elif amount and hash:
-        await wallet.mint(amount, split=optional_split, hash=hash)
+    elif amount and id:
+        await wallet.mint(amount, split=optional_split, id=id)
         return InvoiceResponse(
             amount=amount,
-            hash=hash,
+            id=id,
         )
     return
 
@@ -183,7 +183,7 @@ async def swap(
     await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, hash=invoice.id)
+    await incoming_wallet.mint(amount, id=invoice.id)
     await incoming_wallet.load_proofs(reload=True)
     mint_balances = await incoming_wallet.balance_per_minturl()
     return SwapResponse(

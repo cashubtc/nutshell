@@ -391,13 +391,13 @@ class LedgerAPI(object):
 
     @async_set_httpx_client
     async def mint(
-        self, outputs: List[BlindedMessage], hash: Optional[str] = None
+        self, outputs: List[BlindedMessage], id: Optional[str] = None
     ) -> List[BlindedSignature]:
         """Mints new coins and returns a proof of promise.
 
         Args:
             outputs (List[BlindedMessage]): Outputs to mint new tokens with
-            hash (str, optional): Hash of the paid invoice. Defaults to None.
+            id (str, optional): Id of the paid invoice. Defaults to None.
 
         Returns:
             list[Proof]: List of proofs.
@@ -411,8 +411,8 @@ class LedgerAPI(object):
             "/mint",
             json=outputs_payload.dict(),
             params={
-                "hash": hash,
-                "payment_hash": hash,  # backwards compatibility pre 0.12.0
+                "hash": id,
+                "payment_hash": id,  # backwards compatibility pre 0.12.0
             },
         )
         self.raise_on_error(resp)
@@ -638,14 +638,14 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         self,
         amount: int,
         split: Optional[List[int]] = None,
-        hash: Optional[str] = None,
+        id: Optional[str] = None,
     ) -> List[Proof]:
         """Mint tokens of a specific amount after an invoice has been paid.
 
         Args:
             amount (int): Total amount of tokens to be minted
             split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
-            hash (Optional[str], optional): Hash for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+            id (Optional[str], optional): Id for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
 
         Raises:
             Exception: Raises exception if `amounts` does not sum to `amount` or has unsupported value.
@@ -678,7 +678,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
         # will raise exception if mint is unsuccessful
-        promises = await super().mint(outputs, hash)
+        promises = await super().mint(outputs, id)
 
         # success, bump secret counter in database
         await bump_secret_derivation(
@@ -686,9 +686,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         )
         proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
 
-        if hash:
+        if id:
             await update_lightning_invoice(
-                db=self.db, id=hash, paid=True, time_paid=int(time.time())
+                db=self.db, id=id, paid=True, time_paid=int(time.time())
             )
         return proofs
 

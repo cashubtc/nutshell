@@ -147,7 +147,7 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
 async def test_restore_wallet_after_mint(wallet3: Wallet):
     await reset_wallet_db(wallet3)
     invoice = await wallet3.request_mint(64)
-    await wallet3.mint(64, hash=invoice.hash)
+    await wallet3.mint(64, id=invoice.id)
     assert wallet3.balance == 64
     await reset_wallet_db(wallet3)
     await wallet3.load_proofs()
@@ -177,7 +177,7 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
     await reset_wallet_db(wallet3)
 
     invoice = await wallet3.request_mint(64)
-    await wallet3.mint(64, hash=invoice.hash)
+    await wallet3.mint(64, id=invoice.id)
     assert wallet3.balance == 64
 
     _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 32, set_reserved=True)  # type: ignore
@@ -199,7 +199,7 @@ async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: W
     )
     await reset_wallet_db(wallet3)
     invoice = await wallet3.request_mint(64)
-    await wallet3.mint(64, hash=invoice.hash)
+    await wallet3.mint(64, id=invoice.id)
     assert wallet3.balance == 64
 
     _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 32, set_reserved=True)  # type: ignore
@@ -239,7 +239,7 @@ async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
     await reset_wallet_db(wallet3)
 
     invoice = await wallet3.request_mint(64)
-    await wallet3.mint(64, hash=invoice.hash)
+    await wallet3.mint(64, id=invoice.id)
     assert wallet3.balance == 64
 
     _, spendable_proofs = await wallet3.split_to_send(wallet3.proofs, 32, set_reserved=True)  # type: ignore
@@ -265,7 +265,7 @@ async def test_restore_wallet_after_send_twice(
     await reset_wallet_db(wallet3)
 
     invoice = await wallet3.request_mint(2)
-    await wallet3.mint(2, hash=invoice.hash)
+    await wallet3.mint(2, id=invoice.id)
     box.add(wallet3.proofs)
     assert wallet3.balance == 2
 
@@ -319,7 +319,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     await reset_wallet_db(wallet3)
 
     invoice = await wallet3.request_mint(64)
-    await wallet3.mint(64, hash=invoice.hash)
+    await wallet3.mint(64, id=invoice.id)
     box.add(wallet3.proofs)
     assert wallet3.balance == 64
 

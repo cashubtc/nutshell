@@ -190,7 +190,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 
 @cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=int)
-@click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
+@click.option("--id", default="", help="Id of the paid invoice.", type=str)
 @click.option(
     "--split",
     "-s",
@@ -200,7 +200,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 )
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: int, hash: str, split: int):
+async def invoice(ctx: Context, amount: int, id: str, split: int):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -216,7 +216,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
     if not settings.lightning:
         await wallet.mint(amount, split=optional_split)
     # user requests an invoice
-    elif amount and not hash:
+    elif amount and not id:
         invoice = await wallet.request_mint(amount)
         if invoice.bolt11:
             print(f"Pay invoice to mint {amount} sat:")
@@ -238,7 +238,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
             while time.time() < check_until and not paid:
                 time.sleep(3)
                 try:
-                    await wallet.mint(amount, split=optional_split, hash=invoice.id)
+                    await wallet.mint(amount, split=optional_split, id=invoice.id)
                     paid = True
                     print(" Invoice paid.")
                 except Exception as e:
@@ -256,8 +256,8 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
                 )
 
     # user paid invoice and want to check it
-    elif amount and hash:
-        await wallet.mint(amount, split=optional_split, hash=hash)
+    elif amount and id:
+        await wallet.mint(amount, split=optional_split, id=id)
     wallet.status()
     return
 
@@ -298,7 +298,7 @@ async def swap(ctx: Context):
     await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, hash=invoice.id)
+    await incoming_wallet.mint(amount, id=invoice.id)
 
     await incoming_wallet.load_proofs(reload=True)
     await print_mint_balances(incoming_wallet, show_mints=True)

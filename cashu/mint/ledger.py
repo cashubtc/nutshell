@@ -158,7 +158,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             Exception: Error with funding source.
 
         Returns:
-            Tuple[str, str]: Bolt11 invoice and payment hash (for lookup)
+            Tuple[str, str]: Bolt11 invoice and payment id (for lookup)
         """
         logger.trace(
             "_request_lightning_invoice: Requesting Lightning invoice for"
@@ -186,13 +186,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         return payment_request, checking_id
 
     async def _check_lightning_invoice(
-        self, amount: int, hash: str, conn: Optional[Connection] = None
+        self, *, amount: int, id: str, conn: Optional[Connection] = None
     ) -> Literal[True]:
-        """Checks with the Lightning backend whether an invoice stored with `hash` was paid.
+        """Checks with the Lightning backend whether an invoice with `id` was paid.
 
         Args:
             amount (int): Amount of the outputs the wallet wants in return (in Satoshis).
-            hash (str): Hash to look up Lightning invoice by.
+            id (str): Id to look up Lightning invoice by.
 
         Raises:
             Exception: Invoice not found.
@@ -205,7 +205,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             bool: True if invoice has been paid, else False
         """
         invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
-            id=hash, db=self.db, conn=conn
+            id=id, db=self.db, conn=conn
         )
         if invoice is None:
             raise LightningError("invoice not found.")
@@ -220,7 +220,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # set this invoice as issued
         logger.trace(f"crud: setting invoice {invoice.payment_hash} as issued")
         await self.crud.update_lightning_invoice(
-            id=hash, issued=True, db=self.db, conn=conn
+            id=id, issued=True, db=self.db, conn=conn
         )
         logger.trace(f"crud: invoice {invoice.payment_hash} set as issued")
 
@@ -246,7 +246,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # unset issued
             logger.trace(f"crud: unsetting invoice {invoice.payment_hash} as issued")
             await self.crud.update_lightning_invoice(
-                id=hash, issued=False, db=self.db, conn=conn
+                id=id, issued=False, db=self.db, conn=conn
             )
             logger.trace(f"crud: invoice {invoice.payment_hash} unset as issued")
             raise e
@@ -369,7 +369,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             Exception: Invoice creation failed.
 
         Returns:
-            Tuple[str, str]: Bolt11 invoice and a hash (for looking it up later)
+            Tuple[str, str]: Bolt11 invoice and a id (for looking it up later)
         """
         logger.trace("called request_mint")
         if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
@@ -401,19 +401,19 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     async def mint(
         self,
         B_s: List[BlindedMessage],
-        hash: Optional[str] = None,
+        id: Optional[str] = None,
         keyset: Optional[MintKeyset] = None,
     ) -> List[BlindedSignature]:
         """Mints a promise for coins for B_.
 
         Args:
             B_s (List[BlindedMessage]): Outputs (blinded messages) to sign.
-            hash (Optional[str], optional): Hash of (paid) Lightning invoice. Defaults to None.
+            id (Optional[str], optional): Id of (paid) Lightning invoice. Defaults to None.
             keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
 
         Raises:
-            Exception: Lightning invvoice is not paid.
-            Exception: Lightning is turned on but no payment hash is provided.
+            Exception: Lightning invoice is not paid.
+            Exception: Lightning is turned on but no id is provided.
             Exception: Something went wrong with the invoice check.
             Exception: Amount too large.
 
@@ -424,21 +424,19 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         amount_outputs = sum([b.amount for b in B_s])
 
         if settings.lightning:
-            if not hash:
-                raise NotAllowedError("no hash provided.")
-            self.locks[hash] = (
-                self.locks.get(hash) or asyncio.Lock()
+            if not id:
+                raise NotAllowedError("no id provided.")
+            self.locks[id] = (
+                self.locks.get(id) or asyncio.Lock()
             )  # create a new lock if it doesn't exist
-            async with self.locks[hash]:
+            async with self.locks[id]:
                 # will raise an exception if the invoice is not paid or tokens are
                 # already issued or the requested amount is too high
-                await self._check_lightning_invoice(amount_outputs, hash)
+                await self._check_lightning_invoice(amount=amount_outputs, id=id)
 
-                logger.trace(f"crud: setting invoice {hash} as issued")
-                await self.crud.update_lightning_invoice(
-                    id=hash, issued=True, db=self.db
-                )
-            del self.locks[hash]
+                logger.trace(f"crud: setting invoice {id} as issued")
+                await self.crud.update_lightning_invoice(id=id, issued=True, db=self.db)
+            del self.locks[id]
 
         self._verify_outputs(B_s)
 

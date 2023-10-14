@@ -14,7 +14,7 @@ class PayResponse(BaseModel):
 class InvoiceResponse(BaseModel):
     amount: Optional[int] = None
     invoice: Optional[Invoice] = None
-    hash: Optional[str] = None
+    id: Optional[str] = None
 
 
 class SwapResponse(BaseModel):

@@ -77,7 +77,7 @@ class FakeWallet(Wallet):
 
     async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
         invoice = decode(bolt11)
-        await asyncio.sleep(5)
+        # await asyncio.sleep(5)
 
         if invoice.payment_hash[:6] == self.privkey[:6] or BRR:
             await self.queue.put(invoice)
@@ -89,10 +89,8 @@ class FakeWallet(Wallet):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        import random
-
-        paid = random.random() > 0.7
-        return PaymentStatus(paid)
+        # paid = random.random() > 0.7
+        # return PaymentStatus(paid)
         paid = checking_id in self.paid_invoices or BRR
         return PaymentStatus(paid or None)
 

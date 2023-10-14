@@ -140,7 +140,7 @@ This command will return a Lightning invoice that you need to pay to mint new ec
 cashu invoice 420
 ```
 
-The client will check every few seconds if the invoice has been paid. If you abort this step but still pay the invoice, you can use the command `cashu invoice <amount> --hash <hash>`.
+The client will check every few seconds if the invoice has been paid. If you abort this step but still pay the invoice, you can use the command `cashu invoice <amount> --id <id>`.
 
 #### Pay a Lightning invoice
 ```bash
