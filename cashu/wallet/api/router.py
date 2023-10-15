@@ -11,6 +11,12 @@ from fastapi import APIRouter, Query
 from ...core.base import TokenV3
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
+from ...lightning.base import (
+    InvoiceResponse,
+    PaymentResponse,
+    PaymentStatus,
+    StatusResponse,
+)
 from ...nostr.nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs
@@ -29,11 +35,9 @@ from .responses import (
     BalanceResponse,
     BurnResponse,
     InfoResponse,
-    InvoiceResponse,
     InvoicesResponse,
     LockResponse,
     LocksResponse,
-    PayResponse,
     PendingResponse,
     ReceiveResponse,
     RestoreResponse,
@@ -77,7 +81,9 @@ async def start_wallet():
 
 
 @router.post(
-    "/lightning/pay_invoice", name="Pay lightning invoice", response_model=PayResponse
+    "/lightning/pay_invoice",
+    name="Pay lightning invoice",
+    response_model=PaymentResponse,
 )
 async def pay(
     invoice: str = Query(default=..., description="Lightning invoice to pay"),
@@ -85,20 +91,18 @@ async def pay(
         default=None,
         description="Mint URL to pay from (None for default mint)",
     ),
-):
+) -> PaymentResponse:
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
-    ok = await wallet.pay_invoice(invoice)
-    return PayResponse(
-        ok=ok,
-    )
+    payment_response = await wallet.pay_invoice(invoice)
+    return payment_response
 
 
 @router.get(
     "/lightning/payment_state",
     name="Request lightning invoice",
-    response_model=InvoiceResponse,
+    response_model=PaymentStatus,
 )
 async def payment_state(
     id: str = Query(default=None, description="Id of paid invoice"),
@@ -106,7 +110,7 @@ async def payment_state(
         default=None,
         description="Mint URL to create an invoice at (None for default mint)",
     ),
-):
+) -> PaymentStatus:
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
@@ -125,22 +129,18 @@ async def create_invoice(
         default=None,
         description="Mint URL to create an invoice at (None for default mint)",
     ),
-):
+) -> InvoiceResponse:
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
     invoice = await wallet.create_invoice(amount)
-    return InvoiceResponse(
-        amount=amount,
-        invoice=invoice,
-        id=invoice.payment_hash,
-    )
+    return invoice
 
 
 @router.get(
     "/lightning/invoice_state",
     name="Request lightning invoice",
-    response_model=str,
+    response_model=PaymentStatus,
 )
 async def invoice_state(
     payment_hash: str = Query(default=None, description="Payment hash of paid invoice"),
@@ -148,12 +148,26 @@ async def invoice_state(
         default=None,
         description="Mint URL to create an invoice at (None for default mint)",
     ),
-):
+) -> PaymentStatus:
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
     state = await wallet.get_invoice_status(payment_hash)
     return state
+
+
+@router.get(
+    "/lightning/balance",
+    name="Balance",
+    summary="Display balance.",
+    response_model=StatusResponse,
+)
+async def lightning_balance() -> StatusResponse:
+    try:
+        await wallet.load_proofs(reload=True)
+    except Exception as exc:
+        return StatusResponse(str(exc), balance_msat=0)
+    return StatusResponse(None, balance_msat=wallet.available_balance * 1000)
 
 
 @router.post(
@@ -295,7 +309,7 @@ async def burn(
     if not (all or token or force or delete) or (token and all):
         raise Exception(
             "enter a token or use --all to burn all pending tokens, --force to"
-            " check all tokensor --delete with send ID to force-delete pending"
+            " check all tokens or --delete with send ID to force-delete pending"
             " token from list if mint is unavailable.",
         )
     if all:

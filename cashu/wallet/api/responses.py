@@ -6,7 +6,7 @@ from ...core.base import Invoice
 
 
 class PayResponse(BaseModel):
-    ok: bool
+    ok: Optional[bool] = None
 
 
 class InvoiceResponse(BaseModel):

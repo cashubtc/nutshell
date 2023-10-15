@@ -500,7 +500,7 @@ class LedgerAPI(object):
     @async_set_httpx_client
     async def pay_lightning(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
-    ):
+    ) -> GetMeltResponse:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
@@ -793,7 +793,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     async def pay_lightning(
         self, proofs: List[Proof], invoice: str, fee_reserve_sat: int
-    ) -> bool:
+    ) -> GetMeltResponse:
         """Pays a lightning invoice and returns the status of the payment.
 
         Args:
@@ -814,7 +814,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # generate a random ID for this transaction
         melt_id = await self._generate_secret()
 
-        # store the ID in the melt_id of this proof
+        # store the melt_id in proofs
         for p in proofs:
             p.melt_id = melt_id
             await update_proof(p, melt_id=melt_id, db=self.db)
@@ -830,11 +830,16 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             id=melt_id,  # store the same ID in the invoice
             out=True,  # outgoing invoice
         )
+        # store invoice in db as not paid yet
         await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
         status = await super().pay_lightning(proofs, invoice, outputs)
 
         if not status.paid:
+            # remove the melt_id in proofs
+            for p in proofs:
+                p.melt_id = None
+                await update_proof(p, melt_id=None, db=self.db)
             raise Exception("could not pay invoice.")
 
         # invoice was paid successfully
@@ -861,7 +866,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             )
             logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
             await self._store_proofs(change_proofs)
-        return status.paid
+        return status
 
     async def check_proof_state(self, proofs):
         return await super().check_proof_state(proofs)
