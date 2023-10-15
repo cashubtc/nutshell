@@ -76,7 +76,7 @@ source ~/.bashrc
 #### Poetry: Install Cashu
 ```bash
 # install cashu
-git clone https://github.com/callebtc/cashu.git --recurse-submodules
+git clone https://github.com/callebtc/cashu.git
 cd cashu
 pyenv local 3.10.4
 poetry install
