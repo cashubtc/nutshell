@@ -121,6 +121,7 @@ class EncryptedDirectMessage(Event):
     def id(self) -> str:
         if self.content is None:
             raise Exception(
-                "EncryptedDirectMessage `id` is undefined until its message is encrypted and stored in the `content` field"
+                "EncryptedDirectMessage `id` is undefined until its message is"
+                " encrypted and stored in the `content` field"
             )
         return super().id

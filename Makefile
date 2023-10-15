@@ -5,10 +5,10 @@ ruff-check:
 	poetry run ruff check .
 
 black:
-	poetry run black . --exclude cashu/nostr
+	poetry run black .
 
 black-check:
-	poetry run black . --exclude cashu/nostr --check
+	poetry run black . --check
 
 mypy:
 	poetry run mypy cashu --ignore-missing
