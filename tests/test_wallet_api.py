@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
+from cashu.lightning.base import InvoiceResponse, PaymentStatus
 from cashu.wallet.api.app import app
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -26,15 +27,14 @@ async def test_invoice(wallet: Wallet):
     with TestClient(app) as client:
         response = client.post("/lightning/create_invoice?amount=100")
         assert response.status_code == 200
-        resp = response.json()
-        assert "invoice" in resp
-        state = ""
-        while not state.startswith("paid"):
+        invoice_response = InvoiceResponse(*response.json())
+        state = PaymentStatus(paid=False)
+        while not state.paid:
             print("checking invoice state")
             response2 = client.get(
-                f"/lightning/invoice_state?payment_hash={resp.get('id')}"
+                f"/lightning/invoice_state?payment_hash={invoice_response.checking_id}"
             )
-            state = response2.json()
+            state = PaymentStatus(*response2.json())
             await asyncio.sleep(0.1)
             print("state:", state)
         print("paid")
@@ -155,13 +155,14 @@ async def test_flow(wallet: Wallet):
         response = client.get("/balance")
         initial_balance = response.json()["balance"]
         response = client.post("/lightning/create_invoice?amount=100")
-        state = ""
-        while not state.startswith("paid"):
+        invoice_response = InvoiceResponse(*response.json())
+        state = PaymentStatus(paid=False)
+        while not state.paid:
             print("checking invoice state")
             response2 = client.get(
-                f"/lightning/invoice_state?payment_hash={response.json().get('id')}"
+                f"/lightning/invoice_state?payment_hash={invoice_response.checking_id}"
             )
-            state = response2.json()
+            state = PaymentStatus(*response2.json())
             await asyncio.sleep(0.1)
             print("state:", state)
 

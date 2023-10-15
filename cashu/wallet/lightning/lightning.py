@@ -37,7 +37,7 @@ class LightningWallet(Wallet):
         """
         invoice = await self.request_mint(amount)
         return InvoiceResponse(
-            ok=True, payment_request=invoice.bolt11, checking_id=invoice.id
+            ok=True, payment_request=invoice.bolt11, checking_id=invoice.payment_hash
         )
 
     async def pay_invoice(self, pr: str) -> PaymentResponse:
