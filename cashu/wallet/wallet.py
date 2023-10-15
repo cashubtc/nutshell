@@ -839,6 +839,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
         status = await super().pay_lightning(proofs, invoice, change_outputs)
 
+        # if payment fails
         if not status.paid:
             # remove the melt_id in proofs
             for p in proofs:
@@ -869,7 +870,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 change_derivation_paths[: len(status.change)],
             )
             logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
-            await self._store_proofs(change_proofs)
         return status
 
     async def check_proof_state(self, proofs):
