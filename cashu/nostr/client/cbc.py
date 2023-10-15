@@ -1,4 +1,3 @@
-
 from Cryptodome import Random
 from Cryptodome.Cipher import AES
 
@@ -11,10 +10,10 @@ key = bytes.fromhex("3aa925cb69eb613e2928f8a18279c78b1dca04541dfd064df2eda66b598
 
 BLOCK_SIZE = 16
 
-class AESCipher(object):
-    """This class is compatible with crypto.createCipheriv('aes-256-cbc')
 
-    """
+class AESCipher(object):
+    """This class is compatible with crypto.createCipheriv('aes-256-cbc')"""
+
     def __init__(self, key=None):
         self.key = key
 
@@ -33,7 +32,8 @@ class AESCipher(object):
     def decrypt(self, iv, enc_text):
         cipher = AES.new(self.key, AES.MODE_CBC, iv=iv)
         return self.unpad(cipher.decrypt(enc_text).decode("UTF-8"))
-        
+
+
 if __name__ == "__main__":
     aes = AESCipher(key=key)
     iv, enc_text = aes.encrypt(plain_text)
