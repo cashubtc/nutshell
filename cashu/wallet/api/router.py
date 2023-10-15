@@ -11,7 +11,7 @@ from fastapi import APIRouter, Query
 from ...core.base import TokenV3
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
-from ...nostr.nostr.client.client import NostrClient
+from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import get_lightning_invoices, get_reserved_proofs
 from ...wallet.helpers import (
