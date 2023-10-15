@@ -64,6 +64,7 @@ class RelayManager:
 
         if not event.verify():
             raise RelayException(
-                f"Could not publish {event.id}: failed to verify signature {event.signature}"
+                f"Could not publish {event.id}: failed to verify signature"
+                f" {event.signature}"
             )
         self.publish_message(event.to_message())
