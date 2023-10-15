@@ -537,10 +537,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         # hack: check if it's internal, if it exists, it will return paid = False,
         # if id does not exist (not internal), it returns paid = None
+        amount_msat = 0
         if settings.lightning:
             decoded_invoice = bolt11.decode(pr)
             assert decoded_invoice.amount_msat, "Amountless invoices not supported."
-            amount_msat = decoded_invoice.amount_msat
+            amount_msat = int(decoded_invoice.amount_msat)
             logger.trace(
                 "get_melt_fees: checking lightning invoice:"
                 f" {decoded_invoice.payment_hash}"

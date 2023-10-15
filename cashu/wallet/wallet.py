@@ -92,7 +92,7 @@ def async_set_httpx_client(func):
 
         self.httpx = httpx.AsyncClient(
             verify=not settings.debug,
-            proxies=proxies_dict,
+            proxies=proxies_dict,  # type: ignore
             headers=headers_dict,
             base_url=self.url,
         )
