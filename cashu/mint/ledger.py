@@ -2,9 +2,9 @@ import asyncio
 import math
 from typing import Dict, List, Literal, Optional, Set, Tuple, Union
 
+import bolt11
 from loguru import logger
 
-from ..core import bolt11
 from ..core.base import (
     DLEQ,
     BlindedMessage,
@@ -470,6 +470,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # verify amounts
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
+            assert invoice_obj.amount_msat, "Amountless invoices not supported."
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
             if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
                 raise NotAllowedError(
@@ -538,6 +539,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # if id does not exist (not internal), it returns paid = None
         if settings.lightning:
             decoded_invoice = bolt11.decode(pr)
+            assert decoded_invoice.amount_msat, "Amountless invoices not supported."
             amount_msat = decoded_invoice.amount_msat
             logger.trace(
                 "get_melt_fees: checking lightning invoice:"
@@ -549,6 +551,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         else:
             amount_msat = 0
             internal = True
+
         fees_msat = fee_reserve(amount_msat, internal)
         fee_sat = math.ceil(fees_msat / 1000)
         return fee_sat

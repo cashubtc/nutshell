@@ -1,6 +1,7 @@
 import asyncio
 
-import cashu.core.bolt11 as bolt11
+import bolt11
+
 from cashu.wallet.lightning import LightningWallet
 
 

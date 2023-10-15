@@ -86,7 +86,7 @@ async def start_wallet():
     response_model=PaymentResponse,
 )
 async def pay(
-    invoice: str = Query(default=..., description="Lightning invoice to pay"),
+    bolt11: str = Query(default=..., description="Lightning invoice to pay"),
     mint: str = Query(
         default=None,
         description="Mint URL to pay from (None for default mint)",
@@ -95,7 +95,7 @@ async def pay(
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
-    payment_response = await wallet.pay_invoice(invoice)
+    payment_response = await wallet.pay_invoice(bolt11)
     return payment_response
 
 
@@ -105,7 +105,7 @@ async def pay(
     response_model=PaymentStatus,
 )
 async def payment_state(
-    id: str = Query(default=None, description="Id of paid invoice"),
+    payment_hash: str = Query(default=None, description="Id of paid invoice"),
     mint: str = Query(
         default=None,
         description="Mint URL to create an invoice at (None for default mint)",
@@ -114,7 +114,7 @@ async def payment_state(
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
-    state = await wallet.get_payment_status(id)
+    state = await wallet.get_payment_status(payment_hash)
     return state
 
 

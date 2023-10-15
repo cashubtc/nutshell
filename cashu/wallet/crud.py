@@ -237,6 +237,7 @@ async def store_lightning_invoice(
 
 
 async def get_lightning_invoice(
+    *,
     db: Database,
     id: str = "",
     payment_hash: str = "",

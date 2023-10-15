@@ -7,12 +7,12 @@ from itertools import groupby
 from posixpath import join
 from typing import Dict, List, Optional, Tuple, Union
 
+import bolt11
 import httpx
 from bip32 import BIP32
 from httpx import Response
 from loguru import logger
 
-from ..core import bolt11 as bolt11
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
@@ -37,7 +37,6 @@ from ..core.base import (
     TokenV3Token,
     WalletKeyset,
 )
-from ..core.bolt11 import Invoice as InvoiceBolt11
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
@@ -823,7 +822,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             p.melt_id = melt_id
             await update_proof(p, melt_id=melt_id, db=self.db)
 
-        decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)
+        decoded_invoice = bolt11.decode(invoice)
         invoice_obj = Invoice(
             amount=-sum_proofs(proofs),
             bolt11=invoice,
@@ -1271,7 +1270,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
         """
-        decoded_invoice: InvoiceBolt11 = bolt11.decode(invoice)
+        decoded_invoice = bolt11.decode(invoice)
+        assert decoded_invoice.amount_msat, "Amountless invoices not supported."
         # check if it's an internal payment
         fees = int((await self.check_fees(invoice))["fee"])
         logger.debug(f"Mint wants {fees} sat as fee reserve.")

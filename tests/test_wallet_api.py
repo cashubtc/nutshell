@@ -103,13 +103,13 @@ async def test_burn_all(wallet: Wallet):
 async def test_pay():
     with TestClient(app) as client:
         invoice = (
-            "lnbc100n1pjzp22cpp58xvjxvagzywky9xz3vurue822aaax"
-            "735hzc5pj5fg307y58v5znqdq4vdshx6r4ypjx2ur0wd5hgl"
-            "h6ahauv24wdmac4zk478pmwfzd7sdvm8tje3dmfue3lc2g4l"
-            "9g40a073h39748uez9p8mxws5vqwjmkqr4wl5l7n4dlhj6z6"
-            "va963cqvufrs4"
+            "lnbc100n1pjjcqzfdq4gdshx6r4ypjx2ur0wd5hgpp58xvj8yn00d5"
+            "7uhshwzcwgy9uj3vwf5y2lr5fjf78s4w9l4vhr6xssp5stezsyty9r"
+            "hv3lat69g4mhqxqun56jyehhkq3y8zufh83xyfkmmq4usaqwrt5q4f"
+            "adm44g6crckp0hzvuyv9sja7t65hxj0ucf9y46qstkay7gfnwhuxgr"
+            "krf7djs38rml39l8wpn5ug9shp3n55quxhdecqfwxg23"
         )
-        response = client.post(f"/lightning/pay_invoice?invoice={invoice}")
+        response = client.post(f"/lightning/pay_invoice?bolt11={invoice}")
         assert response.status_code == 200
 
 

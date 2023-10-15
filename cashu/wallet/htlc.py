@@ -2,7 +2,6 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from ..core import bolt11 as bolt11
 from ..core.base import HTLCWitness, Proof
 from ..core.db import Database
 from ..core.htlc import (
