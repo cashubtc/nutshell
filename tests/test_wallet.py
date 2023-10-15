@@ -229,7 +229,8 @@ async def test_melt(wallet1: Wallet):
     await wallet1.pay_lightning(
         send_proofs, invoice=invoice.bolt11, fee_reserve_sat=fee_reserve_sat
     )
-    assert wallet1.balance == 128 - total_amount
+    # the payment was without fees so we need to remove it from the total amount
+    assert wallet1.balance == 128 - (total_amount - fee_reserve_sat)
 
 
 @pytest.mark.asyncio
