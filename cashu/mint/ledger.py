@@ -482,7 +482,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []
-            if outputs and fee_msat:
+            if outputs and fee_msat is not None:
                 return_promises = await self._generate_change_promises(
                     total_provided=total_provided,
                     invoice_amount=invoice_amount,
