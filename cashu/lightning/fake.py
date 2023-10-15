@@ -86,7 +86,9 @@ class FakeWallet(Wallet):
         if invoice.payment_hash[:6] == self.privkey[:6] or BRR:
             await self.queue.put(invoice)
             self.paid_invoices.add(invoice.payment_hash)
-            return PaymentResponse(True, invoice.payment_hash, 0)
+            return PaymentResponse(
+                ok=True, checking_id=invoice.payment_hash, fee_msat=0
+            )
         else:
             return PaymentResponse(
                 ok=False, error_message="Only internal invoices can be used!"

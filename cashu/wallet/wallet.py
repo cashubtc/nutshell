@@ -806,9 +806,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # Generate a number of blank outputs for any overpaid fees. As described in
         # NUT-08, the mint will imprint these outputs with a value depending on the
         # amount of fees we overpaid.
-        n_return_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
-        secrets, rs, derivation_paths = await self.generate_n_secrets(n_return_outputs)
-        outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
+        n_change_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
+        change_secrets, change_rs, change_derivation_paths = (
+            await self.generate_n_secrets(n_change_outputs)
+        )
+        change_outputs, change_rs = self._construct_outputs(
+            n_change_outputs * [1], change_secrets, change_rs
+        )
 
         # we store the invoice object in the database to later be able to check the invoice state
         # generate a random ID for this transaction
@@ -833,7 +837,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # store invoice in db as not paid yet
         await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
-        status = await super().pay_lightning(proofs, invoice, outputs)
+        status = await super().pay_lightning(proofs, invoice, change_outputs)
 
         if not status.paid:
             # remove the melt_id in proofs
@@ -860,9 +864,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         if status.change:
             change_proofs = await self._construct_proofs(
                 status.change,
-                secrets[: len(status.change)],
-                rs[: len(status.change)],
-                derivation_paths[: len(status.change)],
+                change_secrets[: len(status.change)],
+                change_rs[: len(status.change)],
+                change_derivation_paths[: len(status.change)],
             )
             logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
             await self._store_proofs(change_proofs)
