@@ -3,12 +3,16 @@ import math
 from functools import partial, wraps
 from typing import List
 
-from ..core.base import Proof
+from ..core.base import BlindedSignature, Proof
 from ..core.settings import settings
 
 
 def sum_proofs(proofs: List[Proof]):
     return sum([p.amount for p in proofs])
+
+
+def sum_promises(promises: List[BlindedSignature]):
+    return sum([p.amount for p in promises])
 
 
 def async_wrap(func):

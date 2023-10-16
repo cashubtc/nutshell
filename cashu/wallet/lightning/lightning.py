@@ -1,3 +1,6 @@
+import bolt11
+
+from ...core.helpers import sum_promises
 from ...core.settings import settings
 from ...lightning.base import (
     InvoiceResponse,
@@ -56,8 +59,19 @@ class LightningWallet(Wallet):
             return PaymentResponse(ok=False)
         _, send_proofs = await self.split_to_send(self.proofs, total_amount)
         try:
-            await self.pay_lightning(send_proofs, pr, fee_reserve_sat)
-            return PaymentResponse(ok=True)
+            resp = await self.pay_lightning(send_proofs, pr, fee_reserve_sat)
+            if resp.change:
+                fees_paid_sat = fee_reserve_sat - sum_promises(resp.change)
+            else:
+                fees_paid_sat = fee_reserve_sat
+
+            invoice_obj = bolt11.decode(pr)
+            return PaymentResponse(
+                ok=True,
+                checking_id=invoice_obj.payment_hash,
+                preimage=resp.preimage,
+                fee_msat=fees_paid_sat * 1000,
+            )
         except Exception as e:
             print("Exception:", e)
             return PaymentResponse(ok=False, error_message=str(e))
