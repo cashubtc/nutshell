@@ -224,6 +224,7 @@ async def test_melt(wallet1: Wallet):
     total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(
         invoice.bolt11
     )
+    assert fee_reserve_sat == 2
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
     await wallet1.pay_lightning(
