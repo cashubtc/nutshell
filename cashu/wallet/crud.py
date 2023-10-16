@@ -32,6 +32,7 @@ async def store_proof(
 
 
 async def get_proofs(
+    *,
     db: Database,
     melt_id: str = "",
     mint_id: str = "",

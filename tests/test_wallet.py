@@ -9,6 +9,7 @@ from cashu.core.base import Proof
 from cashu.core.errors import CashuError, KeysetNotFoundError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
+from cashu.wallet.crud import get_lightning_invoice, get_proofs
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
@@ -140,6 +141,18 @@ async def test_mint(wallet1: Wallet):
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 64
 
+    # verify that proofs in proofs_used db have the same mint_id as the invoice in the db
+    assert invoice.payment_hash
+    invoice_db = await get_lightning_invoice(
+        db=wallet1.db, payment_hash=invoice.payment_hash, out=False
+    )
+    assert invoice_db
+    proofs_minted = await get_proofs(
+        db=wallet1.db, mint_id=invoice_db.id, table="proofs"
+    )
+    assert len(proofs_minted) == 1
+    assert all([p.mint_id == invoice.id for p in proofs_minted])
+
 
 @pytest.mark.asyncio
 async def test_mint_amounts(wallet1: Wallet):
@@ -230,6 +243,20 @@ async def test_melt(wallet1: Wallet):
     await wallet1.pay_lightning(
         send_proofs, invoice=invoice.bolt11, fee_reserve_sat=fee_reserve_sat
     )
+
+    # verify that proofs in proofs_used db have the same melt_id as the invoice in the db
+    assert invoice.payment_hash
+    invoice_db = await get_lightning_invoice(
+        db=wallet1.db, payment_hash=invoice.payment_hash, out=True
+    )
+    assert invoice_db
+    proofs_used = await get_proofs(
+        db=wallet1.db, melt_id=invoice_db.id, table="proofs_used"
+    )
+
+    assert len(proofs_used) == len(send_proofs)
+    assert all([p.melt_id == invoice_db.id for p in proofs_used])
+
     # the payment was without fees so we need to remove it from the total amount
     assert wallet1.balance == 128 - (total_amount - fee_reserve_sat)
 

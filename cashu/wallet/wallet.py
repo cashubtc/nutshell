@@ -690,6 +690,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             await update_lightning_invoice(
                 db=self.db, id=id, paid=True, time_paid=int(time.time())
             )
+            # store the mint_id in proofs
+            async with self.db.connect() as conn:
+                for p in proofs:
+                    p.mint_id = id
+                    await update_proof(p, mint_id=id, conn=conn)
         return proofs
 
     async def redeem(
@@ -818,9 +823,10 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         melt_id = await self._generate_secret()
 
         # store the melt_id in proofs
-        for p in proofs:
-            p.melt_id = melt_id
-            await update_proof(p, melt_id=melt_id, db=self.db)
+        async with self.db.connect() as conn:
+            for p in proofs:
+                p.melt_id = melt_id
+                await update_proof(p, melt_id=melt_id, conn=conn)
 
         decoded_invoice = bolt11.decode(invoice)
         invoice_obj = Invoice(
@@ -1005,7 +1011,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     async def _store_proofs(self, proofs):
         try:
-            async with self.db.connect() as conn:  # type: ignore
+            async with self.db.connect() as conn:
                 for proof in proofs:
                     await store_proof(proof, db=self.db, conn=conn)
         except Exception as e:
