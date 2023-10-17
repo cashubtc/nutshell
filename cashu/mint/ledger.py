@@ -216,39 +216,22 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
             )
         assert invoice.payment_hash, "invoice has no payment hash."
-
         # set this invoice as issued
-        logger.trace(f"crud: setting invoice {invoice.payment_hash} as issued")
         await self.crud.update_lightning_invoice(
             id=id, issued=True, db=self.db, conn=conn
         )
-        logger.trace(f"crud: invoice {invoice.payment_hash} set as issued")
 
         try:
-            if amount > invoice.amount:
-                raise LightningError(
-                    f"requested amount too high: {amount}. Invoice amount:"
-                    f" {invoice.amount}"
-                )
-            logger.trace(
-                f"_check_lightning_invoice: checking invoice {invoice.payment_hash}"
-            )
             status = await self.lightning.get_invoice_status(invoice.payment_hash)
-            logger.trace(
-                f"_check_lightning_invoice: invoice {invoice.payment_hash} status:"
-                f" {status}"
-            )
             if status.paid:
                 return status.paid
             else:
                 raise InvoiceNotPaidError()
         except Exception as e:
             # unset issued
-            logger.trace(f"crud: unsetting invoice {invoice.payment_hash} as issued")
             await self.crud.update_lightning_invoice(
                 id=id, issued=False, db=self.db, conn=conn
             )
-            logger.trace(f"crud: invoice {invoice.payment_hash} unset as issued")
             raise e
 
     async def _pay_lightning_invoice(self, invoice: str, fee_limit_msat: int):
