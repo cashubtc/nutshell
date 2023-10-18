@@ -445,6 +445,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # verify amounts
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
+            assert invoice_obj.amount_msat, "invoice has no amount."
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
             if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
                 raise NotAllowedError(
