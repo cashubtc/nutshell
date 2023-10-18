@@ -139,14 +139,8 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         return True
 
     def _verify_amount(self, amount: int) -> int:
-        """
-        Any amount used should be non-negative and not larger than 2^MAX_ORDER.
-
-        Note: Amount 0 is allowed because some implementations use it for blank
-        outputs for potential fee returns. The actual amount is determined and
-        imprinted by the mint.
-        """
-        valid = amount >= 0 and amount < 2**settings.max_order
+        """Any amount used should be positive and not larger than 2^MAX_ORDER."""
+        valid = amount > 0 and amount < 2**settings.max_order
         logger.trace(f"Verifying amount {amount} is valid: {valid}")
         if not valid:
             raise NotAllowedError("invalid amount: " + str(amount))

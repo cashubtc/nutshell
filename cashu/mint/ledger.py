@@ -457,8 +457,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 f" {total_provided}, needed: {invoice_amount + fees_sat}"
             )
 
-            # verify spending inputs, outputs, and spending conditions
-            await self.verify_inputs_and_outputs(proofs, outputs)
+            # verify spending inputs and their spending conditions
+            await self.verify_inputs_and_outputs(proofs)
 
             if settings.lightning:
                 logger.trace(f"paying lightning invoice {invoice}")
