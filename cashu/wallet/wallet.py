@@ -797,7 +797,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # amount of fees we overpaid.
         n_return_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
         secrets, rs, derivation_paths = await self.generate_n_secrets(n_return_outputs)
-        outputs, rs = self._construct_outputs(n_return_outputs * [1], secrets, rs)
+        outputs, rs = self._construct_outputs(n_return_outputs * [0], secrets, rs)
 
         status = await super().pay_lightning(proofs, invoice, outputs)
 
