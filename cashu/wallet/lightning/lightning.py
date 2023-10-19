@@ -17,13 +17,15 @@ class LightningWallet(Wallet):
     Lightning wallet interface for Cashu
     """
 
-    # wallet: Wallet
-
-    async def async_init(self):
+    async def async_init(self, raise_connection_error: bool = True):
         """Async init for lightning wallet"""
         settings.tor = False
         await self.load_proofs()
-        await self.load_mint()
+        try:
+            await self.load_mint()
+        except Exception as e:
+            if raise_connection_error:
+                raise e
 
     def __init__(self, *args, **kwargs):
         if not args and not kwargs:

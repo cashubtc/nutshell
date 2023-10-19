@@ -42,7 +42,7 @@ class FakeWallet(Wallet):
     ).hex()
 
     async def status(self) -> StatusResponse:
-        return StatusResponse(None, 1337)
+        return StatusResponse(error_message=None, balance_msat=1337)
 
     async def create_invoice(
         self,
@@ -92,7 +92,9 @@ class FakeWallet(Wallet):
 
         payment_request = encode(bolt11, self.privkey)
 
-        return InvoiceResponse(True, checking_id, payment_request)
+        return InvoiceResponse(
+            ok=True, checking_id=checking_id, payment_request=payment_request
+        )
 
     async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
         invoice = decode(bolt11)
@@ -114,12 +116,12 @@ class FakeWallet(Wallet):
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         if STOCHASTIC_INVOICE:
             paid = random.random() > 0.7
-            return PaymentStatus(paid)
+            return PaymentStatus(paid=paid)
         paid = checking_id in self.paid_invoices or BRR
-        return PaymentStatus(paid or None)
+        return PaymentStatus(paid=paid or None)
 
     async def get_payment_status(self, _: str) -> PaymentStatus:
-        return PaymentStatus(None)
+        return PaymentStatus(paid=None)
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:

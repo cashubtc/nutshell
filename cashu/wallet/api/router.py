@@ -49,13 +49,15 @@ from .responses import (
 router: APIRouter = APIRouter()
 
 
-async def mint_wallet(mint_url: Optional[str] = None):
+async def mint_wallet(
+    mint_url: Optional[str] = None, raise_connection_error: bool = True
+):
     wallet = await LightningWallet.with_db(
         mint_url or settings.mint_url,
         db=os.path.join(settings.cashu_dir, settings.wallet_name),
         name=settings.wallet_name,
     )
-    await wallet.async_init()
+    await wallet.async_init(raise_connection_error=raise_connection_error)
     return wallet
 
 
@@ -69,15 +71,9 @@ wallet = LightningWallet(
 @router.on_event("startup")
 async def start_wallet():
     global wallet
-    wallet = await LightningWallet.with_db(
-        settings.mint_url,
-        db=os.path.join(settings.cashu_dir, settings.wallet_name),
-        name=settings.wallet_name,
-    )
-
+    wallet = await mint_wallet(settings.mint_url, raise_connection_error=False)
     if settings.tor and not TorProxy().check_platform():
         raise Exception("tor not working.")
-    await wallet.async_init()
 
 
 @router.post(
@@ -166,8 +162,10 @@ async def lightning_balance() -> StatusResponse:
     try:
         await wallet.load_proofs(reload=True)
     except Exception as exc:
-        return StatusResponse(str(exc), balance_msat=0)
-    return StatusResponse(None, balance_msat=wallet.available_balance * 1000)
+        return StatusResponse(error_message=str(exc), balance_msat=0)
+    return StatusResponse(
+        error_message=None, balance_msat=wallet.available_balance * 1000
+    )
 
 
 @router.post(

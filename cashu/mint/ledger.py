@@ -28,7 +28,7 @@ from ..core.errors import (
 from ..core.helpers import fee_reserve, sum_proofs
 from ..core.settings import settings
 from ..core.split import amount_split
-from ..lightning.base import Wallet
+from ..lightning.base import PaymentResponse, Wallet
 from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
 from .lightning import LedgerLightning
@@ -247,23 +247,26 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             raise NotAllowedError("Mint does not allow minting new tokens.")
 
         logger.trace(f"requesting invoice for {amount} satoshis")
-        payment_request, payment_hash = await self._request_lightning_invoice(amount)
-        logger.trace(f"got invoice {payment_request} with hash {payment_hash}")
-        assert payment_request and payment_hash, LightningError(
-            "could not fetch invoice from Lightning backend"
+        invoice_response = await self._request_lightning_invoice(amount)
+        logger.trace(
+            f"got invoice {invoice_response.payment_request} with check id"
+            f" {invoice_response.checking_id}"
         )
+        assert (
+            invoice_response.payment_request and invoice_response.checking_id
+        ), LightningError("could not fetch invoice from Lightning backend")
 
         invoice = Invoice(
             amount=amount,
             id=random_hash(),
-            bolt11=payment_request,
-            payment_hash=payment_hash,  # what we got from the backend
+            bolt11=invoice_response.payment_request,
+            payment_hash=invoice_response.checking_id,  # what we got from the backend
             issued=False,
         )
         logger.trace(f"crud: storing invoice {invoice.id} in db")
         await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
         logger.trace(f"crud: stored invoice {invoice.id} in db")
-        return payment_request, invoice.id
+        return invoice_response.payment_request, invoice.id
 
     async def mint(
         self,
@@ -357,20 +360,19 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
             if settings.lightning:
                 logger.trace(f"paying lightning invoice {invoice}")
-                status, preimage, paid_fee_msat = await self._pay_lightning_invoice(
+                payment = await self._pay_lightning_invoice(
                     invoice, reserve_fees_sat * 1000
                 )
-                preimage = preimage or ""
                 logger.trace("paid lightning invoice")
             else:
-                status, preimage, paid_fee_msat = True, "preimage", 0
+                payment = PaymentResponse(ok=True, preimage="preimage", fee_msat=0)
 
             logger.debug(
-                f"Melt status: {status}: preimage: {preimage}, fee_msat:"
-                f" {paid_fee_msat}"
+                f"Melt status: {payment.ok}: preimage: {payment.preimage}, fee_msat:"
+                f" {payment.fee_msat}"
             )
 
-            if not status:
+            if not payment.ok:
                 raise LightningError("Lightning payment unsuccessful.")
 
             # melt successful, invalidate proofs
@@ -378,11 +380,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []
-            if outputs and paid_fee_msat is not None:
+            if outputs and payment.fee_msat is not None:
                 return_promises = await self._generate_change_promises(
                     total_provided=total_provided,
                     invoice_amount=invoice_amount,
-                    ln_fee_msat=paid_fee_msat,
+                    ln_fee_msat=payment.fee_msat,
                     outputs=outputs,
                 )
 
@@ -393,7 +395,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
 
-        return status, preimage, return_promises
+        return payment.ok, payment.preimage or "", return_promises
 
     async def get_melt_fees(self, pr: str) -> int:
         """Returns the fee reserve (in sat) that a wallet must add to its proofs
@@ -416,9 +418,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 "get_melt_fees: checking lightning invoice:"
                 f" {decoded_invoice.payment_hash}"
             )
-            paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
-            logger.trace(f"get_melt_fees: paid: {paid}")
-            internal = paid.paid is False
+            payment = await self.lightning.get_invoice_status(
+                decoded_invoice.payment_hash
+            )
+            logger.trace(f"get_melt_fees: paid: {payment.paid}")
+            internal = payment.paid is False
         else:
             amount_msat = 0
             internal = True

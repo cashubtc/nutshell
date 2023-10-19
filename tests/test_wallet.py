@@ -234,9 +234,12 @@ async def test_melt(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 128
+
     total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(
         invoice.bolt11
     )
+    assert total_amount == 66
+
     assert fee_reserve_sat == 2
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
@@ -259,6 +262,7 @@ async def test_melt(wallet1: Wallet):
 
     # the payment was without fees so we need to remove it from the total amount
     assert wallet1.balance == 128 - (total_amount - fee_reserve_sat)
+    assert wallet1.balance == 64
 
 
 @pytest.mark.asyncio

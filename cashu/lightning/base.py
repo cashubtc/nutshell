@@ -1,20 +1,22 @@
 from abc import ABC, abstractmethod
-from typing import Coroutine, NamedTuple, Optional
+from typing import Coroutine, Optional
+
+from pydantic import BaseModel
 
 
-class StatusResponse(NamedTuple):
+class StatusResponse(BaseModel):
     error_message: Optional[str]
     balance_msat: int
 
 
-class InvoiceResponse(NamedTuple):
+class InvoiceResponse(BaseModel):
     ok: bool  # True: invoice created, False: failed
     checking_id: Optional[str] = None
     payment_request: Optional[str] = None
     error_message: Optional[str] = None
 
 
-class PaymentResponse(NamedTuple):
+class PaymentResponse(BaseModel):
     ok: Optional[bool] = None  # True: paid, False: failed, None: pending or unknown
     checking_id: Optional[str] = None
     fee_msat: Optional[int] = None
@@ -22,7 +24,7 @@ class PaymentResponse(NamedTuple):
     error_message: Optional[str] = None
 
 
-class PaymentStatus(NamedTuple):
+class PaymentStatus(BaseModel):
     paid: Optional[bool] = None
     fee_msat: Optional[int] = None
     preimage: Optional[str] = None

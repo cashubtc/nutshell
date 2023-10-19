@@ -1,4 +1,4 @@
-from typing import Literal, Optional, Tuple, Union
+from typing import Optional, Union
 
 from loguru import logger
 
@@ -10,7 +10,7 @@ from ..core.errors import (
     InvoiceNotPaidError,
     LightningError,
 )
-from ..lightning.base import Wallet
+from ..lightning.base import InvoiceResponse, PaymentResponse, PaymentStatus, Wallet
 from ..mint.crud import LedgerCrud
 from .protocols import SupportLightning, SupportsDb
 
@@ -22,7 +22,7 @@ class LedgerLightning(SupportLightning, SupportsDb):
     crud: LedgerCrud
     db: Database
 
-    async def _request_lightning_invoice(self, amount: int) -> Tuple[str, str]:
+    async def _request_lightning_invoice(self, amount: int) -> InvoiceResponse:
         """Generate a Lightning invoice using the funding source backend.
 
         Args:
@@ -38,30 +38,30 @@ class LedgerLightning(SupportLightning, SupportsDb):
             "_request_lightning_invoice: Requesting Lightning invoice for"
             f" {amount} satoshis."
         )
-        error, balance = await self.lightning.status()
-        logger.trace(f"_request_lightning_invoice: Lightning wallet balance: {balance}")
-        if error:
-            raise LightningError(f"Lightning wallet not responding: {error}")
-        (
-            ok,
-            checking_id,
-            payment_request,
-            error_message,
-        ) = await self.lightning.create_invoice(amount, "Cashu deposit")
+        status = await self.lightning.status()
         logger.trace(
-            f"_request_lightning_invoice: Lightning invoice: {payment_request}"
+            "_request_lightning_invoice: Lightning wallet balance:"
+            f" {status.balance_msat}"
+        )
+        if status.error_message:
+            raise LightningError(
+                f"Lightning wallet not responding: {status.error_message}"
+            )
+        payment = await self.lightning.create_invoice(amount, "Cashu deposit")
+        logger.trace(
+            f"_request_lightning_invoice: Lightning invoice: {payment.payment_request}"
         )
 
-        if not ok:
-            raise LightningError(f"Lightning wallet error: {error_message}")
-        assert payment_request and checking_id, LightningError(
+        if not payment.ok:
+            raise LightningError(f"Lightning wallet error: {payment.error_message}")
+        assert payment.payment_request and payment.checking_id, LightningError(
             "could not fetch invoice from Lightning backend"
         )
-        return payment_request, checking_id
+        return payment
 
     async def _check_lightning_invoice(
         self, *, amount: int, id: str, conn: Optional[Connection] = None
-    ) -> Literal[True]:
+    ) -> PaymentStatus:
         """Checks with the Lightning backend whether an invoice with `id` was paid.
 
         Args:
@@ -98,7 +98,7 @@ class LedgerLightning(SupportLightning, SupportsDb):
         try:
             status = await self.lightning.get_invoice_status(invoice.payment_hash)
             if status.paid:
-                return status.paid
+                return status
             else:
                 raise InvoiceNotPaidError()
         except Exception as e:
@@ -108,7 +108,9 @@ class LedgerLightning(SupportLightning, SupportsDb):
             )
             raise e
 
-    async def _pay_lightning_invoice(self, invoice: str, fee_limit_msat: int):
+    async def _pay_lightning_invoice(
+        self, invoice: str, fee_limit_msat: int
+    ) -> PaymentResponse:
         """Pays a Lightning invoice via the funding source backend.
 
         Args:
@@ -121,17 +123,15 @@ class LedgerLightning(SupportLightning, SupportsDb):
         Returns:
             Tuple[bool, string, int]: Returns payment status, preimage of invoice, paid fees (in Millisatoshi)
         """
-        error, balance = await self.lightning.status()
-        if error:
-            raise LightningError(f"Lightning wallet not responding: {error}")
-        (
-            ok,
-            checking_id,
-            fee_msat,
-            preimage,
-            error_message,
-        ) = await self.lightning.pay_invoice(invoice, fee_limit_msat=fee_limit_msat)
-        logger.trace(f"_pay_lightning_invoice: Lightning payment status: {ok}")
-        # make sure that fee is positive
-        fee_msat = abs(fee_msat) if fee_msat else fee_msat
-        return ok, preimage, fee_msat
+        status = await self.lightning.status()
+        if status.error_message:
+            raise LightningError(
+                f"Lightning wallet not responding: {status.error_message}"
+            )
+        payment = await self.lightning.pay_invoice(
+            invoice, fee_limit_msat=fee_limit_msat
+        )
+        logger.trace(f"_pay_lightning_invoice: Lightning payment status: {payment.ok}")
+        # make sure that fee is positive and not None
+        payment.fee_msat = abs(payment.fee_msat) if payment.fee_msat else 0
+        return payment
