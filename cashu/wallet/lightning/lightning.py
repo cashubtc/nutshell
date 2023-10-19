@@ -93,14 +93,14 @@ class LightningWallet(Wallet):
         if not invoice:
             return PaymentStatus(paid=None)
         if invoice.paid:
-            return PaymentStatus(paid=True, preimage=invoice.preimage)
+            return PaymentStatus(paid=True)
         try:
             # to check the invoice state, we try minting tokens
             await self.mint(invoice.amount, id=invoice.id)
-            return PaymentStatus(paid=True, preimage=invoice.preimage)
+            return PaymentStatus(paid=True)
         except Exception as e:
             print(e)
-            return PaymentStatus(paid=None)
+            return PaymentStatus(paid=False)
 
     async def get_payment_status(self, payment_hash: str) -> PaymentStatus:
         """Get lightning payment status (outgoing)
