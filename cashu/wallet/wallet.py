@@ -1277,7 +1277,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         total amount (amount+fees) to be paid.
         """
         decoded_invoice = bolt11.decode(invoice)
-        assert decoded_invoice.amount_msat, "Amountless invoices not supported."
+        assert decoded_invoice.amount_msat, "invoices has no amount."
         # check if it's an internal payment
         fees = int((await self.check_fees(invoice))["fee"])
         logger.debug(f"Mint wants {fees} sat as fee reserve.")

@@ -337,34 +337,37 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             # verify amounts
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
-            assert invoice_obj.amount_msat, "Amountless invoices not supported."
+            assert invoice_obj.amount_msat, "invoice has no amount."
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
             if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
                 raise NotAllowedError(
                     f"Maximum melt amount is {settings.mint_max_peg_out} sat."
                 )
-            fees_sat = await self.get_melt_fees(invoice)
+            reserve_fees_sat = await self.get_melt_fees(invoice)
             # verify overspending attempt
-            assert total_provided >= invoice_amount + fees_sat, TransactionError(
+            assert (
+                total_provided >= invoice_amount + reserve_fees_sat
+            ), TransactionError(
                 "provided proofs not enough for Lightning payment. Provided:"
-                f" {total_provided}, needed: {invoice_amount + fees_sat}"
+                f" {total_provided}, needed: {invoice_amount + reserve_fees_sat}"
             )
 
-            # verify spending inputs, outputs, and spending conditions
-            await self.verify_inputs_and_outputs(proofs, outputs)
+            # verify spending inputs and their spending conditions
+            await self.verify_inputs_and_outputs(proofs)
 
             if settings.lightning:
                 logger.trace(f"paying lightning invoice {invoice}")
-                status, preimage, fee_msat = await self._pay_lightning_invoice(
-                    invoice, fees_sat * 1000
+                status, preimage, paid_fee_msat = await self._pay_lightning_invoice(
+                    invoice, reserve_fees_sat * 1000
                 )
                 preimage = preimage or ""
                 logger.trace("paid lightning invoice")
             else:
-                status, preimage, fee_msat = True, "preimage", 0
+                status, preimage, paid_fee_msat = True, "preimage", 0
 
             logger.debug(
-                f"Melt status: {status}: preimage: {preimage}, fee_msat: {fee_msat}"
+                f"Melt status: {status}: preimage: {preimage}, fee_msat:"
+                f" {paid_fee_msat}"
             )
 
             if not status:
@@ -375,11 +378,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []
-            if outputs and fee_msat is not None:
+            if outputs and paid_fee_msat is not None:
                 return_promises = await self._generate_change_promises(
                     total_provided=total_provided,
                     invoice_amount=invoice_amount,
-                    ln_fee_msat=fee_msat,
+                    ln_fee_msat=paid_fee_msat,
                     outputs=outputs,
                 )
 
@@ -407,7 +410,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         amount_msat = 0
         if settings.lightning:
             decoded_invoice = bolt11.decode(pr)
-            assert decoded_invoice.amount_msat, "Amountless invoices not supported."
+            assert decoded_invoice.amount_msat, "invoice has no amount."
             amount_msat = int(decoded_invoice.amount_msat)
             logger.trace(
                 "get_melt_fees: checking lightning invoice:"
@@ -624,7 +627,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         Raises:
             Exception: At least one proof already in pending table.
         """
-        # first we check whether these proofs are pending aready
+        # first we check whether these proofs are pending already
         async with self.proofs_pending_lock:
             await self._validate_proofs_pending(proofs, conn)
             for p in proofs:
