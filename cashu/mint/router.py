@@ -10,7 +10,6 @@ from ..core.base import (
     CheckSpendableRequest,
     CheckSpendableResponse,
     GetInfoResponse,
-    GetMintRequest,
     GetMintResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
@@ -141,26 +140,26 @@ async def keysets() -> KeysetsResponse:
         " after payment."
     ),
 )
-async def request_mint(payload: GetMintRequest) -> GetMintResponse:
+async def request_mint(amount: int) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
 
     Call `POST /mint` after paying the invoice.
     """
-    logger.trace(f"> GET /mint: amount={payload.amount}")
-    if payload.amount > 21_000_000 * 100_000_000 or payload.amount <= 0:
+    logger.trace(f"> GET /mint: amount={amount}")
+    if amount > 21_000_000 * 100_000_000 or amount <= 0:
         raise CashuError(code=0, detail="Amount must be a valid amount of sat.")
     if settings.mint_peg_out_only:
         raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
 
-    payment_request, id = await ledger.request_mint(payload.amount)
+    payment_request, id = await ledger.request_mint(amount)
     resp = GetMintResponse(
         request=payment_request,
         id=id,
         method="bolt11",
         symbol="sat",
-        amount=payload.amount,
+        amount=amount,
     )
     logger.trace(f"< GET /mint: {resp}")
     return resp

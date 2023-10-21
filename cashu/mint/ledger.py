@@ -599,8 +599,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         """Load all used proofs from database."""
         logger.trace("crud: loading used proofs")
         secrets_used = await self.crud.get_secrets_used(db=self.db)
-        logger.trace(f"crud: loaded {len(secrets_used)} used proofs")
-        self.secrets_used = set(secrets_used)
+        if secrets_used:
+            logger.trace(f"crud: loaded {len(secrets_used)} used proofs")
+            self.secrets_used = set(secrets_used)
 
     def _check_spendable(self, proof: Proof) -> bool:
         """Checks whether the proof was already spent."""

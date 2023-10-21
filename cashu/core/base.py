@@ -249,12 +249,6 @@ class KeysetsResponse_deprecated(BaseModel):
 # ------- API: MINT -------
 
 
-class GetMintRequest(BaseModel):
-    amount: int
-    method: str
-    symbol: str
-
-
 class GetMintResponse(BaseModel):
     request: str  # payment request
     method: str  # payment method

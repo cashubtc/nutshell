@@ -34,7 +34,7 @@ class LedgerCrud(ABC):
         self,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[str]:
+    ) -> Optional[List[str]]:
         ...
 
     async def invalidate_proof(
@@ -169,11 +169,11 @@ class LedgerCrudSqlite(LedgerCrud):
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[str]:
+    ) -> Optional[List[str]]:
         rows = await (conn or db).fetchall(f"""
             SELECT secret from {table_with_schema(db, 'proofs_used')}
             """)
-        return [row[0] for row in rows]
+        return [row[0] for row in rows] if rows else None
 
     async def invalidate_proof(
         self,

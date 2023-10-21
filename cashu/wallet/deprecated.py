@@ -190,7 +190,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         self.raise_on_error(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
-        return Invoice(amount=amount, pr=mint_response.pr, hash=mint_response.hash)
+        return Invoice(amount=amount, bolt11=mint_response.pr, id=mint_response.hash)
 
     @async_set_requests
     async def mint_deprecated(

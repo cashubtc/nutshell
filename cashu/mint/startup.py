@@ -10,7 +10,7 @@ from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..mint import migrations
-from ..mint.crud import LedgerCrud
+from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
 
 logger.debug("Enviroment Settings:")
@@ -27,7 +27,7 @@ ledger = Ledger(
     seed=settings.mint_private_key,
     derivation_path=settings.mint_derivation_path,
     lightning=lightning_backend,
-    crud=LedgerCrud(),
+    crud=LedgerCrudSqlite(),
 )
 
 
