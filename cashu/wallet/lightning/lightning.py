@@ -71,7 +71,7 @@ class LightningWallet(Wallet):
             return PaymentResponse(
                 ok=True,
                 checking_id=invoice_obj.payment_hash,
-                preimage=resp.preimage,
+                preimage=resp.proof,
                 fee_msat=fees_paid_sat * 1000,
             )
         except Exception as e:

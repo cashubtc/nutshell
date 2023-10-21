@@ -124,7 +124,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         return
 
     @staticmethod
-    def raise_on_error(
+    def raise_on_error_request(
         resp: Response,
     ) -> None:
         """Raises an exception if the response from the mint contains an error.
@@ -289,7 +289,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             ret = await self._get_keys_deprecated(url)
             return ret
         # END backwards compatibility < 0.14.0
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
         keys_dict: dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
@@ -325,7 +325,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             ret = await self._get_keys_of_keyset_deprecated(url, keyset_id)
             return ret
         # END backwards compatibility < 0.14.0
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
 
         keys_dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
@@ -359,7 +359,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             ret = await self._get_keyset_ids_deprecated(url)
             return ret
         # END backwards compatibility < 0.14.0
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
 
         keysets_dict = resp.json()
         keysets = KeysetsResponse.parse_obj(keysets_dict)
@@ -382,7 +382,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         resp = await self.httpx.get(
             join(url, "info"),
         )
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
         data: dict = resp.json()
         mint_info: GetInfoResponse = GetInfoResponse.parse_obj(data)
         return mint_info
@@ -412,7 +412,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             ret = await self.request_mint_deprecated(amount)
             return ret
         # END backwards compatibility < 0.14.0
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse.parse_obj(return_dict)
         decoded_invoice = bolt11.decode(mint_response.request)
@@ -457,7 +457,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             ret = await self.mint_deprecated(outputs, id)
             return ret
         # END backwards compatibility < 0.14.0
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
         response_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /v1/mint")
         promises = PostMintResponse.parse_obj(response_dict).promises
@@ -492,7 +492,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             join(self.url, "split"),
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
         promises_dict = resp.json()
         mint_response = PostMintResponse.parse_obj(promises_dict)
         promises = [BlindedSignature(**p.dict()) for p in mint_response.promises]
@@ -519,7 +519,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             join(self.url, "check"),
             json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
         )
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
 
         return_dict = resp.json()
         states = CheckSpendableResponse.parse_obj(return_dict)
@@ -533,7 +533,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             join(self.url, "checkfees"),
             json=payload.dict(),
         )
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
 
         return_dict = resp.json()
         return return_dict
@@ -565,7 +565,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
             timeout=None,
         )
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
         return_dict = resp.json()
 
         return PostMeltResponse.parse_obj(return_dict)
@@ -579,7 +579,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         payload = PostMintRequest(outputs=outputs)
         resp = await self.httpx.post(join(self.url, "restore"), json=payload.dict())
-        self.raise_on_error(resp)
+        self.raise_on_error_request(resp)
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)
         return returnObj.outputs, returnObj.promises
