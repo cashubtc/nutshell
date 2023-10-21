@@ -36,7 +36,7 @@ class LedgerSpendingConditions:
         - if no valid signatures are present
         - if the signature threshold is not met
         """
-        if secret.kind != SecretKind.P2PK:
+        if SecretKind(secret.kind) != SecretKind.P2PK:
             # not a P2PK secret
             return True
 
@@ -139,7 +139,7 @@ class LedgerSpendingConditions:
         - if 'pubkeys' are present but no valid signature is provided
         """
 
-        if secret.kind != SecretKind.HTLC:
+        if SecretKind(secret.kind) != SecretKind.HTLC:
             # not a P2PK secret
             return True
         htlc_secret = HTLCSecret.from_secret(secret)
@@ -208,11 +208,11 @@ class LedgerSpendingConditions:
             return True
 
         # P2PK
-        if secret.kind == SecretKind.P2PK:
+        if SecretKind(secret.kind) == SecretKind.P2PK:
             return self._verify_p2pk_spending_conditions(proof, secret)
 
         # HTLC
-        if secret.kind == SecretKind.HTLC:
+        if SecretKind(secret.kind) == SecretKind.HTLC:
             return self._verify_htlc_spending_conditions(proof, secret)
 
         # no spending condition present
@@ -255,7 +255,9 @@ class LedgerSpendingConditions:
         # check if all secrets are P2PK
         # NOTE: This is redundant, because P2PKSecret.from_secret() already checks for the kind
         # Leaving it in for explicitness
-        if not all([secret.kind == SecretKind.P2PK for secret in p2pk_secrets]):
+        if not all(
+            [SecretKind(secret.kind) == SecretKind.P2PK for secret in p2pk_secrets]
+        ):
             # not all secrets are P2PK
             return True
 

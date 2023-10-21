@@ -132,17 +132,12 @@ class Proof(BaseModel):
 
     @property
     def p2pksigs(self) -> List[str]:
-        assert self.witness, "Witness is missing"
+        assert self.witness, "Witness is missing for p2pk signature"
         return P2PKWitness.from_witness(self.witness).signatures
 
     @property
-    def p2shscript(self) -> P2SHWitness:
-        assert self.witness, "Witness is missing"
-        return P2SHWitness.from_witness(self.witness)
-
-    @property
     def htlcpreimage(self) -> Union[str, None]:
-        assert self.witness, "Witness is missing"
+        assert self.witness, "Witness is missing for htlc preimage"
         return HTLCWitness.from_witness(self.witness).preimage
 
 
@@ -162,7 +157,7 @@ class BlindedMessage(BaseModel):
 
     @property
     def p2pksigs(self) -> List[str]:
-        assert self.witness, "Witness is missing"
+        assert self.witness, "Witness missing in output"
         return P2PKWitness.from_witness(self.witness).signatures
 
 
