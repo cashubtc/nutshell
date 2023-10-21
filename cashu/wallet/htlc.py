@@ -40,7 +40,7 @@ class WalletHTLC(SupportsDb):
             tags["pubkeys"] = hashlock_pubkey
 
         return HTLCSecret(
-            kind=SecretKind.HTLC,
+            kind=SecretKind.HTLC.value,
             data=preimage_hash,
             tags=tags,
         )

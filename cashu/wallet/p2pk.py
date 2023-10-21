@@ -49,12 +49,14 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             tags["locktime"] = str(
                 int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
             )
-        tags["sigflag"] = SigFlags.SIG_ALL if sig_all else SigFlags.SIG_INPUTS
+        tags["sigflag"] = (
+            SigFlags.SIG_ALL.value if sig_all else SigFlags.SIG_INPUTS.value
+        )
         if n_sigs > 1:
             tags["n_sigs"] = str(n_sigs)
         logger.debug(f"After tags: {tags}")
         return P2PKSecret(
-            kind=SecretKind.P2PK,
+            kind=SecretKind.P2PK.value,
             data=pubkey,
             tags=tags,
         )
@@ -182,7 +184,9 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             return proofs
         logger.debug("Spending conditions detected.")
         # P2PK signatures
-        if all([Secret.deserialize(p.secret).kind == SecretKind.P2PK for p in proofs]):
+        if all(
+            [Secret.deserialize(p.secret).kind == SecretKind.P2PK.value for p in proofs]
+        ):
             logger.debug("P2PK redemption detected.")
             proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
 

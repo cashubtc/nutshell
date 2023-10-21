@@ -1,5 +1,6 @@
 import hashlib
 import time
+from enum import Enum
 from typing import List, Union
 
 from loguru import logger
@@ -8,23 +9,26 @@ from .crypto.secp import PrivateKey, PublicKey
 from .secret import Secret, SecretKind
 
 
-class SigFlags:
-    SIG_INPUTS = (  # require signatures only on the inputs (default signature flag)
-        "SIG_INPUTS"
-    )
-    SIG_ALL = "SIG_ALL"  # require signatures on inputs and outputs
+class SigFlags(Enum):
+    # require signatures only on the inputs (default signature flag)
+    SIG_INPUTS = "SIG_INPUTS"
+    # require signatures on inputs and outputs
+    SIG_ALL = "SIG_ALL"
 
 
 class P2PKSecret(Secret):
     @classmethod
     def from_secret(cls, secret: Secret):
-        assert secret.kind == SecretKind.P2PK, "Secret is not a P2PK secret"
+        assert SecretKind(secret.kind) == SecretKind.P2PK, "Secret is not a P2PK secret"
         # NOTE: exclude tags in .dict() because it doesn't deserialize it properly
         # need to add it back in manually with tags=secret.tags
         return cls(**secret.dict(exclude={"tags"}), tags=secret.tags)
 
     def get_p2pk_pubkey_from_secret(self) -> List[str]:
-        """Gets the P2PK pubkey from a Secret depending on the locktime
+        """Gets the P2PK pubkey from a Secret depending on the locktime.
+
+        If locktime is passed, only the refund pubkeys are returned.
+        Else, the pubkeys in the data field and in the 'pubkeys' tag are returned.
 
         Args:
             secret (Secret): P2PK Secret in ecash token
@@ -54,8 +58,9 @@ class P2PKSecret(Secret):
         return int(locktime) if locktime else None
 
     @property
-    def sigflag(self) -> Union[None, str]:
-        return self.tags.get_tag("sigflag")
+    def sigflag(self) -> Union[None, SigFlags]:
+        sigflag = self.tags.get_tag("sigflag")
+        return SigFlags(sigflag) if sigflag else None
 
     @property
     def n_sigs(self) -> Union[None, int]:
