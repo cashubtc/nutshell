@@ -6,7 +6,6 @@ from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
 
-from ..core import bolt11 as bolt11
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from ..core.settings import settings

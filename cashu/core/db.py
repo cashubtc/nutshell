@@ -3,7 +3,7 @@ import datetime
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, Union
 
 from sqlalchemy import create_engine
 from sqlalchemy_aio.base import AsyncConnection
@@ -118,7 +118,7 @@ class Database(Compat):
                     (1082, 1083, 1266),
                     "DATE2INT",
                     lambda value, curs: (
-                        time.mktime(value.timetuple()) if value is not None else None
+                        time.mktime(value.timetuple()) if value is not None else None  # type: ignore
                     ),
                 )
             )
@@ -189,7 +189,7 @@ class Database(Compat):
 
 
 # public functions for LNbits to use (we don't want to change the Database or Compat classes above)
-def table_with_schema(db: Database, table: str):
+def table_with_schema(db: Union[Database, Connection], table: str):
     return f"{db.references_schema if db.schema else ''}{table}"
 
 

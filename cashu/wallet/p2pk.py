@@ -3,7 +3,6 @@ from typing import List, Optional
 
 from loguru import logger
 
-from ..core import bolt11 as bolt11
 from ..core.base import (
     BlindedMessage,
     P2PKWitness,

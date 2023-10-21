@@ -6,15 +6,13 @@ from ...core.base import Invoice
 
 
 class PayResponse(BaseModel):
-    amount: int
-    fee: int
-    amount_with_fee: int
+    ok: Optional[bool] = None
 
 
 class InvoiceResponse(BaseModel):
     amount: Optional[int] = None
     invoice: Optional[Invoice] = None
-    hash: Optional[str] = None
+    id: Optional[str] = None
 
 
 class SwapResponse(BaseModel):

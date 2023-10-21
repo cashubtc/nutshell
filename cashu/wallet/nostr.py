@@ -2,8 +2,8 @@ import asyncio
 import threading
 
 import click
+from httpx import ConnectError
 from loguru import logger
-from requests.exceptions import ConnectionError
 
 from ..core.settings import settings
 from ..nostr.client.client import NostrClient
@@ -27,11 +27,11 @@ async def nip5_to_pubkey(wallet: Wallet, address: str):
     user, host = address.split("@")
     resp_dict = {}
     try:
-        resp = wallet.s.get(
+        resp = await wallet.httpx.get(
             f"https://{host}/.well-known/nostr.json?name={user}",
         )
         resp.raise_for_status()
-    except ConnectionError:
+    except ConnectError:
         raise Exception(f"Could not connect to {host}")
     except Exception as e:
         raise e

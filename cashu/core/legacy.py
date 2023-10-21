@@ -18,9 +18,9 @@ def hash_to_point_pre_0_3_3(secret_msg):
         _hash = hashlib.sha256(msg).hexdigest().encode("utf-8")  # type: ignore
         try:
             # We construct compressed pub which has x coordinate encoded with even y
-            _hash = list(_hash[:33])  # take the 33 bytes and get a list of bytes
-            _hash[0] = 0x02  # set first byte to represent even y coord
-            _hash = bytes(_hash)
+            _hash_list = list(_hash[:33])  # take the 33 bytes and get a list of bytes
+            _hash_list[0] = 0x02  # set first byte to represent even y coord
+            _hash = bytes(_hash_list)
             point = PublicKey(_hash, raw=True)
         except Exception:
             msg = _hash

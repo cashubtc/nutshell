@@ -88,10 +88,16 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
+    mint_id: Union[None, str] = (
+        None  # holds the id of the mint operation that created this proof
+    )
+    melt_id: Union[None, str] = (
+        None  # holds the id of the melt operation that destroyed this proof
+    )
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
-        if proof_dict.get("dleq"):
+        if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], str):
             proof_dict["dleq"] = DLEQWallet(**json.loads(proof_dict["dleq"]))
         c = cls(**proof_dict)
         return c
@@ -181,8 +187,9 @@ class BlindedMessages(BaseModel):
 
 class Invoice(BaseModel):
     amount: int
-    pr: str
-    hash: str
+    bolt11: str
+    id: str
+    out: Union[None, bool] = None
     payment_hash: Union[None, str] = None
     preimage: Union[str, None] = None
     issued: Union[None, bool] = False

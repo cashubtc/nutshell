@@ -162,10 +162,10 @@ async def mint(
 
     # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
     # We use the payment_hash to lookup the hash from the database and pass that one along.
-    hash = payment_hash or hash
+    id = payment_hash or hash
     # END: backwards compatibility < 0.12
 
-    promises = await ledger.mint(payload.outputs, hash=hash)
+    promises = await ledger.mint(payload.outputs, id=id)
     blinded_signatures = PostMintResponse(promises=promises)
     logger.trace(f"< POST /mint: {blinded_signatures}")
     return blinded_signatures
