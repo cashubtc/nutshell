@@ -24,7 +24,10 @@ class P2PKSecret(Secret):
         return cls(**secret.dict(exclude={"tags"}), tags=secret.tags)
 
     def get_p2pk_pubkey_from_secret(self) -> List[str]:
-        """Gets the P2PK pubkey from a Secret depending on the locktime
+        """Gets the P2PK pubkey from a Secret depending on the locktime.
+
+        If locktime is passed, only the refund pubkeys are returned.
+        Else, the pubkeys in the data field and in the 'pubkeys' tag are returned.
 
         Args:
             secret (Secret): P2PK Secret in ecash token
