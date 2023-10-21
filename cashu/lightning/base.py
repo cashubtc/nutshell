@@ -1,29 +1,30 @@
 from abc import ABC, abstractmethod
-from typing import Coroutine, NamedTuple, Optional
+from typing import Coroutine, Optional
+
+from pydantic import BaseModel
 
 
-class StatusResponse(NamedTuple):
+class StatusResponse(BaseModel):
     error_message: Optional[str]
     balance_msat: int
 
 
-class InvoiceResponse(NamedTuple):
-    ok: bool
-    checking_id: Optional[str] = None  # payment_hash, rpc_id
+class InvoiceResponse(BaseModel):
+    ok: bool  # True: invoice created, False: failed
+    checking_id: Optional[str] = None
     payment_request: Optional[str] = None
     error_message: Optional[str] = None
 
 
-class PaymentResponse(NamedTuple):
-    # when ok is None it means we don't know if this succeeded
-    ok: Optional[bool] = None
-    checking_id: Optional[str] = None  # payment_hash, rcp_id
+class PaymentResponse(BaseModel):
+    ok: Optional[bool] = None  # True: paid, False: failed, None: pending or unknown
+    checking_id: Optional[str] = None
     fee_msat: Optional[int] = None
     preimage: Optional[str] = None
     error_message: Optional[str] = None
 
 
-class PaymentStatus(NamedTuple):
+class PaymentStatus(BaseModel):
     paid: Optional[bool] = None
     fee_msat: Optional[int] = None
     preimage: Optional[str] = None

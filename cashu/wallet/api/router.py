@@ -11,9 +11,15 @@ from fastapi import APIRouter, Query
 from ...core.base import TokenV3
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
-from ...nostr.nostr.client.client import NostrClient
+from ...lightning.base import (
+    InvoiceResponse,
+    PaymentResponse,
+    PaymentStatus,
+    StatusResponse,
+)
+from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
-from ...wallet.crud import get_lightning_invoices, get_reserved_proofs, get_unused_locks
+from ...wallet.crud import get_lightning_invoices, get_reserved_proofs
 from ...wallet.helpers import (
     deserialize_token_from_string,
     init_wallet,
@@ -23,16 +29,15 @@ from ...wallet.helpers import (
 )
 from ...wallet.nostr import receive_nostr, send_nostr
 from ...wallet.wallet import Wallet as Wallet
+from ..lightning.lightning import LightningWallet
 from .api_helpers import verify_mints
 from .responses import (
     BalanceResponse,
     BurnResponse,
     InfoResponse,
-    InvoiceResponse,
     InvoicesResponse,
     LockResponse,
     LocksResponse,
-    PayResponse,
     PendingResponse,
     ReceiveResponse,
     RestoreResponse,
@@ -44,17 +49,19 @@ from .responses import (
 router: APIRouter = APIRouter()
 
 
-async def mint_wallet(mint_url: Optional[str] = None):
-    wallet: Wallet = await Wallet.with_db(
+async def mint_wallet(
+    mint_url: Optional[str] = None, raise_connection_error: bool = True
+) -> LightningWallet:
+    lightning_wallet = await LightningWallet.with_db(
         mint_url or settings.mint_url,
         db=os.path.join(settings.cashu_dir, settings.wallet_name),
         name=settings.wallet_name,
     )
-    await wallet.load_mint()
-    return wallet
+    await lightning_wallet.async_init(raise_connection_error=raise_connection_error)
+    return lightning_wallet
 
 
-wallet: Wallet = Wallet(
+wallet = LightningWallet(
     settings.mint_url,
     db=os.path.join(settings.cashu_dir, settings.wallet_name),
     name=settings.wallet_name,
@@ -64,87 +71,101 @@ wallet: Wallet = Wallet(
 @router.on_event("startup")
 async def start_wallet():
     global wallet
-    wallet = await Wallet.with_db(
-        settings.mint_url,
-        db=os.path.join(settings.cashu_dir, settings.wallet_name),
-        name=settings.wallet_name,
-    )
-
+    wallet = await mint_wallet(settings.mint_url, raise_connection_error=False)
     if settings.tor and not TorProxy().check_platform():
         raise Exception("tor not working.")
-    await wallet.load_mint()
 
 
-@router.post("/pay", name="Pay lightning invoice", response_model=PayResponse)
+@router.post(
+    "/lightning/pay_invoice",
+    name="Pay lightning invoice",
+    response_model=PaymentResponse,
+)
 async def pay(
-    invoice: str = Query(default=..., description="Lightning invoice to pay"),
+    bolt11: str = Query(default=..., description="Lightning invoice to pay"),
     mint: str = Query(
         default=None,
         description="Mint URL to pay from (None for default mint)",
     ),
-):
-    if not settings.lightning:
-        raise Exception("lightning not enabled.")
-
+) -> PaymentResponse:
     global wallet
-    wallet = await mint_wallet(mint)
-    await wallet.load_proofs(reload=True)
-
-    total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
-    assert total_amount > 0, "amount has to be larger than zero."
-    assert wallet.available_balance >= total_amount, "balance is too low."
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
-    await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
-    return PayResponse(
-        amount=total_amount - fee_reserve_sat,
-        fee=fee_reserve_sat,
-        amount_with_fee=total_amount,
-    )
+    if mint:
+        wallet = await mint_wallet(mint)
+    payment_response = await wallet.pay_invoice(bolt11)
+    return payment_response
 
 
-@router.post(
-    "/invoice", name="Request lightning invoice", response_model=InvoiceResponse
+@router.get(
+    "/lightning/payment_state",
+    name="Request lightning invoice",
+    response_model=PaymentStatus,
 )
-async def invoice(
-    amount: int = Query(default=..., description="Amount to request in invoice"),
-    hash: str = Query(default=None, description="Hash of paid invoice"),
+async def payment_state(
+    payment_hash: str = Query(default=None, description="Id of paid invoice"),
     mint: str = Query(
         default=None,
         description="Mint URL to create an invoice at (None for default mint)",
     ),
-    split: int = Query(
-        default=None, description="Split minted tokens with a specific amount."
-    ),
-):
-    # in case the user wants a specific split, we create a list of amounts
-    optional_split = None
-    if split:
-        assert amount % split == 0, "split must be divisor or amount"
-        assert amount >= split, "split must smaller or equal amount"
-        n_splits = amount // split
-        optional_split = [split] * n_splits
-        print(f"Requesting split with {n_splits}*{split} sat tokens.")
-
+) -> PaymentStatus:
     global wallet
-    wallet = await mint_wallet(mint)
-    if not settings.lightning:
-        await wallet.mint(amount, split=optional_split)
-        return InvoiceResponse(
-            amount=amount,
-        )
-    elif amount and not hash:
-        invoice = await wallet.request_mint(amount)
-        return InvoiceResponse(
-            amount=amount,
-            invoice=invoice,
-        )
-    elif amount and hash:
-        await wallet.mint(amount, split=optional_split, hash=hash)
-        return InvoiceResponse(
-            amount=amount,
-            hash=hash,
-        )
-    return
+    if mint:
+        wallet = await mint_wallet(mint)
+    state = await wallet.get_payment_status(payment_hash)
+    return state
+
+
+@router.post(
+    "/lightning/create_invoice",
+    name="Request lightning invoice",
+    response_model=InvoiceResponse,
+)
+async def create_invoice(
+    amount: int = Query(default=..., description="Amount to request in invoice"),
+    mint: str = Query(
+        default=None,
+        description="Mint URL to create an invoice at (None for default mint)",
+    ),
+) -> InvoiceResponse:
+    global wallet
+    if mint:
+        wallet = await mint_wallet(mint)
+    invoice = await wallet.create_invoice(amount)
+    return invoice
+
+
+@router.get(
+    "/lightning/invoice_state",
+    name="Request lightning invoice",
+    response_model=PaymentStatus,
+)
+async def invoice_state(
+    payment_hash: str = Query(default=None, description="Payment hash of paid invoice"),
+    mint: str = Query(
+        default=None,
+        description="Mint URL to create an invoice at (None for default mint)",
+    ),
+) -> PaymentStatus:
+    global wallet
+    if mint:
+        wallet = await mint_wallet(mint)
+    state = await wallet.get_invoice_status(payment_hash)
+    return state
+
+
+@router.get(
+    "/lightning/balance",
+    name="Balance",
+    summary="Display balance.",
+    response_model=StatusResponse,
+)
+async def lightning_balance() -> StatusResponse:
+    try:
+        await wallet.load_proofs(reload=True)
+    except Exception as exc:
+        return StatusResponse(error_message=str(exc), balance_msat=0)
+    return StatusResponse(
+        error_message=None, balance_msat=wallet.available_balance * 1000
+    )
 
 
 @router.post(
@@ -171,7 +192,7 @@ async def swap(
     # pay invoice from outgoing mint
     await outgoing_wallet.load_proofs(reload=True)
     total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
-        invoice.pr
+        invoice.bolt11
     )
     assert total_amount > 0, "amount must be positive"
     if outgoing_wallet.available_balance < total_amount:
@@ -180,10 +201,10 @@ async def swap(
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(send_proofs, invoice.pr, fee_reserve_sat)
+    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, hash=invoice.hash)
+    await incoming_wallet.mint(amount, id=invoice.id)
     await incoming_wallet.load_proofs(reload=True)
     mint_balances = await incoming_wallet.balance_per_minturl()
     return SwapResponse(
@@ -213,7 +234,7 @@ async def balance():
 async def send_command(
     amount: int = Query(default=..., description="Amount to send"),
     nostr: str = Query(default=None, description="Send to nostr pubkey"),
-    lock: str = Query(default=None, description="Lock tokens (P2SH)"),
+    lock: str = Query(default=None, description="Lock tokens (P2PK)"),
     mint: str = Query(
         default=None,
         description="Mint URL to send from (None for default mint)",
@@ -223,6 +244,8 @@ async def send_command(
     ),
 ):
     global wallet
+    if mint:
+        wallet = await mint_wallet(mint)
     if not nostr:
         balance, token = await send(
             wallet, amount=amount, lock=lock, legacy=False, split=not nosplit
@@ -284,7 +307,7 @@ async def burn(
     if not (all or token or force or delete) or (token and all):
         raise Exception(
             "enter a token or use --all to burn all pending tokens, --force to"
-            " check all tokensor --delete with send ID to force-delete pending"
+            " check all tokens or --delete with send ID to force-delete pending"
             " token from list if mint is unavailable.",
         )
     if all:
@@ -354,14 +377,14 @@ async def pending(
 
 @router.get("/lock", name="Generate receiving lock", response_model=LockResponse)
 async def lock():
-    address = await wallet.create_p2sh_address_and_store()
-    return LockResponse(P2SH=address)
+    pubkey = await wallet.create_p2pk_pubkey()
+    return LockResponse(P2PK=pubkey)
 
 
 @router.get("/locks", name="Show unused receiving locks", response_model=LocksResponse)
 async def locks():
-    locks = await get_unused_locks(db=wallet.db)
-    return LocksResponse(locks=locks)
+    pubkey = await wallet.create_p2pk_pubkey()
+    return LocksResponse(locks=[pubkey])
 
 
 @router.get(

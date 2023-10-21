@@ -14,7 +14,6 @@ from .crypto.keys import (
 )
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
-from .p2pk import P2SHScript
 
 
 class DLEQ(BaseModel):
@@ -39,6 +38,41 @@ class DLEQWallet(BaseModel):
 # ------- PROOFS -------
 
 
+class HTLCWitness(BaseModel):
+    preimage: Optional[str] = None
+    signature: Optional[str] = None
+
+    @classmethod
+    def from_witness(cls, witness: str):
+        return cls(**json.loads(witness))
+
+
+class P2SHWitness(BaseModel):
+    """
+    Unlocks P2SH spending condition of a Proof
+    """
+
+    script: str
+    signature: str
+    address: Union[str, None] = None
+
+    @classmethod
+    def from_witness(cls, witness: str):
+        return cls(**json.loads(witness))
+
+
+class P2PKWitness(BaseModel):
+    """
+    Unlocks P2PK spending condition of a Proof
+    """
+
+    signatures: List[str]
+
+    @classmethod
+    def from_witness(cls, witness: str):
+        return cls(**json.loads(witness))
+
+
 class Proof(BaseModel):
     """
     Value token
@@ -50,11 +84,8 @@ class Proof(BaseModel):
     secret: str = ""  # secret or message to be blinded and signed
     C: str = ""  # signature on secret, unblinded by wallet
     dleq: Union[DLEQWallet, None] = None  # DLEQ proof
+    witness: Union[None, str] = ""  # witness for spending condition
 
-    p2pksigs: Union[List[str], None] = []  # P2PK signature
-    p2shscript: Union[P2SHScript, None] = None  # P2SH spending condition
-    htlcpreimage: Union[str, None] = None  # HTLC unlocking preimage
-    htlcsignature: Union[str, None] = None  # HTLC unlocking signature
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
     # unique ID of send attempt, used for grouping pending tokens in the wallet
@@ -62,10 +93,16 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
+    mint_id: Union[None, str] = (
+        None  # holds the id of the mint operation that created this proof
+    )
+    melt_id: Union[None, str] = (
+        None  # holds the id of the melt operation that destroyed this proof
+    )
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
-        if proof_dict.get("dleq"):
+        if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], str):
             proof_dict["dleq"] = DLEQWallet(**json.loads(proof_dict["dleq"]))
         c = cls(**proof_dict)
         return c
@@ -98,6 +135,16 @@ class Proof(BaseModel):
     def __setitem__(self, key, val):
         self.__setattr__(key, val)
 
+    @property
+    def p2pksigs(self) -> List[str]:
+        assert self.witness, "Witness is missing for p2pk signature"
+        return P2PKWitness.from_witness(self.witness).signatures
+
+    @property
+    def htlcpreimage(self) -> Union[str, None]:
+        assert self.witness, "Witness is missing for htlc preimage"
+        return HTLCWitness.from_witness(self.witness).preimage
+
 
 class Proofs(BaseModel):
     # NOTE: not used in Pydantic validation
@@ -111,7 +158,12 @@ class BlindedMessage(BaseModel):
 
     amount: int
     B_: str  # Hex-encoded blinded message
-    p2pksigs: Union[List[str], None] = None  # signature for p2pk with SIG_ALL
+    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
+
+    @property
+    def p2pksigs(self) -> List[str]:
+        assert self.witness, "Witness missing in output"
+        return P2PKWitness.from_witness(self.witness).signatures
 
 
 class BlindedSignature(BaseModel):
@@ -135,8 +187,9 @@ class BlindedMessages(BaseModel):
 
 class Invoice(BaseModel):
     amount: int
-    pr: str
-    hash: str
+    bolt11: str
+    id: str
+    out: Union[None, bool] = None
     payment_hash: Union[None, str] = None
     preimage: Union[str, None] = None
     issued: Union[None, bool] = False
@@ -258,19 +311,6 @@ class PostSplitRequest(BaseModel):
     proofs: List[Proof]
     amount: Optional[int] = None  # deprecated since 0.13.0
     outputs: List[BlindedMessage]
-    # signature: Optional[str] = None
-
-    # def sign(self, private_key: PrivateKey):
-    #     """
-    #     Create a signed split request. The signature is over the `proofs` and `outputs` fields.
-    #     """
-    #     # message = json.dumps(self.proofs).encode("utf-8") + json.dumps(
-    #     #     self.outputs
-    #     # ).encode("utf-8")
-    #     message = json.dumps(self.dict(include={"proofs": ..., "outputs": ...})).encode(
-    #         "utf-8"
-    #     )
-    #     self.signature = sign_p2pk_sign(message, private_key)
 
 
 class PostSplitResponse(BaseModel):

@@ -6,7 +6,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof
+from cashu.core.base import HTLCWitness, Proof
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.htlc import HTLCSecret
 from cashu.core.migrations import migrate_databases
@@ -59,7 +59,7 @@ async def wallet2(mint):
 @pytest.mark.asyncio
 async def test_create_htlc_secret(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(preimage=preimage)
@@ -69,11 +69,10 @@ async def test_create_htlc_secret(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_htlc_split(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(preimage=preimage)
-    # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     for p in send_proofs:
         assert HTLCSecret.deserialize(p.secret).data == preimage_hash
@@ -82,28 +81,28 @@ async def test_htlc_split(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_preimage(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(preimage=preimage)
-    # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     for p in send_proofs:
-        p.htlcpreimage = preimage
+        p.witness = HTLCWitness(preimage=preimage).json()
     await wallet2.redeem(send_proofs)
 
 
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
-    secret = await wallet1.create_htlc_lock(preimage=preimage[:-5] + "11111")
-    # p2pk test
+    secret = await wallet1.create_htlc_lock(
+        preimage=preimage[:-5] + "11111"
+    )  # wrong preimage
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     for p in send_proofs:
-        p.htlcpreimage = preimage
+        p.witness = HTLCWitness(preimage=preimage).json()
     await assert_err(
         wallet2.redeem(send_proofs), "Mint Error: HTLC preimage does not match"
     )
@@ -112,17 +111,16 @@ async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet)
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_no_signature(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(
         preimage=preimage, hashlock_pubkey=pubkey_wallet1
     )
-    # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     for p in send_proofs:
-        p.htlcpreimage = preimage
+        p.witness = HTLCWitness(preimage=preimage).json()
     await assert_err(
         wallet2.redeem(send_proofs),
         "Mint Error: HTLC no hash lock signatures provided.",
@@ -132,20 +130,19 @@ async def test_htlc_redeem_with_no_signature(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_wrong_signature(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(
         preimage=preimage, hashlock_pubkey=pubkey_wallet1
     )
-
-    # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
     signatures = await wallet1.sign_p2pk_proofs(send_proofs)
     for p, s in zip(send_proofs, signatures):
-        p.htlcpreimage = preimage
-        p.htlcsignature = s[:-5] + "11111"  # wrong signature
+        p.witness = HTLCWitness(
+            preimage=preimage, signature=s[:-5] + "11111"
+        ).json()  # wrong signature
 
     await assert_err(
         wallet2.redeem(send_proofs),
@@ -156,20 +153,18 @@ async def test_htlc_redeem_with_wrong_signature(wallet1: Wallet, wallet2: Wallet
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_correct_signature(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(
         preimage=preimage, hashlock_pubkey=pubkey_wallet1
     )
-    # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
 
     signatures = await wallet1.sign_p2pk_proofs(send_proofs)
     for p, s in zip(send_proofs, signatures):
-        p.htlcpreimage = preimage
-        p.htlcsignature = s
+        p.witness = HTLCWitness(preimage=preimage, signature=s).json()
 
     await wallet2.redeem(send_proofs)
 
@@ -179,7 +174,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
     wallet1: Wallet, wallet2: Wallet
 ):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
@@ -190,13 +185,11 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
         locktime_seconds=5,
         locktime_pubkey=pubkey_wallet1,
     )
-    # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
 
     signatures = await wallet1.sign_p2pk_proofs(send_proofs)
     for p, s in zip(send_proofs, signatures):
-        p.htlcpreimage = preimage
-        p.htlcsignature = s
+        p.witness = HTLCWitness(preimage=preimage, signature=s).json()
 
     # should error because we used wallet2 signatures for the hash lock
     await assert_err(
@@ -214,7 +207,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
     wallet1: Wallet, wallet2: Wallet
 ):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
@@ -225,13 +218,13 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
         locktime_seconds=5,
         locktime_pubkey=pubkey_wallet1,
     )
-    # p2pk test
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
 
     signatures = await wallet1.sign_p2pk_proofs(send_proofs)
     for p, s in zip(send_proofs, signatures):
-        p.htlcpreimage = preimage
-        p.htlcsignature = s[:-5] + "11111"  # wrong signature
+        p.witness = HTLCWitness(
+            preimage=preimage, signature=s[:-5] + "11111"
+        ).json()  # wrong signature
 
     # should error because we used wallet2 signatures for the hash lock
     await assert_err(

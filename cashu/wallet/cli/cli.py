@@ -17,13 +17,12 @@ from loguru import logger
 from ...core.base import TokenV3
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
-from ...nostr.nostr.client.client import NostrClient
+from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
     get_lightning_invoices,
     get_reserved_proofs,
     get_seed_and_mnemonic,
-    get_unused_locks,
 )
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
@@ -169,9 +168,12 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     wallet.status()
     total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
     if not yes:
+        potential = (
+            f" ({total_amount} sat with potential fees)" if fee_reserve_sat else ""
+        )
+        message = f"Pay {total_amount - fee_reserve_sat} sat{potential}?"
         click.confirm(
-            f"Pay {total_amount - fee_reserve_sat} sat ({total_amount} sat with"
-            " potential fees)?",
+            message,
             abort=True,
             default=True,
         )
@@ -188,7 +190,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 
 @cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=int)
-@click.option("--hash", default="", help="Hash of the paid invoice.", type=str)
+@click.option("--id", default="", help="Id of the paid invoice.", type=str)
 @click.option(
     "--split",
     "-s",
@@ -198,7 +200,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 )
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: int, hash: str, split: int):
+async def invoice(ctx: Context, amount: int, id: str, split: int):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -214,16 +216,16 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
     if not settings.lightning:
         await wallet.mint(amount, split=optional_split)
     # user requests an invoice
-    elif amount and not hash:
+    elif amount and not id:
         invoice = await wallet.request_mint(amount)
-        if invoice.pr:
+        if invoice.bolt11:
             print(f"Pay invoice to mint {amount} sat:")
             print("")
-            print(f"Invoice: {invoice.pr}")
+            print(f"Invoice: {invoice.bolt11}")
             print("")
             print(
                 "If you abort this you can use this command to recheck the"
-                f" invoice:\ncashu invoice {amount} --hash {invoice.hash}"
+                f" invoice:\ncashu invoice {amount} --id {invoice.id}"
             )
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
@@ -236,7 +238,7 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
             while time.time() < check_until and not paid:
                 time.sleep(3)
                 try:
-                    await wallet.mint(amount, split=optional_split, hash=invoice.hash)
+                    await wallet.mint(amount, split=optional_split, id=invoice.id)
                     paid = True
                     print(" Invoice paid.")
                 except Exception as e:
@@ -254,8 +256,8 @@ async def invoice(ctx: Context, amount: int, hash: str, split: int):
                 )
 
     # user paid invoice and want to check it
-    elif amount and hash:
-        await wallet.mint(amount, split=optional_split, hash=hash)
+    elif amount and id:
+        await wallet.mint(amount, split=optional_split, id=id)
     wallet.status()
     return
 
@@ -286,17 +288,17 @@ async def swap(ctx: Context):
 
     # pay invoice from outgoing mint
     total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
-        invoice.pr
+        invoice.bolt11
     )
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(send_proofs, invoice.pr, fee_reserve_sat)
+    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, hash=invoice.hash)
+    await incoming_wallet.mint(amount, id=invoice.id)
 
     await incoming_wallet.load_proofs(reload=True)
     await print_mint_balances(incoming_wallet, show_mints=True)
@@ -351,7 +353,7 @@ async def balance(ctx: Context, verbose):
     help="Send to nostr pubkey.",
     type=str,
 )
-@click.option("--lock", "-l", default=None, help="Lock tokens (P2SH).", type=str)
+@click.option("--lock", "-l", default=None, help="Lock tokens (P2PK).", type=str)
 @click.option(
     "--dleq",
     "-d",
@@ -583,26 +585,14 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
 
 
 @cli.command("lock", help="Generate receiving lock.")
-@click.option(
-    "--p2sh",
-    "-p",
-    default=False,
-    is_flag=True,
-    help="Create P2SH lock.",
-    type=bool,
-)
 @click.pass_context
 @coro
-async def lock(ctx, p2sh):
+async def lock(ctx):
     wallet: Wallet = ctx.obj["WALLET"]
-    if p2sh:
-        address = await wallet.create_p2sh_address_and_store()
-        lock_str = f"P2SH:{address}"
-        print("---- Pay to script hash (P2SH) ----\n")
-    else:
-        pubkey = await wallet.create_p2pk_pubkey()
-        lock_str = f"P2PK:{pubkey}"
-        print("---- Pay to public key (P2PK) ----\n")
+
+    pubkey = await wallet.create_p2pk_pubkey()
+    lock_str = f"P2PK:{pubkey}"
+    print("---- Pay to public key (P2PK) ----\n")
 
     print("Use a lock to receive tokens that only you can unlock.")
     print("")
@@ -626,19 +616,6 @@ async def locks(ctx):
     print("---- Pay to public key (P2PK) lock ----\n")
     print(f"Lock: {lock_str}")
     print("")
-    print("To see more information enter: cashu lock")
-    # P2SH locks
-    locks = await get_unused_locks(db=wallet.db)
-    if len(locks):
-        print("")
-        print("---- Pay to script hash (P2SH) locks ----\n")
-        for lock in locks:
-            print(f"Lock: P2SH:{lock.address}")
-            print(f"Script: {lock.script}")
-            print(f"Signature: {lock.signature}")
-            print("")
-            print("--------------------------\n")
-
     return True
 
 
@@ -655,8 +632,8 @@ async def invoices(ctx):
             print(f"Paid: {invoice.paid}")
             print(f"Incoming: {invoice.amount > 0}")
             print(f"Amount: {abs(invoice.amount)}")
-            if invoice.hash:
-                print(f"Hash: {invoice.hash}")
+            if invoice.id:
+                print(f"ID: {invoice.id}")
             if invoice.preimage:
                 print(f"Preimage: {invoice.preimage}")
             if invoice.time_created:
@@ -670,7 +647,7 @@ async def invoices(ctx):
                 )
                 print(f"Paid: {d}")
             print("")
-            print(f"Payment request: {invoice.pr}")
+            print(f"Payment request: {invoice.bolt11}")
             print("")
             print("--------------------------\n")
     else:

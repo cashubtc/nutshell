@@ -1,4 +1,5 @@
 import json
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
@@ -7,8 +8,7 @@ from pydantic import BaseModel
 from .crypto.secp import PrivateKey
 
 
-class SecretKind:
-    P2SH = "P2SH"
+class SecretKind(Enum):
     P2PK = "P2PK"
     HTLC = "HTLC"
 

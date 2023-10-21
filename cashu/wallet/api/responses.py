@@ -2,19 +2,17 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
-from ...core.base import Invoice, P2SHScript
+from ...core.base import Invoice
 
 
 class PayResponse(BaseModel):
-    amount: int
-    fee: int
-    amount_with_fee: int
+    ok: Optional[bool] = None
 
 
 class InvoiceResponse(BaseModel):
     amount: Optional[int] = None
     invoice: Optional[Invoice] = None
-    hash: Optional[str] = None
+    id: Optional[str] = None
 
 
 class SwapResponse(BaseModel):
@@ -50,11 +48,11 @@ class PendingResponse(BaseModel):
 
 
 class LockResponse(BaseModel):
-    P2SH: Optional[str]
+    P2PK: Optional[str]
 
 
 class LocksResponse(BaseModel):
-    locks: List[P2SHScript]
+    locks: List[str]
 
 
 class InvoicesResponse(BaseModel):

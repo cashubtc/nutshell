@@ -23,23 +23,25 @@ async def wallet1(mint):
 async def test_melt(wallet1: Wallet, ledger: Ledger):
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 128
-    total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(invoice.pr)
-    mint_fees = await ledger.get_melt_fees(invoice.pr)
+    total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(
+        invoice.bolt11
+    )
+    mint_fees = await ledger.get_melt_fees(invoice.bolt11)
     assert mint_fees == fee_reserve_sat
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
-    await ledger.melt(send_proofs, invoice.pr, outputs=None)
+    await ledger.melt(send_proofs, invoice.bolt11, outputs=None)
 
 
 @pytest.mark.asyncio
 async def test_split(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(len(send_proofs))
@@ -55,7 +57,7 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
-    await wallet1.mint(64, hash=invoice.hash)
+    await wallet1.mint(64, id=invoice.id)
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
 

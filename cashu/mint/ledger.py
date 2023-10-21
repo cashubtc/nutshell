@@ -1,11 +1,11 @@
 import asyncio
 import copy
 import math
-from typing import Dict, List, Literal, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
+import bolt11
 from loguru import logger
 
-from ..core import bolt11
 from ..core.base import (
     DLEQ,
     BlindedMessage,
@@ -20,7 +20,6 @@ from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
-    InvoiceNotPaidError,
     KeysetError,
     KeysetNotFoundError,
     LightningError,
@@ -30,13 +29,14 @@ from ..core.errors import (
 from ..core.helpers import fee_reserve, sum_proofs
 from ..core.settings import settings
 from ..core.split import amount_split
-from ..lightning.base import Wallet
+from ..lightning.base import PaymentResponse, Wallet
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
+from .lightning import LedgerLightning
 from .verification import LedgerVerification
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions):
+class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
     locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
     proofs_pending_lock: asyncio.Lock = (
         asyncio.Lock()
@@ -162,113 +162,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         assert keyset.public_keys, KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
-    # ------- LIGHTNING -------
-
-    async def _request_lightning_invoice(self, amount: int) -> Tuple[str, str]:
-        """Generate a Lightning invoice using the funding source backend.
-
-        Args:
-            amount (int): Amount of invoice (in Satoshis)
-
-        Raises:
-            Exception: Error with funding source.
-
-        Returns:
-            Tuple[str, str]: Bolt11 invoice and payment hash (for lookup)
-        """
-        logger.trace(
-            "_request_lightning_invoice: Requesting Lightning invoice for"
-            f" {amount} satoshis."
-        )
-        error, balance = await self.lightning.status()
-        logger.trace(f"_request_lightning_invoice: Lightning wallet balance: {balance}")
-        if error:
-            raise LightningError(f"Lightning wallet not responding: {error}")
-        (
-            ok,
-            checking_id,
-            payment_request,
-            error_message,
-        ) = await self.lightning.create_invoice(amount, "Cashu deposit")
-        logger.trace(
-            f"_request_lightning_invoice: Lightning invoice: {payment_request}"
-        )
-
-        if not ok:
-            raise LightningError(f"Lightning wallet error: {error_message}")
-        assert payment_request and checking_id, LightningError(
-            "could not fetch invoice from Lightning backend"
-        )
-        return payment_request, checking_id
-
-    async def _check_lightning_invoice(
-        self, amount: int, hash: str, conn: Optional[Connection] = None
-    ) -> Literal[True]:
-        """Checks with the Lightning backend whether an invoice stored with `hash` was paid.
-
-        Args:
-            amount (int): Amount of the outputs the wallet wants in return (in Satoshis).
-            hash (str): Hash to look up Lightning invoice by.
-
-        Raises:
-            Exception: Invoice not found.
-            Exception: Tokens for invoice already issued.
-            Exception: Amount larger than invoice amount.
-            Exception: Invoice not paid yet
-            e: Update database and pass through error.
-
-        Returns:
-            bool: True if invoice has been paid, else False
-        """
-        invoice = await self.crud.get_lightning_invoice(
-            db=self.db, hash=hash, conn=conn
-        )
-        if invoice is None:
-            raise LightningError("invoice not found.")
-        if invoice.issued:
-            raise LightningError("tokens already issued for this invoice.")
-        if amount > invoice.amount:
-            raise LightningError(
-                f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
-            )
-        assert invoice.payment_hash, "invoice has no payment hash."
-        status = await self.lightning.get_invoice_status(invoice.payment_hash)
-        logger.trace(
-            f"_check_lightning_invoice: invoice {invoice.payment_hash} status: {status}"
-        )
-        if not status.paid:
-            raise InvoiceNotPaidError()
-
-        return status.paid
-
-    async def _pay_lightning_invoice(self, invoice: str, fee_limit_msat: int):
-        """Pays a Lightning invoice via the funding source backend.
-
-        Args:
-            invoice (str): Bolt11 Lightning invoice
-            fee_limit_msat (int): Maximum fee reserve for payment (in Millisatoshi)
-
-        Raises:
-            Exception: Funding source error.
-
-        Returns:
-            Tuple[bool, string, int]: Returns payment status, preimage of invoice, paid fees (in Millisatoshi)
-        """
-        error, balance = await self.lightning.status()
-        if error:
-            raise LightningError(f"Lightning wallet not responding: {error}")
-        (
-            ok,
-            checking_id,
-            fee_msat,
-            preimage,
-            error_message,
-        ) = await self.lightning.pay_invoice(invoice, fee_limit_msat=fee_limit_msat)
-        logger.trace(f"_pay_lightning_invoice: Lightning payment status: {ok}")
-        # make sure that fee is positive
-        fee_msat = abs(fee_msat) if fee_msat else fee_msat
-        return ok, preimage, fee_msat
-
     # ------- ECASH -------
 
     async def _invalidate_proofs(self, proofs: List[Proof]) -> None:
@@ -359,7 +252,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             Exception: Invoice creation failed.
 
         Returns:
-            Tuple[str, str]: Bolt11 invoice and a hash (for looking it up later)
+            Tuple[str, str]: Bolt11 invoice and a id (for looking it up later)
         """
         logger.trace("called request_mint")
         if settings.mint_max_peg_in and amount > settings.mint_max_peg_in:
@@ -370,23 +263,26 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             raise NotAllowedError("Mint does not allow minting new tokens.")
 
         logger.trace(f"requesting invoice for {amount} satoshis")
-        payment_request, payment_hash = await self._request_lightning_invoice(amount)
-        logger.trace(f"got invoice {payment_request} with hash {payment_hash}")
-        assert payment_request and payment_hash, LightningError(
-            "could not fetch invoice from Lightning backend"
+        invoice_response = await self._request_lightning_invoice(amount)
+        logger.trace(
+            f"got invoice {invoice_response.payment_request} with check id"
+            f" {invoice_response.checking_id}"
         )
+        assert (
+            invoice_response.payment_request and invoice_response.checking_id
+        ), LightningError("could not fetch invoice from Lightning backend")
 
         invoice = Invoice(
             amount=amount,
-            hash=random_hash(),
-            pr=payment_request,
-            payment_hash=payment_hash,  # what we got from the backend
+            id=random_hash(),
+            bolt11=invoice_response.payment_request,
+            payment_hash=invoice_response.checking_id,  # what we got from the backend
             issued=False,
         )
-        logger.trace(f"crud: storing invoice {invoice.hash} in db")
+        logger.trace(f"crud: storing invoice {invoice.id} in db")
         await self.crud.store_lightning_invoice(invoice=invoice, db=self.db)
-        logger.trace(f"crud: stored invoice {invoice.hash} in db")
-        return payment_request, invoice.hash
+        logger.trace(f"crud: stored invoice {invoice.id} in db")
+        return invoice_response.payment_request, invoice.id
 
     async def mint(
         self,
@@ -416,19 +312,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         if settings.lightning:
             if not id:
-                raise NotAllowedError("no hash provided.")
+                raise NotAllowedError("no id provided.")
             self.locks[id] = (
                 self.locks.get(id) or asyncio.Lock()
             )  # create a new lock if it doesn't exist
             async with self.locks[id]:
                 # will raise an exception if the invoice is not paid or tokens are
                 # already issued or the requested amount is too high
-                await self._check_lightning_invoice(amount_outputs, id)
+                await self._check_lightning_invoice(amount=amount_outputs, id=id)
 
                 logger.trace(f"crud: setting invoice {id} as issued")
-                await self.crud.update_lightning_invoice(
-                    hash=id, issued=True, db=self.db
-                )
+                await self.crud.update_lightning_invoice(id=id, issued=True, db=self.db)
             del self.locks[id]
 
         self._verify_outputs(outputs)
@@ -456,42 +350,46 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         logger.trace("melt called")
 
+        # set proofs to pending to avoid race conditions
         await self._set_proofs_pending(proofs)
 
         try:
             # verify amounts
             total_provided = sum_proofs(proofs)
             invoice_obj = bolt11.decode(invoice)
+            assert invoice_obj.amount_msat, "invoice has no amount."
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
             if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
                 raise NotAllowedError(
                     f"Maximum melt amount is {settings.mint_max_peg_out} sat."
                 )
-            fees_sat = await self.get_melt_fees(invoice)
+            reserve_fees_sat = await self.get_melt_fees(invoice)
             # verify overspending attempt
-            assert total_provided >= invoice_amount + fees_sat, TransactionError(
+            assert (
+                total_provided >= invoice_amount + reserve_fees_sat
+            ), TransactionError(
                 "provided proofs not enough for Lightning payment. Provided:"
-                f" {total_provided}, needed: {invoice_amount + fees_sat}"
+                f" {total_provided}, needed: {invoice_amount + reserve_fees_sat}"
             )
 
-            # verify spending inputs, outputs, and spending conditions
-            await self.verify_inputs_and_outputs(proofs, outputs)
+            # verify spending inputs and their spending conditions
+            await self.verify_inputs_and_outputs(proofs)
 
             if settings.lightning:
                 logger.trace(f"paying lightning invoice {invoice}")
-                status, preimage, fee_msat = await self._pay_lightning_invoice(
-                    invoice, fees_sat * 1000
+                payment = await self._pay_lightning_invoice(
+                    invoice, reserve_fees_sat * 1000
                 )
-                preimage = preimage or ""
                 logger.trace("paid lightning invoice")
             else:
-                status, preimage, fee_msat = True, "preimage", 0
+                payment = PaymentResponse(ok=True, preimage="preimage", fee_msat=0)
 
             logger.debug(
-                f"Melt status: {status}: preimage: {preimage}, fee_msat: {fee_msat}"
+                f"Melt status: {payment.ok}: preimage: {payment.preimage}, fee_msat:"
+                f" {payment.fee_msat}"
             )
 
-            if not status:
+            if not payment.ok:
                 raise LightningError("Lightning payment unsuccessful.")
 
             # melt successful, invalidate proofs
@@ -499,11 +397,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []
-            if outputs and fee_msat:
+            if outputs and payment.fee_msat is not None:
                 return_promises = await self._generate_change_promises(
                     total_provided=total_provided,
                     invoice_amount=invoice_amount,
-                    ln_fee_msat=fee_msat,
+                    ln_fee_msat=payment.fee_msat,
                     outputs=outputs,
                 )
 
@@ -514,7 +412,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
 
-        return status, preimage, return_promises
+        return payment.ok, payment.preimage or "", return_promises
 
     async def get_melt_fees(self, pr: str) -> int:
         """Returns the fee reserve (in sat) that a wallet must add to its proofs
@@ -528,19 +426,24 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         # hack: check if it's internal, if it exists, it will return paid = False,
         # if id does not exist (not internal), it returns paid = None
+        amount_msat = 0
         if settings.lightning:
             decoded_invoice = bolt11.decode(pr)
-            amount_msat = decoded_invoice.amount_msat
+            assert decoded_invoice.amount_msat, "invoice has no amount."
+            amount_msat = int(decoded_invoice.amount_msat)
             logger.trace(
                 "get_melt_fees: checking lightning invoice:"
                 f" {decoded_invoice.payment_hash}"
             )
-            paid = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
-            logger.trace(f"get_melt_fees: paid: {paid}")
-            internal = paid.paid is False
+            payment = await self.lightning.get_invoice_status(
+                decoded_invoice.payment_hash
+            )
+            logger.trace(f"get_melt_fees: paid: {payment.paid}")
+            internal = payment.paid is False
         else:
             amount_msat = 0
             internal = True
+
         fees_msat = fee_reserve(amount_msat, internal)
         fee_sat = math.ceil(fees_msat / 1000)
         return fee_sat

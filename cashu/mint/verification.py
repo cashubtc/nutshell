@@ -139,10 +139,8 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         return True
 
     def _verify_amount(self, amount: int) -> int:
-        """Any amount used should be a positive integer not larger than 2^MAX_ORDER."""
-        valid = (
-            isinstance(amount, int) and amount > 0 and amount < 2**settings.max_order
-        )
+        """Any amount used should be positive and not larger than 2^MAX_ORDER."""
+        valid = amount > 0 and amount < 2**settings.max_order
         logger.trace(f"Verifying amount {amount} is valid: {valid}")
         if not valid:
             raise NotAllowedError("invalid amount: " + str(amount))

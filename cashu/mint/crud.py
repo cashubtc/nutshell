@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Any, List, Optional
 
 from ..core.base import BlindedSignature, Invoice, MintKeyset, Proof
@@ -9,56 +9,108 @@ class LedgerCrud(ABC):
     """
     Database interface for Cashu mint.
 
-    This class needs to be overloaded by any app that imports the Cashu mint.
+    This class needs to be overloaded by any app that imports the Cashu mint and wants
+    to use their own database.
     """
 
-    @abstractmethod
-    async def get_keyset(self, *args, **kwags):
-        pass
+    async def get_keyset(
+        self,
+        db: Database,
+        id: str = "",
+        derivation_path: str = "",
+        conn: Optional[Connection] = None,
+    ) -> List[MintKeyset]:
+        ...
 
-    @abstractmethod
-    async def get_lightning_invoice(self, *args, **kwags) -> Optional[Invoice]:
-        pass
+    async def get_lightning_invoice(
+        self,
+        db: Database,
+        id: str,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Invoice]:
+        ...
 
-    @abstractmethod
-    async def get_secrets_used(self, *args, **kwags) -> List[str]:
-        pass
+    async def get_secrets_used(
+        self,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[str]:
+        ...
 
-    @abstractmethod
-    async def invalidate_proof(self, *args, **kwags) -> None:
-        pass
+    async def invalidate_proof(
+        self,
+        db: Database,
+        proof: Proof,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
-    @abstractmethod
-    async def get_proofs_pending(self, *args, **kwags) -> List[Proof]:
-        pass
+    async def get_proofs_pending(
+        self,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Proof]:
+        ...
 
-    @abstractmethod
-    async def set_proof_pending(self, *args, **kwags) -> None:
-        pass
+    async def set_proof_pending(
+        self,
+        db: Database,
+        proof: Proof,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
-    @abstractmethod
-    async def unset_proof_pending(self, *args, **kwags) -> None:
-        pass
+    async def unset_proof_pending(
+        self, proof: Proof, db: Database, conn: Optional[Connection] = None
+    ) -> None:
+        ...
 
-    @abstractmethod
-    async def store_keyset(self, *args, **kwags) -> None:
-        pass
+    async def store_keyset(
+        self,
+        db: Database,
+        keyset: MintKeyset,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
-    @abstractmethod
-    async def store_lightning_invoice(self, *args, **kwags) -> None:
-        pass
+    async def store_lightning_invoice(
+        self,
+        db: Database,
+        invoice: Invoice,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
-    @abstractmethod
-    async def store_promise(self, *args, **kwags) -> None:
-        pass
+    async def store_promise(
+        self,
+        *,
+        db: Database,
+        amount: int,
+        B_: str,
+        C_: str,
+        id: str,
+        e: str = "",
+        s: str = "",
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
-    @abstractmethod
-    async def get_promise(self, *args, **kwags) -> Optional[BlindedSignature]:
-        pass
+    async def get_promise(
+        self,
+        db: Database,
+        B_: str,
+        conn: Optional[Connection] = None,
+    ) -> Optional[BlindedSignature]:
+        ...
 
-    @abstractmethod
-    async def update_lightning_invoice(self, *args, **kwags) -> None:
-        pass
+    async def update_lightning_invoice(
+        self,
+        db: Database,
+        id: str,
+        issued: bool,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
 
 class LedgerCrudSqlite(LedgerCrud):
@@ -183,7 +235,7 @@ class LedgerCrudSqlite(LedgerCrud):
         proof: Proof,
         db: Database,
         conn: Optional[Connection] = None,
-    ):
+    ) -> None:
         await (conn or db).execute(
             f"""
             DELETE FROM {table_with_schema(db, 'proofs_pending')}
@@ -194,7 +246,6 @@ class LedgerCrudSqlite(LedgerCrud):
 
     async def store_lightning_invoice(
         self,
-        *,
         db: Database,
         invoice: Invoice,
         conn: Optional[Connection] = None,
@@ -202,54 +253,52 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'invoices')}
-            (amount, pr, hash, issued, payment_hash)
-            VALUES (?, ?, ?, ?, ?)
+            (amount, bolt11, id, issued, payment_hash, out)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 invoice.amount,
-                invoice.pr,
-                invoice.hash,
+                invoice.bolt11,
+                invoice.id,
                 invoice.issued,
                 invoice.payment_hash,
+                invoice.out,
             ),
         )
 
     async def get_lightning_invoice(
         self,
-        *,
         db: Database,
-        hash: str,
+        id: str,
         conn: Optional[Connection] = None,
-    ):
+    ) -> Optional[Invoice]:
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'invoices')}
-            WHERE hash = ?
+            WHERE id = ?
             """,
-            (hash,),
+            (id,),
         )
-
-        return Invoice(**row) if row else None
+        row_dict = dict(row)
+        return Invoice(**row_dict) if row_dict else None
 
     async def update_lightning_invoice(
         self,
-        *,
         db: Database,
-        hash: str,
+        id: str,
         issued: bool,
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'invoices')} SET issued = ? WHERE hash = ?",
+            f"UPDATE {table_with_schema(db, 'invoices')} SET issued = ? WHERE id = ?",
             (
                 issued,
-                hash,
+                id,
             ),
         )
 
     async def store_keyset(
         self,
-        *,
         db: Database,
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
@@ -273,7 +322,6 @@ class LedgerCrudSqlite(LedgerCrud):
 
     async def get_keyset(
         self,
-        *,
         db: Database,
         id: str = "",
         derivation_path: str = "",
