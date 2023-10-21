@@ -21,8 +21,7 @@ class LedgerCrud(ABC):
         id: str = "",
         derivation_path: str = "",
         conn: Optional[Connection] = None,
-    ) -> List[MintKeyset]:
-        ...
+    ) -> List[MintKeyset]: ...
 
     @abstractmethod
     async def get_lightning_invoice(
@@ -31,8 +30,7 @@ class LedgerCrud(ABC):
         db: Database,
         id: str,
         conn: Optional[Connection] = None,
-    ) -> Optional[Invoice]:
-        ...
+    ) -> Optional[Invoice]: ...
 
     @abstractmethod
     async def get_secrets_used(
@@ -40,8 +38,7 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[List[str]]:
-        ...
+    ) -> Optional[List[str]]: ...
 
     @abstractmethod
     async def invalidate_proof(
@@ -50,8 +47,7 @@ class LedgerCrud(ABC):
         db: Database,
         proof: Proof,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_proofs_pending(
@@ -59,8 +55,7 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[Proof]:
-        ...
+    ) -> List[Proof]: ...
 
     @abstractmethod
     async def set_proof_pending(
@@ -69,14 +64,12 @@ class LedgerCrud(ABC):
         db: Database,
         proof: Proof,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def unset_proof_pending(
         self, *, proof: Proof, db: Database, conn: Optional[Connection] = None
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def store_keyset(
@@ -85,8 +78,7 @@ class LedgerCrud(ABC):
         db: Database,
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def store_lightning_invoice(
@@ -95,8 +87,7 @@ class LedgerCrud(ABC):
         db: Database,
         invoice: Invoice,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def store_promise(
@@ -110,8 +101,7 @@ class LedgerCrud(ABC):
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_promise(
@@ -120,8 +110,7 @@ class LedgerCrud(ABC):
         db: Database,
         B_: str,
         conn: Optional[Connection] = None,
-    ) -> Optional[BlindedSignature]:
-        ...
+    ) -> Optional[BlindedSignature]: ...
 
     @abstractmethod
     async def update_lightning_invoice(
@@ -131,8 +120,7 @@ class LedgerCrud(ABC):
         id: str,
         issued: bool,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class LedgerCrudSqlite(LedgerCrud):
