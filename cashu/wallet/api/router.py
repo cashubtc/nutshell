@@ -51,14 +51,14 @@ router: APIRouter = APIRouter()
 
 async def mint_wallet(
     mint_url: Optional[str] = None, raise_connection_error: bool = True
-):
-    wallet = await LightningWallet.with_db(
+) -> LightningWallet:
+    lightning_wallet = await LightningWallet.with_db(
         mint_url or settings.mint_url,
         db=os.path.join(settings.cashu_dir, settings.wallet_name),
         name=settings.wallet_name,
     )
-    await wallet.async_init(raise_connection_error=raise_connection_error)
-    return wallet
+    await lightning_wallet.async_init(raise_connection_error=raise_connection_error)
+    return lightning_wallet
 
 
 wallet = LightningWallet(
