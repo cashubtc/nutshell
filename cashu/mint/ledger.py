@@ -315,7 +315,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         return promises
 
     async def melt(
-        self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
+        self,
+        proofs: List[Proof],
+        invoice: str,
+        outputs: Optional[List[BlindedMessage]],
+        keyset: Optional[MintKeyset] = None,
     ) -> Tuple[bool, str, List[BlindedSignature]]:
         """Invalidates proofs and pays a Lightning invoice.
 
@@ -386,6 +390,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                     invoice_amount=invoice_amount,
                     ln_fee_msat=payment.fee_msat,
                     outputs=outputs,
+                    keyset=keyset,
                 )
 
         except Exception as e:
