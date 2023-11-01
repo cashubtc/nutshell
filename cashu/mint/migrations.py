@@ -183,9 +183,9 @@ async def m009_add_out_to_invoices(db: Database):
     # column in invoices for marking whether the invoice is incoming (out=False) or outgoing (out=True)
     async with db.connect() as conn:
         # we have to drop the balance views first and recreate them later
+        await conn.execute(f"DROP VIEW {table_with_schema(db, 'balance')}")
         await conn.execute(f"DROP VIEW {table_with_schema(db, 'balance_issued')}")
         await conn.execute(f"DROP VIEW {table_with_schema(db, 'balance_redeemed')}")
-        await conn.execute(f"DROP VIEW {table_with_schema(db, 'balance')}")
 
         # rename column pr to bolt11
         await conn.execute(
