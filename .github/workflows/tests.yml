@@ -5,11 +5,26 @@ on: [push, pull_request]
 jobs:
   poetry:
     runs-on: ${{ matrix.os }}
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: cashu
+          POSTGRES_PASSWORD: cashu
+          POSTGRES_DB: cashu
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     strategy:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.10.4"]
         poetry-version: ["1.5.1"]
+        db-url: ["", "postgres://cashu:cashu@localhost:5432/cashu"]
     steps:
       - name: Checkout repository and submodules
         uses: actions/checkout@v2
@@ -34,6 +49,7 @@ jobs:
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
+          MINT_DATABASE: ${{ inputs.db-url }}
           TOR: false
         run: |
           make test
