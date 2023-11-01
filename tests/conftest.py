@@ -57,14 +57,16 @@ async def ledger():
         await ledger.load_used_proofs()
         await ledger.init_keysets()
 
-    # clear sqlite database
+    database_name = "test"
+
     if not settings.mint_database.startswith("postgres"):
-        db_file = os.path.join(settings.mint_database, "test.sqlite3")
+        # clear sqlite database
+        db_file = os.path.join(settings.mint_database, database_name + ".sqlite3")
         if os.path.exists(db_file):
             os.remove(db_file)
 
     ledger = Ledger(
-        db=Database("test", settings.mint_database),
+        db=Database(database_name, settings.mint_database),
         seed=settings.mint_private_key,
         derivation_path=settings.mint_derivation_path,
         lightning=FakeWallet(),
