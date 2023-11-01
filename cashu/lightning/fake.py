@@ -30,7 +30,7 @@ STOCHASTIC_INVOICE = False
 class FakeWallet(Wallet):
     """https://github.com/lnbits/lnbits"""
 
-    queue: asyncio.Queue = asyncio.Queue(0)
+    queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     paid_invoices: Set[str] = set()
     secret: str = "FAKEWALLET SECRET"
     privkey: str = hashlib.pbkdf2_hmac(
@@ -52,7 +52,6 @@ class FakeWallet(Wallet):
         unhashed_description: Optional[bytes] = None,
         expiry: Optional[int] = None,
         payment_secret: Optional[bytes] = None,
-        **_,
     ) -> InvoiceResponse:
         tags = Tags()
 
