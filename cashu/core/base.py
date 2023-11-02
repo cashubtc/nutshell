@@ -284,16 +284,17 @@ class GetMintResponse_deprecated(BaseModel):
 
 
 class PostMeltQuoteRequest(BaseModel):
-    symbol: str
-    method: str
-    request: str
+    symbol: str  # input symbol
+    amount: int  # output amount
+    method: str  # output payment method
+    request: str  # output payment request
 
 
 class PostMeltQuoteResponse(BaseModel):
-    symbol: str
-    amount: int
-    fee: int
-    fee_reserve: int
+    symbol: str  # input symbol
+    amount: int  # input amount
+    fee: Optional[int] = None  # input fees
+    fee_reserve: Optional[int] = None  # input fee reserve
 
 
 # ------- API: MELT -------

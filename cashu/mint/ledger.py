@@ -13,6 +13,7 @@ from ..core.base import (
     Invoice,
     MintKeyset,
     MintKeysets,
+    PostMeltQuoteResponse,
     Proof,
 )
 from ..core.crypto import b_dhke
@@ -242,7 +243,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
     # ------- TRANSACTIONS -------
 
-    async def request_mint(self, amount: int) -> Tuple[str, str]:
+    async def mint_quote(self, amount: int) -> Tuple[str, str]:
         """Returns Lightning invoice and stores it in the db.
 
         Args:
@@ -330,6 +331,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         promises = await self._generate_promises(outputs, keyset)
         logger.trace("generated promises")
         return promises
+
+    async def melt_quote(self, request: str) -> PostMeltQuoteResponse:
+        invoice_obj = bolt11.decode(request)
+        assert invoice_obj.amount_msat, "invoice has no amount."
+        fee_reserve_sat = await self.get_melt_fees(request)
+        quote = PostMeltQuoteResponse(
+            symbol="sat",
+            amount=int(invoice_obj.amount_msat / 1000),
+            fee_reserve=fee_reserve_sat,
+        )
+        return quote
 
     async def melt(
         self,
@@ -459,7 +471,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
-        amount: Optional[int] = None,  # backwards compatibility < 0.13.0
     ):
         """Consumes proofs and prepares new promises based on the amount split. Used for splitting tokens
         Before sending or for redeeming tokens for new ones that have been received by another wallet.
@@ -491,27 +502,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
 
-        # BEGIN backwards compatibility < 0.13.0
-        if amount is not None:
-            logger.debug(
-                "Split: Client provided `amount` - backwards compatibility response pre"
-                " 0.13.0"
-            )
-            # split outputs according to amount
-            total = sum_proofs(proofs)
-            if amount > total:
-                raise Exception("split amount is higher than the total sum.")
-            outs_fst = amount_split(total - amount)
-            B_fst = [od for od in outputs[: len(outs_fst)]]
-            B_snd = [od for od in outputs[len(outs_fst) :]]
-
-            # generate promises
-            prom_fst = await self._generate_promises(B_fst, keyset)
-            prom_snd = await self._generate_promises(B_snd, keyset)
-            promises = prom_fst + prom_snd
-        # END backwards compatibility < 0.13.0
-        else:
-            promises = await self._generate_promises(outputs, keyset)
+        promises = await self._generate_promises(outputs, keyset)
 
         # verify amounts in produced promises
         self._verify_equation_balanced(proofs, promises)
