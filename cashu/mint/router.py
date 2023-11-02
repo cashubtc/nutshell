@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Union
 
 from fastapi import APIRouter, Request
 from loguru import logger
@@ -10,13 +10,15 @@ from ..core.base import (
     CheckSpendableRequest,
     CheckSpendableResponse,
     GetInfoResponse,
-    GetMintResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
     KeysResponse,
     KeysResponseKeyset,
+    PostMeltQuoteRequest,
+    PostMeltQuoteResponse,
     PostMeltRequest,
     PostMeltResponse,
+    PostMintQuoteRequest,
     PostMintRequest,
     PostMintResponse,
     PostRestoreResponse,
@@ -140,7 +142,7 @@ async def keysets() -> KeysetsResponse:
         " after payment."
     ),
 )
-async def request_mint(amount: int) -> GetMintResponse:
+async def request_mint(payload: PostMintQuoteRequest) -> GetMintResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
@@ -176,8 +178,6 @@ async def request_mint(amount: int) -> GetMintResponse:
 )
 async def mint(
     payload: PostMintRequest,
-    id: Optional[str] = None,
-    hash: Optional[str] = None,
 ) -> PostMintResponse:
     """
     Requests the minting of tokens belonging to a paid payment request.
@@ -186,10 +186,26 @@ async def mint(
     """
     logger.trace(f"> POST /mint: {payload}")
 
-    promises = await ledger.mint(outputs=payload.outputs, id=id or hash)
+    promises = await ledger.mint(outputs=payload.outputs, id=payload.id)
     blinded_signatures = PostMintResponse(promises=promises)
     logger.trace(f"< POST /mint: {blinded_signatures}")
     return blinded_signatures
+
+
+@router.post(
+    "/v1/melt/quote",
+    summary="Request a quote for melting tokens",
+    response_model=PostMeltQuoteResponse,
+    response_description="Melt tokens for a payment on a supported payment method.",
+)
+async def melt_quote(payload: PostMeltQuoteRequest):
+    """
+    Request a quote for melting tokens.
+    """
+    logger.trace(f"> POST /melt/quote: {payload}")
+    quote = await ledger.melt_quote(payload.outputs)  # TODO
+    logger.trace(f"< POST /melt/quote: {quote}")
+    return PostMeltQuoteResponse(quote=quote)
 
 
 @router.post(

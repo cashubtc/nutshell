@@ -246,15 +246,33 @@ class KeysetsResponse_deprecated(BaseModel):
     keysets: list[str]
 
 
-# ------- API: MINT -------
+# ------- API: MINT QUOTE -------
 
 
-class GetMintResponse(BaseModel):
+class PostMintQuoteRequest(BaseModel):
+    method: str  # Payment method
+    symbol: str  # Payment symbol
+    amount: int  # Amount of payment
+
+
+class PostMintQuoteResponse(BaseModel):
     request: str  # payment request
     method: str  # payment method
     symbol: str  # payment symbol
     amount: int  # amount of payment
-    id: str  # payment lookup id
+    id: str  # quote id
+
+
+# ------- API: MINT -------
+
+
+class PostMintRequest(BaseModel):
+    id: str  # quote id
+    outputs: List[BlindedMessage]  # outputs to mint
+
+
+class PostMintResponse(BaseModel):
+    promises: List[BlindedSignature] = []
 
 
 class GetMintResponse_deprecated(BaseModel):
@@ -262,12 +280,20 @@ class GetMintResponse_deprecated(BaseModel):
     hash: str
 
 
-class PostMintRequest(BaseModel):
-    outputs: List[BlindedMessage]
+# ------- API: MELT QUOTE -------
 
 
-class PostMintResponse(BaseModel):
-    promises: List[BlindedSignature] = []
+class PostMeltQuoteRequest(BaseModel):
+    symbol: str
+    method: str
+    request: str
+
+
+class PostMeltQuoteResponse(BaseModel):
+    symbol: str
+    amount: int
+    fee: int
+    fee_reserve: int
 
 
 # ------- API: MELT -------
@@ -275,7 +301,6 @@ class PostMintResponse(BaseModel):
 
 class PostMeltRequest(BaseModel):
     proofs: List[Proof]
-    method: str
     request: str
     outputs: Union[List[BlindedMessage], None]
 
@@ -303,7 +328,6 @@ class PostMeltResponse_deprecated(BaseModel):
 
 class PostSplitRequest(BaseModel):
     proofs: List[Proof]
-    amount: Optional[int] = None  # deprecated since 0.13.0
     outputs: List[BlindedMessage]
 
 
@@ -312,6 +336,12 @@ class PostSplitResponse(BaseModel):
 
 
 # deprecated since 0.13.0
+class PostSplitRequest_Deprecated(BaseModel):
+    proofs: List[Proof]
+    amount: Optional[int] = None
+    outputs: List[BlindedMessage]
+
+
 class PostSplitResponse_Deprecated(BaseModel):
     fst: List[BlindedSignature] = []
     snd: List[BlindedSignature] = []
