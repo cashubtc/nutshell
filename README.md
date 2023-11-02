@@ -76,18 +76,20 @@ source ~/.bashrc
 #### Poetry: Install Cashu
 ```bash
 # install cashu
-git clone https://github.com/callebtc/cashu.git
+git clone https://github.com/cashubtc/nutshell.git cashu
 cd cashu
 pyenv local 3.10.4
 poetry install
 ```
+
+If you would like to use PostgreSQL as the mint database, use the command `poetry install --extras pgsql`.
 
 #### Poetry: Update Cashu
 To update Cashu to the newest version enter
 ```bash
 git pull && poetry install
 ```
-#### Poetry: Using Cashu
+#### Poetry: Using the Nutshell wallet
 
 Cashu should be now installed. To execute the following commands, activate your virtual Poetry environment via
 
@@ -183,11 +185,13 @@ You can find the API docs at [http://localhost:4448/docs](http://localhost:4448/
 
 # Running a mint
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
+
+Before you can run your own mint, make sure to enable a Lightning backend in `MINT_LIGHTNING_BACKEND` and set `MINT_PRIVATE_KEY` in your `.env` file.
 ```bash
-python -m cashu.mint
+poetry run mint
 ```
 
-You can turn off Lightning support and mint as many tokens as you like by setting `LIGHTNING=FALSE` in the `.env` file.
+For testing, you can use Nutshell without a Lightning backend by setting `MINT_LIGHTNING_BACKEND=FakeWallet` in the `.env` file.
 
 
 # Running tests

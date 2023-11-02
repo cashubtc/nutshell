@@ -244,9 +244,16 @@ async def test_melt(wallet1: Wallet):
     assert fee_reserve_sat == 2
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
-    await wallet1.pay_lightning(
+    melt_response = await wallet1.pay_lightning(
         send_proofs, invoice=invoice.bolt11, fee_reserve_sat=fee_reserve_sat
     )
+
+    assert melt_response.change
+    assert len(melt_response.change) == 1
+    # NOTE: we assume that we will get a token back from the same keyset as the ones we melted
+    # this could be wrong if we melted tokens from an old keyset but the returned ones are
+    # from a newer one.
+    assert melt_response.change[0].id == send_proofs[0].id
 
     # verify that proofs in proofs_used db have the same melt_id as the invoice in the db
     assert invoice.payment_hash

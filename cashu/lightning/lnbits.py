@@ -1,5 +1,5 @@
 # type: ignore
-from typing import Dict, Optional
+from typing import Optional
 
 import httpx
 
@@ -29,18 +29,25 @@ class LNbitsWallet(Wallet):
             r.raise_for_status()
         except Exception as exc:
             return StatusResponse(
-                f"Failed to connect to {self.endpoint} due to: {exc}", 0
+                error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
+                balance_msat=0,
             )
 
         try:
-            data = r.json()
+            data: dict = r.json()
         except Exception:
             return StatusResponse(
-                f"Failed to connect to {self.endpoint}, got: '{r.text[:200]}...'", 0
+                error_message=(
+                    f"Failed to connect to {self.endpoint}, got: '{r.text[:200]}...'"
+                ),
+                balance_msat=0,
             )
         if "detail" in data:
-            return StatusResponse(f"LNbits error: {data['detail']}", 0)
-        return StatusResponse(None, data["balance"])
+            return StatusResponse(
+                error_message=f"LNbits error: {data['detail']}", balance_msat=0
+            )
+
+        return StatusResponse(error_message=None, balance_msat=data["balance"])
 
     async def create_invoice(
         self,
@@ -49,7 +56,7 @@ class LNbitsWallet(Wallet):
         description_hash: Optional[bytes] = None,
         unhashed_description: Optional[bytes] = None,
     ) -> InvoiceResponse:
-        data: Dict = {"out": False, "amount": amount}
+        data = {"out": False, "amount": amount}
         if description_hash:
             data["description_hash"] = description_hash.hex()
         if unhashed_description:
@@ -62,18 +69,19 @@ class LNbitsWallet(Wallet):
             )
             r.raise_for_status()
         except Exception:
-            return InvoiceResponse(False, None, None, r.json()["detail"])
-        ok, checking_id, payment_request, error_message = (
-            True,
-            None,
-            None,
-            None,
-        )
+            return InvoiceResponse(
+                ok=False,
+                error_message=r.json()["detail"],
+            )
 
         data = r.json()
         checking_id, payment_request = data["checking_id"], data["payment_request"]
 
-        return InvoiceResponse(ok, checking_id, payment_request, error_message)
+        return InvoiceResponse(
+            ok=True,
+            checking_id=checking_id,
+            payment_request=payment_request,
+        )
 
     async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
         try:
@@ -84,20 +92,24 @@ class LNbitsWallet(Wallet):
             )
             r.raise_for_status()
         except Exception:
-            error_message = r.json()["detail"]
-            return PaymentResponse(None, None, None, None, error_message)
+            return PaymentResponse(error_message=r.json()["detail"])
         if r.status_code > 299:
-            return PaymentResponse(None, None, None, None, f"HTTP status: {r.reason}")
+            return PaymentResponse(error_message=(f"HTTP status: {r.reason_phrase}",))
         if "detail" in r.json():
-            return PaymentResponse(None, None, None, None, r.json()["detail"])
+            return PaymentResponse(error_message=(r.json()["detail"],))
 
-        data = r.json()
+        data: dict = r.json()
         checking_id = data["payment_hash"]
 
         # we do this to get the fee and preimage
         payment: PaymentStatus = await self.get_payment_status(checking_id)
 
-        return PaymentResponse(True, checking_id, payment.fee_msat, payment.preimage)
+        return PaymentResponse(
+            ok=True,
+            checking_id=checking_id,
+            fee_msat=payment.fee_msat,
+            preimage=payment.preimage,
+        )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         try:
@@ -106,10 +118,11 @@ class LNbitsWallet(Wallet):
             )
             r.raise_for_status()
         except Exception:
-            return PaymentStatus(None)
-        if r.json().get("detail"):
-            return PaymentStatus(None)
-        return PaymentStatus(r.json()["paid"])
+            return PaymentStatus(paid=None)
+        data: dict = r.json()
+        if data.get("detail"):
+            return PaymentStatus(paid=None)
+        return PaymentStatus(paid=r.json()["paid"])
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         try:
@@ -118,33 +131,13 @@ class LNbitsWallet(Wallet):
             )
             r.raise_for_status()
         except Exception:
-            return PaymentStatus(None)
+            return PaymentStatus(paid=None)
         data = r.json()
         if "paid" not in data and "details" not in data:
-            return PaymentStatus(None)
+            return PaymentStatus(paid=None)
 
-        return PaymentStatus(data["paid"], data["details"]["fee"], data["preimage"])
-
-    # async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
-    #     url = f"{self.endpoint}/api/v1/payments/sse"
-
-    #     while True:
-    #         try:
-    #             async with requests.stream("GET", url) as r:
-    #                 async for line in r.aiter_lines():
-    #                     if line.startswith("data:"):
-    #                         try:
-    #                             data = json.loads(line[5:])
-    #                         except json.decoder.JSONDecodeError:
-    #                             continue
-
-    #                         if type(data) is not dict:
-    #                             continue
-
-    #                         yield data["payment_hash"]  # payment_hash
-
-    #         except:
-    #             pass
-
-    #         print("lost connection to lnbits /payments/sse, retrying in 5 seconds")
-    #         await asyncio.sleep(5)
+        return PaymentStatus(
+            paid=data["paid"],
+            fee_msat=data["details"]["fee"],
+            preimage=data["preimage"],
+        )
