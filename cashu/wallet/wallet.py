@@ -16,7 +16,6 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckFeesRequest,
     CheckSpendableRequest,
     CheckSpendableResponse,
     DLEQWallet,
@@ -24,6 +23,8 @@ from ..core.base import (
     Invoice,
     KeysetsResponse,
     KeysResponse,
+    PostMeltQuoteRequest,
+    PostMeltQuoteResponse,
     PostMeltRequest,
     PostMeltResponse,
     PostMintQuoteRequest,
@@ -420,20 +421,20 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             amount=amount,
             bolt11=mint_response.request,
             payment_hash=decoded_invoice.payment_hash,
-            id=mint_response.id,
+            id=mint_response.quote,
             out=False,
             time_created=int(time.time()),
         )
 
     @async_set_httpx_client
     async def mint(
-        self, outputs: List[BlindedMessage], id: str
+        self, outputs: List[BlindedMessage], quote: str
     ) -> List[BlindedSignature]:
         """Mints new coins and returns a proof of promise.
 
         Args:
             outputs (List[BlindedMessage]): Outputs to mint new tokens with
-            id (str, optional): Id of the paid invoice. Defaults to None.
+            quote (str): Quote ID.
 
         Returns:
             list[Proof]: List of proofs.
@@ -441,7 +442,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             Exception: If the minting fails
         """
-        outputs_payload = PostMintRequest(outputs=outputs, id=id)
+        outputs_payload = PostMintRequest(outputs=outputs, quote=quote)
         logger.trace("Checking Lightning invoice. POST /v1/mint")
         resp = await self.httpx.post(
             join(self.url, "/v1/mint"),
@@ -450,19 +451,25 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # BEGIN backwards compatibility < 0.14.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
-            ret = await self.mint_deprecated(outputs, id)
+            ret = await self.mint_deprecated(outputs, quote)
             return ret
         # END backwards compatibility < 0.14.0
         self.raise_on_error_request(resp)
         response_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /v1/mint")
-        promises = PostMintResponse.parse_obj(response_dict).promises
+        promises = PostMintResponse.parse_obj(response_dict).signatures
         return promises
 
     @async_set_httpx_client
-    async def melt_quote(self, payment_request: str):
+    async def melt_quote(self, payment_request: str) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
-        payload = CheckFeesRequest(pr=payment_request)
+        invoice_obj = bolt11.decode(payment_request)
+        assert invoice_obj.amount_msat, "invoice must have amount"
+        amount = invoice_obj.amount_msat // 1000
+
+        payload = PostMeltQuoteRequest(
+            symbol="sat", amount=amount, method="bolt11", request=payment_request
+        )
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote"),
             json=payload.dict(),
@@ -470,27 +477,29 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         self.raise_on_error_request(resp)
 
         return_dict = resp.json()
-        return return_dict
+        return PostMeltQuoteResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
     async def melt(
-        self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
+        self,
+        quote: str,
+        proofs: List[Proof],
+        outputs: Optional[List[BlindedMessage]],
     ) -> PostMeltResponse:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
 
         payload = PostMeltRequest(
-            proofs=proofs, method="bolt11", request=invoice, outputs=outputs
+            quote="to_be_replaced", inputs=proofs, outputs=outputs
         )
 
         def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "witness"}
             return {
-                "proofs": {i: proofs_include for i in range(len(proofs))},
-                "method": ...,
-                "request": ...,
+                "quote": ...,
+                "inputs": {i: proofs_include for i in range(len(proofs))},
                 "outputs": ...,
             }
 
@@ -512,7 +521,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
         logger.debug("Calling split. POST /split")
-        split_payload = PostSplitRequest(proofs=proofs, outputs=outputs)
+        split_payload = PostSplitRequest(inputs=proofs, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
@@ -536,7 +545,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         self.raise_on_error_request(resp)
         promises_dict = resp.json()
         mint_response = PostMintResponse.parse_obj(promises_dict)
-        promises = [BlindedSignature(**p.dict()) for p in mint_response.promises]
+        promises = [BlindedSignature(**p.dict()) for p in mint_response.signatures]
 
         if len(promises) == 0:
             raise Exception("received no splits.")
@@ -573,7 +582,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         Asks the mint to restore promises corresponding to outputs.
         """
-        payload = PostMintRequest(id="restore", outputs=outputs)
+        payload = PostMintRequest(quote="restore", outputs=outputs)
         resp = await self.httpx.post(join(self.url, "restore"), json=payload.dict())
         self.raise_on_error_request(resp)
         response_dict = resp.json()
@@ -882,7 +891,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # store invoice in db as not paid yet
         await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
-        status = await super().melt(proofs, invoice, change_outputs)
+        status = await super().melt("to_be_replaced", proofs, change_outputs)
 
         # if payment fails
         if not status.paid:
@@ -1319,7 +1328,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         decoded_invoice = bolt11.decode(invoice)
         assert decoded_invoice.amount_msat, "invoices has no amount."
         # check if it's an internal payment
-        fees = int((await self.melt_quote(invoice))["fee"])
+        melt_quote = await self.melt_quote(invoice)
+        fees = melt_quote.fee_reserve or 0
         logger.debug(f"Mint wants {fees} sat as fee reserve.")
         amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
         return amount, fees

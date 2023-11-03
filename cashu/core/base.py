@@ -260,19 +260,20 @@ class PostMintQuoteResponse(BaseModel):
     method: str  # payment method
     symbol: str  # payment symbol
     amount: int  # amount of payment
-    id: str  # quote id
+    quote: str  # quote id
 
 
 # ------- API: MINT -------
 
 
 class PostMintRequest(BaseModel):
-    id: str  # quote id
+    quote: str  # quote id
     outputs: List[BlindedMessage]  # outputs to mint
 
 
 class PostMintResponse(BaseModel):
-    promises: List[BlindedSignature] = []
+    quote: str  # quote id
+    signatures: List[BlindedSignature] = []
 
 
 class GetMintResponse_deprecated(BaseModel):
@@ -295,18 +296,20 @@ class PostMeltQuoteResponse(BaseModel):
     amount: int  # input amount
     fee: Optional[int] = None  # input fixed fees
     fee_reserve: Optional[int] = None  # input fee reserve
+    quote: str  # quote id
 
 
 # ------- API: MELT -------
 
 
 class PostMeltRequest(BaseModel):
-    proofs: List[Proof]
-    request: str
+    quote: str  # quote id
+    inputs: List[Proof]
     outputs: Union[List[BlindedMessage], None]
 
 
 class PostMeltResponse(BaseModel):
+    quote: str  # quote id
     paid: Union[bool, None]
     proof: Union[str, None]
     change: Union[List[BlindedSignature], None] = None
@@ -328,12 +331,12 @@ class PostMeltResponse_deprecated(BaseModel):
 
 
 class PostSplitRequest(BaseModel):
-    proofs: List[Proof]
+    inputs: List[Proof]
     outputs: List[BlindedMessage]
 
 
 class PostSplitResponse(BaseModel):
-    promises: List[BlindedSignature]
+    signatures: List[BlindedSignature]
 
 
 # deprecated since 0.13.0

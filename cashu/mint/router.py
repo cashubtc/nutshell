@@ -153,10 +153,10 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
     if settings.mint_peg_out_only:
         raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
 
-    payment_request, id = await ledger.mint_quote(amount)
+    payment_request, quote = await ledger.mint_quote(amount)
     resp = PostMintQuoteResponse(
         request=payment_request,
-        id=id,
+        quote=quote,
         method="bolt11",
         symbol="sat",
         amount=amount,
@@ -184,8 +184,8 @@ async def mint(
     """
     logger.trace(f"> POST /mint: {payload}")
 
-    promises = await ledger.mint(outputs=payload.outputs, id=payload.id)
-    blinded_signatures = PostMintResponse(promises=promises)
+    promises = await ledger.mint(outputs=payload.outputs, quote=payload.quote)
+    blinded_signatures = PostMintResponse(quote=payload.quote, signatures=promises)
     logger.trace(f"< POST /mint: {blinded_signatures}")
     return blinded_signatures
 
@@ -225,9 +225,11 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
     """
     logger.trace(f"> POST /melt: {payload}")
     ok, preimage, change_promises = await ledger.melt(
-        payload.proofs, payload.request, payload.outputs
+        payload.inputs, payload.quote, payload.outputs
     )
-    resp = PostMeltResponse(paid=ok, proof=preimage, change=change_promises)
+    resp = PostMeltResponse(
+        quote="to_be_replaced", paid=ok, proof=preimage, change=change_promises
+    )
     logger.trace(f"< POST /melt: {resp}")
     return resp
 
@@ -293,9 +295,9 @@ async def split(
     logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
 
-    promises = await ledger.split(proofs=payload.proofs, outputs=payload.outputs)
+    signatures = await ledger.split(proofs=payload.inputs, outputs=payload.outputs)
 
-    return PostSplitResponse(promises=promises)
+    return PostSplitResponse(signatures=signatures)
 
 
 @router.post(

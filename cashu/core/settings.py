@@ -71,7 +71,6 @@ class MintInformation(CashuSettings):
 
 
 class WalletSettings(CashuSettings):
-    lightning: bool = Field(default=True)
     tor: bool = Field(default=True)
     socks_host: str = Field(default=None)  # deprecated
     socks_port: int = Field(default=9050)  # deprecated
