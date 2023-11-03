@@ -293,7 +293,7 @@ class PostMeltQuoteRequest(BaseModel):
 class PostMeltQuoteResponse(BaseModel):
     symbol: str  # input symbol
     amount: int  # input amount
-    fee: Optional[int] = None  # input fees
+    fee: Optional[int] = None  # input fixed fees
     fee_reserve: Optional[int] = None  # input fee reserve
 
 

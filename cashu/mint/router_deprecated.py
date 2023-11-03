@@ -4,6 +4,8 @@ from fastapi import APIRouter
 from loguru import logger
 
 from ..core.base import (
+    CheckFeesRequest,
+    CheckFeesResponse,
     GetMintResponse_deprecated,
     KeysetsResponse_deprecated,
     KeysResponse_deprecated,
@@ -101,7 +103,7 @@ async def request_mint_deprecated(amount: int = 0) -> GetMintResponse_deprecated
     if settings.mint_peg_out_only:
         raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
 
-    payment_request, hash = await ledger.request_mint(amount)
+    payment_request, hash = await ledger.mint_quote(amount)
     resp = GetMintResponse_deprecated(pr=payment_request, hash=hash)
     logger.trace(f"< GET /mint: {resp}")
     return resp
@@ -169,3 +171,23 @@ async def melt_deprecated(
     )
     logger.trace(f"< POST /melt: {resp}")
     return resp
+
+
+@router_deprecated.post(
+    "/checkfees",
+    name="Check fees",
+    summary="Check fee reserve for a Lightning payment",
+    response_model=CheckFeesResponse,
+    response_description="The fees necessary to pay a Lightning invoice.",
+    deprecated=True,
+)
+async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
+    """
+    Responds with the fees necessary to pay a Lightning invoice.
+    Used by wallets for figuring out the fees they need to supply together with the payment amount.
+    This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
+    """
+    logger.trace(f"> POST /checkfees: {payload}")
+    fees_sat = await ledger.get_melt_fees(payload.pr)
+    logger.trace(f"< POST /checkfees: {fees_sat}")
+    return CheckFeesResponse(fee=fees_sat)
