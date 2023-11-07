@@ -197,7 +197,9 @@ async def swap(
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote)
+    await outgoing_wallet.pay_lightning(
+        send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
+    )
 
     # mint token in incoming mint
     await incoming_wallet.mint(amount, id=invoice.id)
