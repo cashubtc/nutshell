@@ -14,6 +14,7 @@ from bolt11 import (
     encode,
 )
 
+from ..core.settings import settings
 from .base import (
     InvoiceResponse,
     PaymentResponse,
@@ -21,10 +22,6 @@ from .base import (
     StatusResponse,
     Wallet,
 )
-
-BRR = True
-DELAY_PAYMENT = False
-STOCHASTIC_INVOICE = False
 
 
 class FakeWallet(Wallet):
@@ -98,10 +95,10 @@ class FakeWallet(Wallet):
     async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
         invoice = decode(bolt11)
 
-        if DELAY_PAYMENT:
+        if settings.fakewallet_delay_payment:
             await asyncio.sleep(5)
 
-        if invoice.payment_hash[:6] == self.privkey[:6] or BRR:
+        if invoice.payment_hash[:6] == self.privkey[:6] or settings.fakewallet_brr:
             await self.queue.put(invoice)
             self.paid_invoices.add(invoice.payment_hash)
             return PaymentResponse(
@@ -113,10 +110,10 @@ class FakeWallet(Wallet):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        if STOCHASTIC_INVOICE:
+        if settings.fakewallet_stochastic_invoice:
             paid = random.random() > 0.7
             return PaymentStatus(paid=paid)
-        paid = checking_id in self.paid_invoices or BRR
+        paid = checking_id in self.paid_invoices or settings.fakewallet_brr
         return PaymentStatus(paid=paid or None)
 
     async def get_payment_status(self, _: str) -> PaymentStatus:

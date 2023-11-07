@@ -60,6 +60,12 @@ class MintSettings(CashuSettings):
     mint_lnbits_key: str = Field(default=None)
 
 
+class FakeWalletSettings(MintSettings):
+    fakewallet_brr: bool = Field(default=True)
+    fakewallet_delay_payment: bool = Field(default=False)
+    fakewallet_stochastic_invoice: bool = Field(default=False)
+
+
 class MintInformation(CashuSettings):
     mint_info_name: str = Field(default="Cashu mint")
     mint_info_description: str = Field(default=None)
@@ -99,6 +105,7 @@ class WalletSettings(CashuSettings):
 
 class Settings(
     EnvSettings,
+    FakeWalletSettings,
     MintSettings,
     MintInformation,
     WalletSettings,
