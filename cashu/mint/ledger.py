@@ -33,7 +33,7 @@ from ..core.errors import (
 from ..core.helpers import sum_proofs
 from ..core.settings import settings
 from ..core.split import amount_split
-from ..lightning.base import PaymentResponse, Wallet
+from ..lightning.base import Wallet
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
 from .lightning import LedgerLightning
@@ -431,14 +431,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             # verify spending inputs and their spending conditions
             await self.verify_inputs_and_outputs(proofs)
 
-            if settings.lightning:
-                logger.trace(f"paying lightning invoice {bolt11_request}")
-                payment = await self._pay_lightning_invoice(
-                    bolt11_request, reserve_fees_sat * 1000
-                )
-                logger.trace("paid lightning invoice")
-            else:
-                payment = PaymentResponse(ok=True, preimage="preimage", fee_msat=0)
+            logger.trace(f"paying lightning invoice {bolt11_request}")
+            payment = await self._pay_lightning_invoice(
+                bolt11_request, reserve_fees_sat * 1000
+            )
+            logger.trace("paid lightning invoice")
 
             logger.debug(
                 f"Melt status: {payment.ok}: preimage: {payment.preimage}, fee_msat:"

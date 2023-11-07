@@ -50,16 +50,17 @@ async def start_mint_init():
     await ledger.load_used_proofs()
     await ledger.init_keysets()
 
-    if settings.lightning:
-        logger.info(f"Using backend: {settings.mint_lightning_backend}")
-        status = await ledger.lightning.status()
-        if status.error_message:
-            logger.warning(
+    logger.info(f"Using backend: {settings.mint_lightning_backend}")
+    status = await ledger.lightning.status()
+    if status.error_message:
+        logger.warning(
+            (
                 f"The backend for {ledger.lightning.__class__.__name__} isn't"
-                f" working properly: '{status.error_message}'",
-                RuntimeWarning,
-            )
-        logger.info(f"Lightning balance: {status.balance_msat} msat")
+                f" working properly: '{status.error_message}'"
+            ),
+            RuntimeWarning,
+        )
+    logger.info(f"Lightning balance: {status.balance_msat} msat")
 
     logger.info(f"Data dir: {settings.cashu_dir}")
     logger.info("Mint started.")

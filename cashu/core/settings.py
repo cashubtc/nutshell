@@ -25,7 +25,6 @@ def find_env_file():
 
 class CashuSettings(BaseSettings):
     env_file: str = Field(default=None)
-    lightning: bool = Field(default=True)
     lightning_fee_percent: float = Field(default=1.0)
     lightning_reserve_fee_min: int = Field(default=2000)
     max_order: int = Field(default=64)

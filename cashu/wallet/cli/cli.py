@@ -213,10 +213,8 @@ async def invoice(ctx: Context, amount: int, id: str, split: int):
         optional_split = [split] * n_splits
         logger.debug(f"Requesting split with {n_splits} * {split} sat tokens.")
 
-    if not settings.lightning:
-        await wallet.mint(amount, split=optional_split)
     # user requests an invoice
-    elif amount and not id:
+    if amount and not id:
         invoice = await wallet.request_mint(amount)
         if invoice.bolt11:
             print(f"Pay invoice to mint {amount} sat:")
@@ -266,8 +264,6 @@ async def invoice(ctx: Context, amount: int, id: str, split: int):
 @click.pass_context
 @coro
 async def swap(ctx: Context):
-    if not settings.lightning:
-        raise Exception("lightning not supported.")
     print("Select the mint to swap from:")
     outgoing_wallet = await get_mint_wallet(ctx, force_select=True)
 

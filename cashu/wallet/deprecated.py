@@ -14,8 +14,8 @@ from ..core.base import (
     KeysetsResponse_deprecated,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
-    PostMintRequest,
-    PostMintResponse,
+    PostMintRequest_deprecated,
+    PostMintResponse_deprecated,
     PostRestoreResponse,
     Proof,
     WalletKeyset,
@@ -208,7 +208,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         Raises:
             Exception: If the minting fails
         """
-        outputs_payload = PostMintRequest(outputs=outputs)
+        outputs_payload = PostMintRequest_deprecated(outputs=outputs)
         logger.trace("Checking Lightning invoice. POST /mint")
         resp = self.s.post(
             self.url + "/mint",
@@ -221,7 +221,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         self.raise_on_error(resp)
         response_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /mint")
-        promises = PostMintResponse.parse_obj(response_dict).promises
+        promises = PostMintResponse_deprecated.parse_obj(response_dict).promises
         return promises
 
     @async_set_requests
@@ -259,7 +259,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         """
         Asks the mint to restore promises corresponding to outputs.
         """
-        payload = PostMintRequest(outputs=outputs)
+        payload = PostMintRequest_deprecated(outputs=outputs)
         resp = self.s.post(self.url + "/restore", json=payload.dict())
         self.raise_on_error(resp)
         response_dict = resp.json()

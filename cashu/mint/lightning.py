@@ -8,7 +8,6 @@ from ..core.errors import (
     LightningError,
 )
 from ..core.helpers import fee_reserve
-from ..core.settings import settings
 from ..lightning.base import InvoiceResponse, PaymentResponse, Wallet
 from ..mint.crud import LedgerCrud
 from .protocols import SupportLightning, SupportsDb
@@ -120,22 +119,15 @@ class LedgerLightning(SupportLightning, SupportsDb):
         # hack: check if it's internal, if it exists, it will return paid = False,
         # if id does not exist (not internal), it returns paid = None
         amount_msat = 0
-        if settings.lightning:
-            decoded_invoice = bolt11.decode(pr)
-            assert decoded_invoice.amount_msat, "invoice has no amount."
-            amount_msat = int(decoded_invoice.amount_msat)
-            logger.trace(
-                "get_melt_fees: checking lightning invoice:"
-                f" {decoded_invoice.payment_hash}"
-            )
-            payment = await self.lightning.get_invoice_status(
-                decoded_invoice.payment_hash
-            )
-            logger.trace(f"get_melt_fees: paid: {payment.paid}")
-            internal = payment.paid is False
-        else:
-            amount_msat = 0
-            internal = True
+        decoded_invoice = bolt11.decode(pr)
+        assert decoded_invoice.amount_msat, "invoice has no amount."
+        amount_msat = int(decoded_invoice.amount_msat)
+        logger.trace(
+            f"get_melt_fees: checking lightning invoice: {decoded_invoice.payment_hash}"
+        )
+        payment = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
+        logger.trace(f"get_melt_fees: paid: {payment.paid}")
+        internal = payment.paid is False
 
         fees_msat = fee_reserve(amount_msat, internal)
         fee_sat = math.ceil(fees_msat / 1000)

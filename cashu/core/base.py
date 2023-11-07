@@ -302,6 +302,14 @@ class GetMintResponse_deprecated(BaseModel):
     hash: str
 
 
+class PostMintRequest_deprecated(BaseModel):
+    outputs: List[BlindedMessage]
+
+
+class PostMintResponse_deprecated(BaseModel):
+    promises: List[BlindedSignature] = []
+
+
 # ------- API: MELT QUOTE -------
 
 

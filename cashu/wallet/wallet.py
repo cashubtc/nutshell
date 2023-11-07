@@ -465,10 +465,8 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
-        amount = invoice_obj.amount_msat // 1000
-
         payload = PostMeltQuoteRequest(
-            symbol="sat", amount=amount, method="bolt11", request=payment_request
+            symbol="sat", method="bolt11", request=payment_request
         )
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote"),

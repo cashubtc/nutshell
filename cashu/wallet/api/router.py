@@ -179,8 +179,6 @@ async def swap(
     outgoing_mint: str = Query(default=..., description="URL of outgoing mint"),
     incoming_mint: str = Query(default=..., description="URL of incoming mint"),
 ):
-    if not settings.lightning:
-        raise Exception("lightning not supported")
     incoming_wallet = await mint_wallet(incoming_mint)
     outgoing_wallet = await mint_wallet(outgoing_mint)
     if incoming_wallet.url == outgoing_wallet.url:
@@ -306,9 +304,11 @@ async def burn(
         wallet = await mint_wallet(mint)
     if not (all or token or force or delete) or (token and all):
         raise Exception(
-            "enter a token or use --all to burn all pending tokens, --force to"
-            " check all tokens or --delete with send ID to force-delete pending"
-            " token from list if mint is unavailable.",
+            (
+                "enter a token or use --all to burn all pending tokens, --force to"
+                " check all tokens or --delete with send ID to force-delete pending"
+                " token from list if mint is unavailable."
+            ),
         )
     if all:
         # check only those who are flagged as reserved
