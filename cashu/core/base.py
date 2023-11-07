@@ -198,6 +198,27 @@ class Invoice(BaseModel):
     time_paid: Union[None, str, int, float] = ""
 
 
+class MeltQuote(BaseModel):
+    quote: str
+    method: str
+    request: str
+    checking_id: str
+    symbol: str
+    amount: int
+    fee_reserve: Optional[int] = None
+    issued: bool
+
+
+class MintQuote(BaseModel):
+    quote: str
+    method: str
+    request: str
+    checking_id: str
+    symbol: str
+    amount: int
+    issued: bool
+
+
 # ------- API -------
 
 # ------- API: INFO -------
@@ -250,17 +271,17 @@ class KeysetsResponse_deprecated(BaseModel):
 
 
 class PostMintQuoteRequest(BaseModel):
-    method: str  # Payment method
-    symbol: str  # Payment symbol
-    amount: int  # Amount of payment
+    method: str  # input payment method
+    symbol: str  # output symbol
+    amount: int  # output amount
 
 
 class PostMintQuoteResponse(BaseModel):
-    request: str  # payment request
-    method: str  # payment method
-    symbol: str  # payment symbol
-    amount: int  # amount of payment
     quote: str  # quote id
+    request: str  # input payment request
+    method: str  # input payment method
+    symbol: str  # output symbol
+    amount: int  # output amount
 
 
 # ------- API: MINT -------
@@ -286,17 +307,15 @@ class GetMintResponse_deprecated(BaseModel):
 
 class PostMeltQuoteRequest(BaseModel):
     symbol: str  # input symbol
-    amount: int  # output amount
     method: str  # output payment method
     request: str  # output payment request
 
 
 class PostMeltQuoteResponse(BaseModel):
+    quote: str  # quote id
     symbol: str  # input symbol
     amount: int  # input amount
-    fee: Optional[int] = None  # input fixed fees
     fee_reserve: Optional[int] = None  # input fee reserve
-    quote: str  # quote id
 
 
 # ------- API: MELT -------

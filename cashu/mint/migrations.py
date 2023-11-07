@@ -204,3 +204,38 @@ async def m009_add_out_to_invoices(db: Database):
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN out BOOL"
         )
+
+
+async def m010_add_quote_tables(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'mint_quotes')} (
+                    quote TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    request TEXT NOT NULL,
+                    checking_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    issued BOOL NOT NULL,
+                    created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+
+                    UNIQUE (quote)
+
+                );
+            """)
+
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'melt_quotes')} (
+                    quote TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    request TEXT NOT NULL,
+                    checking_id TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    issued BOOL NOT NULL,
+                    created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+
+                    UNIQUE (quote)
+
+                );
+            """)

@@ -1,7 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
-from ..core.base import BlindedSignature, Invoice, MintKeyset, Proof
+from ..core.base import (
+    BlindedSignature,
+    Invoice,
+    MeltQuote,
+    MintKeyset,
+    MintQuote,
+    Proof,
+)
 from ..core.db import Connection, Database, table_with_schema
 
 
@@ -21,16 +28,8 @@ class LedgerCrud(ABC):
         id: str = "",
         derivation_path: str = "",
         conn: Optional[Connection] = None,
-    ) -> List[MintKeyset]: ...
-
-    @abstractmethod
-    async def get_lightning_invoice(
-        self,
-        *,
-        db: Database,
-        id: str,
-        conn: Optional[Connection] = None,
-    ) -> Optional[Invoice]: ...
+    ) -> List[MintKeyset]:
+        ...
 
     @abstractmethod
     async def get_secrets_used(
@@ -38,7 +37,8 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[List[str]]: ...
+    ) -> Optional[List[str]]:
+        ...
 
     @abstractmethod
     async def invalidate_proof(
@@ -47,7 +47,8 @@ class LedgerCrud(ABC):
         db: Database,
         proof: Proof,
         conn: Optional[Connection] = None,
-    ) -> None: ...
+    ) -> None:
+        ...
 
     @abstractmethod
     async def get_proofs_pending(
@@ -55,7 +56,8 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[Proof]: ...
+    ) -> List[Proof]:
+        ...
 
     @abstractmethod
     async def set_proof_pending(
@@ -64,12 +66,14 @@ class LedgerCrud(ABC):
         db: Database,
         proof: Proof,
         conn: Optional[Connection] = None,
-    ) -> None: ...
+    ) -> None:
+        ...
 
     @abstractmethod
     async def unset_proof_pending(
         self, *, proof: Proof, db: Database, conn: Optional[Connection] = None
-    ) -> None: ...
+    ) -> None:
+        ...
 
     @abstractmethod
     async def store_keyset(
@@ -78,16 +82,8 @@ class LedgerCrud(ABC):
         db: Database,
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
-    ) -> None: ...
-
-    @abstractmethod
-    async def store_lightning_invoice(
-        self,
-        *,
-        db: Database,
-        invoice: Invoice,
-        conn: Optional[Connection] = None,
-    ) -> None: ...
+    ) -> None:
+        ...
 
     @abstractmethod
     async def store_promise(
@@ -101,7 +97,8 @@ class LedgerCrud(ABC):
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
-    ) -> None: ...
+    ) -> None:
+        ...
 
     @abstractmethod
     async def get_promise(
@@ -110,7 +107,18 @@ class LedgerCrud(ABC):
         db: Database,
         B_: str,
         conn: Optional[Connection] = None,
-    ) -> Optional[BlindedSignature]: ...
+    ) -> Optional[BlindedSignature]:
+        ...
+
+    @abstractmethod
+    async def store_lightning_invoice(
+        self,
+        *,
+        db: Database,
+        invoice: Invoice,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
     @abstractmethod
     async def update_lightning_invoice(
@@ -120,7 +128,80 @@ class LedgerCrud(ABC):
         id: str,
         issued: bool,
         conn: Optional[Connection] = None,
-    ) -> None: ...
+    ) -> None:
+        ...
+
+    @abstractmethod
+    async def get_lightning_invoice(
+        self,
+        *,
+        db: Database,
+        id: str,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Invoice]:
+        ...
+
+    @abstractmethod
+    async def store_mint_quote(
+        self,
+        *,
+        quote: MintQuote,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
+
+    @abstractmethod
+    async def get_mint_quote(
+        self,
+        *,
+        quote_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[MintQuote]:
+        ...
+
+    @abstractmethod
+    async def update_mint_quote(
+        self,
+        *,
+        quote_id: str,
+        issued: bool,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
+
+    @abstractmethod
+    async def store_melt_quote(
+        self,
+        *,
+        quote: MeltQuote,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
+
+    @abstractmethod
+    async def get_melt_quote(
+        self,
+        *,
+        quote_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[MintQuote]:
+        ...
+
+    @abstractmethod
+    async def update_melt_quote(
+        self,
+        *,
+        quote_id: str,
+        issued: bool,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
 
 class LedgerCrudSqlite(LedgerCrud):
@@ -252,6 +333,126 @@ class LedgerCrudSqlite(LedgerCrud):
             WHERE secret = ?
             """,
             (str(proof["secret"]),),
+        )
+
+    async def store_mint_quote(
+        self,
+        *,
+        quote: MintQuote,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            INSERT INTO {table_with_schema(db, 'mint_quotes')}
+            (quote, method, request, checking_id, symbol, amount, issued)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                quote.quote,
+                quote.method,
+                quote.request,
+                quote.checking_id,
+                quote.symbol,
+                quote.amount,
+                quote.issued,
+            ),
+        )
+
+    async def get_mint_quote(
+        self,
+        *,
+        quote_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[MintQuote]:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT * from {table_with_schema(db, 'mint_quotes')}
+            WHERE quote = ?
+            """,
+            (quote_id,),
+        )
+        row_dict = dict(row)
+        return MintQuote(**row_dict) if row_dict else None
+
+    async def update_mint_quote(
+        self,
+        *,
+        quote_id: str,
+        issued: bool,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            (
+                f"UPDATE {table_with_schema(db, 'mint_quotes')} SET issued = ? WHERE"
+                " quote = ?"
+            ),
+            (
+                issued,
+                quote_id,
+            ),
+        )
+
+    async def store_melt_quote(
+        self,
+        *,
+        quote: MeltQuote,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            INSERT INTO {table_with_schema(db, 'melt_quotes')}
+            (quote, method, request, checking_id, symbol, amount, issued)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                quote.quote,
+                quote.method,
+                quote.request,
+                quote.checking_id,
+                quote.symbol,
+                quote.amount,
+                quote.issued,
+            ),
+        )
+
+    async def get_melt_quote(
+        self,
+        *,
+        quote_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[MintQuote]:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT * from {table_with_schema(db, 'melt_quotes')}
+            WHERE quote = ?
+            """,
+            (quote_id,),
+        )
+        row_dict = dict(row)
+        return MintQuote(**row_dict) if row_dict else None
+
+    async def update_melt_quote(
+        self,
+        *,
+        quote_id: str,
+        issued: bool,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            (
+                f"UPDATE {table_with_schema(db, 'melt_quotes')} SET issued = ? WHERE"
+                " quote = ?"
+            ),
+            (
+                issued,
+                quote_id,
+            ),
         )
 
     async def store_lightning_invoice(

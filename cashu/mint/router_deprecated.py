@@ -11,8 +11,10 @@ from ..core.base import (
     KeysResponse_deprecated,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
+    PostMintQuoteRequest,
     PostMintRequest,
     PostMintResponse,
+    PostMintResponse_deprecated,
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -102,9 +104,10 @@ async def request_mint_deprecated(amount: int = 0) -> GetMintResponse_deprecated
         raise CashuError(code=0, detail="Amount must be a valid amount of sat.")
     if settings.mint_peg_out_only:
         raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
-
-    payment_request, hash = await ledger.mint_quote(amount)
-    resp = GetMintResponse_deprecated(pr=payment_request, hash=hash)
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=amount, symbol="sat", method="bolt11")
+    )
+    resp = GetMintResponse_deprecated(pr=quote.request, hash=quote.quote)
     logger.trace(f"< GET /mint: {resp}")
     return resp
 
@@ -123,7 +126,7 @@ async def mint_deprecated(
     payload: PostMintRequest,
     hash: Optional[str] = None,
     payment_hash: Optional[str] = None,
-) -> PostMintResponse:
+) -> PostMintResponse_deprecated:
     """
     Requests the minting of tokens belonging to a paid payment request.
 
@@ -134,10 +137,11 @@ async def mint_deprecated(
     # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
     # We use the payment_hash to lookup the hash from the database and pass that one along.
     hash = payment_hash or hash
+    assert hash, "hash must be set."
     # END: backwards compatibility < 0.12
 
-    promises = await ledger.mint(outputs=payload.outputs, id=hash)
-    blinded_signatures = PostMintResponse(promises=promises)
+    promises = await ledger.mint(outputs=payload.outputs, quote_id=hash)
+    blinded_signatures = PostMintResponse_deprecated(promises=promises)
     logger.trace(f"< POST /mint: {blinded_signatures}")
     return blinded_signatures
 
@@ -188,6 +192,6 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
     """
     logger.trace(f"> POST /checkfees: {payload}")
-    fees_sat = await ledger.get_melt_fees(payload.pr)
+    fees_sat = await ledger._get_lightning_fees(payload.pr)
     logger.trace(f"< POST /checkfees: {fees_sat}")
     return CheckFeesResponse(fee=fees_sat)
