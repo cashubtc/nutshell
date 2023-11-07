@@ -402,6 +402,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         # TODO: needs logic to look up the lightning invoice from the quote ID
         melt_quote = await self.crud.get_melt_quote(quote_id=quote, db=self.db)
         assert melt_quote, "quote not found"
+        assert not melt_quote.issued, "quote already issued"
         bolt11_request = melt_quote.request
 
         logger.trace("melt called")
@@ -447,6 +448,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
             # melt successful, invalidate proofs
             await self._invalidate_proofs(proofs)
+
+            # set quote as issued
+            await self.crud.update_melt_quote(quote_id=quote, issued=True, db=self.db)
 
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []

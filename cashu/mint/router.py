@@ -144,7 +144,7 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
 
     Call `POST /mint` after paying the invoice.
     """
-    logger.trace(f"> POST /v1/mint: payload={payload}")
+    logger.trace(f"> POST /v1/mint/quote: payload={payload}")
     amount = payload.amount
     if amount > 21_000_000 * 100_000_000 or amount <= 0:
         raise CashuError(code=0, detail="Amount must be a valid amount of sat.")
@@ -159,7 +159,7 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
         symbol="sat",
         amount=amount,
     )
-    logger.trace(f"< GET /mint: {resp}")
+    logger.trace(f"< POST /v1/mint/quote: {resp}")
     return resp
 
 
@@ -178,13 +178,13 @@ async def mint(
     """
     Requests the minting of tokens belonging to a paid payment request.
 
-    Call this endpoint after `GET /mint`.
+    Call this endpoint after `POST /v1/mint/quote`.
     """
-    logger.trace(f"> POST /mint: {payload}")
+    logger.trace(f"> POST /v1/mint: {payload}")
 
     promises = await ledger.mint(outputs=payload.outputs, quote_id=payload.quote)
     blinded_signatures = PostMintResponse(quote=payload.quote, signatures=promises)
-    logger.trace(f"< POST /mint: {blinded_signatures}")
+    logger.trace(f"< POST /v1/mint: {blinded_signatures}")
     return blinded_signatures
 
 
@@ -198,9 +198,9 @@ async def melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse:
     """
     Request a quote for melting tokens.
     """
-    logger.trace(f"> POST /melt/quote: {payload}")
+    logger.trace(f"> POST /v1/melt/quote: {payload}")
     quote = await ledger.melt_quote(payload)  # TODO
-    logger.trace(f"< POST /melt/quote: {quote}")
+    logger.trace(f"< POST /v1/melt/quote: {quote}")
     return quote
 
 
@@ -221,14 +221,14 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
-    logger.trace(f"> POST /melt: {payload}")
+    logger.trace(f"> POST /v1/melt: {payload}")
     ok, preimage, change_promises = await ledger.melt(
         payload.inputs, payload.quote, payload.outputs
     )
     resp = PostMeltResponse(
         quote="to_be_replaced", paid=ok, proof=preimage, change=change_promises
     )
-    logger.trace(f"< POST /melt: {resp}")
+    logger.trace(f"< POST /v1/melt: {resp}")
     return resp
 
 

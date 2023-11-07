@@ -433,6 +433,8 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             (quote_id,),
         )
+        if row is None:
+            return None
         row_dict = dict(row)
         return MintQuote(**row_dict) if row_dict else None
 

@@ -1,6 +1,5 @@
 import base64
 import json
-import math
 import time
 import uuid
 from itertools import groupby
@@ -33,6 +32,7 @@ from ..core.base import (
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
+    PostSplitResponse,
     Proof,
     TokenV2,
     TokenV2Mint,
@@ -405,7 +405,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         logger.trace("Requesting mint: GET /v1/mint")
         payload = PostMintQuoteRequest(method="bolt11", symbol="sat", amount=amount)
         resp = await self.httpx.post(
-            join(self.url, "/v1/mint/quote"), json=payload.json()
+            join(self.url, "/v1/mint/quote"), json=payload.dict()
         )
         # BEGIN backwards compatibility < 0.14.0
         # assume the mint has not upgraded yet if we get a 404
@@ -488,9 +488,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Accepts proofs and a lightning invoice to pay in exchange.
         """
 
-        payload = PostMeltRequest(
-            quote="to_be_replaced", inputs=proofs, outputs=outputs
-        )
+        payload = PostMeltRequest(quote=quote, inputs=proofs, outputs=outputs)
 
         def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
@@ -533,7 +531,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             }
             return {
                 "outputs": ...,
-                "proofs": {i: proofs_include for i in range(len(proofs))},
+                "inputs": {i: proofs_include for i in range(len(proofs))},
             }
 
         resp = await self.httpx.post(
@@ -542,7 +540,8 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         )
         self.raise_on_error_request(resp)
         promises_dict = resp.json()
-        mint_response = PostMintResponse.parse_obj(promises_dict)
+        print(promises_dict)
+        mint_response = PostSplitResponse.parse_obj(promises_dict)
         promises = [BlindedSignature(**p.dict()) for p in mint_response.signatures]
 
         if len(promises) == 0:
@@ -691,7 +690,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
         Args:
             amount (int): Total amount of tokens to be minted
-            id (str): Id for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
+            id (str): Id for looking up the paid Lightning invoice.
             split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
 
         Raises:
@@ -843,7 +842,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         return keep_proofs, send_proofs
 
     async def pay_lightning(
-        self, proofs: List[Proof], invoice: str, fee_reserve_sat: int
+        self, proofs: List[Proof], invoice: str, fee_reserve_sat: int, quote_id: str
     ) -> PostMeltResponse:
         """Pays a lightning invoice and returns the status of the payment.
 
@@ -889,7 +888,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # store invoice in db as not paid yet
         await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
-        status = await super().melt("to_be_replaced", proofs, change_outputs)
+        status = await super().melt(quote_id, proofs, change_outputs)
 
         # if payment fails
         if not status.paid:
@@ -1323,14 +1322,16 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
         """
-        decoded_invoice = bolt11.decode(invoice)
-        assert decoded_invoice.amount_msat, "invoices has no amount."
+        # decoded_invoice = bolt11.decode(invoice)
+        # assert decoded_invoice.amount_msat, "invoices has no amount."
         # check if it's an internal payment
         melt_quote = await self.melt_quote(invoice)
-        fees = melt_quote.fee_reserve or 0
-        logger.debug(f"Mint wants {fees} sat as fee reserve.")
-        amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
-        return amount, fees
+        # fees = melt_quote.fee_reserve or 0
+        logger.debug(
+            f"Mint wants {melt_quote.fee_reserve} {melt_quote.symbol} as fee reserve."
+        )
+        # amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
+        return melt_quote
 
     async def split_to_send(
         self,

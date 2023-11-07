@@ -166,12 +166,13 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
-    total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
+    quote = await wallet.get_pay_amount_with_fees(invoice)
+    total_amount = quote.amount + quote.fee_reserve
     if not yes:
         potential = (
-            f" ({total_amount} sat with potential fees)" if fee_reserve_sat else ""
+            f" ({total_amount} sat with potential fees)" if quote.fee_reserve else ""
         )
-        message = f"Pay {total_amount - fee_reserve_sat} sat{potential}?"
+        message = f"Pay {quote.amount} sat{potential}?"
         click.confirm(
             message,
             abort=True,
@@ -184,7 +185,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
         print("Error: Balance too low.")
         return
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
-    await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
+    await wallet.pay_lightning(send_proofs, invoice, quote.fee_reserve, quote.quote)
     wallet.status()
 
 
@@ -283,15 +284,14 @@ async def swap(ctx: Context):
     invoice = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
-    total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
-        invoice.bolt11
-    )
+    quote = await outgoing_wallet.get_pay_amount_with_fees(invoice.bolt11)
+    total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
+    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote)
 
     # mint token in incoming mint
     await incoming_wallet.mint(amount, id=invoice.id)

@@ -323,7 +323,7 @@ class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     symbol: str  # input symbol
     amount: int  # input amount
-    fee_reserve: Optional[int] = None  # input fee reserve
+    fee_reserve: int  # input fee reserve
 
 
 # ------- API: MELT -------
