@@ -158,8 +158,8 @@ async def test_mint(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint_amounts(wallet1: Wallet):
     """Mint predefined amounts"""
-    invoice = await wallet1.request_mint(64)
     amts = [1, 1, 1, 2, 2, 4, 16]
+    invoice = await wallet1.request_mint(sum(amts))
     await wallet1.mint(amount=sum(amts), split=amts, id=invoice.id)
     assert wallet1.balance == 27
     assert wallet1.proof_amounts == amts
@@ -168,9 +168,11 @@ async def test_mint_amounts(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint_amounts_wrong_sum(wallet1: Wallet):
     """Mint predefined amounts"""
+
     amts = [1, 1, 1, 2, 2, 4, 16]
+    invoice = await wallet1.request_mint(sum(amts))
     await assert_err(
-        wallet1.mint(amount=sum(amts) + 1, split=amts),
+        wallet1.mint(amount=sum(amts) + 1, split=amts, id=invoice.id),
         "split must sum to amount",
     )
 
@@ -179,8 +181,9 @@ async def test_mint_amounts_wrong_sum(wallet1: Wallet):
 async def test_mint_amounts_wrong_order(wallet1: Wallet):
     """Mint amount that is not part in 2^n"""
     amts = [1, 2, 3]
+    invoice = await wallet1.request_mint(sum(amts))
     await assert_err(
-        wallet1.mint(amount=sum(amts), split=[1, 2, 3]),
+        wallet1.mint(amount=sum(amts), split=[1, 2, 3], id=invoice.id),
         f"Can only mint amounts with 2^n up to {2**settings.max_order}.",
     )
 
@@ -236,16 +239,18 @@ async def test_melt(wallet1: Wallet):
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 128
 
-    total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(
-        invoice.bolt11
-    )
+    quote = await wallet1.get_pay_amount_with_fees(invoice.bolt11)
+    total_amount = quote.amount + quote.fee_reserve
     assert total_amount == 66
 
-    assert fee_reserve_sat == 2
+    assert quote.fee_reserve == 2
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
     melt_response = await wallet1.pay_lightning(
-        send_proofs, invoice=invoice.bolt11, fee_reserve_sat=fee_reserve_sat
+        send_proofs,
+        invoice=invoice.bolt11,
+        fee_reserve_sat=quote.fee_reserve,
+        quote_id=quote.quote,
     )
 
     assert melt_response.change
@@ -269,7 +274,7 @@ async def test_melt(wallet1: Wallet):
     assert all([p.melt_id == invoice_db.id for p in proofs_used])
 
     # the payment was without fees so we need to remove it from the total amount
-    assert wallet1.balance == 128 - (total_amount - fee_reserve_sat)
+    assert wallet1.balance == 128 - (total_amount - quote.fee_reserve)
     assert wallet1.balance == 64
 
 

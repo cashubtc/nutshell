@@ -2,7 +2,7 @@ from typing import List
 
 import pytest
 
-from cashu.core.base import BlindedMessage, Proof
+from cashu.core.base import BlindedMessage, PostMintQuoteRequest, Proof
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.settings import settings
@@ -77,14 +77,16 @@ async def test_get_keyset(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint(ledger: Ledger):
-    invoice, id = await ledger.request_mint(8)
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, symbol="sat", method="bolt11")
+    )
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
             B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
         )
     ]
-    promises = await ledger.mint(outputs=blinded_messages_mock, id=id)
+    promises = await ledger.mint(outputs=blinded_messages_mock, quote_id=quote.quote)
     assert len(promises)
     assert promises[0].amount == 8
     assert (
@@ -95,7 +97,9 @@ async def test_mint(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint_invalid_blinded_message(ledger: Ledger):
-    invoice, id = await ledger.request_mint(8)
+    quote = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=8, symbol="sat", method="bolt11")
+    )
     blinded_messages_mock_invalid_key = [
         BlindedMessage(
             amount=8,
@@ -103,7 +107,7 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
         )
     ]
     await assert_err(
-        ledger.mint(outputs=blinded_messages_mock_invalid_key, id=id),
+        ledger.mint(outputs=blinded_messages_mock_invalid_key, quote_id=quote.quote),
         "invalid public key",
     )
 

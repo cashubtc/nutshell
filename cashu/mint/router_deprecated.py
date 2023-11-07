@@ -9,6 +9,7 @@ from ..core.base import (
     GetMintResponse_deprecated,
     KeysetsResponse_deprecated,
     KeysResponse_deprecated,
+    PostMeltQuoteRequest,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
     PostMintQuoteRequest,
@@ -167,8 +168,11 @@ async def melt_deprecated(
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /melt: {payload}")
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=payload.pr, symbol="sat", method="bolt11")
+    )
     ok, preimage, change_promises = await ledger.melt(
-        payload.proofs, payload.pr, payload.outputs
+        proofs=payload.proofs, quote=quote.quote, outputs=payload.outputs
     )
     resp = PostMeltResponse_deprecated(
         paid=ok, preimage=preimage, change=change_promises

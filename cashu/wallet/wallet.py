@@ -540,7 +540,6 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         )
         self.raise_on_error_request(resp)
         promises_dict = resp.json()
-        print(promises_dict)
         mint_response = PostSplitResponse.parse_obj(promises_dict)
         promises = [BlindedSignature(**p.dict()) for p in mint_response.signatures]
 

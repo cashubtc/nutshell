@@ -380,9 +380,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
     async def melt(
         self,
+        *,
         proofs: List[Proof],
         quote: str,
-        outputs: Optional[List[BlindedMessage]],
+        outputs: Optional[List[BlindedMessage]] = None,
         keyset: Optional[MintKeyset] = None,
     ) -> Tuple[bool, str, List[BlindedSignature]]:
         """Invalidates proofs and pays a Lightning invoice.

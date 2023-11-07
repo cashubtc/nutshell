@@ -223,7 +223,7 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
     """
     logger.trace(f"> POST /v1/melt: {payload}")
     ok, preimage, change_promises = await ledger.melt(
-        payload.inputs, payload.quote, payload.outputs
+        proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
     )
     resp = PostMeltResponse(
         quote="to_be_replaced", paid=ok, proof=preimage, change=change_promises
