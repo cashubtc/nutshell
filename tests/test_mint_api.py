@@ -1,5 +1,5 @@
+import httpx
 import pytest
-import requests
 
 from cashu.core.base import CheckSpendableRequest, CheckSpendableResponse, Proof
 
@@ -8,14 +8,14 @@ BASE_URL = "http://localhost:3337"
 
 @pytest.mark.asyncio
 async def test_info(ledger):
-    response = requests.get(f"{BASE_URL}/info")
+    response = httpx.get(f"{BASE_URL}/info")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert response.json()["pubkey"] == ledger.pubkey.serialize().hex()
 
 
 @pytest.mark.asyncio
 async def test_api_keys(ledger):
-    response = requests.get(f"{BASE_URL}/keys")
+    response = httpx.get(f"{BASE_URL}/keys")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert response.json() == {
         str(k): v.serialize().hex() for k, v in ledger.keyset.public_keys.items()
@@ -24,14 +24,14 @@ async def test_api_keys(ledger):
 
 @pytest.mark.asyncio
 async def test_api_keysets(ledger):
-    response = requests.get(f"{BASE_URL}/keysets")
+    response = httpx.get(f"{BASE_URL}/keysets")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert response.json()["keysets"] == list(ledger.keysets.keysets.keys())
 
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys(ledger):
-    response = requests.get(
+    response = httpx.get(
         f"{BASE_URL}/keys/{'1cCNIAZ2X/w1'.replace('/', '_').replace('+', '-')}"
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -42,13 +42,13 @@ async def test_api_keyset_keys(ledger):
 
 @pytest.mark.asyncio
 async def test_api_mint_validation(ledger):
-    response = requests.get(f"{BASE_URL}/mint?amount=-21")
+    response = httpx.get(f"{BASE_URL}/mint?amount=-21")
     assert "detail" in response.json()
-    response = requests.get(f"{BASE_URL}/mint?amount=0")
+    response = httpx.get(f"{BASE_URL}/mint?amount=0")
     assert "detail" in response.json()
-    response = requests.get(f"{BASE_URL}/mint?amount=2100000000000001")
+    response = httpx.get(f"{BASE_URL}/mint?amount=2100000000000001")
     assert "detail" in response.json()
-    response = requests.get(f"{BASE_URL}/mint?amount=1")
+    response = httpx.get(f"{BASE_URL}/mint?amount=1")
     assert "detail" not in response.json()
 
 
@@ -59,9 +59,9 @@ async def test_api_check_state(ledger):
         Proof(id="1234", amount=0, secret="asdasdasd1", C="asdasdasd1"),
     ]
     payload = CheckSpendableRequest(proofs=proofs)
-    response = requests.post(
+    response = httpx.post(
         f"{BASE_URL}/check",
-        data=payload.json(),
+        json=payload.dict(),
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     states = CheckSpendableResponse.parse_obj(response.json())
