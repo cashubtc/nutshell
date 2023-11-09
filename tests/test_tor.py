@@ -13,8 +13,8 @@ def test_tor_setup():
     socks_host, socks_port = "localhost", 9050
 
     proxies = {
-        "http": f"socks5://{socks_host}:{socks_port}",
-        "https": f"socks5://{socks_host}:{socks_port}",
+        "http://": f"socks5://{socks_host}:{socks_port}",
+        "https://": f"socks5://{socks_host}:{socks_port}",
     }
     s.proxies.update(proxies)
 
