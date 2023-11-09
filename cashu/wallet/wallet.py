@@ -100,6 +100,19 @@ def async_set_httpx_client(func):
     return wrapper
 
 
+def async_ensure_mint_loaded(func):
+    """Decorator that ensures that the mint is loaded before calling the wrapped
+    function. If the mint is not loaded, it will be loaded first.
+    """
+
+    async def wrapper(self, *args, **kwargs):
+        if not self.keysets:
+            await self._load_mint()
+        return await func(self, *args, **kwargs)
+
+    return wrapper
+
+
 class LedgerAPI(object):
     keyset_id: str  # holds current keyset id
     keysets: Dict[str, WalletKeyset]  # holds keysets
@@ -361,6 +374,7 @@ class LedgerAPI(object):
         return mint_info
 
     @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def request_mint(self, amount) -> Invoice:
         """Requests a mint from the server and returns Lightning invoice.
 
@@ -389,6 +403,7 @@ class LedgerAPI(object):
         )
 
     @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def mint(
         self, outputs: List[BlindedMessage], id: Optional[str] = None
     ) -> List[BlindedSignature]:
@@ -421,6 +436,7 @@ class LedgerAPI(object):
         return promises
 
     @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def split(
         self,
         proofs: List[Proof],
@@ -460,6 +476,7 @@ class LedgerAPI(object):
         return promises
 
     @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def check_proof_state(self, proofs: List[Proof]):
         """
         Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
@@ -483,6 +500,7 @@ class LedgerAPI(object):
         return states
 
     @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def check_fees(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
         payload = CheckFeesRequest(pr=payment_request)
@@ -496,6 +514,7 @@ class LedgerAPI(object):
         return return_dict
 
     @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def pay_lightning(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
     ) -> GetMeltResponse:
@@ -526,6 +545,7 @@ class LedgerAPI(object):
         return GetMeltResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def restore_promises(
         self, outputs: List[BlindedMessage]
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
