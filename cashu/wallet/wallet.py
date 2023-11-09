@@ -85,8 +85,7 @@ def async_set_httpx_client(func):
         elif settings.http_proxy:
             proxy_url = settings.http_proxy
         if proxy_url:
-            proxies_dict.update({"http": proxy_url})
-            proxies_dict.update({"https": proxy_url})
+            proxies_dict.update({"all://": proxy_url})
 
         headers_dict = {"Client-version": settings.version}
 
