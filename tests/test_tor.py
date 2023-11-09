@@ -4,6 +4,7 @@ import pytest
 from cashu.tor.tor import TorProxy
 
 
+@pytest.mark.asyncio
 @pytest.mark.skip(reason="Tor is not installed on CI")
 async def test_tor_setup():
     tor = TorProxy(timeout=False)
@@ -17,5 +18,5 @@ async def test_tor_setup():
         proxies=proxies,  # type: ignore
     )
 
-    resp = await client.get("https://google.com")
+    resp = await client.get("https://www.wikipedia.org/")
     resp.raise_for_status()
