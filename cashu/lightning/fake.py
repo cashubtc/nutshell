@@ -3,7 +3,7 @@ import hashlib
 import random
 from datetime import datetime
 from os import urandom
-from typing import AsyncGenerator, Optional, Set
+from typing import AsyncGenerator, Dict, Optional, Set
 
 from bolt11 import (
     Bolt11,
@@ -31,6 +31,7 @@ class FakeWallet(Wallet):
     """https://github.com/lnbits/lnbits"""
 
     queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
+    payment_secrets: Dict[str, str] = dict()
     paid_invoices: Set[str] = set()
     secret: str = "FAKEWALLET SECRET"
     privkey: str = hashlib.pbkdf2_hmac(
@@ -68,19 +69,17 @@ class FakeWallet(Wallet):
         if expiry:
             tags.add(TagChar.expire_time, expiry)
 
-        # random hash
-        checking_id = (
-            self.privkey[:6]
-            + hashlib.sha256(str(random.getrandbits(256)).encode()).hexdigest()[6:]
-        )
-
-        tags.add(TagChar.payment_hash, checking_id)
-
         if payment_secret:
             secret = payment_secret.hex()
         else:
             secret = urandom(32).hex()
         tags.add(TagChar.payment_secret, secret)
+
+        payment_hash = hashlib.sha256(secret.encode()).hexdigest()
+
+        tags.add(TagChar.payment_hash, payment_hash)
+
+        self.payment_secrets[payment_hash] = secret
 
         bolt11 = Bolt11(
             currency="bc",
@@ -92,7 +91,7 @@ class FakeWallet(Wallet):
         payment_request = encode(bolt11, self.privkey)
 
         return InvoiceResponse(
-            ok=True, checking_id=checking_id, payment_request=payment_request
+            ok=True, checking_id=payment_hash, payment_request=payment_request
         )
 
     async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
@@ -101,11 +100,14 @@ class FakeWallet(Wallet):
         if DELAY_PAYMENT:
             await asyncio.sleep(5)
 
-        if invoice.payment_hash[:6] == self.privkey[:6] or BRR:
+        if invoice.payment_hash in self.payment_secrets or BRR:
             await self.queue.put(invoice)
             self.paid_invoices.add(invoice.payment_hash)
             return PaymentResponse(
-                ok=True, checking_id=invoice.payment_hash, fee_msat=0
+                ok=True,
+                checking_id=invoice.payment_hash,
+                fee_msat=0,
+                preimage=self.payment_secrets.get(invoice.payment_hash) or "0" * 64,
             )
         else:
             return PaymentResponse(

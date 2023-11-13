@@ -178,13 +178,25 @@ async def pay(ctx: Context, invoice: str, yes: bool):
             default=True,
         )
 
-    print("Paying Lightning invoice ...")
+    print("Paying Lightning invoice ...", end="", flush=True)
     assert total_amount > 0, "amount is not positive"
     if wallet.available_balance < total_amount:
         print("Error: Balance too low.")
         return
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
-    await wallet.pay_lightning(send_proofs, invoice, fee_reserve_sat)
+    try:
+        melt_response = await wallet.pay_lightning(
+            send_proofs, invoice, fee_reserve_sat
+        )
+
+    except Exception as e:
+        print(f"\nError paying invoice: {str(e)}")
+        return
+    print(" Invoice paid", end="", flush=True)
+    if melt_response.preimage and melt_response.preimage != "0" * 64:
+        print(f" (Proof: {melt_response.preimage}).")
+    else:
+        print(".")
     wallet.status()
 
 
