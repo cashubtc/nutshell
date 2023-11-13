@@ -100,12 +100,11 @@ class WalletSettings(CashuSettings):
 
 
 class LndRestFundingSource(MintSettings):
-    lnd_rest_endpoint: Optional[str] = Field(default=None)
-    lnd_rest_cert: Optional[str] = Field(default=None)
-    lnd_rest_macaroon: Optional[str] = Field(default=None)
-    lnd_cert: Optional[str] = Field(default=None)
-    lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
-    lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_rest_endpoint: Optional[str] = Field(default=None)
+    mint_lnd_rest_cert: Optional[str] = Field(default=None)
+    mint_lnd_rest_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
 
 
 class Settings(
