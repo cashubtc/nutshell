@@ -1,10 +1,21 @@
 name: tests
 
-on: [push, pull_request]
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        default: "3.10.4"
+        type: string
+      poetry-version:
+        default: "1.5.1"
+        type: string
+      os:
+        default: "ubuntu-latest"
+        type: string
 
 jobs:
   poetry:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ inputs.os }}
     services:
       postgres:
         image: postgres:latest
@@ -19,34 +30,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.10.4"]
-        poetry-version: ["1.5.1"]
-        # db-url: ["", "postgres://cashu:cashu@localhost:5432/test"] # TODO: Postgres test not working
-        db-url: [""]
     steps:
       - name: Checkout repository and submodules
         uses: actions/checkout@v2
+      - uses: ./.github/actions/prepare
         with:
-          submodules: recursive
-      - name: Set up Poetry ${{ matrix.poetry-version }}
-        uses: abatilo/actions-poetry@v2
-        with:
-          poetry-version: ${{ matrix.poetry-version }}
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "poetry"
-      - name: Install dependencies
-        run: |
-          poetry install --extras pgsql
-        shell: bash
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
       - name: Run tests
         env:
-          LIGHTNING: false
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
