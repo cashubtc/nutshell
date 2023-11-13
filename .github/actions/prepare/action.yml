@@ -12,15 +12,15 @@ inputs:
 runs:
   using: "composite"
   steps:
+    - name: Set up Poetry ${{ inputs.poetry-version }}
+      uses: abatilo/actions-poetry@v2
+      with:
+        poetry-version: ${{ inputs.poetry-version }}
     - name: Set up Python ${{ inputs.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ inputs.python-version }}
         cache: "poetry"
-    - name: Set up Poetry ${{ inputs.poetry-version }}
-      uses: abatilo/actions-poetry@v2
-      with:
-        poetry-version: ${{ inputs.poetry-version }}
     - name: Install dependencies
       run: |
         poetry install --extras pgsql
