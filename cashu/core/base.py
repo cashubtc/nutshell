@@ -103,18 +103,18 @@ class Proof(BaseModel):
         return c
 
     def to_dict(self, include_dleq=False):
-        # dictionary without the fields that don't need to be send to Carol
-        if not include_dleq:
-            return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
+        # necessary fields
+        return_dict = dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
 
-        assert self.dleq, "DLEQ proof is missing"
-        return dict(
-            id=self.id,
-            amount=self.amount,
-            secret=self.secret,
-            C=self.C,
-            dleq=self.dleq.dict(),
-        )
+        # optional fields
+        if include_dleq:
+            assert self.dleq, "DLEQ proof is missing"
+            return_dict["dleq"] = self.dleq.dict()  # type: ignore
+
+        if self.witness:
+            return_dict["witness"] = self.witness
+
+        return return_dict
 
     def to_dict_no_dleq(self):
         # dictionary without the fields that don't need to be send to Carol
