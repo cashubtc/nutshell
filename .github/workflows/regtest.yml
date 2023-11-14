@@ -30,7 +30,7 @@ jobs:
         run: |
           git clone https://github.com/callebtc/cashu-regtest-enviroment.git regtest
           cd regtest
-          sh ./start.sh
+          bash ./start.sh
 
       - uses: ./.github/actions/prepare
         with:
@@ -39,7 +39,7 @@ jobs:
 
       - name: Create fake admin
         if: ${{ inputs.backend-wallet-class == 'LNbitsWallet' }}
-        run: docker exec lnbits-legend-lnbits-1 poetry run python tools/create_fake_admin.py
+        run: docker exec cashu-lnbits-1 poetry run python tools/create_fake_admin.py
 
       - name: Run Tests
         env:
