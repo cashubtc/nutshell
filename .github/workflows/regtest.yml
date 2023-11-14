@@ -6,6 +6,9 @@ on:
       python-version:
         default: "3.10.4"
         type: string
+      poetry-version:
+        default: "1.5.1"
+        type: string
       os-version:
         default: "ubuntu-latest"
         type: string
@@ -34,6 +37,7 @@ jobs:
       - uses: ./.github/actions/prepare
         with:
           python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
 
       - name: Create fake admin
         if: ${{ inputs.backend-wallet-class == 'LNbitsWallet' }}
