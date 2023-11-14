@@ -52,19 +52,19 @@ async def m002_add_balance_views(db: Database):
         await conn.execute(f"""
             CREATE VIEW {table_with_schema(db, 'balance_issued')} AS
             SELECT COALESCE(SUM(s), 0) AS balance FROM (
-                SELECT SUM(amount)
+                SELECT SUM(amount) AS s
                 FROM {table_with_schema(db, 'promises')}
                 WHERE amount > 0
-            ) AS s;
+            );
         """)
 
         await conn.execute(f"""
             CREATE VIEW {table_with_schema(db, 'balance_redeemed')} AS
             SELECT COALESCE(SUM(s), 0) AS balance FROM (
-                SELECT SUM(amount)
+                SELECT SUM(amount) AS s
                 FROM {table_with_schema(db, 'proofs_used')}
                 WHERE amount > 0
-            )  AS s;
+            );
         """)
 
         await conn.execute(f"""
@@ -73,7 +73,7 @@ async def m002_add_balance_views(db: Database):
                 SELECT bi.balance AS s_issued, bu.balance AS s_used
                 FROM {table_with_schema(db, 'balance_issued')} bi
                 CROSS JOIN {table_with_schema(db, 'balance_redeemed')} bu
-            )  AS balance;
+            ) AS balance;
         """)
 
 
