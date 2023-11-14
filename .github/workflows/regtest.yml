@@ -30,8 +30,7 @@ jobs:
         run: |
           git clone https://github.com/callebtc/cashu-regtest-enviroment.git regtest
           cd regtest
-          ./tests
-          sudo chmod -R a+rwx .
+          sh ./start.sh
 
       - uses: ./.github/actions/prepare
         with:
