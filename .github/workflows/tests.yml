@@ -9,6 +9,9 @@ on:
       poetry-version:
         default: "1.5.1"
         type: string
+      db-url:
+        default: ""
+        type: string
       os:
         default: "ubuntu-latest"
         type: string

@@ -29,7 +29,19 @@ package:
 	python setup.py sdist bdist_wheel
 
 test:
+	PYTHONUNBUFFERED=1 \
+	DEBUG=true \
+	MINT_LIGHTNING_BACKEND=FakeWallet \
 	poetry run pytest tests --cov-report xml --cov cashu
+
+test-lndrest:
+	PYTHONUNBUFFERED=1 \
+	DEBUG=true \
+	MINT_LIGHTNING_BACKEND=LndRestWallet \
+	MINT_LND_REST_ENDPOINT=https://localhost:8081/ \
+	MINT_LND_REST_CERT=../legend-regtest-enviroment/data/lnd-3/tls.cert \
+	MINT_LND_REST_MACAROON=../legend-regtest-enviroment/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon \
+	poetry run pytest tests/test_wallet.py --cov-report xml --cov cashu
 
 install:
 	make clean

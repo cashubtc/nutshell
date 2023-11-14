@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 from pathlib import Path
 from typing import List, Union
@@ -14,6 +15,7 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import is_regtest, pay_real_invoice
 
 
 async def assert_err(f, msg: Union[str, CashuError]):
@@ -138,6 +140,12 @@ async def test_get_keyset_ids(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
+    if is_regtest:
+        await asyncio.sleep(2)
+        print("paying invoice in regtest...")
+        pay_real_invoice(invoice.bolt11)
+        print("Done")
+        await asyncio.sleep(5)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 64
 
@@ -158,6 +166,7 @@ async def test_mint(wallet1: Wallet):
 async def test_mint_amounts(wallet1: Wallet):
     """Mint predefined amounts"""
     invoice = await wallet1.request_mint(64)
+
     amts = [1, 1, 1, 2, 2, 4, 16]
     await wallet1.mint(amount=sum(amts), split=amts, id=invoice.id)
     assert wallet1.balance == 27
