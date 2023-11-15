@@ -177,3 +177,8 @@ def pay_onchain(address: str, sats: int) -> str:
 #         # FIXME: do this once mock data is removed from test data folder
 #         # os.remove(settings.lnbits_data_folder + "/database.sqlite3")
 #         pass
+
+
+def pay_if_regtest(bolt11: str):
+    if is_regtest:
+        pay_real_invoice(bolt11)

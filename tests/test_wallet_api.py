@@ -8,6 +8,7 @@ from cashu.lightning.base import InvoiceResponse, PaymentStatus
 from cashu.wallet.api.app import app
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import is_regtest
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -22,6 +23,7 @@ async def wallet(mint):
     yield wallet
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_invoice(wallet: Wallet):
     with TestClient(app) as client:
@@ -40,6 +42,7 @@ async def test_invoice(wallet: Wallet):
         print("paid")
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_balance():
     with TestClient(app) as client:
@@ -50,6 +53,7 @@ async def test_balance():
         assert response.json()["mints"]
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_send(wallet: Wallet):
     with TestClient(app) as client:
@@ -58,6 +62,7 @@ async def test_send(wallet: Wallet):
         assert response.json()["balance"]
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_send_without_split(wallet: Wallet):
     with TestClient(app) as client:
@@ -66,6 +71,7 @@ async def test_send_without_split(wallet: Wallet):
         assert response.json()["balance"]
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_send_without_split_but_wrong_amount(wallet: Wallet):
     with TestClient(app) as client:
@@ -73,6 +79,7 @@ async def test_send_without_split_but_wrong_amount(wallet: Wallet):
         assert response.status_code == 400
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_pending():
     with TestClient(app) as client:
@@ -80,6 +87,7 @@ async def test_pending():
         assert response.status_code == 200
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_receive_all(wallet: Wallet):
     with TestClient(app) as client:
@@ -89,6 +97,7 @@ async def test_receive_all(wallet: Wallet):
         assert response.json()["balance"]
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_burn_all(wallet: Wallet):
     with TestClient(app) as client:
@@ -99,6 +108,7 @@ async def test_burn_all(wallet: Wallet):
         assert response.json()["balance"]
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_pay():
     with TestClient(app) as client:
@@ -113,6 +123,7 @@ async def test_pay():
         assert response.status_code == 200
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_lock():
     with TestClient(app) as client:
@@ -120,6 +131,7 @@ async def test_lock():
         assert response.status_code == 200
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_locks():
     with TestClient(app) as client:
@@ -127,6 +139,7 @@ async def test_locks():
         assert response.status_code == 200
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_invoices():
     with TestClient(app) as client:
@@ -134,6 +147,7 @@ async def test_invoices():
         assert response.status_code == 200
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_wallets():
     with TestClient(app) as client:
@@ -141,6 +155,7 @@ async def test_wallets():
         assert response.status_code == 200
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_info():
     with TestClient(app) as client:
@@ -149,6 +164,7 @@ async def test_info():
         assert response.json()["version"]
 
 
+@pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
 async def test_flow(wallet: Wallet):
     with TestClient(app) as client:

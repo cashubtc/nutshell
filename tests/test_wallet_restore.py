@@ -12,6 +12,7 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import pay_if_regtest
 
 
 async def assert_err(f, msg: Union[str, CashuError]):
@@ -147,6 +148,7 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
 async def test_restore_wallet_after_mint(wallet3: Wallet):
     await reset_wallet_db(wallet3)
     invoice = await wallet3.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet3.mint(64, id=invoice.id)
     assert wallet3.balance == 64
     await reset_wallet_db(wallet3)
@@ -177,6 +179,7 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
     await reset_wallet_db(wallet3)
 
     invoice = await wallet3.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet3.mint(64, id=invoice.id)
     assert wallet3.balance == 64
 
@@ -199,6 +202,7 @@ async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: W
     )
     await reset_wallet_db(wallet3)
     invoice = await wallet3.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet3.mint(64, id=invoice.id)
     assert wallet3.balance == 64
 
@@ -239,6 +243,7 @@ async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
     await reset_wallet_db(wallet3)
 
     invoice = await wallet3.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet3.mint(64, id=invoice.id)
     assert wallet3.balance == 64
 
@@ -265,6 +270,7 @@ async def test_restore_wallet_after_send_twice(
     await reset_wallet_db(wallet3)
 
     invoice = await wallet3.request_mint(2)
+    pay_if_regtest(invoice.bolt11)
     await wallet3.mint(2, id=invoice.id)
     box.add(wallet3.proofs)
     assert wallet3.balance == 2
@@ -319,6 +325,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     await reset_wallet_db(wallet3)
 
     invoice = await wallet3.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet3.mint(64, id=invoice.id)
     box.add(wallet3.proofs)
     assert wallet3.balance == 64

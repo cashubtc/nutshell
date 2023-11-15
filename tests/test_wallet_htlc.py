@@ -15,6 +15,7 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import pay_if_regtest
 
 
 async def assert_err(f, msg):
@@ -59,6 +60,7 @@ async def wallet2(mint):
 @pytest.mark.asyncio
 async def test_create_htlc_secret(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -69,6 +71,7 @@ async def test_create_htlc_secret(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_htlc_split(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -81,6 +84,7 @@ async def test_htlc_split(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_preimage(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -94,6 +98,7 @@ async def test_htlc_redeem_with_preimage(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -111,6 +116,7 @@ async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet)
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_no_signature(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
@@ -130,6 +136,7 @@ async def test_htlc_redeem_with_no_signature(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_wrong_signature(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
@@ -153,6 +160,7 @@ async def test_htlc_redeem_with_wrong_signature(wallet1: Wallet, wallet2: Wallet
 @pytest.mark.asyncio
 async def test_htlc_redeem_with_correct_signature(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
@@ -174,6 +182,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
     wallet1: Wallet, wallet2: Wallet
 ):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
@@ -207,6 +216,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
     wallet1: Wallet, wallet2: Wallet
 ):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     preimage = "00000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
