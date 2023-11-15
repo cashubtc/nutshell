@@ -42,6 +42,7 @@ jobs:
           poetry-version: ${{ inputs.poetry-version }}
       - name: Run tests
         env:
+          MINT_LIGHTNING_BACKEND: FakeWallet
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
