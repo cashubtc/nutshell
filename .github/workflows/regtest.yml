@@ -65,7 +65,9 @@ jobs:
         #   CORELIGHTNING_REST_CERT: ./docker/data/clightning-2-rest/certificate.pem
         #   ECLAIR_URL: http://127.0.0.1:8082
         #   ECLAIR_PASS: lnbits
-        run: make test
+        run: |
+          chmod -R 777 .
+          make test
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
