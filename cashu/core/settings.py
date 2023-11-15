@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from environs import Env  # type: ignore
 from pydantic import BaseSettings, Extra, Field
@@ -99,8 +99,17 @@ class WalletSettings(CashuSettings):
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
 
 
+class LndRestFundingSource(MintSettings):
+    mint_lnd_rest_endpoint: Optional[str] = Field(default=None)
+    mint_lnd_rest_cert: Optional[str] = Field(default=None)
+    mint_lnd_rest_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
+
+
 class Settings(
     EnvSettings,
+    LndRestFundingSource,
     MintSettings,
     MintInformation,
     WalletSettings,

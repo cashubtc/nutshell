@@ -5,6 +5,7 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import pay_if_regtest
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -23,8 +24,10 @@ async def wallet1(mint):
 async def test_melt(wallet1: Wallet, ledger: Ledger):
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 128
     total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(
@@ -41,6 +44,7 @@ async def test_melt(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 async def test_split(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
@@ -57,6 +61,7 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)

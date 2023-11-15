@@ -7,11 +7,22 @@ from cashu.core.base import TokenV3
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
+from tests.helpers import is_fake, pay_if_regtest
 
 
 @pytest.fixture(autouse=True, scope="session")
 def cli_prefix():
     yield ["--wallet", "test_cli_wallet", "--host", settings.mint_url, "--tests"]
+
+
+def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> (str, str):
+    invoice = [
+        line.split(" ")[1] for line in output.split("\n") if line.startswith("Invoice")
+    ][0]
+    invoice_id = [
+        line.split(" ")[-1] for line in output.split("\n") if line.startswith("You can")
+    ][0]
+    return invoice, invoice_id
 
 
 async def init_wallet():
@@ -77,7 +88,8 @@ def test_balance(cli_prefix):
     assert result.exit_code == 0
 
 
-def test_invoice(mint, cli_prefix):
+@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
+def test_invoice_automatic_fakewallet(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -87,8 +99,31 @@ def test_invoice(mint, cli_prefix):
     print("INVOICE")
     print(result.output)
     wallet = asyncio.run(init_wallet())
-    # assert wallet.available_balance >= 1000
+    assert wallet.available_balance >= 1000
     assert f"Balance: {wallet.available_balance} sat" in result.output
+    assert result.exit_code == 0
+
+
+def test_invoice(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "-n", "1000"],
+    )
+
+    assert result.exception is None
+
+    invoice, invoice_id = get_bolt11_and_invoice_id_from_invoice_command(result.output)
+    pay_if_regtest(invoice)
+
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "1000", "--id", invoice_id],
+    )
+    assert result.exception is None
+
+    wallet = asyncio.run(init_wallet())
+    assert wallet.available_balance >= 1000
     assert result.exit_code == 0
 
 
@@ -96,11 +131,28 @@ def test_invoice_with_split(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "invoice", "10", "-s", "1"],
+        [
+            *cli_prefix,
+            "invoice",
+            "10",
+            "-s",
+            "1",
+            "-n",
+        ],
     )
     assert result.exception is None
-    # wallet = asyncio.run(init_wallet())
-    # assert wallet.proof_amounts.count(1) >= 10
+
+    invoice, invoice_id = get_bolt11_and_invoice_id_from_invoice_command(result.output)
+    pay_if_regtest(invoice)
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "10", "-s", "1", "--id", invoice_id],
+    )
+    assert result.exception is None
+
+    assert result.exception is None
+    wallet = asyncio.run(init_wallet())
+    assert wallet.proof_amounts.count(1) >= 10
 
 
 def test_wallets(cli_prefix):

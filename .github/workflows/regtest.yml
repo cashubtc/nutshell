@@ -1,0 +1,74 @@
+name: regtest
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        default: "3.10.4"
+        type: string
+      poetry-version:
+        default: "1.5.1"
+        type: string
+      os-version:
+        default: "ubuntu-latest"
+        type: string
+      db-url:
+        default: ""
+        type: string
+      backend-wallet-class:
+        required: true
+        type: string
+
+jobs:
+  regtest:
+    runs-on: ${{ inputs.os-version }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Setup Regtest
+        run: |
+          git clone https://github.com/callebtc/cashu-regtest-enviroment.git regtest
+          cd regtest
+          chmod -R 777 .
+          bash ./start.sh
+
+      - name: Create fake admin
+        if: ${{ inputs.backend-wallet-class == 'LNbitsWallet' }}
+        run: docker exec cashu-lnbits-1 poetry run python tools/create_fake_admin.py
+
+      - name: Run Tests
+        env:
+          WALLET_NAME: test_wallet
+          MINT_HOST: localhost
+          MINT_PORT: 3337
+          MINT_DATABASE: ${{ inputs.db-url }}
+          TOR: false
+          MINT_LIGHTNING_BACKEND: ${{ inputs.backend-wallet-class }}
+          MINT_LNBITS_ENDPOINT: http://localhost:5001
+          MINT_LNBITS_KEY: d08a3313322a4514af75d488bcc27eee
+          MINT_LND_REST_ENDPOINT: https://localhost:8081/
+          MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
+          MINT_LND_REST_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+        #   LND_GRPC_ENDPOINT: localhost
+        #   LND_GRPC_PORT: 10009
+        #   LND_GRPC_CERT: docker/data/lnd-3/tls.cert
+        #   LND_GRPC_MACAROON: docker/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+        #   CORELIGHTNING_RPC: ./docker/data/clightning-1/regtest/lightning-rpc
+        #   CORELIGHTNING_REST_URL: https://localhost:3001
+        #   CORELIGHTNING_REST_MACAROON: ./docker/data/clightning-2-rest/access.macaroon
+        #   CORELIGHTNING_REST_CERT: ./docker/data/clightning-2-rest/certificate.pem
+        run: |
+          sudo chmod -R 777 .
+          make test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.xml

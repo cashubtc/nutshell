@@ -210,9 +210,17 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     help="Split minted tokens with a specific amount.",
     type=int,
 )
+@click.option(
+    "--no-check",
+    "-n",
+    default=False,
+    is_flag=True,
+    help="Do not check if invoice is paid.",
+    type=bool,
+)
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: int, id: str, split: int):
+async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
@@ -236,9 +244,11 @@ async def invoice(ctx: Context, amount: int, id: str, split: int):
             print(f"Invoice: {invoice.bolt11}")
             print("")
             print(
-                "If you abort this you can use this command to recheck the"
-                f" invoice:\ncashu invoice {amount} --id {invoice.id}"
+                "You can use this command to check the invoice: cashu invoice"
+                f" {amount} --id {invoice.id}"
             )
+            if no_check:
+                return
             check_until = time.time() + 5 * 60  # check for five minutes
             print("")
             print(

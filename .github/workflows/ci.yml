@@ -1,0 +1,33 @@
+name: Nutshell CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+  tests:
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.9", "3.10"]
+        poetry-version: ["1.5.1"]
+        # db-url: ["", "postgres://cashu:cashu@localhost:5432/test"] # TODO: Postgres test not working
+        db-url: [""]
+        backend-wallet-class: ["FakeWallet"]
+    uses: ./.github/workflows/tests.yml
+    with:
+      python-version: ${{ matrix.python-version }}
+      poetry-version: ${{ matrix.poetry-version }}
+  regtest:
+    uses: ./.github/workflows/regtest.yml
+    strategy:
+      matrix:
+        python-version: ["3.10"]
+        poetry-version: ["1.5.1"]
+        backend-wallet-class: ["LndRestWallet", "LNbitsWallet"]
+    with:
+      python-version: ${{ matrix.python-version }}
+      backend-wallet-class: ${{ matrix.backend-wallet-class }}
