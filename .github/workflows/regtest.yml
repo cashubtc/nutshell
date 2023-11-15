@@ -63,8 +63,6 @@ jobs:
         #   CORELIGHTNING_REST_URL: https://localhost:3001
         #   CORELIGHTNING_REST_MACAROON: ./docker/data/clightning-2-rest/access.macaroon
         #   CORELIGHTNING_REST_CERT: ./docker/data/clightning-2-rest/certificate.pem
-        #   ECLAIR_URL: http://127.0.0.1:8082
-        #   ECLAIR_PASS: lnbits
         run: |
           sudo chmod -R 777 .
           make test
