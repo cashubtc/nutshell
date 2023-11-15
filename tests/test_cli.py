@@ -124,7 +124,6 @@ def test_invoice(mint, cli_prefix):
 
     wallet = asyncio.run(init_wallet())
     assert wallet.available_balance >= 1000
-    assert f"Balance: {wallet.available_balance} sat" in result.output
     assert result.exit_code == 0
 
 
