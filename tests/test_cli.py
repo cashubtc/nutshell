@@ -93,7 +93,7 @@ def test_invoice_automatic_fakewallet(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "invoice", "-n", "1000"],
+        [*cli_prefix, "invoice", "1000"],
     )
     assert result.exception is None
     print("INVOICE")
