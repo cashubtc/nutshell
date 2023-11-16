@@ -42,7 +42,6 @@ async def wallet1(mint):
     )
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
-    wallet1.status()
     yield wallet1
 
 
@@ -54,7 +53,6 @@ async def wallet2(mint):
     await migrate_databases(wallet2.db, migrations)
     wallet2.private_key = PrivateKey(secrets.token_bytes(32), raw=True)
     await wallet2.load_mint()
-    wallet2.status()
     yield wallet2
 
 

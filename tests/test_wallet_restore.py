@@ -53,7 +53,6 @@ async def wallet1(mint):
         name="wallet1",
     )
     await wallet1.load_mint()
-    wallet1.status()
     yield wallet1
 
 
@@ -65,7 +64,6 @@ async def wallet2(mint):
         name="wallet2",
     )
     await wallet2.load_mint()
-    wallet2.status()
     yield wallet2
 
 
@@ -83,7 +81,6 @@ async def wallet3(mint):
     await wallet3.db.execute("DELETE FROM proofs")
     await wallet3.db.execute("DELETE FROM proofs_used")
     await wallet3.load_mint()
-    wallet3.status()
     yield wallet3
 
 

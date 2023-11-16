@@ -17,7 +17,6 @@ async def wallet1(mint):
         name="wallet1",
     )
     await wallet1.load_mint()
-    wallet1.status()
     yield wallet1
 
 

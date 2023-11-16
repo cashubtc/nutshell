@@ -443,6 +443,7 @@ async def send_command(
         await send_nostr(
             wallet, amount=amount, pubkey=nostr or nopt, verbose=verbose, yes=yes
         )
+    print_balance(ctx)
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -497,6 +498,8 @@ async def receive_cli(
                 await receive(wallet, tokenObj)
     else:
         print("Error: enter token or use either flag --nostr or --all.")
+        return
+    print_balance(ctx)
 
 
 @cli.command("burn", help="Burn spent tokens.")
