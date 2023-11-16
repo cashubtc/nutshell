@@ -182,7 +182,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     print("Paying Lightning invoice ...", end="", flush=True)
     assert total_amount > 0, "amount is not positive"
     if wallet.available_balance < total_amount:
-        print("Error: Balance too low.")
+        print(" Error: Balance too low.")
         return
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     try:
@@ -190,11 +190,11 @@ async def pay(ctx: Context, invoice: str, yes: bool):
             send_proofs, invoice, quote.fee_reserve, quote.quote
         )
     except Exception as e:
-        print(f"\nError paying invoice: {str(e)}")
+        print(f" Error paying invoice: {str(e)}")
         return
     print(" Invoice paid", end="", flush=True)
-    if melt_response.preimage and melt_response.preimage != "0" * 64:
-        print(f" (Proof: {melt_response.preimage}).")
+    if melt_response.proof and melt_response.proof != "0" * 64:
+        print(f" (Proof: {melt_response.proof}).")
     else:
         print(".")
     wallet.status()
@@ -237,6 +237,7 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
     if amount and not id:
         invoice = await wallet.request_mint(amount)
         if invoice.bolt11:
+            print("")
             print(f"Pay invoice to mint {amount} sat:")
             print("")
             print(f"Invoice: {invoice.bolt11}")
@@ -278,6 +279,7 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
     # user paid invoice and want to check it
     elif amount and id:
         await wallet.mint(amount, split=optional_split, id=id)
+    print("")
     wallet.status()
     return
 
