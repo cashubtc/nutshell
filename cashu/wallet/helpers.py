@@ -155,7 +155,6 @@ async def receive(
 
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)
-    wallet.status()
     return wallet.available_balance
 
 
@@ -227,5 +226,4 @@ async def send(
         )
         print(token)
 
-    wallet.status()
     return wallet.available_balance, token
