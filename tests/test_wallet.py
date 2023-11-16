@@ -244,22 +244,23 @@ async def test_melt(wallet1: Wallet):
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 128
 
-    quote = await wallet1.get_pay_amount_with_fees(invoice.bolt11)
+    invoice_payment_hash = str(invoice.payment_hash)
+    invoice_payment_request = invoice.bolt11
+    if is_regtest:
+        invoice_dict = get_real_invoice(64)
+        invoice_payment_request = invoice_dict["payment_request"]
+        invoice_payment_hash = str(invoice_dict["r_hash"])
+
+    quote = await wallet1.get_pay_amount_with_fees(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     assert total_amount == 66
 
     assert quote.fee_reserve == 2
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
-    invoice_payment_hash = str(invoice.payment_hash)
-    if is_regtest:
-        invoice_dict = get_real_invoice(64)
-        invoice_dict["payment_request"]
-        invoice_payment_hash = str(invoice_dict["r_hash"])
-
     melt_response = await wallet1.pay_lightning(
-        send_proofs,
-        invoice=invoice.bolt11,
+        proofs=send_proofs,
+        invoice=invoice_payment_request,
         fee_reserve_sat=quote.fee_reserve,
         quote_id=quote.quote,
     )
