@@ -301,15 +301,28 @@ async def store_lightning_invoice(
 
 async def get_lightning_invoice(
     db: Database,
-    id: str,
+    *,
+    id: Optional[str] = None,
+    payment_hash: Optional[str] = None,
     conn: Optional[Connection] = None,
 ):
+    clauses = []
+    values: List[Any] = []
+    if id:
+        clauses.append("id = ?")
+        values.append(id)
+    if payment_hash:
+        clauses.append("payment_hash = ?")
+        values.append(payment_hash)
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
     row = await (conn or db).fetchone(
         f"""
         SELECT * from {table_with_schema(db, 'invoices')}
-        WHERE id = ?
+        {where}
         """,
-        (id,),
+        tuple(values),
     )
     row_dict = dict(row)
     return Invoice(**row_dict) if row_dict else None
