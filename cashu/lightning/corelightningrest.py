@@ -232,15 +232,16 @@ class CoreLightningRestWallet(Wallet):
             return PaymentStatus(paid=None)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        from ..mint.crud import get_lightning_invoice
         from ..mint.startup import ledger
 
-        payment = await get_lightning_invoice(db=ledger.db, payment_hash=checking_id)
+        payment = await ledger.crud.get_melt_quote(
+            db=ledger.db, quote_id="", checking_id=checking_id
+        )
         if not payment:
             raise ValueError(f"Payment with checking_id {checking_id} not found")
         r = await self.client.get(
             f"{self.url}/v1/pay/listPays",
-            params={"invoice": payment.bolt11},
+            params={"invoice": payment.request},
         )
         try:
             r.raise_for_status()

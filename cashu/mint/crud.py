@@ -173,6 +173,7 @@ class LedgerCrud(ABC):
         *,
         quote_id: str,
         db: Database,
+        checking_id: Optional[str] = None,
         conn: Optional[Connection] = None,
     ) -> Optional[MintQuote]: ...
 
@@ -405,14 +406,26 @@ class LedgerCrudSqlite(LedgerCrud):
         *,
         quote_id: str,
         db: Database,
+        checking_id: Optional[str] = None,
         conn: Optional[Connection] = None,
     ) -> Optional[MintQuote]:
+        clauses = []
+        values: List[Any] = []
+        if quote_id:
+            clauses.append("quote = ?")
+            values.append(quote_id)
+        if checking_id:
+            clauses.append("checking_id = ?")
+            values.append(checking_id)
+        where = ""
+        if clauses:
+            where = f"WHERE {' AND '.join(clauses)}"
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'melt_quotes')}
-            WHERE quote = ?
+            {where}
             """,
-            (quote_id,),
+            tuple(values),
         )
         if row is None:
             return None
