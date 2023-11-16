@@ -1,9 +1,8 @@
-import secrets as scrts
 from typing import List, Optional, Tuple, Union
 
-import requests
+import httpx
+from httpx import Response
 from loguru import logger
-from requests import Response
 
 from ..core import bolt11 as bolt11
 from ..core.base import (
@@ -23,22 +22,19 @@ from ..core.base import (
 from ..core.crypto.secp import PublicKey
 from ..core.settings import settings
 from ..tor.tor import TorProxy
-from .protocols import SupportsMintURL, SupportsRequests
+from .protocols import SupportsHttpxClient, SupportsMintURL
 
 
-def async_set_requests(func):
+def async_set_httpx_client(func):
     """
     Decorator that wraps around any async class method of LedgerAPI that makes
     API calls. Sets some HTTP headers and starts a Tor instance if none is
-    already running and  and sets local proxy to use it.
+    already running and and sets local proxy to use it.
     """
 
     async def wrapper(self, *args, **kwargs):
-        self.s.headers.update({"Client-version": settings.version})
-        if settings.debug:
-            self.s.verify = False
-
         # set proxy
+        proxies_dict = {}
         proxy_url: Union[str, None] = None
         if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
@@ -49,19 +45,25 @@ def async_set_requests(func):
         elif settings.http_proxy:
             proxy_url = settings.http_proxy
         if proxy_url:
-            self.s.proxies.update({"http": proxy_url})
-            self.s.proxies.update({"https": proxy_url})
+            proxies_dict.update({"all://": proxy_url})
 
-        self.s.headers.update({"User-Agent": scrts.token_urlsafe(8)})
+        headers_dict = {"Client-version": settings.version}
+
+        self.httpx = httpx.AsyncClient(
+            verify=not settings.debug,
+            proxies=proxies_dict,  # type: ignore
+            headers=headers_dict,
+            base_url=self.url,
+        )
         return await func(self, *args, **kwargs)
 
     return wrapper
 
 
-class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
+class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
     """Deprecated wallet class, will be removed in the future."""
 
-    s: requests.Session
+    httpx: httpx.AsyncClient
     url: str
 
     @staticmethod
@@ -86,7 +88,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         # raise for status if no error
         resp.raise_for_status()
 
-    @async_set_requests
+    @async_set_httpx_client
     async def _get_keys_deprecated(self, url: str) -> WalletKeyset:
         """API that gets the current keys of the mint
 
@@ -100,7 +102,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
             Exception: If no keys are received from the mint
         """
         logger.warning(f"Using deprecated API call: {url}/keys")
-        resp = self.s.get(
+        resp = await self.httpx.get(
             url + "/keys",
         )
         self.raise_on_error(resp)
@@ -115,7 +117,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         )
         return keyset
 
-    @async_set_requests
+    @async_set_httpx_client
     async def _get_keys_of_keyset_deprecated(
         self, url: str, keyset_id: str
     ) -> WalletKeyset:
@@ -134,7 +136,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         """
         logger.warning(f"Using deprecated API call: {url}/keys/{keyset_id}")
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
-        resp = self.s.get(
+        resp = await self.httpx.get(
             url + f"/keys/{keyset_id_urlsafe}",
         )
         self.raise_on_error(resp)
@@ -149,7 +151,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         )
         return keyset
 
-    @async_set_requests
+    @async_set_httpx_client
     async def _get_keyset_ids_deprecated(self, url: str) -> List[str]:
         """API that gets a list of all active keysets of the mint.
 
@@ -163,7 +165,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
             Exception: If no keysets are received from the mint
         """
         logger.warning(f"Using deprecated API call: {url}/keysets")
-        resp = self.s.get(
+        resp = await self.httpx.get(
             url + "/keysets",
         )
         self.raise_on_error(resp)
@@ -172,7 +174,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         assert len(keysets.keysets), Exception("did not receive any keysets")
         return keysets.keysets
 
-    @async_set_requests
+    @async_set_httpx_client
     async def request_mint_deprecated(self, amount) -> Invoice:
         """Requests a mint from the server and returns Lightning invoice.
 
@@ -186,13 +188,13 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: GET /mint")
-        resp = self.s.get(self.url + "/mint", params={"amount": amount})
+        resp = await self.httpx.get(self.url + "/mint", params={"amount": amount})
         self.raise_on_error(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
         return Invoice(amount=amount, bolt11=mint_response.pr, id=mint_response.hash)
 
-    @async_set_requests
+    @async_set_httpx_client
     async def mint_deprecated(
         self, outputs: List[BlindedMessage], hash: Optional[str] = None
     ) -> List[BlindedSignature]:
@@ -210,7 +212,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         """
         outputs_payload = PostMintRequest_deprecated(outputs=outputs)
         logger.trace("Checking Lightning invoice. POST /mint")
-        resp = self.s.post(
+        resp = await self.httpx.post(
             self.url + "/mint",
             json=outputs_payload.dict(),
             params={
@@ -224,7 +226,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         promises = PostMintResponse_deprecated.parse_obj(response_dict).promises
         return promises
 
-    @async_set_requests
+    @async_set_httpx_client
     async def pay_lightning_deprecated(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
     ):
@@ -243,7 +245,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
                 "outputs": ...,
             }
 
-        resp = self.s.post(
+        resp = await self.httpx.post(
             self.url + "/melt",
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
         )
@@ -252,7 +254,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
 
         return PostMeltResponse_deprecated.parse_obj(return_dict)
 
-    @async_set_requests
+    @async_set_httpx_client
     async def restore_promises(
         self, outputs: List[BlindedMessage]
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
@@ -260,7 +262,7 @@ class LedgerAPIDeprecated(SupportsRequests, SupportsMintURL):
         Asks the mint to restore promises corresponding to outputs.
         """
         payload = PostMintRequest_deprecated(outputs=outputs)
-        resp = self.s.post(self.url + "/restore", json=payload.dict())
+        resp = await self.httpx.post(self.url + "/restore", json=payload.dict())
         self.raise_on_error(resp)
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)
