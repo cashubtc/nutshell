@@ -55,14 +55,14 @@ jobs:
           MINT_LND_REST_ENDPOINT: https://localhost:8081/
           MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
           MINT_LND_REST_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
-        #   LND_GRPC_ENDPOINT: localhost
-        #   LND_GRPC_PORT: 10009
-        #   LND_GRPC_CERT: docker/data/lnd-3/tls.cert
-        #   LND_GRPC_MACAROON: docker/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
-        #   CORELIGHTNING_RPC: ./docker/data/clightning-1/regtest/lightning-rpc
-        #   CORELIGHTNING_REST_URL: https://localhost:3001
-        #   CORELIGHTNING_REST_MACAROON: ./docker/data/clightning-2-rest/access.macaroon
-        #   CORELIGHTNING_REST_CERT: ./docker/data/clightning-2-rest/certificate.pem
+          #   LND_GRPC_ENDPOINT: localhost
+          #   LND_GRPC_PORT: 10009
+          #   LND_GRPC_CERT: ./regtest/data/lnd-3/tls.cert
+          #   LND_GRPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          #   CORELIGHTNING_RPC: ./regtest/data/clightning-1/regtest/lightning-rpc
+          MINT_CORELIGHTNING_REST_URL: https://localhost:3001
+          MINT_CORELIGHTNING_REST_MACAROON: ./regtest/data/clightning-2-rest/access.macaroon
+          MINT_CORELIGHTNING_REST_CERT: ./regtest/data/clightning-2-rest/certificate.pem
         run: |
           sudo chmod -R 777 .
           make test

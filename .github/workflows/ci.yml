@@ -27,7 +27,8 @@ jobs:
       matrix:
         python-version: ["3.10"]
         poetry-version: ["1.5.1"]
-        backend-wallet-class: ["LndRestWallet", "LNbitsWallet"]
+        backend-wallet-class:
+          ["LndRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
     with:
       python-version: ${{ matrix.python-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
