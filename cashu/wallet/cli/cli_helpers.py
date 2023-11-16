@@ -9,6 +9,11 @@ from ...wallet.crud import get_keyset
 from ...wallet.wallet import Wallet as Wallet
 
 
+def print_balance(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    print(f"Balance: {wallet.available_balance} sat")
+
+
 async def get_mint_wallet(ctx: Context, force_select: bool = False):
     """
     Helper function that asks the user for an input to select which mint they want to load.

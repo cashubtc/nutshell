@@ -1397,9 +1397,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """Returns a sorted list of amounts of all proofs"""
         return [p.amount for p in sorted(self.proofs, key=lambda p: p.amount)]
 
-    def status(self):
-        print(f"Balance: {self.available_balance} sat")
-
     def balance_per_keyset(self):
         return {
             key: {

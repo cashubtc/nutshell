@@ -26,7 +26,12 @@ from ...wallet.crud import (
 )
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
-from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
+from ..cli.cli_helpers import (
+    get_mint_wallet,
+    print_balance,
+    print_mint_balances,
+    verify_mint,
+)
 from ..helpers import (
     deserialize_token_from_string,
     init_wallet,
@@ -165,7 +170,7 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
 async def pay(ctx: Context, invoice: str, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    wallet.status()
+    print_balance(ctx)
     quote = await wallet.get_pay_amount_with_fees(invoice)
     total_amount = quote.amount + quote.fee_reserve
     if not yes:
@@ -197,7 +202,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
         print(f" (Proof: {melt_response.proof}).")
     else:
         print(".")
-    wallet.status()
+    print_balance(ctx)
 
 
 @cli.command("invoice", help="Create Lighting invoice.")
@@ -223,7 +228,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    wallet.status()
+    print_balance(ctx)
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:
@@ -280,7 +285,7 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
     elif amount and id:
         await wallet.mint(amount, split=optional_split, id=id)
     print("")
-    wallet.status()
+    print_balance(ctx)
     return
 
 
@@ -538,7 +543,7 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         await wallet.invalidate(proofs, check_spendable=False)
     else:
         await wallet.invalidate(proofs)
-    wallet.status()
+    print_balance(ctx)
 
 
 @cli.command("pending", help="Show pending tokens.")
@@ -806,7 +811,7 @@ async def restore(ctx: Context, to: int, batch: int):
 
     await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
     await wallet.load_proofs()
-    wallet.status()
+    print_balance(ctx)
 
 
 @cli.command("selfpay", help="Refresh tokens.")
