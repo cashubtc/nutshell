@@ -488,7 +488,6 @@ class LedgerCrudSqlite(LedgerCrud):
         row_dict = dict(row)
         return Invoice(**row_dict) if row_dict else None
 
-
     async def update_lightning_invoice(
         self,
         *,
