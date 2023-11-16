@@ -179,8 +179,6 @@ async def swap(
     outgoing_mint: str = Query(default=..., description="URL of outgoing mint"),
     incoming_mint: str = Query(default=..., description="URL of incoming mint"),
 ):
-    if not settings.lightning:
-        raise Exception("lightning not supported")
     incoming_wallet = await mint_wallet(incoming_mint)
     outgoing_wallet = await mint_wallet(outgoing_mint)
     if incoming_wallet.url == outgoing_wallet.url:
@@ -191,17 +189,17 @@ async def swap(
 
     # pay invoice from outgoing mint
     await outgoing_wallet.load_proofs(reload=True)
-    total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
-        invoice.bolt11
-    )
-    assert total_amount > 0, "amount must be positive"
+    quote = await outgoing_wallet.get_pay_amount_with_fees(invoice.bolt11)
+    total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
 
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
+    await outgoing_wallet.pay_lightning(
+        send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
+    )
 
     # mint token in incoming mint
     await incoming_wallet.mint(amount, id=invoice.id)
@@ -306,9 +304,11 @@ async def burn(
         wallet = await mint_wallet(mint)
     if not (all or token or force or delete) or (token and all):
         raise Exception(
-            "enter a token or use --all to burn all pending tokens, --force to"
-            " check all tokens or --delete with send ID to force-delete pending"
-            " token from list if mint is unavailable.",
+            (
+                "enter a token or use --all to burn all pending tokens, --force to"
+                " check all tokens or --delete with send ID to force-delete pending"
+                " token from list if mint is unavailable."
+            ),
         )
     if all:
         # check only those who are flagged as reserved

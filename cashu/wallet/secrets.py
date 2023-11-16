@@ -73,8 +73,8 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         self.seed = mnemo.to_seed(mnemonic_str)
         self.mnemonic = mnemonic_str
 
-        logger.debug(f"Using seed: {self.seed.hex()}")
-        logger.debug(f"Using mnemonic: {mnemonic_str}")
+        # logger.debug(f"Using seed: {self.seed.hex()}")
+        # logger.debug(f"Using mnemonic: {mnemonic_str}")
 
         # if no mnemonic was in the database, store the new one
         if ret_db is None:
@@ -116,9 +116,17 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         """
         assert self.bip32, "BIP32 not initialized yet."
         # integer keyset id modulo max number of bip32 child keys
-        keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
-            2**31 - 1
-        )
+        try:
+            keyest_id = int.from_bytes(bytes.fromhex(self.keyset_id), "big") % (
+                2**31 - 1
+            )
+        except ValueError:
+            # BEGIN: backwards compatibility keyset id is not hex
+            keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
+                2**31 - 1
+            )
+            # END: backwards compatibility keyset id is not hex
+
         logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id}")
         token_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'"
         # for secret

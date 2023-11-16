@@ -48,7 +48,7 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
             t.mint, os.path.join(settings.cashu_dir, wallet.name)
         )
         keysets = mint_wallet._get_proofs_keysets(t.proofs)
-        logger.debug(f"Keysets in tokens: {keysets}")
+        logger.trace(f"Keysets in tokens: {keysets}")
         # loop over all keysets
         for keyset in set(keysets):
             await mint_wallet.load_mint()
@@ -142,7 +142,7 @@ async def receive(
         assert keyset_in_token
         # we get the keyset from the db
         mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
-        assert mint_keysets, Exception("we don't know this keyset")
+        assert mint_keysets, Exception(f"we don't know this keyset: {keyset_in_token}")
         assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
         # now we have the URL
         mint_wallet = await Wallet.with_db(

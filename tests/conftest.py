@@ -14,7 +14,7 @@ from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
 from cashu.lightning.fake import FakeWallet
 from cashu.mint import migrations as migrations_mint
-from cashu.mint.crud import LedgerCrud
+from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
 
 SERVER_PORT = 3337
@@ -26,7 +26,6 @@ settings.mint_port = SERVER_PORT
 settings.mint_host = "0.0.0.0"
 settings.mint_listen_port = SERVER_PORT
 settings.mint_url = SERVER_ENDPOINT
-settings.lightning = True
 settings.tor = False
 settings.mint_lightning_backend = settings.mint_lightning_backend or "FakeWallet"
 settings.mint_database = "./test_data/test_mint"
@@ -70,7 +69,7 @@ async def ledger():
         seed=settings.mint_private_key,
         derivation_path=settings.mint_derivation_path,
         lightning=FakeWallet(),
-        crud=LedgerCrud(),
+        crud=LedgerCrudSqlite(),
     )
     await start_mint_init(ledger)
     yield ledger

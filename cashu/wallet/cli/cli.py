@@ -166,12 +166,13 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     wallet.status()
-    total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
+    quote = await wallet.get_pay_amount_with_fees(invoice)
+    total_amount = quote.amount + quote.fee_reserve
     if not yes:
         potential = (
-            f" ({total_amount} sat with potential fees)" if fee_reserve_sat else ""
+            f" ({total_amount} sat with potential fees)" if quote.fee_reserve else ""
         )
-        message = f"Pay {total_amount - fee_reserve_sat} sat{potential}?"
+        message = f"Pay {quote.amount} sat{potential}?"
         click.confirm(
             message,
             abort=True,
@@ -186,9 +187,8 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     try:
         melt_response = await wallet.pay_lightning(
-            send_proofs, invoice, fee_reserve_sat
+            send_proofs, invoice, quote.fee_reserve, quote.quote
         )
-
     except Exception as e:
         print(f"\nError paying invoice: {str(e)}")
         return
@@ -233,10 +233,8 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
         optional_split = [split] * n_splits
         logger.debug(f"Requesting split with {n_splits} * {split} sat tokens.")
 
-    if not settings.lightning:
-        await wallet.mint(amount, split=optional_split)
     # user requests an invoice
-    elif amount and not id:
+    if amount and not id:
         invoice = await wallet.request_mint(amount)
         if invoice.bolt11:
             print(f"Pay invoice to mint {amount} sat:")
@@ -288,8 +286,6 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
 @click.pass_context
 @coro
 async def swap(ctx: Context):
-    if not settings.lightning:
-        raise Exception("lightning not supported.")
     print("Select the mint to swap from:")
     outgoing_wallet = await get_mint_wallet(ctx, force_select=True)
 
@@ -309,15 +305,16 @@ async def swap(ctx: Context):
     invoice = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
-    total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
-        invoice.bolt11
-    )
+    quote = await outgoing_wallet.get_pay_amount_with_fees(invoice.bolt11)
+    total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
+    await outgoing_wallet.pay_lightning(
+        send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
+    )
 
     # mint token in incoming mint
     await incoming_wallet.mint(amount, id=invoice.id)

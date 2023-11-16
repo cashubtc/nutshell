@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 
+from cashu.core.base import PostMeltQuoteRequest
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -30,15 +31,15 @@ async def test_melt(wallet1: Wallet, ledger: Ledger):
     pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 128
-    total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(
-        invoice.bolt11
-    )
-    mint_fees = await ledger.get_melt_fees(invoice.bolt11)
-    assert mint_fees == fee_reserve_sat
-
+    mint_quote = await wallet1.get_pay_amount_with_fees(invoice.bolt11)
+    mint_fees = await ledger._get_lightning_fees(invoice.bolt11)
+    assert mint_fees == mint_quote.fee_reserve
+    total_amount = mint_quote.amount + mint_quote.fee_reserve
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
-
-    await ledger.melt(send_proofs, invoice.bolt11, outputs=None)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=invoice.bolt11, symbol="sat", method="bolt11")
+    )
+    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
 
 @pytest.mark.asyncio

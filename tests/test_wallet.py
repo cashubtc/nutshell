@@ -95,7 +95,8 @@ async def test_get_keys(wallet1: Wallet):
     assert len(wallet1.keysets[wallet1.keyset_id].public_keys) == settings.max_order
     keyset = await wallet1._get_keys(wallet1.url)
     assert keyset.id is not None
-    assert keyset.id == "1cCNIAZ2X/w1"
+    assert keyset.id_deprecated == "1cCNIAZ2X/w1"
+    assert keyset.id == "d5c08d2006765ffc"
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
@@ -130,10 +131,10 @@ async def test_get_nonexistent_keyset(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_get_keyset_ids(wallet1: Wallet):
-    keyset = await wallet1._get_keyset_ids(wallet1.url)
-    assert isinstance(keyset, list)
-    assert len(keyset) > 0
-    assert keyset[-1] == wallet1.keyset_id
+    keysets = await wallet1._get_keyset_ids(wallet1.url)
+    assert isinstance(keysets, list)
+    assert len(keysets) > 0
+    assert wallet1.keyset_id in keysets
 
 
 @pytest.mark.asyncio
@@ -159,9 +160,9 @@ async def test_mint(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint_amounts(wallet1: Wallet):
     """Mint predefined amounts"""
-    invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
     amts = [1, 1, 1, 2, 2, 4, 16]
+    invoice = await wallet1.request_mint(sum(amts))
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(amount=sum(amts), split=amts, id=invoice.id)
     assert wallet1.balance == 27
     assert wallet1.proof_amounts == amts
@@ -170,9 +171,11 @@ async def test_mint_amounts(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint_amounts_wrong_sum(wallet1: Wallet):
     """Mint predefined amounts"""
+
     amts = [1, 1, 1, 2, 2, 4, 16]
+    invoice = await wallet1.request_mint(sum(amts))
     await assert_err(
-        wallet1.mint(amount=sum(amts) + 1, split=amts),
+        wallet1.mint(amount=sum(amts) + 1, split=amts, id=invoice.id),
         "split must sum to amount",
     )
 
@@ -181,8 +184,9 @@ async def test_mint_amounts_wrong_sum(wallet1: Wallet):
 async def test_mint_amounts_wrong_order(wallet1: Wallet):
     """Mint amount that is not part in 2^n"""
     amts = [1, 2, 3]
+    invoice = await wallet1.request_mint(sum(amts))
     await assert_err(
-        wallet1.mint(amount=sum(amts), split=[1, 2, 3]),
+        wallet1.mint(amount=sum(amts), split=[1, 2, 3], id=invoice.id),
         f"Can only mint amounts with 2^n up to {2**settings.max_order}.",
     )
 
@@ -243,23 +247,24 @@ async def test_melt(wallet1: Wallet):
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 128
 
-    total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(
-        invoice.bolt11
-    )
+    quote = await wallet1.get_pay_amount_with_fees(invoice.bolt11)
+    total_amount = quote.amount + quote.fee_reserve
     assert total_amount == 66
 
-    assert fee_reserve_sat == 2
+    assert quote.fee_reserve == 2
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
-    invoice_to_pay = invoice.bolt11
     invoice_payment_hash = str(invoice.payment_hash)
     if is_regtest:
         invoice_dict = get_real_invoice(64)
-        invoice_to_pay = invoice_dict["payment_request"]
+        invoice_dict["payment_request"]
         invoice_payment_hash = str(invoice_dict["r_hash"])
 
     melt_response = await wallet1.pay_lightning(
-        send_proofs, invoice=invoice_to_pay, fee_reserve_sat=fee_reserve_sat
+        send_proofs,
+        invoice=invoice.bolt11,
+        fee_reserve_sat=quote.fee_reserve,
+        quote_id=quote.quote,
     )
 
     assert melt_response.change, "No change returned"
@@ -283,7 +288,7 @@ async def test_melt(wallet1: Wallet):
     assert all([p.melt_id == invoice_db.id for p in proofs_used]), "Wrong melt_id"
 
     # the payment was without fees so we need to remove it from the total amount
-    assert wallet1.balance == 128 - (total_amount - fee_reserve_sat), "Wrong balance"
+    assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), "Wrong balance"
     assert wallet1.balance == 64, "Wrong balance"
 
 

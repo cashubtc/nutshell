@@ -54,24 +54,27 @@ class LightningWallet(Wallet):
         Returns:
             bool: True if successful
         """
-        total_amount, fee_reserve_sat = await self.get_pay_amount_with_fees(pr)
+        quote = await self.get_pay_amount_with_fees(pr)
+        total_amount = quote.amount + quote.fee_reserve
         assert total_amount > 0, "amount is not positive"
         if self.available_balance < total_amount:
             print("Error: Balance too low.")
             return PaymentResponse(ok=False)
         _, send_proofs = await self.split_to_send(self.proofs, total_amount)
         try:
-            resp = await self.pay_lightning(send_proofs, pr, fee_reserve_sat)
+            resp = await self.pay_lightning(
+                send_proofs, pr, quote.fee_reserve, quote.quote
+            )
             if resp.change:
-                fees_paid_sat = fee_reserve_sat - sum_promises(resp.change)
+                fees_paid_sat = quote.fee_reserve - sum_promises(resp.change)
             else:
-                fees_paid_sat = fee_reserve_sat
+                fees_paid_sat = quote.fee_reserve
 
             invoice_obj = bolt11.decode(pr)
             return PaymentResponse(
                 ok=True,
                 checking_id=invoice_obj.payment_hash,
-                preimage=resp.preimage,
+                preimage=resp.proof,
                 fee_msat=fees_paid_sat * 1000,
             )
         except Exception as e:

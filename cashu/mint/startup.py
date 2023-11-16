@@ -10,7 +10,7 @@ from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..mint import migrations
-from ..mint.crud import LedgerCrud
+from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
 
 logger.debug("Enviroment Settings:")
@@ -27,7 +27,7 @@ ledger = Ledger(
     seed=settings.mint_private_key,
     derivation_path=settings.mint_derivation_path,
     lightning=lightning_backend,
-    crud=LedgerCrud(),
+    crud=LedgerCrudSqlite(),
 )
 
 
@@ -50,16 +50,17 @@ async def start_mint_init():
     await ledger.load_used_proofs()
     await ledger.init_keysets()
 
-    if settings.lightning:
-        logger.info(f"Using backend: {settings.mint_lightning_backend}")
-        status = await ledger.lightning.status()
-        if status.error_message:
-            logger.warning(
+    logger.info(f"Using backend: {settings.mint_lightning_backend}")
+    status = await ledger.lightning.status()
+    if status.error_message:
+        logger.warning(
+            (
                 f"The backend for {ledger.lightning.__class__.__name__} isn't"
-                f" working properly: '{status.error_message}'",
-                RuntimeWarning,
-            )
-        logger.info(f"Lightning balance: {status.balance_msat} msat")
+                f" working properly: '{status.error_message}'"
+            ),
+            RuntimeWarning,
+        )
+    logger.info(f"Lightning balance: {status.balance_msat} msat")
 
     logger.info(f"Data dir: {settings.cashu_dir}")
     logger.info("Mint started.")

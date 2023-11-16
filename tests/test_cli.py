@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import json
 
 import pytest
 from click.testing import CliRunner
@@ -257,12 +259,27 @@ def test_receive_tokenv3_no_mint(mint, cli_prefix):
     # where the mint URL is not in the token therefore, we need to know the mint keyset
     # already and have the mint URL in the db
     runner = CliRunner()
-    token = (
-        "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjFjQ05JQVoyWC93MSIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIi1oM0ZXMFFoX1FYLW9ac1V2c0RuNlEiLC"
-        "AiQyI6ICIwMzY5Mzc4MzdlYjg5ZWI4NjMyNWYwOWUyOTIxMWQxYTI4OTRlMzQ2YmM1YzQwZTZhMThlNTk5ZmVjNjEwOGRmMGIifSwgeyJpZCI6ICIxY0NOSUFaMlgvdzEiLCAiYW"
-        "1vdW50IjogOCwgInNlY3JldCI6ICI3d0VhNUgzZGhSRGRNZl94c1k3c3JnIiwgIkMiOiAiMDJiZmZkM2NlZDkxNjUyMzcxMDg2NjQxMzJiMjgxYjBhZjY1ZTNlZWVkNTY3MmFkZj"
-        "M0Y2VhNzE5ODhhZWM1NWI1In1dfV19"
-    )
+    token_dict = {
+        "token": [
+            {
+                "proofs": [
+                    {
+                        "id": "d5c08d2006765ffc",
+                        "amount": 2,
+                        "secret": "-h3FW0Qh_QX-oZsUvsDn6Q",
+                        "C": "036937837eb89eb86325f09e29211d1a2894e346bc5c40e6a18e599fec6108df0b",
+                    },
+                    {
+                        "id": "d5c08d2006765ffc",
+                        "amount": 8,
+                        "secret": "7wEa5H3dhRDdMf_xsY7srg",
+                        "C": "02bffd3ced9165237108664132b281b0af65e3eeed5672adf34cea71988aec55b5",
+                    },
+                ]
+            }
+        ]
+    }
+    token = "cashuA" + base64.b64encode(json.dumps(token_dict).encode()).decode()
     result = runner.invoke(
         cli,
         [
@@ -278,12 +295,28 @@ def test_receive_tokenv3_no_mint(mint, cli_prefix):
 
 def test_receive_tokenv2(mint, cli_prefix):
     runner = CliRunner()
-    token = (
-        "eyJwcm9vZnMiOiBbeyJpZCI6ICIxY0NOSUFaMlgvdzEiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICJhUmREbzlFdW9yZUVfOW90enRNVVpnIiwgIkMiOiAiMDNhMzY5ZmUy"
-        "N2IxYmVmOTg4MzA3NDQyN2RjMzc1NmU0NThlMmMwYjQ1NWMwYmVmZGM4ZjVmNTA3YmM5MGQxNmU3In0sIHsiaWQiOiAiMWNDTklBWjJYL3cxIiwgImFtb3VudCI6IDgsICJzZWNy"
-        "ZXQiOiAiTEZQbFp6Ui1MWHFfYXFDMGhUeDQyZyIsICJDIjogIjAzNGNiYzQxYWY0ODIxMGFmNjVmYjVjOWIzOTNkMjhmMmQ5ZDZhOWE5MzI2YmI3MzQ2YzVkZmRmMTU5MDk1MzI2"
-        "YyJ9XSwgIm1pbnRzIjogW3sidXJsIjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzNyIsICJpZHMiOiBbIjFjQ05JQVoyWC93MSJdfV19"
-    )
+    token_dict = {
+        "proofs": [
+            {
+                "id": "d5c08d2006765ffc",
+                "amount": 2,
+                "secret": "aRdDo9EuoreE_9otztMUZg",
+                "C": (
+                    "03a369fe27b1bef9883074427dc3756e458e2c0b455c0befdc8f5f507bc90d16e7"
+                ),
+            },
+            {
+                "id": "d5c08d2006765ffc",
+                "amount": 8,
+                "secret": "LFPlZzR-LXq_aqC0hTx42g",
+                "C": (
+                    "034cbc41af48210af65fb5c9b393d28f2d9d6a9a9326bb7346c5dfdf159095326c"
+                ),
+            },
+        ],
+        "mints": [{"url": "http://localhost:3337", "ids": ["d5c08d2006765ffc"]}],
+    }
+    token = base64.b64encode(json.dumps(token_dict).encode()).decode()
     result = runner.invoke(
         cli,
         [*cli_prefix, "receive", token],
@@ -295,11 +328,21 @@ def test_receive_tokenv2(mint, cli_prefix):
 
 def test_receive_tokenv1(mint, cli_prefix):
     runner = CliRunner()
-    token = (
-        "W3siaWQiOiAiMWNDTklBWjJYL3cxIiwgImFtb3VudCI6IDIsICJzZWNyZXQiOiAiRnVsc2dzMktQV1FMcUlLX200SzgwQSIsICJDIjogIjAzNTc4OThlYzlhMjIxN2VhYWIx"
-        "ZDc3YmM1Mzc2OTUwMjJlMjU2YTljMmMwNjc0ZDJlM2FiM2JiNGI0ZDMzMWZiMSJ9LCB7ImlkIjogIjFjQ05JQVoyWC93MSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogInJlRDBD"
-        "azVNS2xBTUQ0dWk2OEtfbEEiLCAiQyI6ICIwMjNkODNkNDE0MDU0NWQ1NTg4NjUyMzU5YjJhMjFhODljODY1ZGIzMzAyZTkzMTZkYTM5NjA0YTA2ZDYwYWQzOGYifV0="
-    )
+    token_dict = [
+        {
+            "id": "d5c08d2006765ffc",
+            "amount": 2,
+            "secret": "Fulsgs2KPWQLqIK_m4K80A",
+            "C": "0357898ec9a2217eaab1d77bc537695022e256a9c2c0674d2e3ab3bb4b4d331fb1",
+        },
+        {
+            "id": "d5c08d2006765ffc",
+            "amount": 8,
+            "secret": "reD0Ck5MKlAMD4ui68K_lA",
+            "C": "023d83d4140545d5588652359b2a21a89c865db3302e9316da39604a06d60ad38f",
+        },
+    ]
+    token = base64.b64encode(json.dumps(token_dict).encode()).decode()
     result = runner.invoke(
         cli,
         [*cli_prefix, "receive", token],

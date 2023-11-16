@@ -1,16 +1,14 @@
-from typing import Optional, Union
+import math
 
+import bolt11
 from loguru import logger
 
-from ..core.base import (
-    Invoice,
-)
-from ..core.db import Connection, Database
+from ..core.db import Database
 from ..core.errors import (
-    InvoiceNotPaidError,
     LightningError,
 )
-from ..lightning.base import InvoiceResponse, PaymentResponse, PaymentStatus, Wallet
+from ..core.helpers import fee_reserve
+from ..lightning.base import InvoiceResponse, PaymentResponse, Wallet
 from ..mint.crud import LedgerCrud
 from .protocols import SupportLightning, SupportsDb
 
@@ -59,54 +57,81 @@ class LedgerLightning(SupportLightning, SupportsDb):
         )
         return payment
 
-    async def _check_lightning_invoice(
-        self, *, amount: int, id: str, conn: Optional[Connection] = None
-    ) -> PaymentStatus:
-        """Checks with the Lightning backend whether an invoice with `id` was paid.
+    # async def _check_lightning_invoice(
+    #     self, *, amount: int, id: str, conn: Optional[Connection] = None
+    # ) -> PaymentStatus:
+    #     """Checks with the Lightning backend whether an invoice with `id` was paid.
+
+    #     Args:
+    #         amount (int): Amount of the outputs the wallet wants in return (in Satoshis).
+    #         id (str): Id to look up Lightning invoice by.
+
+    #     Raises:
+    #         Exception: Invoice not found.
+    #         Exception: Tokens for invoice already issued.
+    #         Exception: Amount larger than invoice amount.
+    #         Exception: Invoice not paid yet
+    #         e: Update database and pass through error.
+
+    #     Returns:
+    #         bool: True if invoice has been paid, else False
+    #     """
+    #     invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
+    #         id=id, db=self.db, conn=conn
+    #     )
+    #     if invoice is None:
+    #         raise LightningError("invoice not found.")
+    #     if invoice.issued:
+    #         raise LightningError("tokens already issued for this invoice.")
+    #     if amount > invoice.amount:
+    #         raise LightningError(
+    #             f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
+    #         )
+    #     assert invoice.payment_hash, "invoice has no payment hash."
+    #     # set this invoice as issued
+    #     await self.crud.update_lightning_invoice(
+    #         id=id, issued=True, db=self.db, conn=conn
+    #     )
+
+    #     try:
+    #         status = await self.lightning.get_invoice_status(invoice.payment_hash)
+    #         if status.paid:
+    #             return status
+    #         else:
+    #             raise InvoiceNotPaidError()
+    #     except Exception as e:
+    #         # unset issued
+    #         await self.crud.update_lightning_invoice(
+    #             id=id, issued=False, db=self.db, conn=conn
+    #         )
+    #         raise e
+
+    async def _get_lightning_fees(self, pr: str) -> int:
+        """Returns the fee reserve (in sat) that a wallet must add to its proofs
+        in order to pay a Lightning invoice.
 
         Args:
-            amount (int): Amount of the outputs the wallet wants in return (in Satoshis).
-            id (str): Id to look up Lightning invoice by.
-
-        Raises:
-            Exception: Invoice not found.
-            Exception: Tokens for invoice already issued.
-            Exception: Amount larger than invoice amount.
-            Exception: Invoice not paid yet
-            e: Update database and pass through error.
+            pr (str): Bolt11 encoded payment request. Lightning invoice.
 
         Returns:
-            bool: True if invoice has been paid, else False
+            int: Fee in Satoshis.
         """
-        invoice: Union[Invoice, None] = await self.crud.get_lightning_invoice(
-            id=id, db=self.db, conn=conn
+        # hack: check if it's internal, if it exists, it will return paid = False,
+        # if id does not exist (not internal), it returns paid = None
+        amount_msat = 0
+        decoded_invoice = bolt11.decode(pr)
+        assert decoded_invoice.amount_msat, "invoice has no amount."
+        amount_msat = int(decoded_invoice.amount_msat)
+        logger.trace(
+            f"get_melt_fees: checking lightning invoice: {decoded_invoice.payment_hash}"
         )
-        if invoice is None:
-            raise LightningError("invoice not found.")
-        if invoice.issued:
-            raise LightningError("tokens already issued for this invoice.")
-        if amount > invoice.amount:
-            raise LightningError(
-                f"requested amount too high: {amount}. Invoice amount: {invoice.amount}"
-            )
-        assert invoice.payment_hash, "invoice has no payment hash."
-        # set this invoice as issued
-        await self.crud.update_lightning_invoice(
-            id=id, issued=True, db=self.db, conn=conn
-        )
+        payment = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
+        logger.trace(f"get_melt_fees: paid: {payment.paid}")
+        internal = payment.paid is False
 
-        try:
-            status = await self.lightning.get_invoice_status(invoice.payment_hash)
-            if status.paid:
-                return status
-            else:
-                raise InvoiceNotPaidError()
-        except Exception as e:
-            # unset issued
-            await self.crud.update_lightning_invoice(
-                id=id, issued=False, db=self.db, conn=conn
-            )
-            raise e
+        fees_msat = fee_reserve(amount_msat, internal)
+        fee_sat = math.ceil(fees_msat / 1000)
+        return fee_sat
 
     async def _pay_lightning_invoice(
         self, invoice: str, fee_limit_msat: int

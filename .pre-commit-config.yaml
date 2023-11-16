@@ -12,10 +12,11 @@ repos:
       - id: debug-statements
       - id: mixed-line-ending
       - id: check-case-conflict
-  - repo: https://github.com/psf/black
-    rev: 23.7.0
-    hooks:
-      - id: black
+  # - repo: https://github.com/psf/black
+  #   rev: 23.7.0
+  #   hooks:
+  #     - id: black
+  #       args: [--line-length=88]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.0.283
     hooks:
@@ -25,4 +26,4 @@ repos:
   #   rev: v1.6.0
   #   hooks:
   #     - id: mypy
-  #       args: [--ignore-missing]
+  #       args: [--ignore-missing, --check-untyped-defs]

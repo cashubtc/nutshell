@@ -6,7 +6,12 @@ from typing import Dict, List, Optional, Union
 from loguru import logger
 from pydantic import BaseModel
 
-from .crypto.keys import derive_keys, derive_keyset_id, derive_pubkeys
+from .crypto.keys import (
+    derive_keys,
+    derive_keyset_id,
+    derive_keyset_id_deprecated,
+    derive_pubkeys,
+)
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
 
@@ -193,6 +198,27 @@ class Invoice(BaseModel):
     time_paid: Union[None, str, int, float] = ""
 
 
+class MeltQuote(BaseModel):
+    quote: str
+    method: str
+    request: str
+    checking_id: str
+    symbol: str
+    amount: int
+    fee_reserve: Optional[int] = None
+    issued: bool
+
+
+class MintQuote(BaseModel):
+    quote: str
+    method: str
+    request: str
+    checking_id: str
+    symbol: str
+    amount: int
+    issued: bool
+
+
 # ------- API -------
 
 # ------- API: INFO -------
@@ -213,40 +239,116 @@ class GetInfoResponse(BaseModel):
 # ------- API: KEYS -------
 
 
+class KeysResponseKeyset(BaseModel):
+    id: str
+    symbol: str
+    keys: Dict[str, str]
+
+
 class KeysResponse(BaseModel):
-    __root__: Dict[str, str]
+    keysets: List[KeysResponseKeyset]
+
+
+class KeysetsResponseKeyset(BaseModel):
+    id: str
+    symbol: str
+    active: bool
 
 
 class KeysetsResponse(BaseModel):
+    keysets: list[KeysetsResponseKeyset]
+
+
+class KeysResponse_deprecated(BaseModel):
+    __root__: Dict[str, str]
+
+
+class KeysetsResponse_deprecated(BaseModel):
     keysets: list[str]
+
+
+# ------- API: MINT QUOTE -------
+
+
+class PostMintQuoteRequest(BaseModel):
+    method: str  # input payment method
+    symbol: str  # output symbol
+    amount: int  # output amount
+
+
+class PostMintQuoteResponse(BaseModel):
+    quote: str  # quote id
+    request: str  # input payment request
+    method: str  # input payment method
+    symbol: str  # output symbol
+    amount: int  # output amount
 
 
 # ------- API: MINT -------
 
 
 class PostMintRequest(BaseModel):
-    outputs: List[BlindedMessage]
+    quote: str  # quote id
+    outputs: List[BlindedMessage]  # outputs to mint
 
 
 class PostMintResponse(BaseModel):
+    quote: str  # quote id
+    signatures: List[BlindedSignature] = []
+
+
+class GetMintResponse_deprecated(BaseModel):
+    pr: str
+    hash: str
+
+
+class PostMintRequest_deprecated(BaseModel):
+    outputs: List[BlindedMessage]
+
+
+class PostMintResponse_deprecated(BaseModel):
     promises: List[BlindedSignature] = []
 
 
-class GetMintResponse(BaseModel):
-    pr: str
-    hash: str
+# ------- API: MELT QUOTE -------
+
+
+class PostMeltQuoteRequest(BaseModel):
+    symbol: str  # input symbol
+    method: str  # output payment method
+    request: str  # output payment request
+
+
+class PostMeltQuoteResponse(BaseModel):
+    quote: str  # quote id
+    symbol: str  # input symbol
+    amount: int  # input amount
+    fee_reserve: int  # input fee reserve
 
 
 # ------- API: MELT -------
 
 
 class PostMeltRequest(BaseModel):
+    quote: str  # quote id
+    inputs: List[Proof]
+    outputs: Union[List[BlindedMessage], None]
+
+
+class PostMeltResponse(BaseModel):
+    quote: str  # quote id
+    paid: Union[bool, None]
+    proof: Union[str, None]
+    change: Union[List[BlindedSignature], None] = None
+
+
+class PostMeltRequest_deprecated(BaseModel):
     proofs: List[Proof]
     pr: str
     outputs: Union[List[BlindedMessage], None]
 
 
-class GetMeltResponse(BaseModel):
+class PostMeltResponse_deprecated(BaseModel):
     paid: Union[bool, None]
     preimage: Union[str, None]
     change: Union[List[BlindedSignature], None] = None
@@ -256,16 +358,21 @@ class GetMeltResponse(BaseModel):
 
 
 class PostSplitRequest(BaseModel):
-    proofs: List[Proof]
-    amount: Optional[int] = None  # deprecated since 0.13.0
+    inputs: List[Proof]
     outputs: List[BlindedMessage]
 
 
 class PostSplitResponse(BaseModel):
-    promises: List[BlindedSignature]
+    signatures: List[BlindedSignature]
 
 
 # deprecated since 0.13.0
+class PostSplitRequest_Deprecated(BaseModel):
+    proofs: List[Proof]
+    amount: Optional[int] = None
+    outputs: List[BlindedMessage]
+
+
 class PostSplitResponse_Deprecated(BaseModel):
     fst: List[BlindedSignature] = []
     snd: List[BlindedSignature] = []
@@ -322,6 +429,7 @@ class WalletKeyset:
     """
 
     id: str
+    id_deprecated: str  # deprecated since 0.14.0
     public_keys: Dict[int, PublicKey]
     mint_url: Union[str, None] = None
     valid_from: Union[str, None] = None
@@ -338,6 +446,7 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=None,
+        use_deprecated_id=False,
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
@@ -348,6 +457,11 @@ class WalletKeyset:
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
         self.id = derive_keyset_id(self.public_keys)
+        # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+        self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)
+        if use_deprecated_id:
+            self.id = self.id_deprecated
+        # END BACKWARDS COMPATIBILITY < 0.14.0
 
     def serialize(self):
         return json.dumps(
@@ -383,6 +497,7 @@ class MintKeyset:
     """
 
     id: str
+    id_deprecated: str  # deprecated since 0.14.0
     derivation_path: str
     private_keys: Dict[int, PrivateKey]
     public_keys: Union[Dict[int, PublicKey], None] = None
@@ -390,10 +505,12 @@ class MintKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: Union[bool, None] = True
+    symbol: str = "sat"
     version: Union[str, None] = None
 
     def __init__(
         self,
+        *,
         id="",
         valid_from=None,
         valid_to=None,
@@ -401,6 +518,7 @@ class MintKeyset:
         active=None,
         seed: str = "",
         derivation_path: str = "",
+        symbol: str = "sat",
         version: str = "1",
     ):
         self.derivation_path = derivation_path
@@ -409,34 +527,44 @@ class MintKeyset:
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = active
+        self.symbol = symbol
         self.version = version
         # generate keys from seed
         if seed:
             self.generate_keys(seed)
 
+    @property
+    def public_keys_hex(self) -> Dict[int, str]:
+        assert self.public_keys, "public keys not set"
+        return {
+            int(amount): key.serialize().hex()
+            for amount, key in self.public_keys.items()
+        }
+
     def generate_keys(self, seed):
         """Generates keys of a keyset from a seed."""
-        backwards_compatibility_pre_0_12 = False
         if (
             self.version
             and len(self.version.split(".")) > 1
             and int(self.version.split(".")[0]) == 0
             and int(self.version.split(".")[1]) <= 11
         ):
-            backwards_compatibility_pre_0_12 = True
             # WARNING: Broken key derivation for backwards compatibility with < 0.12
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
                 seed, self.derivation_path
             )
-        else:
-            self.private_keys = derive_keys(seed, self.derivation_path)
-        self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-        self.id = derive_keyset_id(self.public_keys)  # type: ignore
-        if backwards_compatibility_pre_0_12:
             logger.warning(
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
+        else:
+            self.private_keys = derive_keys(seed, self.derivation_path)
+        self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+
+        self.id = derive_keyset_id(self.public_keys)  # type: ignore
+        # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+        self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+        # END BACKWARDS COMPATIBILITY < 0.14.0
 
 
 class MintKeysets:
@@ -530,7 +658,7 @@ class TokenV3(BaseModel):
     @classmethod
     def deserialize(cls, tokenv3_serialized: str) -> "TokenV3":
         """
-        Takes a TokenV3 and serializes it as "cashuA<json_urlsafe_base64>.
+        Ingesta a serialized "cashuA<json_urlsafe_base64>" token and returns a TokenV3.
         """
         prefix = "cashuA"
         assert tokenv3_serialized.startswith(prefix), Exception(

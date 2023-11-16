@@ -200,9 +200,9 @@ To run the tests in this repository, first install the dev dependencies with
 poetry install --with dev
 ```
 
-Then, make sure to set up your `.env` file to use your local mint and disable Lightning and Tor:
+Then, make sure to set up your mint's `.env` file to use a fake Lightning backend and disable Tor:
 ```bash
-LIGHTNING=FALSE
+MINT_LIGHTNING_BACKEND=FakeWallet
 TOR=FALSE
 ```
 You can run the tests with
