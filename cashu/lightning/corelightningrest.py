@@ -132,11 +132,9 @@ class CoreLightningRestWallet(Wallet):
         data = r.json()
         assert "payment_hash" in data
         assert "bolt11" in data
-        # NOTE: use payment_hash when corelightning-rest updates and supports it
-        # return InvoiceResponse(True, data["payment_hash"], data["bolt11"], None)
         return InvoiceResponse(
             ok=True,
-            checking_id=label,
+            checking_id=data["payment_hash"],
             payment_request=data["bolt11"],
             error_message=None,
         )
@@ -212,13 +210,9 @@ class CoreLightningRestWallet(Wallet):
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        # get invoice bolt11 from checking_id
-        # corelightning-rest wants the "label" here....
-        # NOTE: We can get rid of all labels and use payment_hash when
-        # corelightning-rest updates and supports it
         r = await self.client.get(
             f"{self.url}/v1/invoice/listInvoices",
-            params={"label": checking_id},
+            params={"payment_hash": checking_id},
         )
         try:
             r.raise_for_status()
@@ -232,15 +226,9 @@ class CoreLightningRestWallet(Wallet):
             return PaymentStatus(paid=None)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        from ..mint.crud import get_lightning_invoice
-        from ..mint.startup import ledger
-
-        payment = await get_lightning_invoice(db=ledger.db, payment_hash=checking_id)
-        if not payment:
-            raise ValueError(f"Payment with checking_id {checking_id} not found")
         r = await self.client.get(
             f"{self.url}/v1/pay/listPays",
-            params={"invoice": payment.bolt11},
+            params={"payment_hash": checking_id},
         )
         try:
             r.raise_for_status()
@@ -287,18 +275,23 @@ class CoreLightningRestWallet(Wallet):
                             continue
                         logger.trace(f"paid invoice: {inv}")
                         yield inv["label"]
-                        # NOTE: use payment_hash when corelightning-rest updates
-                        # and supports it
+                        # NOTE: use payment_hash when corelightning-rest returns it
+                        # when using waitAnyInvoice
                         # payment_hash = inv["payment_hash"]
                         # yield payment_hash
                         # hack to return payment_hash if the above shouldn't work
-                        # r = await self.client.get(
-                        #     f"{self.url}/v1/invoice/listInvoices",
-                        #     params={"label": inv["label"]},
-                        # )
-                        # paid_invoce = r.json()
-                        # logger.trace(f"paid invoice: {paid_invoce}")
-                        # yield paid_invoce["invoices"][0]["payment_hash"]
+                        r = await self.client.get(
+                            f"{self.url}/v1/invoice/listInvoices",
+                            params={"label": inv["label"]},
+                        )
+                        paid_invoce = r.json()
+                        logger.trace(f"paid invoice: {paid_invoce}")
+                        assert self.statuses[
+                            paid_invoce["invoices"][0]["status"]
+                        ], "streamed invoice not paid"
+                        assert "invoices" in paid_invoce, "no invoices in response"
+                        assert len(paid_invoce["invoices"]), "no invoices in response"
+                        yield paid_invoce["invoices"][0]["payment_hash"]
 
             except Exception as exc:
                 logger.debug(
