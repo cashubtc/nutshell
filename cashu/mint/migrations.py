@@ -52,19 +52,19 @@ async def m002_add_balance_views(db: Database):
         await conn.execute(f"""
             CREATE VIEW {table_with_schema(db, 'balance_issued')} AS
             SELECT COALESCE(SUM(s), 0) AS balance FROM (
-                SELECT SUM(amount) AS s
+                SELECT SUM(amount) 
                 FROM {table_with_schema(db, 'promises')}
                 WHERE amount > 0
-            );
+            ) AS s;
         """)
 
         await conn.execute(f"""
             CREATE VIEW {table_with_schema(db, 'balance_redeemed')} AS
             SELECT COALESCE(SUM(s), 0) AS balance FROM (
-                SELECT SUM(amount) AS s
+                SELECT SUM(amount) 
                 FROM {table_with_schema(db, 'proofs_used')}
                 WHERE amount > 0
-            );
+            ) AS s;
         """)
 
         await conn.execute(f"""
