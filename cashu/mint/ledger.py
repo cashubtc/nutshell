@@ -144,9 +144,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             v.generate_keys(self.master_key)
 
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
+        # we duplicate all keysets also by their deprecated id
         keyset_ids = list(self.keysets.keysets.values())
         for v in keyset_ids:
-            # we duplicate all keysets also by their deprecated id
             logger.trace(f"Loading deprecated keyset {v.id_deprecated} (new: {v.id})")
             self.keysets.keysets[v.id_deprecated] = v
         # END BACKWARDS COMPATIBILITY < 0.15.0

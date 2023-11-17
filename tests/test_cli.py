@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+from typing import Tuple
 
 import pytest
 from click.testing import CliRunner
@@ -17,7 +18,7 @@ def cli_prefix():
     yield ["--wallet", "test_cli_wallet", "--host", settings.mint_url, "--tests"]
 
 
-def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> (str, str):
+def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, str]:
     invoice = [
         line.split(" ")[1] for line in output.split("\n") if line.startswith("Invoice")
     ][0]
@@ -264,13 +265,13 @@ def test_receive_tokenv3_no_mint(mint, cli_prefix):
             {
                 "proofs": [
                     {
-                        "id": "d5c08d2006765ffc",
+                        "id": "00d5c08d2006765f",
                         "amount": 2,
                         "secret": "-h3FW0Qh_QX-oZsUvsDn6Q",
                         "C": "036937837eb89eb86325f09e29211d1a2894e346bc5c40e6a18e599fec6108df0b",
                     },
                     {
-                        "id": "d5c08d2006765ffc",
+                        "id": "00d5c08d2006765f",
                         "amount": 8,
                         "secret": "7wEa5H3dhRDdMf_xsY7srg",
                         "C": "02bffd3ced9165237108664132b281b0af65e3eeed5672adf34cea71988aec55b5",
@@ -298,7 +299,7 @@ def test_receive_tokenv2(mint, cli_prefix):
     token_dict = {
         "proofs": [
             {
-                "id": "d5c08d2006765ffc",
+                "id": "00d5c08d2006765f",
                 "amount": 2,
                 "secret": "aRdDo9EuoreE_9otztMUZg",
                 "C": (
@@ -306,7 +307,7 @@ def test_receive_tokenv2(mint, cli_prefix):
                 ),
             },
             {
-                "id": "d5c08d2006765ffc",
+                "id": "00d5c08d2006765f",
                 "amount": 8,
                 "secret": "LFPlZzR-LXq_aqC0hTx42g",
                 "C": (
@@ -314,7 +315,7 @@ def test_receive_tokenv2(mint, cli_prefix):
                 ),
             },
         ],
-        "mints": [{"url": "http://localhost:3337", "ids": ["d5c08d2006765ffc"]}],
+        "mints": [{"url": "http://localhost:3337", "ids": ["00d5c08d2006765f"]}],
     }
     token = base64.b64encode(json.dumps(token_dict).encode()).decode()
     result = runner.invoke(
@@ -330,13 +331,13 @@ def test_receive_tokenv1(mint, cli_prefix):
     runner = CliRunner()
     token_dict = [
         {
-            "id": "d5c08d2006765ffc",
+            "id": "00d5c08d2006765f",
             "amount": 2,
             "secret": "Fulsgs2KPWQLqIK_m4K80A",
             "C": "0357898ec9a2217eaab1d77bc537695022e256a9c2c0674d2e3ab3bb4b4d331fb1",
         },
         {
-            "id": "d5c08d2006765ffc",
+            "id": "00d5c08d2006765f",
             "amount": 8,
             "secret": "reD0Ck5MKlAMD4ui68K_lA",
             "C": "023d83d4140545d5588652359b2a21a89c865db3302e9316da39604a06d60ad38f",

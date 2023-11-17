@@ -38,7 +38,7 @@ async def test_api_keys(ledger: Ledger):
     expected = {
         "keysets": [
             {
-                "id": "d5c08d2006765ffc",
+                "id": "00d5c08d2006765f",
                 "unit": "sat",
                 "keys": {
                     str(k): v.serialize().hex()
@@ -57,7 +57,7 @@ async def test_api_keysets(ledger: Ledger):
     expected = {
         "keysets": [
             {
-                "id": "d5c08d2006765ffc",
+                "id": "00d5c08d2006765f",
                 "unit": "sat",
                 "active": True,
             },
@@ -75,13 +75,13 @@ async def test_api_keysets(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/keys/d5c08d2006765ffc")
+    response = httpx.get(f"{BASE_URL}/v1/keys/00d5c08d2006765f")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
         "keysets": [
             {
-                "id": "d5c08d2006765ffc",
+                "id": "00d5c08d2006765f",
                 "unit": "sat",
                 "keys": {
                     str(k): v.serialize().hex()
@@ -131,7 +131,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert result["signatures"][0]["id"] == "d5c08d2006765ffc"
+    assert result["signatures"][0]["id"] == "00d5c08d2006765f"
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
@@ -173,7 +173,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert result["signatures"][0]["id"] == "d5c08d2006765ffc"
+    assert result["signatures"][0]["id"] == "00d5c08d2006765f"
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]

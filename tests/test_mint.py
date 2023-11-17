@@ -54,7 +54,7 @@ async def test_privatekeys(ledger: Ledger):
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets.keysets)
     assert len(ledger.keysets.get_ids())
-    assert ledger.keyset.id == "d5c08d2006765ffc"
+    assert ledger.keyset.id == "00d5c08d2006765f"
 
 
 @pytest.mark.asyncio
@@ -64,8 +64,8 @@ async def test_keysets_backwards_compatibility_pre_v0_15(ledger: Ledger):
     First one is the new hex ID, second one is the old base64 ID.
     """
     assert len(ledger.keysets.keysets) == 2
-    assert ledger.keysets.get_ids() == ["d5c08d2006765ffc", "1cCNIAZ2X/w1"]
-    assert ledger.keyset.id == "d5c08d2006765ffc"
+    assert ledger.keysets.get_ids() == ["00d5c08d2006765f", "1cCNIAZ2X/w1"]
+    assert ledger.keyset.id == "00d5c08d2006765f"
 
 
 @pytest.mark.asyncio
@@ -126,7 +126,7 @@ async def test_generate_promises(ledger: Ledger):
         == "037074c4f53e326ee14ed67125f387d160e0e729351471b69ad41f7d5d21071e15"
     )
     assert promises[0].amount == 8
-    assert promises[0].id == "d5c08d2006765ffc"
+    assert promises[0].id == "00d5c08d2006765f"
 
     # DLEQ proof present
     assert promises[0].dleq

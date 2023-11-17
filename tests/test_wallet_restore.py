@@ -92,23 +92,23 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     )
     secrets1, rs1, derivation_paths1 = await wallet3.generate_n_secrets(5)
     secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(0, 4)
-    assert wallet3.keyset_id == "d5c08d2006765ffc"
+    assert wallet3.keyset_id == "00d5c08d2006765f"
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert derivation_paths1 == derivation_paths2
     assert secrets1 == [
-        "064d8f585385fdc01c5e1363cf4d80cae8af6aa36263459cd902667041afacae",
-        "e273fe79f152071a9d430d0de56248f1e8f88b06c6e231d48b8d7f073d5dc852",
-        "7f59ebf0c1d841819b9e2d0c221a5309022aadd34f65426158bf3906faca31ec",
-        "9b0d6cc849823923bbcfa2101874755c108b4cf7a3b721f851d0ee7662581f2d",
-        "1f23400a377aa089d04fa17163a93aab77e397f22a3381fc5ee0ab3328594f5c",
+        "5a5a39a23fd190f06663529567d948144943e29e07ad9b2fc702d52cf0a24ca0",
+        "08ba202fb45b08d1542949228cc2264bd9f01f32c0e8c75416a1699cc7cbecb2",
+        "97f8dbcfaf27d8754793f17566cfe58b2b2f9190aef1afdb1f0d9cf5e0ba368f",
+        "03c3835221a9b871f38694838d6c9ca50aa39849bfd61f0da34bba17e93564ef",
+        "410a049dc13c05113f546e420ec462ce335338c491239250d27cd2bc1591fd61",
     ]
     assert derivation_paths1 == [
-        "m/129372'/0'/838302271'/0'",
-        "m/129372'/0'/838302271'/1'",
-        "m/129372'/0'/838302271'/2'",
-        "m/129372'/0'/838302271'/3'",
-        "m/129372'/0'/838302271'/4'",
+        "m/129372'/0'/565311353'/0'",
+        "m/129372'/0'/565311353'/1'",
+        "m/129372'/0'/565311353'/2'",
+        "m/129372'/0'/565311353'/3'",
+        "m/129372'/0'/565311353'/4'",
     ]
 
 
