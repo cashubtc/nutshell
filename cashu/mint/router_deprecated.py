@@ -1,11 +1,13 @@
-from typing import Optional
+from typing import List, Optional, Union
 
 from fastapi import APIRouter
 from loguru import logger
 
 from ..core.base import (
+    BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
+    GetInfoResponse,
     GetMintResponse_deprecated,
     KeysetsResponse_deprecated,
     KeysResponse_deprecated,
@@ -16,12 +18,42 @@ from ..core.base import (
     PostMintRequest,
     PostMintResponse,
     PostMintResponse_deprecated,
+    PostSplitRequest_Deprecated,
+    PostSplitResponse_Deprecated,
+    PostSplitResponse_Deprecated_Deprecated,
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
 from .startup import ledger
 
 router_deprecated: APIRouter = APIRouter()
+
+
+@router_deprecated.get(
+    "/info",
+    name="Mint information",
+    summary="Mint information, operator contact information, and other info.",
+    response_model=GetInfoResponse,
+    response_model_exclude_none=True,
+    deprecated=True,
+)
+async def info() -> GetInfoResponse:
+    logger.trace("> GET /info")
+    return GetInfoResponse(
+        name=settings.mint_info_name,
+        pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
+        version=f"Nutshell/{settings.version}",
+        description=settings.mint_info_description,
+        description_long=settings.mint_info_description_long,
+        contact=settings.mint_info_contact,
+        nuts=settings.mint_info_nuts,
+        motd=settings.mint_info_motd,
+        parameter={
+            "max_peg_in": settings.mint_max_peg_in,
+            "max_peg_out": settings.mint_max_peg_out,
+            "peg_out_only": settings.mint_peg_out_only,
+        },
+    )
 
 
 @router_deprecated.get(
@@ -106,7 +138,7 @@ async def request_mint_deprecated(amount: int = 0) -> GetMintResponse_deprecated
     if settings.mint_peg_out_only:
         raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
     quote = await ledger.mint_quote(
-        PostMintQuoteRequest(amount=amount, symbol="sat", method="bolt11")
+        PostMintQuoteRequest(amount=amount, unit="sat", method="bolt11")
     )
     resp = GetMintResponse_deprecated(pr=quote.request, hash=quote.quote)
     logger.trace(f"< GET /mint: {resp}")
@@ -169,7 +201,7 @@ async def melt_deprecated(
     """
     logger.trace(f"> POST /melt: {payload}")
     quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=payload.pr, symbol="sat", method="bolt11")
+        PostMeltQuoteRequest(request=payload.pr, unit="sat", method="bolt11")
     )
     ok, preimage, change_promises = await ledger.melt(
         proofs=payload.proofs, quote=quote.quote, outputs=payload.outputs
@@ -199,3 +231,57 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     fees_sat = await ledger._get_lightning_fees(payload.pr)
     logger.trace(f"< POST /checkfees: {fees_sat}")
     return CheckFeesResponse(fee=fees_sat)
+
+
+@router_deprecated.post(
+    "/split",
+    name="Split",
+    summary="Split proofs at a specified amount",
+    # response_model=Union[
+    #     PostSplitResponse_Deprecated_Deprecated, PostSplitResponse_Deprecated
+    # ],
+    response_description=(
+        "A list of blinded signatures that can be used to create proofs."
+    ),
+    deprecated=True,
+)
+async def split_deprecated(
+    payload: PostSplitRequest_Deprecated,
+) -> Union[PostSplitResponse_Deprecated_Deprecated, PostSplitResponse_Deprecated]:
+    """
+    Requests a set of Proofs to be split into two a new set of BlindedSignatures.
+
+    This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
+    It is then used by Carol (by setting split=total) to redeem the tokens.
+    """
+    logger.trace(f"> POST /split: {payload}")
+    assert payload.outputs, Exception("no outputs provided.")
+
+    promises = await ledger.split(proofs=payload.proofs, outputs=payload.outputs)
+
+    if payload.amount:
+        # BEGIN backwards compatibility < 0.13
+        # old clients expect two lists of promises where the second one's amounts
+        # sum up to `amount`. The first one is the rest.
+        # The returned value `promises` has the form [keep1, keep2, ..., send1, send2, ...]
+        # The sum of the sendx is `amount`. We need to split this into two lists and keep the order of the elements.
+        frst_promises: List[BlindedSignature] = []
+        scnd_promises: List[BlindedSignature] = []
+        scnd_amount = 0
+        for promise in promises[::-1]:  # we iterate backwards
+            if scnd_amount < payload.amount:
+                scnd_promises.insert(0, promise)  # and insert at the beginning
+                scnd_amount += promise.amount
+            else:
+                frst_promises.insert(0, promise)  # and insert at the beginning
+        logger.trace(
+            f"Split into keep: {len(frst_promises)}:"
+            f" {sum([p.amount for p in frst_promises])} sat and send:"
+            f" {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
+        )
+        return PostSplitResponse_Deprecated_Deprecated(
+            fst=frst_promises, snd=scnd_promises
+        )
+        # END backwards compatibility < 0.13
+    else:
+        return PostSplitResponse_Deprecated(promises=promises)

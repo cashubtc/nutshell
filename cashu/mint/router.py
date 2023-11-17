@@ -1,5 +1,3 @@
-from typing import Union
-
 from fastapi import APIRouter, Request
 from loguru import logger
 
@@ -22,7 +20,6 @@ from ..core.base import (
     PostRestoreResponse,
     PostSplitRequest,
     PostSplitResponse,
-    PostSplitResponse_Deprecated,
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -32,14 +29,14 @@ router: APIRouter = APIRouter()
 
 
 @router.get(
-    "/info",
+    "/v1/info",
     name="Mint information",
     summary="Mint information, operator contact information, and other info.",
     response_model=GetInfoResponse,
     response_model_exclude_none=True,
 )
 async def info() -> GetInfoResponse:
-    logger.trace("> GET /info")
+    logger.trace("> GET /v1/info")
     return GetInfoResponse(
         name=settings.mint_info_name,
         pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
@@ -69,11 +66,11 @@ async def info() -> GetInfoResponse:
 )
 async def keys():
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
-    logger.trace("> GET /keys")
+    logger.trace("> GET /v1/keys")
     keyset = ledger.keyset
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
-        symbol=keyset.symbol,
+        unit=keyset.unit,
         keys={str(k): v for k, v in keyset.public_keys_hex.items()},
     )
     return KeysResponse(keysets=[keyset_for_response])
@@ -93,7 +90,7 @@ async def keyset_keys(keyset_id: str, request: Request):
     """
     Get the public keys of the mint from a specific keyset id.
     """
-    logger.trace(f"> GET /keys/{keyset_id}")
+    logger.trace(f"> GET /v1/keys/{keyset_id}")
     # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
     # if keyset_id is not hex, we assume it is base64 and sanitize it
     try:
@@ -108,7 +105,7 @@ async def keyset_keys(keyset_id: str, request: Request):
 
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
-        symbol=keyset.symbol,
+        unit=keyset.unit,
         keys={str(k): v for k, v in keyset.public_keys_hex.items()},
     )
     return KeysResponse(keysets=[keyset_for_response])
@@ -123,10 +120,10 @@ async def keyset_keys(keyset_id: str, request: Request):
 )
 async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
-    logger.trace("> GET /keysets")
+    logger.trace("> GET /v1/keysets")
     keysets = []
     for id, keyset in ledger.keysets.keysets.items():
-        keysets.append(KeysetsResponseKeyset(id=id, symbol=keyset.symbol, active=True))
+        keysets.append(KeysetsResponseKeyset(id=id, unit=keyset.unit, active=True))
     return KeysetsResponse(keysets=keysets)
 
 
@@ -142,7 +139,7 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
 
-    Call `POST /mint` after paying the invoice.
+    Call `POST /v1/mint` after paying the invoice.
     """
     logger.trace(f"> POST /v1/mint/quote: payload={payload}")
     amount = payload.amount
@@ -156,7 +153,7 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
         request=quote.request,
         quote=quote.quote,
         method="bolt11",
-        symbol="sat",
+        unit="sat",
         amount=amount,
     )
     logger.trace(f"< POST /v1/mint/quote: {resp}")
@@ -222,14 +219,40 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /v1/melt: {payload}")
-    ok, preimage, change_promises = await ledger.melt(
+    preimage, change_promises = await ledger.melt(
         proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
     )
     resp = PostMeltResponse(
-        quote="to_be_replaced", paid=ok, proof=preimage, change=change_promises
+        quote="to_be_replaced", paid=True, proof=preimage, change=change_promises
     )
     logger.trace(f"< POST /v1/melt: {resp}")
     return resp
+
+
+@router.post(
+    "/v1/split",
+    name="Split",
+    summary="Split proofs at a specified amount",
+    response_model=PostSplitResponse,
+    response_description=(
+        "A list of blinded signatures that can be used to create proofs."
+    ),
+)
+async def split(
+    payload: PostSplitRequest,
+) -> PostSplitResponse:
+    """
+    Requests a set of Proofs to be split into two a new set of BlindedSignatures.
+
+    This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
+    It is then used by Carol (by setting split=total) to redeem the tokens.
+    """
+    logger.trace(f"> POST /v1/split: {payload}")
+    assert payload.outputs, Exception("no outputs provided.")
+
+    signatures = await ledger.split(proofs=payload.inputs, outputs=payload.outputs)
+
+    return PostSplitResponse(signatures=signatures)
 
 
 @router.post(
@@ -251,32 +274,6 @@ async def check_spendable(
     logger.trace(f"< POST /check <spendable>: {spendableList}")
     logger.trace(f"< POST /check <pending>: {pendingList}")
     return CheckSpendableResponse(spendable=spendableList, pending=pendingList)
-
-
-@router.post(
-    "/split",
-    name="Split",
-    summary="Split proofs at a specified amount",
-    response_model=Union[PostSplitResponse, PostSplitResponse_Deprecated],
-    response_description=(
-        "A list of blinded signatures that can be used to create proofs."
-    ),
-)
-async def split(
-    payload: PostSplitRequest,
-) -> Union[PostSplitResponse, PostSplitResponse_Deprecated]:
-    """
-    Requests a set of Proofs to be split into two a new set of BlindedSignatures.
-
-    This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
-    It is then used by Carol (by setting split=total) to redeem the tokens.
-    """
-    logger.trace(f"> POST /split: {payload}")
-    assert payload.outputs, Exception("no outputs provided.")
-
-    signatures = await ledger.split(proofs=payload.inputs, outputs=payload.outputs)
-
-    return PostSplitResponse(signatures=signatures)
 
 
 @router.post(

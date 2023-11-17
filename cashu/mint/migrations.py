@@ -214,8 +214,9 @@ async def m010_add_quote_tables(db: Database):
                     method TEXT NOT NULL,
                     request TEXT NOT NULL,
                     checking_id TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
+                    unit TEXT NOT NULL,
                     amount INTEGER NOT NULL,
+                    paid BOOL NOT NULL,
                     issued BOOL NOT NULL,
                     created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
 
@@ -230,9 +231,9 @@ async def m010_add_quote_tables(db: Database):
                     method TEXT NOT NULL,
                     request TEXT NOT NULL,
                     checking_id TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
+                    unit TEXT NOT NULL,
                     amount INTEGER NOT NULL,
-                    issued BOOL NOT NULL,
+                    paid BOOL NOT NULL,
                     created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
 
                     UNIQUE (quote)

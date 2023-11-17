@@ -415,7 +415,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: GET /v1/mint")
-        payload = PostMintQuoteRequest(method="bolt11", symbol="sat", amount=amount)
+        payload = PostMintQuoteRequest(method="bolt11", unit="sat", amount=amount)
         resp = await self.httpx.post(
             join(self.url, "/v1/mint/quote"), json=payload.dict()
         )
@@ -480,7 +480,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
         payload = PostMeltQuoteRequest(
-            symbol="sat", method="bolt11", request=payment_request
+            unit="sat", method="bolt11", request=payment_request
         )
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote"),
@@ -551,9 +551,15 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             }
 
         resp = await self.httpx.post(
-            join(self.url, "split"),
+            join(self.url, "/v1/split"),
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
+        # BEGIN backwards compatibility < 0.14.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.split_deprecated(proofs, outputs)
+            return ret
+        # END backwards compatibility < 0.14.0
         self.raise_on_error_request(resp)
         promises_dict = resp.json()
         mint_response = PostSplitResponse.parse_obj(promises_dict)
@@ -1345,7 +1351,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         melt_quote = await self.melt_quote(invoice)
         # fees = melt_quote.fee_reserve or 0
         logger.debug(
-            f"Mint wants {melt_quote.fee_reserve} {melt_quote.symbol} as fee reserve."
+            f"Mint wants {melt_quote.fee_reserve} {melt_quote.unit} as fee reserve."
         )
         # amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
         return melt_quote

@@ -31,7 +31,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
     secrets_used: Set[str]
 
     async def verify_inputs_and_outputs(
-        self, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
+        self, *, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
     ):
         """Checks all proofs and outputs for validity.
 

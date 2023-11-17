@@ -203,10 +203,10 @@ class MeltQuote(BaseModel):
     method: str
     request: str
     checking_id: str
-    symbol: str
+    unit: str
     amount: int
     fee_reserve: Optional[int] = None
-    issued: bool
+    paid: bool
 
 
 class MintQuote(BaseModel):
@@ -214,8 +214,9 @@ class MintQuote(BaseModel):
     method: str
     request: str
     checking_id: str
-    symbol: str
+    unit: str
     amount: int
+    paid: bool
     issued: bool
 
 
@@ -241,7 +242,7 @@ class GetInfoResponse(BaseModel):
 
 class KeysResponseKeyset(BaseModel):
     id: str
-    symbol: str
+    unit: str
     keys: Dict[str, str]
 
 
@@ -251,7 +252,7 @@ class KeysResponse(BaseModel):
 
 class KeysetsResponseKeyset(BaseModel):
     id: str
-    symbol: str
+    unit: str
     active: bool
 
 
@@ -272,7 +273,7 @@ class KeysetsResponse_deprecated(BaseModel):
 
 class PostMintQuoteRequest(BaseModel):
     method: str  # input payment method
-    symbol: str  # output symbol
+    unit: str  # output unit
     amount: int  # output amount
 
 
@@ -280,7 +281,7 @@ class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
     method: str  # input payment method
-    symbol: str  # output symbol
+    unit: str  # output unit
     amount: int  # output amount
 
 
@@ -314,14 +315,14 @@ class PostMintResponse_deprecated(BaseModel):
 
 
 class PostMeltQuoteRequest(BaseModel):
-    symbol: str  # input symbol
+    unit: str  # input unit
     method: str  # output payment method
     request: str  # output payment request
 
 
 class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
-    symbol: str  # input symbol
+    unit: str  # input unit
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
 
@@ -374,6 +375,10 @@ class PostSplitRequest_Deprecated(BaseModel):
 
 
 class PostSplitResponse_Deprecated(BaseModel):
+    promises: List[BlindedSignature] = []
+
+
+class PostSplitResponse_Deprecated_Deprecated(BaseModel):
     fst: List[BlindedSignature] = []
     snd: List[BlindedSignature] = []
     deprecated: str = "The amount field is deprecated since 0.13.0"
@@ -505,7 +510,7 @@ class MintKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: Union[bool, None] = True
-    symbol: str = "sat"
+    unit: str = "sat"
     version: Union[str, None] = None
 
     def __init__(
@@ -518,7 +523,7 @@ class MintKeyset:
         active=None,
         seed: str = "",
         derivation_path: str = "",
-        symbol: str = "sat",
+        unit: str = "sat",
         version: str = "1",
     ):
         self.derivation_path = derivation_path
@@ -527,7 +532,7 @@ class MintKeyset:
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = active
-        self.symbol = symbol
+        self.unit = unit
         self.version = version
         # generate keys from seed
         if seed:

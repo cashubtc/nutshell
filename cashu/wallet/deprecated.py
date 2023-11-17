@@ -1,3 +1,4 @@
+from posixpath import join
 from typing import List, Optional, Tuple, Union
 
 import httpx
@@ -16,6 +17,8 @@ from ..core.base import (
     PostMintRequest_deprecated,
     PostMintResponse_deprecated,
     PostRestoreResponse,
+    PostSplitRequest_Deprecated,
+    PostSplitResponse_Deprecated,
     Proof,
     WalletKeyset,
 )
@@ -267,3 +270,42 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)
         return returnObj.outputs, returnObj.promises
+
+    @async_set_httpx_client
+    async def split_deprecated(
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+    ) -> List[BlindedSignature]:
+        """Consume proofs and create new promises based on amount split."""
+        logger.debug("Calling split. POST /split")
+        split_payload = PostSplitRequest_Deprecated(proofs=proofs, outputs=outputs)
+
+        # construct payload
+        def _splitrequest_include_fields(proofs: List[Proof]):
+            """strips away fields from the model that aren't necessary for the /split"""
+            proofs_include = {
+                "id",
+                "amount",
+                "secret",
+                "C",
+                "witness",
+            }
+            return {
+                "outputs": ...,
+                "inputs": {i: proofs_include for i in range(len(proofs))},
+            }
+
+        resp = await self.httpx.post(
+            join(self.url, "/split"),
+            json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
+        )
+        self.raise_on_error(resp)
+        promises_dict = resp.json()
+        mint_response = PostSplitResponse_Deprecated.parse_obj(promises_dict)
+        promises = [BlindedSignature(**p.dict()) for p in mint_response.promises]
+
+        if len(promises) == 0:
+            raise Exception("received no splits.")
+
+        return promises

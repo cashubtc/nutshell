@@ -116,8 +116,7 @@ class LedgerLightning(SupportLightning, SupportsDb):
         Returns:
             int: Fee in Satoshis.
         """
-        # hack: check if it's internal, if it exists, it will return paid = False,
-        # if id does not exist (not internal), it returns paid = None
+
         amount_msat = 0
         decoded_invoice = bolt11.decode(pr)
         assert decoded_invoice.amount_msat, "invoice has no amount."
@@ -125,11 +124,15 @@ class LedgerLightning(SupportLightning, SupportsDb):
         logger.trace(
             f"get_melt_fees: checking lightning invoice: {decoded_invoice.payment_hash}"
         )
-        payment = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
-        logger.trace(f"get_melt_fees: paid: {payment.paid}")
-        internal = payment.paid is False
 
-        fees_msat = fee_reserve(amount_msat, internal)
+        # hack: check if it's internal, if it exists, it will return paid = False,
+        # if id does not exist (not internal), it returns paid = None
+        # NOTE: This only works with LNbits so we're getting rid of it
+        # payment = await self.lightning.get_invoice_status(decoded_invoice.payment_hash)
+        # logger.trace(f"get_melt_fees: paid: {payment.paid}")
+        # internal = payment.paid is False
+
+        fees_msat = fee_reserve(amount_msat)
         fee_sat = math.ceil(fees_msat / 1000)
         return fee_sat
 

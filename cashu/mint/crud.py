@@ -149,11 +149,30 @@ class LedgerCrud(ABC):
     ) -> Optional[MintQuote]: ...
 
     @abstractmethod
-    async def update_mint_quote(
+    async def get_mint_quote_by_checking_id(
+        self,
+        *,
+        checking_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[MintQuote]: ...
+
+    @abstractmethod
+    async def update_mint_quote_issued(
         self,
         *,
         quote_id: str,
         issued: bool,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def update_mint_quote_paid(
+        self,
+        *,
+        quote_id: str,
+        paid: bool,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
@@ -175,14 +194,14 @@ class LedgerCrud(ABC):
         db: Database,
         checking_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> Optional[MintQuote]: ...
+    ) -> Optional[MeltQuote]: ...
 
     @abstractmethod
     async def update_melt_quote(
         self,
         *,
         quote_id: str,
-        issued: bool,
+        paid: bool,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
@@ -329,17 +348,18 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'mint_quotes')}
-            (quote, method, request, checking_id, symbol, amount, issued)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, checking_id, unit, amount, issued, paid)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
                 quote.method,
                 quote.request,
                 quote.checking_id,
-                quote.symbol,
+                quote.unit,
                 quote.amount,
                 quote.issued,
+                quote.paid,
             ),
         )
 
@@ -357,10 +377,25 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             (quote_id,),
         )
-        row_dict = dict(row)
-        return MintQuote(**row_dict) if row_dict else None
+        return MintQuote(**dict(row)) if row else None
 
-    async def update_mint_quote(
+    async def get_mint_quote_by_checking_id(
+        self,
+        *,
+        checking_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[MintQuote]:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT * from {table_with_schema(db, 'mint_quotes')}
+            WHERE checking_id = ?
+            """,
+            (checking_id,),
+        )
+        return MintQuote(**dict(row)) if row else None
+
+    async def update_mint_quote_issued(
         self,
         *,
         quote_id: str,
@@ -377,6 +412,23 @@ class LedgerCrudSqlite(LedgerCrud):
             ),
         )
 
+    async def update_mint_quote_paid(
+        self,
+        *,
+        quote_id: str,
+        paid: bool,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"UPDATE {table_with_schema(db, 'mint_quotes')} SET paid = ? WHERE"
+            " quote = ?",
+            (
+                paid,
+                quote_id,
+            ),
+        )
+
     async def store_melt_quote(
         self,
         *,
@@ -387,7 +439,7 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'melt_quotes')}
-            (quote, method, request, checking_id, symbol, amount, issued)
+            (quote, method, request, checking_id, unit, amount, paid)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -395,9 +447,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.method,
                 quote.request,
                 quote.checking_id,
-                quote.symbol,
+                quote.unit,
                 quote.amount,
-                quote.issued,
+                quote.paid,
             ),
         )
 
@@ -408,7 +460,7 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         checking_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> Optional[MintQuote]:
+    ) -> Optional[MeltQuote]:
         clauses = []
         values: List[Any] = []
         if quote_id:
@@ -429,22 +481,21 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         if row is None:
             return None
-        row_dict = dict(row)
-        return MintQuote(**row_dict) if row_dict else None
+        return MeltQuote(**dict(row)) if row else None
 
     async def update_melt_quote(
         self,
         *,
         quote_id: str,
-        issued: bool,
+        paid: bool,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET issued = ? WHERE"
+            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ? WHERE"
             " quote = ?",
             (
-                issued,
+                paid,
                 quote_id,
             ),
         )
@@ -498,8 +549,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             tuple(values),
         )
-        row_dict = dict(row)
-        return Invoice(**row_dict) if row_dict else None
+        return Invoice(**dict(row)) if row else None
 
     async def update_lightning_invoice(
         self,

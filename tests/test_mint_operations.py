@@ -36,7 +36,7 @@ async def test_melt(wallet1: Wallet, ledger: Ledger):
     total_amount = mint_quote.amount + mint_quote.fee_reserve
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
     melt_quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=invoice.bolt11, symbol="sat", method="bolt11")
+        PostMeltQuoteRequest(request=invoice.bolt11, unit="sat", method="bolt11")
     )
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
