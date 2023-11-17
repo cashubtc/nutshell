@@ -1508,4 +1508,4 @@ pgsql = ["psycopg2-binary"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8.1"
-content-hash = "29567355e47fd37ad2da4f4223e08b13209231080434fca04043ddbe2eb2ab50"
+content-hash = "c534f1a8d4d666f96da62aa3c2dfab31fd793459e64cb6164dd19b31a84c93e5"
