@@ -5,7 +5,6 @@ import httpx
 from httpx import Response
 from loguru import logger
 
-from ..core import bolt11 as bolt11
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
