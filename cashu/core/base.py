@@ -454,7 +454,10 @@ class WalletKeyset:
 
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
-        # self.id = derive_keyset_id(self.public_keys)
+        if not id:
+            self.id = derive_keyset_id(self.public_keys)
+        else:
+            self.id = id
 
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         if use_deprecated_id:
@@ -574,7 +577,7 @@ class MintKeyset:
                 " compatibility < 0.12)"
             )
             self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
-        elif self.version_tuple < (0, 15):
+        elif self.version_tuple < (0, 15) or deprecated:
             self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
             logger.warning(
                 f"WARNING: Using non-bip32 derivation for keyset {self.id} (backwards"

@@ -311,7 +311,9 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.keysets[0].keys.items()
         }
-        keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
+        keyset = WalletKeyset(
+            id=keys.keysets[0].id, public_keys=keyset_keys, mint_url=url
+        )
         return keyset
 
     @async_set_httpx_client

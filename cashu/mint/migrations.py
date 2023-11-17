@@ -1,4 +1,5 @@
 from ..core.db import Connection, Database, table_with_schema
+from ..core.settings import settings
 
 
 async def m000_create_migrations_table(conn: Connection):
@@ -221,8 +222,8 @@ async def m010_add_quote_tables(db: Database):
 
         # fill columns "seed" "counter" and "unit" in table keysets
         await conn.execute(
-            f"UPDATE {table_with_schema(db, 'keysets')} SET seed = '0', counter = 0,"
-            " unit = 'sat'"
+            f"UPDATE {table_with_schema(db, 'keysets')} SET seed ="
+            f" '{settings.mint_private_key}', counter = 0, unit = 'sat'"
         )
 
         await conn.execute(f"""

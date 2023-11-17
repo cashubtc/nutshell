@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import math
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -104,12 +105,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         # store the new keyset in the current keysets
         self.keysets.keysets[keyset.id] = keyset
 
-        # # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        # if keyset.version_tuple < (0, 15):
-        #     self.keysets.keysets[keyset.id_deprecated] = copy.copy(keyset)
-        #     self.keysets.keysets[keyset.id_deprecated].id = keyset.id_deprecated
-        # # END BACKWARDS COMPATIBILITY < 0.15.0
-
         logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
 
@@ -139,6 +134,20 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             logger.trace(f"Generating keys for keyset {v.id}")
             v.seed = self.master_key
             v.generate_keys()
+
+        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
+        # we duplicate old keysets and computer their new keyset id
+        for _, keyset in self.keysets.keysets.items():
+            if keyset.version_tuple < (0, 15):
+                deprecated_keyset_with_new_id = copy.copy(keyset)
+                deprecated_id = deprecated_keyset_with_new_id.id
+                deprecated_keyset_with_new_id.generate_keys(deprecated=True)
+                self.keysets.keysets[keyset.id] = deprecated_keyset_with_new_id
+                logger.warning(
+                    f"Duplicated deprecated keyset {deprecated_id} with new id"
+                    f" {keyset.id}."
+                )
+        # END BACKWARDS COMPATIBILITY < 0.15.0
 
         # # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         # # we duplicate all old keysets also by their deprecated id
