@@ -561,7 +561,7 @@ class MintKeyset:
             for amount, key in self.public_keys.items()
         }
 
-    def generate_keys(self, deprecated=False):
+    def generate_keys(self):
         """Generates keys of a keyset from a seed."""
         assert self.seed, "seed not set"
         assert self.derivation_path, "derivation path not set"
@@ -577,7 +577,7 @@ class MintKeyset:
                 " compatibility < 0.12)"
             )
             self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
-        elif self.version_tuple < (0, 15) or deprecated:
+        elif self.version_tuple < (0, 15):
             self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
             logger.warning(
                 f"WARNING: Using non-bip32 derivation for keyset {self.id} (backwards"

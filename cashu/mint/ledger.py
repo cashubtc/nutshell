@@ -20,7 +20,7 @@ from ..core.base import (
     Proof,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.keys import derive_pubkey, random_hash
+from ..core.crypto.keys import derive_keyset_id, derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -137,29 +137,22 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         # we duplicate old keysets and computer their new keyset id
-        for _, keyset in self.keysets.keysets.items():
+        for _, keyset in copy.copy(self.keysets.keysets).items():
             if keyset.version_tuple < (0, 15):
                 deprecated_keyset_with_new_id = copy.copy(keyset)
                 deprecated_id = deprecated_keyset_with_new_id.id
-                deprecated_keyset_with_new_id.generate_keys(deprecated=True)
-                self.keysets.keysets[keyset.id] = deprecated_keyset_with_new_id
+                assert deprecated_keyset_with_new_id.public_keys
+                deprecated_keyset_with_new_id.id = derive_keyset_id(
+                    deprecated_keyset_with_new_id.public_keys
+                )
+                self.keysets.keysets[deprecated_keyset_with_new_id.id] = (
+                    deprecated_keyset_with_new_id
+                )
                 logger.warning(
                     f"Duplicated deprecated keyset {deprecated_id} with new id"
-                    f" {keyset.id}."
+                    f" {deprecated_keyset_with_new_id.id}."
                 )
         # END BACKWARDS COMPATIBILITY < 0.15.0
-
-        # # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        # # we duplicate all old keysets also by their deprecated id
-        # keyset_ids = [
-        #     v for k, v in self.keysets.keysets.items() if v.version_tuple < (0, 15)
-        # ]
-        # for v in keyset_ids:
-        #     logger.trace(
-        #         f"Loaded deprecated base64 keyset: {v.id_deprecated} (new: {v.id})"
-        #     )
-        #     self.keysets.keysets[v.id_deprecated] = v
-        # # END BACKWARDS COMPATIBILITY < 0.15.0
 
         logger.info(
             f"Initialized {len(self.keysets.keysets)} keysets from the database."
