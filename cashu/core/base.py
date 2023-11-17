@@ -272,7 +272,6 @@ class KeysetsResponse_deprecated(BaseModel):
 
 
 class PostMintQuoteRequest(BaseModel):
-    method: str  # input payment method
     unit: str  # output unit
     amount: int  # output amount
 
@@ -280,9 +279,6 @@ class PostMintQuoteRequest(BaseModel):
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
-    method: str  # input payment method
-    unit: str  # output unit
-    amount: int  # output amount
 
 
 # ------- API: MINT -------
@@ -294,7 +290,6 @@ class PostMintRequest(BaseModel):
 
 
 class PostMintResponse(BaseModel):
-    quote: str  # quote id
     signatures: List[BlindedSignature] = []
 
 
@@ -316,13 +311,11 @@ class PostMintResponse_deprecated(BaseModel):
 
 class PostMeltQuoteRequest(BaseModel):
     unit: str  # input unit
-    method: str  # output payment method
     request: str  # output payment request
 
 
 class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
-    unit: str  # input unit
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
 
@@ -337,7 +330,6 @@ class PostMeltRequest(BaseModel):
 
 
 class PostMeltResponse(BaseModel):
-    quote: str  # quote id
     paid: Union[bool, None]
     proof: Union[str, None]
     change: Union[List[BlindedSignature], None] = None

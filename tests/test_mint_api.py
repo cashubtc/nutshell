@@ -141,15 +141,12 @@ async def test_split(ledger: Ledger, wallet: Wallet):
 async def test_mint_quote(ledger: Ledger):
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11",
-        json={"method": "bolt11", "unit": "sat", "amount": 100},
+        json={"unit": "sat", "amount": 100},
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result["quote"]
     assert result["request"]
-    assert result["method"] == "bolt11"
-    assert result["unit"] == "sat"
-    assert result["amount"] == 100
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
 
@@ -169,7 +166,6 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
-    assert result["quote"] == quote_id
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
@@ -186,17 +182,17 @@ async def test_melt_quote(ledger: Ledger, wallet: Wallet):
     request = invoice.bolt11
     response = httpx.post(
         f"{BASE_URL}/v1/melt/quote/bolt11",
-        json={"method": "bolt11", "unit": "sat", "request": request},
+        json={"unit": "sat", "request": request},
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result["quote"]
-    assert result["unit"] == "sat"
     assert result["amount"] == 64
     # TODO: internal invoice, fee should be 0
     assert result["fee_reserve"] == 2
 
 
+@pytest.mark.asyncio
 async def test_melt(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
@@ -228,7 +224,6 @@ async def test_melt(ledger: Ledger, wallet: Wallet):
     result = response.json()
     assert result.get("proof") is not None
     assert result["paid"] is True
-    assert result["quote"] == quote.quote
     assert result["change"]
     # we get back 2 sats because it was an internal invoice
     assert result["change"][0]["amount"] == 2

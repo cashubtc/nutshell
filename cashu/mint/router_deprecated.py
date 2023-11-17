@@ -136,9 +136,7 @@ async def request_mint_deprecated(amount: int = 0) -> GetMintResponse_deprecated
         raise CashuError(code=0, detail="Amount must be a valid amount of sat.")
     if settings.mint_peg_out_only:
         raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
-    quote = await ledger.mint_quote(
-        PostMintQuoteRequest(amount=amount, unit="sat", method="bolt11")
-    )
+    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=amount, unit="sat"))
     resp = GetMintResponse_deprecated(pr=quote.request, hash=quote.quote)
     logger.trace(f"< GET /mint: {resp}")
     return resp
@@ -200,7 +198,7 @@ async def melt_deprecated(
     """
     logger.trace(f"> POST /melt: {payload}")
     quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=payload.pr, unit="sat", method="bolt11")
+        PostMeltQuoteRequest(request=payload.pr, unit="sat")
     )
     preimage, change_promises = await ledger.melt(
         proofs=payload.proofs, quote=quote.quote, outputs=payload.outputs

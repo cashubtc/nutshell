@@ -152,9 +152,6 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
     resp = PostMintQuoteResponse(
         request=quote.request,
         quote=quote.quote,
-        method="bolt11",
-        unit="sat",
-        amount=amount,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp

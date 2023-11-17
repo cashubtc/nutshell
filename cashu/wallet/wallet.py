@@ -415,7 +415,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: GET /v1/mint/bolt11")
-        payload = PostMintQuoteRequest(method="bolt11", unit="sat", amount=amount)
+        payload = PostMintQuoteRequest(unit="sat", amount=amount)
         resp = await self.httpx.post(
             join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
         )
@@ -475,13 +475,13 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def melt_quote(self, payment_request: str) -> PostMeltQuoteResponse:
+    async def melt_quote(
+        self, payment_request: str, unit: str = "sat"
+    ) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
-        payload = PostMeltQuoteRequest(
-            unit="sat", method="bolt11", request=payment_request
-        )
+        payload = PostMeltQuoteRequest(unit=unit, request=payment_request)
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote/bolt11"),
             json=payload.dict(),
@@ -1340,7 +1340,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     # ---------- TRANSACTION HELPERS ----------
 
-    async def get_pay_amount_with_fees(self, invoice: str):
+    async def get_pay_amount_with_fees(self, invoice: str, unit: str = "sat"):
         """
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
@@ -1348,11 +1348,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # decoded_invoice = bolt11.decode(invoice)
         # assert decoded_invoice.amount_msat, "invoices has no amount."
         # check if it's an internal payment
-        melt_quote = await self.melt_quote(invoice)
+        melt_quote = await self.melt_quote(invoice, unit)
         # fees = melt_quote.fee_reserve or 0
-        logger.debug(
-            f"Mint wants {melt_quote.fee_reserve} {melt_quote.unit} as fee reserve."
-        )
+        logger.debug(f"Mint wants {melt_quote.fee_reserve} {unit} as fee reserve.")
         # amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
         return melt_quote
 

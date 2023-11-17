@@ -255,7 +255,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         Returns:
             Tuple[str, str]: Bolt11 invoice and a id (for looking it up later)
         """
-        assert quote_request.method == "bolt11", "only bolt11 supported"
         assert quote_request.unit == "sat", "only sat supported"
 
         logger.trace("called request_mint")
@@ -360,7 +359,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
     ) -> PostMeltQuoteResponse:
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
-
+        assert melt_quote.unit == "sat", "only sat supported"
         # Lightning
         fee_reserve_sat = await self._get_lightning_fees(melt_quote.request)
 
@@ -370,7 +369,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             method="bolt11",
             request=melt_quote.request,
             checking_id=invoice_obj.payment_hash,
-            unit="sat",
+            unit=melt_quote.unit,
             amount=int(invoice_obj.amount_msat / 1000),
             paid=False,
             fee_reserve=fee_reserve_sat,
@@ -379,7 +378,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         return PostMeltQuoteResponse(
             quote=quote.quote,
             amount=quote.amount,
-            unit=quote.unit,
             fee_reserve=fee_reserve_sat,
         )
 
@@ -407,6 +405,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         # verify quote
         melt_quote = await self.crud.get_melt_quote(quote_id=quote, db=self.db)
         assert melt_quote, "quote not found"
+        assert melt_quote.method == "bolt11", "only bolt11 supported"
+        assert melt_quote.unit == "sat", "only sat supported"
         assert not melt_quote.paid, "melt quote already paid"
         bolt11_request = melt_quote.request
         total_provided = sum_proofs(proofs)
