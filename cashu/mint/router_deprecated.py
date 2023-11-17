@@ -247,6 +247,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
 )
 async def split_deprecated(
     payload: PostSplitRequest_Deprecated,
+    # ) -> Union[PostSplitResponse_Very_Deprecated, PostSplitResponse_Deprecated]:
 ):
     """
     Requests a set of Proofs to be split into two a new set of BlindedSignatures.

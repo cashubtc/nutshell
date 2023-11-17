@@ -13,8 +13,8 @@ BASE_URL = "http://localhost:3337"
 async def wallet(mint):
     wallet1 = await Wallet.with_db(
         url=BASE_URL,
-        db="test_data/wallet_mint_api",
-        name="wallet_mint_api",
+        db="test_data/wallet_mint_api_deprecated",
+        name="wallet_mint_api_deprecated",
     )
     await wallet1.load_mint()
     yield wallet1
@@ -54,7 +54,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
     pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
-    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(200, 201)
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(20000, 20001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
     inputs_payload = [p.to_dict() for p in wallet.proofs]
@@ -72,7 +72,7 @@ async def test_split_deprecated_with_amount(ledger: Ledger, wallet: Wallet):
     pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
-    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(300, 301)
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(80000, 80001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
     inputs_payload = [p.to_dict() for p in wallet.proofs]
