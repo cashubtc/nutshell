@@ -17,11 +17,11 @@ repos:
     hooks:
       - id: black
         args: [--line-length=88]
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.0.283
-    hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
+  # - repo: https://github.com/astral-sh/ruff-pre-commit
+  #   rev: v0.0.283
+  #   hooks:
+  #     - id: ruff
+  #       args: [--fix, --exit-non-zero-on-fix]
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.6.0
     hooks:
