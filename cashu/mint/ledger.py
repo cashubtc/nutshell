@@ -373,6 +373,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             unit="sat",
             amount=int(invoice_obj.amount_msat / 1000),
             paid=False,
+            fee_reserve=fee_reserve_sat,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         return PostMeltQuoteResponse(
@@ -403,40 +404,41 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         Returns:
             Tuple[str, List[BlindedMessage]]: Proof of payment and signed outputs for returning overpaid fees to wallet.
         """
-
-        # TODO: needs logic to look up the lightning invoice from the quote ID
+        # verify quote
         melt_quote = await self.crud.get_melt_quote(quote_id=quote, db=self.db)
         assert melt_quote, "quote not found"
         assert not melt_quote.paid, "melt quote already paid"
         bolt11_request = melt_quote.request
-
-        logger.trace("melt called")
+        total_provided = sum_proofs(proofs)
+        total_needed = melt_quote.amount + (melt_quote.fee_reserve or 0)
+        assert total_provided >= total_needed, (
+            f"provided proofs not enough. Provided: {total_provided}, needed:"
+            f" {total_needed}"
+        )
+        if settings.mint_max_peg_out and total_provided > settings.mint_max_peg_out:
+            raise NotAllowedError(
+                f"Maximum melt amount is {settings.mint_max_peg_out} sat."
+            )
+        # verify inputs and their spending conditions
+        await self.verify_inputs_and_outputs(proofs=proofs)
 
         # set proofs to pending to avoid race conditions
         await self._set_proofs_pending(proofs)
 
         try:
-            # verify amounts
-            total_provided = sum_proofs(proofs)
+            # verify amounts from bolt11 invoice
             invoice_obj = bolt11.decode(bolt11_request)
             assert invoice_obj.amount_msat, "invoice has no amount."
             invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
-            if settings.mint_max_peg_out and invoice_amount > settings.mint_max_peg_out:
-                raise NotAllowedError(
-                    f"Maximum melt amount is {settings.mint_max_peg_out} sat."
-                )
 
-            # verify spending inputs and their spending conditions
-            await self.verify_inputs_and_outputs(proofs=proofs)
-
-            fees_paid = 0
-            payment_proof = ""
             # first we check if there is a mint quote with the same payment request
             # so that we can handle the transaction internally without lightning
+            fees_paid, payment_proof = 0, ""
             mint_quote = await self.crud.get_mint_quote_by_checking_id(
                 checking_id=melt_quote.checking_id, db=self.db
             )
             if mint_quote:
+                # we settle the transaction internally
                 assert mint_quote.amount == invoice_amount, "amounts do not match"
                 assert mint_quote.unit == melt_quote.unit, "units do not match"
                 assert mint_quote.method == melt_quote.method, "methods do not match"

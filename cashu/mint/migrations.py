@@ -233,6 +233,7 @@ async def m010_add_quote_tables(db: Database):
                     checking_id TEXT NOT NULL,
                     unit TEXT NOT NULL,
                     amount INTEGER NOT NULL,
+                    fee_reserve INTEGER,
                     paid BOOL NOT NULL,
                     created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
 

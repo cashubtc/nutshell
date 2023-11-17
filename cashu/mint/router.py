@@ -223,7 +223,7 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
         proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
     )
     resp = PostMeltResponse(
-        quote="to_be_replaced", paid=True, proof=preimage, change=change_promises
+        quote=payload.quote, paid=True, proof=preimage, change=change_promises
     )
     logger.trace(f"< POST /v1/melt: {resp}")
     return resp

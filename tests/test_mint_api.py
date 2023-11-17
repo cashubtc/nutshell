@@ -119,7 +119,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
     pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
-    secrets, rs, derivation_paths = await wallet.generate_n_secrets(2, skip_bump=True)
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
     inputs_payload = [p.to_dict() for p in wallet.proofs]
@@ -195,6 +195,43 @@ async def test_melt_quote(ledger: Ledger, wallet: Wallet):
     assert result["amount"] == 64
     # TODO: internal invoice, fee should be 0
     assert result["fee_reserve"] == 2
+
+
+async def test_melt(ledger: Ledger, wallet: Wallet):
+    # internal invoice
+    invoice = await wallet.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id)
+    assert wallet.balance == 64
+
+    # create invoice to melt to
+    # we melt 2 satoshis less because of the fee reserve
+    invoice = await wallet.request_mint(62)
+    quote = await wallet.melt_quote(invoice.bolt11)
+    inputs_payload = [p.to_dict() for p in wallet.proofs]
+
+    # outputs for change
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
+    outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    outputs_payload = [o.dict() for o in outputs]
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt",
+        json={
+            "quote": quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
+        timeout=None,
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    assert result.get("proof") is not None
+    assert result["paid"] is True
+    assert result["quote"] == quote.quote
+    assert result["change"]
+    # we get back 2 sats because it was an internal invoice
+    assert result["change"][0]["amount"] == 2
 
 
 @pytest.mark.asyncio
