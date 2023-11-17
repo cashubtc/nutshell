@@ -15,8 +15,7 @@ from ..core.base import (
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
     PostMintQuoteRequest,
-    PostMintRequest,
-    PostMintResponse,
+    PostMintRequest_deprecated,
     PostMintResponse_deprecated,
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
@@ -149,14 +148,14 @@ async def request_mint_deprecated(amount: int = 0) -> GetMintResponse_deprecated
     "/mint",
     name="Mint tokens",
     summary="Mint tokens in exchange for a Bitcoin payment that the user has made",
-    response_model=PostMintResponse,
+    response_model=PostMintResponse_deprecated,
     response_description=(
         "A list of blinded signatures that can be used to create proofs."
     ),
     deprecated=True,
 )
 async def mint_deprecated(
-    payload: PostMintRequest,
+    payload: PostMintRequest_deprecated,
     hash: Optional[str] = None,
     payment_hash: Optional[str] = None,
 ) -> PostMintResponse_deprecated:
