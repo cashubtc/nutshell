@@ -359,15 +359,17 @@ async def pending(
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)  # type: ignore
             ).strftime("%Y-%m-%d %H:%M:%S")
-            result.update({
-                f"{i}": {
-                    "amount": sum_proofs(grouped_proofs),
-                    "time": reserved_date,
-                    "ID": key,
-                    "token": token,
-                    "mint": mint,
+            result.update(
+                {
+                    f"{i}": {
+                        "amount": sum_proofs(grouped_proofs),
+                        "time": reserved_date,
+                        "ID": key,
+                        "token": token,
+                        "mint": mint,
+                    }
                 }
-            })
+            )
     return PendingResponse(pending_token=result)
 
 
@@ -412,20 +414,22 @@ async def wallets():
                 if w == wallet.name:
                     active_wallet = True
                 if active_wallet:
-                    result.update({
-                        f"{w}": {
-                            "balance": sum_proofs(wallet.proofs),
-                            "available": sum_proofs([
-                                p for p in wallet.proofs if not p.reserved
-                            ]),
+                    result.update(
+                        {
+                            f"{w}": {
+                                "balance": sum_proofs(wallet.proofs),
+                                "available": sum_proofs(
+                                    [p for p in wallet.proofs if not p.reserved]
+                                ),
+                            }
                         }
-                    })
+                    )
         except Exception:
             pass
     return WalletsResponse(wallets=result)
 
 
-@router.post("/restore", name="Restore wallet", response_model=RestoreResponse)
+@router.post("/v1/restore", name="Restore wallet", response_model=RestoreResponse)
 async def restore(
     to: int = Query(default=..., description="Counter to which restore the wallet"),
 ):

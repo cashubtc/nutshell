@@ -242,7 +242,7 @@ async def test_api_check_state(ledger: Ledger):
     ]
     payload = CheckSpendableRequest(proofs=proofs)
     response = httpx.post(
-        f"{BASE_URL}/check",
+        f"{BASE_URL}/v1/check",
         json=payload.dict(),
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"

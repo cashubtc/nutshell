@@ -91,13 +91,13 @@ async def keyset_keys(keyset_id: str, request: Request):
     Get the public keys of the mint from a specific keyset id.
     """
     logger.trace(f"> GET /v1/keys/{keyset_id}")
-    # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+    # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
     # if keyset_id is not hex, we assume it is base64 and sanitize it
     try:
         int(keyset_id, 16)
     except ValueError:
         keyset_id = keyset_id.replace("-", "+").replace("_", "/")
-    # END BACKWARDS COMPATIBILITY < 0.14.0
+    # END BACKWARDS COMPATIBILITY < 0.15.0
 
     keyset = ledger.keysets.keysets.get(keyset_id)
     if keyset is None:
@@ -256,7 +256,7 @@ async def split(
 
 
 @router.post(
-    "/check",
+    "/v1/check",
     name="Check proof state",
     summary="Check whether a proof is spent already or is pending in a transaction",
     response_model=CheckSpendableResponse,
@@ -269,15 +269,15 @@ async def check_spendable(
     payload: CheckSpendableRequest,
 ) -> CheckSpendableResponse:
     """Check whether a secret has been spent already or not."""
-    logger.trace(f"> POST /check: {payload}")
+    logger.trace(f"> POST /v1/check: {payload}")
     spendableList, pendingList = await ledger.check_proof_state(payload.proofs)
-    logger.trace(f"< POST /check <spendable>: {spendableList}")
-    logger.trace(f"< POST /check <pending>: {pendingList}")
+    logger.trace(f"< POST /v1/check <spendable>: {spendableList}")
+    logger.trace(f"< POST /v1/check <pending>: {pendingList}")
     return CheckSpendableResponse(spendable=spendableList, pending=pendingList)
 
 
 @router.post(
-    "/restore",
+    "/v1/restore",
     name="Restore",
     summary="Restores a blinded signature from a secret",
     response_model=PostRestoreResponse,

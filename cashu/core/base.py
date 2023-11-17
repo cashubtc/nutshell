@@ -434,7 +434,7 @@ class WalletKeyset:
     """
 
     id: str
-    id_deprecated: str  # deprecated since 0.14.0
+    id_deprecated: str  # deprecated since 0.15.0
     public_keys: Dict[int, PublicKey]
     mint_url: Union[str, None] = None
     valid_from: Union[str, None] = None
@@ -462,16 +462,16 @@ class WalletKeyset:
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
         self.id = derive_keyset_id(self.public_keys)
-        # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)
         if use_deprecated_id:
             self.id = self.id_deprecated
-        # END BACKWARDS COMPATIBILITY < 0.14.0
+        # END BACKWARDS COMPATIBILITY < 0.15.0
 
     def serialize(self):
-        return json.dumps({
-            amount: key.serialize().hex() for amount, key in self.public_keys.items()
-        })
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
 
     @classmethod
     def from_row(cls, row: Row):
@@ -502,7 +502,7 @@ class MintKeyset:
     """
 
     id: str
-    id_deprecated: str  # deprecated since 0.14.0
+    id_deprecated: str  # deprecated since 0.15.0
     derivation_path: str
     private_keys: Dict[int, PrivateKey]
     public_keys: Union[Dict[int, PublicKey], None] = None
@@ -567,9 +567,9 @@ class MintKeyset:
         self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
 
         self.id = derive_keyset_id(self.public_keys)  # type: ignore
-        # BEGIN BACKWARDS COMPATIBILITY < 0.14.0
+        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
-        # END BACKWARDS COMPATIBILITY < 0.14.0
+        # END BACKWARDS COMPATIBILITY < 0.15.0
 
 
 class MintKeysets:

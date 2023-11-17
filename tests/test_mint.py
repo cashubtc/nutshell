@@ -58,8 +58,8 @@ async def test_keysets(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_keysets_backwards_compatibility_pre_v0_14(ledger: Ledger):
-    """Backwards compatibility test for keysets pre v0.14.0
+async def test_keysets_backwards_compatibility_pre_v0_15(ledger: Ledger):
+    """Backwards compatibility test for keysets pre v0.15.0
     We expect two instances of the same keyset but with different IDs.
     First one is the new hex ID, second one is the old base64 ID.
     """
@@ -135,10 +135,10 @@ async def test_generate_promises(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_generate_promises_keyset_backwards_compatibility_pre_v0_14(
+async def test_generate_promises_keyset_backwards_compatibility_pre_v0_15(
     ledger: Ledger,
 ):
-    """Backwards compatibility test for keysets pre v0.14.0
+    """Backwards compatibility test for keysets pre v0.15.0
     We want to generate promises using the old keyset ID.
     We expect the promise to have the old base64 ID.
     """

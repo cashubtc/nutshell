@@ -199,10 +199,10 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         assert len(keyset.public_keys) > 0, "did not receive keys from mint."
 
         if keyset_id and keyset_id != keyset.id:
-            # NOTE: Because of the upcoming change of how to calculate keyset ids
-            # with version 0.14.0, we overwrite the calculated keyset id with the
+            # NOTE: Because of the change of how to calculate keyset ids
+            # with version 0.15.0, we overwrite the calculated keyset id with the
             # requested one. This is a temporary fix and should be removed once all
-            # ecash is transitioned to 0.14.0.
+            # ecash is transitioned to 0.15.0.
             logger.debug(
                 f"Keyset ID mismatch: {keyset_id} != {keyset.id}. This can happen due"
                 " to a version upgrade."
@@ -297,12 +297,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         resp = await self.httpx.get(
             join(url, "/v1/keys"),
         )
-        # BEGIN backwards compatibility < 0.14.0
+        # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
             ret = await self._get_keys_deprecated(url)
             return ret
-        # END backwards compatibility < 0.14.0
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         keys_dict: dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
@@ -333,12 +333,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         resp = await self.httpx.get(
             join(url, f"/v1/keys/{keyset_id_urlsafe}"),
         )
-        # BEGIN backwards compatibility < 0.14.0
+        # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
             ret = await self._get_keys_of_keyset_deprecated(url, keyset_id)
             return ret
-        # END backwards compatibility < 0.14.0
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
 
         keys_dict = resp.json()
@@ -367,12 +367,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         resp = await self.httpx.get(
             join(url, "/v1/keysets"),
         )
-        # BEGIN backwards compatibility < 0.14.0
+        # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
             ret = await self._get_keyset_ids_deprecated(url)
             return ret
-        # END backwards compatibility < 0.14.0
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
 
         keysets_dict = resp.json()
@@ -419,12 +419,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         resp = await self.httpx.post(
             join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
         )
-        # BEGIN backwards compatibility < 0.14.0
+        # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
             ret = await self.request_mint_deprecated(amount)
             return ret
-        # END backwards compatibility < 0.14.0
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         return_dict = resp.json()
         mint_response = PostMintQuoteResponse.parse_obj(return_dict)
@@ -461,12 +461,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             join(self.url, "/v1/mint/bolt11"),
             json=outputs_payload.dict(),
         )
-        # BEGIN backwards compatibility < 0.14.0
+        # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
             ret = await self.mint_deprecated(outputs, quote)
             return ret
-        # END backwards compatibility < 0.14.0
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         response_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /v1/mint/bolt11")
@@ -554,12 +554,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             join(self.url, "/v1/split"),
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
-        # BEGIN backwards compatibility < 0.14.0
+        # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
             ret = await self.split_deprecated(proofs, outputs)
             return ret
-        # END backwards compatibility < 0.14.0
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         promises_dict = resp.json()
         mint_response = PostSplitResponse.parse_obj(promises_dict)
@@ -585,7 +585,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             }
 
         resp = await self.httpx.post(
-            join(self.url, "check"),
+            join(self.url, "/v1/check"),
             json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
         )
         self.raise_on_error_request(resp)
@@ -603,7 +603,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Asks the mint to restore promises corresponding to outputs.
         """
         payload = PostMintRequest(quote="restore", outputs=outputs)
-        resp = await self.httpx.post(join(self.url, "restore"), json=payload.dict())
+        resp = await self.httpx.post(join(self.url, "/v1/restore"), json=payload.dict())
         self.raise_on_error_request(resp)
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)

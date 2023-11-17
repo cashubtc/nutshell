@@ -264,7 +264,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         Asks the mint to restore promises corresponding to outputs.
         """
         payload = PostMintRequest_deprecated(outputs=outputs)
-        resp = await self.httpx.post(self.url + "/restore", json=payload.dict())
+        resp = await self.httpx.post(self.url + "/v1/restore", json=payload.dict())
         self.raise_on_error(resp)
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)
