@@ -378,7 +378,7 @@ class PostSplitResponse_Deprecated(BaseModel):
     promises: List[BlindedSignature] = []
 
 
-class PostSplitResponse_Deprecated_Deprecated(BaseModel):
+class PostSplitResponse_Very_Deprecated(BaseModel):
     fst: List[BlindedSignature] = []
     snd: List[BlindedSignature] = []
     deprecated: str = "The amount field is deprecated since 0.13.0"

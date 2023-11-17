@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from fastapi import APIRouter
 from loguru import logger
@@ -20,7 +20,7 @@ from ..core.base import (
     PostMintResponse_deprecated,
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
-    PostSplitResponse_Deprecated_Deprecated,
+    PostSplitResponse_Very_Deprecated,
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -238,7 +238,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     name="Split",
     summary="Split proofs at a specified amount",
     # response_model=Union[
-    #     PostSplitResponse_Deprecated_Deprecated, PostSplitResponse_Deprecated
+    #     PostSplitResponse_Very_Deprecated, PostSplitResponse_Deprecated
     # ],
     response_description=(
         "A list of blinded signatures that can be used to create proofs."
@@ -247,7 +247,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
 )
 async def split_deprecated(
     payload: PostSplitRequest_Deprecated,
-) -> Union[PostSplitResponse_Deprecated_Deprecated, PostSplitResponse_Deprecated]:
+):
     """
     Requests a set of Proofs to be split into two a new set of BlindedSignatures.
 
@@ -279,9 +279,7 @@ async def split_deprecated(
             f" {sum([p.amount for p in frst_promises])} sat and send:"
             f" {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
         )
-        return PostSplitResponse_Deprecated_Deprecated(
-            fst=frst_promises, snd=scnd_promises
-        )
+        return PostSplitResponse_Very_Deprecated(fst=frst_promises, snd=scnd_promises)
         # END backwards compatibility < 0.13
     else:
         return PostSplitResponse_Deprecated(promises=promises)
