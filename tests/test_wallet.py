@@ -236,14 +236,12 @@ async def test_split_more_than_balance(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_melt(wallet1: Wallet):
     # mint twice so we have enough to pay the second invoice back
-    invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
-    invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    topup_invoice = await wallet1.request_mint(128)
+    pay_if_regtest(topup_invoice.bolt11)
+    await wallet1.mint(128, id=topup_invoice.id)
     assert wallet1.balance == 128
 
+    invoice = await wallet1.request_mint(64)
     invoice_payment_hash = str(invoice.payment_hash)
     invoice_payment_request = invoice.bolt11
     if is_regtest:

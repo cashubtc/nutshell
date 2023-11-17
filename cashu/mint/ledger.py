@@ -407,7 +407,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         # TODO: needs logic to look up the lightning invoice from the quote ID
         melt_quote = await self.crud.get_melt_quote(quote_id=quote, db=self.db)
         assert melt_quote, "quote not found"
-        assert not melt_quote.paid, "quote already paid"
+        assert not melt_quote.paid, "melt quote already paid"
         bolt11_request = melt_quote.request
 
         logger.trace("melt called")
@@ -440,8 +440,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 assert mint_quote.amount == invoice_amount, "amounts do not match"
                 assert mint_quote.unit == melt_quote.unit, "units do not match"
                 assert mint_quote.method == melt_quote.method, "methods do not match"
-                assert not mint_quote.paid, "quote already paid"
-                assert not mint_quote.issued, "quote already issued"
+                assert not mint_quote.paid, "mint quote already paid"
+                assert not mint_quote.issued, "mint quote already issued"
                 # we can handle this transaction internally
                 await self.crud.update_mint_quote_paid(
                     quote_id=mint_quote.quote, paid=True, db=self.db

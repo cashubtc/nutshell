@@ -203,11 +203,11 @@ async def melt_deprecated(
     quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=payload.pr, unit="sat", method="bolt11")
     )
-    ok, preimage, change_promises = await ledger.melt(
+    preimage, change_promises = await ledger.melt(
         proofs=payload.proofs, quote=quote.quote, outputs=payload.outputs
     )
     resp = PostMeltResponse_deprecated(
-        paid=ok, preimage=preimage, change=change_promises
+        paid=True, preimage=preimage, change=change_promises
     )
     logger.trace(f"< POST /melt: {resp}")
     return resp

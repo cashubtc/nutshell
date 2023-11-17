@@ -166,7 +166,7 @@ async def test_generate_change_promises(ledger: Ledger):
     invoice_amount = 100_000
     fee_reserve = 2_000
     total_provided = invoice_amount + fee_reserve
-    actual_fee_msat = 100_000
+    actual_fee = 100
 
     expected_returned_promises = 7  # Amounts = [4, 8, 32, 64, 256, 512, 1024]
     expected_returned_fees = 1900
@@ -178,7 +178,7 @@ async def test_generate_change_promises(ledger: Ledger):
     ]
 
     promises = await ledger._generate_change_promises(
-        total_provided, invoice_amount, actual_fee_msat, outputs
+        total_provided, invoice_amount, actual_fee, outputs
     )
 
     assert len(promises) == expected_returned_promises
@@ -192,7 +192,7 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
     invoice_amount = 100_000
     fee_reserve = 2_000
     total_provided = invoice_amount + fee_reserve
-    actual_fee_msat = 100_000
+    actual_fee = 100
 
     expected_returned_promises = 4  # Amounts = [64, 256, 512, 1024]
     expected_returned_fees = 1856
@@ -204,7 +204,7 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
     ]
 
     promises = await ledger._generate_change_promises(
-        total_provided, invoice_amount, actual_fee_msat, outputs
+        total_provided, invoice_amount, actual_fee, outputs
     )
 
     assert len(promises) == expected_returned_promises
