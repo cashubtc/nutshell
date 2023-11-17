@@ -65,7 +65,9 @@ class LedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
-    async def unset_proof_pending(self, *, proof: Proof, db: Database, conn: Optional[Connection] = None) -> None: ...
+    async def unset_proof_pending(
+        self, *, proof: Proof, db: Database, conn: Optional[Connection] = None
+    ) -> None: ...
 
     @abstractmethod
     async def store_keyset(
@@ -402,7 +404,8 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'mint_quotes')} SET issued = ? WHERE quote = ?",
+            f"UPDATE {table_with_schema(db, 'mint_quotes')} SET issued = ? WHERE"
+            " quote = ?",
             (
                 issued,
                 quote_id,
@@ -418,7 +421,8 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'mint_quotes')} SET paid = ? WHERE quote = ?",
+            f"UPDATE {table_with_schema(db, 'mint_quotes')} SET paid = ? WHERE"
+            " quote = ?",
             (
                 paid,
                 quote_id,
@@ -489,7 +493,8 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ? WHERE quote = ?",
+            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ? WHERE"
+            " quote = ?",
             (
                 paid,
                 quote_id,
