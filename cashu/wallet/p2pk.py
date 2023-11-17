@@ -133,12 +133,9 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             return outputs
 
         # if any of the proofs provided require SIG_ALL, we must provide it
-        if any(
-            [
-                P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL
-                for p in proofs
-            ]
-        ):
+        if any([
+            P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL for p in proofs
+        ]):
             outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
         return outputs
 
@@ -184,9 +181,9 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             return proofs
         logger.debug("Spending conditions detected.")
         # P2PK signatures
-        if all(
-            [Secret.deserialize(p.secret).kind == SecretKind.P2PK.value for p in proofs]
-        ):
+        if all([
+            Secret.deserialize(p.secret).kind == SecretKind.P2PK.value for p in proofs
+        ]):
             logger.debug("P2PK redemption detected.")
             proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
 

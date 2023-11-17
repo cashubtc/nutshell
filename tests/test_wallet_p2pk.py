@@ -220,9 +220,9 @@ async def test_p2pk_locktime_with_second_refund_pubkey(
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
         locktime_seconds=2,  # locktime
-        tags=Tags(
-            [["refund", pubkey_wallet2, pubkey_wallet1]]
-        ),  # multiple refund pubkeys
+        tags=Tags([
+            ["refund", pubkey_wallet2, pubkey_wallet1]
+        ]),  # multiple refund pubkeys
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -377,9 +377,9 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
 
 
 def test_tags():
-    tags = Tags(
-        [["key1", "value1"], ["key2", "value2", "value2_1"], ["key2", "value3"]]
-    )
+    tags = Tags([
+        ["key1", "value1"], ["key2", "value2", "value2_1"], ["key2", "value3"]
+    ])
     assert tags.get_tag("key1") == "value1"
     assert tags["key1"] == "value1"
     assert tags.get_tag("key2") == "value2"
