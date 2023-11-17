@@ -7,7 +7,7 @@ on:
         default: "3.10.4"
         type: string
       poetry-version:
-        default: "1.5.1"
+        default: "1.7.1"
         type: string
       os-version:
         default: "ubuntu-latest"

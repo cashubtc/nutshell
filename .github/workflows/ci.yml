@@ -13,7 +13,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.9", "3.10"]
-        poetry-version: ["1.5.1"]
+        poetry-version: ["1.7.1"]
         # db-url: ["", "postgres://cashu:cashu@localhost:5432/test"] # TODO: Postgres test not working
         db-url: [""]
         backend-wallet-class: ["FakeWallet"]
@@ -26,7 +26,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10"]
-        poetry-version: ["1.5.1"]
+        poetry-version: ["1.7.1"]
         backend-wallet-class:
           ["LndRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
     with:
