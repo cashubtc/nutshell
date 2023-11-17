@@ -414,10 +414,10 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             Exception: If the mint request fails
         """
-        logger.trace("Requesting mint: GET /v1/mint")
+        logger.trace("Requesting mint: GET /v1/mint/bolt11")
         payload = PostMintQuoteRequest(method="bolt11", unit="sat", amount=amount)
         resp = await self.httpx.post(
-            join(self.url, "/v1/mint/quote"), json=payload.dict()
+            join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
         )
         # BEGIN backwards compatibility < 0.14.0
         # assume the mint has not upgraded yet if we get a 404
@@ -456,9 +456,9 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If the minting fails
         """
         outputs_payload = PostMintRequest(outputs=outputs, quote=quote)
-        logger.trace("Checking Lightning invoice. POST /v1/mint")
+        logger.trace("Checking Lightning invoice. POST /v1/mint/bolt11")
         resp = await self.httpx.post(
-            join(self.url, "/v1/mint"),
+            join(self.url, "/v1/mint/bolt11"),
             json=outputs_payload.dict(),
         )
         # BEGIN backwards compatibility < 0.14.0
@@ -469,7 +469,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # END backwards compatibility < 0.14.0
         self.raise_on_error_request(resp)
         response_dict = resp.json()
-        logger.trace("Lightning invoice checked. POST /v1/mint")
+        logger.trace("Lightning invoice checked. POST /v1/mint/bolt11")
         promises = PostMintResponse.parse_obj(response_dict).signatures
         return promises
 
@@ -483,7 +483,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             unit="sat", method="bolt11", request=payment_request
         )
         resp = await self.httpx.post(
-            join(self.url, "/v1/melt/quote"),
+            join(self.url, "/v1/melt/quote/bolt11"),
             json=payload.dict(),
         )
         self.raise_on_error_request(resp)
@@ -515,7 +515,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             }
 
         resp = await self.httpx.post(
-            join(self.url, "/v1/melt"),
+            join(self.url, "/v1/melt/bolt11"),
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
             timeout=None,
         )

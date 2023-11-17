@@ -128,7 +128,7 @@ async def keysets() -> KeysetsResponse:
 
 
 @router.post(
-    "/v1/mint/quote",
+    "/v1/mint/quote/bolt11",
     name="Request mint quote",
     summary="Request a quote for minting of new tokens",
     response_model=PostMintQuoteResponse,
@@ -141,7 +141,7 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
 
     Call `POST /v1/mint` after paying the invoice.
     """
-    logger.trace(f"> POST /v1/mint/quote: payload={payload}")
+    logger.trace(f"> POST /v1/mint/quote/bolt11: payload={payload}")
     amount = payload.amount
     if amount > 21_000_000 * 100_000_000 or amount <= 0:
         raise CashuError(code=0, detail="Amount must be a valid amount of sat.")
@@ -156,12 +156,12 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
         unit="sat",
         amount=amount,
     )
-    logger.trace(f"< POST /v1/mint/quote: {resp}")
+    logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
 
 
 @router.post(
-    "/v1/mint",
+    "/v1/mint/bolt11",
     name="Mint tokens",
     summary="Mint tokens in exchange for a Bitcoin payment that the user has made",
     response_model=PostMintResponse,
@@ -177,16 +177,16 @@ async def mint(
 
     Call this endpoint after `POST /v1/mint/quote`.
     """
-    logger.trace(f"> POST /v1/mint: {payload}")
+    logger.trace(f"> POST /v1/mint/bolt11: {payload}")
 
     promises = await ledger.mint(outputs=payload.outputs, quote_id=payload.quote)
     blinded_signatures = PostMintResponse(quote=payload.quote, signatures=promises)
-    logger.trace(f"< POST /v1/mint: {blinded_signatures}")
+    logger.trace(f"< POST /v1/mint/bolt11: {blinded_signatures}")
     return blinded_signatures
 
 
 @router.post(
-    "/v1/melt/quote",
+    "/v1/melt/quote/bolt11",
     summary="Request a quote for melting tokens",
     response_model=PostMeltQuoteResponse,
     response_description="Melt tokens for a payment on a supported payment method.",
@@ -195,14 +195,14 @@ async def melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse:
     """
     Request a quote for melting tokens.
     """
-    logger.trace(f"> POST /v1/melt/quote: {payload}")
+    logger.trace(f"> POST /v1/melt/quote/bolt11: {payload}")
     quote = await ledger.melt_quote(payload)  # TODO
-    logger.trace(f"< POST /v1/melt/quote: {quote}")
+    logger.trace(f"< POST /v1/melt/quote/bolt11: {quote}")
     return quote
 
 
 @router.post(
-    "/v1/melt",
+    "/v1/melt/bolt11",
     name="Melt tokens",
     summary=(
         "Melt tokens for a Bitcoin payment that the mint will make for the user in"
@@ -218,14 +218,14 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
-    logger.trace(f"> POST /v1/melt: {payload}")
+    logger.trace(f"> POST /v1/melt/bolt11: {payload}")
     preimage, change_promises = await ledger.melt(
         proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
     )
     resp = PostMeltResponse(
         quote=payload.quote, paid=True, proof=preimage, change=change_promises
     )
-    logger.trace(f"< POST /v1/melt: {resp}")
+    logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
 
 

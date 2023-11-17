@@ -140,7 +140,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
 @pytest.mark.asyncio
 async def test_mint_quote(ledger: Ledger):
     response = httpx.post(
-        f"{BASE_URL}/v1/mint/quote",
+        f"{BASE_URL}/v1/mint/quote/bolt11",
         json={"method": "bolt11", "unit": "sat", "amount": 100},
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -163,7 +163,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
-        f"{BASE_URL}/v1/mint",
+        f"{BASE_URL}/v1/mint/bolt11",
         json={"quote": quote_id, "outputs": outputs_payload},
         timeout=None,
     )
@@ -185,7 +185,7 @@ async def test_melt_quote(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
     request = invoice.bolt11
     response = httpx.post(
-        f"{BASE_URL}/v1/melt/quote",
+        f"{BASE_URL}/v1/melt/quote/bolt11",
         json={"method": "bolt11", "unit": "sat", "request": request},
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -216,7 +216,7 @@ async def test_melt(ledger: Ledger, wallet: Wallet):
     outputs_payload = [o.dict() for o in outputs]
 
     response = httpx.post(
-        f"{BASE_URL}/v1/melt",
+        f"{BASE_URL}/v1/melt/bolt11",
         json={
             "quote": quote.quote,
             "inputs": inputs_payload,

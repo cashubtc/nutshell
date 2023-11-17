@@ -99,8 +99,8 @@ def create_app(config_object="core.settings") -> FastAPI:
     ]
 
     app = FastAPI(
-        title="Cashu Python Mint",
-        description="Ecash wallet and mint for Bitcoin",
+        title="Nutshell Cashu Mint",
+        description="Ecash wallet and mint based on the Cashu protocol.",
         version=settings.version,
         license_info={
             "name": "MIT License",
