@@ -3,19 +3,29 @@ import hashlib
 import random
 from typing import Dict
 
+from bip32 import BIP32
+
 from ..settings import settings
 from .secp import PrivateKey, PublicKey
 
-# entropy = bytes([random.getrandbits(8) for i in range(16)])
-# mnemonic = bip39.mnemonic_from_bytes(entropy)
-# seed = bip39.mnemonic_to_seed(mnemonic)
-# root = bip32.HDKey.from_seed(seed, version=NETWORKS["main"]["xprv"])
 
-# bip44_xprv = root.derive("m/44h/1h/0h")
-# bip44_xpub = bip44_xprv.to_public()
+def derive_keys(mnemonic: str, derivation_path: str):
+    """
+    Deterministic derivation of keys for 2^n values.
+    """
+    bip32 = BIP32.from_seed(mnemonic.encode())
+    orders_str = [f"/{i}'" for i in range(settings.max_order)]
+    return {
+        2
+        ** i: PrivateKey(
+            bip32.get_privkey_from_path(derivation_path + orders_str[i]),
+            raw=True,
+        )
+        for i in range(settings.max_order)
+    }
 
 
-def derive_keys(master_key: str, derivation_path: str = ""):
+def derive_keys_sha256(master_key: str, derivation_path: str = ""):
     """
     Deterministic derivation of keys for 2^n values.
     TODO: Implement BIP32.

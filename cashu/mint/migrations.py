@@ -208,6 +208,14 @@ async def m009_add_out_to_invoices(db: Database):
 
 async def m010_add_quote_tables(db: Database):
     async with db.connect() as conn:
+        # add columns "seed" and "unit" to table keysets
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN seed TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN unit TEXT"
+        )
+
         await conn.execute(f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'mint_quotes')} (
                     quote TEXT NOT NULL,

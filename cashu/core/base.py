@@ -1,5 +1,6 @@
 import base64
 import json
+from enum import Enum
 from sqlite3 import Row
 from typing import Dict, List, Optional, Union
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 
 from .crypto.keys import (
     derive_keys,
+    derive_keys_sha256,
     derive_keyset_id,
     derive_keyset_id_deprecated,
     derive_pubkeys,
@@ -461,9 +463,9 @@ class WalletKeyset:
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
     def serialize(self):
-        return json.dumps({
-            amount: key.serialize().hex() for amount, key in self.public_keys.items()
-        })
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
 
     @classmethod
     def from_row(cls, row: Row):
@@ -488,6 +490,12 @@ class WalletKeyset:
         )
 
 
+class Unit(Enum):
+    sat = 0
+    msat = 1
+    usd = 2
+
+
 class MintKeyset:
     """
     Contains the keyset from the mint's perspective.
@@ -496,6 +504,7 @@ class MintKeyset:
     id: str
     id_deprecated: str  # deprecated since 0.15.0
     derivation_path: str
+    seed: Optional[str] = ""
     private_keys: Dict[int, PrivateKey]
     public_keys: Union[Dict[int, PublicKey], None] = None
     valid_from: Union[str, None] = None
@@ -516,9 +525,11 @@ class MintKeyset:
         seed: str = "",
         derivation_path: str = "",
         unit: str = "sat",
+        counter: int = 0,
         version: str = "1",
     ):
         self.derivation_path = derivation_path
+        self.seed = seed
         self.id = id
         self.valid_from = valid_from
         self.valid_to = valid_to
@@ -526,9 +537,20 @@ class MintKeyset:
         self.active = active
         self.unit = unit
         self.version = version
+
+        self.version_tuple = tuple(
+            [int(i) for i in self.version.split(".")] if self.version else []
+        )
+
+        if not self.derivation_path:
+            purpose_str = "m/129373'/"
+            unit_str = f"{Unit(self.unit).value}'/"
+            counter_str = f"{counter}'/"
+            self.derivation_path = purpose_str + unit_str + counter_str
+
         # generate keys from seed
-        if seed:
-            self.generate_keys(seed)
+        if self.seed and self.derivation_path:
+            self.generate_keys()
 
     @property
     def public_keys_hex(self) -> Dict[int, str]:
@@ -538,27 +560,32 @@ class MintKeyset:
             for amount, key in self.public_keys.items()
         }
 
-    def generate_keys(self, seed):
+    def generate_keys(self):
         """Generates keys of a keyset from a seed."""
-        if (
-            self.version
-            and len(self.version.split(".")) > 1
-            and int(self.version.split(".")[0]) == 0
-            and int(self.version.split(".")[1]) <= 11
-        ):
+        assert self.seed, "seed not set"
+        assert self.derivation_path, "derivation path not set"
+
+        if self.version_tuple < (0, 12):
             # WARNING: Broken key derivation for backwards compatibility with < 0.12
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
-                seed, self.derivation_path
+                self.seed, self.derivation_path
             )
             logger.warning(
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
+        elif self.version_tuple < (0, 15):
+            self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
+            logger.warning(
+                f"WARNING: Using non-bip32 derivation for keyset {self.id} (backwards"
+                " compatibility < 0.15)"
+            )
         else:
-            self.private_keys = derive_keys(seed, self.derivation_path)
-        self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+            self.private_keys = derive_keys(self.seed, self.derivation_path)
 
+        self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
         self.id = derive_keyset_id(self.public_keys)  # type: ignore
+
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         # END BACKWARDS COMPATIBILITY < 0.15.0

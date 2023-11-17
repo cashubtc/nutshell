@@ -76,11 +76,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         Returns:
             MintKeyset: Keyset
         """
-        keyset = MintKeyset(
-            seed=self.master_key,
-            derivation_path=derivation_path,
-            version=settings.version,
-        )
         # load the keyset from db
         logger.trace(f"crud: loading keyset for {derivation_path}")
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
@@ -91,17 +86,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             # we have a keyset for this derivation path
             keyset = tmp_keyset_local[0]
             # we need to initialize it
-            keyset.generate_keys(self.master_key)
+            keyset.generate_keys()
 
         else:
             # no keyset for this derivation path yet
             # we generate a new keyset
-            logger.debug(f"Generating new keyset {keyset.id}.")
             keyset = MintKeyset(
                 seed=self.master_key,
                 derivation_path=derivation_path,
                 version=settings.version,
             )
+            logger.debug(f"Generated new keyset {keyset.id}.")
             if autosave:
                 logger.debug(f"crud: storing new keyset {keyset.id}.")
                 await self.crud.store_keyset(keyset=keyset, db=self.db)
@@ -109,9 +104,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
         # store the new keyset in the current keysets
         self.keysets.keysets[keyset.id] = keyset
+
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        self.keysets.keysets[keyset.id_deprecated] = copy.copy(keyset)
-        self.keysets.keysets[keyset.id_deprecated].id = keyset.id_deprecated
+        if keyset.version_tuple < (0, 15):
+            self.keysets.keysets[keyset.id_deprecated] = copy.copy(keyset)
+            self.keysets.keysets[keyset.id_deprecated].id = keyset.id_deprecated
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
         logger.debug(f"Loaded keyset {keyset.id}")
@@ -141,11 +138,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             if v.id and v.public_keys and len(v.public_keys):
                 continue
             logger.trace(f"Generating keys for keyset {v.id}")
-            v.generate_keys(self.master_key)
+            v.generate_keys()
 
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        # we duplicate all keysets also by their deprecated id
-        keyset_ids = list(self.keysets.keysets.values())
+        # we duplicate all old keysets also by their deprecated id
+        keyset_ids = [
+            v for k, v in self.keysets.keysets.items() if v.version_tuple < (0, 15)
+        ]
         for v in keyset_ids:
             logger.trace(f"Loading deprecated keyset {v.id_deprecated} (new: {v.id})")
             self.keysets.keysets[v.id_deprecated] = v

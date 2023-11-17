@@ -578,17 +578,19 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(  # type: ignore
             f"""
             INSERT INTO {table_with_schema(db, 'keysets')}
-            (id, derivation_path, valid_from, valid_to, first_seen, active, version)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (id, seed, derivation_path, valid_from, valid_to, first_seen, active, version, unit)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 keyset.id,
+                keyset.seed,
                 keyset.derivation_path,
                 keyset.valid_from or db.timestamp_now,
                 keyset.valid_to or db.timestamp_now,
                 keyset.first_seen or db.timestamp_now,
                 True,
                 keyset.version,
+                keyset.unit,
             ),
         )
 
@@ -598,6 +600,7 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         id: str = "",
         derivation_path: str = "",
+        unit: str = "",
         conn: Optional[Connection] = None,
     ) -> List[MintKeyset]:
         clauses = []
@@ -610,6 +613,9 @@ class LedgerCrudSqlite(LedgerCrud):
         if derivation_path:
             clauses.append("derivation_path = ?")
             values.append(derivation_path)
+        if unit:
+            clauses.append("unit = ?")
+            values.append(unit)
         where = ""
         if clauses:
             where = f"WHERE {' AND '.join(clauses)}"

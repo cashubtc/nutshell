@@ -121,11 +121,11 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
                 2**31 - 1
             )
         except ValueError:
-            # BEGIN: backwards compatibility keyset id is not hex
+            # BEGIN: backwards compatibility < 0.15.0 keyset id is not hex
             keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
                 2**31 - 1
             )
-            # END: backwards compatibility keyset id is not hex
+            # END: backwards compatibility < 0.15.0 keyset id is not hex
 
         logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id}")
         token_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'"
