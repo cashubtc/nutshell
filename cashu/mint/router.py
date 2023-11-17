@@ -177,7 +177,7 @@ async def mint(
     logger.trace(f"> POST /v1/mint/bolt11: {payload}")
 
     promises = await ledger.mint(outputs=payload.outputs, quote_id=payload.quote)
-    blinded_signatures = PostMintResponse(quote=payload.quote, signatures=promises)
+    blinded_signatures = PostMintResponse(signatures=promises)
     logger.trace(f"< POST /v1/mint/bolt11: {blinded_signatures}")
     return blinded_signatures
 
@@ -219,9 +219,7 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
     preimage, change_promises = await ledger.melt(
         proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
     )
-    resp = PostMeltResponse(
-        quote=payload.quote, paid=True, proof=preimage, change=change_promises
-    )
+    resp = PostMeltResponse(paid=True, proof=preimage, change=change_promises)
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
 
