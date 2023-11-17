@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import math
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -105,11 +104,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         # store the new keyset in the current keysets
         self.keysets.keysets[keyset.id] = keyset
 
-        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        if keyset.version_tuple < (0, 15):
-            self.keysets.keysets[keyset.id_deprecated] = copy.copy(keyset)
-            self.keysets.keysets[keyset.id_deprecated].id = keyset.id_deprecated
-        # END BACKWARDS COMPATIBILITY < 0.15.0
+        # # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
+        # if keyset.version_tuple < (0, 15):
+        #     self.keysets.keysets[keyset.id_deprecated] = copy.copy(keyset)
+        #     self.keysets.keysets[keyset.id_deprecated].id = keyset.id_deprecated
+        # # END BACKWARDS COMPATIBILITY < 0.15.0
 
         logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
@@ -138,23 +137,30 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             if v.id and v.public_keys and len(v.public_keys):
                 continue
             logger.trace(f"Generating keys for keyset {v.id}")
+            v.seed = self.master_key
             v.generate_keys()
 
-        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        # we duplicate all old keysets also by their deprecated id
-        keyset_ids = [
-            v for k, v in self.keysets.keysets.items() if v.version_tuple < (0, 15)
-        ]
-        for v in keyset_ids:
-            logger.trace(f"Loading deprecated keyset {v.id_deprecated} (new: {v.id})")
-            self.keysets.keysets[v.id_deprecated] = v
-        # END BACKWARDS COMPATIBILITY < 0.15.0
+        # # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
+        # # we duplicate all old keysets also by their deprecated id
+        # keyset_ids = [
+        #     v for k, v in self.keysets.keysets.items() if v.version_tuple < (0, 15)
+        # ]
+        # for v in keyset_ids:
+        #     logger.trace(
+        #         f"Loaded deprecated base64 keyset: {v.id_deprecated} (new: {v.id})"
+        #     )
+        #     self.keysets.keysets[v.id_deprecated] = v
+        # # END BACKWARDS COMPATIBILITY < 0.15.0
 
         logger.info(
             f"Initialized {len(self.keysets.keysets)} keysets from the database."
         )
         # load the current keyset
         self.keyset = await self.load_keyset(self.derivation_path, autosave)
+        logger.info(
+            "All keysets:"
+            f" {[f'{k} ({v.unit})' for k, v in self.keysets.keysets.items()]}"
+        )
         logger.info(f"Current keyset: {self.keyset.id}")
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:

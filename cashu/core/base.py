@@ -428,7 +428,6 @@ class WalletKeyset:
     """
 
     id: str
-    id_deprecated: str  # deprecated since 0.15.0
     public_keys: Dict[int, PublicKey]
     mint_url: Union[str, None] = None
     valid_from: Union[str, None] = None
@@ -445,7 +444,7 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=None,
-        use_deprecated_id=False,
+        use_deprecated_id=False,  # BACKWARDS COMPATIBILITY < 0.15.0
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
@@ -455,11 +454,11 @@ class WalletKeyset:
 
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
-        self.id = derive_keyset_id(self.public_keys)
+        # self.id = derive_keyset_id(self.public_keys)
+
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)
         if use_deprecated_id:
-            self.id = self.id_deprecated
+            self.id = derive_keyset_id_deprecated(self.public_keys)
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
     def serialize(self):
@@ -502,7 +501,6 @@ class MintKeyset:
     """
 
     id: str
-    id_deprecated: str  # deprecated since 0.15.0
     derivation_path: str
     seed: Optional[str] = ""
     private_keys: Dict[int, PrivateKey]
@@ -560,7 +558,7 @@ class MintKeyset:
             for amount, key in self.public_keys.items()
         }
 
-    def generate_keys(self):
+    def generate_keys(self, deprecated=False):
         """Generates keys of a keyset from a seed."""
         assert self.seed, "seed not set"
         assert self.derivation_path, "derivation path not set"
@@ -570,25 +568,24 @@ class MintKeyset:
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
                 self.seed, self.derivation_path
             )
+            self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
             logger.warning(
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
+            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
             self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
             logger.warning(
                 f"WARNING: Using non-bip32 derivation for keyset {self.id} (backwards"
                 " compatibility < 0.15)"
             )
+            self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         else:
             self.private_keys = derive_keys(self.seed, self.derivation_path)
-
-        self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-        self.id = derive_keyset_id(self.public_keys)  # type: ignore
-
-        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        self.id_deprecated = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
-        # END BACKWARDS COMPATIBILITY < 0.15.0
+            self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+            self.id = derive_keyset_id(self.public_keys)  # type: ignore
 
 
 class MintKeysets:
