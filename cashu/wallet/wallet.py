@@ -1241,6 +1241,12 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
     async def _serialize_token_base64_tokenv2(self, token: TokenV2) -> str:
         """
         Takes a TokenV2 and serializes it in urlsafe_base64.
+
+        Args:
+            token (TokenV2): TokenV2 object to be serialized
+
+        Returns:
+            str: Serialized token
         """
         # encode the token as a base64 string
         token_base64 = base64.urlsafe_b64encode(
@@ -1262,6 +1268,16 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         2) Proofs that have a keyset id that is in self.mint_keyset_ids (all active keysets of mint)
         3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
         4) If the target amount is not reached, add proofs of the current keyset until it is.
+
+        Args:
+            proofs (List[Proof]): List of proofs to select from
+            amount_to_send (int): Amount to select proofs for
+
+        Returns:
+            List[Proof]: List of proofs to send
+
+        Raises:
+            Exception: If the balance is too low to send the amount
         """
         send_proofs: List[Proof] = []
 
@@ -1432,7 +1448,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
     async def restore_wallet_from_mnemonic(
         self, mnemonic: Optional[str], to: int = 2, batch: int = 25
     ) -> None:
-        """Restores the wallet from a mnemonic
+        """
+        Restores the wallet from a mnemonic.
 
         Args:
             mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.

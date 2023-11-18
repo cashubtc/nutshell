@@ -504,15 +504,15 @@ class MintKeyset:
     """
 
     id: str
-    derivation_path: str
-    seed: Optional[str] = ""
     private_keys: Dict[int, PrivateKey]
+    active: bool
+    unit: Unit
+    derivation_path: str
+    seed: Optional[str] = None
     public_keys: Union[Dict[int, PublicKey], None] = None
     valid_from: Union[str, None] = None
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
-    active: Union[bool, None] = True
-    unit: str = "sat"
     version: Union[str, None] = None
 
     def __init__(
@@ -523,31 +523,49 @@ class MintKeyset:
         valid_to=None,
         first_seen=None,
         active=None,
-        seed: str = "",
-        derivation_path: str = "",
-        unit: str = "sat",
-        counter: int = 0,
-        version: str = "1",
+        seed: Optional[str] = None,
+        derivation_path: Optional[str] = None,
+        unit: Optional[str] = None,
+        version: str = "0",
     ):
-        self.derivation_path = derivation_path
+        self.derivation_path = derivation_path or ""
         self.seed = seed
         self.id = id
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
-        self.active = active
-        self.unit = unit
+        self.active = bool(active) if active is not None else False
         self.version = version
 
         self.version_tuple = tuple(
             [int(i) for i in self.version.split(".")] if self.version else []
         )
 
-        if not self.derivation_path:
-            purpose_str = "m/129373'/"
-            unit_str = f"{Unit(self.unit).value}'/"
-            counter_str = f"{counter}'/"
-            self.derivation_path = purpose_str + unit_str + counter_str
+        # if not self.derivation_path:
+        #     purpose_str = "m/129373'/"
+        #     unit_str = f"{Unit(self.unit).value}'/"
+        #     counter_str = f"{counter}'/"
+        #     self.derivation_path = purpose_str + unit_str + counter_str
+        # else:
+
+        # infer unit from derivation path
+        if not unit:
+            logger.warning(
+                f"Unit for keyset {self.id} not set – attempting to parse from"
+                " derivation path"
+            )
+            try:
+                self.unit = Unit(
+                    int(self.derivation_path.split("/")[2].replace("'", ""))
+                )
+            except Exception:
+                logger.warning(
+                    "Could not infer unit from derivation path"
+                    f" {self.derivation_path} – assuming 'sat'"
+                )
+                self.unit = Unit.sat
+        else:
+            self.unit = Unit[unit]
 
         # generate keys from seed
         if self.seed and self.derivation_path:

@@ -66,7 +66,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
     # ------- KEYS -------
 
-    async def load_keyset(self, derivation_path, autosave=True) -> MintKeyset:
+    async def activate_keyset(self, derivation_path, autosave=True) -> MintKeyset:
         """Load the keyset for a derivation path if it already exists. If not generate new one and store in the db.
 
         Args:
@@ -76,6 +76,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         Returns:
             MintKeyset: Keyset
         """
+        logger.debug(f"Activating keyset for derivation path {derivation_path}")
         # load the keyset from db
         logger.trace(f"crud: loading keyset for {derivation_path}")
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
@@ -83,14 +84,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         )
         logger.trace(f"crud: loaded {len(tmp_keyset_local)} keysets")
         if tmp_keyset_local:
-            # we have a keyset for this derivation path
+            # we have a keyset with this derivation path in the database
             keyset = tmp_keyset_local[0]
-            # we need to initialize it
-            keyset.generate_keys()
+            # we keys are not stored in the database but only their derivation path
+            # so we might need to generate the keys for keysets loaded from the database
+            if not len(keyset.private_keys):
+                keyset.generate_keys()
 
         else:
+            logger.trace(f"crud: no keyset for {derivation_path}")
             # no keyset for this derivation path yet
-            # we generate a new keyset
+            # we create a new keyset (keys will be generated at instantiation)
             keyset = MintKeyset(
                 seed=self.master_key,
                 derivation_path=derivation_path,
@@ -102,18 +106,21 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 await self.crud.store_keyset(keyset=keyset, db=self.db)
                 logger.trace(f"crud: stored new keyset {keyset.id}.")
 
-        # store the new keyset in the current keysets
+        # activate this keyset
+        keyset.active = True
+        # load the new keyset in self.keysets
         self.keysets.keysets[keyset.id] = keyset
 
         logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
 
     async def init_keysets(self, autosave=True) -> None:
-        """Initializes all keysets of the mint from the db. Loads all past keysets and generate their keys. Then load the current keyset.
+        """Initializes all keysets of the mint from the db. Loads all past keysets from db
+        and generate their keys. Then load the current keyset.
 
         Args:
             autosave (bool, optional): Whether the current keyset should be saved if it is
-            not in the database yet. Will be passed to `self.load_keyset` where it is
+            not in the database yet. Will be passed to `self.activate_keyset` where it is
             generated from `self.derivation_path`. Defaults to True.
         """
         # load all past keysets from db
@@ -157,13 +164,19 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         logger.info(
             f"Initialized {len(self.keysets.keysets)} keysets from the database."
         )
-        # load the current keyset
-        self.keyset = await self.load_keyset(self.derivation_path, autosave)
+
+        # activate the current keyset set by self.derivation_path
+        self.keyset = await self.activate_keyset(self.derivation_path, autosave)
         logger.info(
             "All keysets:"
-            f" {[f'{k} ({v.unit})' for k, v in self.keysets.keysets.items()]}"
+            f" {[f'{k} ({v.unit.name})' for k, v in self.keysets.keysets.items()]}"
         )
         logger.info(f"Current keyset: {self.keyset.id}")
+
+        # check that we have a least one active keyset
+        assert any(
+            [k.active for k in self.keysets.keysets.values()]
+        ), "No active keyset found."
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""

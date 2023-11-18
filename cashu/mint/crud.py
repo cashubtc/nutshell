@@ -590,7 +590,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 keyset.first_seen or db.timestamp_now,
                 True,
                 keyset.version,
-                keyset.unit,
+                keyset.unit.name,
             ),
         )
 
@@ -598,22 +598,24 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         db: Database,
-        id: str = "",
-        derivation_path: str = "",
-        unit: str = "",
+        id: Optional[str] = None,
+        derivation_path: Optional[str] = None,
+        unit: Optional[str] = None,
+        active: Optional[bool] = None,
         conn: Optional[Connection] = None,
     ) -> List[MintKeyset]:
         clauses = []
         values: List[Any] = []
-        clauses.append("active = ?")
-        values.append(True)
-        if id:
+        if active is not None:
+            clauses.append("active = ?")
+            values.append(active)
+        if id is not None:
             clauses.append("id = ?")
             values.append(id)
-        if derivation_path:
+        if derivation_path is not None:
             clauses.append("derivation_path = ?")
             values.append(derivation_path)
-        if unit:
+        if unit is not None:
             clauses.append("unit = ?")
             values.append(unit)
         where = ""

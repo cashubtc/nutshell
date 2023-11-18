@@ -57,8 +57,8 @@ def derive_keyset_id(keys: Dict[int, PublicKey]):
     """Deterministic derivation keyset_id from set of public keys."""
     # sort public keys by amount
     sorted_keys = dict(sorted(keys.items()))
-    pubkeys_concat = "".join([p.serialize().hex() for _, p in sorted_keys.items()])
-    return "00" + hashlib.sha256(pubkeys_concat.encode("utf-8")).hexdigest()[:14]
+    pubkeys_concat = b"".join([p.serialize() for _, p in sorted_keys.items()])
+    return "00" + hashlib.sha256(pubkeys_concat).hexdigest()[:14]
 
 
 def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):

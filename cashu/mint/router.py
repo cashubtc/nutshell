@@ -68,12 +68,17 @@ async def keys():
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
     logger.trace("> GET /v1/keys")
     keyset = ledger.keyset
-    keyset_for_response = KeysResponseKeyset(
-        id=keyset.id,
-        unit=keyset.unit,
-        keys={str(k): v for k, v in keyset.public_keys_hex.items()},
-    )
-    return KeysResponse(keysets=[keyset_for_response])
+    keyset_for_response = []
+    for keyset in ledger.keysets.keysets.values():
+        if keyset.active:
+            keyset_for_response.append(
+                KeysResponseKeyset(
+                    id=keyset.id,
+                    unit=keyset.unit.name,
+                    keys={str(k): v for k, v in keyset.public_keys_hex.items()},
+                )
+            )
+    return KeysResponse(keysets=keyset_for_response)
 
 
 @router.get(
@@ -105,7 +110,7 @@ async def keyset_keys(keyset_id: str, request: Request):
 
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
-        unit=keyset.unit,
+        unit=keyset.unit.name,
         keys={str(k): v for k, v in keyset.public_keys_hex.items()},
     )
     return KeysResponse(keysets=[keyset_for_response])
@@ -123,7 +128,11 @@ async def keysets() -> KeysetsResponse:
     logger.trace("> GET /v1/keysets")
     keysets = []
     for id, keyset in ledger.keysets.keysets.items():
-        keysets.append(KeysetsResponseKeyset(id=id, unit=keyset.unit, active=True))
+        keysets.append(
+            KeysetsResponseKeyset(
+                id=id, unit=keyset.unit.name, active=keyset.active or False
+            )
+        )
     return KeysetsResponse(keysets=keysets)
 
 
