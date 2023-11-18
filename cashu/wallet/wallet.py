@@ -860,7 +860,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             promises, secrets, rs, derivation_paths
         )
 
-        await self.invalidate(proofs)
+        try:
+            await self.invalidate(proofs)
+        except Exception:
+            logger.error(
+                "Could not invalidate proofs after split. Proofs will remain in your"
+                " wallet. Use this command to invalidate them manually: `cashu burn -f`"
+            )
 
         keep_proofs = new_proofs[: len(frst_outputs)]
         send_proofs = new_proofs[len(frst_outputs) :]
