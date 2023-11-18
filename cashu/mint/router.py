@@ -251,7 +251,7 @@ async def split(
 
 
 @router.post(
-    "/check",
+    "/v1/check",
     name="Check proof state",
     summary="Check whether a proof is spent already or is pending in a transaction",
     response_model=CheckSpendableResponse,
@@ -272,7 +272,7 @@ async def check_spendable(
 
 
 @router.post(
-    "/restore",
+    "/v1/restore",
     name="Restore",
     summary="Restores a blinded signature from a secret",
     response_model=PostRestoreResponse,

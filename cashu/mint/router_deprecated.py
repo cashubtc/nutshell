@@ -7,6 +7,8 @@ from ..core.base import (
     BlindedSignature,
     CheckFeesRequest,
     CheckFeesResponse,
+    CheckSpendableRequest,
+    CheckSpendableResponse,
     GetInfoResponse,
     GetMintResponse_deprecated,
     KeysetsResponse_deprecated,
@@ -17,6 +19,7 @@ from ..core.base import (
     PostMintQuoteRequest,
     PostMintRequest_deprecated,
     PostMintResponse_deprecated,
+    PostRestoreResponse,
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
     PostSplitResponse_Very_Deprecated,
@@ -281,3 +284,42 @@ async def split_deprecated(
         # END backwards compatibility < 0.13
     else:
         return PostSplitResponse_Deprecated(promises=promises)
+
+
+@router_deprecated.post(
+    "/check",
+    name="Check proof state",
+    summary="Check whether a proof is spent already or is pending in a transaction",
+    response_model=CheckSpendableResponse,
+    response_description=(
+        "Two lists of booleans indicating whether the provided proofs "
+        "are spendable or pending in a transaction respectively."
+    ),
+    deprecated=True,
+)
+async def check_spendable(
+    payload: CheckSpendableRequest,
+) -> CheckSpendableResponse:
+    """Check whether a secret has been spent already or not."""
+    logger.trace(f"> POST /v1/check: {payload}")
+    spendableList, pendingList = await ledger.check_proof_state(payload.proofs)
+    logger.trace(f"< POST /v1/check <spendable>: {spendableList}")
+    logger.trace(f"< POST /v1/check <pending>: {pendingList}")
+    return CheckSpendableResponse(spendable=spendableList, pending=pendingList)
+
+
+@router_deprecated.post(
+    "/restore",
+    name="Restore",
+    summary="Restores a blinded signature from a secret",
+    response_model=PostRestoreResponse,
+    response_description=(
+        "Two lists with the first being the list of the provided outputs that "
+        "have an associated blinded signature which is given in the second list."
+    ),
+    deprecated=True,
+)
+async def restore(payload: PostMintRequest_deprecated) -> PostRestoreResponse:
+    assert payload.outputs, Exception("no outputs provided.")
+    outputs, promises = await ledger.restore(payload.outputs)
+    return PostRestoreResponse(outputs=outputs, promises=promises)
