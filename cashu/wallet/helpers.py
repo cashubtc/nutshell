@@ -47,15 +47,16 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
         mint_wallet = await Wallet.with_db(
             t.mint, os.path.join(settings.cashu_dir, wallet.name)
         )
-        keysets = mint_wallet._get_proofs_keysets(t.proofs)
-        logger.trace(f"Keysets in tokens: {keysets}")
+        keyset_ids = mint_wallet._get_proofs_keysets(t.proofs)
+        logger.trace(f"Keysets in tokens: {keyset_ids}")
         # loop over all keysets
-        for keyset in set(keysets):
-            await mint_wallet.load_mint()
+        for keyset_id in set(keyset_ids):
+            await mint_wallet.load_mint(keyset_id)
+            mint_wallet.unit = mint_wallet.keysets[keyset_id].unit
             # redeem proofs of this keyset
-            redeem_proofs = [p for p in t.proofs if p.id == keyset]
+            redeem_proofs = [p for p in t.proofs if p.id == keyset_id]
             _, _ = await mint_wallet.redeem(redeem_proofs)
-            print(f"Received {sum_proofs(redeem_proofs)} sats")
+            print(f"Received {mint_wallet.unit.str(sum_proofs(redeem_proofs))}")
 
 
 def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
@@ -152,7 +153,7 @@ async def receive(
         )
         await mint_wallet.load_mint(keyset_in_token)
         _, _ = await mint_wallet.redeem(proofs)
-        print(f"Received {sum_proofs(proofs)} sats")
+        print(f"Received {mint_wallet.unit.str(sum_proofs(proofs))}")
 
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)

@@ -73,6 +73,15 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         # Verify inputs and outputs together
         if not self._verify_input_output_amounts(proofs, outputs):
             raise TransactionError("input amounts less than output.")
+        # Verify that input keyset units are the same as output keyset unit
+        # We have previously verified that all outputs have the same keyset id in `_verify_outputs`
+        if not all([
+            self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
+            for p in proofs
+            if p.id
+        ]):
+            raise TransactionError("input and output keysets have different units.")
+
         # Verify output spending conditions
         if outputs and not self._verify_output_spending_conditions(proofs, outputs):
             raise TransactionError("validation of output spending conditions failed.")

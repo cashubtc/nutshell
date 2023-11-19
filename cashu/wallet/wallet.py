@@ -183,14 +183,16 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             keysets = await get_keysets(keyset_id, db=self.db)
             if keysets:
                 logger.debug(f"Found keyset {keyset_id} in database.")
-                # keyset = keysets[0]
+                keyset = keysets[0]
             else:
                 logger.debug(
                     f"Cannot find keyset {keyset_id} in database. Loading keyset from"
                     " mint."
                 )
                 keyset = await self._get_keys_of_keyset(keyset_id)
-                logger.debug(f"Storing new mint keyset: {keyset.id}")
+                logger.debug(
+                    f"Storing new mint keyset: {keyset.id} ({keyset.unit.name})"
+                )
                 await store_keyset(keyset=keyset, db=self.db)
                 keysets = [keyset]
 
@@ -200,13 +202,15 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             for keyset in keysets:
                 keysets_in_db = await get_keysets(keyset.id, db=self.db)
                 if not keysets_in_db:
-                    logger.debug(f"Storing new mint keyset: {keyset.id}")
+                    logger.debug(
+                        f"Storing new mint keyset: {keyset.id} ({keyset.unit.name})"
+                    )
                     await store_keyset(keyset=keyset, db=self.db)
 
-        wallet_unit_keysets = [k for k in keysets if k.unit == self.unit]
-        assert len(wallet_unit_keysets) > 0, f"no keyset for unit {self.unit.name}."
+            wallet_unit_keysets = [k for k in keysets if k.unit == self.unit]
+            assert len(wallet_unit_keysets) > 0, f"no keyset for unit {self.unit.name}."
 
-        keyset = [k for k in keysets if k.unit == self.unit][0]
+            keyset = [k for k in keysets if k.unit == self.unit][0]
 
         assert keyset
         assert keyset.id
@@ -303,6 +307,10 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         keys_dict: dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
+        logger.debug(
+            f"Received {len(keys.keysets)} keysets from mint:"
+            f" {' '.join([k.id + f' ({k.unit})' for k in keys.keysets])}."
+        )
         ret = [
             WalletKeyset(
                 id=keyset.id,
@@ -476,13 +484,11 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def melt_quote(
-        self, payment_request: str, unit: str = "sat"
-    ) -> PostMeltQuoteResponse:
+    async def melt_quote(self, payment_request: str) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
-        payload = PostMeltQuoteRequest(unit=unit, request=payment_request)
+        payload = PostMeltQuoteRequest(unit=self.unit.name, request=payment_request)
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote/bolt11"),
             json=payload.dict(),
@@ -883,10 +889,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
         try:
             await self.invalidate(proofs)
-        except Exception:
+        except Exception as e:
             logger.error(
-                "Could not invalidate proofs after split. Proofs will remain in your"
-                " wallet. Use this command to invalidate them manually: `cashu burn -f`"
+                f"Could not invalidate proofs after split: {str(e)}.\nProofs will"
+                " remain in your wallet. Use this command to invalidate them manually:"
+                " `cashu burn -f`"
             )
 
         keep_proofs = new_proofs[: len(frst_outputs)]
@@ -970,7 +977,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 change_rs[: len(status.change)],
                 change_derivation_paths[: len(status.change)],
             )
-            logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
+            logger.debug(f"Received change: {self.unit.str(sum_proofs(change_proofs))}")
         return status
 
     async def check_proof_state(self, proofs):
@@ -1378,7 +1385,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         if invalidated_proofs:
             logger.trace(
                 f"Invalidating {len(invalidated_proofs)} proofs worth"
-                f" {sum_proofs(invalidated_proofs)} sat."
+                f" {self.unit.str(sum_proofs(invalidated_proofs))}."
             )
 
         async with self.db.connect() as conn:
@@ -1393,7 +1400,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     # ---------- TRANSACTION HELPERS ----------
 
-    async def get_pay_amount_with_fees(self, invoice: str, unit: str = "sat"):
+    async def get_pay_amount_with_fees(self, invoice: str):
         """
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
@@ -1401,9 +1408,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # decoded_invoice = bolt11.decode(invoice)
         # assert decoded_invoice.amount_msat, "invoices has no amount."
         # check if it's an internal payment
-        melt_quote = await self.melt_quote(invoice, unit)
+        melt_quote = await self.melt_quote(invoice)
         # fees = melt_quote.fee_reserve or 0
-        logger.debug(f"Mint wants {melt_quote.fee_reserve} {unit} as fee reserve.")
+        logger.debug(
+            f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
+        )
         # amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
         return melt_quote
 
