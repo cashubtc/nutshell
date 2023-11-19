@@ -38,6 +38,7 @@ from ..core.base import (
     TokenV2Mint,
     TokenV3,
     TokenV3Token,
+    Unit,
     WalletKeyset,
 )
 from ..core.crypto import b_dhke
@@ -51,7 +52,7 @@ from ..core.split import amount_split
 from ..tor.tor import TorProxy
 from ..wallet.crud import (
     bump_secret_derivation,
-    get_keyset,
+    get_keysets,
     get_proofs,
     invalidate_proof,
     secret_used,
@@ -98,6 +99,7 @@ def async_set_httpx_client(func):
             proxies=proxies_dict,  # type: ignore
             headers=headers_dict,
             base_url=self.url,
+            timeout=60,
         )
         return await func(self, *args, **kwargs)
 
@@ -174,51 +176,36 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
 
-        keyset: Union[WalletKeyset, None] = None
+        keyset: WalletKeyset
 
-        keyset_local: Union[WalletKeyset, None] = None
         if keyset_id:
             # check if current keyset is in db
-            keyset_local = await get_keyset(keyset_id, db=self.db)
-            if keyset_local:
+            keysets = await get_keysets(keyset_id, db=self.db)
+            if keysets:
                 logger.debug(f"Found keyset {keyset_id} in database.")
+                keyset = keysets[0]
             else:
                 logger.debug(
                     f"Cannot find keyset {keyset_id} in database. Loading keyset from"
                     " mint."
                 )
+                keyset = await self._get_keys_of_keyset(keyset_id)
+                logger.debug(f"Storing new mint keyset: {keyset.id}")
+                await store_keyset(keyset=keyset, db=self.db)
 
-        if keyset_local:
-            # load keyset from database
-            keyset = keyset_local
-        elif keyset_id:
-            # get requested keyset from mint
-            keyset = await self._get_keys_of_keyset(keyset_id)
-            # # BEGIN backwards compatibility < 0.15.0
-            # # NOTE: Because of the change of how to calculate keyset ids
-            # # with version 0.15.0, we overwrite the calculated keyset id with the
-            # # requested one. This is a temporary fix and should be removed once all
-            # # ecash is transitioned to 0.15.0.
-            # logger.debug(
-            #     f"Keyset ID mismatch: {keyset_id} != {keyset.id}. This can happen due"
-            #     " to a version upgrade."
-            # )
-            # keyset.id = keyset_id or keyset.id
-            # # END backwards compatibility < 0.15.0
         else:
-            # get all active keysets from mint
-            keyset = await self._get_keys()
+            keysets = await self._get_keys()
+            assert len(keysets), Exception("did not receive any keys")
+            for keyset in keysets:
+                keysets_in_db = await get_keysets(keyset.id, db=self.db)
+                if not keysets_in_db:
+                    logger.debug(f"Storing new mint keyset: {keyset.id}")
+                    await store_keyset(keyset=keyset, db=self.db)
+            keyset = [k for k in keysets if k.unit.name == settings.wallet_unit][0]
 
         assert keyset
         assert keyset.id
         assert len(keyset.public_keys) > 0, "did not receive keys from mint."
-
-        # if the keyset is not in the database, store it
-        if keyset_local is None:
-            keyset_local_from_mint = await get_keyset(keyset.id, db=self.db)
-            if not keyset_local_from_mint:
-                logger.debug(f"Storing new mint keyset: {keyset.id}")
-                await store_keyset(keyset=keyset, db=self.db)
 
         # set current keyset id
         self.keyset_id = keyset.id
@@ -286,7 +273,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
     """
 
     @async_set_httpx_client
-    async def _get_keys(self) -> WalletKeyset:
+    async def _get_keys(self) -> List[WalletKeyset]:
         """API that gets the current keys of the mint
 
         Args:
@@ -305,20 +292,25 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
             ret = await self._get_keys_deprecated(self.url)
-            return ret
+            return [ret]
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         keys_dict: dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
-        keyset_keys = {
-            int(amt): PublicKey(bytes.fromhex(val), raw=True)
-            for amt, val in keys.keysets[0].keys.items()
-        }
-        keyset = WalletKeyset(
-            id=keys.keysets[0].id, public_keys=keyset_keys, mint_url=self.url
-        )
-        return keyset
+        ret = [
+            WalletKeyset(
+                id=keyset.id,
+                unit=keyset.unit,
+                public_keys={
+                    int(amt): PublicKey(bytes.fromhex(val), raw=True)
+                    for amt, val in keyset.keys.items()
+                },
+                mint_url=self.url,
+            )
+            for keyset in keys.keysets
+        ]
+        return ret
 
     @async_set_httpx_client
     async def _get_keys_of_keyset(self, keyset_id: str) -> WalletKeyset:
@@ -353,7 +345,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.keysets[0].keys.items()
         }
-        keyset = WalletKeyset(id=keyset_id, public_keys=keyset_keys, mint_url=self.url)
+        keyset = WalletKeyset(
+            id=keyset_id,
+            unit=keys.keysets[0].unit,
+            public_keys=keyset_keys,
+            mint_url=self.url,
+        )
         return keyset
 
     @async_set_httpx_client
@@ -617,6 +614,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
     # db: Database
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
+    unit: Unit
 
     def __init__(
         self,
@@ -661,6 +659,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         await self._migrate_database()
         if not skip_private_key:
             await self._init_private_key()
+
+        keysets_list = await get_keysets(mint_url=url, db=self.db)
+        self.keysets = {k.id: k for k in keysets_list}
         return self
 
     async def _migrate_database(self):
@@ -688,6 +689,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             logger.debug("Proofs already loaded.")
             return
         self.proofs = await get_proofs(db=self.db)
+        await self.load_keysets()
+
+    async def load_keysets(self) -> None:
+        """Load all keysets from the database."""
+        keysets = await get_keysets(db=self.db)
+        for keyset in keysets:
+            self.keysets[keyset.id] = keyset
 
     async def request_mint(self, amount: int) -> Invoice:
         """Request a Lightning invoice for minting tokens.
@@ -1093,7 +1101,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
-        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}  # type: ignore
+        return {
+            key: list(group) for key, group in groupby(proofs, lambda p: p.id) if key
+        }
 
     async def _get_proofs_per_minturl(
         self, proofs: List[Proof]
@@ -1102,9 +1112,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         for id in set([p.id for p in proofs]):
             if id is None:
                 continue
-            keyset_crud = await get_keyset(id=id, db=self.db)
-            assert keyset_crud is not None, f"keyset {id} not found"
-            keyset: WalletKeyset = keyset_crud
+            keysets_crud = await get_keysets(id=id, db=self.db)
+            assert keysets_crud, f"keyset {id} not found"
+            keyset: WalletKeyset = keysets_crud[0]
             assert keyset.mint_url
             if keyset.mint_url not in ret:
                 ret[keyset.mint_url] = [p for p in proofs if p.id == id]
@@ -1130,7 +1140,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """
         mint_urls: Dict[str, List[str]] = {}
         for ks in set(keysets):
-            keyset_db = await get_keyset(id=ks, db=self.db)
+            keysets_db = await get_keysets(id=ks, db=self.db)
+            keyset_db = keysets_db[0] if keysets_db else None
             if keyset_db and keyset_db.mint_url:
                 mint_urls[keyset_db.mint_url] = (
                     mint_urls[keyset_db.mint_url] + [ks]
@@ -1217,7 +1228,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             # iterate through unique keyset ids
             for id in set(keysets):
                 # load the keyset from the db
-                keyset_db = await get_keyset(id=id, db=self.db)
+                keysets_db = await get_keysets(id=id, db=self.db)
+                keyset_db = keysets_db[0] if keysets_db else None
                 if keyset_db and keyset_db.mint_url and keyset_db.id:
                     # we group all mints according to URL
                     if keyset_db.mint_url not in mints:
@@ -1420,14 +1432,18 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """Returns a sorted list of amounts of all proofs"""
         return [p.amount for p in sorted(self.proofs, key=lambda p: p.amount)]
 
-    def balance_per_keyset(self):
-        return {
+    def balance_per_keyset(self) -> Dict[str, Dict[str, Union[int, str]]]:
+        ret: Dict[str, Dict[str, Union[int, str]]] = {
             key: {
                 "balance": sum_proofs(proofs),
                 "available": sum_proofs([p for p in proofs if not p.reserved]),
             }
             for key, proofs in self._get_proofs_per_keyset(self.proofs).items()
         }
+        for key in ret.keys():
+            if key in self.keysets:
+                ret[key]["unit"] = self.keysets[key].unit.name
+        return ret
 
     async def balance_per_minturl(self):
         balances = await self._get_proofs_per_minturl(self.proofs)

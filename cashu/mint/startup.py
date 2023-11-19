@@ -40,8 +40,10 @@ async def rotate_keys(n_seconds=10):
     while True:
         i += 1
         logger.info("Rotating keys.")
-        ledger.derivation_path = "m'/0'/0'/{i}"
-        await ledger.activate_keyset(ledger.derivation_path)
+        incremented_derivation_path = (
+            "".join(ledger.derivation_path.split("/")[:-1]) + f"/{i}"
+        )
+        await ledger.activate_keyset(incremented_derivation_path)
         logger.info(f"Current keyset: {ledger.keyset.id}")
         await asyncio.sleep(n_seconds)
 
@@ -50,6 +52,9 @@ async def start_mint_init():
     await migrate_databases(ledger.db, migrations)
     await ledger.load_used_proofs()
     await ledger.init_keysets()
+
+    for derivation_path in settings.mint_derivation_path_list:
+        await ledger.activate_keyset(derivation_path)
 
     logger.info(f"Using backend: {settings.mint_lightning_backend}")
     status = await ledger.lightning.status()

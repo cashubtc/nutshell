@@ -347,13 +347,13 @@ async def balance(ctx: Context, verbose):
     if verbose:
         # show balances per keyset
         keyset_balances = wallet.balance_per_keyset()
-        if len(keyset_balances) > 1:
+        if len(keyset_balances):
             print(f"You have balances in {len(keyset_balances)} keysets:")
             print("")
             for k, v in keyset_balances.items():
                 print(
-                    f"Keyset: {k} - Balance: {v['available']} sat (pending:"
-                    f" {v['balance']-v['available']} sat)"
+                    f"Keyset: {k} - Balance: {v['available']} {v['unit']} (pending:"
+                    f" {int(v['balance'])-int(v['available'])} {v['unit']})"
                 )
             print("")
 

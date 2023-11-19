@@ -209,3 +209,7 @@ async def m010_add_ids_to_proofs_and_out_to_invoices(db: Database):
         await conn.execute("ALTER TABLE invoices RENAME COLUMN hash TO id")
         # add column payment_hash
         await conn.execute("ALTER TABLE invoices ADD COLUMN payment_hash TEXT")
+
+        # add column for storing the unit of a keyset
+        await conn.execute("ALTER TABLE keysets ADD COLUMN unit TEXT")
+        await conn.execute("UPDATE keysets SET unit = 'sat'")

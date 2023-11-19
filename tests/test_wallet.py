@@ -90,7 +90,8 @@ async def wallet3(mint):
 async def test_get_keys(wallet1: Wallet):
     assert wallet1.keysets[wallet1.keyset_id].public_keys
     assert len(wallet1.keysets[wallet1.keyset_id].public_keys) == settings.max_order
-    keyset = await wallet1._get_keys()
+    keysets = await wallet1._get_keys()
+    keyset = keysets[0]
     assert keyset.id is not None
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
     assert keyset.id == "009a1f293253e41e"
@@ -103,13 +104,14 @@ async def test_get_keyset(wallet1: Wallet):
     assert wallet1.keysets[wallet1.keyset_id].public_keys
     assert len(wallet1.keysets[wallet1.keyset_id].public_keys) == settings.max_order
     # let's get the keys first so we can get a keyset ID that we use later
-    keys1 = await wallet1._get_keys()
+    keysets = await wallet1._get_keys()
+    keyset = keysets[0]
     # gets the keys of a specific keyset
-    assert keys1.id is not None
-    assert keys1.public_keys is not None
-    keys2 = await wallet1._get_keys_of_keyset(keys1.id)
+    assert keyset.id is not None
+    assert keyset.public_keys is not None
+    keys2 = await wallet1._get_keys_of_keyset(keyset.id)
     assert keys2.public_keys is not None
-    assert len(keys1.public_keys) == len(keys2.public_keys)
+    assert len(keyset.public_keys) == len(keys2.public_keys)
 
 
 @pytest.mark.asyncio

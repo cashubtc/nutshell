@@ -146,7 +146,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         # activate the current keyset set by self.derivation_path
         self.keyset = await self.activate_keyset(self.derivation_path, autosave)
         logger.info(
-            f"All keysets: {[f'{k} ({v.unit.name})' for k, v in self.keysets.items()]}"
+            "Activated keysets from database:"
+            f" {[f'{k} ({v.unit.name})' for k, v in self.keysets.items()]}"
         )
         logger.info(f"Current keyset: {self.keyset.id}")
 
@@ -621,9 +622,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             BlindedSignature: Generated promise.
         """
         B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
-        keyset = keyset if keyset else self.keyset
+        keyset = keyset if keyset else self.keysets[output.id]
 
-        assert keyset
+        assert output.id in self.keysets, f"keyset {output.id} not found"
         assert output.id == keyset.id, "keyset id does not match output id"
         assert keyset.active, "keyset is not active"
 

@@ -48,6 +48,7 @@ class EnvSettings(CashuSettings):
 class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
+    mint_derivation_path_list: List[str] = Field(default=[])
     mint_listen_host: str = Field(default="127.0.0.1")
     mint_listen_port: int = Field(default=3338)
     mint_lightning_backend: str = Field(default="LNbitsWallet")
@@ -85,6 +86,7 @@ class WalletSettings(CashuSettings):
     mint_host: str = Field(default="8333.space")
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")
+    wallet_unit: str = Field(default="sat")
 
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")

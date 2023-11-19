@@ -423,12 +423,19 @@ class KeyBase(BaseModel):
     pubkey: str
 
 
+class Unit(Enum):
+    sat = 0
+    msat = 1
+    usd = 2
+
+
 class WalletKeyset:
     """
     Contains the keyset from the wallets's perspective.
     """
 
     id: str
+    unit: Unit
     public_keys: Dict[int, PublicKey]
     mint_url: Union[str, None] = None
     valid_from: Union[str, None] = None
@@ -439,12 +446,13 @@ class WalletKeyset:
     def __init__(
         self,
         public_keys: Dict[int, PublicKey],
-        id=None,
+        unit: str,
+        id: Optional[str] = None,
         mint_url=None,
         valid_from=None,
         valid_to=None,
         first_seen=None,
-        active=None,
+        active=True,
         use_deprecated_id=False,  # BACKWARDS COMPATIBILITY < 0.15.0
     ):
         self.valid_from = valid_from
@@ -465,6 +473,8 @@ class WalletKeyset:
             self.id = derive_keyset_id_deprecated(self.public_keys)
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
+        self.unit = Unit[unit]
+
     def serialize(self):
         return json.dumps(
             {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
@@ -480,6 +490,7 @@ class WalletKeyset:
 
         return cls(
             id=row["id"],
+            unit=row["unit"],
             public_keys=(
                 deserialize(str(row["public_keys"]))
                 if dict(row).get("public_keys")
@@ -491,12 +502,6 @@ class WalletKeyset:
             first_seen=row["first_seen"],
             active=row["active"],
         )
-
-
-class Unit(Enum):
-    sat = 0
-    msat = 1
-    usd = 2
 
 
 class MintKeyset:

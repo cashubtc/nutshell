@@ -5,7 +5,7 @@ from click import Context
 from loguru import logger
 
 from ...core.settings import settings
-from ...wallet.crud import get_keyset
+from ...wallet.crud import get_keysets
 from ...wallet.wallet import Wallet as Wallet
 
 
@@ -71,9 +71,10 @@ async def print_mint_balances(wallet, show_mints=False):
     # if we have a balance on a non-default mint, we show its URL
     keysets = [k for k, v in wallet.balance_per_keyset().items()]
     for k in keysets:
-        ks = await get_keyset(id=str(k), db=wallet.db)
-        if ks and ks.mint_url != wallet.url:
-            show_mints = True
+        ks = await get_keysets(id=str(k), db=wallet.db)
+        for k in ks:
+            if k and k.mint_url != wallet.url:
+                show_mints = True
 
     # or we have a balance on more than one mint
     # show balances per mint
@@ -98,7 +99,7 @@ async def verify_mint(mint_wallet: Wallet, url: str):
     # dummy Wallet to check the database later
     # mint_wallet = Wallet(url, os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]))
     # we check the db whether we know this mint already and ask the user if not
-    mint_keysets = await get_keyset(mint_url=url, db=mint_wallet.db)
+    mint_keysets = await get_keysets(mint_url=url, db=mint_wallet.db)
     if mint_keysets is None:
         # we encountered a new mint and ask for a user confirmation
         print("")
@@ -112,4 +113,4 @@ async def verify_mint(mint_wallet: Wallet, url: str):
             default=True,
         )
     else:
-        logger.debug(f"We know keyset {mint_keysets.id} already")
+        logger.debug(f"We know mint {url} already")

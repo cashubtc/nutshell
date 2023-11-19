@@ -10,7 +10,7 @@ from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..wallet import migrations
-from ..wallet.crud import get_keyset
+from ..wallet.crud import get_keysets
 from ..wallet.wallet import Wallet
 
 
@@ -141,12 +141,13 @@ async def receive(
         keyset_in_token = proofs[0].id
         assert keyset_in_token
         # we get the keyset from the db
-        mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
+        mint_keysets = await get_keysets(id=keyset_in_token, db=wallet.db)
         assert mint_keysets, Exception(f"we don't know this keyset: {keyset_in_token}")
-        assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
+        mint_keyset = mint_keysets[0]
+        assert mint_keyset.mint_url, Exception("we don't know this mint's URL")
         # now we have the URL
         mint_wallet = await Wallet.with_db(
-            mint_keysets.mint_url,
+            mint_keyset.mint_url,
             os.path.join(settings.cashu_dir, wallet.name),
         )
         await mint_wallet.load_mint(keyset_in_token)
