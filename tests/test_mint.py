@@ -52,9 +52,9 @@ async def test_privatekeys(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_keysets(ledger: Ledger):
-    assert len(ledger.keysets.keysets)
-    assert len(ledger.keysets.get_ids())
-    assert ledger.keyset.id == "00d5c08d2006765f"
+    assert len(ledger.keysets)
+    assert len(list(ledger.keysets.keys()))
+    assert ledger.keyset.id == "009a1f293253e41e"
 
 
 @pytest.mark.asyncio
@@ -63,8 +63,8 @@ async def test_keysets_backwards_compatibility_pre_v0_15(ledger: Ledger):
     We expect two instances of the same keyset but with different IDs.
     First one is the new hex ID, second one is the old base64 ID.
     """
-    assert len(ledger.keysets.keysets) == 2
-    assert ledger.keysets.get_ids() == ["00d5c08d2006765f", "1cCNIAZ2X/w1"]
+    assert len(ledger.keysets) == 2
+    assert list(ledger.keysets.keys()) == ["00d5c08d2006765f", "1cCNIAZ2X/w1"]
     assert ledger.keyset.id == "00d5c08d2006765f"
 
 
@@ -145,7 +145,7 @@ async def test_generate_promises_keyset_backwards_compatibility_pre_v0_15(
         )
     ]
     promises = await ledger._generate_promises(
-        blinded_messages_mock, keyset=ledger.keysets.keysets["1cCNIAZ2X/w1"]
+        blinded_messages_mock, keyset=ledger.keysets["1cCNIAZ2X/w1"]
     )
     assert (
         promises[0].C_

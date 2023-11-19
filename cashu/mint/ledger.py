@@ -12,7 +12,6 @@ from ..core.base import (
     BlindedSignature,
     MeltQuote,
     MintKeyset,
-    MintKeysets,
     MintQuote,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
@@ -20,7 +19,7 @@ from ..core.base import (
     Proof,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.keys import derive_keyset_id, derive_pubkey, random_hash
+from ..core.crypto.keys import derive_keyset_id_deprecated, derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -45,6 +44,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
     proofs_pending_lock: asyncio.Lock = (
         asyncio.Lock()
     )  # holds locks for proofs_pending database
+    keysets: Dict[str, MintKeyset] = {}
 
     def __init__(
         self,
@@ -62,7 +62,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         self.crud = crud
         self.lightning = lightning
         self.pubkey = derive_pubkey(self.master_key)
-        self.keysets = MintKeysets([])
 
     # ------- KEYS -------
 
@@ -109,7 +108,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         # activate this keyset
         keyset.active = True
         # load the new keyset in self.keysets
-        self.keysets.keysets[keyset.id] = keyset
+        self.keysets[keyset.id] = keyset
 
         logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
@@ -130,11 +129,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         )
         # add keysets from db to current keysets
         for k in tmp_keysets:
-            if k.id and k.id not in self.keysets.keysets:
-                self.keysets.keysets[k.id] = k
+            if k.id and k.id not in self.keysets:
+                self.keysets[k.id] = k
 
         # generate keys for all keysets in the database
-        for _, v in self.keysets.keysets.items():
+        for _, v in self.keysets.items():
             # we already generated the keys for this keyset
             if v.id and v.public_keys and len(v.public_keys):
                 continue
@@ -142,17 +141,30 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             v.seed = self.master_key
             v.generate_keys()
 
+        logger.info(f"Initialized {len(self.keysets)} keysets from the database.")
+
+        # activate the current keyset set by self.derivation_path
+        self.keyset = await self.activate_keyset(self.derivation_path, autosave)
+        logger.info(
+            f"All keysets: {[f'{k} ({v.unit.name})' for k, v in self.keysets.items()]}"
+        )
+        logger.info(f"Current keyset: {self.keyset.id}")
+
+        # check that we have a least one active keyset
+        assert any([k.active for k in self.keysets.values()]), "No active keyset found."
+
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        # we duplicate old keysets and computer their new keyset id
-        for _, keyset in copy.copy(self.keysets.keysets).items():
-            if keyset.version_tuple < (0, 15):
+        # we duplicate new keysets and compute their new keyset id
+        for _, keyset in copy.copy(self.keysets).items():
+            # NOTE: duplicate all keys for now
+            if keyset.version_tuple < (0, 15) or True:
                 deprecated_keyset_with_new_id = copy.copy(keyset)
                 deprecated_id = deprecated_keyset_with_new_id.id
                 assert deprecated_keyset_with_new_id.public_keys
-                deprecated_keyset_with_new_id.id = derive_keyset_id(
+                deprecated_keyset_with_new_id.id = derive_keyset_id_deprecated(
                     deprecated_keyset_with_new_id.public_keys
                 )
-                self.keysets.keysets[deprecated_keyset_with_new_id.id] = (
+                self.keysets[deprecated_keyset_with_new_id.id] = (
                     deprecated_keyset_with_new_id
                 )
                 logger.warning(
@@ -161,28 +173,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 )
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
-        logger.info(
-            f"Initialized {len(self.keysets.keysets)} keysets from the database."
-        )
-
-        # activate the current keyset set by self.derivation_path
-        self.keyset = await self.activate_keyset(self.derivation_path, autosave)
-        logger.info(
-            "All keysets:"
-            f" {[f'{k} ({v.unit.name})' for k, v in self.keysets.keysets.items()]}"
-        )
-        logger.info(f"Current keyset: {self.keyset.id}")
-
-        # check that we have a least one active keyset
-        assert any(
-            [k.active for k in self.keysets.keysets.values()]
-        ), "No active keyset found."
-
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
-        if keyset_id and keyset_id not in self.keysets.keysets:
+        if keyset_id and keyset_id not in self.keysets:
             raise KeysetNotFoundError()
-        keyset = self.keysets.keysets[keyset_id] if keyset_id else self.keyset
+        keyset = self.keysets[keyset_id] if keyset_id else self.keyset
         assert keyset.public_keys, KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
@@ -586,7 +581,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                     # BEGIN backwards compatibility mints pre `m007_proofs_and_promises_store_id`
                     # add keyset id to promise if not present only if the current keyset
                     # is the only one ever used
-                    if not promise.id and len(self.keysets.keysets) == 1:
+                    if not promise.id and len(self.keysets) == 1:
                         promise.id = self.keyset.id
                     # END backwards compatibility
                     promises.append(promise)
@@ -597,7 +592,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
     # ------- BLIND SIGNATURES -------
 
     async def _generate_promises(
-        self, B_s: List[BlindedMessage], keyset: Optional[MintKeyset] = None
+        self, outputs: List[BlindedMessage], keyset: Optional[MintKeyset] = None
     ) -> list[BlindedSignature]:
         """Generates promises that sum to the given amount.
 
@@ -608,44 +603,47 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         Returns:
             list[BlindedSignature]: _description_
         """
-        return [
-            await self._generate_promise(
-                b.amount, PublicKey(bytes.fromhex(b.B_), raw=True), keyset
-            )
-            for b in B_s
-        ]
+        return [await self._generate_promise(o, keyset) for o in outputs]
 
     async def _generate_promise(
-        self, amount: int, B_: PublicKey, keyset: Optional[MintKeyset] = None
+        self,
+        output: BlindedMessage,
+        keyset: Optional[MintKeyset] = None,
     ) -> BlindedSignature:
         """Generates a promise (Blind signature) for given amount and returns a pair (amount, C').
 
         Args:
-            amount (int): Amount of the promise.
+            output (BlindedMessage): output to generate blind signature for
             B_ (PublicKey): Blinded secret (point on curve)
             keyset (Optional[MintKeyset], optional): Which keyset to use. Private keys will be taken from this keyset. Defaults to None.
 
         Returns:
             BlindedSignature: Generated promise.
         """
+        B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
         keyset = keyset if keyset else self.keyset
+
+        assert keyset
+        assert output.id == keyset.id, "keyset id does not match output id"
+        assert keyset.active, "keyset is not active"
+
         logger.trace(f"Generating promise with keyset {keyset.id}.")
-        private_key_amount = keyset.private_keys[amount]
+        private_key_amount = keyset.private_keys[output.amount]
         C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
-        logger.trace(f"crud: _generate_promise storing promise for {amount}")
+        logger.trace(f"crud: _generate_promise storing promise for {output.amount}")
         await self.crud.store_promise(
-            amount=amount,
+            amount=output.amount,
+            id=output.id,
             B_=B_.serialize().hex(),
             C_=C_.serialize().hex(),
             e=e.serialize(),
             s=s.serialize(),
             db=self.db,
-            id=keyset.id,
         )
-        logger.trace(f"crud: _generate_promise stored promise for {amount}")
+        logger.trace(f"crud: _generate_promise stored promise for {output.amount}")
         return BlindedSignature(
-            id=keyset.id,
-            amount=amount,
+            id=output.id,
+            amount=output.amount,
             C_=C_.serialize().hex(),
             dleq=DLEQ(e=e.serialize(), s=s.serialize()),
         )

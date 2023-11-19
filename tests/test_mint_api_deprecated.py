@@ -35,7 +35,7 @@ async def test_api_keysets(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/keysets")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
-    assert response.json()["keysets"] == list(ledger.keysets.keysets.keys())
+    assert response.json()["keysets"] == list(ledger.keysets.keys())
 
 
 @pytest.mark.asyncio

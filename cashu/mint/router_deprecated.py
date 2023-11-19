@@ -112,7 +112,7 @@ async def keyset_deprecated(idBase64Urlsafe: str):
 async def keysets_deprecated() -> KeysetsResponse_deprecated:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
     logger.trace("> GET /keysets")
-    keysets = KeysetsResponse_deprecated(keysets=ledger.keysets.get_ids())
+    keysets = KeysetsResponse_deprecated(keysets=list(ledger.keysets.keys()))
     return keysets
 
 

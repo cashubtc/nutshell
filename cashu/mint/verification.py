@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional, Set, Union
+from typing import Dict, List, Literal, Optional, Set, Union
 
 from loguru import logger
 
@@ -6,7 +6,6 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     MintKeyset,
-    MintKeysets,
     Proof,
 )
 from ..core.crypto import b_dhke
@@ -27,7 +26,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
     """Verification functions for the ledger."""
 
     keyset: MintKeyset
-    keysets: MintKeysets
+    keysets: Dict[str, MintKeyset]
     secrets_used: Set[str]
 
     async def verify_inputs_and_outputs(
@@ -80,6 +79,14 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
 
     def _verify_outputs(self, outputs: List[BlindedMessage]):
         """Verify that the outputs are valid."""
+        # Verify all outputs have the same keyset id
+        if not all([o.id == outputs[0].id for o in outputs]):
+            raise TransactionError("outputs have different keyset ids.")
+        # Verify that the keyset id is known and active
+        if outputs[0].id not in self.keysets:
+            raise TransactionError("keyset id unknown.")
+        if not self.keysets[outputs[0].id].active:
+            raise TransactionError("keyset id inactive.")
         # Verify amounts of outputs
         if not all([self._verify_amount(o.amount) for o in outputs]):
             raise TransactionError("invalid amount.")
@@ -106,14 +113,10 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         if not proof.id:
             private_key_amount = self.keyset.private_keys[proof.amount]
         else:
-            assert proof.id in self.keysets.keysets, f"keyset {proof.id} unknown"
-            logger.trace(
-                f"Validating proof with keyset {self.keysets.keysets[proof.id].id}."
-            )
+            assert proof.id in self.keysets, f"keyset {proof.id} unknown"
+            logger.trace(f"Validating proof with keyset {self.keysets[proof.id].id}.")
             # use the appropriate active keyset for this proof.id
-            private_key_amount = self.keysets.keysets[proof.id].private_keys[
-                proof.amount
-            ]
+            private_key_amount = self.keysets[proof.id].private_keys[proof.amount]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         return b_dhke.verify(private_key_amount, C, proof.secret)

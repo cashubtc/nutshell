@@ -69,7 +69,7 @@ async def keys():
     logger.trace("> GET /v1/keys")
     keyset = ledger.keyset
     keyset_for_response = []
-    for keyset in ledger.keysets.keysets.values():
+    for keyset in ledger.keysets.values():
         if keyset.active:
             keyset_for_response.append(
                 KeysResponseKeyset(
@@ -104,7 +104,7 @@ async def keyset_keys(keyset_id: str, request: Request):
         keyset_id = keyset_id.replace("-", "+").replace("_", "/")
     # END BACKWARDS COMPATIBILITY < 0.15.0
 
-    keyset = ledger.keysets.keysets.get(keyset_id)
+    keyset = ledger.keysets.get(keyset_id)
     if keyset is None:
         raise CashuError(code=0, detail="Keyset not found.")
 
@@ -127,7 +127,7 @@ async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
     logger.trace("> GET /v1/keysets")
     keysets = []
-    for id, keyset in ledger.keysets.keysets.items():
+    for id, keyset in ledger.keysets.items():
         keysets.append(
             KeysetsResponseKeyset(
                 id=id, unit=keyset.unit.name, active=keyset.active or False

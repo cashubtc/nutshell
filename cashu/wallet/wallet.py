@@ -174,6 +174,8 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
 
+        keyset: Union[WalletKeyset, None] = None
+
         keyset_local: Union[WalletKeyset, None] = None
         if keyset_id:
             # check if current keyset is in db
@@ -185,29 +187,31 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                     f"Cannot find keyset {keyset_id} in database. Loading keyset from"
                     " mint."
                 )
-            keyset = keyset_local
 
-        if keyset_local is None and keyset_id:
+        if keyset_local:
+            # load keyset from database
+            keyset = keyset_local
+        elif keyset_id:
             # get requested keyset from mint
-            keyset = await self._get_keys_of_keyset(self.url, keyset_id)
+            keyset = await self._get_keys_of_keyset(keyset_id)
+            # # BEGIN backwards compatibility < 0.15.0
+            # # NOTE: Because of the change of how to calculate keyset ids
+            # # with version 0.15.0, we overwrite the calculated keyset id with the
+            # # requested one. This is a temporary fix and should be removed once all
+            # # ecash is transitioned to 0.15.0.
+            # logger.debug(
+            #     f"Keyset ID mismatch: {keyset_id} != {keyset.id}. This can happen due"
+            #     " to a version upgrade."
+            # )
+            # keyset.id = keyset_id or keyset.id
+            # # END backwards compatibility < 0.15.0
         else:
-            # get current keyset
-            keyset = await self._get_keys(self.url)
+            # get all active keysets from mint
+            keyset = await self._get_keys()
 
         assert keyset
         assert keyset.id
         assert len(keyset.public_keys) > 0, "did not receive keys from mint."
-
-        if keyset_id and keyset_id != keyset.id:
-            # NOTE: Because of the change of how to calculate keyset ids
-            # with version 0.15.0, we overwrite the calculated keyset id with the
-            # requested one. This is a temporary fix and should be removed once all
-            # ecash is transitioned to 0.15.0.
-            logger.debug(
-                f"Keyset ID mismatch: {keyset_id} != {keyset.id}. This can happen due"
-                " to a version upgrade."
-            )
-            keyset.id = keyset_id or keyset.id
 
         # if the keyset is not in the database, store it
         if keyset_local is None:
@@ -234,7 +238,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         mint_keysets = []
         try:
-            mint_keysets = await self._get_keyset_ids(self.url)
+            mint_keysets = await self._get_keyset_ids()
         except Exception:
             assert self.keysets[
                 self.keyset_id
@@ -246,7 +250,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     async def _load_mint_info(self) -> GetInfoResponse:
         """Loads the mint info from the mint."""
-        self.mint_info = await self._get_info(self.url)
+        self.mint_info = await self._get_info()
         logger.debug(f"Mint info: {self.mint_info}")
         return self.mint_info
 
@@ -282,7 +286,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
     """
 
     @async_set_httpx_client
-    async def _get_keys(self, url: str) -> WalletKeyset:
+    async def _get_keys(self) -> WalletKeyset:
         """API that gets the current keys of the mint
 
         Args:
@@ -295,12 +299,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If no keys are received from the mint
         """
         resp = await self.httpx.get(
-            join(url, "/v1/keys"),
+            join(self.url, "/v1/keys"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
-            ret = await self._get_keys_deprecated(url)
+            ret = await self._get_keys_deprecated(self.url)
             return ret
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
@@ -312,17 +316,16 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             for amt, val in keys.keysets[0].keys.items()
         }
         keyset = WalletKeyset(
-            id=keys.keysets[0].id, public_keys=keyset_keys, mint_url=url
+            id=keys.keysets[0].id, public_keys=keyset_keys, mint_url=self.url
         )
         return keyset
 
     @async_set_httpx_client
-    async def _get_keys_of_keyset(self, url: str, keyset_id: str) -> WalletKeyset:
+    async def _get_keys_of_keyset(self, keyset_id: str) -> WalletKeyset:
         """API that gets the keys of a specific keyset from the mint.
 
 
         Args:
-            url (str): Mint URL
             keyset_id (str): base64 keyset ID, needs to be urlsafe-encoded before sending to mint (done in this method)
 
         Returns:
@@ -333,12 +336,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = await self.httpx.get(
-            join(url, f"/v1/keys/{keyset_id_urlsafe}"),
+            join(self.url, f"/v1/keys/{keyset_id_urlsafe}"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
-            ret = await self._get_keys_of_keyset_deprecated(url, keyset_id)
+            ret = await self._get_keys_of_keyset_deprecated(self.url, keyset_id)
             return ret
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
@@ -350,15 +353,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.keysets[0].keys.items()
         }
-        keyset = WalletKeyset(id=keyset_id, public_keys=keyset_keys, mint_url=url)
+        keyset = WalletKeyset(id=keyset_id, public_keys=keyset_keys, mint_url=self.url)
         return keyset
 
     @async_set_httpx_client
-    async def _get_keyset_ids(self, url: str) -> List[str]:
+    async def _get_keyset_ids(self) -> List[str]:
         """API that gets a list of all active keysets of the mint.
-
-        Args:
-            url (str): Mint URL
 
         Returns:
             KeysetsResponse (List[str]): List of all active keyset IDs of the mint
@@ -367,12 +367,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If no keysets are received from the mint
         """
         resp = await self.httpx.get(
-            join(url, "/v1/keysets"),
+            join(self.url, "/v1/keysets"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
-            ret = await self._get_keyset_ids_deprecated(url)
+            ret = await self._get_keyset_ids_deprecated(self.url)
             return ret
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
@@ -383,11 +383,8 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         return [k.id for k in keysets.keysets]
 
     @async_set_httpx_client
-    async def _get_info(self, url: str) -> GetInfoResponse:
+    async def _get_info(self) -> GetInfoResponse:
         """API that gets the mint info.
-
-        Args:
-            url (str): Mint URL
 
         Returns:
             GetInfoResponse: Current mint info
@@ -396,7 +393,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If the mint info request fails
         """
         resp = await self.httpx.get(
-            join(url, "info"),
+            join(self.url, "info"),
         )
         self.raise_on_error_request(resp)
         data: dict = resp.json()
@@ -751,9 +748,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # will raise exception if mint is unsuccessful
         promises = await super().mint(outputs, id)
 
-        # success, bump secret counter in database
+        promises_keyset_id = promises[0].id
         await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=len(amounts)
+            db=self.db, keyset_id=promises_keyset_id, by=len(amounts)
         )
         proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
 
@@ -829,9 +826,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             # generate secrets for receiver
             secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
             logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
-            assert len(secret_locks) == len(
-                scnd_outputs
-            ), "number of secret_locks does not match number of outputs."
             # append predefined secrets (to send) to random secrets (to keep)
             # generate secrets to keep
             secrets = [
@@ -896,14 +890,12 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         )
 
         # we store the invoice object in the database to later be able to check the invoice state
-        # generate a random ID for this transaction
-        melt_id = await self._generate_secret()
 
         # store the melt_id in proofs
         async with self.db.connect() as conn:
             for p in proofs:
-                p.melt_id = melt_id
-                await update_proof(p, melt_id=melt_id, conn=conn)
+                p.melt_id = quote_id
+                await update_proof(p, melt_id=quote_id, conn=conn)
 
         decoded_invoice = bolt11.decode(invoice)
         invoice_obj = Invoice(
@@ -913,7 +905,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             # preimage=status.preimage,
             paid=False,
             time_paid=int(time.time()),
-            id=melt_id,  # store the same ID in the invoice
+            id=quote_id,  # store the same ID in the invoice
             out=True,  # outgoing invoice
         )
         # store invoice in db as not paid yet
@@ -934,10 +926,10 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         await self.invalidate(proofs, check_spendable=False)
 
         # update paid status in db
-        logger.trace(f"Settings invoice {melt_id} to paid.")
+        logger.trace(f"Settings invoice {quote_id} to paid.")
         await update_lightning_invoice(
             db=self.db,
-            id=melt_id,
+            id=quote_id,
             paid=True,
             time_paid=int(time.time()),
             preimage=status.proof,
@@ -1051,9 +1043,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
         return proofs
 
-    @staticmethod
     def _construct_outputs(
-        amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
+        self,
+        amounts: List[int],
+        secrets: List[str],
+        rs: List[PrivateKey] = [],
     ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
         """Takes a list of amounts and secrets and returns outputs.
         Outputs are blinded messages `outputs` and blinding factors `rs`
@@ -1080,7 +1074,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         for secret, amount, r in zip(secrets, amounts, rs_):
             B_, r = b_dhke.step1_alice(secret, r or None)
             rs_return.append(r)
-            output = BlindedMessage(amount=amount, B_=B_.serialize().hex())
+            output = BlindedMessage(
+                amount=amount, B_=B_.serialize().hex(), id=self.keyset_id
+            )
             outputs.append(output)
             logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
 

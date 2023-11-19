@@ -29,7 +29,7 @@ settings.mint_url = SERVER_ENDPOINT
 settings.tor = False
 settings.mint_lightning_backend = settings.mint_lightning_backend or "FakeWallet"
 settings.mint_database = "./test_data/test_mint"
-settings.mint_derivation_path = "0/0/0/0"
+settings.mint_derivation_path = "m/0'/0'/0'"
 settings.mint_private_key = "TEST_PRIVATE_KEY"
 
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)

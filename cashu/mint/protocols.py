@@ -1,6 +1,6 @@
-from typing import Protocol
+from typing import Dict, Protocol
 
-from ..core.base import MintKeyset, MintKeysets
+from ..core.base import MintKeyset
 from ..core.db import Database
 from ..lightning.base import Wallet
 from ..mint.crud import LedgerCrud
@@ -8,7 +8,7 @@ from ..mint.crud import LedgerCrud
 
 class SupportsKeysets(Protocol):
     keyset: MintKeyset
-    keysets: MintKeysets
+    keysets: Dict[str, MintKeyset]
 
 
 class SupportLightning(Protocol):

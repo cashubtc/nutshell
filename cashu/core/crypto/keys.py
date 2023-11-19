@@ -62,7 +62,7 @@ def derive_keyset_id(keys: Dict[int, PublicKey]):
 
 
 def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):
-    """DEPRECATED: Deterministic derivation keyset_id from set of public keys.
+    """DEPRECATED from 0.15.0 on: Deterministic derivation keyset_id from set of public keys.
     DEPRECATION: This method produces base64 keyset ids. Use `derive_keyset_id` instead.
     """
     # sort public keys by amount

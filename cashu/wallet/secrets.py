@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import os
 from typing import List, Optional, Tuple
 
 from bip32 import BIP32
@@ -92,20 +93,21 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         except Exception as e:
             logger.error(e)
 
-    async def _generate_secret(self, randombits=128) -> str:
+    async def _generate_secret(self) -> str:
         """Returns base64 encoded deterministic random string.
 
         NOTE: This method should probably retire after `deterministic_secrets`. We are
         deriving secrets from a counter but don't store the respective blinding factor.
         We won't be able to restore any ecash generated with these secrets.
         """
-        secret_counter = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id
-        )
-        logger.trace(f"secret_counter: {secret_counter}")
-        s, _, _ = await self.generate_determinstic_secret(secret_counter)
-        # return s.decode("utf-8")
-        return hashlib.sha256(s).hexdigest()
+        # secret_counter = await bump_secret_derivation(db=self.db, keyset_id=keyset_id)
+        # logger.trace(f"secret_counter: {secret_counter}")
+        # s, _, _ = await self.generate_determinstic_secret(secret_counter, keyset_id)
+        # # return s.decode("utf-8")
+        # return hashlib.sha256(s).hexdigest()
+
+        # return random 32 byte hex string
+        return hashlib.sha256(os.urandom(32)).hexdigest()
 
     async def generate_determinstic_secret(
         self, counter: int
@@ -117,18 +119,18 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         assert self.bip32, "BIP32 not initialized yet."
         # integer keyset id modulo max number of bip32 child keys
         try:
-            keyest_id = int.from_bytes(bytes.fromhex(self.keyset_id), "big") % (
+            keyest_id_int = int.from_bytes(bytes.fromhex(self.keyset_id), "big") % (
                 2**31 - 1
             )
         except ValueError:
             # BEGIN: backwards compatibility < 0.15.0 keyset id is not hex
-            keyest_id = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
+            keyest_id_int = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
                 2**31 - 1
             )
             # END: backwards compatibility < 0.15.0 keyset id is not hex
 
-        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id}")
-        token_derivation_path = f"m/129372'/0'/{keyest_id}'/{counter}'"
+        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id_int}")
+        token_derivation_path = f"m/129372'/0'/{keyest_id_int}'/{counter}'"
         # for secret
         secret_derivation_path = f"{token_derivation_path}/0"
         logger.trace(f"secret derivation path: {secret_derivation_path}")

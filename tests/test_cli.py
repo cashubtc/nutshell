@@ -331,16 +331,20 @@ def test_receive_tokenv1(mint, cli_prefix):
     runner = CliRunner()
     token_dict = [
         {
-            "id": "00d5c08d2006765f",
+            "id": "009a1f293253e41e",
             "amount": 2,
-            "secret": "Fulsgs2KPWQLqIK_m4K80A",
-            "C": "0357898ec9a2217eaab1d77bc537695022e256a9c2c0674d2e3ab3bb4b4d331fb1",
+            "secret": (
+                "c80d7927f6f5913e60764dd77d765ebd2dc1ec96083a69a933e60dead416130d"
+            ),
+            "C": "023b7013cf2d8f13939ce0186510602d946861e237bf588bf2cfbb73de4f405e46",
         },
         {
-            "id": "00d5c08d2006765f",
+            "id": "009a1f293253e41e",
             "amount": 8,
-            "secret": "reD0Ck5MKlAMD4ui68K_lA",
-            "C": "023d83d4140545d5588652359b2a21a89c865db3302e9316da39604a06d60ad38f",
+            "secret": (
+                "c68e7afaf943fab76144c9238ebfb0fbaeaea22c89611e2c5851d25c7a64558b"
+            ),
+            "C": "039b6afd81117c779c284a601eb286fd748773b63ffeb76660d5fb4313a0f541cd",
         },
     ]
     token = base64.b64encode(json.dumps(token_dict).encode()).decode()

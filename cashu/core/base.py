@@ -159,6 +159,7 @@ class BlindedMessage(BaseModel):
     """
 
     amount: int
+    id: str
     B_: str  # Hex-encoded blinded message
     witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
 
@@ -607,20 +608,6 @@ class MintKeyset:
             self.private_keys = derive_keys(self.seed, self.derivation_path)
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
             self.id = derive_keyset_id(self.public_keys)  # type: ignore
-
-
-class MintKeysets:
-    """
-    Collection of keyset IDs and the corresponding keyset of the mint.
-    """
-
-    keysets: Dict[str, MintKeyset]
-
-    def __init__(self, keysets: List[MintKeyset]):
-        self.keysets = {k.id: k for k in keysets}  # type: ignore
-
-    def get_ids(self):
-        return [k for k, _ in self.keysets.items()]
 
 
 # ------- TOKEN -------
