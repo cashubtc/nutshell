@@ -90,10 +90,10 @@ async def wallet3(mint):
 async def test_get_keys(wallet1: Wallet):
     assert wallet1.keysets[wallet1.keyset_id].public_keys
     assert len(wallet1.keysets[wallet1.keyset_id].public_keys) == settings.max_order
-    keyset = await wallet1._get_keys(wallet1.url)
+    keyset = await wallet1._get_keys()
     assert keyset.id is not None
-    # assert keyset.id_deprecated == "1cCNIAZ2X/w1"
-    assert keyset.id == "00d5c08d2006765f"
+    # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
+    assert keyset.id == "009a1f293253e41e"
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
@@ -103,32 +103,32 @@ async def test_get_keyset(wallet1: Wallet):
     assert wallet1.keysets[wallet1.keyset_id].public_keys
     assert len(wallet1.keysets[wallet1.keyset_id].public_keys) == settings.max_order
     # let's get the keys first so we can get a keyset ID that we use later
-    keys1 = await wallet1._get_keys(wallet1.url)
+    keys1 = await wallet1._get_keys()
     # gets the keys of a specific keyset
     assert keys1.id is not None
     assert keys1.public_keys is not None
-    keys2 = await wallet1._get_keys_of_keyset(wallet1.url, keys1.id)
+    keys2 = await wallet1._get_keys_of_keyset(keys1.id)
     assert keys2.public_keys is not None
     assert len(keys1.public_keys) == len(keys2.public_keys)
 
 
 @pytest.mark.asyncio
 async def test_get_info(wallet1: Wallet):
-    info = await wallet1._get_info(wallet1.url)
+    info = await wallet1._get_info()
     assert info.name
 
 
 @pytest.mark.asyncio
 async def test_get_nonexistent_keyset(wallet1: Wallet):
     await assert_err(
-        wallet1._get_keys_of_keyset(wallet1.url, "nonexistent"),
+        wallet1._get_keys_of_keyset("nonexistent"),
         KeysetNotFoundError(),
     )
 
 
 @pytest.mark.asyncio
 async def test_get_keyset_ids(wallet1: Wallet):
-    keysets = await wallet1._get_keyset_ids(wallet1.url)
+    keysets = await wallet1._get_keyset_ids()
     assert isinstance(keysets, list)
     assert len(keysets) > 0
     assert wallet1.keyset_id in keysets

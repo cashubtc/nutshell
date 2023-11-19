@@ -1004,7 +1004,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 # we don't have the keyset for this promise, so we load it
                 await self._load_mint_keys(promise.id)
                 assert promise.id in self.keysets, "Could not load keyset."
-
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(
                 C_, r, self.keysets[promise.id].public_keys[promise.amount]

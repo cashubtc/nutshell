@@ -38,13 +38,13 @@ async def test_api_keys(ledger: Ledger):
     expected = {
         "keysets": [
             {
-                "id": "00d5c08d2006765f",
-                "unit": "sat",
+                "id": keyset.id,
+                "unit": keyset.unit.name,
                 "keys": {
-                    str(k): v.serialize().hex()
-                    for k, v in ledger.keyset.public_keys.items()
+                    str(k): v.serialize().hex() for k, v in keyset.public_keys.items()  # type: ignore
                 },
             }
+            for keyset in ledger.keysets.values()
         ]
     }
     assert response.json() == expected
@@ -57,14 +57,14 @@ async def test_api_keysets(ledger: Ledger):
     expected = {
         "keysets": [
             {
-                "id": "00d5c08d2006765f",
+                "id": "009a1f293253e41e",
                 "unit": "sat",
                 "active": True,
             },
             # for backwards compatibility of the new keyset ID format,
             # we also return the same keyset with the old base64 ID
             {
-                "id": "1cCNIAZ2X/w1",
+                "id": "eGnEWtdJ0PIM",
                 "unit": "sat",
                 "active": True,
             },
@@ -75,17 +75,17 @@ async def test_api_keysets(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/keys/00d5c08d2006765f")
+    response = httpx.get(f"{BASE_URL}/v1/keys/009a1f293253e41e")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
         "keysets": [
             {
-                "id": "00d5c08d2006765f",
+                "id": "009a1f293253e41e",
                 "unit": "sat",
                 "keys": {
                     str(k): v.serialize().hex()
-                    for k, v in ledger.keyset.public_keys.items()
+                    for k, v in ledger.keysets["009a1f293253e41e"].public_keys.items()  # type: ignore
                 },
             }
         ]
@@ -95,17 +95,17 @@ async def test_api_keyset_keys(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/keys/1cCNIAZ2X_w1")
+    response = httpx.get(f"{BASE_URL}/v1/keys/eGnEWtdJ0PIM")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
         "keysets": [
             {
-                "id": "1cCNIAZ2X/w1",
+                "id": "eGnEWtdJ0PIM",
                 "unit": "sat",
                 "keys": {
                     str(k): v.serialize().hex()
-                    for k, v in ledger.keyset.public_keys.items()
+                    for k, v in ledger.keysets["eGnEWtdJ0PIM"].public_keys.items()  # type: ignore
                 },
             }
         ]
@@ -131,7 +131,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert result["signatures"][0]["id"] == "00d5c08d2006765f"
+    assert result["signatures"][0]["id"] == "009a1f293253e41e"
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
@@ -169,7 +169,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["signatures"]) == 2
     assert result["signatures"][0]["amount"] == 32
     assert result["signatures"][1]["amount"] == 32
-    assert result["signatures"][0]["id"] == "00d5c08d2006765f"
+    assert result["signatures"][0]["id"] == "009a1f293253e41e"
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
