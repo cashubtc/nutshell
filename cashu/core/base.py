@@ -476,9 +476,9 @@ class WalletKeyset:
         self.unit = Unit[unit]
 
     def serialize(self):
-        return json.dumps(
-            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
-        )
+        return json.dumps({
+            amount: key.serialize().hex() for amount, key in self.public_keys.items()
+        })
 
     @classmethod
     def from_row(cls, row: Row):
