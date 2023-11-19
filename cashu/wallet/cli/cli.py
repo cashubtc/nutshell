@@ -14,7 +14,7 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import TokenV3
+from ...core.base import TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...nostr.client.client import NostrClient
@@ -175,9 +175,11 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     total_amount = quote.amount + quote.fee_reserve
     if not yes:
         potential = (
-            f" ({total_amount} sat with potential fees)" if quote.fee_reserve else ""
+            f" ({wallet.unit.str(total_amount)} with potential fees)"
+            if quote.fee_reserve
+            else ""
         )
-        message = f"Pay {quote.amount} sat{potential}?"
+        message = f"Pay {wallet.unit.str(quote.amount)} {potential}?"
         click.confirm(
             message,
             abort=True,
@@ -236,14 +238,16 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
         assert amount >= split, "split must smaller or equal amount"
         n_splits = amount // split
         optional_split = [split] * n_splits
-        logger.debug(f"Requesting split with {n_splits} * {split} sat tokens.")
+        logger.debug(
+            f"Requesting split with {n_splits} * {wallet.unit.str(split)} tokens."
+        )
 
     # user requests an invoice
     if amount and not id:
         invoice = await wallet.request_mint(amount)
         if invoice.bolt11:
             print("")
-            print(f"Pay invoice to mint {amount} sat:")
+            print(f"Pay invoice to mint {wallet.unit.str(amount)}:")
             print("")
             print(f"Invoice: {invoice.bolt11}")
             print("")
@@ -305,7 +309,7 @@ async def swap(ctx: Context):
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    amount = int(input("Enter amount to swap in sat: "))
+    amount = int(input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
     assert amount > 0, "amount is not positive"
 
     # request invoice from incoming mint
@@ -343,7 +347,7 @@ async def swap(ctx: Context):
 @coro
 async def balance(ctx: Context, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs()
+    await wallet.load_proofs(unit=False)
     if verbose:
         # show balances per keyset
         keyset_balances = wallet.balance_per_keyset()
@@ -351,22 +355,24 @@ async def balance(ctx: Context, verbose):
             print(f"You have balances in {len(keyset_balances)} keysets:")
             print("")
             for k, v in keyset_balances.items():
+                unit = Unit[str(v["unit"])]
                 print(
-                    f"Keyset: {k} - Balance: {v['available']} {v['unit']} (pending:"
-                    f" {int(v['balance'])-int(v['available'])} {v['unit']})"
+                    f"Keyset: {k} - Balance: {unit.str(int(v['available']))} (pending:"
+                    f" {unit.str(int(v['balance'])-int(v['available']))})"
                 )
             print("")
 
     await print_mint_balances(wallet)
 
+    await wallet.load_proofs(reload=True)
     if verbose:
         print(
-            f"Balance: {wallet.available_balance} sat (pending:"
-            f" {wallet.balance-wallet.available_balance} sat) in"
+            f"Balance: {wallet.unit.str(wallet.available_balance)} (pending:"
+            f" {wallet.unit.str(wallet.balance-wallet.available_balance)}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
-        print(f"Balance: {wallet.available_balance} sat")
+        print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
 
 
 @cli.command("send", help="Send tokens.")
@@ -598,7 +604,8 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time:"
+                f"#{i} Amount:"
+                f" {wallet.unit.str(sum_proofs(grouped_proofs))} Time:"
                 f" {reserved_date} ID: {key}  Mint: {mint}\n"
             )
             print(f"{token}\n")
@@ -704,9 +711,10 @@ async def wallets(ctx):
                 if w == ctx.obj["WALLET_NAME"]:
                     active_wallet = True
                 print(
-                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat"
+                    f"Wallet: {w}\tBalance:"
+                    f" {wallet.unit.str(sum_proofs(wallet.proofs))}"
                     " (available: "
-                    f"{sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
+                    f"{wallet.unit.str(sum_proofs([p for p in wallet.proofs if not p.reserved]))}){' *' if active_wallet else ''}"
                 )
         except Exception:
             pass
@@ -827,7 +835,7 @@ async def selfpay(ctx: Context, all: bool = False):
 
     # get balance on this mint
     mint_balance_dict = await wallet.balance_per_minturl()
-    mint_balance = mint_balance_dict[wallet.url]["available"]
+    mint_balance = int(mint_balance_dict[wallet.url]["available"])
     # send balance once to mark as reserved
     await wallet.split_to_send(wallet.proofs, mint_balance, None, set_reserved=True)
     # load all reserved proofs (including the one we just sent)

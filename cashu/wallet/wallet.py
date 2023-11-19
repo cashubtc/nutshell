@@ -123,7 +123,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
     keyset_id: str  # holds current keyset id
     keysets: Dict[str, WalletKeyset]  # holds keysets
     mint_keyset_ids: List[str]  # holds active keyset ids of the mint
-
+    unit: Unit
     mint_info: GetInfoResponse  # holds info about mint
     tor: TorProxy
     db: Database
@@ -183,7 +183,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             keysets = await get_keysets(keyset_id, db=self.db)
             if keysets:
                 logger.debug(f"Found keyset {keyset_id} in database.")
-                keyset = keysets[0]
+                # keyset = keysets[0]
             else:
                 logger.debug(
                     f"Cannot find keyset {keyset_id} in database. Loading keyset from"
@@ -192,6 +192,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 keyset = await self._get_keys_of_keyset(keyset_id)
                 logger.debug(f"Storing new mint keyset: {keyset.id}")
                 await store_keyset(keyset=keyset, db=self.db)
+                keysets = [keyset]
 
         else:
             keysets = await self._get_keys()
@@ -201,11 +202,15 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 if not keysets_in_db:
                     logger.debug(f"Storing new mint keyset: {keyset.id}")
                     await store_keyset(keyset=keyset, db=self.db)
-            keyset = [k for k in keysets if k.unit.name == settings.wallet_unit][0]
+
+        wallet_unit_keysets = [k for k in keysets if k.unit == self.unit]
+        assert len(wallet_unit_keysets) > 0, f"no keyset for unit {self.unit.name}."
+
+        keyset = [k for k in keysets if k.unit == self.unit][0]
 
         assert keyset
         assert keyset.id
-        assert len(keyset.public_keys) > 0, "did not receive keys from mint."
+        assert len(keyset.public_keys) > 0, "no public keys in keyset"
 
         # set current keyset id
         self.keyset_id = keyset.id
@@ -614,7 +619,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
     # db: Database
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
-    unit: Unit
 
     def __init__(
         self,
@@ -632,9 +636,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
+        self.unit = Unit[settings.wallet_unit]
 
         super().__init__(url=url, db=self.db)
-        logger.debug(f"Wallet initialized with mint URL {url}")
+        logger.debug("Wallet initialized")
+        logger.debug(f"Mint URL: {url}")
+        logger.debug(f"Database: {db}")
+        logger.debug(f"Unit: {self.unit.name}")
 
     @classmethod
     async def with_db(
@@ -655,6 +663,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Returns:
             Wallet: Initialized wallet.
         """
+        logger.debug(f"Initializing wallet with database: {db}")
         self = cls(url=url, db=db, name=name)
         await self._migrate_database()
         if not skip_private_key:
@@ -682,7 +691,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """
         await super()._load_mint(keyset_id)
 
-    async def load_proofs(self, reload: bool = False) -> None:
+    async def load_proofs(
+        self, reload: bool = False, unit: Union[Unit, bool] = True
+    ) -> None:
         """Load all proofs from the database."""
 
         if self.proofs and not reload:
@@ -690,6 +701,14 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             return
         self.proofs = await get_proofs(db=self.db)
         await self.load_keysets()
+        unit = self.unit if unit is True else unit
+        if unit:
+            self.unit = unit
+            self.proofs = [
+                p
+                for p in self.proofs
+                if p.id in self.keysets and self.keysets[p.id].unit == unit
+            ]
 
     async def load_keysets(self) -> None:
         """Load all keysets from the database."""
@@ -1106,15 +1125,18 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         }
 
     async def _get_proofs_per_minturl(
-        self, proofs: List[Proof]
+        self, proofs: List[Proof], unit: Optional[Unit] = None
     ) -> Dict[str, List[Proof]]:
         ret: Dict[str, List[Proof]] = {}
-        for id in set([p.id for p in proofs]):
+        keyset_ids = set([p.id for p in proofs])
+        for id in keyset_ids:
             if id is None:
                 continue
             keysets_crud = await get_keysets(id=id, db=self.db)
             assert keysets_crud, f"keyset {id} not found"
             keyset: WalletKeyset = keysets_crud[0]
+            if unit and keyset.unit != unit:
+                continue
             assert keyset.mint_url
             if keyset.mint_url not in ret:
                 ret[keyset.mint_url] = [p for p in proofs if p.id == id]
@@ -1445,15 +1467,20 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 ret[key]["unit"] = self.keysets[key].unit.name
         return ret
 
-    async def balance_per_minturl(self):
-        balances = await self._get_proofs_per_minturl(self.proofs)
-        balances_return = {
+    async def balance_per_minturl(
+        self, unit: Optional[Unit] = None
+    ) -> Dict[str, Dict[str, Union[int, str]]]:
+        balances = await self._get_proofs_per_minturl(self.proofs, unit=unit)
+        balances_return: Dict[str, Dict[str, Union[int, str]]] = {
             key: {
                 "balance": sum_proofs(proofs),
                 "available": sum_proofs([p for p in proofs if not p.reserved]),
             }
             for key, proofs in balances.items()
         }
+        for key in balances_return.keys():
+            if unit:
+                balances_return[key]["unit"] = unit.name
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
 
     async def restore_wallet_from_mnemonic(

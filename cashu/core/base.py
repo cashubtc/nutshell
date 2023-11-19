@@ -424,9 +424,19 @@ class KeyBase(BaseModel):
 
 
 class Unit(Enum):
-    sat = 0
-    msat = 1
-    usd = 2
+    sat = "sat"
+    msat = "msat"
+    usd = "usd"
+
+    def str(self, amount: int) -> str:
+        if self == Unit.sat:
+            return f"{amount} sat"
+        elif self == Unit.msat:
+            return f"{amount} msat"
+        elif self == Unit.usd:
+            return f"${amount/100:.2f} USD"
+        else:
+            raise Exception("Invalid unit")
 
 
 class WalletKeyset:
@@ -476,9 +486,9 @@ class WalletKeyset:
         self.unit = Unit[unit]
 
     def serialize(self):
-        return json.dumps({
-            amount: key.serialize().hex() for amount, key in self.public_keys.items()
-        })
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
 
     @classmethod
     def from_row(cls, row: Row):

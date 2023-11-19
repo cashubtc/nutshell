@@ -4,6 +4,7 @@ import click
 from click import Context
 from loguru import logger
 
+from ...core.base import Unit
 from ...core.settings import settings
 from ...wallet.crud import get_keysets
 from ...wallet.wallet import Wallet as Wallet
@@ -11,7 +12,7 @@ from ...wallet.wallet import Wallet as Wallet
 
 def print_balance(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
-    print(f"Balance: {wallet.available_balance} sat")
+    print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
 
 
 async def get_mint_wallet(ctx: Context, force_select: bool = False):
@@ -61,19 +62,18 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
     return mint_wallet
 
 
-async def print_mint_balances(wallet, show_mints=False):
+async def print_mint_balances(wallet: Wallet, show_mints: bool = False):
     """
     Helper function that prints the balances for each mint URL that we have tokens from.
     """
     # get balances per mint
-    mint_balances = await wallet.balance_per_minturl()
-
+    mint_balances = await wallet.balance_per_minturl(unit=wallet.unit)
     # if we have a balance on a non-default mint, we show its URL
     keysets = [k for k, v in wallet.balance_per_keyset().items()]
     for k in keysets:
-        ks = await get_keysets(id=str(k), db=wallet.db)
-        for k in ks:
-            if k and k.mint_url != wallet.url:
+        keysets_local = await get_keysets(id=str(k), db=wallet.db)
+        for kl in keysets_local:
+            if kl and kl.mint_url != wallet.url:
                 show_mints = True
 
     # or we have a balance on more than one mint
@@ -82,9 +82,10 @@ async def print_mint_balances(wallet, show_mints=False):
         print(f"You have balances in {len(mint_balances)} mints:")
         print("")
         for i, (k, v) in enumerate(mint_balances.items()):
+            unit = Unit[str(v["unit"])]
             print(
-                f"Mint {i+1}: Balance: {v['available']} sat (pending:"
-                f" {v['balance']-v['available']} sat) URL: {k}"
+                f"Mint {i+1}: Balance: {unit.str(int(v['available']))} (pending:"
+                f" {unit.str(int(v['balance'])-int(v['available']))}) URL: {k}"
             )
         print("")
 
