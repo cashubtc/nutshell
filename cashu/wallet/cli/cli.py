@@ -208,7 +208,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 
 
 @cli.command("invoice", help="Create Lighting invoice.")
-@click.argument("amount", type=int)
+@click.argument("amount", type=float)
 @click.option("--id", default="", help="Id of the paid invoice.", type=str)
 @click.option(
     "--split",
@@ -231,6 +231,7 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     print_balance(ctx)
+    amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:
@@ -376,7 +377,7 @@ async def balance(ctx: Context, verbose):
 
 
 @cli.command("send", help="Send tokens.")
-@click.argument("amount", type=int)
+@click.argument("amount", type=float)
 @click.argument("nostr", type=str, required=False)
 @click.option(
     "--nostr",
@@ -436,6 +437,7 @@ async def send_command(
     nosplit: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
+    amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
     if not nostr and not nopt:
         await send(
             wallet,

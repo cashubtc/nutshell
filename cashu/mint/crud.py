@@ -460,6 +460,7 @@ class LedgerCrudSqlite(LedgerCrud):
         quote_id: str,
         db: Database,
         checking_id: Optional[str] = None,
+        request: Optional[str] = None,
         conn: Optional[Connection] = None,
     ) -> Optional[MeltQuote]:
         clauses = []
@@ -470,6 +471,9 @@ class LedgerCrudSqlite(LedgerCrud):
         if checking_id:
             clauses.append("checking_id = ?")
             values.append(checking_id)
+        if request:
+            clauses.append("request = ?")
+            values.append(request)
         where = ""
         if clauses:
             where = f"WHERE {' AND '.join(clauses)}"

@@ -495,7 +495,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 # TODO: Check if melt_quote.fee_reserve is always the correct unit!
                 logger.debug(f"Lightning: pay invoice {bolt11_request}")
                 payment = await self.backends[method][unit].pay_invoice(
-                    bolt11_request, melt_quote.fee_reserve * 1000
+                    melt_quote, melt_quote.fee_reserve * 1000
                 )
                 logger.trace("paid lightning invoice")
 

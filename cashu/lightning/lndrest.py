@@ -10,7 +10,7 @@ from bolt11 import (
 )
 from loguru import logger
 
-from ..core.base import Amount, Unit
+from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -139,14 +139,16 @@ class LndRestWallet(LightningBackend):
             error_message=None,
         )
 
-    async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(
+        self, quote: MeltQuote, fee_limit_msat: int
+    ) -> PaymentResponse:
         # set the fee limit for the payment
         lnrpcFeeLimit = dict()
         lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
 
         r = await self.client.post(
             url="/v1/channels/transactions",
-            json={"payment_request": bolt11, "fee_limit": lnrpcFeeLimit},
+            json={"payment_request": quote.request, "fee_limit": lnrpcFeeLimit},
             timeout=None,
         )
 

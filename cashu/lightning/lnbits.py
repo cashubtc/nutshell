@@ -6,7 +6,7 @@ from bolt11 import (
     decode,
 )
 
-from ..core.base import Amount, Unit
+from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -93,11 +93,13 @@ class LNbitsWallet(LightningBackend):
             payment_request=payment_request,
         )
 
-    async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(
+        self, quote: MeltQuote, fee_limit_msat: int
+    ) -> PaymentResponse:
         try:
             r = await self.client.post(
                 url=f"{self.endpoint}/api/v1/payments",
-                json={"out": True, "bolt11": bolt11},
+                json={"out": True, "bolt11": quote.request},
                 timeout=None,
             )
             r.raise_for_status()

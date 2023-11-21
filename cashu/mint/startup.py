@@ -21,14 +21,17 @@ for key, value in settings.dict().items():
 wallets_module = importlib.import_module("cashu.lightning")
 lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
 
+assert settings.mint_private_key is not None, "No mint private key set."
+
 # strike_backend = getattr(wallets_module, "StrikeUSDWallet")()
-# assert settings.mint_private_key is not None, "No mint private key set."
 # backends = {
 #     Method.bolt11: {Unit.sat: lightning_backend, Unit.usd: strike_backend},
 # }
-
+# backends = {
+#     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend},
+# }
 backends = {
-    Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend},
+    Method.bolt11: {Unit.sat: lightning_backend},
 }
 ledger = Ledger(
     db=Database("mint", settings.mint_database),

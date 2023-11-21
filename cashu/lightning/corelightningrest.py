@@ -10,7 +10,7 @@ from bolt11 import (
 )
 from loguru import logger
 
-from ..core.base import Amount, Unit
+from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -147,9 +147,11 @@ class CoreLightningRestWallet(LightningBackend):
             error_message=None,
         )
 
-    async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(
+        self, quote: MeltQuote, fee_limit_msat: int
+    ) -> PaymentResponse:
         try:
-            invoice = decode(bolt11)
+            invoice = decode(quote.request)
         except Bolt11Exception as exc:
             return PaymentResponse(
                 ok=False,
@@ -172,7 +174,7 @@ class CoreLightningRestWallet(LightningBackend):
         r = await self.client.post(
             f"{self.url}/v1/pay",
             data={
-                "invoice": bolt11,
+                "invoice": quote.request,
                 "maxfeepercent": f"{fee_limit_percent:.11}",
                 "exemptfee": 0,  # so fee_limit_percent is applied even on payments
                 # with fee < 5000 millisatoshi (which is default value of exemptfee)

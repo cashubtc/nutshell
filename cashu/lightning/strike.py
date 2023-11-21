@@ -4,7 +4,7 @@ from typing import Dict, Optional
 
 import httpx
 
-from ..core.base import Amount, Unit
+from ..core.base import Amount, MeltQuote, Unit
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
@@ -76,7 +76,7 @@ class StrikeUSDWallet(LightningBackend):
         payload = {
             "correlationId": secrets.token_hex(16),
             "description": "Invoice for order 123",
-            "amount": {"amount": str(amount / 100), "currency": "USD"},
+            "amount": {"amount": str(amount.amount / 100), "currency": "USD"},
         }
         try:
             r = await self.client.post(url=f"{self.endpoint}/v1/invoices", json=payload)
@@ -131,30 +131,41 @@ class StrikeUSDWallet(LightningBackend):
 
         amount_cent = int(float(data.get("amount").get("amount")) * 100)
         quote = PaymentQuoteResponse(
-            amount=amount_cent, id=data.get("paymentQuoteId"), fee=Amount(Unit.msat, 0)
+            amount=Amount(Unit.usd, amount=amount_cent),
+            checking_id=data.get("paymentQuoteId"),
+            fee=Amount(Unit.usd, 0),
         )
         return quote
 
-    async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(
+        self, quote: MeltQuote, fee_limit_msat: int
+    ) -> PaymentResponse:
+        # we need to get the checking_id of this quote
         try:
             r = await self.client.patch(
-                url=f"{self.endpoint}/v1/payment-quotes/{bolt11}/execute",
+                url=f"{self.endpoint}/v1/payment-quotes/{quote.checking_id}/execute",
                 timeout=None,
             )
             r.raise_for_status()
         except Exception:
             error_message = r.json()["data"]["message"]
-            return PaymentResponse(None, None, None, None, error_message)
+            return PaymentResponse(
+                ok=None,
+                checking_id=None,
+                fee=None,
+                preimage=None,
+                error_message=error_message,
+            )
 
         data = r.json()
         states = {"PENDING": None, "COMPLETED": True, "FAILED": False}
         if states[data.get("state")]:
             return PaymentResponse(
-                ok=True, checking_id=None, fee=None, error_message=None
+                ok=True, checking_id=None, fee=None, preimage=None, error_message=None
             )
         else:
             return PaymentResponse(
-                ok=False, checking_id=None, fee=None, error_message=None
+                ok=False, checking_id=None, fee=None, preimage=None, error_message=None
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:

@@ -3,7 +3,7 @@ from typing import Coroutine, Optional, Union
 
 from pydantic import BaseModel
 
-from ..core.base import Amount, Unit
+from ..core.base import Amount, MeltQuote, Unit
 
 
 class StatusResponse(BaseModel):
@@ -83,7 +83,7 @@ class LightningBackend(ABC):
 
     @abstractmethod
     def pay_invoice(
-        self, bolt11: str, fee_limit_msat: int
+        self, quote: MeltQuote, fee_limit_msat: int
     ) -> Coroutine[None, None, PaymentResponse]:
         pass
 

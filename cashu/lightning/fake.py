@@ -14,7 +14,7 @@ from bolt11 import (
     encode,
 )
 
-from ..core.base import Amount, Unit
+from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -94,8 +94,8 @@ class FakeWallet(LightningBackend):
             ok=True, checking_id=payment_hash, payment_request=payment_request
         )
 
-    async def pay_invoice(self, bolt11: str, fee_limit: int) -> PaymentResponse:
-        invoice = decode(bolt11)
+    async def pay_invoice(self, quote: MeltQuote, fee_limit: int) -> PaymentResponse:
+        invoice = decode(quote.request)
 
         if settings.fakewallet_delay_payment:
             await asyncio.sleep(5)
