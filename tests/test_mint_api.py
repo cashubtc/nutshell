@@ -6,7 +6,7 @@ import pytest_asyncio
 from cashu.core.base import CheckSpendableRequest, CheckSpendableResponse, Proof
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
-from tests.helpers import pay_if_regtest
+from tests.helpers import get_real_invoice, is_regtest, pay_if_regtest
 
 BASE_URL = "http://localhost:3337"
 
@@ -201,9 +201,16 @@ async def test_melt(ledger: Ledger, wallet: Wallet):
     assert wallet.balance == 64
 
     # create invoice to melt to
-    # we melt 2 satoshis less because of the fee reserve
+    # use 2 sat less because we need to pay the fee
     invoice = await wallet.request_mint(62)
-    quote = await wallet.melt_quote(invoice.bolt11)
+
+    invoice_payment_request = invoice.bolt11
+    if is_regtest:
+        invoice_dict = get_real_invoice(62)
+        invoice_payment_request = invoice_dict["payment_request"]
+        str(invoice_dict["r_hash"])
+
+    quote = await wallet.melt_quote(invoice_payment_request)
     inputs_payload = [p.to_dict() for p in wallet.proofs]
 
     # outputs for change
