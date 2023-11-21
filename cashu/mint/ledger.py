@@ -436,6 +436,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         unit = Unit[melt_quote.unit]
         # make sure that the outputs (for fee return) are in the same unit as the quote
         if outputs:
+            assert outputs[0].id, "output id not set"
             outputs_unit = self.keysets[outputs[0].id].unit
             assert outputs_unit
             assert melt_quote.unit == outputs_unit.name, (
@@ -519,6 +520,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []
             if outputs and fees_paid is not None:
+                assert outputs[0].id, "output id not set"
                 return_promises = await self._generate_change_promises(
                     input_amount=total_provided,
                     output_amount=melt_quote.amount,
@@ -636,6 +638,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             BlindedSignature: Generated promise.
         """
         B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
+        assert output.id, "output id not set"
         keyset = keyset if keyset else self.keysets[output.id]
 
         assert output.id in self.keysets, f"keyset {output.id} not found"

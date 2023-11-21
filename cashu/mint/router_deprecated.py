@@ -168,7 +168,12 @@ async def mint_deprecated(
     Call this endpoint after `GET /mint`.
     """
     logger.trace(f"> POST /mint: {payload}")
-
+    # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
+    if payload.outputs:
+        for output in payload.outputs:
+            if not output.id:
+                output.id = ledger.keyset.id
+    # END BACKWARDS COMPATIBILITY < 0.14
     # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
     # We use the payment_hash to lookup the hash from the database and pass that one along.
     hash = payment_hash or hash
@@ -202,6 +207,12 @@ async def melt_deprecated(
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /melt: {payload}")
+    # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
+    if payload.outputs:
+        for output in payload.outputs:
+            if not output.id:
+                output.id = ledger.keyset.id
+    # END BACKWARDS COMPATIBILITY < 0.14
     quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=payload.pr, unit="sat")
     )
@@ -262,7 +273,12 @@ async def split_deprecated(
     """
     logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
-
+    # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
+    if payload.outputs:
+        for output in payload.outputs:
+            if not output.id:
+                output.id = ledger.keyset.id
+    # END BACKWARDS COMPATIBILITY < 0.14
     promises = await ledger.split(proofs=payload.proofs, outputs=payload.outputs)
 
     if payload.amount:

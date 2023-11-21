@@ -161,7 +161,9 @@ class BlindedMessage(BaseModel):
     """
 
     amount: int
-    id: str
+    id: Optional[
+        str
+    ]  # DEPRECATION: Only Optional for backwards compatibility with old clients < 0.15 for deprecated API route.
     B_: str  # Hex-encoded blinded message
     witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
 
