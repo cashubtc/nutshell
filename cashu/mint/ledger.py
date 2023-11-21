@@ -1,7 +1,7 @@
 import asyncio
 import copy
 import math
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Mapping, Optional, Set, Tuple
 
 import bolt11
 from loguru import logger
@@ -11,12 +11,14 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     MeltQuote,
+    Method,
     MintKeyset,
     MintQuote,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
     Proof,
+    Unit,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_keyset_id_deprecated, derive_pubkey, random_hash
@@ -32,14 +34,19 @@ from ..core.errors import (
 from ..core.helpers import sum_proofs
 from ..core.settings import settings
 from ..core.split import amount_split
-from ..lightning.base import Wallet
+from ..lightning.base import (
+    InvoiceResponse,
+    LightningWallet,
+    PaymentQuoteResponse,
+    PaymentStatus,
+)
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
-from .lightning import LedgerLightning
 from .verification import LedgerVerification
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
+class Ledger(LedgerVerification, LedgerSpendingConditions):
+    backends: Mapping[Method, Mapping[Unit, LightningWallet]] = {}
     locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
     proofs_pending_lock: asyncio.Lock = (
         asyncio.Lock()
@@ -50,7 +57,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         self,
         db: Database,
         seed: str,
-        lightning: Wallet,
+        backends: Mapping[Method, Mapping[Unit, LightningWallet]],
         derivation_path="",
         crud=LedgerCrudSqlite(),
     ):
@@ -60,7 +67,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
         self.db = db
         self.crud = crud
-        self.lightning = lightning
+        self.backends = backends
         self.pubkey = derive_pubkey(self.master_key)
 
     # ------- KEYS -------
@@ -271,8 +278,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         Returns:
             Tuple[str, str]: Bolt11 invoice and a id (for looking it up later)
         """
-        assert quote_request.unit == "sat", "only sat supported"
-
         logger.trace("called request_mint")
         if settings.mint_max_peg_in and quote_request.amount > settings.mint_max_peg_in:
             raise NotAllowedError(
@@ -280,22 +285,54 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             )
         if settings.mint_peg_out_only:
             raise NotAllowedError("Mint does not allow minting new tokens.")
-
-        logger.trace(f"requesting invoice for {quote_request.amount} satoshis")
-        invoice_response = await self._request_lightning_invoice(quote_request.amount)
+        unit = Unit[quote_request.unit]
+        method = Method["bolt11"]
+        requested_amount_sat = quote_request.amount
+        if unit == Unit.msat:
+            requested_amount_sat = math.ceil(quote_request.amount / 1000)
+        logger.trace(f"requesting invoice for {requested_amount_sat} satoshis")
+        invoice_response: InvoiceResponse = await self.backends[method][
+            unit
+        ].create_invoice(requested_amount_sat)
         logger.trace(
             f"got invoice {invoice_response.payment_request} with check id"
             f" {invoice_response.checking_id}"
         )
+        # if unit == Unit.sat:
+
+        # elif unit == Unit.msat:
+        #     amount_sat = math.ceil(quote_request.amount / 1000)
+        #     logger.trace(f"requesting invoice for {amount_sat} satoshis")
+        #     invoice_response = await self._request_lightning_invoice(amount_sat)
+        #     logger.trace(
+        #         f"got invoice {invoice_response.payment_request} with check id"
+        #         f" {invoice_response.checking_id}"
+        #     )
+        # elif unit == Unit.usd:
+        #     invoice_response = InvoiceResponse(
+        #         ok=True,
+        #         checking_id="USD checking ID",
+        #         payment_request="lnbc1230n1pj4k54wdq4gdshx6r4ypjx2ur0wd5hgsp5m7gsgz8v9k8dlvzkrwcwps30xmxt4pag36pn96nxf5twald9vp5qpp59laagur6w8shykfh05mdyl3e7k304gmn8zp3yjj8429ur2uq6znqwuul0t3kl7g38htuue82gwe3s9fh37j6rza8ja7w35lnn4up5t9jqls32vjqsy4tywh479wusv9xwj92hphane9p0wppjk4n4ms6nasquzj6ug", # noqa
+        #     )
+        # elif unit == Unit.cheese:
+        #     invoice_response = InvoiceResponse(
+        #         ok=True,
+        #         checking_id="USD checking ID",
+        #         payment_request="lnbc1230n1pj4k54wdq4gdshx6r4ypjx2ur0wd5hgsp5m7gsgz8v9k8dlvzkrwcwps30xmxt4pag36pn96nxf5twald9vp5qpp59laagur6w8shykfh05mdyl3e7k304gmn8zp3yjj8429ur2uq6znqwuul0t3kl7g38htuue82gwe3s9fh37j6rza8ja7w35lnn4up5t9jqls32vjqsy4tywh479wusv9xwj92hphane9p0wppjk4n4ms6nasquzj6ug", # noqa
+        #     )
+        # else:
+        #     raise NotAllowedError(f"Mint quote: {quote_request.unit} unit not allowed.")
+
         assert (
             invoice_response.payment_request and invoice_response.checking_id
-        ), LightningError("could not fetch invoice from Lightning backend")
+        ), LightningError("could not fetch bolt11 payment request from backend")
+
         quote = MintQuote(
             quote=random_hash(),
             method="bolt11",
             request=invoice_response.payment_request,
             checking_id=invoice_response.checking_id,
-            unit="sat",
+            unit=quote_request.unit,
             amount=quote_request.amount,
             issued=False,
             paid=False,
@@ -344,21 +381,33 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 quote.amount == sum_amount_outputs
             ), "amount to mint does not match quote amount"
 
-            # Lightning
-            assert quote.unit == "sat", "only sat supported"
             assert quote.method == "bolt11", "only bolt11 supported"
-
+            unit = Unit[quote.unit]
+            method = Method["bolt11"]
             if not quote.paid:
                 logger.debug(f"Lightning: checking invoice {quote.checking_id}")
-                status = await self.lightning.get_invoice_status(quote.checking_id)
+                status: PaymentStatus = await self.backends[method][
+                    unit
+                ].get_invoice_status(quote.checking_id)
                 assert status.paid, "invoice not paid"
                 await self.crud.update_mint_quote_paid(
                     quote_id=quote_id, paid=True, db=self.db
                 )
-
-            # # will raise an exception if the invoice is not paid or tokens are
-            # # already issued or the requested amount is too high
-            # await self._check_lightning_invoice(amount=sum_amount_outputs, id=quote_id)
+            # # Lightning
+            # if unit == Unit.sat:
+            #     if not quote.paid:
+            #         logger.debug(f"Lightning: checking invoice {quote.checking_id}")
+            #         status = await self.lightning[unit].get_invoice_status(quote.checking_id)
+            #         assert status.paid, "invoice not paid"
+            #         await self.crud.update_mint_quote_paid(
+            #             quote_id=quote_id, paid=True, db=self.db
+            #         )
+            # elif unit == Unit.usd:
+            #     logger.debug("USD mint: paid")
+            # elif unit == Unit.cheese:
+            #     logger.debug("Cheese mint: paid")
+            # else:
+            # raise NotAllowedError(f"Mint: {quote.unit} unit not supported.")
 
             logger.trace(f"crud: setting invoice {id} as issued")
             await self.crud.update_mint_quote_issued(
@@ -375,26 +424,55 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
     ) -> PostMeltQuoteResponse:
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
-        assert melt_quote.unit == "sat", "only sat supported"
-        # Lightning
-        fee_reserve_sat = await self._get_lightning_fees(melt_quote.request)
+        unit = Unit[melt_quote.unit]
+        method = Method["bolt11"]
+        payment_quote: PaymentQuoteResponse = await self.backends[method][
+            unit
+        ].get_payment_quote(melt_quote.request)
+
+        if unit == Unit.msat:
+            payment_quote.amount = payment_quote.amount * 1000
+            payment_quote.fee = payment_quote.fee * 1000
+
+        # amount = invoice_amount_sat
+        # checking_id = invoice_obj.payment_hash
+
+        # if unit == Unit.sat:
+        #     # Lightning
+        #     fee_reserve_sat = await self._get_lightning_fees(melt_quote.request)
+        #     amount = invoice_amount_sat
+        #     checking_id = invoice_obj.payment_hash
+        # elif unit == Unit.usd:
+        #     fee_reserve_sat = 0
+        #     amount = int(invoice_amount_sat / 3400)
+        #     checking_id = invoice_obj.payment_hash
+        # elif unit == Unit.cheese:
+        #     fee_reserve_sat = 2
+        #     amount = int(invoice_amount_sat / 2)
+        #     checking_id = invoice_obj.payment_hash
+        # elif unit == Unit.msat:
+        #     fee_reserve_sat = 0
+        #     amount = invoice_amount_sat * 1000
+        #     checking_id = invoice_obj.payment_hash
+        # else:
+        #     raise NotAllowedError(f"Melt quote: {melt_quote.unit} unit not supported.")
 
         # NOTE: We do not store the fee reserve in the database.
         quote = MeltQuote(
             quote=random_hash(),
-            method="bolt11",
-            request=melt_quote.request,
-            checking_id=invoice_obj.payment_hash,
+            method="bolt11",  # TODO: remove unnecessary fields
+            request=melt_quote.request,  # TODO: remove unnecessary fields
+            checking_id=payment_quote.checking_id,
             unit=melt_quote.unit,
-            amount=int(invoice_obj.amount_msat / 1000),
+            amount=payment_quote.amount,
             paid=False,
-            fee_reserve=fee_reserve_sat,
+            fee_reserve=payment_quote.fee,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         return PostMeltQuoteResponse(
             quote=quote.quote,
             amount=quote.amount,
-            fee_reserve=fee_reserve_sat,
+            fee_reserve=quote.fee_reserve,
         )
 
     async def melt(
@@ -422,7 +500,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         melt_quote = await self.crud.get_melt_quote(quote_id=quote, db=self.db)
         assert melt_quote, "quote not found"
         assert melt_quote.method == "bolt11", "only bolt11 supported"
-        assert melt_quote.unit == "sat", "only sat supported"
+
+        method = Method["bolt11"]
+        unit = Unit[melt_quote.unit]
+        # make sure that the outputs (for fee return) are in the same unit as the quote
+        if outputs:
+            outputs_unit = self.keysets[outputs[0].id].unit
+            assert outputs_unit
+            assert melt_quote.unit == outputs_unit.name, (
+                f"output unit {outputs_unit.name} does not match quote unit"
+                f" {melt_quote.unit}"
+            )
         assert not melt_quote.paid, "melt quote already paid"
         bolt11_request = melt_quote.request
         total_provided = sum_proofs(proofs)
@@ -460,26 +548,20 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 assert mint_quote.method == melt_quote.method, "methods do not match"
                 assert not mint_quote.paid, "mint quote already paid"
                 assert not mint_quote.issued, "mint quote already issued"
-                # we can handle this transaction internally
+                logger.info(
+                    f"Settling bolt11 payment internally: {melt_quote.quote} ->"
+                    f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
+                )
+                # we handle this transaction internally
                 await self.crud.update_mint_quote_paid(
                     quote_id=mint_quote.quote, paid=True, db=self.db
                 )
 
             else:
-                # we need to pay the lightning invoice
-                logger.debug(f"Lightning: get fees for {bolt11_request}")
-                reserve_fees_sat = await self._get_lightning_fees(bolt11_request)
-                # verify overspending attempt
-                assert (
-                    total_provided >= invoice_amount + reserve_fees_sat
-                ), TransactionError(
-                    "provided proofs not enough for Lightning payment. Provided:"
-                    f" {total_provided}, needed: {invoice_amount + reserve_fees_sat}"
-                )
-
+                # TODO: Check if melt_quote.fee_reserve is always the correct unit!
                 logger.debug(f"Lightning: pay invoice {bolt11_request}")
-                payment = await self._pay_lightning_invoice(
-                    bolt11_request, reserve_fees_sat * 1000
+                payment = await self.backends[method][unit].pay_invoice(
+                    bolt11_request, melt_quote.fee_reserve * 1000
                 )
                 logger.trace("paid lightning invoice")
 
@@ -487,14 +569,52 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                     f"Melt status: {payment.ok}: preimage: {payment.preimage},"
                     f" fee_msat: {payment.fee_msat}"
                 )
-
                 if not payment.ok:
                     raise LightningError("Lightning payment unsuccessful.")
-
                 if payment.fee_msat:
                     fees_paid = math.ceil(payment.fee_msat / 1000)
                 if payment.preimage:
                     payment_proof = payment.preimage
+
+                # if outputs_unit == Unit.sat:
+                #     # we need to pay the lightning invoice
+                #     logger.debug(f"Lightning: get fees for {bolt11_request}")
+                #     reserve_fees_sat = await self._get_lightning_fees(bolt11_request)
+                #     # verify overspending attempt
+                #     assert (
+                #         total_provided >= invoice_amount + reserve_fees_sat
+                #     ), TransactionError(
+                #         "provided proofs not enough for Lightning payment. Provided:"
+                #         f" {total_provided}, needed:"
+                #         f" {invoice_amount + reserve_fees_sat}"
+                #     )
+
+                #     logger.debug(f"Lightning: pay invoice {bolt11_request}")
+                #     payment = await self._pay_lightning_invoice(
+                #         bolt11_request, reserve_fees_sat * 1000
+                #     )
+                #     logger.trace("paid lightning invoice")
+
+                #     logger.debug(
+                #         f"Melt status: {payment.ok}: preimage: {payment.preimage},"
+                #         f" fee_msat: {payment.fee_msat}"
+                #     )
+
+                #     if not payment.ok:
+                #         raise LightningError("Lightning payment unsuccessful.")
+
+                #     if payment.fee_msat:
+                #         fees_paid = math.ceil(payment.fee_msat / 1000)
+                #     if payment.preimage:
+                #         payment_proof = payment.preimage
+                # elif outputs_unit == Unit.usd:
+                #     payment_proof = "paid USD"
+                # elif outputs_unit == Unit.cheese or True:
+                #     payment_proof = "paid Cheese"
+                # else:
+                #     raise LightningError(
+                #         f"Melt: {outputs_unit.name} unit not supported."
+                #     )
 
             # melt successful, invalidate proofs
             await self._invalidate_proofs(proofs)
@@ -510,7 +630,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                     output_amount=invoice_amount,
                     output_fee_paid=fees_paid,
                     outputs=outputs,
-                    keyset=keyset,
+                    keyset=self.keysets[outputs[0].id],
                 )
 
         except Exception as e:

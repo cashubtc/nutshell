@@ -31,8 +31,8 @@ async def test_melt(wallet1: Wallet, ledger: Ledger):
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 128
     mint_quote = await wallet1.get_pay_amount_with_fees(invoice.bolt11)
-    mint_fees = await ledger._get_lightning_fees(invoice.bolt11)
-    assert mint_fees == mint_quote.fee_reserve
+    # mint_fees = await ledger._get_lightning_fees(invoice.bolt11)
+    # assert mint_fees == mint_quote.fee_reserve
     total_amount = mint_quote.amount + mint_quote.fee_reserve
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
     melt_quote = await ledger.melt_quote(

@@ -6,6 +6,7 @@ import importlib
 
 from loguru import logger
 
+from ..core.base import Method, Unit
 from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
@@ -19,15 +20,19 @@ for key, value in settings.dict().items():
 
 wallets_module = importlib.import_module("cashu.lightning")
 lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
+strike_backend = getattr(wallets_module, "StrikeUSDWallet")()
 
 assert settings.mint_private_key is not None, "No mint private key set."
 
+backends = {
+    Method.bolt11: {Unit.sat: lightning_backend, Unit.usd: strike_backend},
+}
 
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
     seed=settings.mint_private_key,
     derivation_path=settings.mint_derivation_path,
-    lightning=lightning_backend,
+    backends=backends,
     crud=LedgerCrudSqlite(),
 )
 
@@ -56,15 +61,21 @@ async def start_mint_init():
     for derivation_path in settings.mint_derivation_path_list:
         await ledger.activate_keyset(derivation_path)
 
-    logger.info(f"Using backend: {settings.mint_lightning_backend}")
-    status = await ledger.lightning.status()
-    if status.error_message:
-        logger.warning(
-            f"The backend for {ledger.lightning.__class__.__name__} isn't"
-            f" working properly: '{status.error_message}'",
-            RuntimeWarning,
-        )
-    logger.info(f"Lightning balance: {status.balance_msat} msat")
+    for method in ledger.backends:
+        for unit in ledger.backends[method]:
+            logger.info(
+                f"Using {ledger.backends[method][unit].__class__.__name__} backend for"
+                f" method: '{method.name}' and unit '{unit.name}'"
+            )
+            status = await ledger.backends[method][unit].status()
+            if status.error_message:
+                logger.warning(
+                    "The backend for"
+                    f" {ledger.backends[method][unit].__class__.__name__} isn't"
+                    f" working properly: '{status.error_message}'",
+                    RuntimeWarning,
+                )
+            logger.info(f"Backend balance: {status.balance} {unit.name}")
 
     logger.info(f"Data dir: {settings.cashu_dir}")
     logger.info("Mint started.")

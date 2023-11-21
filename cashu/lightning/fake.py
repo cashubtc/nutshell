@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import math
 import random
 from datetime import datetime
 from os import urandom
@@ -14,18 +15,25 @@ from bolt11 import (
     encode,
 )
 
+from ..core.base import Method, Unit
+from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
+    InvoiceQuoteResponse,
     InvoiceResponse,
+    LightningWallet,
+    PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
-    Wallet,
 )
 
 
-class FakeWallet(Wallet):
+class FakeWallet(LightningWallet):
     """https://github.com/lnbits/lnbits"""
+
+    method = Method.bolt11
+    unit = Unit.sat
 
     queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
@@ -40,7 +48,7 @@ class FakeWallet(Wallet):
     ).hex()
 
     async def status(self) -> StatusResponse:
-        return StatusResponse(error_message=None, balance_msat=1337)
+        return StatusResponse(error_message=None, balance=1337)
 
     async def create_invoice(
         self,
@@ -125,3 +133,18 @@ class FakeWallet(Wallet):
         while True:
             value: Bolt11 = await self.queue.get()
             yield value.payment_hash
+
+    async def get_invoice_quote(self, bolt11: str) -> InvoiceQuoteResponse:
+        invoice_obj = decode(bolt11)
+        assert invoice_obj.amount_msat, "invoice has no amount."
+        amount = invoice_obj.amount_msat
+        return InvoiceQuoteResponse(checking_id="", amount=amount)
+
+    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
+        invoice_obj = decode(bolt11)
+        assert invoice_obj.amount_msat, "invoice has no amount."
+        amount_msat = int(invoice_obj.amount_msat)
+        fees_msat = fee_reserve(amount_msat)
+        fee_sat = math.ceil(fees_msat / 1000)
+        amount_sat = math.ceil(amount_msat / 1000)
+        return PaymentQuoteResponse(checking_id="", fee=fee_sat, amount=amount_sat)

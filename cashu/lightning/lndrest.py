@@ -10,15 +10,15 @@ from loguru import logger
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
+    LightningWallet,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
-    Wallet,
 )
 from .macaroon import load_macaroon
 
 
-class LndRestWallet(Wallet):
+class LndRestWallet(LightningWallet):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
     def __init__(self):

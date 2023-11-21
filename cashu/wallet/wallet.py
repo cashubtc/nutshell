@@ -424,7 +424,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: GET /v1/mint/bolt11")
-        payload = PostMintQuoteRequest(unit="sat", amount=amount)
+        payload = PostMintQuoteRequest(unit=self.unit.name, amount=amount)
         resp = await self.httpx.post(
             join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
         )
@@ -1008,7 +1008,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             ):
                 raise Exception("DLEQ proof invalid.")
             else:
-                logger.debug("DLEQ proof valid.")
+                logger.trace("DLEQ proof valid.")
 
     async def _construct_proofs(
         self,

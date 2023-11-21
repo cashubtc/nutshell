@@ -3,12 +3,14 @@ import os
 import shutil
 import time
 from pathlib import Path
+from typing import Mapping
 
 import pytest
 import pytest_asyncio
 import uvicorn
 from uvicorn import Config, Server
 
+from cashu.core.base import Method, Unit
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
@@ -67,11 +69,14 @@ async def ledger():
         if os.path.exists(db_file):
             os.remove(db_file)
 
+    backends: Mapping = {
+        Method.bolt11: {Unit.sat: FakeWallet()},
+    }
     ledger = Ledger(
         db=Database(database_name, settings.mint_database),
         seed=settings.mint_private_key,
         derivation_path=settings.mint_derivation_path,
-        lightning=FakeWallet(),
+        backends=backends,
         crud=LedgerCrudSqlite(),
     )
     await start_mint_init(ledger)

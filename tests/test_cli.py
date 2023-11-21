@@ -58,7 +58,7 @@ def test_info_with_mint(cli_prefix):
         [*cli_prefix, "info", "--mint"],
     )
     assert result.exception is None
-    print("INFO -M")
+    print("INFO --MINT")
     print(result.output)
     assert "Mint name" in result.output
     assert result.exit_code == 0
@@ -71,7 +71,7 @@ def test_info_with_mnemonic(cli_prefix):
         [*cli_prefix, "info", "--mnemonic"],
     )
     assert result.exception is None
-    print("INFO -M")
+    print("INFO --MNEMONIC")
     print(result.output)
     assert "Mnemonic" in result.output
     assert result.exit_code == 0

@@ -11,16 +11,16 @@ from loguru import logger
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
+    LightningWallet,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
     Unsupported,
-    Wallet,
 )
 from .macaroon import load_macaroon
 
 
-class CoreLightningRestWallet(Wallet):
+class CoreLightningRestWallet(LightningWallet):
     def __init__(self):
         macaroon = settings.mint_corelightning_rest_macaroon
         assert macaroon, "missing cln-rest macaroon"

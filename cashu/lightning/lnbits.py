@@ -6,14 +6,14 @@ import httpx
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
+    LightningWallet,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
-    Wallet,
 )
 
 
-class LNbitsWallet(Wallet):
+class LNbitsWallet(LightningWallet):
     """https://github.com/lnbits/lnbits"""
 
     def __init__(self):

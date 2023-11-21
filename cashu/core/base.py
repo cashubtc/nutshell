@@ -208,7 +208,7 @@ class MeltQuote(BaseModel):
     checking_id: str
     unit: str
     amount: int
-    fee_reserve: Optional[int] = None
+    fee_reserve: int
     paid: bool
 
 
@@ -427,6 +427,7 @@ class Unit(Enum):
     sat = 0
     msat = 1
     usd = 2
+    cheese = 3
 
     def str(self, amount: int) -> str:
         if self == Unit.sat:
@@ -435,8 +436,14 @@ class Unit(Enum):
             return f"{amount} msat"
         elif self == Unit.usd:
             return f"${amount/100:.2f} USD"
+        elif self == Unit.cheese:
+            return f"E{amount/100:.2f} Chuck E Cheese Tokens"
         else:
             raise Exception("Invalid unit")
+
+
+class Method(Enum):
+    bolt11 = 0
 
 
 class WalletKeyset:
@@ -486,9 +493,9 @@ class WalletKeyset:
         self.unit = Unit[unit]
 
     def serialize(self):
-        return json.dumps({
-            amount: key.serialize().hex() for amount, key in self.public_keys.items()
-        })
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
 
     @classmethod
     def from_row(cls, row: Row):
@@ -567,8 +574,8 @@ class MintKeyset:
         # infer unit from derivation path
         if not unit:
             logger.warning(
-                f"Unit for keyset {self.id} not set – attempting to parse from"
-                " derivation path"
+                f"Unit for keyset {self.derivation_path} not set – attempting to parse"
+                " from derivation path"
             )
             try:
                 self.unit = Unit(
@@ -586,6 +593,8 @@ class MintKeyset:
         # generate keys from seed
         if self.seed and self.derivation_path:
             self.generate_keys()
+
+        logger.debug(f"Keyset id: {self.id} ({self.unit.name})")
 
     @property
     def public_keys_hex(self) -> Dict[int, str]:

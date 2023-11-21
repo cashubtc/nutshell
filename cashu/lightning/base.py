@@ -1,12 +1,25 @@
 from abc import ABC, abstractmethod
-from typing import Coroutine, Optional
+from typing import Coroutine, Optional, Union
 
 from pydantic import BaseModel
+
+from ..core.base import Method, Unit
 
 
 class StatusResponse(BaseModel):
     error_message: Optional[str]
-    balance_msat: int
+    balance: Union[int, float]
+
+
+class InvoiceQuoteResponse(BaseModel):
+    checking_id: str
+    amount: int
+
+
+class PaymentQuoteResponse(BaseModel):
+    checking_id: str
+    amount: int
+    fee: int
 
 
 class InvoiceResponse(BaseModel):
@@ -48,7 +61,10 @@ class PaymentStatus(BaseModel):
             return "unknown (should never happen)"
 
 
-class Wallet(ABC):
+class LightningWallet(ABC):
+    unit: Unit
+    method: Method
+
     @abstractmethod
     def status(self) -> Coroutine[None, None, StatusResponse]:
         pass
@@ -79,6 +95,20 @@ class Wallet(ABC):
         self, checking_id: str
     ) -> Coroutine[None, None, PaymentStatus]:
         pass
+
+    @abstractmethod
+    async def get_payment_quote(
+        self,
+        bolt11: str,
+    ) -> PaymentQuoteResponse:
+        pass
+
+    # @abstractmethod
+    # async def get_invoice_quote(
+    #     self,
+    #     bolt11: str,
+    # ) -> InvoiceQuoteResponse:
+    #     pass
 
     # @abstractmethod
     # def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
