@@ -1,12 +1,18 @@
 # type: ignore
+import math
 from typing import Optional
 
 import httpx
+from bolt11 import (
+    decode,
+)
 
+from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
     LightningWallet,
+    PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
@@ -141,3 +147,12 @@ class LNbitsWallet(LightningWallet):
             fee_msat=data["details"]["fee"],
             preimage=data["preimage"],
         )
+
+    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
+        invoice_obj = decode(bolt11)
+        assert invoice_obj.amount_msat, "invoice has no amount."
+        amount_msat = int(invoice_obj.amount_msat)
+        fees_msat = fee_reserve(amount_msat)
+        fee_sat = math.ceil(fees_msat / 1000)
+        amount_sat = math.ceil(amount_msat / 1000)
+        return PaymentQuoteResponse(checking_id="", fee=fee_sat, amount=amount_sat)

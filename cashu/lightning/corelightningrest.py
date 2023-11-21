@@ -1,17 +1,22 @@
 import asyncio
 import json
+import math
 import random
 from typing import AsyncGenerator, Dict, Optional
 
 import httpx
-from bolt11 import Bolt11Exception
-from bolt11.decode import decode
+from bolt11 import (
+    Bolt11Exception,
+    decode,
+)
 from loguru import logger
 
+from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
     LightningWallet,
+    PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
@@ -298,3 +303,12 @@ class CoreLightningRestWallet(LightningWallet):
                     "reconnecting..."
                 )
                 await asyncio.sleep(0.02)
+
+    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
+        invoice_obj = decode(bolt11)
+        assert invoice_obj.amount_msat, "invoice has no amount."
+        amount_msat = int(invoice_obj.amount_msat)
+        fees_msat = fee_reserve(amount_msat)
+        fee_sat = math.ceil(fees_msat / 1000)
+        amount_sat = math.ceil(amount_msat / 1000)
+        return PaymentQuoteResponse(checking_id="", fee=fee_sat, amount=amount_sat)

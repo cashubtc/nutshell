@@ -19,7 +19,6 @@ from ..core.base import Method, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
-    InvoiceQuoteResponse,
     InvoiceResponse,
     LightningWallet,
     PaymentQuoteResponse,
@@ -134,11 +133,11 @@ class FakeWallet(LightningWallet):
             value: Bolt11 = await self.queue.get()
             yield value.payment_hash
 
-    async def get_invoice_quote(self, bolt11: str) -> InvoiceQuoteResponse:
-        invoice_obj = decode(bolt11)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-        amount = invoice_obj.amount_msat
-        return InvoiceQuoteResponse(checking_id="", amount=amount)
+    # async def get_invoice_quote(self, bolt11: str) -> InvoiceQuoteResponse:
+    #     invoice_obj = decode(bolt11)
+    #     assert invoice_obj.amount_msat, "invoice has no amount."
+    #     amount = invoice_obj.amount_msat
+    #     return InvoiceQuoteResponse(checking_id="", amount=amount)
 
     async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
         invoice_obj = decode(bolt11)
