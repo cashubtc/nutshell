@@ -298,30 +298,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             f"got invoice {invoice_response.payment_request} with check id"
             f" {invoice_response.checking_id}"
         )
-        # if unit == Unit.sat:
-
-        # elif unit == Unit.msat:
-        #     amount_sat = math.ceil(quote_request.amount / 1000)
-        #     logger.trace(f"requesting invoice for {amount_sat} satoshis")
-        #     invoice_response = await self._request_lightning_invoice(amount_sat)
-        #     logger.trace(
-        #         f"got invoice {invoice_response.payment_request} with check id"
-        #         f" {invoice_response.checking_id}"
-        #     )
-        # elif unit == Unit.usd:
-        #     invoice_response = InvoiceResponse(
-        #         ok=True,
-        #         checking_id="USD checking ID",
-        #         payment_request="lnbc1230n1pj4k54wdq4gdshx6r4ypjx2ur0wd5hgsp5m7gsgz8v9k8dlvzkrwcwps30xmxt4pag36pn96nxf5twald9vp5qpp59laagur6w8shykfh05mdyl3e7k304gmn8zp3yjj8429ur2uq6znqwuul0t3kl7g38htuue82gwe3s9fh37j6rza8ja7w35lnn4up5t9jqls32vjqsy4tywh479wusv9xwj92hphane9p0wppjk4n4ms6nasquzj6ug", # noqa
-        #     )
-        # elif unit == Unit.cheese:
-        #     invoice_response = InvoiceResponse(
-        #         ok=True,
-        #         checking_id="USD checking ID",
-        #         payment_request="lnbc1230n1pj4k54wdq4gdshx6r4ypjx2ur0wd5hgsp5m7gsgz8v9k8dlvzkrwcwps30xmxt4pag36pn96nxf5twald9vp5qpp59laagur6w8shykfh05mdyl3e7k304gmn8zp3yjj8429ur2uq6znqwuul0t3kl7g38htuue82gwe3s9fh37j6rza8ja7w35lnn4up5t9jqls32vjqsy4tywh479wusv9xwj92hphane9p0wppjk4n4ms6nasquzj6ug", # noqa
-        #     )
-        # else:
-        #     raise NotAllowedError(f"Mint quote: {quote_request.unit} unit not allowed.")
 
         assert (
             invoice_response.payment_request and invoice_response.checking_id
@@ -393,21 +369,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 await self.crud.update_mint_quote_paid(
                     quote_id=quote_id, paid=True, db=self.db
                 )
-            # # Lightning
-            # if unit == Unit.sat:
-            #     if not quote.paid:
-            #         logger.debug(f"Lightning: checking invoice {quote.checking_id}")
-            #         status = await self.lightning[unit].get_invoice_status(quote.checking_id)
-            #         assert status.paid, "invoice not paid"
-            #         await self.crud.update_mint_quote_paid(
-            #             quote_id=quote_id, paid=True, db=self.db
-            #         )
-            # elif unit == Unit.usd:
-            #     logger.debug("USD mint: paid")
-            # elif unit == Unit.cheese:
-            #     logger.debug("Cheese mint: paid")
-            # else:
-            # raise NotAllowedError(f"Mint: {quote.unit} unit not supported.")
 
             logger.trace(f"crud: setting invoice {id} as issued")
             await self.crud.update_mint_quote_issued(
@@ -548,46 +509,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     fees_paid = math.ceil(payment.fee_msat / 1000)
                 if payment.preimage:
                     payment_proof = payment.preimage
-
-                # if outputs_unit == Unit.sat:
-                #     # we need to pay the lightning invoice
-                #     logger.debug(f"Lightning: get fees for {bolt11_request}")
-                #     reserve_fees_sat = await self._get_lightning_fees(bolt11_request)
-                #     # verify overspending attempt
-                #     assert (
-                #         total_provided >= invoice_amount + reserve_fees_sat
-                #     ), TransactionError(
-                #         "provided proofs not enough for Lightning payment. Provided:"
-                #         f" {total_provided}, needed:"
-                #         f" {invoice_amount + reserve_fees_sat}"
-                #     )
-
-                #     logger.debug(f"Lightning: pay invoice {bolt11_request}")
-                #     payment = await self._pay_lightning_invoice(
-                #         bolt11_request, reserve_fees_sat * 1000
-                #     )
-                #     logger.trace("paid lightning invoice")
-
-                #     logger.debug(
-                #         f"Melt status: {payment.ok}: preimage: {payment.preimage},"
-                #         f" fee_msat: {payment.fee_msat}"
-                #     )
-
-                #     if not payment.ok:
-                #         raise LightningError("Lightning payment unsuccessful.")
-
-                #     if payment.fee_msat:
-                #         fees_paid = math.ceil(payment.fee_msat / 1000)
-                #     if payment.preimage:
-                #         payment_proof = payment.preimage
-                # elif outputs_unit == Unit.usd:
-                #     payment_proof = "paid USD"
-                # elif outputs_unit == Unit.cheese or True:
-                #     payment_proof = "paid Cheese"
-                # else:
-                #     raise LightningError(
-                #         f"Melt: {outputs_unit.name} unit not supported."
-                #     )
 
             # melt successful, invalidate proofs
             await self._invalidate_proofs(proofs)
