@@ -151,6 +151,4 @@ class LightningWallet(Wallet):
         Returns:
             int: balance in satoshis
         """
-        return StatusResponse(
-            error_message=None, balance_msat=self.available_balance * 1000
-        )
+        return StatusResponse(error_message=None, balance=self.available_balance * 1000)

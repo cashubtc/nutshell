@@ -72,14 +72,14 @@ class CoreLightningRestWallet(LightningWallet):
                 error_message=(
                     f"Failed to connect to {self.url}, got: '{error_message}...'"
                 ),
-                balance_msat=0,
+                balance=0,
             )
 
         data = r.json()
         if len(data) == 0:
-            return StatusResponse(error_message="no data", balance_msat=0)
+            return StatusResponse(error_message="no data", balance=0)
         balance_msat = int(data.get("localBalance") * 1000)
-        return StatusResponse(error_message=None, balance_msat=balance_msat)
+        return StatusResponse(error_message=None, balance=balance_msat)
 
     async def create_invoice(
         self,

@@ -67,7 +67,7 @@ class LndRestWallet(LightningWallet):
         except (httpx.ConnectError, httpx.RequestError) as exc:
             return StatusResponse(
                 error_message=f"Unable to connect to {self.endpoint}. {exc}",
-                balance_msat=0,
+                balance=0,
             )
 
         try:
@@ -75,11 +75,9 @@ class LndRestWallet(LightningWallet):
             if r.is_error:
                 raise Exception
         except Exception:
-            return StatusResponse(error_message=r.text[:200], balance_msat=0)
+            return StatusResponse(error_message=r.text[:200], balance=0)
 
-        return StatusResponse(
-            error_message=None, balance_msat=int(data["balance"]) * 1000
-        )
+        return StatusResponse(error_message=None, balance=int(data["balance"]) * 1000)
 
     async def create_invoice(
         self,

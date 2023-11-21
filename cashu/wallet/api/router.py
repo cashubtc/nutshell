@@ -162,10 +162,8 @@ async def lightning_balance() -> StatusResponse:
     try:
         await wallet.load_proofs(reload=True)
     except Exception as exc:
-        return StatusResponse(error_message=str(exc), balance_msat=0)
-    return StatusResponse(
-        error_message=None, balance_msat=wallet.available_balance * 1000
-    )
+        return StatusResponse(error_message=str(exc), balance=0)
+    return StatusResponse(error_message=None, balance=wallet.available_balance * 1000)
 
 
 @router.post(
@@ -359,15 +357,17 @@ async def pending(
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)  # type: ignore
             ).strftime("%Y-%m-%d %H:%M:%S")
-            result.update({
-                f"{i}": {
-                    "amount": sum_proofs(grouped_proofs),
-                    "time": reserved_date,
-                    "ID": key,
-                    "token": token,
-                    "mint": mint,
+            result.update(
+                {
+                    f"{i}": {
+                        "amount": sum_proofs(grouped_proofs),
+                        "time": reserved_date,
+                        "ID": key,
+                        "token": token,
+                        "mint": mint,
+                    }
                 }
-            })
+            )
     return PendingResponse(pending_token=result)
 
 
@@ -412,14 +412,16 @@ async def wallets():
                 if w == wallet.name:
                     active_wallet = True
                 if active_wallet:
-                    result.update({
-                        f"{w}": {
-                            "balance": sum_proofs(wallet.proofs),
-                            "available": sum_proofs([
-                                p for p in wallet.proofs if not p.reserved
-                            ]),
+                    result.update(
+                        {
+                            f"{w}": {
+                                "balance": sum_proofs(wallet.proofs),
+                                "available": sum_proofs(
+                                    [p for p in wallet.proofs if not p.reserved]
+                                ),
+                            }
                         }
-                    })
+                    )
         except Exception:
             pass
     return WalletsResponse(wallets=result)
