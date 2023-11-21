@@ -15,6 +15,46 @@ def print_balance(ctx: Context):
     print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
 
 
+async def get_unit_wallet(ctx: Context, force_select: bool = False):
+    """Helper function that asks the user for an input to select which unit they want to load.
+
+    Args:
+        ctx (Context): Context
+        force_select (bool, optional): Force the user to select a unit. Defaults to False.
+    """
+    wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_proofs(reload=True, unit=False)
+    # show balances per keyset
+    unit_balances = wallet.balance_per_unit()
+    if ctx.obj["UNIT"] in [u.name for u in unit_balances] and not force_select:
+        wallet.unit = Unit[ctx.obj["UNIT"]]
+    elif len(unit_balances):
+        print(f"You have balances in {len(unit_balances)} units:")
+        print("")
+        for i, (k, v) in enumerate(unit_balances.items()):
+            unit = k
+            print(f"Unit {i+1} ({unit}) – Balance: {unit.str(int(v['available']))}")
+        print("")
+        unit_nr_str = input(
+            f"Select unit [1-{len(unit_balances)}] or "
+            f"press enter for your default '{Unit[settings.wallet_unit]}': "
+        )
+        if not unit_nr_str:  # largest balance
+            unit = Unit[settings.wallet_unit]
+        elif unit_nr_str.isdigit() and int(unit_nr_str) <= len(
+            unit_balances
+        ):  # specific unit
+            unit = list(unit_balances.keys())[int(unit_nr_str) - 1]
+        else:
+            raise Exception("invalid input.")
+
+        print(f"Selected unit: {unit}")
+        print("")
+        # load this unit into a wallet
+        wallet.unit = unit
+    return wallet
+
+
 async def get_mint_wallet(ctx: Context, force_select: bool = False):
     """
     Helper function that asks the user for an input to select which mint they want to load.

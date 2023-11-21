@@ -445,6 +445,9 @@ class Unit(Enum):
         else:
             raise Exception("Invalid unit")
 
+    def __str__(self):
+        return self.name
+
 
 @dataclass
 class Amount:

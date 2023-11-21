@@ -80,6 +80,13 @@ def coro(f):
     help=f"Wallet name (default: {settings.wallet_name}).",
 )
 @click.option(
+    "--unit",
+    "-u",
+    "unit",
+    default=None,
+    help=f"Wallet unit (default: {settings.wallet_unit}).",
+)
+@click.option(
     "--daemon",
     "-d",
     is_flag=True,
@@ -97,7 +104,7 @@ def coro(f):
 )
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str, tests: bool):
+async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
     if settings.tor and not TorProxy().check_platform():
         error_str = (
             "Your settings say TOR=true but the built-in Tor bundle is not supported on"
@@ -125,6 +132,7 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
 
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host or settings.mint_url
+    ctx.obj["UNIT"] = unit
     ctx.obj["WALLET_NAME"] = walletname
     settings.wallet_name = walletname
 
@@ -147,7 +155,8 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     assert wallet, "Wallet not found."
     ctx.obj["WALLET"] = wallet
     # await init_wallet(ctx.obj["WALLET"], load_proofs=False)
-
+    # ------ MULTIUNIT ------- : Select a unit
+    # ctx.obj["WALLET"] = await get_unit_wallet(ctx)
     # ------ MUTLIMINT ------- : Select a wallet
     # only if a command is one of a subset that needs to specify a mint host
     # if a mint host is already specified as an argument `host`, use it

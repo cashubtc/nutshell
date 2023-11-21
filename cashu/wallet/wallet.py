@@ -1151,6 +1151,19 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 ret[keyset.mint_url].extend([p for p in proofs if p.id == id])
         return ret
 
+    def _get_proofs_per_unit(self, proofs: List[Proof]) -> Dict[Unit, List[Proof]]:
+        ret: Dict[Unit, List[Proof]] = {}
+        for proof in proofs:
+            if proof.id not in self.keysets:
+                logger.error(f"Keyset {proof.id} not found in wallet.")
+                continue
+            unit = self.keysets[proof.id].unit
+            if unit not in ret:
+                ret[unit] = [proof]
+            else:
+                ret[unit].append(proof)
+        return ret
+
     def _get_proofs_keysets(self, proofs: List[Proof]) -> List[str]:
         """Extracts all keyset ids from a list of proofs.
 
@@ -1474,6 +1487,16 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         for key in ret.keys():
             if key in self.keysets:
                 ret[key]["unit"] = self.keysets[key].unit.name
+        return ret
+
+    def balance_per_unit(self) -> Dict[Unit, Dict[str, Union[int, str]]]:
+        ret: Dict[Unit, Dict[str, Union[int, str]]] = {
+            unit: {
+                "balance": sum_proofs(proofs),
+                "available": sum_proofs([p for p in proofs if not p.reserved]),
+            }
+            for unit, proofs in self._get_proofs_per_unit(self.proofs).items()
+        }
         return ret
 
     async def balance_per_minturl(
