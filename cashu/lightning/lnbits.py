@@ -11,7 +11,7 @@ from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
-    LightningWallet,
+    LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
@@ -19,7 +19,7 @@ from .base import (
 )
 
 
-class LNbitsWallet(LightningWallet):
+class LNbitsWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
     def __init__(self):

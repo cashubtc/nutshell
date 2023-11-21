@@ -3,8 +3,6 @@ from typing import Coroutine, Optional, Union
 
 from pydantic import BaseModel
 
-from ..core.base import Method, Unit
-
 
 class StatusResponse(BaseModel):
     error_message: Optional[str]
@@ -61,9 +59,7 @@ class PaymentStatus(BaseModel):
             return "unknown (should never happen)"
 
 
-class LightningWallet(ABC):
-    unit: Unit
-    method: Method
+class LightningBackend(ABC):
 
     @abstractmethod
     def status(self) -> Coroutine[None, None, StatusResponse]:

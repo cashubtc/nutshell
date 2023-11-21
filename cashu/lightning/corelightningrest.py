@@ -15,7 +15,7 @@ from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
-    LightningWallet,
+    LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
@@ -25,7 +25,7 @@ from .base import (
 from .macaroon import load_macaroon
 
 
-class CoreLightningRestWallet(LightningWallet):
+class CoreLightningRestWallet(LightningBackend):
     def __init__(self):
         macaroon = settings.mint_corelightning_rest_macaroon
         assert macaroon, "missing cln-rest macaroon"

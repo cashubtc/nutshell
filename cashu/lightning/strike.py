@@ -8,7 +8,7 @@ from ..core.base import Method, Unit
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
-    LightningWallet,
+    LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
@@ -16,7 +16,7 @@ from .base import (
 )
 
 
-class StrikeUSDWallet(LightningWallet):
+class StrikeUSDWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
     method = Method.bolt11

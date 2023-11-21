@@ -15,7 +15,7 @@ from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
-    LightningWallet,
+    LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
@@ -24,7 +24,7 @@ from .base import (
 from .macaroon import load_macaroon
 
 
-class LndRestWallet(LightningWallet):
+class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
     def __init__(self):

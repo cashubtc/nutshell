@@ -15,12 +15,11 @@ from bolt11 import (
     encode,
 )
 
-from ..core.base import Method, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
-    LightningWallet,
+    LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
@@ -28,11 +27,8 @@ from .base import (
 )
 
 
-class FakeWallet(LightningWallet):
+class FakeWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
-
-    method = Method.bolt11
-    unit = Unit.sat
 
     queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()

@@ -36,7 +36,7 @@ from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
     InvoiceResponse,
-    LightningWallet,
+    LightningBackend,
     PaymentQuoteResponse,
     PaymentStatus,
 )
@@ -46,7 +46,7 @@ from .verification import LedgerVerification
 
 
 class Ledger(LedgerVerification, LedgerSpendingConditions):
-    backends: Mapping[Method, Mapping[Unit, LightningWallet]] = {}
+    backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
     proofs_pending_lock: asyncio.Lock = (
         asyncio.Lock()
@@ -57,7 +57,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         self,
         db: Database,
         seed: str,
-        backends: Mapping[Method, Mapping[Unit, LightningWallet]],
+        backends: Mapping[Method, Mapping[Unit, LightningBackend]],
         derivation_path="",
         crud=LedgerCrudSqlite(),
     ):
@@ -429,33 +429,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         payment_quote: PaymentQuoteResponse = await self.backends[method][
             unit
         ].get_payment_quote(melt_quote.request)
-
-        if unit == Unit.msat:
-            payment_quote.amount = payment_quote.amount * 1000
-            payment_quote.fee = payment_quote.fee * 1000
-
-        # amount = invoice_amount_sat
-        # checking_id = invoice_obj.payment_hash
-
-        # if unit == Unit.sat:
-        #     # Lightning
-        #     fee_reserve_sat = await self._get_lightning_fees(melt_quote.request)
-        #     amount = invoice_amount_sat
-        #     checking_id = invoice_obj.payment_hash
-        # elif unit == Unit.usd:
-        #     fee_reserve_sat = 0
-        #     amount = int(invoice_amount_sat / 3400)
-        #     checking_id = invoice_obj.payment_hash
-        # elif unit == Unit.cheese:
-        #     fee_reserve_sat = 2
-        #     amount = int(invoice_amount_sat / 2)
-        #     checking_id = invoice_obj.payment_hash
-        # elif unit == Unit.msat:
-        #     fee_reserve_sat = 0
-        #     amount = invoice_amount_sat * 1000
-        #     checking_id = invoice_obj.payment_hash
-        # else:
-        #     raise NotAllowedError(f"Melt quote: {melt_quote.unit} unit not supported.")
 
         # NOTE: We do not store the fee reserve in the database.
         quote = MeltQuote(
