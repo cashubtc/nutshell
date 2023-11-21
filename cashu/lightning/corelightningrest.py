@@ -1,6 +1,5 @@
 import asyncio
 import json
-import math
 import random
 from typing import AsyncGenerator, Dict, Optional
 
@@ -11,6 +10,7 @@ from bolt11 import (
 )
 from loguru import logger
 
+from ..core.base import Amount, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -26,6 +26,8 @@ from .macaroon import load_macaroon
 
 
 class CoreLightningRestWallet(LightningBackend):
+    units = set([Unit.sat, Unit.msat])
+
     def __init__(self):
         macaroon = settings.mint_corelightning_rest_macaroon
         assert macaroon, "missing cln-rest macaroon"
@@ -88,15 +90,16 @@ class CoreLightningRestWallet(LightningBackend):
 
     async def create_invoice(
         self,
-        amount: int,
+        amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
         unhashed_description: Optional[bytes] = None,
         **kwargs,
     ) -> InvoiceResponse:
+        self.assert_unit_supported(amount.unit)
         label = f"lbl{random.random()}"
         data: Dict = {
-            "amount": amount * 1000,
+            "amount": amount.to(Unit.msat, round="up").amount,
             "description": memo,
             "label": label,
         }
@@ -151,7 +154,7 @@ class CoreLightningRestWallet(LightningBackend):
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message=str(exc),
             )
@@ -161,7 +164,7 @@ class CoreLightningRestWallet(LightningBackend):
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message=error_message,
             )
@@ -186,7 +189,7 @@ class CoreLightningRestWallet(LightningBackend):
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message=error_message,
             )
@@ -197,7 +200,7 @@ class CoreLightningRestWallet(LightningBackend):
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message="payment failed",
             )
@@ -209,7 +212,7 @@ class CoreLightningRestWallet(LightningBackend):
         return PaymentResponse(
             ok=self.statuses.get(data["status"]),
             checking_id=checking_id,
-            fee_msat=fee_msat,
+            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
             error_message=None,
         )
@@ -254,7 +257,7 @@ class CoreLightningRestWallet(LightningBackend):
 
             return PaymentStatus(
                 paid=self.statuses.get(pay["status"]),
-                fee_msat=fee_msat,
+                fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
                 preimage=preimage,
             )
         except Exception as e:
@@ -309,6 +312,6 @@ class CoreLightningRestWallet(LightningBackend):
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)
-        fee_sat = math.ceil(fees_msat / 1000)
-        amount_sat = math.ceil(amount_msat / 1000)
-        return PaymentQuoteResponse(checking_id="", fee=fee_sat, amount=amount_sat)
+        fees = Amount(unit=Unit.msat, amount=fees_msat)
+        amount = Amount(unit=Unit.msat, amount=amount_msat)
+        return PaymentQuoteResponse(checking_id="", fee=fees, amount=amount)

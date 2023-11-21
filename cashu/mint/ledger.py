@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import math
 from typing import Dict, List, Mapping, Optional, Set, Tuple
 
 import bolt11
@@ -8,6 +7,7 @@ from loguru import logger
 
 from ..core.base import (
     DLEQ,
+    Amount,
     BlindedMessage,
     BlindedSignature,
     MeltQuote,
@@ -287,12 +287,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             raise NotAllowedError("Mint does not allow minting new tokens.")
         unit = Unit[quote_request.unit]
         method = Method["bolt11"]
-        requested_amount_sat = quote_request.amount
 
         logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
         invoice_response: InvoiceResponse = await self.backends[method][
             unit
-        ].create_invoice(requested_amount_sat)
+        ].create_invoice(Amount(unit=unit, amount=quote_request.amount))
         logger.trace(
             f"got invoice {invoice_response.payment_request} with check id"
             f" {invoice_response.checking_id}"
@@ -390,16 +389,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             unit
         ].get_payment_quote(melt_quote.request)
 
-        # NOTE: We do not store the fee reserve in the database.
         quote = MeltQuote(
             quote=random_hash(),
             method="bolt11",  # TODO: remove unnecessary fields
             request=melt_quote.request,  # TODO: remove unnecessary fields
             checking_id=payment_quote.checking_id,
             unit=melt_quote.unit,
-            amount=payment_quote.amount,
+            amount=payment_quote.amount.to(unit).amount,
             paid=False,
-            fee_reserve=payment_quote.fee,
+            fee_reserve=payment_quote.fee.to(unit).amount,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         return PostMeltQuoteResponse(
@@ -464,9 +462,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         try:
             # verify amounts from bolt11 invoice
-            invoice_obj = bolt11.decode(bolt11_request)
-            assert invoice_obj.amount_msat, "invoice has no amount."
-            invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
+            # invoice_obj = bolt11.decode(bolt11_request)
+            # assert invoice_obj.amount_msat, "invoice has no amount."
+            # invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
 
             # first we check if there is a mint quote with the same payment request
             # so that we can handle the transaction internally without lightning
@@ -476,7 +474,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             )
             if mint_quote:
                 # we settle the transaction internally
-                assert mint_quote.amount == invoice_amount, "amounts do not match"
+                # assert Amount(unit, mint_quote.amount).to() == invoice_amount, "amounts do not match"
+                assert (
+                    bolt11_request == mint_quote.request
+                ), "bolt11 requests do not match"
                 assert mint_quote.unit == melt_quote.unit, "units do not match"
                 assert mint_quote.method == melt_quote.method, "methods do not match"
                 assert not mint_quote.paid, "mint quote already paid"
@@ -500,12 +501,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
                 logger.debug(
                     f"Melt status: {payment.ok}: preimage: {payment.preimage},"
-                    f" fee: {unit.str(payment.fee_msat) if payment.fee_msat else 0}"
+                    f" fee: {payment.fee.str() if payment.fee else 0}"
                 )
                 if not payment.ok:
                     raise LightningError("Lightning payment unsuccessful.")
-                if payment.fee_msat:
-                    fees_paid = math.ceil(payment.fee_msat / 1000)
+                if payment.fee:
+                    fees_paid = payment.fee.to(to_unit=unit, round="up").amount
                 if payment.preimage:
                     payment_proof = payment.preimage
 
@@ -520,7 +521,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             if outputs and fees_paid is not None:
                 return_promises = await self._generate_change_promises(
                     input_amount=total_provided,
-                    output_amount=invoice_amount,
+                    output_amount=melt_quote.amount,
                     output_fee_paid=fees_paid,
                     outputs=outputs,
                     keyset=self.keysets[outputs[0].id],

@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import math
 import random
 from datetime import datetime
 from os import urandom
@@ -15,6 +14,7 @@ from bolt11 import (
     encode,
 )
 
+from ..core.base import Amount, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -28,8 +28,7 @@ from .base import (
 
 
 class FakeWallet(LightningBackend):
-    """https://github.com/lnbits/lnbits"""
-
+    units = set([Unit.sat, Unit.msat])
     queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
     paid_invoices: Set[str] = set()
@@ -47,13 +46,14 @@ class FakeWallet(LightningBackend):
 
     async def create_invoice(
         self,
-        amount: int,
+        amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
         unhashed_description: Optional[bytes] = None,
         expiry: Optional[int] = None,
         payment_secret: Optional[bytes] = None,
     ) -> InvoiceResponse:
+        self.assert_unit_supported(amount.unit)
         tags = Tags()
 
         if description_hash:
@@ -83,7 +83,7 @@ class FakeWallet(LightningBackend):
 
         bolt11 = Bolt11(
             currency="bc",
-            amount_msat=MilliSatoshi(amount * 1000),
+            amount_msat=MilliSatoshi(amount.to(Unit.msat, round="up").amount),
             date=int(datetime.now().timestamp()),
             tags=tags,
         )
@@ -94,7 +94,7 @@ class FakeWallet(LightningBackend):
             ok=True, checking_id=payment_hash, payment_request=payment_request
         )
 
-    async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(self, bolt11: str, fee_limit: int) -> PaymentResponse:
         invoice = decode(bolt11)
 
         if settings.fakewallet_delay_payment:
@@ -106,7 +106,7 @@ class FakeWallet(LightningBackend):
             return PaymentResponse(
                 ok=True,
                 checking_id=invoice.payment_hash,
-                fee_msat=0,
+                fee=Amount(unit=Unit.msat, amount=0),
                 preimage=self.payment_secrets.get(invoice.payment_hash) or "0" * 64,
             )
         else:
@@ -140,6 +140,6 @@ class FakeWallet(LightningBackend):
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)
-        fee_sat = math.ceil(fees_msat / 1000)
-        amount_sat = math.ceil(amount_msat / 1000)
-        return PaymentQuoteResponse(checking_id="", fee=fee_sat, amount=amount_sat)
+        fees = Amount(unit=Unit.msat, amount=fees_msat)
+        amount = Amount(unit=Unit.msat, amount=amount_msat)
+        return PaymentQuoteResponse(checking_id="", fee=fees, amount=amount)

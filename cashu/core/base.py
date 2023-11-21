@@ -1,5 +1,7 @@
 import base64
 import json
+import math
+from dataclasses import dataclass
 from enum import Enum
 from sqlite3 import Row
 from typing import Dict, List, Optional, Union
@@ -440,6 +442,40 @@ class Unit(Enum):
             return f"E{amount/100:.2f} Chuck E Cheese Tokens"
         else:
             raise Exception("Invalid unit")
+
+
+@dataclass
+class Amount:
+    unit: Unit
+    amount: int
+
+    def to(self, to_unit: Unit, round: Optional[str] = None):
+        if self.unit == to_unit:
+            return self
+
+        if self.unit == Unit.sat:
+            if to_unit == Unit.msat:
+                return Amount(to_unit, self.amount * 1000)
+            else:
+                raise Exception(f"Cannot convert {self.unit.name} to {to_unit.name}")
+        elif self.unit == Unit.msat:
+            if to_unit == Unit.sat:
+                if round == "up":
+                    return Amount(to_unit, math.ceil(self.amount / 1000))
+                elif round == "down":
+                    return Amount(to_unit, math.floor(self.amount / 1000))
+                else:
+                    return Amount(to_unit, self.amount // 1000)
+            else:
+                raise Exception(f"Cannot convert {self.unit.name} to {to_unit.name}")
+        else:
+            return self
+
+    def str(self) -> str:
+        return self.unit.str(self.amount)
+
+    def __repr__(self):
+        return self.unit.str(self.amount)
 
 
 class Method(Enum):

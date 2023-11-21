@@ -4,7 +4,7 @@ from typing import Dict, Optional
 
 import httpx
 
-from ..core.base import Method, Unit
+from ..core.base import Amount, Unit
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
@@ -19,8 +19,7 @@ from .base import (
 class StrikeUSDWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
-    method = Method.bolt11
-    unit = Unit.usd
+    units = [Unit.usd]
 
     def __init__(self):
         self.endpoint = "https://api.strike.me"
@@ -60,11 +59,13 @@ class StrikeUSDWallet(LightningBackend):
 
     async def create_invoice(
         self,
-        amount: int,
+        amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
         unhashed_description: Optional[bytes] = None,
     ) -> InvoiceResponse:
+        self.assert_unit_supported(amount.unit)
+
         data: Dict = {"out": False, "amount": amount}
         if description_hash:
             data["description_hash"] = description_hash.hex()
@@ -130,7 +131,7 @@ class StrikeUSDWallet(LightningBackend):
 
         amount_cent = int(float(data.get("amount").get("amount")) * 100)
         quote = PaymentQuoteResponse(
-            amount=amount_cent, id=data.get("paymentQuoteId"), fee=0
+            amount=amount_cent, id=data.get("paymentQuoteId"), fee=Amount(Unit.msat, 0)
         )
         return quote
 

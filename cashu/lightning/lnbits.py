@@ -1,5 +1,4 @@
 # type: ignore
-import math
 from typing import Optional
 
 import httpx
@@ -7,6 +6,7 @@ from bolt11 import (
     decode,
 )
 
+from ..core.base import Amount, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -21,6 +21,8 @@ from .base import (
 
 class LNbitsWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
+
+    units = set([Unit.sat])
 
     def __init__(self):
         self.endpoint = settings.mint_lnbits_endpoint
@@ -57,12 +59,14 @@ class LNbitsWallet(LightningBackend):
 
     async def create_invoice(
         self,
-        amount: int,
+        amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
         unhashed_description: Optional[bytes] = None,
     ) -> InvoiceResponse:
-        data = {"out": False, "amount": amount}
+        self.assert_unit_supported(amount.unit)
+
+        data = {"out": False, "amount": amount.to(Unit.sat).amount}
         if description_hash:
             data["description_hash"] = description_hash.hex()
         if unhashed_description:
@@ -153,6 +157,6 @@ class LNbitsWallet(LightningBackend):
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)
-        fee_sat = math.ceil(fees_msat / 1000)
-        amount_sat = math.ceil(amount_msat / 1000)
-        return PaymentQuoteResponse(checking_id="", fee=fee_sat, amount=amount_sat)
+        fees = Amount(unit=Unit.msat, amount=fees_msat)
+        amount = Amount(unit=Unit.msat, amount=amount_msat)
+        return PaymentQuoteResponse(checking_id="", fee=fees, amount=amount)

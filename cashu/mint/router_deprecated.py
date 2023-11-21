@@ -235,7 +235,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     payment_quote = await ledger.backends[method][unit].get_payment_quote(payload.pr)
     fees_sat = payment_quote.fee
     logger.trace(f"< POST /checkfees: {fees_sat}")
-    return CheckFeesResponse(fee=fees_sat)
+    return CheckFeesResponse(fee=fees_sat.amount)
 
 
 @router_deprecated.post(

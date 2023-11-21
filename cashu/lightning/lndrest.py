@@ -2,7 +2,6 @@ import asyncio
 import base64
 import hashlib
 import json
-import math
 from typing import AsyncGenerator, Dict, Optional
 
 import httpx
@@ -11,6 +10,7 @@ from bolt11 import (
 )
 from loguru import logger
 
+from ..core.base import Amount, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -26,6 +26,8 @@ from .macaroon import load_macaroon
 
 class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
+
+    units = set([Unit.sat, Unit.msat])
 
     def __init__(self):
         endpoint = settings.mint_lnd_rest_endpoint
@@ -87,13 +89,18 @@ class LndRestWallet(LightningBackend):
 
     async def create_invoice(
         self,
-        amount: int,
+        amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
         unhashed_description: Optional[bytes] = None,
         **kwargs,
     ) -> InvoiceResponse:
-        data: Dict = {"value": amount, "private": True, "memo": memo or ""}
+        self.assert_unit_supported(amount.unit)
+        data: Dict = {
+            "value": amount.to(Unit.msat, round="up").amount,
+            "private": True,
+            "memo": memo or "",
+        }
         if kwargs.get("expiry"):
             data["expiry"] = kwargs["expiry"]
         if description_hash:
@@ -148,7 +155,7 @@ class LndRestWallet(LightningBackend):
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message=error_message,
             )
@@ -160,7 +167,7 @@ class LndRestWallet(LightningBackend):
         return PaymentResponse(
             ok=True,
             checking_id=checking_id,
-            fee_msat=fee_msat,
+            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
             error_message=None,
         )
@@ -213,7 +220,11 @@ class LndRestWallet(LightningBackend):
                     if payment is not None and payment.get("status"):
                         return PaymentStatus(
                             paid=statuses[payment["status"]],
-                            fee_msat=payment.get("fee_msat"),
+                            fee=(
+                                Amount(unit=Unit.msat, amount=payment.get("fee_msat"))
+                                if payment.get("fee_msat")
+                                else None
+                            ),
                             preimage=payment.get("payment_preimage"),
                         )
                     else:
@@ -250,6 +261,6 @@ class LndRestWallet(LightningBackend):
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)
-        fee_sat = math.ceil(fees_msat / 1000)
-        amount_sat = math.ceil(amount_msat / 1000)
-        return PaymentQuoteResponse(checking_id="", fee=fee_sat, amount=amount_sat)
+        fees = Amount(unit=Unit.msat, amount=fees_msat)
+        amount = Amount(unit=Unit.msat, amount=amount_msat)
+        return PaymentQuoteResponse(checking_id="", fee=fees, amount=amount)

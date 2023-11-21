@@ -1,5 +1,6 @@
 import bolt11
 
+from ...core.base import Amount, Unit
 from ...core.helpers import sum_promises
 from ...core.settings import settings
 from ...lightning.base import (
@@ -75,7 +76,7 @@ class LightningWallet(Wallet):
                 ok=True,
                 checking_id=invoice_obj.payment_hash,
                 preimage=resp.proof,
-                fee_msat=fees_paid_sat * 1000,
+                fee=Amount(Unit.msat, fees_paid_sat),
             )
         except Exception as e:
             print("Exception:", e)

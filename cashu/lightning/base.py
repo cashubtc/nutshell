@@ -3,6 +3,8 @@ from typing import Coroutine, Optional, Union
 
 from pydantic import BaseModel
 
+from ..core.base import Amount, Unit
+
 
 class StatusResponse(BaseModel):
     error_message: Optional[str]
@@ -16,8 +18,8 @@ class InvoiceQuoteResponse(BaseModel):
 
 class PaymentQuoteResponse(BaseModel):
     checking_id: str
-    amount: int
-    fee: int
+    amount: Amount
+    fee: Amount
 
 
 class InvoiceResponse(BaseModel):
@@ -30,14 +32,14 @@ class InvoiceResponse(BaseModel):
 class PaymentResponse(BaseModel):
     ok: Optional[bool] = None  # True: paid, False: failed, None: pending or unknown
     checking_id: Optional[str] = None
-    fee_msat: Optional[int] = None
+    fee: Optional[Amount] = None
     preimage: Optional[str] = None
     error_message: Optional[str] = None
 
 
 class PaymentStatus(BaseModel):
     paid: Optional[bool] = None
-    fee_msat: Optional[int] = None
+    fee: Optional[Amount] = None
     preimage: Optional[str] = None
 
     @property
@@ -60,6 +62,12 @@ class PaymentStatus(BaseModel):
 
 
 class LightningBackend(ABC):
+    units: set[Unit]
+
+    def assert_unit_supported(self, unit: Unit):
+        if unit not in self.units:
+            raise Unsupported(f"Unit {unit} is not supported")
+
     @abstractmethod
     def status(self) -> Coroutine[None, None, StatusResponse]:
         pass
@@ -67,7 +75,7 @@ class LightningBackend(ABC):
     @abstractmethod
     def create_invoice(
         self,
-        amount: int,
+        amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
     ) -> Coroutine[None, None, InvoiceResponse]:

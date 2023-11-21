@@ -92,7 +92,9 @@ async def pay(
     if mint:
         wallet = await mint_wallet(mint)
     payment_response = await wallet.pay_invoice(bolt11)
-    return payment_response
+    ret = PaymentResponse(**payment_response.dict())
+    ret.fee = None  # TODO: we can't return an Amount object, overwriting
+    return ret
 
 
 @router.get(
