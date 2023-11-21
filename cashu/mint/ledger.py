@@ -288,9 +288,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         unit = Unit[quote_request.unit]
         method = Method["bolt11"]
         requested_amount_sat = quote_request.amount
-        if unit == Unit.msat:
-            requested_amount_sat = math.ceil(quote_request.amount / 1000)
-        logger.trace(f"requesting invoice for {requested_amount_sat} satoshis")
+
+        logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
         invoice_response: InvoiceResponse = await self.backends[method][
             unit
         ].create_invoice(requested_amount_sat)
@@ -383,10 +382,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     async def melt_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PostMeltQuoteResponse:
-        invoice_obj = bolt11.decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
         unit = Unit[melt_quote.unit]
         method = Method["bolt11"]
+        invoice_obj = bolt11.decode(melt_quote.request)
+        assert invoice_obj.amount_msat, "invoice has no amount."
         payment_quote: PaymentQuoteResponse = await self.backends[method][
             unit
         ].get_payment_quote(melt_quote.request)
@@ -501,7 +500,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
                 logger.debug(
                     f"Melt status: {payment.ok}: preimage: {payment.preimage},"
-                    f" fee_msat: {payment.fee_msat}"
+                    f" fee: {unit.str(payment.fee_msat) if payment.fee_msat else 0}"
                 )
                 if not payment.ok:
                     raise LightningError("Lightning payment unsuccessful.")
