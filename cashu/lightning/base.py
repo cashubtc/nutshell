@@ -60,7 +60,6 @@ class PaymentStatus(BaseModel):
 
 
 class LightningBackend(ABC):
-
     @abstractmethod
     def status(self) -> Coroutine[None, None, StatusResponse]:
         pass
