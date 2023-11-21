@@ -97,7 +97,7 @@ class LndRestWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
         data: Dict = {
-            "value": amount.to(Unit.msat, round="up").amount,
+            "value": amount.to(Unit.sat).amount,
             "private": True,
             "memo": memo or "",
         }

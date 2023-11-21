@@ -117,7 +117,7 @@ class LNbitsWallet(LightningBackend):
         return PaymentResponse(
             ok=True,
             checking_id=checking_id,
-            fee_msat=payment.fee_msat,
+            fee=payment.fee,
             preimage=payment.preimage,
         )
 
@@ -148,7 +148,7 @@ class LNbitsWallet(LightningBackend):
 
         return PaymentStatus(
             paid=data["paid"],
-            fee_msat=data["details"]["fee"],
+            fee=Amount(unit=Unit.msat, amount=data["details"]["fee"]),
             preimage=data["preimage"],
         )
 

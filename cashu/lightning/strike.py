@@ -150,11 +150,11 @@ class StrikeUSDWallet(LightningBackend):
         states = {"PENDING": None, "COMPLETED": True, "FAILED": False}
         if states[data.get("state")]:
             return PaymentResponse(
-                ok=True, checking_id="", fee_msat=0, error_message=None
+                ok=True, checking_id=None, fee=None, error_message=None
             )
         else:
             return PaymentResponse(
-                ok=False, checking_id="", fee_msat=0, error_message=None
+                ok=False, checking_id=None, fee=None, error_message=None
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
