@@ -172,3 +172,19 @@ async def test_melt(ledger: Ledger, wallet: Wallet):
     assert result["change"]
     # we get back 2 sats because it was an internal invoice
     assert result["change"][0]["amount"] == 2
+
+
+@pytest.mark.asyncio
+async def test_checkfees(ledger: Ledger, wallet: Wallet):
+    # internal invoice
+    invoice = await wallet.request_mint(64)
+    response = httpx.post(
+        f"{BASE_URL}/checkfees",
+        json={
+            "pr": invoice.bolt11,
+        },
+        timeout=None,
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    assert result["fee"] == 2
