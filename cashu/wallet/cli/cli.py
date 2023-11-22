@@ -28,6 +28,7 @@ from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
 from ..cli.cli_helpers import (
     get_mint_wallet,
+    get_unit_wallet,
     print_balance,
     print_mint_balances,
     verify_mint,
@@ -155,13 +156,14 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
     assert wallet, "Wallet not found."
     ctx.obj["WALLET"] = wallet
     # await init_wallet(ctx.obj["WALLET"], load_proofs=False)
-    # ------ MULTIUNIT ------- : Select a unit
-    # ctx.obj["WALLET"] = await get_unit_wallet(ctx)
-    # ------ MUTLIMINT ------- : Select a wallet
+
     # only if a command is one of a subset that needs to specify a mint host
     # if a mint host is already specified as an argument `host`, use it
     if ctx.invoked_subcommand not in ["send", "invoice", "pay"] or host:
         return
+    # ------ MULTIUNIT ------- : Select a unit
+    ctx.obj["WALLET"] = await get_unit_wallet(ctx)
+    # ------ MUTLIMINT ------- : Select a wallet
     # else: we ask the user to select one
     ctx.obj["WALLET"] = await get_mint_wallet(
         ctx
@@ -358,13 +360,21 @@ async def swap(ctx: Context):
 async def balance(ctx: Context, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_proofs(unit=False)
+    unit_balances = wallet.balance_per_unit()
+    if len(unit_balances)>1 and not ctx.obj["UNIT"]:
+        print(f"You have balances in {len(unit_balances)} units:")
+        print("")
+        for i, (k, v) in enumerate(unit_balances.items()):
+            unit = k
+            print(f"Unit {i+1} ({unit}) – Balance: {unit.str(int(v['available']))}")
+        print("")
     if verbose:
         # show balances per keyset
         keyset_balances = wallet.balance_per_keyset()
         if len(keyset_balances):
             print(f"You have balances in {len(keyset_balances)} keysets:")
             print("")
-            for k, v in keyset_balances.items():
+            for k, v in keyset_balances.items(): # type: ignore
                 unit = Unit[str(v["unit"])]
                 print(
                     f"Keyset: {k} - Balance: {unit.str(int(v['available']))} (pending:"
@@ -377,12 +387,12 @@ async def balance(ctx: Context, verbose):
     await wallet.load_proofs(reload=True)
     if verbose:
         print(
-            f"Balance: {wallet.unit.str(wallet.available_balance)} (pending:"
+            f"Active balance: {wallet.unit.str(wallet.available_balance)} (pending:"
             f" {wallet.unit.str(wallet.balance-wallet.available_balance)}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
-        print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
+        print(f"Active balance: {wallet.unit.str(wallet.available_balance)}")
 
 
 @cli.command("send", help="Send tokens.")

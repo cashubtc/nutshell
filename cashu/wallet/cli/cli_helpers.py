@@ -24,11 +24,11 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
     """
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_proofs(reload=True, unit=False)
-    # show balances per keyset
+    # show balances per unit
     unit_balances = wallet.balance_per_unit()
     if ctx.obj["UNIT"] in [u.name for u in unit_balances] and not force_select:
         wallet.unit = Unit[ctx.obj["UNIT"]]
-    elif len(unit_balances):
+    elif len(unit_balances)>1 and not ctx.obj["UNIT"]:
         print(f"You have balances in {len(unit_balances)} units:")
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
@@ -52,6 +52,11 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
         print("")
         # load this unit into a wallet
         wallet.unit = unit
+    elif len(unit_balances) == 1 and not ctx.obj["UNIT"]:
+        wallet.unit = list(unit_balances.keys())[0]
+    elif ctx.obj["UNIT"]:
+        wallet.unit = Unit[ctx.obj["UNIT"]]
+    settings.wallet_unit = wallet.unit.name
     return wallet
 
 
