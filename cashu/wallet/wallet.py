@@ -64,10 +64,10 @@ from ..wallet.crud import (
     update_proof,
 )
 from . import migrations
-from .deprecated import LedgerAPIDeprecated
 from .htlc import WalletHTLC
 from .p2pk import WalletP2PK
 from .secrets import WalletSecrets
+from .wallet_deprecated import LedgerAPIDeprecated
 
 
 def async_set_httpx_client(func):

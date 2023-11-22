@@ -75,7 +75,7 @@ async def keys():
                 KeysResponseKeyset(
                     id=keyset.id,
                     unit=keyset.unit.name,
-                    keys={str(k): v for k, v in keyset.public_keys_hex.items()},
+                    keys={k: v for k, v in keyset.public_keys_hex.items()},
                 )
             )
     return KeysResponse(keysets=keyset_for_response)
@@ -111,7 +111,7 @@ async def keyset_keys(keyset_id: str, request: Request):
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
         unit=keyset.unit.name,
-        keys={str(k): v for k, v in keyset.public_keys_hex.items()},
+        keys={k: v for k, v in keyset.public_keys_hex.items()},
     )
     return KeysResponse(keysets=[keyset_for_response])
 

@@ -361,7 +361,7 @@ async def balance(ctx: Context, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_proofs(unit=False)
     unit_balances = wallet.balance_per_unit()
-    if len(unit_balances)>1 and not ctx.obj["UNIT"]:
+    if len(unit_balances) > 1 and not ctx.obj["UNIT"]:
         print(f"You have balances in {len(unit_balances)} units:")
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
@@ -374,7 +374,7 @@ async def balance(ctx: Context, verbose):
         if len(keyset_balances):
             print(f"You have balances in {len(keyset_balances)} keysets:")
             print("")
-            for k, v in keyset_balances.items(): # type: ignore
+            for k, v in keyset_balances.items():  # type: ignore
                 unit = Unit[str(v["unit"])]
                 print(
                     f"Keyset: {k} - Balance: {unit.str(int(v['available']))} (pending:"
@@ -387,12 +387,12 @@ async def balance(ctx: Context, verbose):
     await wallet.load_proofs(reload=True)
     if verbose:
         print(
-            f"Active balance: {wallet.unit.str(wallet.available_balance)} (pending:"
+            f"Balance: {wallet.unit.str(wallet.available_balance)} (pending:"
             f" {wallet.unit.str(wallet.balance-wallet.available_balance)}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
-        print(f"Active balance: {wallet.unit.str(wallet.available_balance)}")
+        print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
 
 
 @cli.command("send", help="Send tokens.")

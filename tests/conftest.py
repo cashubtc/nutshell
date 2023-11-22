@@ -69,6 +69,12 @@ async def ledger():
         if os.path.exists(db_file):
             os.remove(db_file)
 
+    settings.wallet_unit = "sat"
+    settings.mint_lightning_backend = "FakeWallet"
+    settings.mint_database = "./test_data/test_mint"
+    settings.mint_derivation_path = "m/0'/0'/0'"
+    settings.mint_private_key = "TEST_PRIVATE_KEY"
+
     backends: Mapping = {
         Method.bolt11: {Unit.sat: FakeWallet()},
     }

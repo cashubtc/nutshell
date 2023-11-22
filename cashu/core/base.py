@@ -250,7 +250,7 @@ class GetInfoResponse(BaseModel):
 class KeysResponseKeyset(BaseModel):
     id: str
     unit: str
-    keys: Dict[str, str]
+    keys: Dict[int, str]
 
 
 class KeysResponse(BaseModel):

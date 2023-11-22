@@ -27,15 +27,15 @@ assert settings.mint_private_key is not None, "No mint private key set."
 # backends = {
 #     Method.bolt11: {Unit.sat: lightning_backend, Unit.usd: strike_backend},
 # }
-backends = {
-    Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend},
-}
 # backends = {
 #     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend},
 # }
 # backends = {
-#     Method.bolt11: {Unit.sat: lightning_backend},
+#     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend},
 # }
+backends = {
+    Method.bolt11: {Unit.sat: lightning_backend},
+}
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
     seed=settings.mint_private_key,
