@@ -209,6 +209,24 @@ async def m009_add_out_to_invoices(db: Database):
 
 async def m010_add_quote_tables(db: Database):
     async with db.connect() as conn:
+        # add column "created" to tables invoices, promises, proofs_used, proofs_pending
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN created"
+            f" TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN created"
+            f" TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN created"
+            f" TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'proofs_pending')} ADD COLUMN created"
+            f" TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}"
+        )
+
         # add columns "seed" and "unit" to table keysets
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN seed TEXT"

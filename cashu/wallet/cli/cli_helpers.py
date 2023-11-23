@@ -39,7 +39,7 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
             f"Select unit [1-{len(unit_balances)}] or "
             f"press enter for your default '{Unit[settings.wallet_unit]}': "
         )
-        if not unit_nr_str:  # largest balance
+        if not unit_nr_str:  # default unit
             unit = Unit[settings.wallet_unit]
         elif unit_nr_str.isdigit() and int(unit_nr_str) <= len(
             unit_balances
