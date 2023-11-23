@@ -620,7 +620,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             list[BlindedSignature]: _description_
         """
-        return [await self._generate_promise(o, keyset) for o in outputs]
+        logger.debug(f"Generating promises for {len(outputs)} outputs.")
+        signatures = [await self._generate_promise(o, keyset) for o in outputs]
+        logger.debug(f"Generated {len(signatures)} promises.")
+        return signatures
 
     async def _generate_promise(
         self,

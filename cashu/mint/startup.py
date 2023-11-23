@@ -31,7 +31,7 @@ assert settings.mint_private_key is not None, "No mint private key set."
 #     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend},
 # }
 # backends = {
-#     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend},
+#     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend, Unit.nsat: lightning_backend},
 # }
 backends = {
     Method.bolt11: {Unit.sat: lightning_backend},

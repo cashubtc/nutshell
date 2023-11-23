@@ -7,7 +7,7 @@ from sqlite3 import Row
 from typing import Dict, List, Optional, Union
 
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .crypto.keys import (
     derive_keys,
@@ -18,6 +18,7 @@ from .crypto.keys import (
 )
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
+from .settings import settings
 
 
 class DLEQ(BaseModel):
@@ -279,8 +280,8 @@ class KeysetsResponse_deprecated(BaseModel):
 
 
 class PostMintQuoteRequest(BaseModel):
-    unit: str  # output unit
-    amount: int  # output amount
+    unit: str = Field(..., max_length=settings.mint_max_request_length)  # output unit
+    amount: int = Field(..., gt=0)  # output amount
 
 
 class PostMintQuoteResponse(BaseModel):
@@ -292,8 +293,10 @@ class PostMintQuoteResponse(BaseModel):
 
 
 class PostMintRequest(BaseModel):
-    quote: str  # quote id
-    outputs: List[BlindedMessage]  # outputs to mint
+    quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
+    outputs: List[BlindedMessage] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
 
 
 class PostMintResponse(BaseModel):
@@ -306,7 +309,9 @@ class GetMintResponse_deprecated(BaseModel):
 
 
 class PostMintRequest_deprecated(BaseModel):
-    outputs: List[BlindedMessage]
+    outputs: List[BlindedMessage] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
 
 
 class PostMintResponse_deprecated(BaseModel):
@@ -317,8 +322,10 @@ class PostMintResponse_deprecated(BaseModel):
 
 
 class PostMeltQuoteRequest(BaseModel):
-    unit: str  # input unit
-    request: str  # output payment request
+    unit: str = Field(..., max_length=settings.mint_max_request_length)  # input unit
+    request: str = Field(
+        ..., max_length=settings.mint_max_request_length
+    )  # output payment request
 
 
 class PostMeltQuoteResponse(BaseModel):
@@ -331,9 +338,11 @@ class PostMeltQuoteResponse(BaseModel):
 
 
 class PostMeltRequest(BaseModel):
-    quote: str  # quote id
-    inputs: List[Proof]
-    outputs: Union[List[BlindedMessage], None]
+    quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
+    inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
+    outputs: Union[List[BlindedMessage], None] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
 
 
 class PostMeltResponse(BaseModel):
@@ -343,9 +352,11 @@ class PostMeltResponse(BaseModel):
 
 
 class PostMeltRequest_deprecated(BaseModel):
-    proofs: List[Proof]
-    pr: str
-    outputs: Union[List[BlindedMessage], None]
+    proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
+    pr: str = Field(..., max_length=settings.mint_max_request_length)
+    outputs: Union[List[BlindedMessage], None] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
 
 
 class PostMeltResponse_deprecated(BaseModel):
@@ -358,8 +369,10 @@ class PostMeltResponse_deprecated(BaseModel):
 
 
 class PostSplitRequest(BaseModel):
-    inputs: List[Proof]
-    outputs: List[BlindedMessage]
+    inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
+    outputs: List[BlindedMessage] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
 
 
 class PostSplitResponse(BaseModel):
@@ -368,9 +381,11 @@ class PostSplitResponse(BaseModel):
 
 # deprecated since 0.13.0
 class PostSplitRequest_Deprecated(BaseModel):
-    proofs: List[Proof]
+    proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     amount: Optional[int] = None
-    outputs: List[BlindedMessage]
+    outputs: List[BlindedMessage] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
 
 
 class PostSplitResponse_Deprecated(BaseModel):
@@ -387,7 +402,7 @@ class PostSplitResponse_Very_Deprecated(BaseModel):
 
 
 class CheckSpendableRequest(BaseModel):
-    proofs: List[Proof]
+    proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
 
 
 class CheckSpendableResponse(BaseModel):
@@ -399,7 +414,7 @@ class CheckSpendableResponse(BaseModel):
 
 
 class CheckFeesRequest(BaseModel):
-    pr: str
+    pr: str = Field(..., max_length=settings.mint_max_request_length)
 
 
 class CheckFeesResponse(BaseModel):
@@ -432,12 +447,15 @@ class Unit(Enum):
     msat = 1
     usd = 2
     cheese = 3
+    nsat = 4
 
     def str(self, amount: int) -> str:
         if self == Unit.sat:
             return f"{amount} sat"
         elif self == Unit.msat:
             return f"{amount} msat"
+        elif self == Unit.nsat:
+            return f"{amount} nsat"
         elif self == Unit.usd:
             return f"${amount/100:.2f} USD"
         elif self == Unit.cheese:
@@ -471,6 +489,31 @@ class Amount:
                     return Amount(to_unit, math.floor(self.amount / 1000))
                 else:
                     return Amount(to_unit, self.amount // 1000)
+            elif to_unit == Unit.nsat:
+                if round == "up":
+                    return Amount(to_unit, math.ceil(self.amount * 1000000))
+                elif round == "down":
+                    return Amount(to_unit, math.floor(self.amount * 1000000))
+                else:
+                    return Amount(to_unit, self.amount * 1000000)
+            else:
+                raise Exception(f"Cannot convert {self.unit.name} to {to_unit.name}")
+
+        elif self.unit == Unit.nsat:
+            if to_unit == Unit.sat:
+                if round == "up":
+                    return Amount(to_unit, math.ceil(self.amount / 1000000000))
+                elif round == "down":
+                    return Amount(to_unit, math.floor(self.amount / 1000000000))
+                else:
+                    return Amount(to_unit, self.amount // 1000000000)
+            elif to_unit == Unit.msat:
+                if round == "up":
+                    return Amount(to_unit, math.ceil(self.amount / 1000000))
+                elif round == "down":
+                    return Amount(to_unit, math.floor(self.amount / 1000000))
+                else:
+                    return Amount(to_unit, self.amount // 1000000)
             else:
                 raise Exception(f"Cannot convert {self.unit.name} to {to_unit.name}")
         else:

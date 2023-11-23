@@ -89,6 +89,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
 
     def _verify_outputs(self, outputs: List[BlindedMessage]):
         """Verify that the outputs are valid."""
+        logger.trace(f"Verifying {len(outputs)} outputs.")
         # Verify all outputs have the same keyset id
         if not all([o.id == outputs[0].id for o in outputs]):
             raise TransactionError("outputs have different keyset ids.")
@@ -103,6 +104,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate outputs.")
+        logger.trace(f"Verified {len(outputs)} outputs.")
 
     def _check_proofs_spendable(self, proofs: List[Proof]):
         """Checks whether the proofs were already spent."""

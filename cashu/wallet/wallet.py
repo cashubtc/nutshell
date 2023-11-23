@@ -466,10 +466,21 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         outputs_payload = PostMintRequest(outputs=outputs, quote=quote)
         logger.trace("Checking Lightning invoice. POST /v1/mint/bolt11")
+
+        def _mintrequest_include_fields(outputs: List[BlindedMessage]):
+            """strips away fields from the model that aren't necessary for the /mint"""
+            outputs_include = {"id", "amount", "B_"}
+            return {
+                "quote": ...,
+                "outputs": {i: outputs_include for i in range(len(outputs))},
+            }
+
+        payload = outputs_payload.dict(include=_mintrequest_include_fields(outputs))  # type: ignore
         resp = await self.httpx.post(
             join(self.url, "/v1/mint/bolt11"),
-            json=outputs_payload.dict(),
+            json=payload,  # type: ignore
         )
+        print("Size of JSON payload in bytes: ")
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
@@ -496,6 +507,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         self.raise_on_error_request(resp)
 
         return_dict = resp.json()
+        print(PostMeltQuoteResponse.parse_obj(return_dict).json())
         return PostMeltQuoteResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
@@ -512,18 +524,21 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
         payload = PostMeltRequest(quote=quote, inputs=proofs, outputs=outputs)
 
-        def _meltrequest_include_fields(proofs: List[Proof]):
+        def _meltrequest_include_fields(
+            proofs: List[Proof], outputs: List[BlindedMessage]
+        ):
             """strips away fields from the model that aren't necessary for the /melt"""
             proofs_include = {"id", "amount", "secret", "C", "witness"}
+            outputs_include = {"id", "amount", "B_"}
             return {
                 "quote": ...,
                 "inputs": {i: proofs_include for i in range(len(proofs))},
-                "outputs": ...,
+                "outputs": {i: outputs_include for i in range(len(outputs))},
             }
 
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/bolt11"),
-            json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
+            json=payload.dict(include=_meltrequest_include_fields(proofs, outputs)),  # type: ignore
             timeout=None,
         )
         self.raise_on_error_request(resp)

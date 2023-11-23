@@ -148,7 +148,7 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
 
-    Call `POST /v1/mint` after paying the invoice.
+    Call `POST /v1/mint/bolt11` after paying the invoice.
     """
     logger.trace(f"> POST /v1/mint/quote/bolt11: payload={payload}")
     amount = payload.amount
