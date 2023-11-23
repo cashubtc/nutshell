@@ -191,7 +191,7 @@ async def m010_add_proofs_dleq(db: Database):
         await conn.execute("ALTER TABLE proofs ADD COLUMN dleq TEXT")
 
 
-async def m010_add_ids_to_proofs_and_out_to_invoices(db: Database):
+async def m011_add_ids_to_proofs_and_out_to_invoices(db: Database):
     """
     Columns that store mint and melt id for proofs and invoices.
     """
