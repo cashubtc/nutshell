@@ -45,7 +45,7 @@ ledger = Ledger(
 )
 
 
-async def rotate_keys(n_seconds=10):
+async def rotate_keys(n_seconds=60):
     """Rotate keyset epoch every n_seconds.
     Note: This is just a helper function for testing purposes.
     """
@@ -54,7 +54,7 @@ async def rotate_keys(n_seconds=10):
         i += 1
         logger.info("Rotating keys.")
         incremented_derivation_path = (
-            "".join(ledger.derivation_path.split("/")[:-1]) + f"/{i}"
+            "/".join(ledger.derivation_path.split("/")[:-1]) + f"/{i}"
         )
         await ledger.activate_keyset(incremented_derivation_path)
         logger.info(f"Current keyset: {ledger.keyset.id}")
