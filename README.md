@@ -202,7 +202,7 @@ poetry install --with dev
 
 Then, make sure to set up your `.env` file to use your local mint and disable Lightning and Tor:
 ```bash
-LIGHTNING=FALSE
+MINT_LIGHTNING_BACKEND=FakeWallet
 TOR=FALSE
 ```
 You can run the tests with
