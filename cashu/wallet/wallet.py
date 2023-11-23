@@ -480,7 +480,6 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             join(self.url, "/v1/mint/bolt11"),
             json=payload,  # type: ignore
         )
-        print("Size of JSON payload in bytes: ")
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
