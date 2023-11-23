@@ -1,3 +1,5 @@
+import time
+
 from ..core.db import Connection, Database, table_with_schema
 from ..core.settings import settings
 
@@ -210,22 +212,16 @@ async def m009_add_out_to_invoices(db: Database):
 async def m010_add_quote_tables(db: Database):
     async with db.connect() as conn:
         # add column "created" to tables invoices, promises, proofs_used, proofs_pending
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN created"
-            f" TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}"
-        )
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN created"
-            f" TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}"
-        )
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN created"
-            f" TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}"
-        )
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'proofs_pending')} ADD COLUMN created"
-            f" TIMESTAMP NOT NULL DEFAULT {db.timestamp_now}"
-        )
+        tables = ["invoices", "promises", "proofs_used", "proofs_pending"]
+        for table in tables:
+            await conn.execute(
+                f"ALTER TABLE {table_with_schema(db, table)} ADD COLUMN created"
+                " TIMESTAMP"
+            )
+            await conn.execute(
+                f"UPDATE {table_with_schema(db, table)} SET created ="
+                f" '{int(time.time())}'"
+            )
 
         # add columns "seed" and "unit" to table keysets
         await conn.execute(
@@ -251,7 +247,8 @@ async def m010_add_quote_tables(db: Database):
                     amount INTEGER NOT NULL,
                     paid BOOL NOT NULL,
                     issued BOOL NOT NULL,
-                    created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                    created_time TIMESTAMP,
+                    paid_time TIMESTAMP,
 
                     UNIQUE (quote)
 
@@ -268,7 +265,8 @@ async def m010_add_quote_tables(db: Database):
                     amount INTEGER NOT NULL,
                     fee_reserve INTEGER,
                     paid BOOL NOT NULL,
-                    created TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                    created_time TIMESTAMP,
+                    paid_time TIMESTAMP,
 
                     UNIQUE (quote)
 

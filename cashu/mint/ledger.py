@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import time
 from typing import Dict, List, Mapping, Optional, Set, Tuple
 
 import bolt11
@@ -310,6 +311,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             amount=quote_request.amount,
             issued=False,
             paid=False,
+            created_time=int(time.time()),
         )
         await self.crud.store_mint_quote(
             quote=quote,
@@ -398,6 +400,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             amount=payment_quote.amount.to(unit).amount,
             paid=False,
             fee_reserve=payment_quote.fee.to(unit).amount,
+            created_time=int(time.time()),
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         return PostMeltQuoteResponse(
@@ -515,7 +518,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             await self._invalidate_proofs(proofs)
 
             # set quote as paid
-            await self.crud.update_melt_quote(quote_id=quote, paid=True, db=self.db)
+            melt_quote.paid = True
+            melt_quote.paid_time = int(time.time())
+            await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
 
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []

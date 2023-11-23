@@ -215,6 +215,8 @@ class MeltQuote(BaseModel):
     amount: int
     fee_reserve: int
     paid: bool
+    created_time: int = 0
+    paid_time: int = 0
 
 
 class MintQuote(BaseModel):
@@ -226,6 +228,8 @@ class MintQuote(BaseModel):
     amount: int
     paid: bool
     issued: bool
+    created_time: int = 0
+    paid_time: int = 0
 
 
 # ------- API -------

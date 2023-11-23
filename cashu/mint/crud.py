@@ -1,3 +1,4 @@
+import time
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
@@ -200,8 +201,7 @@ class LedgerCrud(ABC):
     async def update_melt_quote(
         self,
         *,
-        quote_id: str,
-        paid: bool,
+        quote: MeltQuote,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
@@ -229,8 +229,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'promises')}
-            (amount, B_b, C_b, e, s, id)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (amount, B_b, C_b, e, s, id, created)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 amount,
@@ -239,6 +239,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 e,
                 s,
                 id,
+                int(time.time()),
             ),
         )
 
@@ -280,14 +281,15 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'proofs_used')}
-            (amount, C, secret, id)
-            VALUES (?, ?, ?, ?)
+            (amount, C, secret, id, created)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 proof.amount,
-                str(proof.C),
-                str(proof.secret),
-                str(proof.id),
+                proof.C,
+                proof.secret,
+                proof.id,
+                int(time.time()),
             ),
         )
 
@@ -313,13 +315,14 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'proofs_pending')}
-            (amount, C, secret)
-            VALUES (?, ?, ?)
+            (amount, C, secret, created)
+            VALUES (?, ?, ?, ?)
             """,
             (
                 proof.amount,
                 str(proof.C),
                 str(proof.secret),
+                int(time.time()),
             ),
         )
 
@@ -348,8 +351,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, issued, paid)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, checking_id, unit, amount, issued, paid, created_time, paid_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
@@ -360,6 +363,8 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.issued,
                 quote.paid,
+                quote.created_time,
+                quote.paid_time,
             ),
         )
 
@@ -439,8 +444,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, paid)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
@@ -451,6 +456,8 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.fee_reserve or 0,
                 quote.paid,
+                quote.created_time,
+                quote.paid_time,
             ),
         )
 
@@ -491,8 +498,7 @@ class LedgerCrudSqlite(LedgerCrud):
     async def update_melt_quote(
         self,
         *,
-        quote_id: str,
-        paid: bool,
+        quote: MeltQuote,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None:
@@ -500,8 +506,8 @@ class LedgerCrudSqlite(LedgerCrud):
             f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ? WHERE"
             " quote = ?",
             (
-                paid,
-                quote_id,
+                quote.paid,
+                quote.quote,
             ),
         )
 
@@ -515,8 +521,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'invoices')}
-            (amount, bolt11, id, issued, payment_hash, out)
-            VALUES (?, ?, ?, ?, ?, ?)
+            (amount, bolt11, id, issued, payment_hash, out, created)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 invoice.amount,
@@ -525,6 +531,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 invoice.issued,
                 invoice.payment_hash,
                 invoice.out,
+                int(time.time()),
             ),
         )
 
@@ -589,9 +596,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 keyset.id,
                 keyset.seed,
                 keyset.derivation_path,
-                keyset.valid_from or db.timestamp_now,
-                keyset.valid_to or db.timestamp_now,
-                keyset.first_seen or db.timestamp_now,
+                keyset.valid_from or int(time.time()),
+                keyset.valid_to or int(time.time()),
+                keyset.first_seen or int(time.time()),
                 True,
                 keyset.version,
                 keyset.unit.name,
