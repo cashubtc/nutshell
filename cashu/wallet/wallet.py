@@ -171,21 +171,24 @@ class LedgerAPI(object):
         keyset_local: Union[WalletKeyset, None] = None
         if keyset_id:
             # check if current keyset is in db
+            logger.trace(f"Checking if keyset {keyset_id} is in database.")
             keyset_local = await get_keyset(keyset_id, db=self.db)
             if keyset_local:
-                logger.debug(f"Found keyset {keyset_id} in database.")
+                logger.trace(f"Found keyset {keyset_id} in database.")
             else:
-                logger.debug(
-                    f"Cannot find keyset {keyset_id} in database. Loading keyset from"
-                    " mint."
+                logger.trace(
+                    f"Could not find keyset {keyset_id} in database. Loading keyset"
+                    " from mint."
                 )
             keyset = keyset_local
 
         if keyset_local is None and keyset_id:
             # get requested keyset from mint
+            logger.trace(f"Getting keyset {keyset_id} from mint.")
             keyset = await self._get_keys_of_keyset(self.url, keyset_id)
         else:
             # get current keyset
+            logger.trace("Getting current keyset from mint.")
             keyset = await self._get_keys(self.url)
 
         assert keyset
