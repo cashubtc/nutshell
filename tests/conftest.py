@@ -32,6 +32,7 @@ settings.mint_lightning_backend = settings.mint_lightning_backend or "FakeWallet
 settings.mint_database = "./test_data/test_mint"
 settings.mint_derivation_path = "0/0/0/0"
 settings.mint_private_key = "TEST_PRIVATE_KEY"
+settings.mint_max_balance = 0
 
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)

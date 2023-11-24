@@ -56,6 +56,7 @@ class MintSettings(CashuSettings):
     mint_peg_out_only: bool = Field(default=False)
     mint_max_peg_in: int = Field(default=None)
     mint_max_peg_out: int = Field(default=None)
+    mint_max_balance: int = Field(default=None)
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
