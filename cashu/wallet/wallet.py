@@ -94,6 +94,7 @@ def async_set_httpx_client(func):
             proxies=proxies_dict,  # type: ignore
             headers=headers_dict,
             base_url=self.url,
+            timeout=None if settings.debug else 5,
         )
         return await func(self, *args, **kwargs)
 

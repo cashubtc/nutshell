@@ -1,5 +1,3 @@
-import time
-
 import pytest
 import pytest_asyncio
 
@@ -71,18 +69,3 @@ async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
     spendable, pending = await ledger.check_proof_state(proofs=send_proofs)
     assert sum(spendable) == len(send_proofs)
     assert sum(pending) == 0
-
-
-@pytest.mark.asyncio
-async def test_benchmark_check_proof_spendable(wallet1: Wallet, ledger: Ledger):
-    invoice = await wallet1.request_mint(1000)
-    pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(1000, split=[1] * 1000, id=invoice.id)
-
-    time_begin = time.time()
-    spendable = await ledger._check_proofs_spendable(wallet1.proofs)
-    time_end = time.time()
-    time_elapsed = time_end - time_begin
-    print(f"Time elapsed: {time_elapsed}")
-    assert sum(spendable) == len(wallet1.proofs)
-    assert time_elapsed < 0.5

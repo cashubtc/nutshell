@@ -20,6 +20,7 @@ from cashu.mint.ledger import Ledger
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
 
+settings.debug = True
 settings.cashu_dir = "./test_data/"
 settings.mint_host = "localhost"
 settings.mint_port = SERVER_PORT
