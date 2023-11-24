@@ -146,6 +146,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         assert keyset.public_keys, KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
+    async def get_balance(self) -> int:
+        """Returns the balance of the mint."""
+        return await self.crud.get_balance(db=self.db)
+
     # ------- ECASH -------
 
     async def _invalidate_proofs(self, proofs: List[Proof]) -> None:
@@ -245,6 +249,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             )
         if settings.mint_peg_out_only:
             raise NotAllowedError("Mint does not allow minting new tokens.")
+        if settings.mint_max_balance:
+            balance = await self.get_balance()
+            if balance + amount > settings.mint_max_balance:
+                raise NotAllowedError("Mint has reached maximum balance.")
 
         logger.trace(f"requesting invoice for {amount} satoshis")
         invoice_response = await self._request_lightning_invoice(amount)

@@ -158,6 +158,16 @@ class LedgerCrud:
             conn=conn,
         )
 
+    async def get_balance(
+        self,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> int:
+        return await get_balance(
+            db=db,
+            conn=conn,
+        )
+
 
 async def store_promise(
     *,
@@ -394,3 +404,14 @@ async def get_keyset(
         tuple(values),
     )
     return [MintKeyset(**row) for row in rows]
+
+
+async def get_balance(
+    db: Database,
+    conn: Optional[Connection] = None,
+) -> int:
+    row = await (conn or db).fetchone(f"""
+        SELECT * from {table_with_schema(db, 'balance')}
+        """)
+    assert row, "Balance not found"
+    return int(row[0])
