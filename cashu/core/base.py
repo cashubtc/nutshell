@@ -348,6 +348,11 @@ class WalletKeyset:
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
         self.id = derive_keyset_id(self.public_keys)
+        logger.trace(f"Derived keyset id {self.id} from public keys.")
+        if id and id != self.id:
+            logger.warning(
+                f"WARNING: Keyset id {self.id} does not match the given id {id}."
+            )
 
     def serialize(self):
         return json.dumps(
@@ -356,7 +361,7 @@ class WalletKeyset:
 
     @classmethod
     def from_row(cls, row: Row):
-        def deserialize(serialized: str):
+        def deserialize(serialized: str) -> Dict[int, PublicKey]:
             return {
                 int(amount): PublicKey(bytes.fromhex(hex_key), raw=True)
                 for amount, hex_key in dict(json.loads(serialized)).items()
