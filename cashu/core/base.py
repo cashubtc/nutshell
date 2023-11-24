@@ -358,7 +358,7 @@ class WalletKeyset:
     def from_row(cls, row: Row):
         def deserialize(serialized: str):
             return {
-                amount: PublicKey(bytes.fromhex(hex_key), raw=True)
+                int(amount): PublicKey(bytes.fromhex(hex_key), raw=True)
                 for amount, hex_key in dict(json.loads(serialized)).items()
             }
 
