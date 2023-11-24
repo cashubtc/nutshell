@@ -1,3 +1,4 @@
+import copy
 import shutil
 from pathlib import Path
 from typing import List, Union
@@ -112,6 +113,20 @@ async def test_get_keyset(wallet1: Wallet):
     keys2 = await wallet1._get_keys_of_keyset(wallet1.url, keys1.id)
     assert keys2.public_keys is not None
     assert len(keys1.public_keys) == len(keys2.public_keys)
+
+
+@pytest.mark.asyncio
+async def test_get_keyset_from_db(wallet1: Wallet):
+    # first load it from the mint
+    # await wallet1._load_mint_keys()
+    # NOTE: conftest already called wallet.load_mint() which got the keys from the mint
+
+    # then load it from the db
+    keyset1 = copy.copy(wallet1.keysets[wallet1.keyset_id])
+    await wallet1._load_mint_keys()
+    keyset2 = copy.copy(wallet1.keysets[wallet1.keyset_id])
+    assert keyset1.public_keys == keyset2.public_keys
+    assert keyset1.id == keyset2.id
 
 
 @pytest.mark.asyncio
