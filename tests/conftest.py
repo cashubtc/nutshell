@@ -54,7 +54,6 @@ class UvicornServer(multiprocessing.Process):
 async def ledger():
     async def start_mint_init(ledger: Ledger):
         await migrate_databases(ledger.db, migrations_mint)
-        await ledger.load_used_proofs()
         await ledger.init_keysets()
 
     database_name = "test"

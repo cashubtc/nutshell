@@ -11,6 +11,7 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
+from ..core.db import Database
 from ..core.errors import (
     NoSecretInProofsError,
     NotAllowedError,
@@ -19,16 +20,19 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.settings import settings
+from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
-from .protocols import SupportsKeysets
+from .protocols import SupportsDb, SupportsKeysets
 
 
-class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
+class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
     """Verification functions for the ledger."""
 
     keyset: MintKeyset
     keysets: MintKeysets
     secrets_used: Set[str]
+    crud: LedgerCrud
+    db: Database
 
     async def verify_inputs_and_outputs(
         self, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
@@ -48,7 +52,9 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         """
         # Verify inputs
         # Verify proofs are spendable
-        self._check_proofs_spendable(proofs)
+        spendable = await self._check_proofs_spendable(proofs)
+        if not all(spendable):
+            raise TokenAlreadySpentError()
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
             raise TransactionError("invalid amount.")
@@ -87,10 +93,17 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate outputs.")
 
-    def _check_proofs_spendable(self, proofs: List[Proof]):
-        """Checks whether the proofs were already spent."""
-        if not all([p.secret not in self.secrets_used for p in proofs]):
-            raise TokenAlreadySpentError()
+    async def _check_proofs_spendable(self, proofs: List[Proof]) -> List[bool]:
+        """Checks whether the proof was already spent."""
+        spendable_states = []
+        async with self.db.connect() as conn:
+            for p in proofs:
+                spendable_state = (
+                    await self.crud.get_proof_used(db=self.db, proof=p, conn=conn)
+                    is None
+                )
+                spendable_states.append(spendable_state)
+        return spendable_states
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""

@@ -47,7 +47,6 @@ async def rotate_keys(n_seconds=10):
 
 async def start_mint_init():
     await migrate_databases(ledger.db, migrations)
-    await ledger.load_used_proofs()
     await ledger.init_keysets()
 
     if settings.lightning:

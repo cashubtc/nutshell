@@ -1,6 +1,6 @@
 import asyncio
 import math
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import bolt11
 from loguru import logger
@@ -49,7 +49,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         crud: LedgerCrud,
         derivation_path="",
     ):
-        self.secrets_used: Set[str] = set()
         self.master_key = seed
         self.derivation_path = derivation_path
 
@@ -156,8 +155,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             proofs (List[Proof]): Proofs to add to known secret table.
         """
         # Mark proofs as used and prepare new promises
-        secrets = set([p.secret for p in proofs])
-        self.secrets_used |= secrets
+        set([p.secret for p in proofs])
         # store in db
         for p in proofs:
             await self.crud.invalidate_proof(proof=p, db=self.db)
@@ -583,17 +581,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
     # ------- PROOFS -------
 
-    async def load_used_proofs(self) -> None:
-        """Load all used proofs from database."""
-        logger.trace("crud: loading used proofs")
-        secrets_used = await self.crud.get_secrets_used(db=self.db)
-        logger.trace(f"crud: loaded {len(secrets_used)} used proofs")
-        self.secrets_used = set(secrets_used)
-
-    def _check_spendable(self, proof: Proof) -> bool:
-        """Checks whether the proof was already spent."""
-        return proof.secret not in self.secrets_used
-
     async def _check_pending(self, proofs: List[Proof]) -> List[bool]:
         """Checks whether the proof is still pending."""
         proofs_pending = await self.crud.get_proofs_pending(db=self.db)
@@ -620,7 +607,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             List[bool]: List of which proof is still spendable (True if still spendable, else False)
             List[bool]: List of which proof are pending (True if pending, else False)
         """
-        spendable = [self._check_spendable(p) for p in proofs]
+
+        spendable = await self._check_proofs_spendable(proofs)
         pending = await self._check_pending(proofs)
         return spendable, pending
 
