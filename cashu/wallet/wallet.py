@@ -185,9 +185,9 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 logger.debug(f"Found keyset {keyset_id} in database.")
                 keyset = keysets[0]
             else:
-                logger.debug(
-                    f"Cannot find keyset {keyset_id} in database. Loading keyset from"
-                    " mint."
+                logger.trace(
+                    f"Could not find keyset {keyset_id} in database. Loading keyset"
+                    " from mint."
                 )
                 keyset = await self._get_keys_of_keyset(keyset_id)
                 logger.debug(
