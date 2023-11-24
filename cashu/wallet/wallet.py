@@ -210,7 +210,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             wallet_unit_keysets = [k for k in keysets if k.unit == self.unit]
             assert len(wallet_unit_keysets) > 0, f"no keyset for unit {self.unit.name}."
 
-            keyset = [k for k in keysets if k.unit == self.unit][-1]
+            keyset = [k for k in keysets if k.unit == self.unit][0]
 
         assert keyset
         assert keyset.id
