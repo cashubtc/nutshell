@@ -31,10 +31,20 @@ class LedgerCrud:
         db: Database,
         id: str,
         conn: Optional[Connection] = None,
-    ):
+    ) -> Optional[Invoice]:
         return await get_lightning_invoice(
             db=db,
             id=id,
+            conn=conn,
+        )
+
+    async def get_secrets_used(
+        self,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[str]:
+        return await get_secrets_used(
+            db=db,
             conn=conn,
         )
 
@@ -210,7 +220,7 @@ async def get_promise(
 async def get_secrets_used(
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> List[str]:
     rows = await (conn or db).fetchall(f"""
         SELECT secret from {table_with_schema(db, 'proofs_used')}
         """)

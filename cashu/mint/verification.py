@@ -30,7 +30,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
 
     keyset: MintKeyset
     keysets: MintKeysets
-    secrets_used: Set[str]
+    secrets_used: Set[str] = set()
     crud: LedgerCrud
     db: Database
 
@@ -96,13 +96,20 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
     async def _check_proofs_spendable(self, proofs: List[Proof]) -> List[bool]:
         """Checks whether the proof was already spent."""
         spendable_states = []
-        async with self.db.connect() as conn:
+        if settings.mint_cache_secrets:
+            # check used secrets in memory
             for p in proofs:
-                spendable_state = (
-                    await self.crud.get_proof_used(db=self.db, proof=p, conn=conn)
-                    is None
-                )
+                spendable_state = p.secret not in self.secrets_used
                 spendable_states.append(spendable_state)
+        else:
+            # check used secrets in database
+            async with self.db.connect() as conn:
+                for p in proofs:
+                    spendable_state = (
+                        await self.crud.get_proof_used(db=self.db, proof=p, conn=conn)
+                        is None
+                    )
+                    spendable_states.append(spendable_state)
         return spendable_states
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
