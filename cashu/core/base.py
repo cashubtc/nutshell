@@ -450,20 +450,14 @@ class Unit(Enum):
     sat = 0
     msat = 1
     usd = 2
-    cheese = 3
-    nsat = 4
 
     def str(self, amount: int) -> str:
         if self == Unit.sat:
             return f"{amount} sat"
         elif self == Unit.msat:
             return f"{amount} msat"
-        elif self == Unit.nsat:
-            return f"{amount} nsat"
         elif self == Unit.usd:
             return f"${amount/100:.2f} USD"
-        elif self == Unit.cheese:
-            return f"E{amount/100:.2f} Chuck E Cheese Tokens"
         else:
             raise Exception("Invalid unit")
 
@@ -493,31 +487,6 @@ class Amount:
                     return Amount(to_unit, math.floor(self.amount / 1000))
                 else:
                     return Amount(to_unit, self.amount // 1000)
-            elif to_unit == Unit.nsat:
-                if round == "up":
-                    return Amount(to_unit, math.ceil(self.amount * 1000000))
-                elif round == "down":
-                    return Amount(to_unit, math.floor(self.amount * 1000000))
-                else:
-                    return Amount(to_unit, self.amount * 1000000)
-            else:
-                raise Exception(f"Cannot convert {self.unit.name} to {to_unit.name}")
-
-        elif self.unit == Unit.nsat:
-            if to_unit == Unit.sat:
-                if round == "up":
-                    return Amount(to_unit, math.ceil(self.amount / 1000000000))
-                elif round == "down":
-                    return Amount(to_unit, math.floor(self.amount / 1000000000))
-                else:
-                    return Amount(to_unit, self.amount // 1000000000)
-            elif to_unit == Unit.msat:
-                if round == "up":
-                    return Amount(to_unit, math.ceil(self.amount / 1000000))
-                elif round == "down":
-                    return Amount(to_unit, math.floor(self.amount / 1000000))
-                else:
-                    return Amount(to_unit, self.amount // 1000000)
             else:
                 raise Exception(f"Cannot convert {self.unit.name} to {to_unit.name}")
         else:
@@ -587,9 +556,9 @@ class WalletKeyset:
             )
 
     def serialize(self):
-        return json.dumps({
-            amount: key.serialize().hex() for amount, key in self.public_keys.items()
-        })
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
 
     @classmethod
     def from_row(cls, row: Row):

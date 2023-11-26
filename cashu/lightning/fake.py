@@ -28,7 +28,7 @@ from .base import (
 
 
 class FakeWallet(LightningBackend):
-    units = set([Unit.sat, Unit.msat, Unit.nsat])
+    units = set([Unit.sat, Unit.msat])
     queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
     paid_invoices: Set[str] = set()
