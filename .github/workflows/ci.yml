@@ -21,9 +21,11 @@ jobs:
         backend-wallet-class: ["FakeWallet"]
     uses: ./.github/workflows/tests.yml
     with:
+      os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
       poetry-version: ${{ matrix.poetry-version }}
       mint-cache-secrets: ${{ matrix.mint-cache-secrets }}
+      mint-only-deprecated: ${{ matrix.mint-only-deprecated }}
   regtest:
     uses: ./.github/workflows/regtest.yml
     strategy:
