@@ -95,7 +95,10 @@ async def test_get_keys(wallet1: Wallet):
     keyset = keysets[0]
     assert keyset.id is not None
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
-    assert keyset.id == "009a1f293253e41e"
+    if settings.debug_mint_only_deprecated:
+        assert keyset.id == "eGnEWtdJ0PIM"
+    else:
+        assert keyset.id == "009a1f293253e41e"
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
@@ -157,6 +160,12 @@ async def test_get_keyset_ids(wallet1: Wallet):
     assert isinstance(keysets, list)
     assert len(keysets) > 0
     assert wallet1.keyset_id in keysets
+
+
+@pytest.mark.asyncio
+async def test_request_mint(wallet1: Wallet):
+    invoice = await wallet1.request_mint(64)
+    assert invoice.payment_hash
 
 
 @pytest.mark.asyncio
@@ -296,7 +305,7 @@ async def test_melt(wallet1: Wallet):
     assert melt_response.change[0].id == send_proofs[0].id, "Wrong keyset returned"
 
     # verify that proofs in proofs_used db have the same melt_id as the invoice in the db
-    assert invoice.payment_hash, "No payment hash in invoice"
+    assert invoice_payment_hash, "No payment hash in invoice"
     invoice_db = await get_lightning_invoice(
         db=wallet1.db, payment_hash=invoice_payment_hash, out=True
     )

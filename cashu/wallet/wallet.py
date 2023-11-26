@@ -15,6 +15,7 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
+    CheckFeesResponse,
     CheckSpendableRequest,
     CheckSpendableResponse,
     DLEQWallet,
@@ -26,6 +27,7 @@ from ..core.base import (
     PostMeltQuoteResponse,
     PostMeltRequest,
     PostMeltResponse,
+    PostMeltResponse_deprecated,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,
@@ -53,6 +55,7 @@ from ..tor.tor import TorProxy
 from ..wallet.crud import (
     bump_secret_derivation,
     get_keysets,
+    get_lightning_invoice,
     get_proofs,
     invalidate_proof,
     secret_used,
@@ -172,6 +175,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             AssertionError: if mint URL is not set
             AssertionError: if no keys are received from the mint
         """
+        logger.trace(f"Loading mint keys: {keyset_id}")
         assert len(
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
@@ -180,6 +184,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
         if keyset_id:
             # check if current keyset is in db
+            logger.trace(f"Loading keyset {keyset_id} from database.")
             keysets = await get_keysets(keyset_id, db=self.db)
             if keysets:
                 logger.debug(f"Found keyset {keyset_id} in database.")
@@ -190,10 +195,13 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                     " from mint."
                 )
                 keyset = await self._get_keys_of_keyset(keyset_id)
-                logger.debug(
-                    f"Storing new mint keyset: {keyset.id} ({keyset.unit.name})"
-                )
-                await store_keyset(keyset=keyset, db=self.db)
+                if keyset.id == keyset_id:
+                    # NOTE: Derived keyset *could* have a different id than the one
+                    # requested because of the duplicate keysets for < 0.15.0
+                    logger.debug(
+                        f"Storing new mint keyset: {keyset.id} ({keyset.unit.name})"
+                    )
+                    await store_keyset(keyset=keyset, db=self.db)
                 keysets = [keyset]
 
         else:
@@ -203,7 +211,8 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 keysets_in_db = await get_keysets(keyset.id, db=self.db)
                 if not keysets_in_db:
                     logger.debug(
-                        f"Storing new mint keyset: {keyset.id} ({keyset.unit.name})"
+                        "Storing new current mint keyset:"
+                        f" {keyset.id} ({keyset.unit.name})"
                     )
                     await store_keyset(keyset=keyset, db=self.db)
 
@@ -232,6 +241,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             AssertionError: if no keysets are received from the mint
         """
+        logger.trace("Loading mint keysets.")
         mint_keysets = []
         try:
             mint_keysets = await self._get_keyset_ids()
@@ -256,6 +266,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         `keyset_id` or gets the keys of the active keyset from the mint.
         Gets the active keyset ids of the mint and stores in `self.mint_keyset_ids`.
         """
+        logger.trace("Loading mint.")
         await self._load_mint_keys(keyset_id)
         await self._load_mint_keysets()
         try:
@@ -411,6 +422,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         return mint_info
 
     @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def mint_quote(self, amount) -> Invoice:
         """Requests a mint quote from the server and returns a payment request.
 
@@ -503,10 +515,19 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             join(self.url, "/v1/melt/quote/bolt11"),
             json=payload.dict(),
         )
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret: CheckFeesResponse = await self.check_fees_deprecated(payment_request)
+            quote_id = "deprecated_" + str(uuid.uuid4())
+            return PostMeltQuoteResponse(
+                quote=quote_id,
+                amount=invoice_obj.amount_msat // 1000,
+                fee_reserve=ret.fee or 0,
+            )
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
-
         return_dict = resp.json()
-        print(PostMeltQuoteResponse.parse_obj(return_dict).json())
         return PostMeltQuoteResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
@@ -540,9 +561,20 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             json=payload.dict(include=_meltrequest_include_fields(proofs, outputs)),  # type: ignore
             timeout=None,
         )
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            invoice = await get_lightning_invoice(id=quote, db=self.db)
+            assert invoice, f"no invoice found for id {quote}"
+            ret: PostMeltResponse_deprecated = await self.pay_lightning_deprecated(
+                proofs=proofs, outputs=outputs, invoice=invoice.bolt11
+            )
+            return PostMeltResponse(
+                paid=ret.paid, proof=ret.preimage, change=ret.change
+            )
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         return_dict = resp.json()
-
         return PostMeltResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
@@ -609,6 +641,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             join(self.url, "/v1/check"),
             json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
         )
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.check_proof_state_deprecated(proofs)
+            return ret
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
 
         return_dict = resp.json()
@@ -625,6 +663,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         payload = PostMintRequest(quote="restore", outputs=outputs)
         resp = await self.httpx.post(join(self.url, "/v1/restore"), json=payload.dict())
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.restore_promises_deprecated(outputs)
+            return ret
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)
@@ -937,13 +981,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             n_change_outputs * [1], change_secrets, change_rs
         )
 
-        # we store the invoice object in the database to later be able to check the invoice state
-
         # store the melt_id in proofs
         async with self.db.connect() as conn:
             for p in proofs:
                 p.melt_id = quote_id
                 await update_proof(p, melt_id=quote_id, conn=conn)
+
+        # we store the invoice object in the database to later be able to check the invoice state
 
         decoded_invoice = bolt11.decode(invoice)
         invoice_obj = Invoice(
@@ -1049,6 +1093,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         proofs: List[Proof] = []
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
             if promise.id not in self.keysets:
+                logger.debug(f"Keyset {promise.id} not found in db. Loading from mint.")
                 # we don't have the keyset for this promise, so we load it
                 await self._load_mint_keys(promise.id)
                 assert promise.id in self.keysets, "Could not load keyset."

@@ -74,7 +74,7 @@ async def start_mint_init():
         for unit in ledger.backends[method]:
             logger.info(
                 f"Using {ledger.backends[method][unit].__class__.__name__} backend for"
-                f" method: '{method.name}' and unit '{unit.name}'"
+                f" method: '{method.name}' and unit: '{unit.name}'"
             )
             status = await ledger.backends[method][unit].status()
             if status.error_message:

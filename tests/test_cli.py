@@ -29,6 +29,7 @@ def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, st
 
 
 async def init_wallet():
+    settings.debug = False
     wallet = await Wallet.with_db(
         url=settings.mint_url,
         db="test_data/test_cli_wallet",
@@ -179,7 +180,7 @@ def test_send(mint, cli_prefix):
         [*cli_prefix, "send", "10"],
     )
     assert result.exception is None
-    print(result.output)
+    print("test_send", result.output)
     token_str = result.output.split("\n")[0]
     assert "cashuA" in token_str, "output does not have a token"
     token = TokenV3.deserialize(token_str)
@@ -193,7 +194,7 @@ def test_send_with_dleq(mint, cli_prefix):
         [*cli_prefix, "send", "10", "--dleq"],
     )
     assert result.exception is None
-    print(result.output)
+    print("test_send_with_dleq", result.output)
     token_str = result.output.split("\n")[0]
     assert "cashuA" in token_str, "output does not have a token"
     token = TokenV3.deserialize(token_str)
@@ -207,7 +208,7 @@ def test_send_legacy(mint, cli_prefix):
         [*cli_prefix, "send", "10", "--legacy"],
     )
     assert result.exception is None
-    print(result.output)
+    print("test_send_legacy", result.output)
     # this is the legacy token in the output
     token_str = result.output.split("\n")[4]
     assert token_str.startswith("eyJwcm9v"), "output is not as expected"
@@ -221,7 +222,7 @@ def test_send_without_split(mint, cli_prefix):
     )
     assert result.exception is None
     print("SEND")
-    print(result.output)
+    print("test_send_without_split", result.output)
     assert "cashuA" in result.output, "output does not have a token"
 
 

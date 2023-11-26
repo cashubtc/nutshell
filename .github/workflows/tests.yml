@@ -18,9 +18,13 @@ on:
       mint-cache-secrets:
         default: "false"
         type: string
+      mint-only-deprecated:
+        default: "false"
+        type: string
 
 jobs:
   poetry:
+    name: Run (mint-cache-secrets ${{ inputs.mint-cache-secrets }}, mint-only-deprecated ${{ inputs.mint-only-deprecated }})
     runs-on: ${{ inputs.os }}
     services:
       postgres:

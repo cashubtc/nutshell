@@ -14,6 +14,8 @@ import click
 from click import Context
 from loguru import logger
 
+from cashu.core.logging import configure_logger
+
 from ...core.base import TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
@@ -106,6 +108,8 @@ def coro(f):
 @click.pass_context
 @coro
 async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
+    if settings.debug:
+        configure_logger()
     if settings.tor and not TorProxy().check_platform():
         error_str = (
             "Your settings say TOR=true but the built-in Tor bundle is not supported on"

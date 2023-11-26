@@ -4,6 +4,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import CheckSpendableRequest, CheckSpendableResponse, Proof
+from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.helpers import get_real_invoice, is_regtest, pay_if_regtest
@@ -23,14 +24,22 @@ async def wallet(mint):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_info(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/info")
+    response = httpx.get(f"{BASE_URL}/v1/info")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.pubkey
     assert response.json()["pubkey"] == ledger.pubkey.serialize().hex()
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_api_keys(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/keys")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -51,6 +60,10 @@ async def test_api_keys(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_api_keysets(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/keysets")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -74,6 +87,10 @@ async def test_api_keysets(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_api_keyset_keys(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/keys/009a1f293253e41e")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -94,6 +111,10 @@ async def test_api_keyset_keys(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/keys/eGnEWtdJ0PIM")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -114,6 +135,10 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_split(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
     pay_if_regtest(invoice.bolt11)
@@ -138,6 +163,10 @@ async def test_split(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_mint_quote(ledger: Ledger):
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11",
@@ -152,6 +181,10 @@ async def test_mint_quote(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_mint(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
     pay_if_regtest(invoice.bolt11)
@@ -176,6 +209,10 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_melt_quote(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
@@ -193,6 +230,10 @@ async def test_melt_quote(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_melt(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
@@ -237,6 +278,10 @@ async def test_melt(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_api_check_state(ledger: Ledger):
     proofs = [
         Proof(id="1234", amount=0, secret="asdasdasd", C="asdasdasd"),

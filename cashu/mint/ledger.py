@@ -22,7 +22,12 @@ from ..core.base import (
     Unit,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.keys import derive_keyset_id_deprecated, derive_pubkey, random_hash
+from ..core.crypto.keys import (
+    derive_keyset_id,
+    derive_keyset_id_deprecated,
+    derive_pubkey,
+    random_hash,
+)
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -117,6 +122,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # load the new keyset in self.keysets
         self.keysets[keyset.id] = keyset
 
+        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
+        # set the deprecated id
+        assert keyset.public_keys
+        keyset.duplicate_keyset_id = derive_keyset_id_deprecated(keyset.public_keys)
+
         logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
 
@@ -136,12 +146,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         )
         # add keysets from db to current keysets
         for k in tmp_keysets:
-            if k.id and k.id not in self.keysets:
-                self.keysets[k.id] = k
+            self.keysets[k.id] = k
 
         # generate keys for all keysets in the database
         for _, v in self.keysets.items():
-            # we already generated the keys for this keyset
+            # if we already generated the keys for this keyset, skip
             if v.id and v.public_keys and len(v.public_keys):
                 continue
             logger.trace(f"Generating keys for keyset {v.id}")
@@ -162,23 +171,20 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         assert any([k.active for k in self.keysets.values()]), "No active keyset found."
 
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        # we duplicate new keysets and compute their new keyset id
+        # we duplicate new keysets and compute their old keyset id
+        # we duplicate old keysets and compute their new keyset id
         for _, keyset in copy.copy(self.keysets).items():
-            # NOTE: duplicate all keys for now
-            if keyset.version_tuple < (0, 15) or True:
-                deprecated_keyset_with_new_id = copy.copy(keyset)
-                deprecated_id = deprecated_keyset_with_new_id.id
-                assert deprecated_keyset_with_new_id.public_keys
-                deprecated_keyset_with_new_id.id = derive_keyset_id_deprecated(
-                    deprecated_keyset_with_new_id.public_keys
-                )
-                self.keysets[deprecated_keyset_with_new_id.id] = (
-                    deprecated_keyset_with_new_id
-                )
-                logger.warning(
-                    f"Duplicated deprecated keyset {deprecated_id} with new id"
-                    f" {deprecated_keyset_with_new_id.id}."
-                )
+            keyest_copy = copy.copy(keyset)
+            assert keyest_copy.public_keys
+            if keyset.version_tuple >= (0, 15):
+                keyest_copy.id = derive_keyset_id_deprecated(keyest_copy.public_keys)
+            else:
+                keyest_copy.id = derive_keyset_id(keyest_copy.public_keys)
+            keyest_copy.duplicate_keyset_id = keyset.id
+            self.keysets[keyest_copy.id] = keyest_copy
+            # remember which keyset this keyset was duplicated from
+            logger.debug(f"Duplicated keyset id {keyset.id} -> {keyest_copy.id}")
+
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
@@ -369,23 +375,24 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             unit = Unit[quote.unit]
             method = Method["bolt11"]
             if not quote.paid:
-                logger.debug(f"Lightning: checking invoice {quote.checking_id}")
+                logger.trace(f"Lightning: checking invoice {quote.checking_id}")
                 status: PaymentStatus = await self.backends[method][
                     unit
                 ].get_invoice_status(quote.checking_id)
                 assert status.paid, "invoice not paid"
+                logger.trace(f"Setting quote {quote_id} as paid")
                 await self.crud.update_mint_quote_paid(
                     quote_id=quote_id, paid=True, db=self.db
                 )
 
-            logger.trace(f"crud: setting invoice {id} as issued")
+            promises = await self._generate_promises(outputs, keyset)
+            logger.trace("generated promises")
+
+            logger.trace(f"crud: setting quote {quote_id} as issued")
             await self.crud.update_mint_quote_issued(
                 quote_id=quote_id, issued=True, db=self.db
             )
         del self.locks[quote_id]
-
-        promises = await self._generate_promises(outputs, keyset)
-        logger.trace("generated promises")
         return promises
 
     async def melt_quote(
@@ -633,30 +640,36 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             list[BlindedSignature]: Generated BlindedSignatures.
         """
-        keyset = keyset if keyset else self.keyset
-        promises: List[Tuple[PublicKey, int, PublicKey, PrivateKey, PrivateKey]] = []
+        promises: List[
+            Tuple[str, PublicKey, int, PublicKey, PrivateKey, PrivateKey]
+        ] = []
         for output in outputs:
             B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
             assert output.id, "output id not set"
-            keyset = keyset if keyset else self.keysets[output.id]
+            keyset = keyset or self.keysets[output.id]
 
             assert output.id in self.keysets, f"keyset {output.id} not found"
-            assert output.id == keyset.id, "keyset id does not match output id"
+            assert output.id in [
+                keyset.id,
+                keyset.duplicate_keyset_id,
+            ], "keyset id does not match output id"
             assert keyset.active, "keyset is not active"
+            keyset_id = output.id
+            logger.trace(f"Generating promise with keyset {keyset_id}.")
             private_key_amount = keyset.private_keys[output.amount]
             C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
-            promises.append((B_, output.amount, C_, e, s))
+            promises.append((keyset_id, B_, output.amount, C_, e, s))
 
-        logger.trace(f"Generating promise with keyset {keyset.id}.")
+        keyset = keyset or self.keyset
 
         signatures = []
         async with self.db.connect() as conn:
             for promise in promises:
-                B_, amount, C_, e, s = promise
+                keyset_id, B_, amount, C_, e, s = promise
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
                 await self.crud.store_promise(
                     amount=amount,
-                    id=keyset.id,
+                    id=keyset_id,
                     B_=B_.serialize().hex(),
                     C_=C_.serialize().hex(),
                     e=e.serialize(),
@@ -666,7 +679,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 )
                 logger.trace(f"crud: _generate_promise stored promise for {amount}")
                 signature = BlindedSignature(
-                    id=keyset.id,
+                    id=keyset_id,
                     amount=amount,
                     C_=C_.serialize().hex(),
                     dleq=DLEQ(e=e.serialize(), s=s.serialize()),

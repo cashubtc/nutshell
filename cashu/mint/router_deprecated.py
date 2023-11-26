@@ -168,12 +168,15 @@ async def mint_deprecated(
     Call this endpoint after `GET /mint`.
     """
     logger.trace(f"> POST /mint: {payload}")
-    # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
-    if payload.outputs:
-        for output in payload.outputs:
-            if not output.id:
-                output.id = ledger.keyset.id
-    # END BACKWARDS COMPATIBILITY < 0.14
+
+    # BEGIN BACKWARDS COMPATIBILITY < 0.15
+    # Mint expects "id" in outputs to know which keyset to use to sign them.
+    for output in payload.outputs:
+        if not output.id:
+            # use the deprecated version of the current keyset
+            output.id = ledger.keyset.duplicate_keyset_id
+    # END BACKWARDS COMPATIBILITY < 0.15
+
     # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
     # We use the payment_hash to lookup the hash from the database and pass that one along.
     hash = payment_hash or hash
@@ -182,6 +185,7 @@ async def mint_deprecated(
 
     promises = await ledger.mint(outputs=payload.outputs, quote_id=hash)
     blinded_signatures = PostMintResponse_deprecated(promises=promises)
+
     logger.trace(f"< POST /mint: {blinded_signatures}")
     return blinded_signatures
 

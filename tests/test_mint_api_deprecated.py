@@ -2,6 +2,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.helpers import get_real_invoice, is_regtest, pay_if_regtest
@@ -18,6 +19,14 @@ async def wallet(mint):
     )
     await wallet1.load_mint()
     yield wallet1
+
+
+@pytest.mark.asyncio
+async def test_info(ledger: Ledger):
+    response = httpx.get(f"{BASE_URL}/info")
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    assert ledger.pubkey
+    assert response.json()["pubkey"] == ledger.pubkey.serialize().hex()
 
 
 @pytest.mark.asyncio
@@ -124,7 +133,10 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["promises"]) == 2
     assert result["promises"][0]["amount"] == 32
     assert result["promises"][1]["amount"] == 32
-    assert result["promises"][0]["id"] == "009a1f293253e41e"
+    if settings.debug_mint_only_deprecated:
+        assert result["promises"][0]["id"] == "eGnEWtdJ0PIM"
+    else:
+        assert result["promises"][0]["id"] == "009a1f293253e41e"
     assert result["promises"][0]["dleq"]
     assert "e" in result["promises"][0]["dleq"]
     assert "s" in result["promises"][0]["dleq"]

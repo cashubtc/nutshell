@@ -544,21 +544,27 @@ class WalletKeyset:
 
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         if use_deprecated_id:
+            logger.warning(
+                "Using deprecated keyset id derivation for backwards compatibility <"
+                " 0.15.0"
+            )
             self.id = derive_keyset_id_deprecated(self.public_keys)
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
         self.unit = Unit[unit]
 
         logger.trace(f"Derived keyset id {self.id} from public keys.")
-        if id and id != self.id:
+        if id and id != self.id and use_deprecated_id:
             logger.warning(
                 f"WARNING: Keyset id {self.id} does not match the given id {id}."
+                " Overwriting."
             )
+            self.id = id
 
     def serialize(self):
-        return json.dumps(
-            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
-        )
+        return json.dumps({
+            amount: key.serialize().hex() for amount, key in self.public_keys.items()
+        })
 
     @classmethod
     def from_row(cls, row: Row):
@@ -601,6 +607,8 @@ class MintKeyset:
     first_seen: Union[str, None] = None
     version: Union[str, None] = None
 
+    duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
+
     def __init__(
         self,
         *,
@@ -627,13 +635,6 @@ class MintKeyset:
             [int(i) for i in self.version.split(".")] if self.version else []
         )
 
-        # if not self.derivation_path:
-        #     purpose_str = "m/129373'/"
-        #     unit_str = f"{Unit(self.unit).value}'/"
-        #     counter_str = f"{counter}'/"
-        #     self.derivation_path = purpose_str + unit_str + counter_str
-        # else:
-
         # infer unit from derivation path
         if not unit:
             logger.warning(
@@ -644,6 +645,7 @@ class MintKeyset:
                 self.unit = Unit(
                     int(self.derivation_path.split("/")[2].replace("'", ""))
                 )
+                logger.warning(f"Inferred unit: {self.unit.name}")
             except Exception:
                 logger.warning(
                     "Could not infer unit from derivation path"
