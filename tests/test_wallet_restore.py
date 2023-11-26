@@ -8,6 +8,7 @@ import pytest_asyncio
 from cashu.core.base import Proof
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import CashuError
+from cashu.core.settings import settings
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
@@ -85,6 +86,10 @@ async def wallet3(mint):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_bump_secret_derivation(wallet3: Wallet):
     await wallet3._init_private_key(
         "half depart obvious quality work element tank gorilla view sugar picture"

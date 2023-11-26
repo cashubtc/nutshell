@@ -55,7 +55,7 @@ jobs:
           MINT_PORT: 3337
           MINT_DATABASE: ${{ inputs.db-url }}
           MINT_CACHE_SECRETS: ${{ inputs.mint-cache-secrets }}
-          MINT_ONLY_DEPRECATED: ${{ inputs.mint-only-deprecated }}
+          DEBUG_MINT_ONLY_DEPRECATED: ${{ inputs.mint-only-deprecated }}
           TOR: false
         run: |
           make test
