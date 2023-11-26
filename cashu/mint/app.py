@@ -140,4 +140,5 @@ if settings.debug_mint_only_deprecated:
 else:
     app.include_router(router=router, tags=["Mint"])
     app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
+
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
