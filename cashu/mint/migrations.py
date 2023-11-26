@@ -204,3 +204,13 @@ async def m009_add_out_to_invoices(db: Database):
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN out BOOL"
         )
+
+
+async def m010_add_index_to_proofs_used(db: Database):
+    # create index on proofs_used table for secret
+    async with db.connect() as conn:
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS"
+            f" {table_with_schema(db, 'proofs_used')}_secret_idx ON"
+            f" {table_with_schema(db, 'proofs_used')} (secret)"
+        )

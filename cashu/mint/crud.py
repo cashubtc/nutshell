@@ -31,7 +31,7 @@ class LedgerCrud:
         db: Database,
         id: str,
         conn: Optional[Connection] = None,
-    ):
+    ) -> Optional[Invoice]:
         return await get_lightning_invoice(
             db=db,
             id=id,
@@ -42,8 +42,23 @@ class LedgerCrud:
         self,
         db: Database,
         conn: Optional[Connection] = None,
-    ):
-        return await get_secrets_used(db=db, conn=conn)
+    ) -> List[str]:
+        return await get_secrets_used(
+            db=db,
+            conn=conn,
+        )
+
+    async def get_proof_used(
+        self,
+        db: Database,
+        proof: Proof,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Proof]:
+        return await get_proof_used(
+            db=db,
+            proof=proof,
+            conn=conn,
+        )
 
     async def invalidate_proof(
         self,
@@ -215,7 +230,7 @@ async def get_promise(
 async def get_secrets_used(
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> List[str]:
     rows = await (conn or db).fetchall(f"""
         SELECT secret from {table_with_schema(db, 'proofs_used')}
         """)
@@ -251,6 +266,21 @@ async def get_proofs_pending(
         SELECT * from {table_with_schema(db, 'proofs_pending')}
         """)
     return [Proof(**r) for r in rows]
+
+
+async def get_proof_used(
+    db: Database,
+    proof: Proof,
+    conn: Optional[Connection] = None,
+) -> Optional[Proof]:
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT 1 from {table_with_schema(db, 'proofs_used')}
+        WHERE secret = ?
+        """,
+        (str(proof.secret),),
+    )
+    return Proof(**row) if row else None
 
 
 async def set_proof_pending(

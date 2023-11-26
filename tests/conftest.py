@@ -20,6 +20,7 @@ from cashu.mint.ledger import Ledger
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
 
+settings.debug = True
 settings.cashu_dir = "./test_data/"
 settings.mint_host = "localhost"
 settings.mint_port = SERVER_PORT
@@ -55,7 +56,8 @@ class UvicornServer(multiprocessing.Process):
 async def ledger():
     async def start_mint_init(ledger: Ledger):
         await migrate_databases(ledger.db, migrations_mint)
-        await ledger.load_used_proofs()
+        if settings.mint_cache_secrets:
+            await ledger.load_used_proofs()
         await ledger.init_keysets()
 
     database_name = "test"
