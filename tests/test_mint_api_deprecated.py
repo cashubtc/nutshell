@@ -11,7 +11,7 @@ BASE_URL = "http://localhost:3337"
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet(mint):
+async def wallet(ledger: Ledger):
     wallet1 = await Wallet.with_db(
         url=BASE_URL,
         db="test_data/wallet_mint_api_deprecated",

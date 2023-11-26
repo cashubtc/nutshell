@@ -56,6 +56,23 @@ class UvicornServer(multiprocessing.Process):
         self.server.run()
 
 
+# # This fixture is used for tests that require API access to the mint
+@pytest.fixture(autouse=True, scope="session")
+def mint():
+    config = uvicorn.Config(
+        "cashu.mint.app:app",
+        port=settings.mint_listen_port,
+        host=settings.mint_listen_host,
+    )
+
+    server = UvicornServer(config=config)
+    server.start()
+    time.sleep(1)
+    yield server
+    server.stop()
+
+
+# This fixture is used for all other tests
 @pytest_asyncio.fixture(scope="function")
 async def ledger():
     async def start_mint_init(ledger: Ledger):
@@ -72,12 +89,6 @@ async def ledger():
         if os.path.exists(db_file):
             os.remove(db_file)
 
-    settings.wallet_unit = "sat"
-    settings.mint_lightning_backend = "FakeWallet"
-    settings.mint_database = "./test_data/test_mint"
-    settings.mint_derivation_path = "m/0'/0'/0'"
-    settings.mint_private_key = "TEST_PRIVATE_KEY"
-
     backends: Mapping = {
         Method.bolt11: {Unit.sat: FakeWallet()},
     }
@@ -90,18 +101,3 @@ async def ledger():
     )
     await start_mint_init(ledger)
     yield ledger
-
-
-@pytest.fixture(autouse=True, scope="session")
-def mint():
-    config = uvicorn.Config(
-        "cashu.mint.app:app",
-        port=settings.mint_listen_port,
-        host=settings.mint_listen_host,
-    )
-
-    server = UvicornServer(config=config)
-    server.start()
-    time.sleep(1)
-    yield server
-    server.stop()

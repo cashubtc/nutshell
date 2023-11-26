@@ -182,12 +182,14 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
         keyset: WalletKeyset
 
+        # if we want to load a specific keyset
         if keyset_id:
-            # check if current keyset is in db
+            # check if this keyset is in db
             logger.trace(f"Loading keyset {keyset_id} from database.")
             keysets = await get_keysets(keyset_id, db=self.db)
             if keysets:
                 logger.debug(f"Found keyset {keyset_id} in database.")
+                # select as current keyset
                 keyset = keysets[0]
             else:
                 logger.trace(
@@ -197,16 +199,20 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 keyset = await self._get_keys_of_keyset(keyset_id)
                 if keyset.id == keyset_id:
                     # NOTE: Derived keyset *could* have a different id than the one
-                    # requested because of the duplicate keysets for < 0.15.0
+                    # requested because of the duplicate keysets for < 0.15.0 that's
+                    # why we make an explicit check here to not overwrite an existing
+                    # keyset with the incoming one.
                     logger.debug(
                         f"Storing new mint keyset: {keyset.id} ({keyset.unit.name})"
                     )
                     await store_keyset(keyset=keyset, db=self.db)
                 keysets = [keyset]
-
         else:
+            # else we load all active keysets of the mint and choose
+            # an appropriate one as the current keyset
             keysets = await self._get_keys()
             assert len(keysets), Exception("did not receive any keys")
+            # check if we have all keysets in db
             for keyset in keysets:
                 keysets_in_db = await get_keysets(keyset.id, db=self.db)
                 if not keysets_in_db:
@@ -216,21 +222,22 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                     )
                     await store_keyset(keyset=keyset, db=self.db)
 
+            # select a keyset that matches the wallet unit
             wallet_unit_keysets = [k for k in keysets if k.unit == self.unit]
             assert len(wallet_unit_keysets) > 0, f"no keyset for unit {self.unit.name}."
-
             keyset = [k for k in keysets if k.unit == self.unit][0]
 
+        # load all keysets we have into memory
+        for k in keysets:
+            self.keysets[k.id] = k
+
+        # make sure we have selected a current keyset
         assert keyset
         assert keyset.id
         assert len(keyset.public_keys) > 0, "no public keys in keyset"
-
         # set current keyset id
         self.keyset_id = keyset.id
         logger.debug(f"Current mint keyset: {self.keyset_id}")
-
-        # add keyset to keysets dict
-        self.keysets[keyset.id] = keyset
 
     async def _load_mint_keysets(self) -> List[str]:
         """Loads the keyset IDs of the mint.

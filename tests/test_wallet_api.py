@@ -12,7 +12,7 @@ from tests.helpers import is_regtest
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet(mint):
+async def wallet():
     wallet = await Wallet.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet",

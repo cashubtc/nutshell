@@ -47,7 +47,7 @@ async def reset_wallet_db(wallet: Wallet):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1(mint):
+async def wallet1():
     wallet1 = await Wallet1.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet1",
@@ -58,7 +58,7 @@ async def wallet1(mint):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2(mint):
+async def wallet2():
     wallet2 = await Wallet2.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet2",
@@ -69,7 +69,7 @@ async def wallet2(mint):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet3(mint):
+async def wallet3():
     dirpath = Path("test_data/wallet3")
     if dirpath.exists() and dirpath.is_dir():
         shutil.rmtree(dirpath)

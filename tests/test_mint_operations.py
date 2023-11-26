@@ -10,7 +10,7 @@ from tests.helpers import get_real_invoice, is_regtest, pay_if_regtest
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1(mint):
+async def wallet1(ledger: Ledger):
     wallet1 = await Wallet1.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet1",
