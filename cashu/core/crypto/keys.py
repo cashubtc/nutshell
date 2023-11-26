@@ -50,7 +50,9 @@ def derive_pubkey(master_key: str):
 
 
 def derive_pubkeys(keys: Dict[int, PrivateKey]):
-    return {amt: keys[amt].pubkey for amt in [2**i for i in range(settings.max_order)]}
+    return {
+        amt: keys[amt].pubkey for amt in [2**i for i in range(settings.max_order)]
+    }
 
 
 def derive_keyset_id(keys: Dict[int, PublicKey]):

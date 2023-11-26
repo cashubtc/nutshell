@@ -634,7 +634,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             list[BlindedSignature]: Generated BlindedSignatures.
         """
         keyset = keyset if keyset else self.keyset
-        promises : List[Tuple[PublicKey, int, PublicKey, PrivateKey, PrivateKey]]= []
+        promises: List[Tuple[PublicKey, int, PublicKey, PrivateKey, PrivateKey]] = []
         for output in outputs:
             B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
             assert output.id, "output id not set"

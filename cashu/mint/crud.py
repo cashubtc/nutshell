@@ -618,6 +618,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 keyset.unit.name,
             ),
         )
+
     async def get_balance(
         self,
         db: Database,
@@ -628,7 +629,6 @@ class LedgerCrudSqlite(LedgerCrud):
             """)
         assert row, "Balance not found"
         return int(row[0])
-
 
     async def get_keyset(
         self,

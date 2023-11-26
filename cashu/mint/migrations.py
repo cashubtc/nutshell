@@ -208,6 +208,7 @@ async def m009_add_out_to_invoices(db: Database):
             f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN out BOOL"
         )
 
+
 async def m010_add_index_to_proofs_used(db: Database):
     # create index on proofs_used table for secret
     async with db.connect() as conn:
@@ -216,6 +217,7 @@ async def m010_add_index_to_proofs_used(db: Database):
             f" {table_with_schema(db, 'proofs_used')}_secret_idx ON"
             f" {table_with_schema(db, 'proofs_used')} (secret)"
         )
+
 
 async def m011_add_quote_tables(db: Database):
     async with db.connect() as conn:
