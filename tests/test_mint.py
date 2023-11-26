@@ -244,7 +244,7 @@ async def test_get_balance(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_maximum_balance(ledger: Ledger):
     settings.mint_max_balance = 1000
-    invoice, id = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
     await assert_err(
         ledger.mint_quote(PostMintQuoteRequest(amount=8000, unit="sat")),
         "Mint has reached maximum balance.",
