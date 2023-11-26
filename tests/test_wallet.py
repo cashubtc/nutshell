@@ -420,3 +420,20 @@ async def test_token_state(wallet1: Wallet):
     resp = await wallet1.check_proof_state(wallet1.proofs)
     assert resp.dict()["spendable"]
     assert resp.dict()["pending"]
+
+
+@pytest.mark.asyncio
+async def test_load_mint_keys_specific_keyset(wallet1: Wallet):
+    await wallet1._load_mint_keys()
+    if settings.debug_mint_only_deprecated:
+        assert list(wallet1.keysets.keys()) == ["eGnEWtdJ0PIM"]
+    else:
+        assert list(wallet1.keysets.keys()) == ["009a1f293253e41e"]
+    await wallet1._load_mint_keys(keyset_id=wallet1.keyset_id)
+    await wallet1._load_mint_keys(keyset_id="009a1f293253e41e")
+    # expect deprecated keyset id to be present
+    await wallet1._load_mint_keys(keyset_id="eGnEWtdJ0PIM")
+    await assert_err(
+        wallet1._load_mint_keys(keyset_id="nonexistent"),
+        KeysetNotFoundError(),
+    )
