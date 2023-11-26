@@ -37,7 +37,14 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[List[str]]: ...
+    ) -> List[str]: ...
+
+    async def get_proof_used(
+        self,
+        db: Database,
+        proof: Proof,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Proof]: ...
 
     @abstractmethod
     async def invalidate_proof(
@@ -78,6 +85,13 @@ class LedgerCrud(ABC):
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
     ) -> None: ...
+
+    @abstractmethod
+    async def get_balance(
+        self,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> int: ...
 
     @abstractmethod
     async def store_promise(
@@ -264,11 +278,11 @@ class LedgerCrudSqlite(LedgerCrud):
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[List[str]]:
+    ) -> List[str]:
         rows = await (conn or db).fetchall(f"""
             SELECT secret from {table_with_schema(db, 'proofs_used')}
             """)
-        return [row[0] for row in rows] if rows else None
+        return [row[0] for row in rows] if rows else []
 
     async def invalidate_proof(
         self,
@@ -604,6 +618,17 @@ class LedgerCrudSqlite(LedgerCrud):
                 keyset.unit.name,
             ),
         )
+    async def get_balance(
+        self,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> int:
+        row = await (conn or db).fetchone(f"""
+            SELECT * from {table_with_schema(db, 'balance')}
+            """)
+        assert row, "Balance not found"
+        return int(row[0])
+
 
     async def get_keyset(
         self,
@@ -641,3 +666,18 @@ class LedgerCrudSqlite(LedgerCrud):
             tuple(values),
         )
         return [MintKeyset(**row) for row in rows]
+
+    async def get_proof_used(
+        self,
+        db: Database,
+        proof: Proof,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Proof]:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT 1 from {table_with_schema(db, 'proofs_used')}
+            WHERE secret = ?
+            """,
+            (str(proof.secret),),
+        )
+        return Proof(**row) if row else None

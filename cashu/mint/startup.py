@@ -63,7 +63,8 @@ async def rotate_keys(n_seconds=60):
 
 async def start_mint_init():
     await migrate_databases(ledger.db, migrations)
-    await ledger.load_used_proofs()
+    if settings.mint_cache_secrets:
+        await ledger.load_used_proofs()
     await ledger.init_keysets()
 
     for derivation_path in settings.mint_derivation_path_list:

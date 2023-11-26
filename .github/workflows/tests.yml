@@ -15,6 +15,9 @@ on:
       os:
         default: "ubuntu-latest"
         type: string
+      mint-cache-secrets:
+        default: "false"
+        type: string
 
 jobs:
   poetry:
@@ -47,6 +50,7 @@ jobs:
           MINT_HOST: localhost
           MINT_PORT: 3337
           MINT_DATABASE: ${{ inputs.db-url }}
+          MINT_CACHE_SECRETS: ${{ inputs.mint-cache-secrets }}
           TOR: false
         run: |
           make test

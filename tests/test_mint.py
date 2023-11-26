@@ -233,3 +233,20 @@ async def test_generate_change_promises_returns_empty_if_no_outputs(ledger: Ledg
         total_provided, invoice_amount, actual_fee_msat, outputs
     )
     assert len(promises) == 0
+
+
+@pytest.mark.asyncio
+async def test_get_balance(ledger: Ledger):
+    balance = await ledger.get_balance()
+    assert balance == 0
+
+
+@pytest.mark.asyncio
+async def test_maximum_balance(ledger: Ledger):
+    settings.mint_max_balance = 1000
+    invoice, id = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    await assert_err(
+        ledger.mint_quote(PostMintQuoteRequest(amount=8000, unit="sat")),
+        "Mint has reached maximum balance.",
+    )
+    settings.mint_max_balance = 0

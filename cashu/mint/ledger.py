@@ -1,7 +1,7 @@
 import asyncio
 import copy
 import time
-from typing import Dict, List, Mapping, Optional, Set, Tuple
+from typing import Dict, List, Mapping, Optional, Tuple
 
 import bolt11
 from loguru import logger
@@ -23,7 +23,7 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_keyset_id_deprecated, derive_pubkey, random_hash
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     KeysetError,
@@ -62,7 +62,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         derivation_path="",
         crud=LedgerCrudSqlite(),
     ):
-        self.secrets_used: Set[str] = set()
         self.master_key = seed
         self.derivation_path = derivation_path
 
@@ -190,6 +189,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         assert keyset.public_keys, KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
+    async def get_balance(self) -> int:
+        """Returns the balance of the mint."""
+        return await self.crud.get_balance(db=self.db)
+
     # ------- ECASH -------
 
     async def _invalidate_proofs(self, proofs: List[Proof]) -> None:
@@ -202,9 +205,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # Mark proofs as used and prepare new promises
         secrets = set([p.secret for p in proofs])
         self.secrets_used |= secrets
-        # store in db
-        for p in proofs:
-            await self.crud.invalidate_proof(proof=p, db=self.db)
+        async with self.db.connect() as conn:
+            # store in db
+            for p in proofs:
+                await self.crud.invalidate_proof(proof=p, db=self.db, conn=conn)
 
     async def _generate_change_promises(
         self,
@@ -288,6 +292,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             raise NotAllowedError("Mint does not allow minting new tokens.")
         unit = Unit[quote_request.unit]
         method = Method["bolt11"]
+        if settings.mint_max_balance:
+            balance = await self.get_balance()
+            if balance + quote_request.amount > settings.mint_max_balance:
+                raise NotAllowedError("Mint has reached maximum balance.")
 
         logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
         invoice_response: InvoiceResponse = await self.backends[method][
@@ -616,77 +624,65 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     async def _generate_promises(
         self, outputs: List[BlindedMessage], keyset: Optional[MintKeyset] = None
     ) -> list[BlindedSignature]:
-        """Generates promises that sum to the given amount.
+        """Generates a promises (Blind signatures) for given amount and returns a pair (amount, C').
 
         Args:
-            B_s (List[BlindedMessage]): _description_
-            keyset (Optional[MintKeyset], optional): _description_. Defaults to None.
-
-        Returns:
-            list[BlindedSignature]: _description_
-        """
-        logger.debug(f"Generating promises for {len(outputs)} outputs.")
-        signatures = [await self._generate_promise(o, keyset) for o in outputs]
-        logger.debug(f"Generated {len(signatures)} promises.")
-        return signatures
-
-    async def _generate_promise(
-        self,
-        output: BlindedMessage,
-        keyset: Optional[MintKeyset] = None,
-    ) -> BlindedSignature:
-        """Generates a promise (Blind signature) for given amount and returns a pair (amount, C').
-
-        Args:
-            output (BlindedMessage): output to generate blind signature for
-            B_ (PublicKey): Blinded secret (point on curve)
+            B_s (List[BlindedMessage]): Blinded secret (point on curve)
             keyset (Optional[MintKeyset], optional): Which keyset to use. Private keys will be taken from this keyset. Defaults to None.
 
         Returns:
-            BlindedSignature: Generated promise.
+            list[BlindedSignature]: Generated BlindedSignatures.
         """
-        B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
-        assert output.id, "output id not set"
-        keyset = keyset if keyset else self.keysets[output.id]
+        keyset = keyset if keyset else self.keyset
+        promises : List[Tuple[PublicKey, int, PublicKey, PrivateKey, PrivateKey]]= []
+        for output in outputs:
+            B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
+            assert output.id, "output id not set"
+            keyset = keyset if keyset else self.keysets[output.id]
 
-        assert output.id in self.keysets, f"keyset {output.id} not found"
-        assert output.id == keyset.id, "keyset id does not match output id"
-        assert keyset.active, "keyset is not active"
+            assert output.id in self.keysets, f"keyset {output.id} not found"
+            assert output.id == keyset.id, "keyset id does not match output id"
+            assert keyset.active, "keyset is not active"
+            private_key_amount = keyset.private_keys[output.amount]
+            C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
+            promises.append((B_, output.amount, C_, e, s))
 
         logger.trace(f"Generating promise with keyset {keyset.id}.")
-        private_key_amount = keyset.private_keys[output.amount]
-        C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
-        logger.trace(f"crud: _generate_promise storing promise for {output.amount}")
-        await self.crud.store_promise(
-            amount=output.amount,
-            id=output.id,
-            B_=B_.serialize().hex(),
-            C_=C_.serialize().hex(),
-            e=e.serialize(),
-            s=s.serialize(),
-            db=self.db,
-        )
-        logger.trace(f"crud: _generate_promise stored promise for {output.amount}")
-        return BlindedSignature(
-            id=output.id,
-            amount=output.amount,
-            C_=C_.serialize().hex(),
-            dleq=DLEQ(e=e.serialize(), s=s.serialize()),
-        )
+
+        signatures = []
+        async with self.db.connect() as conn:
+            for promise in promises:
+                B_, amount, C_, e, s = promise
+                logger.trace(f"crud: _generate_promise storing promise for {amount}")
+                await self.crud.store_promise(
+                    amount=amount,
+                    id=keyset.id,
+                    B_=B_.serialize().hex(),
+                    C_=C_.serialize().hex(),
+                    e=e.serialize(),
+                    s=s.serialize(),
+                    db=self.db,
+                    conn=conn,
+                )
+                logger.trace(f"crud: _generate_promise stored promise for {amount}")
+                signature = BlindedSignature(
+                    id=keyset.id,
+                    amount=amount,
+                    C_=C_.serialize().hex(),
+                    dleq=DLEQ(e=e.serialize(), s=s.serialize()),
+                )
+                signatures.append(signature)
+            return signatures
 
     # ------- PROOFS -------
 
     async def load_used_proofs(self) -> None:
         """Load all used proofs from database."""
-        logger.trace("crud: loading used proofs")
-        secrets_used = await self.crud.get_secrets_used(db=self.db)
-        if secrets_used:
-            logger.trace(f"crud: loaded {len(secrets_used)} used proofs")
-            self.secrets_used = set(secrets_used)
-
-    def _check_spendable(self, proof: Proof) -> bool:
-        """Checks whether the proof was already spent."""
-        return proof.secret not in self.secrets_used
+        assert settings.mint_cache_secrets, "MINT_CACHE_SECRETS must be set to TRUE"
+        logger.debug("Loading used proofs into memory")
+        secrets_used = await self.crud.get_secrets_used(db=self.db) or []
+        logger.debug(f"Loaded {len(secrets_used)} used proofs")
+        self.secrets_used = set(secrets_used)
 
     async def _check_pending(self, proofs: List[Proof]) -> List[bool]:
         """Checks whether the proof is still pending."""
@@ -714,13 +710,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             List[bool]: List of which proof is still spendable (True if still spendable, else False)
             List[bool]: List of which proof are pending (True if pending, else False)
         """
-        spendable = [self._check_spendable(p) for p in proofs]
+
+        spendable = await self._check_proofs_spendable(proofs)
         pending = await self._check_pending(proofs)
         return spendable, pending
 
-    async def _set_proofs_pending(
-        self, proofs: List[Proof], conn: Optional[Connection] = None
-    ) -> None:
+    async def _set_proofs_pending(self, proofs: List[Proof]) -> None:
         """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
         the list of pending proofs or removes them. Used as a mutex for proofs.
 
@@ -732,24 +727,26 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         # first we check whether these proofs are pending already
         async with self.proofs_pending_lock:
-            await self._validate_proofs_pending(proofs, conn)
-            for p in proofs:
-                try:
-                    await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
-                except Exception:
-                    raise TransactionError("proofs already pending.")
+            async with self.db.connect() as conn:
+                await self._validate_proofs_pending(proofs, conn)
+                for p in proofs:
+                    try:
+                        await self.crud.set_proof_pending(
+                            proof=p, db=self.db, conn=conn
+                        )
+                    except Exception:
+                        raise TransactionError("proofs already pending.")
 
-    async def _unset_proofs_pending(
-        self, proofs: List[Proof], conn: Optional[Connection] = None
-    ) -> None:
+    async def _unset_proofs_pending(self, proofs: List[Proof]) -> None:
         """Deletes proofs from pending table.
 
         Args:
             proofs (List[Proof]): Proofs to delete.
         """
         async with self.proofs_pending_lock:
-            for p in proofs:
-                await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+            async with self.db.connect() as conn:
+                for p in proofs:
+                    await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
 
     async def _validate_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None

@@ -22,6 +22,7 @@ from cashu.mint.ledger import Ledger
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
 
+settings.debug = True
 settings.cashu_dir = "./test_data/"
 settings.mint_host = "localhost"
 settings.mint_port = SERVER_PORT
@@ -35,6 +36,7 @@ settings.mint_database = "./test_data/test_mint"
 settings.mint_derivation_path = "m/0'/0'/0'"
 settings.mint_derivation_path_list = []
 settings.mint_private_key = "TEST_PRIVATE_KEY"
+settings.mint_max_balance = 0
 
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
@@ -58,7 +60,8 @@ class UvicornServer(multiprocessing.Process):
 async def ledger():
     async def start_mint_init(ledger: Ledger):
         await migrate_databases(ledger.db, migrations_mint)
-        await ledger.load_used_proofs()
+        if settings.mint_cache_secrets:
+            await ledger.load_used_proofs()
         await ledger.init_keysets()
 
     database_name = "test"

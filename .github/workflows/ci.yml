@@ -12,8 +12,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.9", "3.10"]
+        python-version: ["3.10"]
         poetry-version: ["1.7.1"]
+        mint-cache-secrets: ["true", "false"]
         # db-url: ["", "postgres://cashu:cashu@localhost:5432/test"] # TODO: Postgres test not working
         db-url: [""]
         backend-wallet-class: ["FakeWallet"]
@@ -21,6 +22,7 @@ jobs:
     with:
       python-version: ${{ matrix.python-version }}
       poetry-version: ${{ matrix.poetry-version }}
+      mint-cache-secrets: ${{ matrix.mint-cache-secrets }}
   regtest:
     uses: ./.github/workflows/regtest.yml
     strategy:
