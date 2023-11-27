@@ -4,7 +4,6 @@ from typing import Any, List, Optional
 
 from ..core.base import (
     BlindedSignature,
-    Invoice,
     MeltQuote,
     MintKeyset,
     MintQuote,
@@ -116,34 +115,34 @@ class LedgerCrud(ABC):
         conn: Optional[Connection] = None,
     ) -> Optional[BlindedSignature]: ...
 
-    @abstractmethod
-    async def store_lightning_invoice(
-        self,
-        *,
-        db: Database,
-        invoice: Invoice,
-        conn: Optional[Connection] = None,
-    ) -> None: ...
+    # @abstractmethod
+    # async def store_lightning_invoice(
+    #     self,
+    #     *,
+    #     db: Database,
+    #     invoice: Invoice,
+    #     conn: Optional[Connection] = None,
+    # ) -> None: ...
 
-    @abstractmethod
-    async def update_lightning_invoice(
-        self,
-        *,
-        db: Database,
-        id: str,
-        issued: bool,
-        conn: Optional[Connection] = None,
-    ) -> None: ...
+    # @abstractmethod
+    # async def update_lightning_invoice(
+    #     self,
+    #     *,
+    #     db: Database,
+    #     id: str,
+    #     issued: bool,
+    #     conn: Optional[Connection] = None,
+    # ) -> None: ...
 
-    @abstractmethod
-    async def get_lightning_invoice(
-        self,
-        *,
-        db: Database,
-        id: Optional[str] = None,
-        checking_id: Optional[str] = None,
-        conn: Optional[Connection] = None,
-    ) -> Optional[Invoice]: ...
+    # @abstractmethod
+    # async def get_lightning_invoice(
+    #     self,
+    #     *,
+    #     db: Database,
+    #     id: Optional[str] = None,
+    #     checking_id: Optional[str] = None,
+    #     conn: Optional[Connection] = None,
+    # ) -> Optional[Invoice]: ...
 
     @abstractmethod
     async def store_mint_quote(
@@ -525,73 +524,73 @@ class LedgerCrudSqlite(LedgerCrud):
             ),
         )
 
-    async def store_lightning_invoice(
-        self,
-        *,
-        db: Database,
-        invoice: Invoice,
-        conn: Optional[Connection] = None,
-    ) -> None:
-        await (conn or db).execute(
-            f"""
-            INSERT INTO {table_with_schema(db, 'invoices')}
-            (amount, bolt11, id, issued, payment_hash, out, created)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                invoice.amount,
-                invoice.bolt11,
-                invoice.id,
-                invoice.issued,
-                invoice.payment_hash,
-                invoice.out,
-                int(time.time()),
-            ),
-        )
+    # async def store_lightning_invoice(
+    #     self,
+    #     *,
+    #     db: Database,
+    #     invoice: Invoice,
+    #     conn: Optional[Connection] = None,
+    # ) -> None:
+    #     await (conn or db).execute(
+    #         f"""
+    #         INSERT INTO {table_with_schema(db, 'invoices')}
+    #         (amount, bolt11, id, issued, payment_hash, out, created)
+    #         VALUES (?, ?, ?, ?, ?, ?, ?)
+    #         """,
+    #         (
+    #             invoice.amount,
+    #             invoice.bolt11,
+    #             invoice.id,
+    #             invoice.issued,
+    #             invoice.payment_hash,
+    #             invoice.out,
+    #             int(time.time()),
+    #         ),
+    #     )
 
-    async def get_lightning_invoice(
-        self,
-        *,
-        db: Database,
-        id: Optional[str] = None,
-        checking_id: Optional[str] = None,
-        conn: Optional[Connection] = None,
-    ) -> Optional[Invoice]:
-        clauses = []
-        values: List[Any] = []
-        if id:
-            clauses.append("id = ?")
-            values.append(id)
-        if checking_id:
-            clauses.append("payment_hash = ?")
-            values.append(checking_id)
-        where = ""
-        if clauses:
-            where = f"WHERE {' AND '.join(clauses)}"
-        row = await (conn or db).fetchone(
-            f"""
-            SELECT * from {table_with_schema(db, 'invoices')}
-            {where}
-            """,
-            tuple(values),
-        )
-        return Invoice(**dict(row)) if row else None
+    # async def get_lightning_invoice(
+    #     self,
+    #     *,
+    #     db: Database,
+    #     id: Optional[str] = None,
+    #     checking_id: Optional[str] = None,
+    #     conn: Optional[Connection] = None,
+    # ) -> Optional[Invoice]:
+    #     clauses = []
+    #     values: List[Any] = []
+    #     if id:
+    #         clauses.append("id = ?")
+    #         values.append(id)
+    #     if checking_id:
+    #         clauses.append("payment_hash = ?")
+    #         values.append(checking_id)
+    #     where = ""
+    #     if clauses:
+    #         where = f"WHERE {' AND '.join(clauses)}"
+    #     row = await (conn or db).fetchone(
+    #         f"""
+    #         SELECT * from {table_with_schema(db, 'invoices')}
+    #         {where}
+    #         """,
+    #         tuple(values),
+    #     )
+    #     return Invoice(**dict(row)) if row else None
 
-    async def update_lightning_invoice(
-        self,
-        *,
-        db: Database,
-        id: str,
-        issued: bool,
-        conn: Optional[Connection] = None,
-    ) -> None:
-        await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'invoices')} SET issued = ? WHERE id = ?",
-            (
-                issued,
-                id,
-            ),
-        )
+    # async def update_lightning_invoice(
+    #     self,
+    #     *,
+    #     db: Database,
+    #     id: str,
+    #     issued: bool,
+    #     conn: Optional[Connection] = None,
+    # ) -> None:
+    #     await (conn or db).execute(
+    #         f"UPDATE {table_with_schema(db, 'invoices')} SET issued = ? WHERE id = ?",
+    #         (
+    #             issued,
+    #             id,
+    #         ),
+    #     )
 
     async def store_keyset(
         self,
