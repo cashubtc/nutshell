@@ -47,12 +47,12 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(128)
     pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    await wallet1.mint(128, id=invoice.id)
+    assert wallet1.balance == 128
 
     invoice_dict = get_real_invoice(64)
     invoice_payment_request = invoice_dict["payment_request"]
 
-    assert wallet1.balance == 128
     mint_quote = await wallet1.get_pay_amount_with_fees(invoice_payment_request)
     total_amount = mint_quote.amount + mint_quote.fee_reserve
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
