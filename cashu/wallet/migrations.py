@@ -139,24 +139,24 @@ async def m007_nostr(db: Database):
     """
     Stores timestamps of nostr operations.
     """
-    # async with db.connect() as conn:
-    # await conn.execute("""
-    #     CREATE TABLE IF NOT EXISTS nostr (
-    #         type TEXT NOT NULL,
-    #         last TIMESTAMP DEFAULT NULL
-    #     )
-    #     """)
-    # await conn.execute(
-    #     """
-    #     INSERT INTO nostr
-    #         (type, last)
-    #     VALUES (?, ?)
-    #     """,
-    #     (
-    #         "dm",
-    #         None,
-    #     ),
-    # )
+    async with db.connect() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS nostr (
+                type TEXT NOT NULL,
+                last TIMESTAMP DEFAULT NULL
+            )
+            """)
+        await conn.execute(
+            """
+            INSERT INTO nostr
+                (type, last)
+            VALUES (?, ?)
+            """,
+            (
+                "dm",
+                None,
+            ),
+        )
 
 
 async def m008_keysets_add_public_keys(db: Database):

@@ -721,7 +721,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         url: str,
         db: str,
         name: str = "no_name",
-        skip_private_key: bool = False,
+        skip_db_read: bool = False,
     ):
         """Initializes a wallet with a database and initializes the private key.
 
@@ -729,7 +729,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             url (str): URL of the mint.
             db (str): Path to the database.
             name (str, optional): Name of the wallet. Defaults to "no_name".
-            skip_private_key (bool, optional): If true, the private key is not initialized. Defaults to False.
+            skip_db_read (bool, optional): If true, values from db like private key and
+                keysets are not loaded. Useful for running only migrations and returning.
+                Defaults to False.
 
         Returns:
             Wallet: Initialized wallet.
@@ -737,11 +739,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         logger.debug(f"Initializing wallet with database: {db}")
         self = cls(url=url, db=db, name=name)
         await self._migrate_database()
-        if not skip_private_key:
+        if not skip_db_read:
             await self._init_private_key()
+            keysets_list = await get_keysets(mint_url=url, db=self.db)
+            self.keysets = {k.id: k for k in keysets_list}
 
-        keysets_list = await get_keysets(mint_url=url, db=self.db)
-        self.keysets = {k.id: k for k in keysets_list}
         return self
 
     async def _migrate_database(self):

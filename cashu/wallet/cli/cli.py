@@ -146,13 +146,13 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
     # otherwise it will create a mnemonic and store it in the database
     if ctx.invoked_subcommand == "restore":
         wallet = await Wallet.with_db(
-            ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
+            ctx.obj["HOST"], db_path, name=walletname, skip_db_read=True
         )
     else:
         # # we need to run the migrations before we load the wallet for the first time
         # # otherwise the wallet will not be able to generate a new private key and store it
         wallet = await Wallet.with_db(
-            ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
+            ctx.obj["HOST"], db_path, name=walletname, skip_db_read=True
         )
         # now with the migrations done, we can load the wallet and generate a new mnemonic if needed
         wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
