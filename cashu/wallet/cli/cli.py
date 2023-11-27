@@ -194,7 +194,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
             if quote.fee_reserve
             else ""
         )
-        message = f"Pay {wallet.unit.str(quote.amount)} {potential}?"
+        message = f"Pay {wallet.unit.str(quote.amount)}{potential}?"
         click.confirm(
             message,
             abort=True,

@@ -1,5 +1,6 @@
 import asyncio
 import copy
+import math
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -402,14 +403,44 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         method = Method["bolt11"]
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
-        payment_quote: PaymentQuoteResponse = await self.backends[method][
-            unit
-        ].get_payment_quote(melt_quote.request)
+
+        # check if there is a mint quote with the same payment request
+        # so that we can handle the transaction internally without lightning
+        # and respond with zero fees
+        mint_quote = await self.crud.get_mint_quote_by_checking_id(
+            checking_id=invoice_obj.payment_hash, db=self.db
+        )
+        if mint_quote:
+            assert (
+                Amount(unit, mint_quote.amount).to(Unit.msat).amount
+                == invoice_obj.amount_msat
+            ), "amounts do not match"
+            assert (
+                melt_quote.request == mint_quote.request
+            ), "bolt11 requests do not match"
+            assert mint_quote.unit == melt_quote.unit, "units do not match"
+            assert mint_quote.method == method.name, "methods do not match"
+            assert not mint_quote.paid, "mint quote already paid"
+            assert not mint_quote.issued, "mint quote already issued"
+            logger.info(
+                f"Issuing internal melt quote: {melt_quote.request} ->"
+                f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
+            )
+            payment_quote = PaymentQuoteResponse(
+                checking_id=mint_quote.checking_id,
+                amount=Amount(unit, mint_quote.amount),
+                fee=Amount(unit=Unit.msat, amount=0),
+            )
+        else:
+            # not internal, get quote by Lightning backend
+            payment_quote = await self.backends[method][unit].get_payment_quote(
+                melt_quote.request
+            )
 
         quote = MeltQuote(
             quote=random_hash(),
-            method="bolt11",  # TODO: remove unnecessary fields
-            request=melt_quote.request,  # TODO: remove unnecessary fields
+            method="bolt11",
+            request=melt_quote.request,
             checking_id=payment_quote.checking_id,
             unit=melt_quote.unit,
             amount=payment_quote.amount.to(unit).amount,
@@ -481,9 +512,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         try:
             # verify amounts from bolt11 invoice
-            # invoice_obj = bolt11.decode(bolt11_request)
-            # assert invoice_obj.amount_msat, "invoice has no amount."
-            # invoice_amount = math.ceil(invoice_obj.amount_msat / 1000)
+            invoice_obj = bolt11.decode(bolt11_request)
+            assert invoice_obj.amount_msat, "invoice has no amount."
+            invoice_amount_sat = math.ceil(invoice_obj.amount_msat / 1000)
 
             # first we check if there is a mint quote with the same payment request
             # so that we can handle the transaction internally without lightning
@@ -493,7 +524,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             )
             if mint_quote:
                 # we settle the transaction internally
-                # assert Amount(unit, mint_quote.amount).to() == invoice_amount, "amounts do not match"
+                assert (
+                    Amount(unit, mint_quote.amount).to(Unit.sat).amount
+                    == invoice_amount_sat
+                ), "amounts do not match"
                 assert (
                     bolt11_request == mint_quote.request
                 ), "bolt11 requests do not match"
@@ -511,13 +545,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 )
 
             else:
-                # TODO: Check if melt_quote.fee_reserve is always the correct unit!
                 logger.debug(f"Lightning: pay invoice {bolt11_request}")
                 payment = await self.backends[method][unit].pay_invoice(
                     melt_quote, melt_quote.fee_reserve * 1000
                 )
-                logger.trace("paid lightning invoice")
-
                 logger.debug(
                     f"Melt status: {payment.ok}: preimage: {payment.preimage},"
                     f" fee: {payment.fee.str() if payment.fee else 0}"

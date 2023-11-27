@@ -6,7 +6,7 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_real_invoice, is_regtest, pay_if_regtest
+from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -21,19 +21,36 @@ async def wallet1(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_melt(wallet1: Wallet, ledger: Ledger):
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     # mint twice so we have enough to pay the second invoice back
-    invoice = await wallet1.request_mint(64)
+    invoice = await wallet1.request_mint(128)
+    await wallet1.mint(128, id=invoice.id)
+    assert wallet1.balance == 128
+
+    # create a mint quote so that we can melt to it internally
+    invoice_to_pay = await wallet1.request_mint(64)
+    invoice_payment_request = invoice_to_pay.bolt11
+
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
+    )
+    assert melt_quote.amount == 64
+    assert melt_quote.fee_reserve == 0
+    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 64)
+    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only works with FakeWallet")
+async def test_melt_external(wallet1: Wallet, ledger: Ledger):
+    # mint twice so we have enough to pay the second invoice back
+    invoice = await wallet1.request_mint(128)
     pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
-    invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
-    invoice_payment_request = invoice.bolt11
-    if is_regtest:
-        invoice_dict = get_real_invoice(64)
-        invoice_payment_request = invoice_dict["payment_request"]
-        str(invoice_dict["r_hash"])
+
+    invoice_dict = get_real_invoice(64)
+    invoice_payment_request = invoice_dict["payment_request"]
 
     assert wallet1.balance == 128
     mint_quote = await wallet1.get_pay_amount_with_fees(invoice_payment_request)

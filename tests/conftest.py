@@ -81,11 +81,9 @@ async def ledger():
             await ledger.load_used_proofs()
         await ledger.init_keysets()
 
-    database_name = "test"
-
     if not settings.mint_database.startswith("postgres"):
         # clear sqlite database
-        db_file = os.path.join(settings.mint_database, database_name + ".sqlite3")
+        db_file = os.path.join(settings.mint_database, "mint.sqlite3")
         if os.path.exists(db_file):
             os.remove(db_file)
 
@@ -93,7 +91,7 @@ async def ledger():
         Method.bolt11: {Unit.sat: FakeWallet()},
     }
     ledger = Ledger(
-        db=Database(database_name, settings.mint_database),
+        db=Database("mint", settings.mint_database),
         seed=settings.mint_private_key,
         derivation_path=settings.mint_derivation_path,
         backends=backends,

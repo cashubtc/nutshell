@@ -7,7 +7,7 @@ from cashu.core.base import CheckSpendableRequest, CheckSpendableResponse, Proof
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
-from tests.helpers import get_real_invoice, is_regtest, pay_if_regtest
+from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
 
 BASE_URL = "http://localhost:3337"
 
@@ -213,7 +213,11 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
-async def test_melt_quote(ledger: Ledger, wallet: Wallet):
+@pytest.mark.skipif(
+    is_regtest,
+    reason="regtest",
+)
+async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
     request = invoice.bolt11
@@ -226,6 +230,31 @@ async def test_melt_quote(ledger: Ledger, wallet: Wallet):
     assert result["quote"]
     assert result["amount"] == 64
     # TODO: internal invoice, fee should be 0
+    assert result["fee_reserve"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
+@pytest.mark.skipif(
+    is_fake,
+    reason="only works on regtest",
+)
+async def test_melt_quote_external(ledger: Ledger, wallet: Wallet):
+    # internal invoice
+    invoice_dict = get_real_invoice(64)
+    request = invoice_dict["payment_request"]
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/quote/bolt11",
+        json={"unit": "sat", "request": request},
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    assert result["quote"]
+    assert result["amount"] == 64
+    # external invoice, fee should be 2
     assert result["fee_reserve"] == 2
 
 
@@ -234,7 +263,7 @@ async def test_melt_quote(ledger: Ledger, wallet: Wallet):
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
-async def test_melt(ledger: Ledger, wallet: Wallet):
+async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
     pay_if_regtest(invoice.bolt11)
@@ -244,15 +273,13 @@ async def test_melt(ledger: Ledger, wallet: Wallet):
     # create invoice to melt to
     # use 2 sat less because we need to pay the fee
     invoice = await wallet.request_mint(62)
-
     invoice_payment_request = invoice.bolt11
-    if is_regtest:
-        invoice_dict = get_real_invoice(62)
-        invoice_payment_request = invoice_dict["payment_request"]
-        str(invoice_dict["r_hash"])
 
     quote = await wallet.melt_quote(invoice_payment_request)
     inputs_payload = [p.to_dict() for p in wallet.proofs]
+
+    assert quote.amount == 62
+    assert quote.fee_reserve == 0
 
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
@@ -273,7 +300,55 @@ async def test_melt(ledger: Ledger, wallet: Wallet):
     assert result.get("proof") is not None
     assert result["paid"] is True
     assert result["change"]
-    # we get back 2 sats because it was an internal invoice
+    # we get back 2 sats because we provided the entire wallet balance which was 64 sats
+    assert result["change"][0]["amount"] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
+@pytest.mark.skipif(
+    is_fake,
+    reason="only works on regtest",
+)
+async def test_melt_external(ledger: Ledger, wallet: Wallet):
+    # internal invoice
+    invoice = await wallet.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id)
+    assert wallet.balance == 64
+
+    invoice_dict = get_real_invoice(62)
+    invoice_payment_request = invoice_dict["payment_request"]
+
+    quote = await wallet.melt_quote(invoice_payment_request)
+    inputs_payload = [p.to_dict() for p in wallet.proofs]
+
+    assert quote.amount == 62
+    assert quote.fee_reserve == 2
+
+    # outputs for change
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
+    outputs, rs = wallet._construct_outputs([2], secrets, rs)
+    outputs_payload = [o.dict() for o in outputs]
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/melt/bolt11",
+        json={
+            "quote": quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
+        timeout=None,
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    assert result.get("proof") is not None
+    assert result["paid"] is True
+    assert result["change"]
+    # we get back 2 sats because Lightning was free to pay on regtest
     assert result["change"][0]["amount"] == 2
 
 

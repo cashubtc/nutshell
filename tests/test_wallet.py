@@ -15,7 +15,7 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_real_invoice, is_regtest, pay_if_regtest
+from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
 
 
 async def assert_err(f, msg: Union[str, CashuError]):
@@ -285,9 +285,16 @@ async def test_melt(wallet1: Wallet):
 
     quote = await wallet1.get_pay_amount_with_fees(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
-    assert total_amount == 66
 
-    assert quote.fee_reserve == 2
+    if is_regtest:
+        # we expect a fee reserve of 2 sat for regtest
+        assert total_amount == 66
+        assert quote.fee_reserve == 2
+    if is_fake:
+        # we expect a fee reserve of 0 sat for fake
+        assert total_amount == 64
+        assert quote.fee_reserve == 0
+
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
     melt_response = await wallet1.pay_lightning(
@@ -297,12 +304,13 @@ async def test_melt(wallet1: Wallet):
         quote_id=quote.quote,
     )
 
-    assert melt_response.change, "No change returned"
-    assert len(melt_response.change) == 1, "More than one change returned"
-    # NOTE: we assume that we will get a token back from the same keyset as the ones we melted
-    # this could be wrong if we melted tokens from an old keyset but the returned ones are
-    # from a newer one.
-    assert melt_response.change[0].id == send_proofs[0].id, "Wrong keyset returned"
+    if is_regtest:
+        assert melt_response.change, "No change returned"
+        assert len(melt_response.change) == 1, "More than one change returned"
+        # NOTE: we assume that we will get a token back from the same keyset as the ones we melted
+        # this could be wrong if we melted tokens from an old keyset but the returned ones are
+        # from a newer one.
+        assert melt_response.change[0].id == send_proofs[0].id, "Wrong keyset returned"
 
     # verify that proofs in proofs_used db have the same melt_id as the invoice in the db
     assert invoice_payment_hash, "No payment hash in invoice"
