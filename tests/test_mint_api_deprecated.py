@@ -199,4 +199,22 @@ async def test_checkfees(ledger: Ledger, wallet: Wallet):
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
+    # internal invoice, so no fee
+    assert result["fee"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_regtest, reason="only works on regtest")
+async def test_checkfees_external(ledger: Ledger, wallet: Wallet):
+    # internal invoice
+    invoice_dict = get_real_invoice(62)
+    invoice_payment_request = invoice_dict["payment_request"]
+    response = httpx.post(
+        f"{BASE_URL}/checkfees",
+        json={"pr": invoice_payment_request},
+        timeout=None,
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    # internal invoice, so no fee
     assert result["fee"] == 2
