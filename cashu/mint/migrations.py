@@ -283,6 +283,9 @@ async def m011_add_quote_tables(db: Database):
                 );
             """)
 
+
+async def m012_migrate_invoices_table(db: Database):
+    async with db.connect() as conn:
         # copy all entries of invoices table to mint_quotes table if out = False
         await conn.execute(
             f"INSERT INTO {table_with_schema(db, 'mint_quotes')} (quote, method,"
@@ -299,4 +302,4 @@ async def m011_add_quote_tables(db: Database):
             f" NULL FROM {table_with_schema(db, 'invoices')} WHERE out = True"
         )
         # drop table invoices
-        await conn.execute(f"DROP TABLE {table_with_schema(db, 'invoices')}")
+        # await conn.execute(f"DROP TABLE {table_with_schema(db, 'invoices')}")
