@@ -13,7 +13,6 @@ from ..core.base import (
     GetMintResponse_deprecated,
     KeysetsResponse_deprecated,
     KeysResponse_deprecated,
-    Method,
     PostMeltQuoteRequest,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
@@ -24,7 +23,6 @@ from ..core.base import (
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
     PostSplitResponse_Very_Deprecated,
-    Unit,
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -245,12 +243,12 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     This is can be useful for checking whether an invoice is internal (Cashu-to-Cashu).
     """
     logger.trace(f"> POST /checkfees: {payload}")
-    unit = Unit.sat
-    method = Method.bolt11
-    payment_quote = await ledger.backends[method][unit].get_payment_quote(payload.pr)
-    fees_sat = payment_quote.fee.to(Unit.sat)
+    quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=payload.pr, unit="sat")
+    )
+    fees_sat = quote.fee_reserve
     logger.trace(f"< POST /checkfees: {fees_sat}")
-    return CheckFeesResponse(fee=fees_sat.amount)
+    return CheckFeesResponse(fee=fees_sat)
 
 
 @router_deprecated.post(

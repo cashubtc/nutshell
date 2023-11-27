@@ -275,13 +275,17 @@ async def test_melt(wallet1: Wallet):
     await wallet1.mint(128, id=topup_invoice.id)
     assert wallet1.balance == 128
 
-    invoice = await wallet1.request_mint(64)
-    invoice_payment_hash = str(invoice.payment_hash)
-    invoice_payment_request = invoice.bolt11
+    invoice_payment_request = ""
+    invoice_payment_hash = ""
     if is_regtest:
         invoice_dict = get_real_invoice(64)
-        invoice_payment_request = invoice_dict["payment_request"]
         invoice_payment_hash = str(invoice_dict["r_hash"])
+        invoice_payment_request = invoice_dict["payment_request"]
+
+    if is_fake:
+        invoice = await wallet1.request_mint(64)
+        invoice_payment_hash = str(invoice.payment_hash)
+        invoice_payment_request = invoice.bolt11
 
     quote = await wallet1.get_pay_amount_with_fees(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
