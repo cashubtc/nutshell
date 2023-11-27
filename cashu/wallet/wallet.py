@@ -736,10 +736,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Returns:
             Wallet: Initialized wallet.
         """
-        logger.debug(f"Initializing wallet with database: {db}")
+        logger.trace(f"Initializing wallet with database: {db}")
         self = cls(url=url, db=db, name=name)
         await self._migrate_database()
         if not skip_db_read:
+            logger.trace("Mint init: loading private key and keysets from db.")
             await self._init_private_key()
             keysets_list = await get_keysets(mint_url=url, db=self.db)
             self.keysets = {k.id: k for k in keysets_list}
@@ -751,6 +752,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             await migrate_databases(self.db, migrations)
         except Exception as e:
             logger.error(f"Could not run migrations: {e}")
+            raise e
 
     # ---------- API ----------
 
