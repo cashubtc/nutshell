@@ -250,7 +250,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         user_fee_paid = input_amount - output_amount
         overpaid_fee = user_fee_paid - output_fee_paid
         logger.debug(
-            f"Lightning fee was: {output_fee_paid}. User paid: {overpaid_fee}. "
+            f"Lightning fee was: {output_fee_paid}. User paid: {user_fee_paid}. "
             f"Returning difference: {overpaid_fee}."
         )
 

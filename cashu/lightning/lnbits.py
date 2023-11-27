@@ -150,7 +150,7 @@ class LNbitsWallet(LightningBackend):
 
         return PaymentStatus(
             paid=data["paid"],
-            fee=Amount(unit=Unit.msat, amount=data["details"]["fee"]),
+            fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
             preimage=data["preimage"],
         )
 
