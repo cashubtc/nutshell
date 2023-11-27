@@ -198,8 +198,9 @@ async def m011_add_ids_to_proofs_and_out_to_invoices(db: Database):
     async with db.connect() as conn:
         print("Running wallet migrations")
         await conn.execute("ALTER TABLE proofs ADD COLUMN mint_id TEXT")
-        await conn.execute("ALTER TABLE proofs_used ADD COLUMN mint_id TEXT")
         await conn.execute("ALTER TABLE proofs ADD COLUMN melt_id TEXT")
+
+        await conn.execute("ALTER TABLE proofs_used ADD COLUMN mint_id TEXT")
         await conn.execute("ALTER TABLE proofs_used ADD COLUMN melt_id TEXT")
 
         # column in invoices for marking whether the invoice is incoming (out=False) or outgoing (out=True)
