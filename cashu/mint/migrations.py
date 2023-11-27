@@ -287,7 +287,7 @@ async def m011_add_quote_tables(db: Database):
             f"INSERT INTO {table_with_schema(db, 'mint_quotes')} (quote, method,"
             " request, checking_id, unit, amount, paid, issued, created_time,"
             " paid_time) SELECT id, 'bolt11', bolt11, payment_hash, 'sat', amount,"
-            f" False, issued, created, NULL FROM {table_with_schema(db, 'invoices')} "
+            f" False, issued, created, 0 FROM {table_with_schema(db, 'invoices')} "
         )
 
         # drop table invoices

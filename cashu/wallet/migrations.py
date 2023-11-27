@@ -191,7 +191,7 @@ async def m010_add_proofs_dleq(db: Database):
         await conn.execute("ALTER TABLE proofs ADD COLUMN dleq TEXT")
 
 
-async def m011_add_ids_to_proofs_and_out_to_invoices(db: Database):
+async def m010_add_ids_to_proofs_and_out_to_invoices(db: Database):
     """
     Columns that store mint and melt id for proofs and invoices.
     """
@@ -212,6 +212,9 @@ async def m011_add_ids_to_proofs_and_out_to_invoices(db: Database):
         # add column payment_hash
         await conn.execute("ALTER TABLE invoices ADD COLUMN payment_hash TEXT")
 
+
+async def m011_keysets_add_unit(db: Database):
+    async with db.connect() as conn:
         # add column for storing the unit of a keyset
         await conn.execute("ALTER TABLE keysets ADD COLUMN unit TEXT")
         await conn.execute("UPDATE keysets SET unit = 'sat'")
