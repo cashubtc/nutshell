@@ -175,16 +175,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # we duplicate new keysets and compute their old keyset id
         # we duplicate old keysets and compute their new keyset id
         for _, keyset in copy.copy(self.keysets).items():
-            keyest_copy = copy.copy(keyset)
-            assert keyest_copy.public_keys
+            keyset_copy = copy.copy(keyset)
+            assert keyset_copy.public_keys
             if keyset.version_tuple >= (0, 15):
-                keyest_copy.id = derive_keyset_id_deprecated(keyest_copy.public_keys)
+                keyset_copy.id = derive_keyset_id_deprecated(keyset_copy.public_keys)
             else:
-                keyest_copy.id = derive_keyset_id(keyest_copy.public_keys)
-            keyest_copy.duplicate_keyset_id = keyset.id
-            self.keysets[keyest_copy.id] = keyest_copy
+                keyset_copy.id = derive_keyset_id(keyset_copy.public_keys)
+            keyset_copy.duplicate_keyset_id = keyset.id
+            self.keysets[keyset_copy.id] = keyset_copy
             # remember which keyset this keyset was duplicated from
-            logger.debug(f"Duplicated keyset id {keyset.id} -> {keyest_copy.id}")
+            logger.debug(f"Duplicated keyset id {keyset.id} -> {keyset_copy.id}")
 
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
