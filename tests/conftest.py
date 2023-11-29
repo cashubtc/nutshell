@@ -20,6 +20,7 @@ from cashu.mint.ledger import Ledger
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
 
+settings.debug = True
 settings.cashu_dir = "./test_data/"
 settings.mint_host = "localhost"
 settings.mint_port = SERVER_PORT
@@ -32,6 +33,7 @@ settings.mint_lightning_backend = settings.mint_lightning_backend or "FakeWallet
 settings.mint_database = "./test_data/test_mint"
 settings.mint_derivation_path = "0/0/0/0"
 settings.mint_private_key = "TEST_PRIVATE_KEY"
+settings.mint_max_balance = 0
 
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
@@ -54,7 +56,8 @@ class UvicornServer(multiprocessing.Process):
 async def ledger():
     async def start_mint_init(ledger: Ledger):
         await migrate_databases(ledger.db, migrations_mint)
-        await ledger.load_used_proofs()
+        if settings.mint_cache_secrets:
+            await ledger.load_used_proofs()
         await ledger.init_keysets()
 
     database_name = "test"

@@ -31,7 +31,7 @@ class LedgerCrud:
         db: Database,
         id: str,
         conn: Optional[Connection] = None,
-    ):
+    ) -> Optional[Invoice]:
         return await get_lightning_invoice(
             db=db,
             id=id,
@@ -42,8 +42,23 @@ class LedgerCrud:
         self,
         db: Database,
         conn: Optional[Connection] = None,
-    ):
-        return await get_secrets_used(db=db, conn=conn)
+    ) -> List[str]:
+        return await get_secrets_used(
+            db=db,
+            conn=conn,
+        )
+
+    async def get_proof_used(
+        self,
+        db: Database,
+        proof: Proof,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Proof]:
+        return await get_proof_used(
+            db=db,
+            proof=proof,
+            conn=conn,
+        )
 
     async def invalidate_proof(
         self,
@@ -158,6 +173,16 @@ class LedgerCrud:
             conn=conn,
         )
 
+    async def get_balance(
+        self,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> int:
+        return await get_balance(
+            db=db,
+            conn=conn,
+        )
+
 
 async def store_promise(
     *,
@@ -205,7 +230,7 @@ async def get_promise(
 async def get_secrets_used(
     db: Database,
     conn: Optional[Connection] = None,
-):
+) -> List[str]:
     rows = await (conn or db).fetchall(f"""
         SELECT secret from {table_with_schema(db, 'proofs_used')}
         """)
@@ -241,6 +266,21 @@ async def get_proofs_pending(
         SELECT * from {table_with_schema(db, 'proofs_pending')}
         """)
     return [Proof(**r) for r in rows]
+
+
+async def get_proof_used(
+    db: Database,
+    proof: Proof,
+    conn: Optional[Connection] = None,
+) -> Optional[Proof]:
+    row = await (conn or db).fetchone(
+        f"""
+        SELECT 1 from {table_with_schema(db, 'proofs_used')}
+        WHERE secret = ?
+        """,
+        (str(proof.secret),),
+    )
+    return Proof(**row) if row else None
 
 
 async def set_proof_pending(
@@ -394,3 +434,14 @@ async def get_keyset(
         tuple(values),
     )
     return [MintKeyset(**row) for row in rows]
+
+
+async def get_balance(
+    db: Database,
+    conn: Optional[Connection] = None,
+) -> int:
+    row = await (conn or db).fetchone(f"""
+        SELECT * from {table_with_schema(db, 'balance')}
+        """)
+    assert row, "Balance not found"
+    return int(row[0])

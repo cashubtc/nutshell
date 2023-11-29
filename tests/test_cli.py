@@ -1,4 +1,5 @@
 import asyncio
+from typing import Tuple
 
 import pytest
 from click.testing import CliRunner
@@ -15,7 +16,7 @@ def cli_prefix():
     yield ["--wallet", "test_cli_wallet", "--host", settings.mint_url, "--tests"]
 
 
-def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> (str, str):
+def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, str]:
     invoice = [
         line.split(" ")[1] for line in output.split("\n") if line.startswith("Invoice")
     ][0]

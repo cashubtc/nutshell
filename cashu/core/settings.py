@@ -44,6 +44,7 @@ class EnvSettings(CashuSettings):
     debug: bool = Field(default=False)
     log_level: str = Field(default="INFO")
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
+    debug_profiling: bool = Field(default=False)
 
 
 class MintSettings(CashuSettings):
@@ -56,9 +57,12 @@ class MintSettings(CashuSettings):
     mint_peg_out_only: bool = Field(default=False)
     mint_max_peg_in: int = Field(default=None)
     mint_max_peg_out: int = Field(default=None)
+    mint_max_balance: int = Field(default=None)
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
+
+    mint_cache_secrets: bool = Field(default=True)
 
 
 class MintInformation(CashuSettings):

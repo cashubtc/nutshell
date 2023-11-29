@@ -5,6 +5,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional, Union
 
+from loguru import logger
 from sqlalchemy import create_engine
 from sqlalchemy_aio.base import AsyncConnection
 from sqlalchemy_aio.strategy import ASYNCIO_STRATEGY  # type: ignore
@@ -130,7 +131,7 @@ class Database(Compat):
             # )
         else:
             if not os.path.exists(self.db_location):
-                print(f"Creating database directory: {self.db_location}")
+                logger.info(f"Creating database directory: {self.db_location}")
                 os.makedirs(self.db_location)
             self.path = os.path.join(self.db_location, f"{self.name}.sqlite3")
             database_uri = f"sqlite:///{self.path}"
