@@ -127,6 +127,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # set the deprecated id
         assert keyset.public_keys
         keyset.duplicate_keyset_id = derive_keyset_id_deprecated(keyset.public_keys)
+        # END BACKWARDS COMPATIBILITY < 0.15.0
 
         logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
@@ -172,7 +173,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         assert any([k.active for k in self.keysets.values()]), "No active keyset found."
 
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        # we duplicate new keysets and compute their old keyset id
+        # we duplicate new keysets and compute their old keyset id, and
         # we duplicate old keysets and compute their new keyset id
         for _, keyset in copy.copy(self.keysets).items():
             keyset_copy = copy.copy(keyset)

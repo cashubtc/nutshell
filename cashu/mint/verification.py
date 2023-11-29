@@ -82,11 +82,13 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         # Verify that input keyset units are the same as output keyset unit
         # We have previously verified that all outputs have the same keyset id in `_verify_outputs`
         assert outputs[0].id, "output id not set"
-        if not all([
-            self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
-            for p in proofs
-            if p.id
-        ]):
+        if not all(
+            [
+                self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
+                for p in proofs
+                if p.id
+            ]
+        ):
             raise TransactionError("input and output keysets have different units.")
 
         # Verify output spending conditions
@@ -139,19 +141,27 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
             raise SecretTooLongError()
         return True
 
-    def _verify_proof_bdhke(self, proof: Proof):
+    def _verify_proof_bdhke(self, proof: Proof) -> bool:
         """Verifies that the proof of promise was issued by this ledger."""
         # if no keyset id is given in proof, assume the current one
         if not proof.id:
             private_key_amount = self.keyset.private_keys[proof.amount]
         else:
             assert proof.id in self.keysets, f"keyset {proof.id} unknown"
-            logger.trace(f"Validating proof with keyset {self.keysets[proof.id].id}.")
+            logger.trace(
+                f"Validating proof {proof.secret} with keyset"
+                f" {self.keysets[proof.id].id}."
+            )
             # use the appropriate active keyset for this proof.id
             private_key_amount = self.keysets[proof.id].private_keys[proof.amount]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
-        return b_dhke.verify(private_key_amount, C, proof.secret)
+        valid = b_dhke.verify(private_key_amount, C, proof.secret)
+        if valid:
+            logger.trace("Proof verified.")
+        else:
+            logger.trace(f"Proof verification failed for {proof.secret} – {proof.C}.")
+        return valid
 
     def _verify_input_output_amounts(
         self, inputs: List[Proof], outputs: List[BlindedMessage]
