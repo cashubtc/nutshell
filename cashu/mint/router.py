@@ -91,7 +91,7 @@ async def keys():
     ),
     response_model=KeysResponse,
 )
-async def keyset_keys(keyset_id: str, request: Request):
+async def keyset_keys(keyset_id: str, request: Request) -> KeysResponse:
     """
     Get the public keys of the mint from a specific keyset id.
     """
