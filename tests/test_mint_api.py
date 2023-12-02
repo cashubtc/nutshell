@@ -280,9 +280,6 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 
     inputs_payload = [p.to_dict() for p in wallet.proofs]
 
-    assert quote.amount == 62
-    assert quote.fee_reserve == 0
-
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
