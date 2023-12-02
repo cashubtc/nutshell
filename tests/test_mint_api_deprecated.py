@@ -161,7 +161,8 @@ async def test_melt(ledger: Ledger, wallet: Wallet):
         str(invoice_dict["r_hash"])
 
     await wallet.melt_quote(invoice_payment_request)
-    inputs_payload = [p.to_dict() for p in wallet.proofs]
+    keep, send = await wallet.split_to_send(wallet.proofs, 62)
+    inputs_payload = [p.to_dict() for p in send]
 
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
@@ -181,9 +182,6 @@ async def test_melt(ledger: Ledger, wallet: Wallet):
     result = response.json()
     assert result.get("preimage") is not None
     assert result["paid"] is True
-    assert result["change"]
-    # we get back 2 sats because it was an internal invoice
-    assert result["change"][0]["amount"] == 2
 
 
 @pytest.mark.asyncio

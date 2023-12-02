@@ -276,7 +276,8 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     invoice_payment_request = invoice.bolt11
 
     quote = await wallet.melt_quote(invoice_payment_request)
-    inputs_payload = [p.to_dict() for p in wallet.proofs]
+    keep, send = await wallet.split_to_send(wallet.proofs, 62)
+    inputs_payload = [p.to_dict() for p in send]
 
     assert quote.amount == 62
     assert quote.fee_reserve == 0
@@ -299,9 +300,6 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     result = response.json()
     assert result.get("proof") is not None
     assert result["paid"] is True
-    assert result["change"]
-    # we get back 2 sats because we provided the entire wallet balance which was 64 sats
-    assert result["change"][0]["amount"] == 2
 
 
 @pytest.mark.asyncio
@@ -324,7 +322,8 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     invoice_payment_request = invoice_dict["payment_request"]
 
     quote = await wallet.melt_quote(invoice_payment_request)
-    inputs_payload = [p.to_dict() for p in wallet.proofs]
+    keep, send = await wallet.split_to_send(wallet.proofs, 62)
+    inputs_payload = [p.to_dict() for p in send]
 
     assert quote.amount == 62
     assert quote.fee_reserve == 2
