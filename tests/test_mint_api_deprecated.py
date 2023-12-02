@@ -155,7 +155,10 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 
     invoice_payment_request = invoice.bolt11
 
-    await wallet.melt_quote(invoice_payment_request)
+    quote = await wallet.melt_quote(invoice_payment_request)
+    assert quote.amount == 64
+    assert quote.fee_reserve == 0
+
     inputs_payload = [p.to_dict() for p in wallet.proofs]
 
     # outputs for change
@@ -199,8 +202,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert quote.amount == 62
     assert quote.fee_reserve == 2
 
-    keep, send = await wallet.split_to_send(wallet.proofs, 62)
-    inputs_payload = [p.to_dict() for p in send]
+    inputs_payload = [p.to_dict() for p in wallet.proofs]
 
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)

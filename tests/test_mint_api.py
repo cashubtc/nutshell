@@ -271,13 +271,14 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert wallet.balance == 64
 
     # create invoice to melt to
-    # use 2 sat less because we need to pay the fee
-    invoice = await wallet.request_mint(62)
+    invoice = await wallet.request_mint(64)
     invoice_payment_request = invoice.bolt11
 
     quote = await wallet.melt_quote(invoice_payment_request)
-    keep, send = await wallet.split_to_send(wallet.proofs, 62)
-    inputs_payload = [p.to_dict() for p in send]
+    assert quote.amount == 64
+    assert quote.fee_reserve == 0
+
+    inputs_payload = [p.to_dict() for p in wallet.proofs]
 
     assert quote.amount == 62
     assert quote.fee_reserve == 0
