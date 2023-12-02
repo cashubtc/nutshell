@@ -74,6 +74,9 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         if not outputs:
             return
 
+        # Verify input and output amounts
+        self._verify_equation_balanced(proofs, outputs)
+
         # Verify outputs
         self._verify_outputs(outputs)
 
@@ -176,6 +179,6 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         """
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
-        assert (
-            sum_outputs - sum_inputs == 0
-        ), "inputs do not have same amount as outputs"
+        assert sum_outputs - sum_inputs == 0, TransactionError(
+            f"inputs ({sum_inputs}) do not have same amount as outputs ({sum_outputs})."
+        )
