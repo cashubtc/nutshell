@@ -168,16 +168,6 @@ class Database(Compat):
         finally:
             self.lock.release()
 
-    @asynccontextmanager
-    async def get_connection(self, conn: Optional[Connection] = None):
-        if conn is not None:
-            # Yield the existing connection
-            yield conn
-        else:
-            # Create and yield a new connection
-            async with self.connect() as new_conn:
-                yield new_conn
-
     async def fetchall(self, query: str, values: tuple = ()) -> list:
         async with self.connect() as conn:
             result = await conn.execute(query, values)
@@ -212,3 +202,26 @@ def lock_table(db: Database, table: str) -> str:
     elif db.type == SQLITE:
         return "BEGIN EXCLUSIVE TRANSACTION;"
     return "<nothing>"
+
+
+@asynccontextmanager
+async def get_db_connection(db: Database, conn: Optional[Connection] = None):
+    """Either yield the existing database connection or create a new one.
+
+    Note: This should be implemented as Database.get_db_connection(self, conn) but
+    since we want to use it in LNbits, we can't change the Database class their.
+
+    Args:
+        db (Database): Database object.
+        conn (Optional[Connection], optional): Connection object. Defaults to None.
+
+    Yields:
+        Connection: Connection object.
+    """
+    if conn is not None:
+        # Yield the existing connection
+        yield conn
+    else:
+        # Create and yield a new connection
+        async with db.connect() as new_conn:
+            yield new_conn

@@ -17,7 +17,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
-from ..core.db import Connection, Database
+from ..core.db import Connection, Database, get_db_connection
 from ..core.errors import (
     KeysetError,
     KeysetNotFoundError,
@@ -161,7 +161,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         """
         secrets = set([p.secret for p in proofs])
         self.secrets_used |= secrets
-        async with self.db.get_connection(conn) as conn:
+        async with get_db_connection(self.db, conn) as conn:
             # store in db
             for p in proofs:
                 await self.crud.invalidate_proof(proof=p, db=self.db, conn=conn)
@@ -478,7 +478,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             await self.verify_inputs_and_outputs(proofs, outputs)
 
             # Mark proofs as used and prepare new promises
-            async with self.db.get_connection() as conn:
+            async with get_db_connection(self.db) as conn:
                 promises = await self._generate_promises(outputs, keyset, conn)
                 await self._invalidate_proofs(proofs, conn)
 
@@ -543,7 +543,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             promises.append((B_, amount, C_, e, s))
 
         signatures = []
-        async with self.db.get_connection(conn) as conn:
+        async with get_db_connection(self.db, conn) as conn:
             for promise in promises:
                 B_, amount, C_, e, s = promise
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
