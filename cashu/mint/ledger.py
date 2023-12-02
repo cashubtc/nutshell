@@ -473,39 +473,38 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         try:
             # verify spending inputs, outputs, and spending conditions
             await self.verify_inputs_and_outputs(proofs, outputs)
-            # Mark proofs as used and prepare new promises
-            await self._invalidate_proofs(proofs)
+
+            # BEGIN backwards compatibility < 0.13.0
+            if amount is not None:
+                logger.debug(
+                    "Split: Client provided `amount` - backwards compatibility response"
+                    " pre 0.13.0"
+                )
+                # split outputs according to amount
+                total = sum_proofs(proofs)
+                if amount > total:
+                    raise Exception("split amount is higher than the total sum.")
+                outs_fst = amount_split(total - amount)
+                B_fst = [od for od in outputs[: len(outs_fst)]]
+                B_snd = [od for od in outputs[len(outs_fst) :]]
+
+                # Mark proofs as used and prepare new promises
+                await self._invalidate_proofs(proofs)
+                prom_fst = await self._generate_promises(B_fst, keyset)
+                prom_snd = await self._generate_promises(B_snd, keyset)
+                promises = prom_fst + prom_snd
+            # END backwards compatibility < 0.13.0
+            else:
+                # Mark proofs as used and prepare new promises
+                await self._invalidate_proofs(proofs)
+                promises = await self._generate_promises(outputs, keyset)
+
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
         finally:
             # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
-
-        # BEGIN backwards compatibility < 0.13.0
-        if amount is not None:
-            logger.debug(
-                "Split: Client provided `amount` - backwards compatibility response pre"
-                " 0.13.0"
-            )
-            # split outputs according to amount
-            total = sum_proofs(proofs)
-            if amount > total:
-                raise Exception("split amount is higher than the total sum.")
-            outs_fst = amount_split(total - amount)
-            B_fst = [od for od in outputs[: len(outs_fst)]]
-            B_snd = [od for od in outputs[len(outs_fst) :]]
-
-            # generate promises
-            prom_fst = await self._generate_promises(B_fst, keyset)
-            prom_snd = await self._generate_promises(B_snd, keyset)
-            promises = prom_fst + prom_snd
-        # END backwards compatibility < 0.13.0
-        else:
-            promises = await self._generate_promises(outputs, keyset)
-
-        # verify amounts in produced promises
-        self._verify_equation_balanced(proofs, promises)
 
         logger.trace("split successful")
         return promises
