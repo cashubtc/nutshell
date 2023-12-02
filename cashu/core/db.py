@@ -168,6 +168,16 @@ class Database(Compat):
         finally:
             self.lock.release()
 
+    @asynccontextmanager
+    async def get_connection(self, conn: Optional[Connection] = None):
+        if conn is not None:
+            # Yield the existing connection
+            yield conn
+        else:
+            # Create and yield a new connection
+            async with self.connect() as new_conn:
+                yield new_conn
+
     async def fetchall(self, query: str, values: tuple = ()) -> list:
         async with self.connect() as conn:
             result = await conn.execute(query, values)

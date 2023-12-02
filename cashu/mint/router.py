@@ -258,9 +258,7 @@ async def split(
     logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
 
-    promises = await ledger.split(
-        proofs=payload.proofs, outputs=payload.outputs, amount=payload.amount
-    )
+    promises = await ledger.split(proofs=payload.proofs, outputs=payload.outputs)
 
     if payload.amount:
         # BEGIN backwards compatibility < 0.13

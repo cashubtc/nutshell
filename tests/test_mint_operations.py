@@ -124,6 +124,38 @@ async def test_split_with_input_more_than_outputs(wallet1: Wallet, ledger: Ledge
 
 
 @pytest.mark.asyncio
+async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(128)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(128, [64, 64], id=invoice.id)
+    inputs1 = wallet1.proofs[:1]
+    inputs2 = wallet1.proofs[1:]
+
+    output_amounts = [64]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+
+    await ledger.split(proofs=inputs1, outputs=outputs)
+
+    # try to spend other proofs with the same outputs again
+    await assert_err(
+        ledger.split(proofs=inputs2, outputs=outputs),
+        "UNIQUE constraint failed: promises.B_b",
+    )
+
+    # try to spend inputs2 again with new outputs
+    output_amounts = [64]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+
+    await ledger.split(proofs=inputs2, outputs=outputs)
+
+
+@pytest.mark.asyncio
 async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
     pay_if_regtest(invoice.bolt11)
