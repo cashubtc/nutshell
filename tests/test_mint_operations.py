@@ -141,7 +141,6 @@ async def test_split_with_input_more_than_outputs(wallet1: Wallet, ledger: Ledge
 
     # make sure we can still spend our tokens
     keep_proofs, send_proofs = await wallet1.split(inputs, 10)
-    print(keep_proofs, send_proofs)
 
 
 @pytest.mark.asyncio
