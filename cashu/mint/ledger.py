@@ -17,7 +17,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
-from ..core.db import Connection, Database
+from ..core.db import Connection, Database, get_db_connection
 from ..core.errors import (
     KeysetError,
     KeysetNotFoundError,
@@ -151,17 +151,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
     # ------- ECASH -------
 
-    async def _invalidate_proofs(self, proofs: List[Proof]) -> None:
+    async def _invalidate_proofs(
+        self, proofs: List[Proof], conn: Optional[Connection] = None
+    ) -> None:
         """Adds secrets of proofs to the list of known secrets and stores them in the db.
-        Removes proofs from pending table. This is executed if the ecash has been redeemed.
 
         Args:
             proofs (List[Proof]): Proofs to add to known secret table.
         """
-        # Mark proofs as used and prepare new promises
         secrets = set([p.secret for p in proofs])
         self.secrets_used |= secrets
-        async with self.db.connect() as conn:
+        async with get_db_connection(self.db, conn) as conn:
             # store in db
             for p in proofs:
                 await self.crud.invalidate_proof(proof=p, db=self.db, conn=conn)
@@ -450,14 +450,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
-        amount: Optional[int] = None,  # backwards compatibility < 0.13.0
     ):
         """Consumes proofs and prepares new promises based on the amount split. Used for splitting tokens
         Before sending or for redeeming tokens for new ones that have been received by another wallet.
 
         Args:
             proofs (List[Proof]): Proofs to be invalidated for the split.
-            amount (int): Amount at which the split should happen.
             outputs (List[BlindedMessage]): New outputs that should be signed in return.
             keyset (Optional[MintKeyset], optional): Keyset to use. Uses default keyset if not given. Defaults to None.
 
@@ -471,33 +469,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
         await self._set_proofs_pending(proofs)
         try:
+            # explicitly check that amount of inputs is equal to amount of outputs
+            # note: we check this again in verify_inputs_and_outputs but only if any
+            # outputs are provided at all. To make sure of that before calling
+            # verify_inputs_and_outputs, we check it here.
+            self._verify_equation_balanced(proofs, outputs)
             # verify spending inputs, outputs, and spending conditions
             await self.verify_inputs_and_outputs(proofs, outputs)
 
-            # BEGIN backwards compatibility < 0.13.0
-            if amount is not None:
-                logger.debug(
-                    "Split: Client provided `amount` - backwards compatibility response"
-                    " pre 0.13.0"
-                )
-                # split outputs according to amount
-                total = sum_proofs(proofs)
-                if amount > total:
-                    raise Exception("split amount is higher than the total sum.")
-                outs_fst = amount_split(total - amount)
-                B_fst = [od for od in outputs[: len(outs_fst)]]
-                B_snd = [od for od in outputs[len(outs_fst) :]]
-
-                # Mark proofs as used and prepare new promises
-                await self._invalidate_proofs(proofs)
-                prom_fst = await self._generate_promises(B_fst, keyset)
-                prom_snd = await self._generate_promises(B_snd, keyset)
-                promises = prom_fst + prom_snd
-            # END backwards compatibility < 0.13.0
-            else:
-                # Mark proofs as used and prepare new promises
-                await self._invalidate_proofs(proofs)
-                promises = await self._generate_promises(outputs, keyset)
+            # Mark proofs as used and prepare new promises
+            async with get_db_connection(self.db) as conn:
+                promises = await self._generate_promises(outputs, keyset, conn)
+                await self._invalidate_proofs(proofs, conn)
 
         except Exception as e:
             logger.trace(f"split failed: {e}")
@@ -535,7 +518,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
     # ------- BLIND SIGNATURES -------
 
     async def _generate_promises(
-        self, B_s: List[BlindedMessage], keyset: Optional[MintKeyset] = None
+        self,
+        B_s: List[BlindedMessage],
+        keyset: Optional[MintKeyset] = None,
+        conn: Optional[Connection] = None,
     ) -> list[BlindedSignature]:
         """Generates a promises (Blind signatures) for given amount and returns a pair (amount, C').
 
@@ -557,7 +543,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             promises.append((B_, amount, C_, e, s))
 
         signatures = []
-        async with self.db.connect() as conn:
+        async with get_db_connection(self.db, conn) as conn:
             for promise in promises:
                 B_, amount, C_, e, s = promise
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
