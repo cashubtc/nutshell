@@ -620,17 +620,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
             # Mark proofs as used and prepare new promises
             await self._invalidate_proofs(proofs)
+            promises = await self._generate_promises(outputs, keyset)
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
         finally:
             # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
-
-        promises = await self._generate_promises(outputs, keyset)
-
-        # verify amounts in produced promises
-        self._verify_equation_balanced(proofs, promises)
 
         logger.trace("split successful")
         return promises

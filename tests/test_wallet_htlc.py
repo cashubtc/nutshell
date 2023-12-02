@@ -189,7 +189,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
     secret = await wallet1.create_htlc_lock(
         preimage=preimage,
         hashlock_pubkey=pubkey_wallet2,
-        locktime_seconds=5,
+        locktime_seconds=2,
         locktime_pubkey=pubkey_wallet1,
     )
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
@@ -204,7 +204,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
         "Mint Error: HTLC hash lock signatures did not match.",
     )
 
-    await asyncio.sleep(5)
+    await asyncio.sleep(2)
     # should succeed since lock time has passed and we provided wallet1 signature for timelock
     await wallet1.redeem(send_proofs)
 
@@ -223,7 +223,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
     secret = await wallet1.create_htlc_lock(
         preimage=preimage,
         hashlock_pubkey=pubkey_wallet2,
-        locktime_seconds=5,
+        locktime_seconds=2,
         locktime_pubkey=pubkey_wallet1,
     )
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 8, secret_lock=secret)
@@ -240,7 +240,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
         "Mint Error: HTLC hash lock signatures did not match.",
     )
 
-    await asyncio.sleep(5)
+    await asyncio.sleep(2)
     # should fail since lock time has passed and we provided a wrong signature for timelock
     await assert_err(
         wallet1.redeem(send_proofs),
