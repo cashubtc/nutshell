@@ -155,12 +155,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         self, proofs: List[Proof], conn: Optional[Connection] = None
     ) -> None:
         """Adds secrets of proofs to the list of known secrets and stores them in the db.
-        Removes proofs from pending table. This is executed if the ecash has been redeemed.
 
         Args:
             proofs (List[Proof]): Proofs to add to known secret table.
         """
-        # Mark proofs as used and prepare new promises
         secrets = set([p.secret for p in proofs])
         self.secrets_used |= secrets
         async with self.db.get_connection(conn) as conn:
@@ -481,8 +479,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
             # Mark proofs as used and prepare new promises
             async with self.db.get_connection() as conn:
-                await self._invalidate_proofs(proofs, conn)
                 promises = await self._generate_promises(outputs, keyset, conn)
+                await self._invalidate_proofs(proofs, conn)
 
         except Exception as e:
             logger.trace(f"split failed: {e}")
