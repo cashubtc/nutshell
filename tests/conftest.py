@@ -60,7 +60,7 @@ async def ledger():
             await ledger.load_used_proofs()
         await ledger.init_keysets()
 
-    database_name = "test"
+    database_name = "mint"
 
     if not settings.mint_database.startswith("postgres"):
         # clear sqlite database

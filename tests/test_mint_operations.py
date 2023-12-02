@@ -75,7 +75,9 @@ async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledge
     pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
+    keep_proofs, send_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 10, set_reserved=False
+    )
 
     all_send_proofs = send_proofs + keep_proofs
 
@@ -93,30 +95,32 @@ async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledge
     )
 
     # make sure we can still spend our tokens
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
+    keep_proofs, send_proofs = await wallet1.split(wallet1.proofs, 10)
 
 
 @pytest.mark.asyncio
 async def test_split_with_input_more_than_outputs(wallet1: Wallet, ledger: Ledger):
-    invoice = await wallet1.request_mint(12345)
+    invoice = await wallet1.request_mint(128)
     pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(12345, id=invoice.id)
+    await wallet1.mint(128, id=invoice.id)
 
     inputs = wallet1.proofs
 
     # less outputs than inputs
-    output_amounts = [p.amount for p in inputs[:2]]
+    output_amounts = [8]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
         len(output_amounts)
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+
     await assert_err(
         ledger.split(proofs=inputs, outputs=outputs),
-        "inputs do not have same amount as outputs.",
+        "inputs do not have same amount as outputs",
     )
 
     # make sure we can still spend our tokens
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
+    keep_proofs, send_proofs = await wallet1.split(inputs, 10)
+    print(keep_proofs, send_proofs)
 
 
 @pytest.mark.asyncio
