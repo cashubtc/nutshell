@@ -323,11 +323,11 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     invoice_payment_request = invoice_dict["payment_request"]
 
     quote = await wallet.melt_quote(invoice_payment_request)
-    keep, send = await wallet.split_to_send(wallet.proofs, 64)
-    inputs_payload = [p.to_dict() for p in send]
-
     assert quote.amount == 62
     assert quote.fee_reserve == 2
+
+    keep, send = await wallet.split_to_send(wallet.proofs, 64)
+    inputs_payload = [p.to_dict() for p in send]
 
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
