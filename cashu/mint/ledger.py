@@ -488,19 +488,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 B_fst = [od for od in outputs[: len(outs_fst)]]
                 B_snd = [od for od in outputs[len(outs_fst) :]]
 
-                # generate promises
+                # Mark proofs as used and prepare new promises
+                await self._invalidate_proofs(proofs)
                 prom_fst = await self._generate_promises(B_fst, keyset)
                 prom_snd = await self._generate_promises(B_snd, keyset)
                 promises = prom_fst + prom_snd
             # END backwards compatibility < 0.13.0
             else:
+                # Mark proofs as used and prepare new promises
+                await self._invalidate_proofs(proofs)
                 promises = await self._generate_promises(outputs, keyset)
 
-            # verify amounts in produced promises
-            self._verify_equation_balanced(proofs, promises)
-
-            # Mark proofs as used and prepare new promises
-            await self._invalidate_proofs(proofs)
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
