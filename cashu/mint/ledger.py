@@ -497,8 +497,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         bolt11_request = melt_quote.request
         total_provided = sum_proofs(proofs)
         total_needed = melt_quote.amount + (melt_quote.fee_reserve or 0)
-        assert total_provided >= total_needed, (
-            f"provided proofs not enough. Provided: {total_provided}, needed:"
+        assert total_provided == total_needed, (
+            f"proofs have wrong amount. Provided: {total_provided}, needed:"
             f" {total_needed}"
         )
         if settings.mint_max_peg_out and total_provided > settings.mint_max_peg_out:
@@ -616,6 +616,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         await self._set_proofs_pending(proofs)
         try:
+            # explicitly check that amount of inputs is equal to amount of outputs
+            # note: we check this again in verify_inputs_and_outputs but only if any
+            # outputs are provided at all. To make sure of that before calling
+            # verify_inputs_and_outputs, we check it here.
+            self._verify_equation_balanced(proofs, outputs)
             # verify spending inputs, outputs, and spending conditions
             await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
             # Mark proofs as used and prepare new promises
