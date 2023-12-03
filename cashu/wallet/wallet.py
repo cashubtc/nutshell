@@ -94,7 +94,7 @@ def async_set_httpx_client(func):
             proxies=proxies_dict,  # type: ignore
             headers=headers_dict,
             base_url=self.url,
-            timeout=None if settings.debug else 5,
+            timeout=5,
         )
         return await func(self, *args, **kwargs)
 
@@ -450,6 +450,9 @@ class LedgerAPI(object):
         logger.debug("Calling split. POST /split")
         split_payload = PostSplitRequest(proofs=proofs, outputs=outputs)
 
+        # BEGIN: backwards compatibility pre 0.13.0
+        split_payload.amount = outputs[0].amount
+
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /split"""
@@ -732,9 +735,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             proofs (List[Proof]): Proofs to be redeemed.
         """
         # verify DLEQ of incoming proofs
-        logger.debug("Verifying DLEQ of incoming proofs.")
         self.verify_proofs_dleq(proofs)
-        logger.debug("DLEQ verified.")
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
@@ -928,7 +929,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             ):
                 raise Exception("DLEQ proof invalid.")
             else:
-                logger.debug("DLEQ proof valid.")
+                logger.trace("DLEQ proof valid.")
+        logger.debug("Verified incoming DLEQ proofs.")
 
     async def _construct_proofs(
         self,
