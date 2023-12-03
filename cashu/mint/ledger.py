@@ -316,7 +316,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 await self.crud.update_lightning_invoice(id=id, issued=True, db=self.db)
             del self.locks[id]
 
-        self._verify_outputs(B_s)
+        await self._verify_outputs(B_s)
 
         promises = await self._generate_promises(B_s, keyset)
         logger.trace("generated promises")

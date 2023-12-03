@@ -142,7 +142,7 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     # try to spend other proofs with the same outputs again
     await assert_err(
         ledger.split(proofs=inputs2, outputs=outputs),
-        "UNIQUE constraint failed: promises.B_b",
+        "outputs have already been signed before.",
     )
 
     # try to spend inputs2 again with new outputs
@@ -153,6 +153,27 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
     await ledger.split(proofs=inputs2, outputs=outputs)
+
+
+@pytest.mark.asyncio
+async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(128)
+    pay_if_regtest(invoice.bolt11)
+    output_amounts = [128]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+    await ledger.mint(outputs, id=invoice.id)
+
+    # now try to mint with the same outputs again
+    invoice2 = await wallet1.request_mint(128)
+    pay_if_regtest(invoice2.bolt11)
+
+    await assert_err(
+        ledger.mint(outputs, id=invoice2.id),
+        "outputs have already been signed before.",
+    )
 
 
 @pytest.mark.asyncio
