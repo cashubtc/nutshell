@@ -302,6 +302,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         logger.trace("called mint")
         amount_outputs = sum([b.amount for b in B_s])
 
+        await self._verify_outputs(B_s)
+
         if settings.lightning:
             if not id:
                 raise NotAllowedError("no id provided.")
@@ -316,8 +318,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 logger.trace(f"crud: setting invoice {id} as issued")
                 await self.crud.update_lightning_invoice(id=id, issued=True, db=self.db)
             del self.locks[id]
-
-        await self._verify_outputs(B_s)
 
         promises = await self._generate_promises(B_s, keyset)
         logger.trace("generated promises")
@@ -367,6 +367,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 "provided proofs not enough for Lightning payment. Provided:"
                 f" {total_provided}, needed: {invoice_amount + reserve_fees_sat}"
             )
+
+            if outputs:
+                # verify the outputs. note: we don't verify inputs
+                # and outputs simultaneously with verify_inputs_and_outputs() as we do
+                # in split() because we do not expect the amounts to be equal here.
+                await self._verify_outputs(outputs)
 
             # verify spending inputs and their spending conditions
             await self.verify_inputs_and_outputs(proofs)
