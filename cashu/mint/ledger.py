@@ -368,6 +368,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 f" {total_provided}, needed: {invoice_amount + reserve_fees_sat}"
             )
 
+            if outputs:
+                # verify the outputs. note: we don't verify inputs
+                # and outputs simultaneously with verify_inputs_and_outputs() as we do
+                # in split() because we do not expect the amounts to be equal here.
+                await self._verify_outputs(outputs)
+
             # verify spending inputs and their spending conditions
             await self.verify_inputs_and_outputs(proofs)
 

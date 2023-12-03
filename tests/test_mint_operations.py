@@ -37,19 +37,19 @@ async def test_melt(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
     pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
-    invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    invoice2 = await wallet1.request_mint(64)
+    pay_if_regtest(invoice2.bolt11)
+    await wallet1.mint(64, id=invoice2.id)
     assert wallet1.balance == 128
     total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(
-        invoice.bolt11
+        invoice2.bolt11
     )
-    mint_fees = await ledger.get_melt_fees(invoice.bolt11)
-    assert mint_fees == fee_reserve_sat
+    melt_fees = await ledger.get_melt_fees(invoice2.bolt11)
+    assert melt_fees == fee_reserve_sat
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
-    await ledger.melt(send_proofs, invoice.bolt11, outputs=None)
+    await ledger.melt(send_proofs, invoice2.bolt11, outputs=None)
 
 
 @pytest.mark.asyncio
@@ -172,6 +172,31 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
 
     await assert_err(
         ledger.mint(outputs, id=invoice2.id),
+        "outputs have already been signed before.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(130)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(130, id=invoice.id)
+
+    output_amounts = [128]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+
+    # we use the outputs once for minting
+    invoice2 = await wallet1.request_mint(128)
+    pay_if_regtest(invoice2.bolt11)
+    await ledger.mint(outputs, id=invoice2.id)
+
+    # use the same outputs for melting
+    invoice3 = await wallet1.request_mint(128)
+    await assert_err(
+        ledger.melt(wallet1.proofs, invoice3.bolt11, outputs=outputs),
         "outputs have already been signed before.",
     )
 
