@@ -158,6 +158,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
         Args:
             proofs (List[Proof]): Proofs to add to known secret table.
+            conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
         secrets = set([p.secret for p in proofs])
         self.secrets_used |= secrets
@@ -316,7 +317,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 await self.crud.update_lightning_invoice(id=id, issued=True, db=self.db)
             del self.locks[id]
 
-        self._verify_outputs(B_s)
+        await self._verify_outputs(B_s)
 
         promises = await self._generate_promises(B_s, keyset)
         logger.trace("generated promises")
@@ -479,6 +480,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
             # Mark proofs as used and prepare new promises
             async with get_db_connection(self.db) as conn:
+                # we do this in a single db transaction
                 promises = await self._generate_promises(outputs, keyset, conn)
                 await self._invalidate_proofs(proofs, conn)
 
@@ -525,10 +527,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
     ) -> list[BlindedSignature]:
         """Generates a promises (Blind signatures) for given amount and returns a pair (amount, C').
 
+        Important: When a promises is once created it should be considered issued to the user since the user
+        will always be able to restore promises later through the backup restore endpoint. That means that additional
+        checks in the code that might decide not to return these promises should be avoided once this function is
+        called. Only call this function if the transaction is fully validated!
+
         Args:
             B_s (List[BlindedMessage]): Blinded secret (point on curve)
             keyset (Optional[MintKeyset], optional): Which keyset to use. Private keys will be taken from this keyset. Defaults to None.
-
+            conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         Returns:
             list[BlindedSignature]: Generated BlindedSignatures.
         """
