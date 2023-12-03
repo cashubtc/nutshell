@@ -452,6 +452,7 @@ class LedgerAPI(object):
 
         # BEGIN: backwards compatibility pre 0.13.0
         split_payload.amount = outputs[0].amount
+        # END: backwards compatibility pre 0.13.0
 
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
@@ -466,6 +467,7 @@ class LedgerAPI(object):
             return {
                 "outputs": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
+                "amount": ...,  # backwards compatibility pre 0.13.0
             }
 
         resp = await self.httpx.post(
