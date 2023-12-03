@@ -198,9 +198,9 @@ class LedgerAPI(object):
 
         if keyset_id and keyset_id != keyset.id:
             # NOTE: Because of the upcoming change of how to calculate keyset ids
-            # with version 0.14.0, we overwrite the calculated keyset id with the
+            # with version 0.15.0, we overwrite the calculated keyset id with the
             # requested one. This is a temporary fix and should be removed once all
-            # ecash is transitioned to 0.14.0.
+            # ecash is transitioned to 0.15.0.
             logger.debug(
                 f"Keyset ID mismatch: {keyset_id} != {keyset.id}. This can happen due"
                 " to a version upgrade."
@@ -450,10 +450,6 @@ class LedgerAPI(object):
         logger.debug("Calling split. POST /split")
         split_payload = PostSplitRequest(proofs=proofs, outputs=outputs)
 
-        # BEGIN: backwards compatibility pre 0.13.0
-        split_payload.amount = outputs[0].amount
-        # END: backwards compatibility pre 0.13.0
-
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /split"""
@@ -467,7 +463,6 @@ class LedgerAPI(object):
             return {
                 "outputs": ...,
                 "proofs": {i: proofs_include for i in range(len(proofs))},
-                "amount": ...,  # backwards compatibility pre 0.13.0
             }
 
         resp = await self.httpx.post(

@@ -119,15 +119,7 @@ MINT_URL=https://8333.space:3338
 ```bash
 cashu info
 ```
-
-Returns:
-```bash
-Version: 0.14.0
-Debug: False
-Cashu dir: /home/user/.cashu
-Wallet: wallet
-Mint URL: https://8333.space:3338
-```
+This command shows information about your wallet.
 
 #### Check balance
 ```bash
@@ -159,20 +151,10 @@ You should see the encoded token. Copy the token and send it to another user suc
 cashuAeyJwcm9vZnMiOiBbey...
 ```
 
-You can now see that your available balance has dropped by the amount that you reserved for sending if you enter `cashu balance`:
-```bash
-Balance: 420 sat
-```
-
 #### Receive tokens
 To receive tokens, another user enters:
 ```bash
 cashu receive cashuAeyJwcm9vZnMiOiBbey...
-```
-You should see the balance increase:
-```bash
-Balance: 0 sat
-Balance: 69 sat
 ```
 
 # Starting the wallet API daemon
