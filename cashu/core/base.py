@@ -532,6 +532,9 @@ class TokenV3(BaseModel):
     def get_keysets(self):
         return list(set([p.id for p in self.get_proofs()]))
 
+    def get_mints(self):
+        return list(set([t.mint for t in self.token if t.mint]))
+
     @classmethod
     def deserialize(cls, tokenv3_serialized: str) -> "TokenV3":
         """
@@ -542,6 +545,9 @@ class TokenV3(BaseModel):
             f"Token prefix not valid. Expected {prefix}."
         )
         token_base64 = tokenv3_serialized[len(prefix) :]
+        # if base64 string is not a multiple of 4, pad it with "="
+        token_base64 += "=" * (4 - len(token_base64) % 4)
+
         token = json.loads(base64.urlsafe_b64decode(token_base64))
         return cls.parse_obj(token)
 

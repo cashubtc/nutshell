@@ -94,7 +94,7 @@ def async_set_httpx_client(func):
             proxies=proxies_dict,  # type: ignore
             headers=headers_dict,
             base_url=self.url,
-            timeout=None if settings.debug else 5,
+            timeout=5,
         )
         return await func(self, *args, **kwargs)
 
@@ -198,9 +198,9 @@ class LedgerAPI(object):
 
         if keyset_id and keyset_id != keyset.id:
             # NOTE: Because of the upcoming change of how to calculate keyset ids
-            # with version 0.14.0, we overwrite the calculated keyset id with the
+            # with version 0.15.0, we overwrite the calculated keyset id with the
             # requested one. This is a temporary fix and should be removed once all
-            # ecash is transitioned to 0.14.0.
+            # ecash is transitioned to 0.15.0.
             logger.debug(
                 f"Keyset ID mismatch: {keyset_id} != {keyset.id}. This can happen due"
                 " to a version upgrade."
@@ -732,9 +732,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             proofs (List[Proof]): Proofs to be redeemed.
         """
         # verify DLEQ of incoming proofs
-        logger.debug("Verifying DLEQ of incoming proofs.")
         self.verify_proofs_dleq(proofs)
-        logger.debug("DLEQ verified.")
         return await self.split(proofs, sum_proofs(proofs))
 
     async def split(
@@ -928,7 +926,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             ):
                 raise Exception("DLEQ proof invalid.")
             else:
-                logger.debug("DLEQ proof valid.")
+                logger.trace("DLEQ proof valid.")
+        logger.debug("Verified incoming DLEQ proofs.")
 
     async def _construct_proofs(
         self,
