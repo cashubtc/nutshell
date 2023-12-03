@@ -120,7 +120,7 @@ class NostrClient:
         message = json.dumps(request)
         self.relay_manager.publish_message(message)
 
-        while True:
+        while any([r.connected for r in self.relay_manager.relays.values()]):
             while self.relay_manager.message_pool.has_events():
                 event_msg = self.relay_manager.message_pool.get_event()
                 if "?iv=" in event_msg.event.content:
@@ -141,7 +141,7 @@ class NostrClient:
             time.sleep(0.1)
 
     def subscribe(self, callback_func=None):
-        while True:
+        while any([r.connected for r in self.relay_manager.relays.values()]):
             while self.relay_manager.message_pool.has_events():
                 event_msg = self.relay_manager.message_pool.get_event()
                 if callback_func:

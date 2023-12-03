@@ -77,7 +77,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         self._verify_equation_balanced(proofs, outputs)
 
         # Verify outputs
-        self._verify_outputs(outputs)
+        await self._verify_outputs(outputs)
 
         # Verify inputs and outputs together
         if not self._verify_input_output_amounts(proofs, outputs):
@@ -85,18 +85,20 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         # Verify that input keyset units are the same as output keyset unit
         # We have previously verified that all outputs have the same keyset id in `_verify_outputs`
         assert outputs[0].id, "output id not set"
-        if not all([
-            self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
-            for p in proofs
-            if p.id
-        ]):
+        if not all(
+            [
+                self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
+                for p in proofs
+                if p.id
+            ]
+        ):
             raise TransactionError("input and output keysets have different units.")
 
         # Verify output spending conditions
         if outputs and not self._verify_output_spending_conditions(proofs, outputs):
             raise TransactionError("validation of output spending conditions failed.")
 
-    def _verify_outputs(self, outputs: List[BlindedMessage]):
+    async def _verify_outputs(self, outputs: List[BlindedMessage]):
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
         # Verify all outputs have the same keyset id
@@ -113,7 +115,29 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate outputs.")
+        # verify that outputs have not been signed previously
+        if any(await self._check_outputs_issued_before(outputs)):
+            raise TransactionError("outputs have already been signed before.")
         logger.trace(f"Verified {len(outputs)} outputs.")
+
+    async def _check_outputs_issued_before(self, outputs: List[BlindedMessage]):
+        """Checks whether the provided outputs have previously been signed by the mint
+        (which would lead to a duplication error later when trying to store these outputs again).
+
+        Args:
+            outputs (List[BlindedMessage]): Outputs to check
+
+        Returns:
+            result (List[bool]): Whether outputs are already present in the database.
+        """
+        result = []
+        async with self.db.connect() as conn:
+            for output in outputs:
+                promise = await self.crud.get_promise(
+                    B_=output.B_, db=self.db, conn=conn
+                )
+                result.append(False if promise is None else True)
+        return result
 
     async def _check_proofs_spendable(self, proofs: List[Proof]) -> List[bool]:
         """Checks whether the proof was already spent."""

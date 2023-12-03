@@ -1,7 +1,7 @@
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import PostMeltQuoteRequest
+from cashu.core.base import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -162,7 +162,7 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     # try to spend other proofs with the same outputs again
     await assert_err(
         ledger.split(proofs=inputs2, outputs=outputs),
-        "UNIQUE constraint failed: promises.B_b",
+        "outputs have already been signed before.",
     )
 
     # try to spend inputs2 again with new outputs
@@ -173,6 +173,55 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
     await ledger.split(proofs=inputs2, outputs=outputs)
+
+
+@pytest.mark.asyncio
+async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(128)
+    pay_if_regtest(invoice.bolt11)
+    output_amounts = [128]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+    await ledger.mint(outputs=outputs, quote_id=invoice.id)
+
+    # now try to mint with the same outputs again
+    invoice2 = await wallet1.request_mint(128)
+    pay_if_regtest(invoice2.bolt11)
+
+    await assert_err(
+        ledger.mint(outputs=outputs, quote_id=invoice2.id),
+        "outputs have already been signed before.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(130)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(130, id=invoice.id)
+
+    output_amounts = [128]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+
+    # we use the outputs once for minting
+    invoice2 = await wallet1.request_mint(128)
+    pay_if_regtest(invoice2.bolt11)
+    await ledger.mint(outputs=outputs, quote_id=invoice2.id)
+
+    # use the same outputs for melting
+    mint_quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=128))
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
+    )
+    await assert_err(
+        ledger.melt(proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs),
+        "outputs have already been signed before.",
+    )
 
 
 @pytest.mark.asyncio

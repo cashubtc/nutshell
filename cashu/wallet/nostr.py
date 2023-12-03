@@ -1,9 +1,12 @@
 import asyncio
+import datetime
 import threading
 
 import click
 from httpx import ConnectError
 from loguru import logger
+
+from cashu.core.base import TokenV3
 
 from ..core.settings import settings
 from ..nostr.client.client import NostrClient
@@ -97,7 +100,7 @@ async def send_nostr(
 
 async def receive_nostr(
     wallet: Wallet,
-):
+) -> NostrClient:
     if settings.nostr_private_key is None:
         print(
             "Warning: No nostr private key set! You don't have NOSTR_PRIVATE_KEY set in"
@@ -113,18 +116,28 @@ async def receive_nostr(
     await asyncio.sleep(2)
 
     def get_token_callback(event: Event, decrypted_content: str):
+        date_str = datetime.datetime.fromtimestamp(event.created_at).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
         logger.debug(
-            f"From {event.public_key[:3]}..{event.public_key[-3:]}: {decrypted_content}"
+            f"From {event.public_key[:3]}..{event.public_key[-3:]} on {date_str}:"
+            f" {decrypted_content}"
         )
         # split the content into words
         words = decrypted_content.split(" ")
         for w in words:
             try:
                 logger.trace(
-                    f"Nostr: setting last check timestamp to {event.created_at}"
+                    "Nostr: setting last check timestamp to"
+                    f" {event.created_at} ({date_str})"
                 )
                 # call the receive method
-                tokenObj = deserialize_token_from_string(w)
+                tokenObj: TokenV3 = deserialize_token_from_string(w)
+                print(
+                    f"Receiving {tokenObj.get_amount()} sat on mint"
+                    f" {tokenObj.get_mints()[0]} from nostr user {event.public_key} at"
+                    f" {date_str}"
+                )
                 asyncio.run(
                     receive(
                         wallet,
@@ -143,8 +156,11 @@ async def receive_nostr(
 
     # determine timestamp of last check so we don't scan all historical DMs
     last_check = await get_nostr_last_check_timestamp(db=wallet.db)
-    logger.debug(f"Last check: {last_check}")
     if last_check:
+        date_str = datetime.datetime.fromtimestamp(last_check).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        logger.debug(f"Last check: {date_str}")
         last_check -= 60 * 60  # 1 hour tolerance
 
     logger.debug("Starting Nostr DM thread")
@@ -154,3 +170,4 @@ async def receive_nostr(
         name="Nostr DM",
     )
     t.start()
+    return client
