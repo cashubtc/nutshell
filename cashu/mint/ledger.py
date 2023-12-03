@@ -302,6 +302,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         logger.trace("called mint")
         amount_outputs = sum([b.amount for b in B_s])
 
+        await self._verify_outputs(B_s)
+
         if settings.lightning:
             if not id:
                 raise NotAllowedError("no id provided.")
@@ -316,8 +318,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 logger.trace(f"crud: setting invoice {id} as issued")
                 await self.crud.update_lightning_invoice(id=id, issued=True, db=self.db)
             del self.locks[id]
-
-        await self._verify_outputs(B_s)
 
         promises = await self._generate_promises(B_s, keyset)
         logger.trace("generated promises")
