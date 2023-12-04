@@ -281,16 +281,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     # ------- TRANSACTIONS -------
 
     async def mint_quote(self, quote_request: PostMintQuoteRequest) -> MintQuote:
-        """Returns Lightning invoice and stores it in the db.
+        """Creates a mint quote and stores it in the database.
 
         Args:
-            amount (int): Amount of the mint request in Satoshis.
+            quote_request (PostMintQuoteRequest): Mint quote request.
 
         Raises:
-            Exception: Invoice creation failed.
+            Exception: Quote creation failed.
 
         Returns:
-            Tuple[str, str]: Bolt11 invoice and a id (for looking it up later)
+            MintQuote: Mint quote object.
         """
         logger.trace("called request_mint")
         if settings.mint_max_peg_in and quote_request.amount > settings.mint_max_peg_in:
@@ -341,13 +341,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         *,
         outputs: List[BlindedMessage],
         quote_id: str,
-        keyset: Optional[MintKeyset] = None,
     ) -> List[BlindedSignature]:
-        """Mints new coins if payment `id` was made. Ingest blind messages `outputs` and returns blind signatures `promises`.
+        """Mints new coins if quote with `quote_id` was paid. Ingest blind messages `outputs` and returns blind signatures `promises`.
 
         Args:
             outputs (List[BlindedMessage]): Outputs (blinded messages) to sign.
-            quote (str): Quote of mint payment. Defaults to None.
+            quote_id (str): Quote id of mint payment.
             keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
 
         Raises:
@@ -376,7 +375,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
             assert quote.method == "bolt11", "only bolt11 supported"
             unit = Unit[quote.unit]
-            method = Method["bolt11"]
+            method = Method[quote.method]
             if not quote.paid:
                 logger.trace(f"Lightning: checking invoice {quote.checking_id}")
                 status: PaymentStatus = await self.backends[method][
@@ -388,7 +387,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     quote_id=quote_id, paid=True, db=self.db
                 )
 
-            promises = await self._generate_promises(outputs, keyset)
+            promises = await self._generate_promises(outputs)
             logger.trace("generated promises")
 
             logger.trace(f"crud: setting quote {quote_id} as issued")
@@ -413,6 +412,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             checking_id=invoice_obj.payment_hash, db=self.db
         )
         if mint_quote:
+            # internal transaction
             assert (
                 Amount(unit, mint_quote.amount).to(Unit.msat).amount
                 == invoice_obj.amount_msat
@@ -424,14 +424,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             assert mint_quote.method == method.name, "methods do not match"
             assert not mint_quote.paid, "mint quote already paid"
             assert not mint_quote.issued, "mint quote already issued"
-            logger.info(
-                f"Issuing internal melt quote: {melt_quote.request} ->"
-                f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
-            )
             payment_quote = PaymentQuoteResponse(
                 checking_id=mint_quote.checking_id,
                 amount=Amount(unit, mint_quote.amount),
                 fee=Amount(unit=Unit.msat, amount=0),
+            )
+            logger.info(
+                f"Issuing internal melt quote: {melt_quote.request} ->"
+                f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
             )
         else:
             # not internal, get quote by Lightning backend
@@ -463,7 +463,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         proofs: List[Proof],
         quote: str,
         outputs: Optional[List[BlindedMessage]] = None,
-        keyset: Optional[MintKeyset] = None,
     ) -> Tuple[str, List[BlindedSignature]]:
         """Invalidates proofs and pays a Lightning invoice.
 
@@ -482,31 +481,29 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         melt_quote = await self.crud.get_melt_quote(quote_id=quote, db=self.db)
         assert melt_quote, "quote not found"
         assert melt_quote.method == "bolt11", "only bolt11 supported"
-
-        method = Method["bolt11"]
+        method = Method[melt_quote.method]
         unit = Unit[melt_quote.unit]
+        assert not melt_quote.paid, "melt quote already paid"
+
         # make sure that the outputs (for fee return) are in the same unit as the quote
         if outputs:
+            await self._verify_outputs(outputs)
             assert outputs[0].id, "output id not set"
             outputs_unit = self.keysets[outputs[0].id].unit
-            assert outputs_unit
             assert melt_quote.unit == outputs_unit.name, (
                 f"output unit {outputs_unit.name} does not match quote unit"
                 f" {melt_quote.unit}"
             )
-            # verify the outputs. note: we don't verify inputs
-            # and outputs simultaneously with verify_inputs_and_outputs() as we do
-            # in split() because we do not expect the amounts to be equal here.
-            await self._verify_outputs(outputs)
 
-        assert not melt_quote.paid, "melt quote already paid"
-        bolt11_request = melt_quote.request
+        # verify that the amount of the proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
         total_needed = melt_quote.amount + (melt_quote.fee_reserve or 0)
         assert total_provided == total_needed, (
             f"proofs have wrong amount. Provided: {total_provided}, needed:"
             f" {total_needed}"
         )
+
+        # verify that the amount of the proofs is not larger than the maximum allowed
         if settings.mint_max_peg_out and total_provided > settings.mint_max_peg_out:
             raise NotAllowedError(
                 f"Maximum melt amount is {settings.mint_max_peg_out} sat."
@@ -519,6 +516,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         await self._set_proofs_pending(proofs)
         try:
             # verify amounts from bolt11 invoice
+            bolt11_request = melt_quote.request
             invoice_obj = bolt11.decode(bolt11_request)
             assert invoice_obj.amount_msat, "invoice has no amount."
             invoice_amount_sat = math.ceil(invoice_obj.amount_msat / 1000)
@@ -685,7 +683,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         Args:
             B_s (List[BlindedMessage]): Blinded secret (point on curve)
-            keyset (Optional[MintKeyset], optional): Which keyset to use. Private keys will be taken from this keyset. Defaults to None.
+            keyset (Optional[MintKeyset], optional): Which keyset to use. Private keys will be taken from this keyset.
+                If not given will use the keyset of the first output. Defaults to None.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         Returns:
             list[BlindedSignature]: Generated BlindedSignatures.
