@@ -119,6 +119,11 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     mint_quote = await ledger.get_mint_quote(invoice.id)
     assert not mint_quote.paid, "mint quote not should be paid"
 
+    await assert_err(
+        wallet1.mint(128, id=invoice.id),
+        "quote not paid",
+    )
+
     pay_if_regtest(invoice.bolt11)
 
     mint_quote = await ledger.get_mint_quote(invoice.id)

@@ -216,8 +216,8 @@ async def pay(ctx: Context, invoice: str, yes: bool):
         print(f" Error paying invoice: {str(e)}")
         return
     print(" Invoice paid", end="", flush=True)
-    if melt_response.proof and melt_response.proof != "0" * 64:
-        print(f" (Proof: {melt_response.proof}).")
+    if melt_response.payment_preimage and melt_response.payment_preimage != "0" * 64:
+        print(f" (Preimage: {melt_response.payment_preimage}).")
     else:
         print(".")
     print_balance(ctx)

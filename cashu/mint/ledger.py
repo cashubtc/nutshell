@@ -319,6 +319,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             invoice_response.payment_request and invoice_response.checking_id
         ), LightningError("could not fetch bolt11 payment request from backend")
 
+        # get invoice expiry time
+        invoice_obj = bolt11.decode(invoice_response.payment_request)
+
         quote = MintQuote(
             quote=random_hash(),
             method="bolt11",
@@ -329,6 +332,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             issued=False,
             paid=False,
             created_time=int(time.time()),
+            expiry=invoice_obj.expiry or 0,
         )
         await self.crud.store_mint_quote(
             quote=quote,
@@ -397,10 +401,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         )  # create a new lock if it doesn't exist
         async with self.locks[quote_id]:
             quote = await self.get_mint_quote(quote_id=quote_id)
+            assert quote.paid, "quote not paid"
             assert not quote.issued, "quote already issued"
             assert (
                 quote.amount == sum_amount_outputs
             ), "amount to mint does not match quote amount"
+            if quote.expiry:
+                assert quote.expiry > int(time.time()), "quote expired"
 
             promises = await self._generate_promises(outputs)
             logger.trace("generated promises")
@@ -558,7 +565,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # we handle this transaction internally
         melt_quote.fee_paid = 0
-        melt_quote.proof = "internal"
         melt_quote.paid = True
         melt_quote.paid_time = int(time.time())
         await self.crud.update_melt_quote(quote=melt_quote, db=self.db)

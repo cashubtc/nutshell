@@ -162,6 +162,7 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
         request=quote.request,
         quote=quote.quote,
         paid=quote.paid,
+        expiry=quote.expiry,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
@@ -183,6 +184,7 @@ async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
         quote=mint_quote.quote,
         request=mint_quote.request,
         paid=mint_quote.paid,
+        expiry=mint_quote.expiry,
     )
     logger.trace(f"< POST /v1/mint/quote/{quote}")
     return resp
@@ -272,7 +274,9 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
     preimage, change_promises = await ledger.melt(
         proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
     )
-    resp = PostMeltResponse(paid=True, proof=preimage, change=change_promises)
+    resp = PostMeltResponse(
+        paid=True, payment_preimage=preimage, change=change_promises
+    )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp
 

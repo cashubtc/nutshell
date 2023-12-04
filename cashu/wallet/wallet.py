@@ -578,7 +578,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 proofs=proofs, outputs=outputs, invoice=invoice.bolt11
             )
             return PostMeltResponse(
-                paid=ret.paid, proof=ret.preimage, change=ret.change
+                paid=ret.paid, payment_preimage=ret.preimage, change=ret.change
             )
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
@@ -1034,7 +1034,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             id=quote_id,
             paid=True,
             time_paid=int(time.time()),
-            preimage=status.proof,
+            preimage=status.payment_preimage,
         )
 
         # handle change and produce proofs

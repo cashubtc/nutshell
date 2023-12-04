@@ -232,6 +232,7 @@ class MintQuote(BaseModel):
     issued: bool
     created_time: int = 0
     paid_time: int = 0
+    expiry: int = 0
 
 
 # ------- API -------
@@ -294,6 +295,7 @@ class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
     paid: bool  # whether the request has been paid
+    expiry: int  # expiry of the quote
 
 
 # ------- API: MINT -------
@@ -355,7 +357,7 @@ class PostMeltRequest(BaseModel):
 
 class PostMeltResponse(BaseModel):
     paid: Union[bool, None]
-    proof: Union[str, None]
+    payment_preimage: Union[str, None]
     change: Union[List[BlindedSignature], None] = None
 
 
