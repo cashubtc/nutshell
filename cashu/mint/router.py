@@ -278,12 +278,12 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
 
 
 @router.post(
-    "/v1/split",
-    name="Split",
-    summary="Split proofs at a specified amount",
+    "/v1/swap",
+    name="Swap tokens",
+    summary="Swap inputs for outputs of the same value",
     response_model=PostSplitResponse,
     response_description=(
-        "A list of blinded signatures that can be used to create proofs."
+        "An array of blinded signatures that can be used to create proofs."
     ),
 )
 async def split(
@@ -295,7 +295,7 @@ async def split(
     This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
     It is then used by Carol (by setting split=total) to redeem the tokens.
     """
-    logger.trace(f"> POST /v1/split: {payload}")
+    logger.trace(f"> POST /v1/swap: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
 
     signatures = await ledger.split(proofs=payload.inputs, outputs=payload.outputs)

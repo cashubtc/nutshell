@@ -593,12 +593,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         outputs: List[BlindedMessage],
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
-        logger.debug("Calling split. POST /split")
+        logger.debug("Calling split. POST /v1/swap")
         split_payload = PostSplitRequest(inputs=proofs, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
-            """strips away fields from the model that aren't necessary for the /split"""
+            """strips away fields from the model that aren't necessary for /v1/swap"""
             proofs_include = {
                 "id",
                 "amount",
@@ -612,7 +612,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             }
 
         resp = await self.httpx.post(
-            join(self.url, "/v1/split"),
+            join(self.url, "/v1/swap"),
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -640,7 +640,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         payload = CheckSpendableRequest(proofs=proofs)
 
         def _check_proof_state_include_fields(proofs):
-            """strips away fields from the model that aren't necessary for the /split"""
+            """strips away fields from the model that aren't necessary for the /v1/check"""
             return {
                 "proofs": {i: {"secret"} for i in range(len(proofs))},
             }
@@ -947,7 +947,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # potentially add witnesses to outputs based on what requirement the proofs indicate
         outputs = await self.add_witnesses_to_outputs(proofs, outputs)
 
-        # Call /split API
+        # Call swap API
         promises = await super().split(proofs, outputs)
 
         # Construct proofs from returned promises (i.e., unblind the signatures)

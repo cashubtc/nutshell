@@ -41,7 +41,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         Args:
             proofs (List[Proof]): List of proofs to check.
             outputs (Optional[List[BlindedMessage]], optional): List of outputs to check.
-            Must be provided for /split but not for /melt. Defaults to None.
+            Must be provided for a swap but not for a melt. Defaults to None.
 
         Raises:
             Exception: Scripts did not validate.
