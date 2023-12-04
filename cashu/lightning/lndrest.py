@@ -112,7 +112,10 @@ class LndRestWallet(LightningBackend):
                 hashlib.sha256(unhashed_description).digest()
             ).decode("ascii")
 
-        r = await self.client.post(url="/v1/invoices", json=data)
+        try:
+            r = await self.client.post(url="/v1/invoices", json=data)
+        except Exception as e:
+            raise Exception(f"failed to create invoice: {e}")
 
         if r.is_error:
             error_message = r.text

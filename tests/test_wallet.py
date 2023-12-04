@@ -47,7 +47,7 @@ async def reset_wallet_db(wallet: Wallet):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1():
+async def wallet1(mint):
     wallet1 = await Wallet1.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet1",

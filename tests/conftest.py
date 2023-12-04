@@ -1,4 +1,4 @@
-import importlib
+import asyncio
 import multiprocessing
 import os
 import shutil
@@ -44,9 +44,15 @@ assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
 
-wallets_module = importlib.import_module("cashu.lightning")
-lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
+from cashu.mint.startup import lightning_backend # noqa
 
+
+@pytest.fixture(scope="session")
+def event_loop():
+    policy = asyncio.get_event_loop_policy()
+    loop = policy.new_event_loop()
+    yield loop
+    loop.close()
 
 class UvicornServer(multiprocessing.Process):
     def __init__(self, config: Config):
@@ -104,3 +110,4 @@ async def ledger():
     )
     await start_mint_init(ledger)
     yield ledger
+    print("teardown")
