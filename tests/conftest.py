@@ -44,7 +44,7 @@ assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
 
-from cashu.mint.startup import lightning_backend # noqa
+from cashu.mint.startup import lightning_backend  # noqa
 
 
 @pytest.fixture(scope="session")
@@ -53,6 +53,7 @@ def event_loop():
     loop = policy.new_event_loop()
     yield loop
     loop.close()
+
 
 class UvicornServer(multiprocessing.Process):
     def __init__(self, config: Config):
