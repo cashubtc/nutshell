@@ -281,6 +281,8 @@ async def m011_add_quote_tables(db: Database):
                     paid BOOL NOT NULL,
                     created_time TIMESTAMP,
                     paid_time TIMESTAMP,
+                    fee_paid INTEGER,
+                    proof TEXT,
 
                     UNIQUE (quote)
 

@@ -187,6 +187,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     await wallet.load_mint()
     print_balance(ctx)
     quote = await wallet.get_pay_amount_with_fees(invoice)
+    logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
     if not yes:
         potential = (

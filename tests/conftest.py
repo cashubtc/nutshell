@@ -1,9 +1,9 @@
+import importlib
 import multiprocessing
 import os
 import shutil
 import time
 from pathlib import Path
-from typing import Mapping
 
 import pytest
 import pytest_asyncio
@@ -14,7 +14,6 @@ from cashu.core.base import Method, Unit
 from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
-from cashu.lightning.fake import FakeWallet
 from cashu.mint import migrations as migrations_mint
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
@@ -44,6 +43,9 @@ settings.mint_max_balance = 0
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
+
+wallets_module = importlib.import_module("cashu.lightning")
+lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
 
 
 class UvicornServer(multiprocessing.Process):
@@ -90,8 +92,8 @@ async def ledger():
         if os.path.exists(db_file):
             os.remove(db_file)
 
-    backends: Mapping = {
-        Method.bolt11: {Unit.sat: FakeWallet()},
+    backends = {
+        Method.bolt11: {Unit.sat: lightning_backend},
     }
     ledger = Ledger(
         db=Database("mint", settings.mint_database),

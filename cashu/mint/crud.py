@@ -143,24 +143,23 @@ class LedgerCrud(ABC):
     ) -> Optional[MintQuote]: ...
 
     @abstractmethod
-    async def update_mint_quote_issued(
+    async def update_mint_quote(
         self,
         *,
-        quote_id: str,
-        issued: bool,
+        quote: MintQuote,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
 
-    @abstractmethod
-    async def update_mint_quote_paid(
-        self,
-        *,
-        quote_id: str,
-        paid: bool,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> None: ...
+    # @abstractmethod
+    # async def update_mint_quote_paid(
+    #     self,
+    #     *,
+    #     quote_id: str,
+    #     paid: bool,
+    #     db: Database,
+    #     conn: Optional[Connection] = None,
+    # ) -> None: ...
 
     @abstractmethod
     async def store_melt_quote(
@@ -384,39 +383,40 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return MintQuote(**dict(row)) if row else None
 
-    async def update_mint_quote_issued(
+    async def update_mint_quote(
         self,
         *,
-        quote_id: str,
-        issued: bool,
+        quote: MintQuote,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'mint_quotes')} SET issued = ? WHERE"
-            " quote = ?",
+            f"UPDATE {table_with_schema(db, 'mint_quotes')} SET issued = ?, paid = ?,"
+            " paid_time = ? WHERE quote = ?",
             (
-                issued,
-                quote_id,
+                quote.issued,
+                quote.paid,
+                quote.paid_time,
+                quote.quote,
             ),
         )
 
-    async def update_mint_quote_paid(
-        self,
-        *,
-        quote_id: str,
-        paid: bool,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> None:
-        await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'mint_quotes')} SET paid = ? WHERE"
-            " quote = ?",
-            (
-                paid,
-                quote_id,
-            ),
-        )
+    # async def update_mint_quote_paid(
+    #     self,
+    #     *,
+    #     quote_id: str,
+    #     paid: bool,
+    #     db: Database,
+    #     conn: Optional[Connection] = None,
+    # ) -> None:
+    #     await (conn or db).execute(
+    #         f"UPDATE {table_with_schema(db, 'mint_quotes')} SET paid = ? WHERE"
+    #         " quote = ?",
+    #         (
+    #             paid,
+    #             quote_id,
+    #         ),
+    #     )
 
     async def store_melt_quote(
         self,
@@ -428,8 +428,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
@@ -442,6 +442,8 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.paid,
                 quote.created_time,
                 quote.paid_time,
+                quote.fee_paid,
+                quote.proof,
             ),
         )
 
@@ -487,10 +489,13 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ? WHERE"
-            " quote = ?",
+            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ?, fee_paid = ?,"
+            " paid_time = ?, proof = ? WHERE quote = ?",
             (
                 quote.paid,
+                quote.fee_paid,
+                quote.paid_time,
+                quote.proof,
                 quote.quote,
             ),
         )

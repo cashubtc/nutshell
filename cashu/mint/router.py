@@ -161,8 +161,30 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
     resp = PostMintQuoteResponse(
         request=quote.request,
         quote=quote.quote,
+        paid=quote.paid,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
+    return resp
+
+
+@router.get(
+    "/v1/mint/quote/{quote}",
+    summary="Get mint quote",
+    response_model=PostMintQuoteResponse,
+    response_description="Get an existing mint quote to check its status.",
+)
+async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
+    """
+    Get mint quote state.
+    """
+    logger.trace(f"> POST /v1/mint/quote/{quote}")
+    mint_quote = await ledger.get_mint_quote(quote)
+    resp = PostMintQuoteResponse(
+        quote=mint_quote.quote,
+        request=mint_quote.request,
+        paid=mint_quote.paid,
+    )
+    logger.trace(f"< POST /v1/mint/quote/{quote}")
     return resp
 
 
@@ -197,7 +219,7 @@ async def mint(
     response_model=PostMeltQuoteResponse,
     response_description="Melt tokens for a payment on a supported payment method.",
 )
-async def melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse:
+async def get_melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse:
     """
     Request a quote for melting tokens.
     """
@@ -205,6 +227,28 @@ async def melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse:
     quote = await ledger.melt_quote(payload)  # TODO
     logger.trace(f"< POST /v1/melt/quote/bolt11: {quote}")
     return quote
+
+
+@router.get(
+    "/v1/melt/quote/{quote}",
+    summary="Get melt quote",
+    response_model=PostMeltQuoteResponse,
+    response_description="Get an existing melt quote to check its status.",
+)
+async def melt_quote(quote: str) -> PostMeltQuoteResponse:
+    """
+    Get melt quote state.
+    """
+    logger.trace(f"> POST /v1/melt/quote/{quote}")
+    melt_quote = await ledger.get_melt_quote(quote)
+    resp = PostMeltQuoteResponse(
+        quote=melt_quote.quote,
+        amount=melt_quote.amount,
+        fee_reserve=melt_quote.fee_reserve,
+        paid=melt_quote.paid,
+    )
+    logger.trace(f"< POST /v1/melt/quote/{quote}")
+    return resp
 
 
 @router.post(

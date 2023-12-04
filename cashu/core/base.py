@@ -217,6 +217,8 @@ class MeltQuote(BaseModel):
     paid: bool
     created_time: int = 0
     paid_time: int = 0
+    fee_paid: int = 0
+    proof: str = ""
 
 
 class MintQuote(BaseModel):
@@ -291,6 +293,7 @@ class PostMintQuoteRequest(BaseModel):
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
+    paid: bool  # whether the request has been paid
 
 
 # ------- API: MINT -------
@@ -336,6 +339,7 @@ class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
+    paid: bool  # whether the request has been paid
 
 
 # ------- API: MELT -------
@@ -562,9 +566,9 @@ class WalletKeyset:
             self.id = id
 
     def serialize(self):
-        return json.dumps({
-            amount: key.serialize().hex() for amount, key in self.public_keys.items()
-        })
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
 
     @classmethod
     def from_row(cls, row: Row):
