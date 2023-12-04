@@ -613,8 +613,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
         total_needed = melt_quote.amount + (melt_quote.fee_reserve or 0)
-        assert total_provided == total_needed, (
-            f"proofs have wrong amount. Provided: {total_provided}, needed:"
+        assert total_provided >= total_needed, (
+            f"not enough inputs provided for melt. Provided: {total_provided}, needed:"
             f" {total_needed}"
         )
 

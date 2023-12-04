@@ -2,6 +2,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import PostMeltQuoteRequest, PostMintQuoteRequest
+from cashu.core.helpers import sum_proofs
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -291,6 +292,66 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
         ledger.melt(proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs),
         "outputs have already been signed before.",
     )
+
+
+@pytest.mark.asyncio
+async def test_melt_with_less_inputs_than_invoice(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(32)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(32, id=invoice.id)
+
+    # outputs for fee return
+    output_amounts = [1, 1, 1, 1]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+
+    # create a mint quote to pay
+    mint_quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=128))
+    # prepare melt quote
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
+    )
+
+    assert melt_quote.amount + melt_quote.fee_reserve > sum_proofs(wallet1.proofs)
+
+    # try to pay with not enough inputs
+    await assert_err(
+        ledger.melt(proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs),
+        "not enough inputs provided for melt",
+    )
+
+
+@pytest.mark.asyncio
+async def test_melt_with_more_inputs_than_invoice(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(130)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(130, split=[64, 64, 2], id=invoice.id)
+
+    # outputs for fee return
+    output_amounts = [1, 1, 1, 1]
+    secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
+        len(output_amounts)
+    )
+    outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
+
+    # create a mint quote to pay
+    mint_quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=128))
+    # prepare melt quote
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=mint_quote.request)
+    )
+    # fees are 0 because it's internal
+    assert melt_quote.fee_reserve == 0
+
+    # make sure we have more inputs than the melt quote needs
+    assert sum_proofs(wallet1.proofs) >= melt_quote.amount + melt_quote.fee_reserve
+    payment_proof, return_outputs = await ledger.melt(
+        proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
+    )
+    # we get 2 sats back because we overpaid
+    assert sum([o.amount for o in return_outputs]) == 2
 
 
 @pytest.mark.asyncio
