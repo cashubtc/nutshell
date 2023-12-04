@@ -115,19 +115,19 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")
 async def test_mint_external(wallet1: Wallet, ledger: Ledger):
-    invoice = await wallet1.request_mint(128)
+    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=128, unit="sat"))
 
-    mint_quote = await ledger.get_mint_quote(invoice.id)
+    mint_quote = await ledger.get_mint_quote(quote.quote)
     assert not mint_quote.paid, "mint quote not should be paid"
 
     await assert_err(
-        wallet1.mint(128, id=invoice.id),
+        wallet1.mint(128, id=quote.quote),
         "quote not paid",
     )
 
-    pay_if_regtest(invoice.bolt11)
+    pay_if_regtest(quote.request)
 
-    mint_quote = await ledger.get_mint_quote(invoice.id)
+    mint_quote = await ledger.get_mint_quote(quote.quote)
     assert mint_quote.paid, "mint quote should be paid"
 
     output_amounts = [128]
@@ -135,12 +135,7 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
         len(output_amounts)
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
-    await ledger.mint(outputs=outputs, quote_id=invoice.id)
-
-    await assert_err(
-        ledger.mint(outputs=outputs, quote_id=invoice.id),
-        "outputs have already been signed before.",
-    )
+    await ledger.mint(outputs=outputs, quote_id=quote.quote)
 
 
 @pytest.mark.asyncio

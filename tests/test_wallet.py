@@ -1,6 +1,4 @@
 import copy
-import shutil
-from pathlib import Path
 from typing import List, Union
 
 import pytest
@@ -68,23 +66,6 @@ async def wallet2():
     )
     await wallet2.load_mint()
     yield wallet2
-
-
-@pytest_asyncio.fixture(scope="function")
-async def wallet3():
-    dirpath = Path("test_data/wallet3")
-    if dirpath.exists() and dirpath.is_dir():
-        shutil.rmtree(dirpath)
-
-    wallet3 = await Wallet1.with_db(
-        url=SERVER_ENDPOINT,
-        db="test_data/wallet3",
-        name="wallet3",
-    )
-    await wallet3.db.execute("DELETE FROM proofs")
-    await wallet3.db.execute("DELETE FROM proofs_used")
-    await wallet3.load_mint()
-    yield wallet3
 
 
 @pytest.mark.asyncio

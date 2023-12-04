@@ -517,7 +517,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         )
 
         if not melt_quote.paid and not mint_quote:
-            logger.trace(f"Lightning: checking invoice {melt_quote.checking_id}")
+            logger.trace(
+                "Lightning: checking outgoing Lightning payment"
+                f" {melt_quote.checking_id}"
+            )
             status: PaymentStatus = await self.backends[method][
                 unit
             ].get_payment_status(melt_quote.checking_id)
