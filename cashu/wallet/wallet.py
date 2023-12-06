@@ -1488,15 +1488,10 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
         """
-        # decoded_invoice = bolt11.decode(invoice)
-        # assert decoded_invoice.amount_msat, "invoices has no amount."
-        # check if it's an internal payment
         melt_quote = await self.melt_quote(invoice)
-        # fees = melt_quote.fee_reserve or 0
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
         )
-        # amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
         return melt_quote
 
     async def split_to_send(
