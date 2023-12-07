@@ -9,7 +9,7 @@ from ..core.base import (
     CheckFeesResponse,
     CheckSpendableRequest,
     CheckSpendableResponse,
-    GetInfoResponse,
+    GetInfoResponse_deprecated,
     GetMintResponse_deprecated,
     KeysetsResponse_deprecated,
     KeysResponse_deprecated,
@@ -35,13 +35,13 @@ router_deprecated: APIRouter = APIRouter()
     "/info",
     name="Mint information",
     summary="Mint information, operator contact information, and other info.",
-    response_model=GetInfoResponse,
+    response_model=GetInfoResponse_deprecated,
     response_model_exclude_none=True,
     deprecated=True,
 )
-async def info() -> GetInfoResponse:
+async def info() -> GetInfoResponse_deprecated:
     logger.trace("> GET /info")
-    return GetInfoResponse(
+    return GetInfoResponse_deprecated(
         name=settings.mint_info_name,
         pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
         version=f"Nutshell/{settings.version}",

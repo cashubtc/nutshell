@@ -421,8 +421,14 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If the mint info request fails
         """
         resp = await self.httpx.get(
-            join(self.url, "info"),
+            join(self.url, "/v1/info"),
         )
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self._get_info_deprecated()
+            return ret
+        # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         data: dict = resp.json()
         mint_info: GetInfoResponse = GetInfoResponse.parse_obj(data)
@@ -956,7 +962,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         )
 
         try:
-            await self.invalidate(proofs)
+            await self.invalidate(proofs, check_spendable=False)
         except Exception as e:
             logger.error(
                 f"Could not invalidate proofs after split: {str(e)}.\nProofs will"

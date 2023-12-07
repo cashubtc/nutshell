@@ -13,6 +13,8 @@ from ..core.base import (
     CheckFeesResponse,
     CheckSpendableRequest,
     CheckSpendableResponse,
+    GetInfoResponse,
+    GetInfoResponse_deprecated,
     GetMintResponse_deprecated,
     Invoice,
     KeysetsResponse_deprecated,
@@ -108,6 +110,30 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             raise Exception(error_message)
         # raise for status if no error
         resp.raise_for_status()
+
+    @async_set_httpx_client
+    async def _get_info_deprecated(self) -> GetInfoResponse:
+        """API that gets the mint info.
+
+        Returns:
+            GetInfoResponse: Current mint info
+
+        Raises:
+            Exception: If the mint info request fails
+        """
+        logger.warning(f"Using deprecated API call: {self.url}/info")
+        resp = await self.httpx.get(
+            join(self.url, "/info"),
+        )
+        self.raise_on_error(resp)
+        data: dict = resp.json()
+        mint_info_deprecated: GetInfoResponse_deprecated = (
+            GetInfoResponse_deprecated.parse_obj(data)
+        )
+        mint_info = GetInfoResponse(
+            **mint_info_deprecated.dict(exclude={"parameter", "nuts"})
+        )
+        return mint_info
 
     @async_set_httpx_client
     async def _get_keys_deprecated(self, url: str) -> WalletKeyset:

@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 from sqlite3 import Row
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -244,6 +244,17 @@ class MintQuote(BaseModel):
 
 
 class GetInfoResponse(BaseModel):
+    name: Optional[str] = None
+    pubkey: Optional[str] = None
+    version: Optional[str] = None
+    description: Optional[str] = None
+    description_long: Optional[str] = None
+    contact: Optional[List[List[str]]] = None
+    motd: Optional[str] = None
+    nuts: Optional[Dict[int, Dict[str, Any]]] = None
+
+
+class GetInfoResponse_deprecated(BaseModel):
     name: Optional[str] = None
     pubkey: Optional[str] = None
     version: Optional[str] = None

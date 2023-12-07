@@ -1,3 +1,5 @@
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, Request
 from loguru import logger
 
@@ -37,6 +39,30 @@ router: APIRouter = APIRouter()
 )
 async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
+
+    # determine all method-unit pairs
+    method_unit_pairs: List[List[str]] = []
+    for method, unit_dict in ledger.backends.items():
+        for unit in unit_dict.keys():
+            method_unit_pairs.append([method.name, unit.name])
+    supported_dict = dict(supported=True)
+
+    mint_features: Dict[int, Dict[str, Any]] = {
+        4: dict(
+            methods=method_unit_pairs,
+        ),
+        5: dict(
+            methods=method_unit_pairs,
+            disabled=False,
+        ),
+        7: supported_dict,
+        8: supported_dict,
+        9: supported_dict,
+        10: supported_dict,
+        11: supported_dict,
+        12: supported_dict,
+    }
+
     return GetInfoResponse(
         name=settings.mint_info_name,
         pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
@@ -44,13 +70,8 @@ async def info() -> GetInfoResponse:
         description=settings.mint_info_description,
         description_long=settings.mint_info_description_long,
         contact=settings.mint_info_contact,
-        nuts=settings.mint_info_nuts,
+        nuts=mint_features,
         motd=settings.mint_info_motd,
-        parameter={
-            "max_peg_in": settings.mint_max_peg_in,
-            "max_peg_out": settings.mint_max_peg_out,
-            "peg_out_only": settings.mint_peg_out_only,
-        },
     )
 
 
