@@ -114,7 +114,8 @@ async def test_pay_invoice_external(wallet: LightningWallet):
     assert invoice.payment_request
     assert invoice.checking_id
     pay_if_regtest(invoice.payment_request)
-    await wallet.get_invoice_status(invoice.checking_id)
+    status = await wallet.get_invoice_status(invoice.checking_id)
+    assert status.paid
     assert wallet.available_balance >= 64
 
     # pay invoice

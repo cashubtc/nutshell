@@ -1,4 +1,5 @@
 import base64
+import copy
 import json
 import time
 import uuid
@@ -912,6 +913,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         assert len(proofs) > 0, "no proofs provided."
         assert sum_proofs(proofs) >= amount, "amount too large."
         assert amount > 0, "amount must be positive."
+        # make sure we're operating on an independent copy of proofs
+        proofs = copy.copy(proofs)
 
         # potentially add witnesses to unlock provided proofs (if they indicate one)
         proofs = await self.add_witnesses_to_proofs(proofs)
@@ -961,14 +964,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             promises, secrets, rs, derivation_paths
         )
 
-        try:
-            await self.invalidate(proofs, check_spendable=False)
-        except Exception as e:
-            logger.error(
-                f"Could not invalidate proofs after split: {str(e)}.\nProofs will"
-                " remain in your wallet. Use this command to invalidate them manually:"
-                " `cashu burn -f`"
-            )
+        await self.invalidate(proofs)
 
         keep_proofs = new_proofs[: len(frst_outputs)]
         send_proofs = new_proofs[len(frst_outputs) :]
@@ -985,6 +981,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             fee_reserve_sat (int): Amount of fees to be reserved for the payment.
 
         """
+        # Make sure we're operating on an independent copy of proofs
+        proofs = copy.copy(proofs)
 
         # Generate a number of blank outputs for any overpaid fees. As described in
         # NUT-08, the mint will imprint these outputs with a value depending on the
@@ -1030,8 +1028,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             raise Exception("could not pay invoice.")
 
         # invoice was paid successfully
-        # we don't have to recheck the spendable sate of these tokens when invalidating
-        await self.invalidate(proofs, check_spendable=False)
+
+        await self.invalidate(proofs)
 
         # update paid status in db
         logger.trace(f"Settings invoice {quote_id} to paid.")
@@ -1146,7 +1144,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         logger.trace(f"Constructed {len(proofs)} proofs.")
 
         # add new proofs to wallet
-        self.proofs += proofs
+        self.proofs += copy.copy(proofs)
         # store new proofs in database
         await self._store_proofs(proofs)
 
@@ -1451,7 +1449,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             await update_proof(proof, reserved=reserved, send_id=uuid_str, db=self.db)
 
     async def invalidate(
-        self, proofs: List[Proof], check_spendable=True
+        self, proofs: List[Proof], check_spendable=False
     ) -> List[Proof]:
         """Invalidates all unspendable tokens supplied in proofs.
 
@@ -1615,7 +1613,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             restored_proofs = await self.restore_promises_from_to(i, i + batch - 1)
             if len(restored_proofs) == 0:
                 stop_counter += 1
-            spendable_proofs = await self.invalidate(restored_proofs)
+            spendable_proofs = await self.invalidate(restored_proofs, check_spendable=True)
             if len(spendable_proofs):
                 n_last_restored_proofs = len(spendable_proofs)
                 print(f"Restored {sum_proofs(restored_proofs)} sat")

@@ -323,9 +323,9 @@ async def burn(
         proofs = tokenObj.get_proofs()
 
     if delete:
-        await wallet.invalidate(proofs, check_spendable=False)
-    else:
         await wallet.invalidate(proofs)
+    else:
+        await wallet.invalidate(proofs, check_spendable=True)
     return BurnResponse(balance=wallet.available_balance)
 
 
@@ -433,7 +433,7 @@ async def restore(
         raise Exception("Counter must be positive")
     await wallet.load_mint()
     await wallet.restore_promises_from_to(0, to)
-    await wallet.invalidate(wallet.proofs)
+    await wallet.invalidate(wallet.proofs, check_spendable=True)
     return RestoreResponse(balance=wallet.available_balance)
 
 

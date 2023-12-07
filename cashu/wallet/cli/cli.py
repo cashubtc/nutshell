@@ -575,9 +575,9 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         proofs = tokenObj.get_proofs()
 
     if delete:
-        await wallet.invalidate(proofs, check_spendable=False)
-    else:
         await wallet.invalidate(proofs)
+    else:
+        await wallet.invalidate(proofs, check_spendable=True)
     print_balance(ctx)
 
 
