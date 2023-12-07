@@ -316,4 +316,6 @@ class CoreLightningRestWallet(LightningBackend):
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
-        return PaymentQuoteResponse(checking_id=invoice_obj.payment_hash, fee=fees, amount=amount)
+        return PaymentQuoteResponse(
+            checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
+        )

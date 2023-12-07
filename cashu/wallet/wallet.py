@@ -1613,7 +1613,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             restored_proofs = await self.restore_promises_from_to(i, i + batch - 1)
             if len(restored_proofs) == 0:
                 stop_counter += 1
-            spendable_proofs = await self.invalidate(restored_proofs, check_spendable=True)
+            spendable_proofs = await self.invalidate(
+                restored_proofs, check_spendable=True
+            )
             if len(spendable_proofs):
                 n_last_restored_proofs = len(spendable_proofs)
                 print(f"Restored {sum_proofs(restored_proofs)} sat")
