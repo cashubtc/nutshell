@@ -40,7 +40,7 @@ async def m001_initial(db: Database):
                 SELECT SUM(amount) AS s
                 FROM proofs
                 WHERE amount > 0
-            );
+            ) AS s;
         """)
 
         await conn.execute("""
@@ -49,7 +49,7 @@ async def m001_initial(db: Database):
                 SELECT SUM(amount) AS s
                 FROM proofs_used
                 WHERE amount > 0
-            );
+            )AS s;
         """)
 
 
