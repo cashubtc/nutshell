@@ -1,6 +1,6 @@
 import asyncio
 import math
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import bolt11
 from loguru import logger
@@ -17,7 +17,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_pubkey, random_hash
 from ..core.crypto.secp import PublicKey
-from ..core.db import Connection, Database
+from ..core.db import Connection, Database, get_db_connection
 from ..core.errors import (
     KeysetError,
     KeysetNotFoundError,
@@ -49,7 +49,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         crud: LedgerCrud,
         derivation_path="",
     ):
-        self.secrets_used: Set[str] = set()
         self.master_key = seed
         self.derivation_path = derivation_path
 
@@ -146,21 +145,27 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         assert keyset.public_keys, KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
+    async def get_balance(self) -> int:
+        """Returns the balance of the mint."""
+        return await self.crud.get_balance(db=self.db)
+
     # ------- ECASH -------
 
-    async def _invalidate_proofs(self, proofs: List[Proof]) -> None:
+    async def _invalidate_proofs(
+        self, proofs: List[Proof], conn: Optional[Connection] = None
+    ) -> None:
         """Adds secrets of proofs to the list of known secrets and stores them in the db.
-        Removes proofs from pending table. This is executed if the ecash has been redeemed.
 
         Args:
             proofs (List[Proof]): Proofs to add to known secret table.
+            conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        # Mark proofs as used and prepare new promises
         secrets = set([p.secret for p in proofs])
         self.secrets_used |= secrets
-        # store in db
-        for p in proofs:
-            await self.crud.invalidate_proof(proof=p, db=self.db)
+        async with get_db_connection(self.db, conn) as conn:
+            # store in db
+            for p in proofs:
+                await self.crud.invalidate_proof(proof=p, db=self.db, conn=conn)
 
     async def _generate_change_promises(
         self,
@@ -245,6 +250,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             )
         if settings.mint_peg_out_only:
             raise NotAllowedError("Mint does not allow minting new tokens.")
+        if settings.mint_max_balance:
+            balance = await self.get_balance()
+            if balance + amount > settings.mint_max_balance:
+                raise NotAllowedError("Mint has reached maximum balance.")
 
         logger.trace(f"requesting invoice for {amount} satoshis")
         invoice_response = await self._request_lightning_invoice(amount)
@@ -293,6 +302,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         logger.trace("called mint")
         amount_outputs = sum([b.amount for b in B_s])
 
+        await self._verify_outputs(B_s)
+
         if settings.lightning:
             if not id:
                 raise NotAllowedError("no id provided.")
@@ -307,8 +318,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 logger.trace(f"crud: setting invoice {id} as issued")
                 await self.crud.update_lightning_invoice(id=id, issued=True, db=self.db)
             del self.locks[id]
-
-        self._verify_outputs(B_s)
 
         promises = await self._generate_promises(B_s, keyset)
         logger.trace("generated promises")
@@ -358,6 +367,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 "provided proofs not enough for Lightning payment. Provided:"
                 f" {total_provided}, needed: {invoice_amount + reserve_fees_sat}"
             )
+
+            if outputs:
+                # verify the outputs. note: we don't verify inputs
+                # and outputs simultaneously with verify_inputs_and_outputs() as we do
+                # in split() because we do not expect the amounts to be equal here.
+                await self._verify_outputs(outputs)
 
             # verify spending inputs and their spending conditions
             await self.verify_inputs_and_outputs(proofs)
@@ -442,14 +457,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
-        amount: Optional[int] = None,  # backwards compatibility < 0.13.0
     ):
         """Consumes proofs and prepares new promises based on the amount split. Used for splitting tokens
         Before sending or for redeeming tokens for new ones that have been received by another wallet.
 
         Args:
             proofs (List[Proof]): Proofs to be invalidated for the split.
-            amount (int): Amount at which the split should happen.
             outputs (List[BlindedMessage]): New outputs that should be signed in return.
             keyset (Optional[MintKeyset], optional): Keyset to use. Uses default keyset if not given. Defaults to None.
 
@@ -463,41 +476,26 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
         await self._set_proofs_pending(proofs)
         try:
+            # explicitly check that amount of inputs is equal to amount of outputs
+            # note: we check this again in verify_inputs_and_outputs but only if any
+            # outputs are provided at all. To make sure of that before calling
+            # verify_inputs_and_outputs, we check it here.
+            self._verify_equation_balanced(proofs, outputs)
             # verify spending inputs, outputs, and spending conditions
             await self.verify_inputs_and_outputs(proofs, outputs)
+
             # Mark proofs as used and prepare new promises
-            await self._invalidate_proofs(proofs)
+            async with get_db_connection(self.db) as conn:
+                # we do this in a single db transaction
+                promises = await self._generate_promises(outputs, keyset, conn)
+                await self._invalidate_proofs(proofs, conn)
+
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
         finally:
             # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
-
-        # BEGIN backwards compatibility < 0.13.0
-        if amount is not None:
-            logger.debug(
-                "Split: Client provided `amount` - backwards compatibility response pre"
-                " 0.13.0"
-            )
-            # split outputs according to amount
-            total = sum_proofs(proofs)
-            if amount > total:
-                raise Exception("split amount is higher than the total sum.")
-            outs_fst = amount_split(total - amount)
-            B_fst = [od for od in outputs[: len(outs_fst)]]
-            B_snd = [od for od in outputs[len(outs_fst) :]]
-
-            # generate promises
-            prom_fst = await self._generate_promises(B_fst, keyset)
-            prom_snd = await self._generate_promises(B_snd, keyset)
-            promises = prom_fst + prom_snd
-        # END backwards compatibility < 0.13.0
-        else:
-            promises = await self._generate_promises(outputs, keyset)
-
-        # verify amounts in produced promises
-        self._verify_equation_balanced(proofs, promises)
 
         logger.trace("split successful")
         return promises
@@ -528,71 +526,68 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
     # ------- BLIND SIGNATURES -------
 
     async def _generate_promises(
-        self, B_s: List[BlindedMessage], keyset: Optional[MintKeyset] = None
+        self,
+        B_s: List[BlindedMessage],
+        keyset: Optional[MintKeyset] = None,
+        conn: Optional[Connection] = None,
     ) -> list[BlindedSignature]:
-        """Generates promises that sum to the given amount.
+        """Generates a promises (Blind signatures) for given amount and returns a pair (amount, C').
+
+        Important: When a promises is once created it should be considered issued to the user since the user
+        will always be able to restore promises later through the backup restore endpoint. That means that additional
+        checks in the code that might decide not to return these promises should be avoided once this function is
+        called. Only call this function if the transaction is fully validated!
 
         Args:
-            B_s (List[BlindedMessage]): _description_
-            keyset (Optional[MintKeyset], optional): _description_. Defaults to None.
-
-        Returns:
-            list[BlindedSignature]: _description_
-        """
-        return [
-            await self._generate_promise(
-                b.amount, PublicKey(bytes.fromhex(b.B_), raw=True), keyset
-            )
-            for b in B_s
-        ]
-
-    async def _generate_promise(
-        self, amount: int, B_: PublicKey, keyset: Optional[MintKeyset] = None
-    ) -> BlindedSignature:
-        """Generates a promise (Blind signature) for given amount and returns a pair (amount, C').
-
-        Args:
-            amount (int): Amount of the promise.
-            B_ (PublicKey): Blinded secret (point on curve)
+            B_s (List[BlindedMessage]): Blinded secret (point on curve)
             keyset (Optional[MintKeyset], optional): Which keyset to use. Private keys will be taken from this keyset. Defaults to None.
-
+            conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         Returns:
-            BlindedSignature: Generated promise.
+            list[BlindedSignature]: Generated BlindedSignatures.
         """
         keyset = keyset if keyset else self.keyset
-        logger.trace(f"Generating promise with keyset {keyset.id}.")
-        private_key_amount = keyset.private_keys[amount]
-        C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
-        logger.trace(f"crud: _generate_promise storing promise for {amount}")
-        await self.crud.store_promise(
-            amount=amount,
-            B_=B_.serialize().hex(),
-            C_=C_.serialize().hex(),
-            e=e.serialize(),
-            s=s.serialize(),
-            db=self.db,
-            id=keyset.id,
-        )
-        logger.trace(f"crud: _generate_promise stored promise for {amount}")
-        return BlindedSignature(
-            id=keyset.id,
-            amount=amount,
-            C_=C_.serialize().hex(),
-            dleq=DLEQ(e=e.serialize(), s=s.serialize()),
-        )
+        promises = []
+        for b in B_s:
+            amount = b.amount
+            B_ = PublicKey(bytes.fromhex(b.B_), raw=True)
+            logger.trace(f"Generating promise with keyset {keyset.id}.")
+            private_key_amount = keyset.private_keys[amount]
+            C_, e, s = b_dhke.step2_bob(B_, private_key_amount)
+            promises.append((B_, amount, C_, e, s))
+
+        signatures = []
+        async with get_db_connection(self.db, conn) as conn:
+            for promise in promises:
+                B_, amount, C_, e, s = promise
+                logger.trace(f"crud: _generate_promise storing promise for {amount}")
+                await self.crud.store_promise(
+                    amount=amount,
+                    id=keyset.id,
+                    B_=B_.serialize().hex(),
+                    C_=C_.serialize().hex(),
+                    e=e.serialize(),
+                    s=s.serialize(),
+                    db=self.db,
+                    conn=conn,
+                )
+                logger.trace(f"crud: _generate_promise stored promise for {amount}")
+                signature = BlindedSignature(
+                    id=keyset.id,
+                    amount=amount,
+                    C_=C_.serialize().hex(),
+                    dleq=DLEQ(e=e.serialize(), s=s.serialize()),
+                )
+                signatures.append(signature)
+            return signatures
 
     # ------- PROOFS -------
 
     async def load_used_proofs(self) -> None:
         """Load all used proofs from database."""
-        logger.trace("crud: loading used proofs")
+        logger.debug("Loading used proofs into memory")
         secrets_used = await self.crud.get_secrets_used(db=self.db)
-        logger.trace(f"crud: loaded {len(secrets_used)} used proofs")
+        logger.debug(f"Loaded {len(secrets_used)} used proofs")
         self.secrets_used = set(secrets_used)
-
-    def _check_spendable(self, proof: Proof) -> bool:
-        """Checks whether the proof was already spent."""
-        return proof.secret not in self.secrets_used
 
     async def _check_pending(self, proofs: List[Proof]) -> List[bool]:
         """Checks whether the proof is still pending."""
@@ -620,13 +615,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
             List[bool]: List of which proof is still spendable (True if still spendable, else False)
             List[bool]: List of which proof are pending (True if pending, else False)
         """
-        spendable = [self._check_spendable(p) for p in proofs]
+
+        spendable = await self._check_proofs_spendable(proofs)
         pending = await self._check_pending(proofs)
         return spendable, pending
 
-    async def _set_proofs_pending(
-        self, proofs: List[Proof], conn: Optional[Connection] = None
-    ) -> None:
+    async def _set_proofs_pending(self, proofs: List[Proof]) -> None:
         """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
         the list of pending proofs or removes them. Used as a mutex for proofs.
 
@@ -638,24 +632,26 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
         """
         # first we check whether these proofs are pending already
         async with self.proofs_pending_lock:
-            await self._validate_proofs_pending(proofs, conn)
-            for p in proofs:
-                try:
-                    await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
-                except Exception:
-                    raise TransactionError("proofs already pending.")
+            async with self.db.connect() as conn:
+                await self._validate_proofs_pending(proofs, conn)
+                for p in proofs:
+                    try:
+                        await self.crud.set_proof_pending(
+                            proof=p, db=self.db, conn=conn
+                        )
+                    except Exception:
+                        raise TransactionError("proofs already pending.")
 
-    async def _unset_proofs_pending(
-        self, proofs: List[Proof], conn: Optional[Connection] = None
-    ) -> None:
+    async def _unset_proofs_pending(self, proofs: List[Proof]) -> None:
         """Deletes proofs from pending table.
 
         Args:
             proofs (List[Proof]): Proofs to delete.
         """
         async with self.proofs_pending_lock:
-            for p in proofs:
-                await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+            async with self.db.connect() as conn:
+                for p in proofs:
+                    await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
 
     async def _validate_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None

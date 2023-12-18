@@ -1,3 +1,4 @@
+import copy
 import shutil
 from pathlib import Path
 from typing import List, Union
@@ -9,7 +10,7 @@ from cashu.core.base import Proof
 from cashu.core.errors import CashuError, KeysetNotFoundError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
-from cashu.wallet.crud import get_lightning_invoice, get_proofs
+from cashu.wallet.crud import get_keyset, get_lightning_invoice, get_proofs
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
@@ -112,6 +113,27 @@ async def test_get_keyset(wallet1: Wallet):
     keys2 = await wallet1._get_keys_of_keyset(wallet1.url, keys1.id)
     assert keys2.public_keys is not None
     assert len(keys1.public_keys) == len(keys2.public_keys)
+
+
+@pytest.mark.asyncio
+async def test_get_keyset_from_db(wallet1: Wallet):
+    # first load it from the mint
+    # await wallet1._load_mint_keys()
+    # NOTE: conftest already called wallet.load_mint() which got the keys from the mint
+    keyset1 = copy.copy(wallet1.keysets[wallet1.keyset_id])
+
+    # then load it from the db
+    await wallet1._load_mint_keys()
+    keyset2 = copy.copy(wallet1.keysets[wallet1.keyset_id])
+
+    assert keyset1.public_keys == keyset2.public_keys
+    assert keyset1.id == keyset2.id
+
+    # load it directly from the db
+    keyset3 = await get_keyset(db=wallet1.db, id=keyset1.id)
+    assert keyset3
+    assert keyset1.public_keys == keyset3.public_keys
+    assert keyset1.id == keyset3.id
 
 
 @pytest.mark.asyncio

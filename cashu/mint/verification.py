@@ -11,6 +11,7 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
+from ..core.db import Database
 from ..core.errors import (
     NoSecretInProofsError,
     NotAllowedError,
@@ -19,16 +20,19 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.settings import settings
+from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
-from .protocols import SupportsKeysets
+from .protocols import SupportsDb, SupportsKeysets
 
 
-class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
+class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
     """Verification functions for the ledger."""
 
     keyset: MintKeyset
     keysets: MintKeysets
-    secrets_used: Set[str]
+    secrets_used: Set[str] = set()
+    crud: LedgerCrud
+    db: Database
 
     async def verify_inputs_and_outputs(
         self, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
@@ -48,7 +52,9 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         """
         # Verify inputs
         # Verify proofs are spendable
-        self._check_proofs_spendable(proofs)
+        spendable = await self._check_proofs_spendable(proofs)
+        if not all(spendable):
+            raise TokenAlreadySpentError()
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
             raise TransactionError("invalid amount.")
@@ -68,8 +74,11 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         if not outputs:
             return
 
+        # Verify input and output amounts
+        self._verify_equation_balanced(proofs, outputs)
+
         # Verify outputs
-        self._verify_outputs(outputs)
+        await self._verify_outputs(outputs)
 
         # Verify inputs and outputs together
         if not self._verify_input_output_amounts(proofs, outputs):
@@ -78,7 +87,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         if outputs and not self._verify_output_spending_conditions(proofs, outputs):
             raise TransactionError("validation of output spending conditions failed.")
 
-    def _verify_outputs(self, outputs: List[BlindedMessage]):
+    async def _verify_outputs(self, outputs: List[BlindedMessage]):
         """Verify that the outputs are valid."""
         # Verify amounts of outputs
         if not all([self._verify_amount(o.amount) for o in outputs]):
@@ -86,11 +95,47 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate outputs.")
+        # verify that outputs have not been signed previously
+        if any(await self._check_outputs_issued_before(outputs)):
+            raise TransactionError("outputs have already been signed before.")
 
-    def _check_proofs_spendable(self, proofs: List[Proof]):
-        """Checks whether the proofs were already spent."""
-        if not all([p.secret not in self.secrets_used for p in proofs]):
-            raise TokenAlreadySpentError()
+    async def _check_outputs_issued_before(self, outputs: List[BlindedMessage]):
+        """Checks whether the provided outputs have previously been signed by the mint
+        (which would lead to a duplication error later when trying to store these outputs again).
+
+        Args:
+            outputs (List[BlindedMessage]): Outputs to check
+
+        Returns:
+            result (List[bool]): Whether outputs are already present in the database.
+        """
+        result = []
+        async with self.db.connect() as conn:
+            for output in outputs:
+                promise = await self.crud.get_promise(
+                    B_=output.B_, db=self.db, conn=conn
+                )
+                result.append(False if promise is None else True)
+        return result
+
+    async def _check_proofs_spendable(self, proofs: List[Proof]) -> List[bool]:
+        """Checks whether the proof was already spent."""
+        spendable_states = []
+        if settings.mint_cache_secrets:
+            # check used secrets in memory
+            for p in proofs:
+                spendable_state = p.secret not in self.secrets_used
+                spendable_states.append(spendable_state)
+        else:
+            # check used secrets in database
+            async with self.db.connect() as conn:
+                for p in proofs:
+                    spendable_state = (
+                        await self.crud.get_proof_used(db=self.db, proof=p, conn=conn)
+                        is None
+                    )
+                    spendable_states.append(spendable_state)
+        return spendable_states
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""
@@ -156,6 +201,6 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets):
         """
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
-        assert (
-            sum_outputs - sum_inputs == 0
-        ), "inputs do not have same amount as outputs"
+        assert sum_outputs - sum_inputs == 0, TransactionError(
+            "inputs do not have same amount as outputs."
+        )

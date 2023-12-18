@@ -107,16 +107,13 @@ def deserialize_token_from_string(token: str) -> TokenV3:
         except Exception:
             pass
 
-    # ----- receive token -----
+    if token.startswith("cashu"):
+        tokenObj = TokenV3.deserialize(token)
+        assert len(tokenObj.token), Exception("no proofs in token")
+        assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
+        return tokenObj
 
-    # deserialize token
-    # dtoken = json.loads(base64.urlsafe_b64decode(token))
-    tokenObj = TokenV3.deserialize(token)
-
-    # tokenObj = TokenV2.parse_obj(dtoken)
-    assert len(tokenObj.token), Exception("no proofs in token")
-    assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
-    return tokenObj
+    raise Exception("Invalid token")
 
 
 async def receive(

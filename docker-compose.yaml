@@ -7,7 +7,12 @@ services:
     container_name: mint
     ports:
       - "3338:3338"
-    command: ["poetry", "run", "mint", "--port", "3338", "--host", "0.0.0.0"]
+    environment:
+      - MINT_LIGHTNING_BACKEND=FakeWallet
+      - MINT_LISTEN_HOST=0.0.0.0
+      - MINT_LISTEN_PORT=3338
+      - MINT_PRIVATE_KEY=TEST_PRIVATE_KEY
+    command: ["poetry", "run", "mint"]
   wallet:
     build:
       context: .

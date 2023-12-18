@@ -8,8 +8,6 @@ from fastapi.exception_handlers import (
 )
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-
-# from fastapi_profiler import PyInstrumentProfilerMiddleware
 from loguru import logger
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
@@ -19,6 +17,9 @@ from ..core.errors import CashuError
 from ..core.settings import settings
 from .router import router
 from .startup import start_mint_init
+
+if settings.debug_profiling:
+    from fastapi_profiler import PyInstrumentProfilerMiddleware
 
 # from starlette_context import context
 # from starlette_context.middleware import RawContextMiddleware
@@ -108,7 +109,9 @@ def create_app(config_object="core.settings") -> FastAPI:
         middleware=middleware,
     )
 
-    # app.add_middleware(PyInstrumentProfilerMiddleware)
+    if settings.debug_profiling:
+        assert PyInstrumentProfilerMiddleware is not None
+        app.add_middleware(PyInstrumentProfilerMiddleware)
 
     return app
 

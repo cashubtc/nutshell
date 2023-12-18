@@ -55,7 +55,7 @@ async def m002_add_balance_views(db: Database):
                 SELECT SUM(amount) AS s
                 FROM {table_with_schema(db, 'promises')}
                 WHERE amount > 0
-            );
+            ) AS balance_issued;
         """)
 
         await conn.execute(f"""
@@ -64,7 +64,7 @@ async def m002_add_balance_views(db: Database):
                 SELECT SUM(amount) AS s
                 FROM {table_with_schema(db, 'proofs_used')}
                 WHERE amount > 0
-            );
+            ) AS balance_redeemed;
         """)
 
         await conn.execute(f"""
@@ -183,9 +183,13 @@ async def m009_add_out_to_invoices(db: Database):
     # column in invoices for marking whether the invoice is incoming (out=False) or outgoing (out=True)
     async with db.connect() as conn:
         # we have to drop the balance views first and recreate them later
-        await conn.execute(f"DROP VIEW {table_with_schema(db, 'balance')}")
-        await conn.execute(f"DROP VIEW {table_with_schema(db, 'balance_issued')}")
-        await conn.execute(f"DROP VIEW {table_with_schema(db, 'balance_redeemed')}")
+        await conn.execute(f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance')}")
+        await conn.execute(
+            f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_issued')}"
+        )
+        await conn.execute(
+            f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_redeemed')}"
+        )
 
         # rename column pr to bolt11
         await conn.execute(
@@ -203,4 +207,14 @@ async def m009_add_out_to_invoices(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN out BOOL"
+        )
+
+
+async def m010_add_index_to_proofs_used(db: Database):
+    # create index on proofs_used table for secret
+    async with db.connect() as conn:
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS"
+            " proofs_used_secret_idx ON"
+            f" {table_with_schema(db, 'proofs_used')} (secret)"
         )

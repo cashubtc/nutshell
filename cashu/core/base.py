@@ -99,6 +99,9 @@ class Proof(BaseModel):
     def from_dict(cls, proof_dict: dict):
         if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], str):
             proof_dict["dleq"] = DLEQWallet(**json.loads(proof_dict["dleq"]))
+        else:
+            # overwrite the empty string with None
+            proof_dict["dleq"] = None
         c = cls(**proof_dict)
         return c
 
@@ -348,6 +351,11 @@ class WalletKeyset:
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
         self.id = derive_keyset_id(self.public_keys)
+        logger.trace(f"Derived keyset id {self.id} from public keys.")
+        if id and id != self.id:
+            logger.warning(
+                f"WARNING: Keyset id {self.id} does not match the given id {id}."
+            )
 
     def serialize(self):
         return json.dumps(
@@ -356,9 +364,9 @@ class WalletKeyset:
 
     @classmethod
     def from_row(cls, row: Row):
-        def deserialize(serialized: str):
+        def deserialize(serialized: str) -> Dict[int, PublicKey]:
             return {
-                amount: PublicKey(bytes.fromhex(hex_key), raw=True)
+                int(amount): PublicKey(bytes.fromhex(hex_key), raw=True)
                 for amount, hex_key in dict(json.loads(serialized)).items()
             }
 
@@ -527,6 +535,9 @@ class TokenV3(BaseModel):
     def get_keysets(self):
         return list(set([p.id for p in self.get_proofs()]))
 
+    def get_mints(self):
+        return list(set([t.mint for t in self.token if t.mint]))
+
     @classmethod
     def deserialize(cls, tokenv3_serialized: str) -> "TokenV3":
         """
@@ -537,6 +548,9 @@ class TokenV3(BaseModel):
             f"Token prefix not valid. Expected {prefix}."
         )
         token_base64 = tokenv3_serialized[len(prefix) :]
+        # if base64 string is not a multiple of 4, pad it with "="
+        token_base64 += "=" * (4 - len(token_base64) % 4)
+
         token = json.loads(base64.urlsafe_b64decode(token_base64))
         return cls.parse_obj(token)
 
