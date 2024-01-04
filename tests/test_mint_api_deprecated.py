@@ -2,6 +2,11 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from cashu.core.base import (
+    CheckSpendableRequest_deprecated,
+    CheckSpendableResponse_deprecated,
+    Proof,
+)
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -259,3 +264,26 @@ async def test_checkfees_external(ledger: Ledger, wallet: Wallet):
     result = response.json()
     # external invoice, so fee
     assert result["fee"] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
+async def test_api_check_state(ledger: Ledger):
+    proofs = [
+        Proof(id="1234", amount=0, secret="asdasdasd", C="asdasdasd"),
+        Proof(id="1234", amount=0, secret="asdasdasd1", C="asdasdasd1"),
+    ]
+    payload = CheckSpendableRequest_deprecated(proofs=proofs)
+    response = httpx.post(
+        f"{BASE_URL}/check",
+        json=payload.dict(),
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    states = CheckSpendableResponse_deprecated.parse_obj(response.json())
+    assert states.spendable
+    assert len(states.spendable) == 2
+    assert states.pending
+    assert len(states.pending) == 2
