@@ -20,6 +20,8 @@ from ..core.base import (
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
     Proof,
+    ProofState,
+    SpentState,
     Unit,
 )
 from ..core.crypto import b_dhke
@@ -834,18 +836,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.debug(f"Loaded {len(secrets_used)} used proofs")
         self.secrets_used = set(secrets_used)
 
-    async def _check_pending(self, proofs: List[Proof]) -> List[bool]:
+    async def _check_proofs_pending(self, secrets: List[str]) -> List[bool]:
         """Checks whether the proof is still pending."""
         proofs_pending = await self.crud.get_proofs_pending(db=self.db)
         pending_secrets = [pp.secret for pp in proofs_pending]
         pending_states = [
-            True if p.secret in pending_secrets else False for p in proofs
+            True if secret in pending_secrets else False for secret in secrets
         ]
         return pending_states
 
-    async def check_proof_state(
-        self, proofs: List[Proof]
-    ) -> Tuple[List[bool], List[bool]]:
+    async def check_proofs_state(self, secrets: List[str]) -> List[ProofState]:
         """Checks if provided proofs are spend or are pending.
         Used by wallets to check if their proofs have been redeemed by a receiver or they are still in-flight in a transaction.
 
@@ -860,10 +860,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             List[bool]: List of which proof is still spendable (True if still spendable, else False)
             List[bool]: List of which proof are pending (True if pending, else False)
         """
-
-        spendable = await self._check_proofs_spendable(proofs)
-        pending = await self._check_pending(proofs)
-        return spendable, pending
+        states: List[ProofState] = []
+        spendables = await self._check_proofs_spendable(secrets)
+        pendings = await self._check_proofs_pending(secrets)
+        for spendable, pending, secret in zip(spendables, pendings, secrets):
+            if spendable and not pending:
+                states.append(ProofState(secret=secret, state=SpentState.unspent))
+            elif spendable and pending:
+                states.append(ProofState(secret=secret, state=SpentState.pending))
+            else:
+                states.append(ProofState(secret=secret, state=SpentState.spent))
+        return states
 
     async def _set_proofs_pending(self, proofs: List[Proof]) -> None:
         """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to

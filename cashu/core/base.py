@@ -425,23 +425,43 @@ class PostSplitResponse_Very_Deprecated(BaseModel):
 # ------- API: CHECK -------
 
 
-class CheckSpendableRequest(BaseModel):
+class PostCheckStateRequest(BaseModel):
+    secrets: List[str] = Field(..., max_items=settings.mint_max_request_length)
+
+
+class SpentState(Enum):
+    unspent = "UNSPENT"
+    spent = "SPENT"
+    pending = "PENDING"
+
+    def __str__(self):
+        return self.name
+
+
+class ProofState(BaseModel):
+    secret: str
+    state: SpentState
+    witness: Optional[str] = None
+
+
+class PostCheckStateResponse(BaseModel):
+    states: List[ProofState] = []
+
+
+class CheckSpendableRequest_deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
 
 
-class CheckSpendableResponse(BaseModel):
+class CheckSpendableResponse_deprecated(BaseModel):
     spendable: List[bool]
-    pending: Optional[List[bool]] = (
-        None  # TODO: Uncomment when all mints are updated to 0.12.3 and support /check
-    )
-    # with pending tokens (kept for backwards compatibility of new wallets with old mints)
+    pending: List[bool]
 
 
-class CheckFeesRequest(BaseModel):
+class CheckFeesRequest_deprecated(BaseModel):
     pr: str = Field(..., max_length=settings.mint_max_request_length)
 
 
-class CheckFeesResponse(BaseModel):
+class CheckFeesResponse_deprecated(BaseModel):
     fee: Union[int, None]
 
 
@@ -582,9 +602,9 @@ class WalletKeyset:
             self.id = id
 
     def serialize(self):
-        return json.dumps({
-            amount: key.serialize().hex() for amount, key in self.public_keys.items()
-        })
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
 
     @classmethod
     def from_row(cls, row: Row):

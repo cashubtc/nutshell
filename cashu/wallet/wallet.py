@@ -16,14 +16,14 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckFeesResponse,
-    CheckSpendableRequest,
-    CheckSpendableResponse,
+    CheckFeesResponse_deprecated,
     DLEQWallet,
     GetInfoResponse,
     Invoice,
     KeysetsResponse,
     KeysResponse,
+    PostCheckStateRequest,
+    PostCheckStateResponse,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
@@ -37,6 +37,8 @@ from ..core.base import (
     PostSplitRequest,
     PostSplitResponse,
     Proof,
+    ProofState,
+    SpentState,
     TokenV2,
     TokenV2Mint,
     TokenV3,
@@ -532,7 +534,9 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
-            ret: CheckFeesResponse = await self.check_fees_deprecated(payment_request)
+            ret: CheckFeesResponse_deprecated = await self.check_fees_deprecated(
+                payment_request
+            )
             quote_id = "deprecated_" + str(uuid.uuid4())
             return PostMeltQuoteResponse(
                 quote=quote_id,
@@ -640,33 +644,33 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def check_proof_state(self, proofs: List[Proof]):
+    async def check_proof_state(self, proofs: List[Proof]) -> PostCheckStateResponse:
         """
         Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
-        payload = CheckSpendableRequest(proofs=proofs)
-
-        def _check_proof_state_include_fields(proofs):
-            """strips away fields from the model that aren't necessary for the /v1/check"""
-            return {
-                "proofs": {i: {"secret"} for i in range(len(proofs))},
-            }
-
+        payload = PostCheckStateRequest(secrets=[p.secret for p in proofs])
         resp = await self.httpx.post(
-            join(self.url, "/v1/check"),
-            json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
+            join(self.url, "/v1/checkstate"),
+            json=payload.dict(),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
             ret = await self.check_proof_state_deprecated(proofs)
+            # convert CheckSpendableResponse_deprecated to CheckSpendableResponse
+            states: List[ProofState] = []
+            for spendable, pending, p in zip(ret.spendable, ret.pending, proofs):
+                if spendable and not pending:
+                    states.append(ProofState(secret=p.secret, state=SpentState.unspent))
+                elif spendable and pending:
+                    states.append(ProofState(secret=p.secret, state=SpentState.pending))
+                else:
+                    states.append(ProofState(secret=p.secret, state=SpentState.spent))
+            ret = PostCheckStateResponse(states=states)
             return ret
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
-
-        return_dict = resp.json()
-        states = CheckSpendableResponse.parse_obj(return_dict)
-        return states
+        return PostCheckStateResponse.parse_obj(resp.json())
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -1052,7 +1056,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             logger.debug(f"Received change: {self.unit.str(sum_proofs(change_proofs))}")
         return status
 
-    async def check_proof_state(self, proofs):
+    async def check_proof_state(self, proofs) -> PostCheckStateResponse:
         return await super().check_proof_state(proofs)
 
     # ---------- TOKEN MECHANICS ----------
@@ -1463,8 +1467,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         invalidated_proofs: List[Proof] = []
         if check_spendable:
             proof_states = await self.check_proof_state(proofs)
-            for i, spendable in enumerate(proof_states.spendable):
-                if not spendable:
+            for i, state in enumerate(proof_states.states):
+                if state.state == SpentState.spent:
                     invalidated_proofs.append(proofs[i])
         else:
             invalidated_proofs = proofs

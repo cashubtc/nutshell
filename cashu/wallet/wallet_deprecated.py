@@ -9,10 +9,10 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckFeesRequest,
-    CheckFeesResponse,
-    CheckSpendableRequest,
-    CheckSpendableResponse,
+    CheckFeesRequest_deprecated,
+    CheckFeesResponse_deprecated,
+    CheckSpendableRequest_deprecated,
+    CheckSpendableResponse_deprecated,
     GetInfoResponse,
     GetInfoResponse_deprecated,
     GetMintResponse_deprecated,
@@ -369,12 +369,14 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
-    async def check_proof_state_deprecated(self, proofs: List[Proof]):
+    async def check_proof_state_deprecated(
+        self, proofs: List[Proof]
+    ) -> CheckSpendableResponse_deprecated:
         """
         Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
         logger.warning("Using deprecated API call: POST /check")
-        payload = CheckSpendableRequest(proofs=proofs)
+        payload = CheckSpendableRequest_deprecated(proofs=proofs)
 
         def _check_proof_state_include_fields(proofs):
             """strips away fields from the model that aren't necessary for the /split"""
@@ -389,7 +391,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         self.raise_on_error(resp)
 
         return_dict = resp.json()
-        states = CheckSpendableResponse.parse_obj(return_dict)
+        states = CheckSpendableResponse_deprecated.parse_obj(return_dict)
         return states
 
     @async_set_httpx_client
@@ -412,7 +414,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
     @async_ensure_mint_loaded_deprecated
     async def check_fees_deprecated(self, payment_request: str):
         """Checks whether the Lightning payment is internal."""
-        payload = CheckFeesRequest(pr=payment_request)
+        payload = CheckFeesRequest_deprecated(pr=payment_request)
         resp = await self.httpx.post(
             join(self.url, "/checkfees"),
             json=payload.dict(),
@@ -420,4 +422,4 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         self.raise_on_error(resp)
 
         return_dict = resp.json()
-        return CheckFeesResponse.parse_obj(return_dict)
+        return CheckFeesResponse_deprecated.parse_obj(return_dict)

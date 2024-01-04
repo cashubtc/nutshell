@@ -51,7 +51,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         """
         # Verify inputs
         # Verify proofs are spendable
-        spendable = await self._check_proofs_spendable(proofs)
+        spendable = await self._check_proofs_spendable([p.secret for p in proofs])
         if not all(spendable):
             raise TokenAlreadySpentError()
         # Verify amounts of inputs
@@ -85,11 +85,13 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         # Verify that input keyset units are the same as output keyset unit
         # We have previously verified that all outputs have the same keyset id in `_verify_outputs`
         assert outputs[0].id, "output id not set"
-        if not all([
-            self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
-            for p in proofs
-            if p.id
-        ]):
+        if not all(
+            [
+                self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
+                for p in proofs
+                if p.id
+            ]
+        ):
             raise TransactionError("input and output keysets have different units.")
 
         # Verify output spending conditions
@@ -137,20 +139,22 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
                 result.append(False if promise is None else True)
         return result
 
-    async def _check_proofs_spendable(self, proofs: List[Proof]) -> List[bool]:
+    async def _check_proofs_spendable(self, secrets: List[str]) -> List[bool]:
         """Checks whether the proof was already spent."""
         spendable_states = []
         if settings.mint_cache_secrets:
             # check used secrets in memory
-            for p in proofs:
-                spendable_state = p.secret not in self.secrets_used
+            for secret in secrets:
+                spendable_state = secret not in self.secrets_used
                 spendable_states.append(spendable_state)
         else:
             # check used secrets in database
             async with self.db.connect() as conn:
-                for p in proofs:
+                for secret in secrets:
                     spendable_state = (
-                        await self.crud.get_proof_used(db=self.db, proof=p, conn=conn)
+                        await self.crud.get_proof_used(
+                            db=self.db, secret=secret, conn=conn
+                        )
                         is None
                     )
                     spendable_states.append(spendable_state)

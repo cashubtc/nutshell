@@ -5,10 +5,10 @@ from loguru import logger
 
 from ..core.base import (
     BlindedSignature,
-    CheckFeesRequest,
-    CheckFeesResponse,
-    CheckSpendableRequest,
-    CheckSpendableResponse,
+    CheckFeesRequest_deprecated,
+    CheckFeesResponse_deprecated,
+    CheckSpendableRequest_deprecated,
+    CheckSpendableResponse_deprecated,
     GetInfoResponse_deprecated,
     GetMintResponse_deprecated,
     KeysetsResponse_deprecated,
@@ -23,6 +23,7 @@ from ..core.base import (
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
     PostSplitResponse_Very_Deprecated,
+    SpentState,
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
@@ -232,11 +233,13 @@ async def melt_deprecated(
     "/checkfees",
     name="Check fees",
     summary="Check fee reserve for a Lightning payment",
-    response_model=CheckFeesResponse,
+    response_model=CheckFeesResponse_deprecated,
     response_description="The fees necessary to pay a Lightning invoice.",
     deprecated=True,
 )
-async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
+async def check_fees(
+    payload: CheckFeesRequest_deprecated,
+) -> CheckFeesResponse_deprecated:
     """
     Responds with the fees necessary to pay a Lightning invoice.
     Used by wallets for figuring out the fees they need to supply together with the payment amount.
@@ -248,7 +251,7 @@ async def check_fees(payload: CheckFeesRequest) -> CheckFeesResponse:
     )
     fees_sat = quote.fee_reserve
     logger.trace(f"< POST /checkfees: {fees_sat}")
-    return CheckFeesResponse(fee=fees_sat)
+    return CheckFeesResponse_deprecated(fee=fees_sat)
 
 
 @router_deprecated.post(
@@ -313,7 +316,7 @@ async def split_deprecated(
     "/check",
     name="Check proof state",
     summary="Check whether a proof is spent already or is pending in a transaction",
-    response_model=CheckSpendableResponse,
+    response_model=CheckSpendableResponse_deprecated,
     response_description=(
         "Two lists of booleans indicating whether the provided proofs "
         "are spendable or pending in a transaction respectively."
@@ -321,14 +324,26 @@ async def split_deprecated(
     deprecated=True,
 )
 async def check_spendable(
-    payload: CheckSpendableRequest,
-) -> CheckSpendableResponse:
+    payload: CheckSpendableRequest_deprecated,
+) -> CheckSpendableResponse_deprecated:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /v1/check: {payload}")
-    spendableList, pendingList = await ledger.check_proof_state(payload.proofs)
-    logger.trace(f"< POST /v1/check <spendable>: {spendableList}")
-    logger.trace(f"< POST /v1/check <pending>: {pendingList}")
-    return CheckSpendableResponse(spendable=spendableList, pending=pendingList)
+    proofs_state = await ledger.check_proofs_state([p.secret for p in payload.proofs])
+    spendableList: List[bool] = []
+    pendingList: List[bool] = []
+    for proof_state in proofs_state:
+        if proof_state.state == SpentState.unspent:
+            spendableList.append(True)
+            pendingList.append(False)
+        elif proof_state.state == SpentState.spent:
+            spendableList.append(False)
+            pendingList.append(False)
+        elif proof_state.state == SpentState.pending:
+            spendableList.append(True)
+            pendingList.append(True)
+    return CheckSpendableResponse_deprecated(
+        spendable=spendableList, pending=pendingList
+    )
 
 
 @router_deprecated.post(

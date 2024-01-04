@@ -3,7 +3,11 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import CheckSpendableRequest, CheckSpendableResponse, Proof
+from cashu.core.base import (
+    CheckSpendableRequest_deprecated,
+    CheckSpendableResponse_deprecated,
+    Proof,
+)
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -359,13 +363,13 @@ async def test_api_check_state(ledger: Ledger):
         Proof(id="1234", amount=0, secret="asdasdasd", C="asdasdasd"),
         Proof(id="1234", amount=0, secret="asdasdasd1", C="asdasdasd1"),
     ]
-    payload = CheckSpendableRequest(proofs=proofs)
+    payload = CheckSpendableRequest_deprecated(proofs=proofs)
     response = httpx.post(
         f"{BASE_URL}/v1/check",
         json=payload.dict(),
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    states = CheckSpendableResponse.parse_obj(response.json())
+    states = CheckSpendableResponse_deprecated.parse_obj(response.json())
     assert states.spendable
     assert len(states.spendable) == 2
     assert states.pending

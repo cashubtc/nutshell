@@ -4,13 +4,13 @@ from fastapi import APIRouter, Request
 from loguru import logger
 
 from ..core.base import (
-    CheckSpendableRequest,
-    CheckSpendableResponse,
     GetInfoResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
     KeysResponse,
     KeysResponseKeyset,
+    PostCheckStateRequest,
+    PostCheckStateResponse,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
@@ -329,24 +329,22 @@ async def split(
 
 
 @router.post(
-    "/v1/check",
+    "/v1/checkstate",
     name="Check proof state",
     summary="Check whether a proof is spent already or is pending in a transaction",
-    response_model=CheckSpendableResponse,
+    response_model=PostCheckStateResponse,
     response_description=(
         "Two lists of booleans indicating whether the provided proofs "
         "are spendable or pending in a transaction respectively."
     ),
 )
 async def check_spendable(
-    payload: CheckSpendableRequest,
-) -> CheckSpendableResponse:
+    payload: PostCheckStateRequest,
+) -> PostCheckStateResponse:
     """Check whether a secret has been spent already or not."""
-    logger.trace(f"> POST /v1/check: {payload}")
-    spendableList, pendingList = await ledger.check_proof_state(payload.proofs)
-    logger.trace(f"< POST /v1/check <spendable>: {spendableList}")
-    logger.trace(f"< POST /v1/check <pending>: {pendingList}")
-    return CheckSpendableResponse(spendable=spendableList, pending=pendingList)
+    logger.trace(f"> POST /v1/checkstate: {payload}")
+    proof_states = await ledger.check_proofs_state(payload.secrets)
+    return PostCheckStateResponse(states=proof_states)
 
 
 @router.post(
