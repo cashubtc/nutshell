@@ -15,8 +15,8 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.10"]
         poetry-version: ["1.7.1"]
-        mint-cache-secrets: ["true", "false"]
-        mint-only-deprecated: ["true", "false"]
+        mint-cache-secrets: ["false", "true"]
+        mint-only-deprecated: ["false", "true"]
         # db-url: ["", "postgres://cashu:cashu@localhost:5432/test"] # TODO: Postgres test not working
         db-url: [""]
         backend-wallet-class: ["FakeWallet"]

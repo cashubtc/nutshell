@@ -40,6 +40,7 @@ class LedgerCrud(ABC):
 
     async def get_proof_used(
         self,
+        *,
         db: Database,
         secret: str,
         conn: Optional[Connection] = None,
@@ -583,7 +584,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Optional[Proof]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT 1 from {table_with_schema(db, 'proofs_used')}
+            SELECT * from {table_with_schema(db, 'proofs_used')}
             WHERE secret = ?
             """,
             (secret,),
