@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional, Set, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from loguru import logger
 
@@ -29,7 +29,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
 
     keyset: MintKeyset
     keysets: Dict[str, MintKeyset]
-    secrets_used: Set[str] = set()
+    spent_proofs: Dict[str, Proof]
     crud: LedgerCrud
     db: Database
 
@@ -51,8 +51,8 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         """
         # Verify inputs
         # Verify proofs are spendable
-        spendable = await self._check_proofs_spendable([p.secret for p in proofs])
-        if not all(spendable):
+        spent_proofs = await self._get_proofs_spent([p.secret for p in proofs])
+        if not len(spent_proofs) == 0:
             raise TokenAlreadySpentError()
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
@@ -137,26 +137,32 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
                 result.append(False if promise is None else True)
         return result
 
-    async def _check_proofs_spendable(self, secrets: List[str]) -> List[bool]:
-        """Checks whether the proof was already spent."""
-        spendable_states = []
+    async def _get_proofs_pending(self, secrets: List[str]) -> Dict[str, Proof]:
+        """Returns only those proofs that are pending."""
+        all_proofs_pending = await self.crud.get_proofs_pending(db=self.db)
+        proofs_pending = list(filter(lambda p: p.secret in secrets, all_proofs_pending))
+        proofs_pending_dict = {p.secret: p for p in proofs_pending}
+        return proofs_pending_dict
+
+    async def _get_proofs_spent(self, secrets: List[str]) -> Dict[str, Proof]:
+        """Returns all proofs that are spent."""
+        proofs_spent: List[Proof] = []
         if settings.mint_cache_secrets:
             # check used secrets in memory
             for secret in secrets:
-                spendable_state = secret not in self.secrets_used
-                spendable_states.append(spendable_state)
+                if secret in self.spent_proofs:
+                    proofs_spent.append(self.spent_proofs[secret])
         else:
             # check used secrets in database
             async with self.db.connect() as conn:
                 for secret in secrets:
-                    spendable_state = (
-                        await self.crud.get_proof_used(
-                            db=self.db, secret=secret, conn=conn
-                        )
-                        is None
+                    spent_proof = await self.crud.get_proof_used(
+                        db=self.db, secret=secret, conn=conn
                     )
-                    spendable_states.append(spendable_state)
-        return spendable_states
+                    if spent_proof:
+                        proofs_spent.append(spent_proof)
+        proofs_spent_dict = {p.secret: p for p in proofs_spent}
+        return proofs_spent_dict
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""

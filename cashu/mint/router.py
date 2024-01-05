@@ -338,12 +338,13 @@ async def split(
         "are spendable or pending in a transaction respectively."
     ),
 )
-async def check_spendable(
+async def check_state(
     payload: PostCheckStateRequest,
 ) -> PostCheckStateResponse:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /v1/checkstate: {payload}")
     proof_states = await ledger.check_proofs_state(payload.secrets)
+    print(proof_states)
     return PostCheckStateResponse(states=proof_states)
 
 

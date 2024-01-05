@@ -31,12 +31,12 @@ class LedgerCrud(ABC):
     ) -> List[MintKeyset]: ...
 
     @abstractmethod
-    async def get_secrets_used(
+    async def get_spent_proofs(
         self,
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[str]: ...
+    ) -> List[Proof]: ...
 
     async def get_proof_used(
         self,
@@ -242,16 +242,16 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return BlindedSignature(amount=row[0], C_=row[2], id=row[3]) if row else None
 
-    async def get_secrets_used(
+    async def get_spent_proofs(
         self,
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[str]:
+    ) -> List[Proof]:
         rows = await (conn or db).fetchall(f"""
-            SELECT secret from {table_with_schema(db, 'proofs_used')}
+            SELECT * from {table_with_schema(db, 'proofs_used')}
             """)
-        return [row[0] for row in rows] if rows else []
+        return [Proof(**r) for r in rows] if rows else []
 
     async def invalidate_proof(
         self,
@@ -264,14 +264,15 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'proofs_used')}
-            (amount, C, secret, id, created)
-            VALUES (?, ?, ?, ?, ?)
+            (amount, C, secret, id, witness, created)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 proof.amount,
                 proof.C,
                 proof.secret,
                 proof.id,
+                proof.witness,
                 int(time.time()),
             ),
         )
@@ -321,7 +322,7 @@ class LedgerCrudSqlite(LedgerCrud):
             DELETE FROM {table_with_schema(db, 'proofs_pending')}
             WHERE secret = ?
             """,
-            (str(proof["secret"]),),
+            (proof.secret,),
         )
 
     async def store_mint_quote(

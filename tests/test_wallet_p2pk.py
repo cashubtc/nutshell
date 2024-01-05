@@ -1,12 +1,13 @@
 import asyncio
 import copy
+import json
 import secrets
 from typing import List
 
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, SpentState
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import SigFlags
@@ -16,7 +17,7 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import pay_if_regtest
+from tests.helpers import is_deprecated_api_only, pay_if_regtest
 
 
 async def assert_err(f, msg):
@@ -77,6 +78,16 @@ async def test_p2pk(wallet1: Wallet, wallet2: Wallet):
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     await wallet2.redeem(send_proofs)
+
+    proof_states = await wallet2.check_proof_state(send_proofs)
+    assert all([p.state == SpentState.spent for p in proof_states.states])
+
+    if not is_deprecated_api_only:
+        for state in proof_states.states:
+            assert state.witness is not None
+            witness_obj = json.loads(state.witness)
+            assert len(witness_obj["signatures"]) == 1
+            assert len(witness_obj["signatures"][0]) == 128
 
 
 @pytest.mark.asyncio

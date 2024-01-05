@@ -237,6 +237,12 @@ async def m011_add_quote_tables(db: Database):
                 f" '{int(time.time())}'"
             )
 
+        # add column "witness" to table proofs_used
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN witness"
+            " TEXT"
+        )
+
         # add columns "seed" and "unit" to table keysets
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN seed TEXT"

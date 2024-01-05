@@ -77,6 +77,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         self.crud = crud
         self.backends = backends
         self.pubkey = derive_pubkey(self.master_key)
+        self.spent_proofs: Dict[str, Proof] = {}
 
     # ------- KEYS -------
 
@@ -208,14 +209,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     async def _invalidate_proofs(
         self, proofs: List[Proof], conn: Optional[Connection] = None
     ) -> None:
-        """Adds secrets of proofs to the list of known secrets and stores them in the db.
+        """Adds proofs to the set of spent proofs and stores them in the db.
 
         Args:
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        secrets = set([p.secret for p in proofs])
-        self.secrets_used |= secrets
+        self.spent_proofs.update({p.secret: p for p in proofs})
         async with get_db_connection(self.db, conn) as conn:
             # store in db
             for p in proofs:
@@ -832,18 +832,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """Load all used proofs from database."""
         assert settings.mint_cache_secrets, "MINT_CACHE_SECRETS must be set to TRUE"
         logger.debug("Loading used proofs into memory")
-        secrets_used = await self.crud.get_secrets_used(db=self.db) or []
-        logger.debug(f"Loaded {len(secrets_used)} used proofs")
-        self.secrets_used = set(secrets_used)
-
-    async def _check_proofs_pending(self, secrets: List[str]) -> List[bool]:
-        """Checks whether the proof is still pending."""
-        proofs_pending = await self.crud.get_proofs_pending(db=self.db)
-        pending_secrets = [pp.secret for pp in proofs_pending]
-        pending_states = [
-            True if secret in pending_secrets else False for secret in secrets
-        ]
-        return pending_states
+        spent_proofs_list = await self.crud.get_spent_proofs(db=self.db) or []
+        logger.debug(f"Loaded {len(spent_proofs_list)} used proofs")
+        self.spent_proofs = {p.secret: p for p in spent_proofs_list}
 
     async def check_proofs_state(self, secrets: List[str]) -> List[ProofState]:
         """Checks if provided proofs are spend or are pending.
@@ -861,15 +852,21 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             List[bool]: List of which proof are pending (True if pending, else False)
         """
         states: List[ProofState] = []
-        spendables = await self._check_proofs_spendable(secrets)
-        pendings = await self._check_proofs_pending(secrets)
-        for spendable, pending, secret in zip(spendables, pendings, secrets):
-            if spendable and not pending:
+        proofs_spent = await self._get_proofs_spent(secrets)
+        proofs_pending = await self._get_proofs_pending(secrets)
+        for secret in secrets:
+            if secret not in proofs_spent and secret not in proofs_pending:
                 states.append(ProofState(secret=secret, state=SpentState.unspent))
-            elif spendable and pending:
+            elif secret not in proofs_spent and secret in proofs_pending:
                 states.append(ProofState(secret=secret, state=SpentState.pending))
             else:
-                states.append(ProofState(secret=secret, state=SpentState.spent))
+                states.append(
+                    ProofState(
+                        secret=secret,
+                        state=SpentState.spent,
+                        witness=proofs_spent[secret].witness,
+                    )
+                )
         return states
 
     async def _set_proofs_pending(self, proofs: List[Proof]) -> None:
