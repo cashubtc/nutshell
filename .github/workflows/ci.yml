@@ -10,6 +10,7 @@ jobs:
     uses: ./.github/workflows/checks.yml
   tests:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.10"]
