@@ -26,6 +26,8 @@ jobs:
   poetry:
     name: Run (mint-cache-secrets ${{ inputs.mint-cache-secrets }}, mint-only-deprecated ${{ inputs.mint-only-deprecated }})
     runs-on: ${{ inputs.os }}
+    strategy:
+      fail-fast: false
     services:
       postgres:
         image: postgres:latest
