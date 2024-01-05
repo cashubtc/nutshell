@@ -31,6 +31,7 @@ httpx = {extras = ["socks"], version = "^0.25.1"}
 bip32 = "^3.4"
 mnemonic = "^0.20"
 bolt11 = "^2.0.5"
+psycopg2 = "^2.9.9"
 
 [tool.poetry.extras]
 pgsql = ["psycopg2-binary"]
