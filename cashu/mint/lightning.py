@@ -22,7 +22,7 @@ class LedgerLightning(SupportLightning, SupportsDb):
     crud: LedgerCrud
     db: Database
 
-    async def _request_lightning_invoice(self, amount: int) -> InvoiceResponse:
+    async def _request_lightning_invoice(self, amount: int, description_hash: Optional[bytes] = None) -> InvoiceResponse:
         """Generate a Lightning invoice using the funding source backend.
 
         Args:
@@ -47,7 +47,7 @@ class LedgerLightning(SupportLightning, SupportsDb):
             raise LightningError(
                 f"Lightning wallet not responding: {status.error_message}"
             )
-        payment = await self.lightning.create_invoice(amount, "Cashu deposit")
+        payment = await self.lightning.create_invoice(amount, memo="Cashu deposit", description_hash=description_hash)
         logger.trace(
             f"_request_lightning_invoice: Lightning invoice: {payment.payment_request}"
         )

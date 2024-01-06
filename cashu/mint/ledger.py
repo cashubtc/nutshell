@@ -231,7 +231,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
 
     # ------- TRANSACTIONS -------
 
-    async def request_mint(self, amount: int) -> Tuple[str, str]:
+    async def request_mint(self, amount: int, description_hash: Optional[bytes] = None) -> Tuple[str, str]:
         """Returns Lightning invoice and stores it in the db.
 
         Args:
@@ -256,7 +256,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerLightning):
                 raise NotAllowedError("Mint has reached maximum balance.")
 
         logger.trace(f"requesting invoice for {amount} satoshis")
-        invoice_response = await self._request_lightning_invoice(amount)
+        invoice_response = await self._request_lightning_invoice(amount, description_hash=description_hash)
         logger.trace(
             f"got invoice {invoice_response.payment_request} with check id"
             f" {invoice_response.checking_id}"
