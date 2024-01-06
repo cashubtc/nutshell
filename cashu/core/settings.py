@@ -58,6 +58,7 @@ class MintSettings(CashuSettings):
     mint_max_peg_in: int = Field(default=None)
     mint_max_peg_out: int = Field(default=None)
     mint_max_balance: int = Field(default=None)
+    mint_invoice_memo: str = Field(default="Cashu deposit")
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)

@@ -13,6 +13,8 @@ from ..core.errors import (
 from ..lightning.base import InvoiceResponse, PaymentResponse, PaymentStatus, Wallet
 from ..mint.crud import LedgerCrud
 from .protocols import SupportLightning, SupportsDb
+from ..core.settings import settings 
+
 
 
 class LedgerLightning(SupportLightning, SupportsDb):
@@ -47,7 +49,8 @@ class LedgerLightning(SupportLightning, SupportsDb):
             raise LightningError(
                 f"Lightning wallet not responding: {status.error_message}"
             )
-        payment = await self.lightning.create_invoice(amount, memo="Cashu deposit", description_hash=description_hash)
+        # logger.info(f"create lightning invoice settings: {settings.mint_invoice_memo}")
+        payment = await self.lightning.create_invoice(amount, memo=settings.mint_invoice_memo, description_hash=description_hash)
         logger.trace(
             f"_request_lightning_invoice: Lightning invoice: {payment.payment_request}"
         )
