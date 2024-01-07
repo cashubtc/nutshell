@@ -29,7 +29,7 @@ wallet_class = getattr(wallets_module, settings.mint_lightning_backend)
 WALLET = wallet_class()
 is_fake: bool = WALLET.__class__.__name__ == "FakeWallet"
 is_regtest: bool = not is_fake
-
+is_deprecated_api_only = settings.debug_mint_only_deprecated
 
 docker_lightning_cli = [
     "docker",

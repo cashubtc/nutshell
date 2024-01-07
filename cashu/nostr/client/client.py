@@ -45,9 +45,9 @@ class NostrClient:
     def connect(self):
         for relay in self.relays:
             self.relay_manager.add_relay(relay)
-        self.relay_manager.open_connections(
-            {"cert_reqs": ssl.CERT_NONE}
-        )  # NOTE: This disables ssl certificate verification
+        self.relay_manager.open_connections({
+            "cert_reqs": ssl.CERT_NONE
+        })  # NOTE: This disables ssl certificate verification
 
     def close(self):
         self.relay_manager.close_connections()
@@ -105,15 +105,13 @@ class NostrClient:
         self.relay_manager.publish_event(dm)
 
     def get_dm(self, sender_publickey: PublicKey, callback_func=None, filter_kwargs={}):
-        filters = Filters(
-            [
-                Filter(
-                    kinds=[EventKind.ENCRYPTED_DIRECT_MESSAGE],
-                    pubkey_refs=[sender_publickey.hex()],
-                    **filter_kwargs,
-                )
-            ]
-        )
+        filters = Filters([
+            Filter(
+                kinds=[EventKind.ENCRYPTED_DIRECT_MESSAGE],
+                pubkey_refs=[sender_publickey.hex()],
+                **filter_kwargs,
+            )
+        ])
         subscription_id = os.urandom(4).hex()
         self.relay_manager.add_subscription(subscription_id, filters)
 

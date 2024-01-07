@@ -5,21 +5,29 @@ import json
 from typing import AsyncGenerator, Dict, Optional
 
 import httpx
+from bolt11 import (
+    decode,
+)
 from loguru import logger
 
+from ..core.base import Amount, MeltQuote, Unit
+from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
+    LightningBackend,
+    PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
-    Wallet,
 )
 from .macaroon import load_macaroon
 
 
-class LndRestWallet(Wallet):
+class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
+
+    units = set([Unit.sat, Unit.msat])
 
     def __init__(self):
         endpoint = settings.mint_lnd_rest_endpoint
@@ -67,7 +75,7 @@ class LndRestWallet(Wallet):
         except (httpx.ConnectError, httpx.RequestError) as exc:
             return StatusResponse(
                 error_message=f"Unable to connect to {self.endpoint}. {exc}",
-                balance_msat=0,
+                balance=0,
             )
 
         try:
@@ -75,21 +83,24 @@ class LndRestWallet(Wallet):
             if r.is_error:
                 raise Exception
         except Exception:
-            return StatusResponse(error_message=r.text[:200], balance_msat=0)
+            return StatusResponse(error_message=r.text[:200], balance=0)
 
-        return StatusResponse(
-            error_message=None, balance_msat=int(data["balance"]) * 1000
-        )
+        return StatusResponse(error_message=None, balance=int(data["balance"]) * 1000)
 
     async def create_invoice(
         self,
-        amount: int,
+        amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
         unhashed_description: Optional[bytes] = None,
         **kwargs,
     ) -> InvoiceResponse:
-        data: Dict = {"value": amount, "private": True, "memo": memo or ""}
+        self.assert_unit_supported(amount.unit)
+        data: Dict = {
+            "value": amount.to(Unit.sat).amount,
+            "private": True,
+            "memo": memo or "",
+        }
         if kwargs.get("expiry"):
             data["expiry"] = kwargs["expiry"]
         if description_hash:
@@ -101,7 +112,10 @@ class LndRestWallet(Wallet):
                 hashlib.sha256(unhashed_description).digest()
             ).decode("ascii")
 
-        r = await self.client.post(url="/v1/invoices", json=data)
+        try:
+            r = await self.client.post(url="/v1/invoices", json=data)
+        except Exception as e:
+            raise Exception(f"failed to create invoice: {e}")
 
         if r.is_error:
             error_message = r.text
@@ -128,14 +142,16 @@ class LndRestWallet(Wallet):
             error_message=None,
         )
 
-    async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(
+        self, quote: MeltQuote, fee_limit_msat: int
+    ) -> PaymentResponse:
         # set the fee limit for the payment
         lnrpcFeeLimit = dict()
         lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
 
         r = await self.client.post(
             url="/v1/channels/transactions",
-            json={"payment_request": bolt11, "fee_limit": lnrpcFeeLimit},
+            json={"payment_request": quote.request, "fee_limit": lnrpcFeeLimit},
             timeout=None,
         )
 
@@ -144,7 +160,7 @@ class LndRestWallet(Wallet):
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message=error_message,
             )
@@ -156,7 +172,7 @@ class LndRestWallet(Wallet):
         return PaymentResponse(
             ok=True,
             checking_id=checking_id,
-            fee_msat=fee_msat,
+            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
             error_message=None,
         )
@@ -209,7 +225,11 @@ class LndRestWallet(Wallet):
                     if payment is not None and payment.get("status"):
                         return PaymentStatus(
                             paid=statuses[payment["status"]],
-                            fee_msat=payment.get("fee_msat"),
+                            fee=(
+                                Amount(unit=Unit.msat, amount=payment.get("fee_msat"))
+                                if payment.get("fee_msat")
+                                else None
+                            ),
                             preimage=payment.get("payment_preimage"),
                         )
                     else:
@@ -240,3 +260,14 @@ class LndRestWallet(Wallet):
                     " seconds"
                 )
                 await asyncio.sleep(5)
+
+    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
+        invoice_obj = decode(bolt11)
+        assert invoice_obj.amount_msat, "invoice has no amount."
+        amount_msat = int(invoice_obj.amount_msat)
+        fees_msat = fee_reserve(amount_msat)
+        fees = Amount(unit=Unit.msat, amount=fees_msat)
+        amount = Amount(unit=Unit.msat, amount=amount_msat)
+        return PaymentQuoteResponse(
+            checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
+        )

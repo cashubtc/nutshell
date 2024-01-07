@@ -14,7 +14,9 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import TokenV3
+from cashu.core.logging import configure_logger
+
+from ...core.base import TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...nostr.client.client import NostrClient
@@ -26,7 +28,13 @@ from ...wallet.crud import (
 )
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
-from ..cli.cli_helpers import get_mint_wallet, print_mint_balances, verify_mint
+from ..cli.cli_helpers import (
+    get_mint_wallet,
+    get_unit_wallet,
+    print_balance,
+    print_mint_balances,
+    verify_mint,
+)
 from ..helpers import (
     deserialize_token_from_string,
     init_wallet,
@@ -75,6 +83,13 @@ def coro(f):
     help=f"Wallet name (default: {settings.wallet_name}).",
 )
 @click.option(
+    "--unit",
+    "-u",
+    "unit",
+    default=None,
+    help=f"Wallet unit (default: {settings.wallet_unit}).",
+)
+@click.option(
     "--daemon",
     "-d",
     is_flag=True,
@@ -92,7 +107,9 @@ def coro(f):
 )
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str, tests: bool):
+async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
+    if settings.debug:
+        configure_logger()
     if settings.tor and not TorProxy().check_platform():
         error_str = (
             "Your settings say TOR=true but the built-in Tor bundle is not supported on"
@@ -120,6 +137,7 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
 
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host or settings.mint_url
+    ctx.obj["UNIT"] = unit
     ctx.obj["WALLET_NAME"] = walletname
     settings.wallet_name = walletname
 
@@ -128,13 +146,13 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     # otherwise it will create a mnemonic and store it in the database
     if ctx.invoked_subcommand == "restore":
         wallet = await Wallet.with_db(
-            ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
+            ctx.obj["HOST"], db_path, name=walletname, skip_db_read=True
         )
     else:
         # # we need to run the migrations before we load the wallet for the first time
         # # otherwise the wallet will not be able to generate a new private key and store it
         wallet = await Wallet.with_db(
-            ctx.obj["HOST"], db_path, name=walletname, skip_private_key=True
+            ctx.obj["HOST"], db_path, name=walletname, skip_db_read=True
         )
         # now with the migrations done, we can load the wallet and generate a new mnemonic if needed
         wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
@@ -143,11 +161,13 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
     ctx.obj["WALLET"] = wallet
     # await init_wallet(ctx.obj["WALLET"], load_proofs=False)
 
-    # ------ MUTLIMINT ------- : Select a wallet
     # only if a command is one of a subset that needs to specify a mint host
     # if a mint host is already specified as an argument `host`, use it
     if ctx.invoked_subcommand not in ["send", "invoice", "pay"] or host:
         return
+    # ------ MULTIUNIT ------- : Select a unit
+    ctx.obj["WALLET"] = await get_unit_wallet(ctx)
+    # ------ MUTLIMINT ------- : Select a wallet
     # else: we ask the user to select one
     ctx.obj["WALLET"] = await get_mint_wallet(
         ctx
@@ -165,13 +185,17 @@ async def cli(ctx: Context, host: str, walletname: str, tests: bool):
 async def pay(ctx: Context, invoice: str, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    wallet.status()
-    total_amount, fee_reserve_sat = await wallet.get_pay_amount_with_fees(invoice)
+    print_balance(ctx)
+    quote = await wallet.get_pay_amount_with_fees(invoice)
+    logger.debug(f"Quote: {quote}")
+    total_amount = quote.amount + quote.fee_reserve
     if not yes:
         potential = (
-            f" ({total_amount} sat with potential fees)" if fee_reserve_sat else ""
+            f" ({wallet.unit.str(total_amount)} with potential fees)"
+            if quote.fee_reserve
+            else ""
         )
-        message = f"Pay {total_amount - fee_reserve_sat} sat{potential}?"
+        message = f"Pay {wallet.unit.str(quote.amount)}{potential}?"
         click.confirm(
             message,
             abort=True,
@@ -181,27 +205,26 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     print("Paying Lightning invoice ...", end="", flush=True)
     assert total_amount > 0, "amount is not positive"
     if wallet.available_balance < total_amount:
-        print("Error: Balance too low.")
+        print(" Error: Balance too low.")
         return
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     try:
         melt_response = await wallet.pay_lightning(
-            send_proofs, invoice, fee_reserve_sat
+            send_proofs, invoice, quote.fee_reserve, quote.quote
         )
-
     except Exception as e:
-        print(f"\nError paying invoice: {str(e)}")
+        print(f" Error paying invoice: {str(e)}")
         return
     print(" Invoice paid", end="", flush=True)
-    if melt_response.preimage and melt_response.preimage != "0" * 64:
-        print(f" (Proof: {melt_response.preimage}).")
+    if melt_response.payment_preimage and melt_response.payment_preimage != "0" * 64:
+        print(f" (Preimage: {melt_response.payment_preimage}).")
     else:
         print(".")
-    wallet.status()
+    print_balance(ctx)
 
 
 @cli.command("invoice", help="Create Lighting invoice.")
-@click.argument("amount", type=int)
+@click.argument("amount", type=float)
 @click.option("--id", default="", help="Id of the paid invoice.", type=str)
 @click.option(
     "--split",
@@ -223,7 +246,8 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    wallet.status()
+    print_balance(ctx)
+    amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:
@@ -231,15 +255,16 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
         assert amount >= split, "split must smaller or equal amount"
         n_splits = amount // split
         optional_split = [split] * n_splits
-        logger.debug(f"Requesting split with {n_splits} * {split} sat tokens.")
+        logger.debug(
+            f"Requesting split with {n_splits} * {wallet.unit.str(split)} tokens."
+        )
 
-    if not settings.lightning:
-        await wallet.mint(amount, split=optional_split)
     # user requests an invoice
-    elif amount and not id:
+    if amount and not id:
         invoice = await wallet.request_mint(amount)
         if invoice.bolt11:
-            print(f"Pay invoice to mint {amount} sat:")
+            print("")
+            print(f"Pay invoice to mint {wallet.unit.str(amount)}:")
             print("")
             print(f"Invoice: {invoice.bolt11}")
             print("")
@@ -280,7 +305,8 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
     # user paid invoice and want to check it
     elif amount and id:
         await wallet.mint(amount, split=optional_split, id=id)
-    wallet.status()
+    print("")
+    print_balance(ctx)
     return
 
 
@@ -288,8 +314,6 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
 @click.pass_context
 @coro
 async def swap(ctx: Context):
-    if not settings.lightning:
-        raise Exception("lightning not supported.")
     print("Select the mint to swap from:")
     outgoing_wallet = await get_mint_wallet(ctx, force_select=True)
 
@@ -302,22 +326,23 @@ async def swap(ctx: Context):
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    amount = int(input("Enter amount to swap in sat: "))
+    amount = int(input(f"Enter amount to swap in {incoming_wallet.unit.name}: "))
     assert amount > 0, "amount is not positive"
 
     # request invoice from incoming mint
     invoice = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
-    total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
-        invoice.bolt11
-    )
+    quote = await outgoing_wallet.get_pay_amount_with_fees(invoice.bolt11)
+    total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
+    await outgoing_wallet.pay_lightning(
+        send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
+    )
 
     # mint token in incoming mint
     await incoming_wallet.mint(amount, id=invoice.id)
@@ -339,34 +364,44 @@ async def swap(ctx: Context):
 @coro
 async def balance(ctx: Context, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs()
+    await wallet.load_proofs(unit=False)
+    unit_balances = wallet.balance_per_unit()
+    if len(unit_balances) > 1 and not ctx.obj["UNIT"]:
+        print(f"You have balances in {len(unit_balances)} units:")
+        print("")
+        for i, (k, v) in enumerate(unit_balances.items()):
+            unit = k
+            print(f"Unit {i+1} ({unit}) – Balance: {unit.str(int(v['available']))}")
+        print("")
     if verbose:
         # show balances per keyset
         keyset_balances = wallet.balance_per_keyset()
-        if len(keyset_balances) > 1:
+        if len(keyset_balances):
             print(f"You have balances in {len(keyset_balances)} keysets:")
             print("")
-            for k, v in keyset_balances.items():
+            for k, v in keyset_balances.items():  # type: ignore
+                unit = Unit[str(v["unit"])]
                 print(
-                    f"Keyset: {k} - Balance: {v['available']} sat (pending:"
-                    f" {v['balance']-v['available']} sat)"
+                    f"Keyset: {k} - Balance: {unit.str(int(v['available']))} (pending:"
+                    f" {unit.str(int(v['balance'])-int(v['available']))})"
                 )
             print("")
 
     await print_mint_balances(wallet)
 
+    await wallet.load_proofs(reload=True)
     if verbose:
         print(
-            f"Balance: {wallet.available_balance} sat (pending:"
-            f" {wallet.balance-wallet.available_balance} sat) in"
+            f"Balance: {wallet.unit.str(wallet.available_balance)} (pending:"
+            f" {wallet.unit.str(wallet.balance-wallet.available_balance)}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
-        print(f"Balance: {wallet.available_balance} sat")
+        print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
 
 
 @cli.command("send", help="Send tokens.")
-@click.argument("amount", type=int)
+@click.argument("amount", type=float)
 @click.argument("nostr", type=str, required=False)
 @click.option(
     "--nostr",
@@ -426,6 +461,7 @@ async def send_command(
     nosplit: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
+    amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
     if not nostr and not nopt:
         await send(
             wallet,
@@ -439,6 +475,7 @@ async def send_command(
         await send_nostr(
             wallet, amount=amount, pubkey=nostr or nopt, verbose=verbose, yes=yes
         )
+    print_balance(ctx)
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -493,6 +530,8 @@ async def receive_cli(
                 await receive(wallet, tokenObj)
     else:
         print("Error: enter token or use either flag --nostr or --all.")
+        return
+    print_balance(ctx)
 
 
 @cli.command("burn", help="Burn spent tokens.")
@@ -536,10 +575,10 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         proofs = tokenObj.get_proofs()
 
     if delete:
-        await wallet.invalidate(proofs, check_spendable=False)
-    else:
         await wallet.invalidate(proofs)
-    wallet.status()
+    else:
+        await wallet.invalidate(proofs, check_spendable=True)
+    print_balance(ctx)
 
 
 @cli.command("pending", help="Show pending tokens.")
@@ -591,7 +630,8 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                 int(grouped_proofs[0].time_reserved)
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
-                f"#{i} Amount: {sum_proofs(grouped_proofs)} sat Time:"
+                f"#{i} Amount:"
+                f" {wallet.unit.str(sum_proofs(grouped_proofs))} Time:"
                 f" {reserved_date} ID: {key}  Mint: {mint}\n"
             )
             print(f"{token}\n")
@@ -697,9 +737,10 @@ async def wallets(ctx):
                 if w == ctx.obj["WALLET_NAME"]:
                     active_wallet = True
                 print(
-                    f"Wallet: {w}\tBalance: {sum_proofs(wallet.proofs)} sat"
+                    f"Wallet: {w}\tBalance:"
+                    f" {wallet.unit.str(sum_proofs(wallet.proofs))}"
                     " (available: "
-                    f"{sum_proofs([p for p in wallet.proofs if not p.reserved])} sat){' *' if active_wallet else ''}"
+                    f"{wallet.unit.str(sum_proofs([p for p in wallet.proofs if not p.reserved]))}){' *' if active_wallet else ''}"
                 )
         except Exception:
             pass
@@ -737,25 +778,32 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
     if mint:
         for mint_url in mint_list:
             wallet.url = mint_url
-            mint_info: dict = (await wallet._load_mint_info()).dict()
-            print("")
-            print("Mint information:")
-            print("")
-            print(f"Mint URL: {mint_url}")
-            if mint_info:
-                print(f"Mint name: {mint_info['name']}")
-                if mint_info["description"]:
-                    print(f"Description: {mint_info['description']}")
-                if mint_info["description_long"]:
-                    print(f"Long description: {mint_info['description_long']}")
-                if mint_info["contact"]:
-                    print(f"Contact: {mint_info['contact']}")
-                if mint_info["version"]:
-                    print(f"Version: {mint_info['version']}")
-                if mint_info["motd"]:
-                    print(f"Message of the day: {mint_info['motd']}")
-                if mint_info["parameter"]:
-                    print(f"Parameter: {mint_info['parameter']}")
+            try:
+                mint_info: dict = (await wallet._load_mint_info()).dict()
+                print("")
+                print("---- Mint information ----")
+                print("")
+                print(f"Mint URL: {mint_url}")
+                if mint_info:
+                    print(f"Mint name: {mint_info['name']}")
+                    if mint_info.get("description"):
+                        print(f"Description: {mint_info['description']}")
+                    if mint_info.get("description_long"):
+                        print(f"Long description: {mint_info['description_long']}")
+                    if mint_info.get("contact"):
+                        print(f"Contact: {mint_info['contact']}")
+                    if mint_info.get("version"):
+                        print(f"Version: {mint_info['version']}")
+                    if mint_info.get("motd"):
+                        print(f"Message of the day: {mint_info['motd']}")
+                    if mint_info.get("nuts"):
+                        print(
+                            "Supported NUTS:"
+                            f" {', '.join(['NUT-'+str(k) for k in mint_info['nuts'].keys()])}"
+                        )
+            except Exception as e:
+                print("")
+                print(f"Error fetching mint information for {mint_url}: {e}")
 
     if mnemonic:
         assert wallet.mnemonic
@@ -807,7 +855,7 @@ async def restore(ctx: Context, to: int, batch: int):
 
     await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
     await wallet.load_proofs()
-    wallet.status()
+    print_balance(ctx)
 
 
 @cli.command("selfpay", help="Refresh tokens.")
@@ -820,7 +868,7 @@ async def selfpay(ctx: Context, all: bool = False):
 
     # get balance on this mint
     mint_balance_dict = await wallet.balance_per_minturl()
-    mint_balance = mint_balance_dict[wallet.url]["available"]
+    mint_balance = int(mint_balance_dict[wallet.url]["available"])
     # send balance once to mark as reserved
     await wallet.split_to_send(wallet.proofs, mint_balance, None, set_reserved=True)
     # load all reserved proofs (including the one we just sent)

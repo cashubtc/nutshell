@@ -92,7 +92,9 @@ async def pay(
     if mint:
         wallet = await mint_wallet(mint)
     payment_response = await wallet.pay_invoice(bolt11)
-    return payment_response
+    ret = PaymentResponse(**payment_response.dict())
+    ret.fee = None  # TODO: we can't return an Amount object, overwriting
+    return ret
 
 
 @router.get(
@@ -162,10 +164,8 @@ async def lightning_balance() -> StatusResponse:
     try:
         await wallet.load_proofs(reload=True)
     except Exception as exc:
-        return StatusResponse(error_message=str(exc), balance_msat=0)
-    return StatusResponse(
-        error_message=None, balance_msat=wallet.available_balance * 1000
-    )
+        return StatusResponse(error_message=str(exc), balance=0)
+    return StatusResponse(error_message=None, balance=wallet.available_balance * 1000)
 
 
 @router.post(
@@ -179,8 +179,6 @@ async def swap(
     outgoing_mint: str = Query(default=..., description="URL of outgoing mint"),
     incoming_mint: str = Query(default=..., description="URL of incoming mint"),
 ):
-    if not settings.lightning:
-        raise Exception("lightning not supported")
     incoming_wallet = await mint_wallet(incoming_mint)
     outgoing_wallet = await mint_wallet(outgoing_mint)
     if incoming_wallet.url == outgoing_wallet.url:
@@ -191,17 +189,17 @@ async def swap(
 
     # pay invoice from outgoing mint
     await outgoing_wallet.load_proofs(reload=True)
-    total_amount, fee_reserve_sat = await outgoing_wallet.get_pay_amount_with_fees(
-        invoice.bolt11
-    )
-    assert total_amount > 0, "amount must be positive"
+    quote = await outgoing_wallet.get_pay_amount_with_fees(invoice.bolt11)
+    total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
 
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(send_proofs, invoice.bolt11, fee_reserve_sat)
+    await outgoing_wallet.pay_lightning(
+        send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
+    )
 
     # mint token in incoming mint
     await incoming_wallet.mint(amount, id=invoice.id)
@@ -325,9 +323,9 @@ async def burn(
         proofs = tokenObj.get_proofs()
 
     if delete:
-        await wallet.invalidate(proofs, check_spendable=False)
-    else:
         await wallet.invalidate(proofs)
+    else:
+        await wallet.invalidate(proofs, check_spendable=True)
     return BurnResponse(balance=wallet.available_balance)
 
 
@@ -361,17 +359,15 @@ async def pending(
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)  # type: ignore
             ).strftime("%Y-%m-%d %H:%M:%S")
-            result.update(
-                {
-                    f"{i}": {
-                        "amount": sum_proofs(grouped_proofs),
-                        "time": reserved_date,
-                        "ID": key,
-                        "token": token,
-                        "mint": mint,
-                    }
+            result.update({
+                f"{i}": {
+                    "amount": sum_proofs(grouped_proofs),
+                    "time": reserved_date,
+                    "ID": key,
+                    "token": token,
+                    "mint": mint,
                 }
-            )
+            })
     return PendingResponse(pending_token=result)
 
 
@@ -416,22 +412,20 @@ async def wallets():
                 if w == wallet.name:
                     active_wallet = True
                 if active_wallet:
-                    result.update(
-                        {
-                            f"{w}": {
-                                "balance": sum_proofs(wallet.proofs),
-                                "available": sum_proofs(
-                                    [p for p in wallet.proofs if not p.reserved]
-                                ),
-                            }
+                    result.update({
+                        f"{w}": {
+                            "balance": sum_proofs(wallet.proofs),
+                            "available": sum_proofs([
+                                p for p in wallet.proofs if not p.reserved
+                            ]),
                         }
-                    )
+                    })
         except Exception:
             pass
     return WalletsResponse(wallets=result)
 
 
-@router.post("/restore", name="Restore wallet", response_model=RestoreResponse)
+@router.post("/v1/restore", name="Restore wallet", response_model=RestoreResponse)
 async def restore(
     to: int = Query(default=..., description="Counter to which restore the wallet"),
 ):
@@ -439,8 +433,7 @@ async def restore(
         raise Exception("Counter must be positive")
     await wallet.load_mint()
     await wallet.restore_promises_from_to(0, to)
-    await wallet.invalidate(wallet.proofs)
-    wallet.status()
+    await wallet.invalidate(wallet.proofs, check_spendable=True)
     return RestoreResponse(balance=wallet.available_balance)
 
 

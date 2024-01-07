@@ -1,6 +1,4 @@
 import copy
-import shutil
-from pathlib import Path
 from typing import List, Union
 
 import pytest
@@ -10,12 +8,12 @@ from cashu.core.base import Proof
 from cashu.core.errors import CashuError, KeysetNotFoundError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
-from cashu.wallet.crud import get_keyset, get_lightning_invoice, get_proofs
+from cashu.wallet.crud import get_keysets, get_lightning_invoice, get_proofs
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_real_invoice, is_regtest, pay_if_regtest
+from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
 
 
 async def assert_err(f, msg: Union[str, CashuError]):
@@ -56,47 +54,32 @@ async def wallet1(mint):
         name="wallet1",
     )
     await wallet1.load_mint()
-    wallet1.status()
     yield wallet1
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2(mint):
+async def wallet2():
     wallet2 = await Wallet2.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet2",
         name="wallet2",
     )
     await wallet2.load_mint()
-    wallet2.status()
     yield wallet2
-
-
-@pytest_asyncio.fixture(scope="function")
-async def wallet3(mint):
-    dirpath = Path("test_data/wallet3")
-    if dirpath.exists() and dirpath.is_dir():
-        shutil.rmtree(dirpath)
-
-    wallet3 = await Wallet1.with_db(
-        url=SERVER_ENDPOINT,
-        db="test_data/wallet3",
-        name="wallet3",
-    )
-    await wallet3.db.execute("DELETE FROM proofs")
-    await wallet3.db.execute("DELETE FROM proofs_used")
-    await wallet3.load_mint()
-    wallet3.status()
-    yield wallet3
 
 
 @pytest.mark.asyncio
 async def test_get_keys(wallet1: Wallet):
     assert wallet1.keysets[wallet1.keyset_id].public_keys
     assert len(wallet1.keysets[wallet1.keyset_id].public_keys) == settings.max_order
-    keyset = await wallet1._get_keys(wallet1.url)
+    keysets = await wallet1._get_keys()
+    keyset = keysets[0]
     assert keyset.id is not None
-    assert keyset.id == "1cCNIAZ2X/w1"
+    # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
+    if settings.debug_mint_only_deprecated:
+        assert keyset.id == "eGnEWtdJ0PIM"
+    else:
+        assert keyset.id == "009a1f293253e41e"
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
@@ -106,13 +89,14 @@ async def test_get_keyset(wallet1: Wallet):
     assert wallet1.keysets[wallet1.keyset_id].public_keys
     assert len(wallet1.keysets[wallet1.keyset_id].public_keys) == settings.max_order
     # let's get the keys first so we can get a keyset ID that we use later
-    keys1 = await wallet1._get_keys(wallet1.url)
+    keysets = await wallet1._get_keys()
+    keyset = keysets[0]
     # gets the keys of a specific keyset
-    assert keys1.id is not None
-    assert keys1.public_keys is not None
-    keys2 = await wallet1._get_keys_of_keyset(wallet1.url, keys1.id)
+    assert keyset.id is not None
+    assert keyset.public_keys is not None
+    keys2 = await wallet1._get_keys_of_keyset(keyset.id)
     assert keys2.public_keys is not None
-    assert len(keys1.public_keys) == len(keys2.public_keys)
+    assert len(keyset.public_keys) == len(keys2.public_keys)
 
 
 @pytest.mark.asyncio
@@ -130,32 +114,39 @@ async def test_get_keyset_from_db(wallet1: Wallet):
     assert keyset1.id == keyset2.id
 
     # load it directly from the db
-    keyset3 = await get_keyset(db=wallet1.db, id=keyset1.id)
-    assert keyset3
+    keysets_local = await get_keysets(db=wallet1.db, id=keyset1.id)
+    assert keysets_local[0]
+    keyset3 = keysets_local[0]
     assert keyset1.public_keys == keyset3.public_keys
     assert keyset1.id == keyset3.id
 
 
 @pytest.mark.asyncio
 async def test_get_info(wallet1: Wallet):
-    info = await wallet1._get_info(wallet1.url)
+    info = await wallet1._get_info()
     assert info.name
 
 
 @pytest.mark.asyncio
 async def test_get_nonexistent_keyset(wallet1: Wallet):
     await assert_err(
-        wallet1._get_keys_of_keyset(wallet1.url, "nonexistent"),
+        wallet1._get_keys_of_keyset("nonexistent"),
         KeysetNotFoundError(),
     )
 
 
 @pytest.mark.asyncio
 async def test_get_keyset_ids(wallet1: Wallet):
-    keyset = await wallet1._get_keyset_ids(wallet1.url)
-    assert isinstance(keyset, list)
-    assert len(keyset) > 0
-    assert keyset[-1] == wallet1.keyset_id
+    keysets = await wallet1._get_keyset_ids()
+    assert isinstance(keysets, list)
+    assert len(keysets) > 0
+    assert wallet1.keyset_id in keysets
+
+
+@pytest.mark.asyncio
+async def test_request_mint(wallet1: Wallet):
+    invoice = await wallet1.request_mint(64)
+    assert invoice.payment_hash
 
 
 @pytest.mark.asyncio
@@ -181,9 +172,9 @@ async def test_mint(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint_amounts(wallet1: Wallet):
     """Mint predefined amounts"""
-    invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
     amts = [1, 1, 1, 2, 2, 4, 16]
+    invoice = await wallet1.request_mint(sum(amts))
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(amount=sum(amts), split=amts, id=invoice.id)
     assert wallet1.balance == 27
     assert wallet1.proof_amounts == amts
@@ -192,9 +183,11 @@ async def test_mint_amounts(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint_amounts_wrong_sum(wallet1: Wallet):
     """Mint predefined amounts"""
+
     amts = [1, 1, 1, 2, 2, 4, 16]
+    invoice = await wallet1.request_mint(sum(amts))
     await assert_err(
-        wallet1.mint(amount=sum(amts) + 1, split=amts),
+        wallet1.mint(amount=sum(amts) + 1, split=amts, id=invoice.id),
         "split must sum to amount",
     )
 
@@ -203,8 +196,9 @@ async def test_mint_amounts_wrong_sum(wallet1: Wallet):
 async def test_mint_amounts_wrong_order(wallet1: Wallet):
     """Mint amount that is not part in 2^n"""
     amts = [1, 2, 3]
+    invoice = await wallet1.request_mint(sum(amts))
     await assert_err(
-        wallet1.mint(amount=sum(amts), split=[1, 2, 3]),
+        wallet1.mint(amount=sum(amts), split=[1, 2, 3], id=invoice.id),
         f"Can only mint amounts with 2^n up to {2**settings.max_order}.",
     )
 
@@ -257,42 +251,54 @@ async def test_split_more_than_balance(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_melt(wallet1: Wallet):
     # mint twice so we have enough to pay the second invoice back
-    invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
-    invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    topup_invoice = await wallet1.request_mint(128)
+    pay_if_regtest(topup_invoice.bolt11)
+    await wallet1.mint(128, id=topup_invoice.id)
     assert wallet1.balance == 128
 
-    total_amount, fee_reserve_sat = await wallet1.get_pay_amount_with_fees(
-        invoice.bolt11
-    )
-    assert total_amount == 66
-
-    assert fee_reserve_sat == 2
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
-
-    invoice_to_pay = invoice.bolt11
-    invoice_payment_hash = str(invoice.payment_hash)
+    invoice_payment_request = ""
+    invoice_payment_hash = ""
     if is_regtest:
         invoice_dict = get_real_invoice(64)
-        invoice_to_pay = invoice_dict["payment_request"]
         invoice_payment_hash = str(invoice_dict["r_hash"])
+        invoice_payment_request = invoice_dict["payment_request"]
+
+    if is_fake:
+        invoice = await wallet1.request_mint(64)
+        invoice_payment_hash = str(invoice.payment_hash)
+        invoice_payment_request = invoice.bolt11
+
+    quote = await wallet1.get_pay_amount_with_fees(invoice_payment_request)
+    total_amount = quote.amount + quote.fee_reserve
+
+    if is_regtest:
+        # we expect a fee reserve of 2 sat for regtest
+        assert total_amount == 66
+        assert quote.fee_reserve == 2
+    if is_fake:
+        # we expect a fee reserve of 0 sat for fake
+        assert total_amount == 64
+        assert quote.fee_reserve == 0
+
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
     melt_response = await wallet1.pay_lightning(
-        send_proofs, invoice=invoice_to_pay, fee_reserve_sat=fee_reserve_sat
+        proofs=send_proofs,
+        invoice=invoice_payment_request,
+        fee_reserve_sat=quote.fee_reserve,
+        quote_id=quote.quote,
     )
 
-    assert melt_response.change, "No change returned"
-    assert len(melt_response.change) == 1, "More than one change returned"
-    # NOTE: we assume that we will get a token back from the same keyset as the ones we melted
-    # this could be wrong if we melted tokens from an old keyset but the returned ones are
-    # from a newer one.
-    assert melt_response.change[0].id == send_proofs[0].id, "Wrong keyset returned"
+    if is_regtest:
+        assert melt_response.change, "No change returned"
+        assert len(melt_response.change) == 1, "More than one change returned"
+        # NOTE: we assume that we will get a token back from the same keyset as the ones we melted
+        # this could be wrong if we melted tokens from an old keyset but the returned ones are
+        # from a newer one.
+        assert melt_response.change[0].id == send_proofs[0].id, "Wrong keyset returned"
 
     # verify that proofs in proofs_used db have the same melt_id as the invoice in the db
-    assert invoice.payment_hash, "No payment hash in invoice"
+    assert invoice_payment_hash, "No payment hash in invoice"
     invoice_db = await get_lightning_invoice(
         db=wallet1.db, payment_hash=invoice_payment_hash, out=True
     )
@@ -305,7 +311,7 @@ async def test_melt(wallet1: Wallet):
     assert all([p.melt_id == invoice_db.id for p in proofs_used]), "Wrong melt_id"
 
     # the payment was without fees so we need to remove it from the total amount
-    assert wallet1.balance == 128 - (total_amount - fee_reserve_sat), "Wrong balance"
+    assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), "Wrong balance"
     assert wallet1.balance == 64, "Wrong balance"
 
 
@@ -368,23 +374,23 @@ async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
 
 
 @pytest.mark.asyncio
-async def test_invalidate_unspent_proofs(wallet1: Wallet):
+async def test_invalidate_all_proofs(wallet1: Wallet):
     """Try to invalidate proofs that have not been spent yet. Should not work!"""
     invoice = await wallet1.request_mint(64)
     pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     await wallet1.invalidate(wallet1.proofs)
-    assert wallet1.balance == 64
+    assert wallet1.balance == 0
 
 
 @pytest.mark.asyncio
-async def test_invalidate_unspent_proofs_without_checking(wallet1: Wallet):
+async def test_invalidate_unspent_proofs_with_checking(wallet1: Wallet):
     """Try to invalidate proofs that have not been spent yet but force no check."""
     invoice = await wallet1.request_mint(64)
     pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
-    await wallet1.invalidate(wallet1.proofs, check_spendable=False)
-    assert wallet1.balance == 0
+    await wallet1.invalidate(wallet1.proofs, check_spendable=True)
+    assert wallet1.balance == 64
 
 
 @pytest.mark.asyncio
@@ -405,5 +411,21 @@ async def test_token_state(wallet1: Wallet):
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 64
     resp = await wallet1.check_proof_state(wallet1.proofs)
-    assert resp.dict()["spendable"]
-    assert resp.dict()["pending"]
+    assert resp.states[0].state.value == "UNSPENT"
+
+
+@pytest.mark.asyncio
+async def test_load_mint_keys_specific_keyset(wallet1: Wallet):
+    await wallet1._load_mint_keys()
+    if settings.debug_mint_only_deprecated:
+        assert list(wallet1.keysets.keys()) == ["eGnEWtdJ0PIM"]
+    else:
+        assert list(wallet1.keysets.keys()) == ["009a1f293253e41e", "eGnEWtdJ0PIM"]
+    await wallet1._load_mint_keys(keyset_id=wallet1.keyset_id)
+    await wallet1._load_mint_keys(keyset_id="009a1f293253e41e")
+    # expect deprecated keyset id to be present
+    await wallet1._load_mint_keys(keyset_id="eGnEWtdJ0PIM")
+    await assert_err(
+        wallet1._load_mint_keys(keyset_id="nonexistent"),
+        KeysetNotFoundError(),
+    )

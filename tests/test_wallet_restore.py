@@ -8,6 +8,7 @@ import pytest_asyncio
 from cashu.core.base import Proof
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.errors import CashuError
+from cashu.core.settings import settings
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
@@ -46,31 +47,29 @@ async def reset_wallet_db(wallet: Wallet):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1(mint):
+async def wallet1():
     wallet1 = await Wallet1.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet1",
         name="wallet1",
     )
     await wallet1.load_mint()
-    wallet1.status()
     yield wallet1
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2(mint):
+async def wallet2():
     wallet2 = await Wallet2.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet2",
         name="wallet2",
     )
     await wallet2.load_mint()
-    wallet2.status()
     yield wallet2
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet3(mint):
+async def wallet3():
     dirpath = Path("test_data/wallet3")
     if dirpath.exists() and dirpath.is_dir():
         shutil.rmtree(dirpath)
@@ -83,11 +82,14 @@ async def wallet3(mint):
     await wallet3.db.execute("DELETE FROM proofs")
     await wallet3.db.execute("DELETE FROM proofs_used")
     await wallet3.load_mint()
-    wallet3.status()
     yield wallet3
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_bump_secret_derivation(wallet3: Wallet):
     await wallet3._init_private_key(
         "half depart obvious quality work element tank gorilla view sugar picture"
@@ -95,23 +97,27 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     )
     secrets1, rs1, derivation_paths1 = await wallet3.generate_n_secrets(5)
     secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(0, 4)
-    assert wallet3.keyset_id == "1cCNIAZ2X/w1"
+    assert wallet3.keyset_id == "009a1f293253e41e"
     assert secrets1 == secrets2
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert derivation_paths1 == derivation_paths2
+    for s in secrets1:
+        print('"' + s + '",')
     assert secrets1 == [
-        "9d32fc57e6fa2942d05ee475d28ba6a56839b8cb8a3f174b05ed0ed9d3a420f6",
-        "1c0f2c32e7438e7cc992612049e9dfcdbffd454ea460901f24cc429921437802",
-        "327c606b761af03cbe26fa13c4b34a6183b868c52cda059fe57fdddcb4e1e1e7",
-        "53476919560398b56c0fdc5dd92cf8628b1e06de6f2652b0f7d6e8ac319de3b7",
-        "b2f5d632229378a716be6752fc79ac8c2b43323b820859a7956f2dfe5432b7b4",
+        "485875df74771877439ac06339e284c3acfcd9be7abf3bc20b516faeadfe77ae",
+        "8f2b39e8e594a4056eb1e6dbb4b0c38ef13b1b2c751f64f810ec04ee35b77270",
+        "bc628c79accd2364fd31511216a0fab62afd4a18ff77a20deded7b858c9860c8",
+        "59284fd1650ea9fa17db2b3acf59ecd0f2d52ec3261dd4152785813ff27a33bf",
+        "576c23393a8b31cc8da6688d9c9a96394ec74b40fdaf1f693a6bb84284334ea0",
     ]
+    for d in derivation_paths1:
+        print('"' + d + '",')
     assert derivation_paths1 == [
-        "m/129372'/0'/2004500376'/0'",
-        "m/129372'/0'/2004500376'/1'",
-        "m/129372'/0'/2004500376'/2'",
-        "m/129372'/0'/2004500376'/3'",
-        "m/129372'/0'/2004500376'/4'",
+        "m/129372'/0'/864559728'/0'",
+        "m/129372'/0'/864559728'/1'",
+        "m/129372'/0'/864559728'/2'",
+        "m/129372'/0'/864559728'/3'",
+        "m/129372'/0'/864559728'/4'",
     ]
 
 
@@ -191,7 +197,7 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 100)
     assert wallet3.balance == 64 * 2
-    await wallet3.invalidate(wallet3.proofs)
+    await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
 
 
@@ -216,7 +222,7 @@ async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: W
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 100)
     assert wallet3.balance == 64 + 2 * 32
-    await wallet3.invalidate(wallet3.proofs)
+    await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 32
 
 
@@ -257,7 +263,7 @@ async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 100)
     assert wallet3.balance == 64 + 2 * 32 + 32
-    await wallet3.invalidate(wallet3.proofs)
+    await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
 
 
@@ -290,7 +296,7 @@ async def test_restore_wallet_after_send_twice(
     await wallet3.restore_promises_from_to(0, 10)
     box.add(wallet3.proofs)
     assert wallet3.balance == 5
-    await wallet3.invalidate(wallet3.proofs)
+    await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 2
 
     # again
@@ -310,7 +316,7 @@ async def test_restore_wallet_after_send_twice(
     await wallet3.restore_promises_from_to(0, 15)
     box.add(wallet3.proofs)
     assert wallet3.balance == 7
-    await wallet3.invalidate(wallet3.proofs)
+    await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 2
 
 
@@ -345,7 +351,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     await wallet3.restore_promises_from_to(0, 20)
     box.add(wallet3.proofs)
     assert wallet3.balance == 138
-    await wallet3.invalidate(wallet3.proofs)
+    await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
 
     # again
@@ -362,5 +368,5 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 50)
     assert wallet3.balance == 182
-    await wallet3.invalidate(wallet3.proofs)
+    await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64

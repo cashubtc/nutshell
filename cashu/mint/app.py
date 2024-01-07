@@ -1,4 +1,3 @@
-import logging
 import sys
 from traceback import print_exception
 
@@ -14,8 +13,10 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
 from ..core.errors import CashuError
+from ..core.logging import configure_logger
 from ..core.settings import settings
 from .router import router
+from .router_deprecated import router_deprecated
 from .startup import start_mint_init
 
 if settings.debug_profiling:
@@ -37,48 +38,6 @@ if settings.debug_profiling:
 
 
 def create_app(config_object="core.settings") -> FastAPI:
-    def configure_logger() -> None:
-        class Formatter:
-            def __init__(self):
-                self.padding = 0
-                self.minimal_fmt = (
-                    "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> |"
-                    " <level>{level}</level> | <level>{message}</level>\n"
-                )
-                if settings.debug:
-                    self.fmt = (
-                        "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level:"
-                        " <4}</level> |"
-                        " <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>"
-                        " | <level>{message}</level>\n"
-                    )
-                else:
-                    self.fmt = self.minimal_fmt
-
-            def format(self, record):
-                function = "{function}".format(**record)
-                if function == "emit":  # uvicorn logs
-                    return self.minimal_fmt
-                return self.fmt
-
-        class InterceptHandler(logging.Handler):
-            def emit(self, record):
-                try:
-                    level = logger.level(record.levelname).name
-                except ValueError:
-                    level = record.levelno
-                logger.log(level, record.getMessage())
-
-        logger.remove()
-        log_level = settings.log_level
-        if settings.debug and log_level == "INFO":
-            log_level = "DEBUG"
-        formatter = Formatter()
-        logger.add(sys.stderr, level=log_level, format=formatter.format)
-
-        logging.getLogger("uvicorn").handlers = [InterceptHandler()]
-        logging.getLogger("uvicorn.access").handlers = [InterceptHandler()]
-
     configure_logger()
 
     # middleware = [
@@ -99,8 +58,8 @@ def create_app(config_object="core.settings") -> FastAPI:
     ]
 
     app = FastAPI(
-        title="Cashu Python Mint",
-        description="Ecash wallet and mint for Bitcoin",
+        title="Nutshell Cashu Mint",
+        description="Ecash wallet and mint based on the Cashu protocol.",
         version=settings.version,
         license_info={
             "name": "MIT License",
@@ -176,5 +135,10 @@ async def startup_mint():
     await start_mint_init()
 
 
-app.include_router(router=router)
+if settings.debug_mint_only_deprecated:
+    app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
+else:
+    app.include_router(router=router, tags=["Mint"])
+    app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
+
 app.add_exception_handler(RequestValidationError, request_validation_exception_handler)

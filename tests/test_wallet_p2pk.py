@@ -1,12 +1,13 @@
 import asyncio
 import copy
+import json
 import secrets
 from typing import List
 
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, SpentState
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import SigFlags
@@ -16,7 +17,7 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import pay_if_regtest
+from tests.helpers import is_deprecated_api_only, pay_if_regtest
 
 
 async def assert_err(f, msg):
@@ -36,25 +37,23 @@ def assert_amt(proofs: List[Proof], expected: int):
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet1(mint):
+async def wallet1():
     wallet1 = await Wallet1.with_db(
         SERVER_ENDPOINT, "test_data/wallet_p2pk_1", "wallet1"
     )
     await migrate_databases(wallet1.db, migrations)
     await wallet1.load_mint()
-    wallet1.status()
     yield wallet1
 
 
 @pytest_asyncio.fixture(scope="function")
-async def wallet2(mint):
+async def wallet2():
     wallet2 = await Wallet2.with_db(
         SERVER_ENDPOINT, "test_data/wallet_p2pk_2", "wallet2"
     )
     await migrate_databases(wallet2.db, migrations)
     wallet2.private_key = PrivateKey(secrets.token_bytes(32), raw=True)
     await wallet2.load_mint()
-    wallet2.status()
     yield wallet2
 
 
@@ -79,6 +78,16 @@ async def test_p2pk(wallet1: Wallet, wallet2: Wallet):
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     await wallet2.redeem(send_proofs)
+
+    proof_states = await wallet2.check_proof_state(send_proofs)
+    assert all([p.state == SpentState.spent for p in proof_states.states])
+
+    if not is_deprecated_api_only:
+        for state in proof_states.states:
+            assert state.witness is not None
+            witness_obj = json.loads(state.witness)
+            assert len(witness_obj["signatures"]) == 1
+            assert len(witness_obj["signatures"][0]) == 128
 
 
 @pytest.mark.asyncio
@@ -222,9 +231,9 @@ async def test_p2pk_locktime_with_second_refund_pubkey(
     secret_lock = await wallet1.create_p2pk_lock(
         garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
         locktime_seconds=2,  # locktime
-        tags=Tags(
-            [["refund", pubkey_wallet2, pubkey_wallet1]]
-        ),  # multiple refund pubkeys
+        tags=Tags([
+            ["refund", pubkey_wallet2, pubkey_wallet1]
+        ]),  # multiple refund pubkeys
     )  # sender side
     _, send_proofs = await wallet1.split_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
@@ -379,9 +388,9 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
 
 
 def test_tags():
-    tags = Tags(
-        [["key1", "value1"], ["key2", "value2", "value2_1"], ["key2", "value3"]]
-    )
+    tags = Tags([
+        ["key1", "value1"], ["key2", "value2", "value2_1"], ["key2", "value3"]
+    ])
     assert tags.get_tag("key1") == "value1"
     assert tags["key1"] == "value1"
     assert tags.get_tag("key2") == "value2"

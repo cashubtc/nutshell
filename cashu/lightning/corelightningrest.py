@@ -4,23 +4,30 @@ import random
 from typing import AsyncGenerator, Dict, Optional
 
 import httpx
-from bolt11 import Bolt11Exception
-from bolt11.decode import decode
+from bolt11 import (
+    Bolt11Exception,
+    decode,
+)
 from loguru import logger
 
+from ..core.base import Amount, MeltQuote, Unit
+from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
+    LightningBackend,
+    PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
     Unsupported,
-    Wallet,
 )
 from .macaroon import load_macaroon
 
 
-class CoreLightningRestWallet(Wallet):
+class CoreLightningRestWallet(LightningBackend):
+    units = set([Unit.sat, Unit.msat])
+
     def __init__(self):
         macaroon = settings.mint_corelightning_rest_macaroon
         assert macaroon, "missing cln-rest macaroon"
@@ -72,26 +79,27 @@ class CoreLightningRestWallet(Wallet):
                 error_message=(
                     f"Failed to connect to {self.url}, got: '{error_message}...'"
                 ),
-                balance_msat=0,
+                balance=0,
             )
 
         data = r.json()
         if len(data) == 0:
-            return StatusResponse(error_message="no data", balance_msat=0)
+            return StatusResponse(error_message="no data", balance=0)
         balance_msat = int(data.get("localBalance") * 1000)
-        return StatusResponse(error_message=None, balance_msat=balance_msat)
+        return StatusResponse(error_message=None, balance=balance_msat)
 
     async def create_invoice(
         self,
-        amount: int,
+        amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
         unhashed_description: Optional[bytes] = None,
         **kwargs,
     ) -> InvoiceResponse:
+        self.assert_unit_supported(amount.unit)
         label = f"lbl{random.random()}"
         data: Dict = {
-            "amount": amount * 1000,
+            "amount": amount.to(Unit.msat, round="up").amount,
             "description": memo,
             "label": label,
         }
@@ -139,14 +147,16 @@ class CoreLightningRestWallet(Wallet):
             error_message=None,
         )
 
-    async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(
+        self, quote: MeltQuote, fee_limit_msat: int
+    ) -> PaymentResponse:
         try:
-            invoice = decode(bolt11)
+            invoice = decode(quote.request)
         except Bolt11Exception as exc:
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message=str(exc),
             )
@@ -156,7 +166,7 @@ class CoreLightningRestWallet(Wallet):
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message=error_message,
             )
@@ -164,7 +174,7 @@ class CoreLightningRestWallet(Wallet):
         r = await self.client.post(
             f"{self.url}/v1/pay",
             data={
-                "invoice": bolt11,
+                "invoice": quote.request,
                 "maxfeepercent": f"{fee_limit_percent:.11}",
                 "exemptfee": 0,  # so fee_limit_percent is applied even on payments
                 # with fee < 5000 millisatoshi (which is default value of exemptfee)
@@ -181,7 +191,7 @@ class CoreLightningRestWallet(Wallet):
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message=error_message,
             )
@@ -192,7 +202,7 @@ class CoreLightningRestWallet(Wallet):
             return PaymentResponse(
                 ok=False,
                 checking_id=None,
-                fee_msat=None,
+                fee=None,
                 preimage=None,
                 error_message="payment failed",
             )
@@ -204,7 +214,7 @@ class CoreLightningRestWallet(Wallet):
         return PaymentResponse(
             ok=self.statuses.get(data["status"]),
             checking_id=checking_id,
-            fee_msat=fee_msat,
+            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
             error_message=None,
         )
@@ -249,7 +259,7 @@ class CoreLightningRestWallet(Wallet):
 
             return PaymentStatus(
                 paid=self.statuses.get(pay["status"]),
-                fee_msat=fee_msat,
+                fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
                 preimage=preimage,
             )
         except Exception as e:
@@ -274,7 +284,6 @@ class CoreLightningRestWallet(Wallet):
                         except Exception:
                             continue
                         logger.trace(f"paid invoice: {inv}")
-                        yield inv["label"]
                         # NOTE: use payment_hash when corelightning-rest returns it
                         # when using waitAnyInvoice
                         # payment_hash = inv["payment_hash"]
@@ -299,3 +308,14 @@ class CoreLightningRestWallet(Wallet):
                     "reconnecting..."
                 )
                 await asyncio.sleep(0.02)
+
+    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
+        invoice_obj = decode(bolt11)
+        assert invoice_obj.amount_msat, "invoice has no amount."
+        amount_msat = int(invoice_obj.amount_msat)
+        fees_msat = fee_reserve(amount_msat)
+        fees = Amount(unit=Unit.msat, amount=fees_msat)
+        amount = Amount(unit=Unit.msat, amount=amount_msat)
+        return PaymentQuoteResponse(
+            checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
+        )

@@ -11,7 +11,7 @@ black-check:
 	poetry run black . --check
 
 mypy:
-	poetry run mypy cashu --ignore-missing --check-untyped-defs
+	poetry run mypy cashu --check-untyped-defs
 
 format: black ruff
 

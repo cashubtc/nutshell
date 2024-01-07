@@ -7,7 +7,7 @@ on:
         default: "3.10.4"
         type: string
       poetry-version:
-        default: "1.5.1"
+        default: "1.7.1"
         type: string
 
 jobs:
@@ -46,7 +46,7 @@ jobs:
       - name: Setup mypy
         run: yes | poetry run mypy cashu --install-types || true
       - name: Run mypy
-        run: poetry run mypy cashu --ignore-missing
+        run: poetry run mypy cashu --ignore-missing --check-untyped-defs
   ruff:
     runs-on: ubuntu-latest
     steps:

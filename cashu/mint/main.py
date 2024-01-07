@@ -32,7 +32,6 @@ def main(
     for a in ctx.args:
         item = a.split("=")
         if len(item) > 1:  # argument like --key=value
-            print(a, item)
             d[item[0].strip("--").replace("-", "_")] = (
                 int(item[1])  # need to convert to int if it's a number
                 if item[1].isdigit()
@@ -49,5 +48,6 @@ def main(
         ssl_certfile=ssl_certfile,
         **d,  # type: ignore
     )
+
     server = uvicorn.Server(config)
     server.run()

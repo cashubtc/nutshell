@@ -1,6 +1,6 @@
 import base64
+import copy
 import json
-import math
 import time
 import uuid
 from itertools import groupby
@@ -16,25 +16,34 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckFeesRequest,
-    CheckSpendableRequest,
-    CheckSpendableResponse,
+    CheckFeesResponse_deprecated,
     DLEQWallet,
     GetInfoResponse,
-    GetMeltResponse,
-    GetMintResponse,
     Invoice,
     KeysetsResponse,
+    KeysResponse,
+    PostCheckStateRequest,
+    PostCheckStateResponse,
+    PostMeltQuoteRequest,
+    PostMeltQuoteResponse,
     PostMeltRequest,
+    PostMeltResponse,
+    PostMeltResponse_deprecated,
+    PostMintQuoteRequest,
+    PostMintQuoteResponse,
     PostMintRequest,
     PostMintResponse,
     PostRestoreResponse,
     PostSplitRequest,
+    PostSplitResponse,
     Proof,
+    ProofState,
+    SpentState,
     TokenV2,
     TokenV2Mint,
     TokenV3,
     TokenV3Token,
+    Unit,
     WalletKeyset,
 )
 from ..core.crypto import b_dhke
@@ -48,7 +57,8 @@ from ..core.split import amount_split
 from ..tor.tor import TorProxy
 from ..wallet.crud import (
     bump_secret_derivation,
-    get_keyset,
+    get_keysets,
+    get_lightning_invoice,
     get_proofs,
     invalidate_proof,
     secret_used,
@@ -63,6 +73,7 @@ from . import migrations
 from .htlc import WalletHTLC
 from .p2pk import WalletP2PK
 from .secrets import WalletSecrets
+from .wallet_deprecated import LedgerAPIDeprecated
 
 
 def async_set_httpx_client(func):
@@ -94,7 +105,7 @@ def async_set_httpx_client(func):
             proxies=proxies_dict,  # type: ignore
             headers=headers_dict,
             base_url=self.url,
-            timeout=5,
+            timeout=None if settings.debug else 60,
         )
         return await func(self, *args, **kwargs)
 
@@ -114,11 +125,11 @@ def async_ensure_mint_loaded(func):
     return wrapper
 
 
-class LedgerAPI(object):
+class LedgerAPI(LedgerAPIDeprecated, object):
     keyset_id: str  # holds current keyset id
     keysets: Dict[str, WalletKeyset]  # holds keysets
     mint_keyset_ids: List[str]  # holds active keyset ids of the mint
-
+    unit: Unit
     mint_info: GetInfoResponse  # holds info about mint
     tor: TorProxy
     db: Database
@@ -135,7 +146,9 @@ class LedgerAPI(object):
         return
 
     @staticmethod
-    def raise_on_error(resp: Response) -> None:
+    def raise_on_error_request(
+        resp: Response,
+    ) -> None:
         """Raises an exception if the response from the mint contains an error.
 
         Args:
@@ -165,61 +178,69 @@ class LedgerAPI(object):
             AssertionError: if mint URL is not set
             AssertionError: if no keys are received from the mint
         """
+        logger.trace(f"Loading mint keys: {keyset_id}")
         assert len(
             self.url
         ), "Ledger not initialized correctly: mint URL not specified yet. "
 
-        keyset_local: Union[WalletKeyset, None] = None
+        keyset: WalletKeyset
+
+        # if we want to load a specific keyset
         if keyset_id:
-            # check if current keyset is in db
-            logger.trace(f"Checking if keyset {keyset_id} is in database.")
-            keyset_local = await get_keyset(keyset_id, db=self.db)
-            if keyset_local:
-                logger.trace(f"Found keyset {keyset_id} in database.")
+            # check if this keyset is in db
+            logger.trace(f"Loading keyset {keyset_id} from database.")
+            keysets = await get_keysets(keyset_id, db=self.db)
+            if keysets:
+                logger.debug(f"Found keyset {keyset_id} in database.")
+                # select as current keyset
+                keyset = keysets[0]
             else:
                 logger.trace(
                     f"Could not find keyset {keyset_id} in database. Loading keyset"
                     " from mint."
                 )
-            keyset = keyset_local
-
-        if keyset_local is None and keyset_id:
-            # get requested keyset from mint
-            logger.trace(f"Getting keyset {keyset_id} from mint.")
-            keyset = await self._get_keys_of_keyset(self.url, keyset_id)
+                keyset = await self._get_keys_of_keyset(keyset_id)
+                if keyset.id == keyset_id:
+                    # NOTE: Derived keyset *could* have a different id than the one
+                    # requested because of the duplicate keysets for < 0.15.0 that's
+                    # why we make an explicit check here to not overwrite an existing
+                    # keyset with the incoming one.
+                    logger.debug(
+                        f"Storing new mint keyset: {keyset.id} ({keyset.unit.name})"
+                    )
+                    await store_keyset(keyset=keyset, db=self.db)
+                keysets = [keyset]
         else:
-            # get current keyset
-            logger.trace("Getting current keyset from mint.")
-            keyset = await self._get_keys(self.url)
+            # else we load all active keysets of the mint and choose
+            # an appropriate one as the current keyset
+            keysets = await self._get_keys()
+            assert len(keysets), Exception("did not receive any keys")
+            # check if we have all keysets in db
+            for keyset in keysets:
+                keysets_in_db = await get_keysets(keyset.id, db=self.db)
+                if not keysets_in_db:
+                    logger.debug(
+                        "Storing new current mint keyset:"
+                        f" {keyset.id} ({keyset.unit.name})"
+                    )
+                    await store_keyset(keyset=keyset, db=self.db)
 
+            # select a keyset that matches the wallet unit
+            wallet_unit_keysets = [k for k in keysets if k.unit == self.unit]
+            assert len(wallet_unit_keysets) > 0, f"no keyset for unit {self.unit.name}."
+            keyset = [k for k in keysets if k.unit == self.unit][0]
+
+        # load all keysets we have into memory
+        for k in keysets:
+            self.keysets[k.id] = k
+
+        # make sure we have selected a current keyset
         assert keyset
         assert keyset.id
-        assert len(keyset.public_keys) > 0, "did not receive keys from mint."
-
-        if keyset_id and keyset_id != keyset.id:
-            # NOTE: Because of the upcoming change of how to calculate keyset ids
-            # with version 0.15.0, we overwrite the calculated keyset id with the
-            # requested one. This is a temporary fix and should be removed once all
-            # ecash is transitioned to 0.15.0.
-            logger.debug(
-                f"Keyset ID mismatch: {keyset_id} != {keyset.id}. This can happen due"
-                " to a version upgrade."
-            )
-            keyset.id = keyset_id or keyset.id
-
-        # if the keyset is not in the database, store it
-        if keyset_local is None:
-            keyset_local_from_mint = await get_keyset(keyset.id, db=self.db)
-            if not keyset_local_from_mint:
-                logger.debug(f"Storing new mint keyset: {keyset.id}")
-                await store_keyset(keyset=keyset, db=self.db)
-
+        assert len(keyset.public_keys) > 0, "no public keys in keyset"
         # set current keyset id
         self.keyset_id = keyset.id
         logger.debug(f"Current mint keyset: {self.keyset_id}")
-
-        # add keyset to keysets dict
-        self.keysets[keyset.id] = keyset
 
     async def _load_mint_keysets(self) -> List[str]:
         """Loads the keyset IDs of the mint.
@@ -230,9 +251,10 @@ class LedgerAPI(object):
         Raises:
             AssertionError: if no keysets are received from the mint
         """
+        logger.trace("Loading mint keysets.")
         mint_keysets = []
         try:
-            mint_keysets = await self._get_keyset_ids(self.url)
+            mint_keysets = await self._get_keyset_ids()
         except Exception:
             assert self.keysets[
                 self.keyset_id
@@ -244,7 +266,7 @@ class LedgerAPI(object):
 
     async def _load_mint_info(self) -> GetInfoResponse:
         """Loads the mint info from the mint."""
-        self.mint_info = await self._get_info(self.url)
+        self.mint_info = await self._get_info()
         logger.debug(f"Mint info: {self.mint_info}")
         return self.mint_info
 
@@ -254,6 +276,7 @@ class LedgerAPI(object):
         `keyset_id` or gets the keys of the active keyset from the mint.
         Gets the active keyset ids of the mint and stores in `self.mint_keyset_ids`.
         """
+        logger.trace("Loading mint.")
         await self._load_mint_keys(keyset_id)
         await self._load_mint_keysets()
         try:
@@ -280,7 +303,7 @@ class LedgerAPI(object):
     """
 
     @async_set_httpx_client
-    async def _get_keys(self, url: str) -> WalletKeyset:
+    async def _get_keys(self) -> List[WalletKeyset]:
         """API that gets the current keys of the mint
 
         Args:
@@ -293,25 +316,42 @@ class LedgerAPI(object):
             Exception: If no keys are received from the mint
         """
         resp = await self.httpx.get(
-            join(url, "keys"),
+            join(self.url, "/v1/keys"),
         )
-        self.raise_on_error(resp)
-        keys: dict = resp.json()
-        assert len(keys), Exception("did not receive any keys")
-        keyset_keys = {
-            int(amt): PublicKey(bytes.fromhex(val), raw=True)
-            for amt, val in keys.items()
-        }
-        keyset = WalletKeyset(public_keys=keyset_keys, mint_url=url)
-        return keyset
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self._get_keys_deprecated(self.url)
+            return [ret]
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
+        keys_dict: dict = resp.json()
+        assert len(keys_dict), Exception("did not receive any keys")
+        keys = KeysResponse.parse_obj(keys_dict)
+        logger.debug(
+            f"Received {len(keys.keysets)} keysets from mint:"
+            f" {' '.join([k.id + f' ({k.unit})' for k in keys.keysets])}."
+        )
+        ret = [
+            WalletKeyset(
+                id=keyset.id,
+                unit=keyset.unit,
+                public_keys={
+                    int(amt): PublicKey(bytes.fromhex(val), raw=True)
+                    for amt, val in keyset.keys.items()
+                },
+                mint_url=self.url,
+            )
+            for keyset in keys.keysets
+        ]
+        return ret
 
     @async_set_httpx_client
-    async def _get_keys_of_keyset(self, url: str, keyset_id: str) -> WalletKeyset:
+    async def _get_keys_of_keyset(self, keyset_id: str) -> WalletKeyset:
         """API that gets the keys of a specific keyset from the mint.
 
 
         Args:
-            url (str): Mint URL
             keyset_id (str): base64 keyset ID, needs to be urlsafe-encoded before sending to mint (done in this method)
 
         Returns:
@@ -322,24 +362,34 @@ class LedgerAPI(object):
         """
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = await self.httpx.get(
-            join(url, f"keys/{keyset_id_urlsafe}"),
+            join(self.url, f"/v1/keys/{keyset_id_urlsafe}"),
         )
-        self.raise_on_error(resp)
-        keys = resp.json()
-        assert len(keys), Exception("did not receive any keys")
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self._get_keys_of_keyset_deprecated(self.url, keyset_id)
+            return ret
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
+
+        keys_dict = resp.json()
+        assert len(keys_dict), Exception("did not receive any keys")
+        keys = KeysResponse.parse_obj(keys_dict)
         keyset_keys = {
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
-            for amt, val in keys.items()
+            for amt, val in keys.keysets[0].keys.items()
         }
-        keyset = WalletKeyset(id=keyset_id, public_keys=keyset_keys, mint_url=url)
+        keyset = WalletKeyset(
+            id=keyset_id,
+            unit=keys.keysets[0].unit,
+            public_keys=keyset_keys,
+            mint_url=self.url,
+        )
         return keyset
 
     @async_set_httpx_client
-    async def _get_keyset_ids(self, url: str) -> List[str]:
+    async def _get_keyset_ids(self) -> List[str]:
         """API that gets a list of all active keysets of the mint.
-
-        Args:
-            url (str): Mint URL
 
         Returns:
             KeysetsResponse (List[str]): List of all active keyset IDs of the mint
@@ -348,20 +398,24 @@ class LedgerAPI(object):
             Exception: If no keysets are received from the mint
         """
         resp = await self.httpx.get(
-            join(url, "keysets"),
+            join(self.url, "/v1/keysets"),
         )
-        self.raise_on_error(resp)
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self._get_keyset_ids_deprecated(self.url)
+            return ret
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
+
         keysets_dict = resp.json()
         keysets = KeysetsResponse.parse_obj(keysets_dict)
         assert len(keysets.keysets), Exception("did not receive any keysets")
-        return keysets.keysets
+        return [k.id for k in keysets.keysets]
 
     @async_set_httpx_client
-    async def _get_info(self, url: str) -> GetInfoResponse:
+    async def _get_info(self) -> GetInfoResponse:
         """API that gets the mint info.
-
-        Args:
-            url (str): Mint URL
 
         Returns:
             GetInfoResponse: Current mint info
@@ -370,17 +424,23 @@ class LedgerAPI(object):
             Exception: If the mint info request fails
         """
         resp = await self.httpx.get(
-            join(url, "info"),
+            join(self.url, "/v1/info"),
         )
-        self.raise_on_error(resp)
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self._get_info_deprecated()
+            return ret
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
         data: dict = resp.json()
         mint_info: GetInfoResponse = GetInfoResponse.parse_obj(data)
         return mint_info
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def request_mint(self, amount) -> Invoice:
-        """Requests a mint from the server and returns Lightning invoice.
+    async def mint_quote(self, amount) -> Invoice:
+        """Requests a mint quote from the server and returns a payment request.
 
         Args:
             amount (int): Amount of tokens to mint
@@ -391,17 +451,26 @@ class LedgerAPI(object):
         Raises:
             Exception: If the mint request fails
         """
-        logger.trace("Requesting mint: GET /mint")
-        resp = await self.httpx.get(join(self.url, "mint"), params={"amount": amount})
-        self.raise_on_error(resp)
+        logger.trace("Requesting mint: GET /v1/mint/bolt11")
+        payload = PostMintQuoteRequest(unit=self.unit.name, amount=amount)
+        resp = await self.httpx.post(
+            join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
+        )
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.request_mint_deprecated(amount)
+            return ret
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
         return_dict = resp.json()
-        mint_response = GetMintResponse.parse_obj(return_dict)
-        decoded_invoice = bolt11.decode(mint_response.pr)
+        mint_response = PostMintQuoteResponse.parse_obj(return_dict)
+        decoded_invoice = bolt11.decode(mint_response.request)
         return Invoice(
             amount=amount,
-            bolt11=mint_response.pr,
+            bolt11=mint_response.request,
             payment_hash=decoded_invoice.payment_hash,
-            id=mint_response.hash,
+            id=mint_response.quote,
             out=False,
             time_created=int(time.time()),
         )
@@ -409,13 +478,13 @@ class LedgerAPI(object):
     @async_set_httpx_client
     @async_ensure_mint_loaded
     async def mint(
-        self, outputs: List[BlindedMessage], id: Optional[str] = None
+        self, outputs: List[BlindedMessage], quote: str
     ) -> List[BlindedSignature]:
         """Mints new coins and returns a proof of promise.
 
         Args:
             outputs (List[BlindedMessage]): Outputs to mint new tokens with
-            id (str, optional): Id of the paid invoice. Defaults to None.
+            quote (str): Quote ID.
 
         Returns:
             list[Proof]: List of proofs.
@@ -423,21 +492,109 @@ class LedgerAPI(object):
         Raises:
             Exception: If the minting fails
         """
-        outputs_payload = PostMintRequest(outputs=outputs)
-        logger.trace("Checking Lightning invoice. POST /mint")
+        outputs_payload = PostMintRequest(outputs=outputs, quote=quote)
+        logger.trace("Checking Lightning invoice. POST /v1/mint/bolt11")
+
+        def _mintrequest_include_fields(outputs: List[BlindedMessage]):
+            """strips away fields from the model that aren't necessary for the /mint"""
+            outputs_include = {"id", "amount", "B_"}
+            return {
+                "quote": ...,
+                "outputs": {i: outputs_include for i in range(len(outputs))},
+            }
+
+        payload = outputs_payload.dict(include=_mintrequest_include_fields(outputs))  # type: ignore
         resp = await self.httpx.post(
-            join(self.url, "mint"),
-            json=outputs_payload.dict(),
-            params={
-                "hash": id,
-                "payment_hash": id,  # backwards compatibility pre 0.12.0
-            },
+            join(self.url, "/v1/mint/bolt11"),
+            json=payload,  # type: ignore
         )
-        self.raise_on_error(resp)
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.mint_deprecated(outputs, quote)
+            return ret
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
         response_dict = resp.json()
-        logger.trace("Lightning invoice checked. POST /mint")
-        promises = PostMintResponse.parse_obj(response_dict).promises
+        logger.trace("Lightning invoice checked. POST /v1/mint/bolt11")
+        promises = PostMintResponse.parse_obj(response_dict).signatures
         return promises
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def melt_quote(self, payment_request: str) -> PostMeltQuoteResponse:
+        """Checks whether the Lightning payment is internal."""
+        invoice_obj = bolt11.decode(payment_request)
+        assert invoice_obj.amount_msat, "invoice must have amount"
+        payload = PostMeltQuoteRequest(unit=self.unit.name, request=payment_request)
+        resp = await self.httpx.post(
+            join(self.url, "/v1/melt/quote/bolt11"),
+            json=payload.dict(),
+        )
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret: CheckFeesResponse_deprecated = await self.check_fees_deprecated(
+                payment_request
+            )
+            quote_id = "deprecated_" + str(uuid.uuid4())
+            return PostMeltQuoteResponse(
+                quote=quote_id,
+                amount=invoice_obj.amount_msat // 1000,
+                fee_reserve=ret.fee or 0,
+                paid=False,
+            )
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
+        return_dict = resp.json()
+        return PostMeltQuoteResponse.parse_obj(return_dict)
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def melt(
+        self,
+        quote: str,
+        proofs: List[Proof],
+        outputs: Optional[List[BlindedMessage]],
+    ) -> PostMeltResponse:
+        """
+        Accepts proofs and a lightning invoice to pay in exchange.
+        """
+
+        payload = PostMeltRequest(quote=quote, inputs=proofs, outputs=outputs)
+
+        def _meltrequest_include_fields(
+            proofs: List[Proof], outputs: List[BlindedMessage]
+        ):
+            """strips away fields from the model that aren't necessary for the /melt"""
+            proofs_include = {"id", "amount", "secret", "C", "witness"}
+            outputs_include = {"id", "amount", "B_"}
+            return {
+                "quote": ...,
+                "inputs": {i: proofs_include for i in range(len(proofs))},
+                "outputs": {i: outputs_include for i in range(len(outputs))},
+            }
+
+        resp = await self.httpx.post(
+            join(self.url, "/v1/melt/bolt11"),
+            json=payload.dict(include=_meltrequest_include_fields(proofs, outputs)),  # type: ignore
+            timeout=None,
+        )
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            invoice = await get_lightning_invoice(id=quote, db=self.db)
+            assert invoice, f"no invoice found for id {quote}"
+            ret: PostMeltResponse_deprecated = await self.pay_lightning_deprecated(
+                proofs=proofs, outputs=outputs, invoice=invoice.bolt11
+            )
+            return PostMeltResponse(
+                paid=ret.paid, payment_preimage=ret.preimage, change=ret.change
+            )
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
+        return_dict = resp.json()
+        return PostMeltResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -447,12 +604,12 @@ class LedgerAPI(object):
         outputs: List[BlindedMessage],
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
-        logger.debug("Calling split. POST /split")
-        split_payload = PostSplitRequest(proofs=proofs, outputs=outputs)
+        logger.debug("Calling split. POST /v1/swap")
+        split_payload = PostSplitRequest(inputs=proofs, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
-            """strips away fields from the model that aren't necessary for the /split"""
+            """strips away fields from the model that aren't necessary for /v1/swap"""
             proofs_include = {
                 "id",
                 "amount",
@@ -462,17 +619,23 @@ class LedgerAPI(object):
             }
             return {
                 "outputs": ...,
-                "proofs": {i: proofs_include for i in range(len(proofs))},
+                "inputs": {i: proofs_include for i in range(len(proofs))},
             }
 
         resp = await self.httpx.post(
-            join(self.url, "split"),
+            join(self.url, "/v1/swap"),
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
-        self.raise_on_error(resp)
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.split_deprecated(proofs, outputs)
+            return ret
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
         promises_dict = resp.json()
-        mint_response = PostMintResponse.parse_obj(promises_dict)
-        promises = [BlindedSignature(**p.dict()) for p in mint_response.promises]
+        mint_response = PostSplitResponse.parse_obj(promises_dict)
+        promises = [BlindedSignature(**p.dict()) for p in mint_response.signatures]
 
         if len(promises) == 0:
             raise Exception("received no splits.")
@@ -481,72 +644,33 @@ class LedgerAPI(object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def check_proof_state(self, proofs: List[Proof]):
+    async def check_proof_state(self, proofs: List[Proof]) -> PostCheckStateResponse:
         """
         Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
-        payload = CheckSpendableRequest(proofs=proofs)
-
-        def _check_proof_state_include_fields(proofs):
-            """strips away fields from the model that aren't necessary for the /split"""
-            return {
-                "proofs": {i: {"secret"} for i in range(len(proofs))},
-            }
-
+        payload = PostCheckStateRequest(secrets=[p.secret for p in proofs])
         resp = await self.httpx.post(
-            join(self.url, "check"),
-            json=payload.dict(include=_check_proof_state_include_fields(proofs)),  # type: ignore
-        )
-        self.raise_on_error(resp)
-
-        return_dict = resp.json()
-        states = CheckSpendableResponse.parse_obj(return_dict)
-        return states
-
-    @async_set_httpx_client
-    @async_ensure_mint_loaded
-    async def check_fees(self, payment_request: str):
-        """Checks whether the Lightning payment is internal."""
-        payload = CheckFeesRequest(pr=payment_request)
-        resp = await self.httpx.post(
-            join(self.url, "checkfees"),
+            join(self.url, "/v1/checkstate"),
             json=payload.dict(),
         )
-        self.raise_on_error(resp)
-
-        return_dict = resp.json()
-        return return_dict
-
-    @async_set_httpx_client
-    @async_ensure_mint_loaded
-    async def pay_lightning(
-        self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
-    ) -> GetMeltResponse:
-        """
-        Accepts proofs and a lightning invoice to pay in exchange.
-        """
-
-        payload = PostMeltRequest(proofs=proofs, pr=invoice, outputs=outputs)
-        logger.debug("Calling melt. POST /melt")
-
-        def _meltrequest_include_fields(proofs: List[Proof]):
-            """strips away fields from the model that aren't necessary for the /melt"""
-            proofs_include = {"id", "amount", "secret", "C", "witness"}
-            return {
-                "proofs": {i: proofs_include for i in range(len(proofs))},
-                "pr": ...,
-                "outputs": ...,
-            }
-
-        resp = await self.httpx.post(
-            join(self.url, "melt"),
-            json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
-            timeout=None,
-        )
-        self.raise_on_error(resp)
-        return_dict = resp.json()
-
-        return GetMeltResponse.parse_obj(return_dict)
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.check_proof_state_deprecated(proofs)
+            # convert CheckSpendableResponse_deprecated to CheckSpendableResponse
+            states: List[ProofState] = []
+            for spendable, pending, p in zip(ret.spendable, ret.pending, proofs):
+                if spendable and not pending:
+                    states.append(ProofState(secret=p.secret, state=SpentState.unspent))
+                elif spendable and pending:
+                    states.append(ProofState(secret=p.secret, state=SpentState.pending))
+                else:
+                    states.append(ProofState(secret=p.secret, state=SpentState.spent))
+            ret = PostCheckStateResponse(states=states)
+            return ret
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
+        return PostCheckStateResponse.parse_obj(resp.json())
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -556,9 +680,15 @@ class LedgerAPI(object):
         """
         Asks the mint to restore promises corresponding to outputs.
         """
-        payload = PostMintRequest(outputs=outputs)
-        resp = await self.httpx.post(join(self.url, "restore"), json=payload.dict())
-        self.raise_on_error(resp)
+        payload = PostMintRequest(quote="restore", outputs=outputs)
+        resp = await self.httpx.post(join(self.url, "/v1/restore"), json=payload.dict())
+        # BEGIN backwards compatibility < 0.15.0
+        # assume the mint has not upgraded yet if we get a 404
+        if resp.status_code == 404:
+            ret = await self.restore_promises_deprecated(outputs)
+            return ret
+        # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)
         return returnObj.outputs, returnObj.promises
@@ -589,9 +719,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
+        self.unit = Unit[settings.wallet_unit]
 
         super().__init__(url=url, db=self.db)
-        logger.debug(f"Wallet initialized with mint URL {url}")
+        logger.debug("Wallet initialized")
+        logger.debug(f"Mint URL: {url}")
+        logger.debug(f"Database: {db}")
+        logger.debug(f"Unit: {self.unit.name}")
 
     @classmethod
     async def with_db(
@@ -599,7 +733,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         url: str,
         db: str,
         name: str = "no_name",
-        skip_private_key: bool = False,
+        skip_db_read: bool = False,
     ):
         """Initializes a wallet with a database and initializes the private key.
 
@@ -607,15 +741,22 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             url (str): URL of the mint.
             db (str): Path to the database.
             name (str, optional): Name of the wallet. Defaults to "no_name".
-            skip_private_key (bool, optional): If true, the private key is not initialized. Defaults to False.
+            skip_db_read (bool, optional): If true, values from db like private key and
+                keysets are not loaded. Useful for running only migrations and returning.
+                Defaults to False.
 
         Returns:
             Wallet: Initialized wallet.
         """
+        logger.trace(f"Initializing wallet with database: {db}")
         self = cls(url=url, db=db, name=name)
         await self._migrate_database()
-        if not skip_private_key:
+        if not skip_db_read:
+            logger.trace("Mint init: loading private key and keysets from db.")
             await self._init_private_key()
+            keysets_list = await get_keysets(mint_url=url, db=self.db)
+            self.keysets = {k.id: k for k in keysets_list}
+
         return self
 
     async def _migrate_database(self):
@@ -623,6 +764,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             await migrate_databases(self.db, migrations)
         except Exception as e:
             logger.error(f"Could not run migrations: {e}")
+            raise e
 
     # ---------- API ----------
 
@@ -636,13 +778,30 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """
         await super()._load_mint(keyset_id)
 
-    async def load_proofs(self, reload: bool = False) -> None:
+    async def load_proofs(
+        self, reload: bool = False, unit: Union[Unit, bool] = True
+    ) -> None:
         """Load all proofs from the database."""
 
         if self.proofs and not reload:
             logger.debug("Proofs already loaded.")
             return
         self.proofs = await get_proofs(db=self.db)
+        await self.load_keysets()
+        unit = self.unit if unit is True else unit
+        if unit:
+            self.unit = unit
+            self.proofs = [
+                p
+                for p in self.proofs
+                if p.id in self.keysets and self.keysets[p.id].unit == unit
+            ]
+
+    async def load_keysets(self) -> None:
+        """Load all keysets from the database."""
+        keysets = await get_keysets(db=self.db)
+        for keyset in keysets:
+            self.keysets[keyset.id] = keyset
 
     async def request_mint(self, amount: int) -> Invoice:
         """Request a Lightning invoice for minting tokens.
@@ -653,22 +812,22 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Returns:
             Invoice: Lightning invoice
         """
-        invoice = await super().request_mint(amount)
+        invoice = await super().mint_quote(amount)
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
     async def mint(
         self,
         amount: int,
+        id: str,
         split: Optional[List[int]] = None,
-        id: Optional[str] = None,
     ) -> List[Proof]:
         """Mint tokens of a specific amount after an invoice has been paid.
 
         Args:
             amount (int): Total amount of tokens to be minted
+            id (str): Id for looking up the paid Lightning invoice.
             split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
-            id (Optional[str], optional): Id for looking up the paid Lightning invoice. Defaults to None (for testing with LIGHTNING=False).
 
         Raises:
             Exception: Raises exception if `amounts` does not sum to `amount` or has unsupported value.
@@ -703,9 +862,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # will raise exception if mint is unsuccessful
         promises = await super().mint(outputs, id)
 
-        # success, bump secret counter in database
+        promises_keyset_id = promises[0].id
         await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=len(amounts)
+            db=self.db, keyset_id=promises_keyset_id, by=len(amounts)
         )
         proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
 
@@ -758,6 +917,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         assert len(proofs) > 0, "no proofs provided."
         assert sum_proofs(proofs) >= amount, "amount too large."
         assert amount > 0, "amount must be positive."
+        # make sure we're operating on an independent copy of proofs
+        proofs = copy.copy(proofs)
 
         # potentially add witnesses to unlock provided proofs (if they indicate one)
         proofs = await self.add_witnesses_to_proofs(proofs)
@@ -779,9 +940,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             # generate secrets for receiver
             secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
             logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
-            assert len(secret_locks) == len(
-                scnd_outputs
-            ), "number of secret_locks does not match number of outputs."
             # append predefined secrets (to send) to random secrets (to keep)
             # generate secrets to keep
             secrets = [
@@ -802,7 +960,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # potentially add witnesses to outputs based on what requirement the proofs indicate
         outputs = await self.add_witnesses_to_outputs(proofs, outputs)
 
-        # Call /split API
+        # Call swap API
         promises = await super().split(proofs, outputs)
 
         # Construct proofs from returned promises (i.e., unblind the signatures)
@@ -817,8 +975,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         return keep_proofs, send_proofs
 
     async def pay_lightning(
-        self, proofs: List[Proof], invoice: str, fee_reserve_sat: int
-    ) -> GetMeltResponse:
+        self, proofs: List[Proof], invoice: str, fee_reserve_sat: int, quote_id: str
+    ) -> PostMeltResponse:
         """Pays a lightning invoice and returns the status of the payment.
 
         Args:
@@ -827,6 +985,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             fee_reserve_sat (int): Amount of fees to be reserved for the payment.
 
         """
+        # Make sure we're operating on an independent copy of proofs
+        proofs = copy.copy(proofs)
 
         # Generate a number of blank outputs for any overpaid fees. As described in
         # NUT-08, the mint will imprint these outputs with a value depending on the
@@ -839,15 +999,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             n_change_outputs * [1], change_secrets, change_rs
         )
 
-        # we store the invoice object in the database to later be able to check the invoice state
-        # generate a random ID for this transaction
-        melt_id = await self._generate_secret()
-
         # store the melt_id in proofs
         async with self.db.connect() as conn:
             for p in proofs:
-                p.melt_id = melt_id
-                await update_proof(p, melt_id=melt_id, conn=conn)
+                p.melt_id = quote_id
+                await update_proof(p, melt_id=quote_id, conn=conn)
+
+        # we store the invoice object in the database to later be able to check the invoice state
 
         decoded_invoice = bolt11.decode(invoice)
         invoice_obj = Invoice(
@@ -857,13 +1015,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             # preimage=status.preimage,
             paid=False,
             time_paid=int(time.time()),
-            id=melt_id,  # store the same ID in the invoice
+            id=quote_id,  # store the same ID in the invoice
             out=True,  # outgoing invoice
         )
         # store invoice in db as not paid yet
         await store_lightning_invoice(db=self.db, invoice=invoice_obj)
 
-        status = await super().pay_lightning(proofs, invoice, change_outputs)
+        status = await super().melt(quote_id, proofs, change_outputs)
 
         # if payment fails
         if not status.paid:
@@ -874,17 +1032,17 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             raise Exception("could not pay invoice.")
 
         # invoice was paid successfully
-        # we don't have to recheck the spendable sate of these tokens when invalidating
-        await self.invalidate(proofs, check_spendable=False)
+
+        await self.invalidate(proofs)
 
         # update paid status in db
-        logger.trace(f"Settings invoice {melt_id} to paid.")
+        logger.trace(f"Settings invoice {quote_id} to paid.")
         await update_lightning_invoice(
             db=self.db,
-            id=melt_id,
+            id=quote_id,
             paid=True,
             time_paid=int(time.time()),
-            preimage=status.preimage,
+            preimage=status.payment_preimage,
         )
 
         # handle change and produce proofs
@@ -895,10 +1053,10 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 change_rs[: len(status.change)],
                 change_derivation_paths[: len(status.change)],
             )
-            logger.debug(f"Received change: {sum_proofs(change_proofs)} sat")
+            logger.debug(f"Received change: {self.unit.str(sum_proofs(change_proofs))}")
         return status
 
-    async def check_proof_state(self, proofs):
+    async def check_proof_state(self, proofs) -> PostCheckStateResponse:
         return await super().check_proof_state(proofs)
 
     # ---------- TOKEN MECHANICS ----------
@@ -954,10 +1112,10 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         proofs: List[Proof] = []
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
             if promise.id not in self.keysets:
+                logger.debug(f"Keyset {promise.id} not found in db. Loading from mint.")
                 # we don't have the keyset for this promise, so we load it
                 await self._load_mint_keys(promise.id)
                 assert promise.id in self.keysets, "Could not load keyset."
-
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(
                 C_, r, self.keysets[promise.id].public_keys[promise.amount]
@@ -990,15 +1148,17 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         logger.trace(f"Constructed {len(proofs)} proofs.")
 
         # add new proofs to wallet
-        self.proofs += proofs
+        self.proofs += copy.copy(proofs)
         # store new proofs in database
         await self._store_proofs(proofs)
 
         return proofs
 
-    @staticmethod
     def _construct_outputs(
-        amounts: List[int], secrets: List[str], rs: List[PrivateKey] = []
+        self,
+        amounts: List[int],
+        secrets: List[str],
+        rs: List[PrivateKey] = [],
     ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
         """Takes a list of amounts and secrets and returns outputs.
         Outputs are blinded messages `outputs` and blinding factors `rs`
@@ -1025,7 +1185,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         for secret, amount, r in zip(secrets, amounts, rs_):
             B_, r = b_dhke.step1_alice(secret, r or None)
             rs_return.append(r)
-            output = BlindedMessage(amount=amount, B_=B_.serialize().hex())
+            output = BlindedMessage(
+                amount=amount, B_=B_.serialize().hex(), id=self.keyset_id
+            )
             outputs.append(output)
             logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
 
@@ -1043,23 +1205,41 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     @staticmethod
     def _get_proofs_per_keyset(proofs: List[Proof]):
-        return {key: list(group) for key, group in groupby(proofs, lambda p: p.id)}  # type: ignore
+        return {
+            key: list(group) for key, group in groupby(proofs, lambda p: p.id) if key
+        }
 
     async def _get_proofs_per_minturl(
-        self, proofs: List[Proof]
+        self, proofs: List[Proof], unit: Optional[Unit] = None
     ) -> Dict[str, List[Proof]]:
         ret: Dict[str, List[Proof]] = {}
-        for id in set([p.id for p in proofs]):
+        keyset_ids = set([p.id for p in proofs])
+        for id in keyset_ids:
             if id is None:
                 continue
-            keyset_crud = await get_keyset(id=id, db=self.db)
-            assert keyset_crud is not None, f"keyset {id} not found"
-            keyset: WalletKeyset = keyset_crud
+            keysets_crud = await get_keysets(id=id, db=self.db)
+            assert keysets_crud, f"keyset {id} not found"
+            keyset: WalletKeyset = keysets_crud[0]
+            if unit and keyset.unit != unit:
+                continue
             assert keyset.mint_url
             if keyset.mint_url not in ret:
                 ret[keyset.mint_url] = [p for p in proofs if p.id == id]
             else:
                 ret[keyset.mint_url].extend([p for p in proofs if p.id == id])
+        return ret
+
+    def _get_proofs_per_unit(self, proofs: List[Proof]) -> Dict[Unit, List[Proof]]:
+        ret: Dict[Unit, List[Proof]] = {}
+        for proof in proofs:
+            if proof.id not in self.keysets:
+                logger.error(f"Keyset {proof.id} not found in wallet.")
+                continue
+            unit = self.keysets[proof.id].unit
+            if unit not in ret:
+                ret[unit] = [proof]
+            else:
+                ret[unit].append(proof)
         return ret
 
     def _get_proofs_keysets(self, proofs: List[Proof]) -> List[str]:
@@ -1080,7 +1260,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """
         mint_urls: Dict[str, List[str]] = {}
         for ks in set(keysets):
-            keyset_db = await get_keyset(id=ks, db=self.db)
+            keysets_db = await get_keysets(id=ks, db=self.db)
+            keyset_db = keysets_db[0] if keysets_db else None
             if keyset_db and keyset_db.mint_url:
                 mint_urls[keyset_db.mint_url] = (
                     mint_urls[keyset_db.mint_url] + [ks]
@@ -1167,7 +1348,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             # iterate through unique keyset ids
             for id in set(keysets):
                 # load the keyset from the db
-                keyset_db = await get_keyset(id=id, db=self.db)
+                keysets_db = await get_keysets(id=id, db=self.db)
+                keyset_db = keysets_db[0] if keysets_db else None
                 if keyset_db and keyset_db.mint_url and keyset_db.id:
                     # we group all mints according to URL
                     if keyset_db.mint_url not in mints:
@@ -1186,6 +1368,12 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
     async def _serialize_token_base64_tokenv2(self, token: TokenV2) -> str:
         """
         Takes a TokenV2 and serializes it in urlsafe_base64.
+
+        Args:
+            token (TokenV2): TokenV2 object to be serialized
+
+        Returns:
+            str: Serialized token
         """
         # encode the token as a base64 string
         token_base64 = base64.urlsafe_b64encode(
@@ -1207,6 +1395,16 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         2) Proofs that have a keyset id that is in self.mint_keyset_ids (all active keysets of mint)
         3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
         4) If the target amount is not reached, add proofs of the current keyset until it is.
+
+        Args:
+            proofs (List[Proof]): List of proofs to select from
+            amount_to_send (int): Amount to select proofs for
+
+        Returns:
+            List[Proof]: List of proofs to send
+
+        Raises:
+            Exception: If the balance is too low to send the amount
         """
         send_proofs: List[Proof] = []
 
@@ -1255,7 +1453,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             await update_proof(proof, reserved=reserved, send_id=uuid_str, db=self.db)
 
     async def invalidate(
-        self, proofs: List[Proof], check_spendable=True
+        self, proofs: List[Proof], check_spendable=False
     ) -> List[Proof]:
         """Invalidates all unspendable tokens supplied in proofs.
 
@@ -1269,8 +1467,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         invalidated_proofs: List[Proof] = []
         if check_spendable:
             proof_states = await self.check_proof_state(proofs)
-            for i, spendable in enumerate(proof_states.spendable):
-                if not spendable:
+            for i, state in enumerate(proof_states.states):
+                if state.state == SpentState.spent:
                     invalidated_proofs.append(proofs[i])
         else:
             invalidated_proofs = proofs
@@ -1278,7 +1476,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         if invalidated_proofs:
             logger.trace(
                 f"Invalidating {len(invalidated_proofs)} proofs worth"
-                f" {sum_proofs(invalidated_proofs)} sat."
+                f" {self.unit.str(sum_proofs(invalidated_proofs))}."
             )
 
         async with self.db.connect() as conn:
@@ -1298,13 +1496,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
         """
-        decoded_invoice = bolt11.decode(invoice)
-        assert decoded_invoice.amount_msat, "invoices has no amount."
-        # check if it's an internal payment
-        fees = int((await self.check_fees(invoice))["fee"])
-        logger.debug(f"Mint wants {fees} sat as fee reserve.")
-        amount = math.ceil((decoded_invoice.amount_msat + fees * 1000) / 1000)  # 1% fee
-        return amount, fees
+        melt_quote = await self.melt_quote(invoice)
+        logger.debug(
+            f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
+        )
+        return melt_quote
 
     async def split_to_send(
         self,
@@ -1353,33 +1549,50 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """Returns a sorted list of amounts of all proofs"""
         return [p.amount for p in sorted(self.proofs, key=lambda p: p.amount)]
 
-    def status(self):
-        print(f"Balance: {self.available_balance} sat")
-
-    def balance_per_keyset(self):
-        return {
+    def balance_per_keyset(self) -> Dict[str, Dict[str, Union[int, str]]]:
+        ret: Dict[str, Dict[str, Union[int, str]]] = {
             key: {
                 "balance": sum_proofs(proofs),
                 "available": sum_proofs([p for p in proofs if not p.reserved]),
             }
             for key, proofs in self._get_proofs_per_keyset(self.proofs).items()
         }
+        for key in ret.keys():
+            if key in self.keysets:
+                ret[key]["unit"] = self.keysets[key].unit.name
+        return ret
 
-    async def balance_per_minturl(self):
-        balances = await self._get_proofs_per_minturl(self.proofs)
-        balances_return = {
+    def balance_per_unit(self) -> Dict[Unit, Dict[str, Union[int, str]]]:
+        ret: Dict[Unit, Dict[str, Union[int, str]]] = {
+            unit: {
+                "balance": sum_proofs(proofs),
+                "available": sum_proofs([p for p in proofs if not p.reserved]),
+            }
+            for unit, proofs in self._get_proofs_per_unit(self.proofs).items()
+        }
+        return ret
+
+    async def balance_per_minturl(
+        self, unit: Optional[Unit] = None
+    ) -> Dict[str, Dict[str, Union[int, str]]]:
+        balances = await self._get_proofs_per_minturl(self.proofs, unit=unit)
+        balances_return: Dict[str, Dict[str, Union[int, str]]] = {
             key: {
                 "balance": sum_proofs(proofs),
                 "available": sum_proofs([p for p in proofs if not p.reserved]),
             }
             for key, proofs in balances.items()
         }
+        for key in balances_return.keys():
+            if unit:
+                balances_return[key]["unit"] = unit.name
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
 
     async def restore_wallet_from_mnemonic(
         self, mnemonic: Optional[str], to: int = 2, batch: int = 25
     ) -> None:
-        """Restores the wallet from a mnemonic
+        """
+        Restores the wallet from a mnemonic.
 
         Args:
             mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.
@@ -1404,7 +1617,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             restored_proofs = await self.restore_promises_from_to(i, i + batch - 1)
             if len(restored_proofs) == 0:
                 stop_counter += 1
-            spendable_proofs = await self.invalidate(restored_proofs)
+            spendable_proofs = await self.invalidate(
+                restored_proofs, check_spendable=True
+            )
             if len(spendable_proofs):
                 n_last_restored_proofs = len(spendable_proofs)
                 print(f"Restored {sum_proofs(restored_proofs)} sat")

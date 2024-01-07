@@ -1,4 +1,7 @@
+import time
+
 from ..core.db import Connection, Database, table_with_schema
+from ..core.settings import settings
 
 
 async def m000_create_migrations_table(conn: Connection):
@@ -218,3 +221,86 @@ async def m010_add_index_to_proofs_used(db: Database):
             " proofs_used_secret_idx ON"
             f" {table_with_schema(db, 'proofs_used')} (secret)"
         )
+
+
+async def m011_add_quote_tables(db: Database):
+    async with db.connect() as conn:
+        # add column "created" to tables invoices, promises, proofs_used, proofs_pending
+        tables = ["invoices", "promises", "proofs_used", "proofs_pending"]
+        for table in tables:
+            await conn.execute(
+                f"ALTER TABLE {table_with_schema(db, table)} ADD COLUMN created"
+                " TIMESTAMP"
+            )
+            await conn.execute(
+                f"UPDATE {table_with_schema(db, table)} SET created ="
+                f" '{int(time.time())}'"
+            )
+
+        # add column "witness" to table proofs_used
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN witness"
+            " TEXT"
+        )
+
+        # add columns "seed" and "unit" to table keysets
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN seed TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN unit TEXT"
+        )
+
+        # fill columns "seed" and "unit" in table keysets
+        await conn.execute(
+            f"UPDATE {table_with_schema(db, 'keysets')} SET seed ="
+            f" '{settings.mint_private_key}', unit = 'sat'"
+        )
+
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'mint_quotes')} (
+                    quote TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    request TEXT NOT NULL,
+                    checking_id TEXT NOT NULL,
+                    unit TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    paid BOOL NOT NULL,
+                    issued BOOL NOT NULL,
+                    created_time TIMESTAMP,
+                    paid_time TIMESTAMP,
+
+                    UNIQUE (quote)
+
+                );
+            """)
+
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'melt_quotes')} (
+                    quote TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    request TEXT NOT NULL,
+                    checking_id TEXT NOT NULL,
+                    unit TEXT NOT NULL,
+                    amount INTEGER NOT NULL,
+                    fee_reserve INTEGER,
+                    paid BOOL NOT NULL,
+                    created_time TIMESTAMP,
+                    paid_time TIMESTAMP,
+                    fee_paid INTEGER,
+                    proof TEXT,
+
+                    UNIQUE (quote)
+
+                );
+            """)
+
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'mint_quotes')} (quote, method,"
+            " request, checking_id, unit, amount, paid, issued, created_time,"
+            " paid_time) SELECT id, 'bolt11', bolt11, payment_hash, 'sat', amount,"
+            f" False, issued, created, 0 FROM {table_with_schema(db, 'invoices')} "
+        )
+
+        # drop table invoices
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'invoices')}")

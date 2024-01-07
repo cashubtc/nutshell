@@ -3,19 +3,29 @@ import hashlib
 import random
 from typing import Dict
 
+from bip32 import BIP32
+
 from ..settings import settings
 from .secp import PrivateKey, PublicKey
 
-# entropy = bytes([random.getrandbits(8) for i in range(16)])
-# mnemonic = bip39.mnemonic_from_bytes(entropy)
-# seed = bip39.mnemonic_to_seed(mnemonic)
-# root = bip32.HDKey.from_seed(seed, version=NETWORKS["main"]["xprv"])
 
-# bip44_xprv = root.derive("m/44h/1h/0h")
-# bip44_xpub = bip44_xprv.to_public()
+def derive_keys(mnemonic: str, derivation_path: str):
+    """
+    Deterministic derivation of keys for 2^n values.
+    """
+    bip32 = BIP32.from_seed(mnemonic.encode())
+    orders_str = [f"/{i}'" for i in range(settings.max_order)]
+    return {
+        2
+        ** i: PrivateKey(
+            bip32.get_privkey_from_path(derivation_path + orders_str[i]),
+            raw=True,
+        )
+        for i in range(settings.max_order)
+    }
 
 
-def derive_keys(master_key: str, derivation_path: str = ""):
+def derive_keys_sha256(master_key: str, derivation_path: str = ""):
     """
     Deterministic derivation of keys for 2^n values.
     TODO: Implement BIP32.
@@ -40,13 +50,21 @@ def derive_pubkey(master_key: str):
 
 
 def derive_pubkeys(keys: Dict[int, PrivateKey]):
-    return {
-        amt: keys[amt].pubkey for amt in [2**i for i in range(settings.max_order)]
-    }
+    return {amt: keys[amt].pubkey for amt in [2**i for i in range(settings.max_order)]}
 
 
 def derive_keyset_id(keys: Dict[int, PublicKey]):
     """Deterministic derivation keyset_id from set of public keys."""
+    # sort public keys by amount
+    sorted_keys = dict(sorted(keys.items()))
+    pubkeys_concat = b"".join([p.serialize() for _, p in sorted_keys.items()])
+    return "00" + hashlib.sha256(pubkeys_concat).hexdigest()[:14]
+
+
+def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):
+    """DEPRECATED 0.15.0: Deterministic derivation keyset_id from set of public keys.
+    DEPRECATION: This method produces base64 keyset ids. Use `derive_keyset_id` instead.
+    """
     # sort public keys by amount
     sorted_keys = dict(sorted(keys.items()))
     pubkeys_concat = "".join([p.serialize().hex() for _, p in sorted_keys.items()])

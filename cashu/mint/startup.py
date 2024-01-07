@@ -6,11 +6,12 @@ import importlib
 
 from loguru import logger
 
+from ..core.base import Method, Unit
 from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..mint import migrations
-from ..mint.crud import LedgerCrud
+from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
 
 logger.debug("Enviroment Settings:")
@@ -22,16 +23,29 @@ lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
 
 assert settings.mint_private_key is not None, "No mint private key set."
 
+# strike_backend = getattr(wallets_module, "StrikeUSDWallet")()
+# backends = {
+#     Method.bolt11: {Unit.sat: lightning_backend, Unit.usd: strike_backend},
+# }
+# backends = {
+#     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend},
+# }
+# backends = {
+#     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend,
+# }
+backends = {
+    Method.bolt11: {Unit.sat: lightning_backend},
+}
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
     seed=settings.mint_private_key,
     derivation_path=settings.mint_derivation_path,
-    lightning=lightning_backend,
-    crud=LedgerCrud(),
+    backends=backends,
+    crud=LedgerCrudSqlite(),
 )
 
 
-async def rotate_keys(n_seconds=10):
+async def rotate_keys(n_seconds=60):
     """Rotate keyset epoch every n_seconds.
     Note: This is just a helper function for testing purposes.
     """
@@ -39,8 +53,10 @@ async def rotate_keys(n_seconds=10):
     while True:
         i += 1
         logger.info("Rotating keys.")
-        ledger.derivation_path = f"0/0/0/{i}"
-        await ledger.init_keysets()
+        incremented_derivation_path = (
+            "/".join(ledger.derivation_path.split("/")[:-1]) + f"/{i}"
+        )
+        await ledger.activate_keyset(incremented_derivation_path)
         logger.info(f"Current keyset: {ledger.keyset.id}")
         await asyncio.sleep(n_seconds)
 
@@ -51,16 +67,24 @@ async def start_mint_init():
         await ledger.load_used_proofs()
     await ledger.init_keysets()
 
-    if settings.lightning:
-        logger.info(f"Using backend: {settings.mint_lightning_backend}")
-        status = await ledger.lightning.status()
-        if status.error_message:
-            logger.warning(
-                f"The backend for {ledger.lightning.__class__.__name__} isn't"
-                f" working properly: '{status.error_message}'",
-                RuntimeWarning,
+    for derivation_path in settings.mint_derivation_path_list:
+        await ledger.activate_keyset(derivation_path)
+
+    for method in ledger.backends:
+        for unit in ledger.backends[method]:
+            logger.info(
+                f"Using {ledger.backends[method][unit].__class__.__name__} backend for"
+                f" method: '{method.name}' and unit: '{unit.name}'"
             )
-        logger.info(f"Lightning balance: {status.balance_msat} msat")
+            status = await ledger.backends[method][unit].status()
+            if status.error_message:
+                logger.warning(
+                    "The backend for"
+                    f" {ledger.backends[method][unit].__class__.__name__} isn't"
+                    f" working properly: '{status.error_message}'",
+                    RuntimeWarning,
+                )
+            logger.info(f"Backend balance: {status.balance} {unit.name}")
 
     logger.info(f"Data dir: {settings.cashu_dir}")
     logger.info("Mint started.")
