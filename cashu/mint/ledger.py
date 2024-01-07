@@ -302,7 +302,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         if settings.mint_peg_out_only:
             raise NotAllowedError("Mint does not allow minting new tokens.")
         unit = Unit[quote_request.unit]
-        method = Method["bolt11"]
+        method = Method.bolt11
         if settings.mint_max_balance:
             balance = await self.get_balance()
             if balance + quote_request.amount > settings.mint_max_balance:
@@ -313,7 +313,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             unit
         ].create_invoice(Amount(unit=unit, amount=quote_request.amount))
         logger.trace(
-            f"got invoice {invoice_response.payment_request} with check id"
+            f"got invoice {invoice_response.payment_request} with checking id"
             f" {invoice_response.checking_id}"
         )
 
@@ -326,7 +326,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         quote = MintQuote(
             quote=random_hash(),
-            method="bolt11",
+            method=method.name,
             request=invoice_response.payment_request,
             checking_id=invoice_response.checking_id,
             unit=quote_request.unit,
@@ -356,7 +356,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db)
         assert quote, "quote not found"
-        assert quote.method == "bolt11", "only bolt11 supported"
+        assert quote.method == Method.bolt11.name, "only bolt11 supported"
         unit = Unit[quote.unit]
         method = Method[quote.method]
 
@@ -382,14 +382,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         Args:
             outputs (List[BlindedMessage]): Outputs (blinded messages) to sign.
-            quote_id (str): Quote id of mint payment.
+            quote_id (str): Mint quote id.
             keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
 
         Raises:
-            Exception: Lightning invoice is not paid.
-            Exception: Lightning is turned on but no payment hash is provided.
-            Exception: Something went wrong with the invoice check.
-            Exception: Amount too large.
+            Exception: Validation of outputs failed.
+            Exception: Quote not paid.
+            Exception: Quote already issued.
+            Exception: Quote expired.
+            Exception: Amount to mint does not match quote amount.
 
         Returns:
             List[BlindedSignature]: Signatures on the outputs.
@@ -428,11 +429,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Args:
             melt_quote (PostMeltQuoteRequest): Melt quote request.
 
+        Raises:
+            Exception: Quote invalid.
+            Exception: Quote already paid.
+            Exception: Quote already issued.
+
         Returns:
             PostMeltQuoteResponse: Melt quote response.
         """
         unit = Unit[melt_quote.unit]
-        method = Method["bolt11"]
+        method = Method.bolt11
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
@@ -473,7 +479,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         quote = MeltQuote(
             quote=random_hash(),
-            method="bolt11",
+            method=method.name,
             request=melt_quote.request,
             checking_id=payment_quote.checking_id,
             unit=melt_quote.unit,
@@ -493,9 +499,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     async def get_melt_quote(self, quote_id: str) -> MeltQuote:
         """Returns a melt quote.
 
-        If it is not paid yet, checks with the backend for the payment state of the melt request.
+        If melt quote is not paid yet, checks with the backend for the state of the payment request.
 
-        Updates the melt quote in the database.
+        If the quote has been paid, updates the melt quote in the database.
 
         Args:
             quote_id (str): ID of the melt quote.
@@ -508,7 +514,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         melt_quote = await self.crud.get_melt_quote(quote_id=quote_id, db=self.db)
         assert melt_quote, "quote not found"
-        assert melt_quote.method == "bolt11", "only bolt11 supported"
+        assert melt_quote.method == Method.bolt11.name, "only bolt11 supported"
         unit = Unit[melt_quote.unit]
         method = Method[melt_quote.method]
 
@@ -539,6 +545,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         return melt_quote
 
     async def melt_mint_settle_internally(self, melt_quote: MeltQuote) -> MeltQuote:
+        """Settles a melt quote internally if there is a mint quote with the same payment request.
+
+        Args:
+            melt_quote (MeltQuote): Melt quote to settle.
+
+        Raises:
+            Exception: Melt quote already paid.
+            Exception: Melt quote already issued.
+
+        Returns:
+            MeltQuote: Settled melt quote.
+        """
         # first we check if there is a mint quote with the same payment request
         # so that we can handle the transaction internally without the backend
         mint_quote = await self.crud.get_mint_quote_by_checking_id(
