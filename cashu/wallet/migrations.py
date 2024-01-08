@@ -35,7 +35,7 @@ async def m001_initial(db: Database):
             """)
 
         await conn.execute("""
-            CREATE VIEW IF NOT EXISTS balance AS
+            CREATE VIEW balance AS
             SELECT COALESCE(SUM(s), 0) AS balance FROM (
                 SELECT SUM(amount) AS s
                 FROM proofs
@@ -44,7 +44,7 @@ async def m001_initial(db: Database):
         """)
 
         await conn.execute("""
-            CREATE VIEW IF NOT EXISTS balance_used AS
+            CREATE VIEW  balance_used AS
             SELECT COALESCE(SUM(s), 0) AS used FROM (
                 SELECT SUM(amount) AS s
                 FROM proofs_used
