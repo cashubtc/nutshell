@@ -139,4 +139,4 @@ tor.pid
 .DS_Store
 
 # extra
-./testclient.py
+testclient.py
