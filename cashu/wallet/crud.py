@@ -63,34 +63,41 @@ async def get_proofs(
     )
     print(rows)
     Proof_list = []
-    for each in rows:   
+    
+    for each_row in rows:   
         # handle datetime casting. 
         #TODO yes, I know there is a shorter way of doing this check
+        print("EACH ROW:", each_row)
+        for each_proof in each_row:
+            print("each proof", each_proof)
 
-        arg_time_created = each[0][5].timestamp()
-        if each[0][6] == None:
-            arg_time_reserved = datetime.now().timestamp()
-        else:
-            arg_time_reserved = each[0][6].timestamp()
-
-        each_proof = Proof(     amount              =   each[0][0], 
-                                C                   =   each[0][1],
-                                secret              =   each[0][2],
-                                reserved            =   each[0][3],                                
-                                send_id             =   each[0][4],
-                                time_created        =   arg_time_created,
-                                time_reserved       =   arg_time_reserved,                                
-                                id                  =   each[0][7],
-                                derivation_path     =   each[0][8],
-                                dleq                =   each[0][9],
-                                mint_id             =   each[0][10],
-                                melt_id             =   each[0][11]                 
-                                )
+            if each_proof==[]:
+                continue
+            arg_time_created = each_proof[5].timestamp()
+            if each_proof[6] == None:
+                arg_time_reserved = datetime.now().timestamp()
+            else:
+                arg_time_reserved = each_proof[6].timestamp()
+            print("are we here?")
+            each_proof = Proof(     amount              =   each_proof[0], 
+                                    C                   =   each_proof[1],
+                                    secret              =   each_proof[2],
+                                    reserved            =   each_proof[3],                                
+                                    send_id             =   each_proof[4],
+                                    time_created        =   arg_time_created,
+                                    time_reserved       =   arg_time_reserved,                               
+                                    id                  =   each_proof[7],
+                                    derivation_path     =   each_proof[8],
+                                    dleq                =   each_proof[9],
+                                    mint_id             =   each_proof[10],
+                                    melt_id             =   each_proof[11]                 
+                                    )
+            
+            
+            
+            Proof_list.append(each_proof)
         
-        
-        print("each_proof:", each[0][6])
-        Proof_list.append(each_proof)
-        
+    
         
 
     return Proof_list
