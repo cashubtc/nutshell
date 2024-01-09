@@ -379,7 +379,7 @@ class LedgerAPI(object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def request_mint(self, amount) -> Invoice:
+    async def request_mint(self, amount, description_hash: Optional[bytes] = None, description: str = "no description") -> Invoice:
         """Requests a mint from the server and returns Lightning invoice.
 
         Args:
@@ -391,8 +391,11 @@ class LedgerAPI(object):
         Raises:
             Exception: If the mint request fails
         """
+        if description_hash != None:
+            description_hash = description_hash.decode("utf-8")
+
         logger.trace("Requesting mint: GET /mint")
-        resp = await self.httpx.get(join(self.url, "mint"), params={"amount": amount})
+        resp = await self.httpx.get(join(self.url, "mint"), params={"amount": amount, "description_hash": description_hash, "description": description})
         self.raise_on_error(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse.parse_obj(return_dict)
@@ -644,7 +647,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             return
         self.proofs = await get_proofs(db=self.db)
 
-    async def request_mint(self, amount: int) -> Invoice:
+    async def request_mint(self, amount: int, description_hash: Optional[bytes] = None, description: str = "no description") -> Invoice:
         """Request a Lightning invoice for minting tokens.
 
         Args:
@@ -653,7 +656,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Returns:
             Invoice: Lightning invoice
         """
-        invoice = await super().request_mint(amount)
+        invoice = await super().request_mint(amount,description_hash=description_hash, description=description)
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
