@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime
 from typing import Any, List, Optional, Tuple
 
 from ..core.base import Invoice, Proof, WalletKeyset
@@ -173,9 +174,9 @@ async def store_keyset(
         (
             keyset.id,
             mint_url or keyset.mint_url,
-            keyset.valid_from or int(time.time()),
-            keyset.valid_to or int(time.time()),
-            keyset.first_seen or int(time.time()),
+            keyset.valid_from or  datetime.fromtimestamp(time.time()),
+            keyset.valid_to or datetime.fromtimestamp(time.time()),
+            keyset.first_seen or datetime.fromtimestamp(time.time()),
             True,
             keyset.serialize(),
         ),
@@ -220,8 +221,8 @@ async def store_lightning_invoice(
     await (conn or db).execute(
         """
         INSERT INTO invoices
-          (amount, bolt11, id, payment_hash, preimage, paid, time_created, time_paid, out)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (amount, bolt11, id, payment_hash, preimage, paid,out, time_created)
+        VALUES (?, ?, ?, ?, ?, ?, ?, to_timestamp(?))
         """,
         (
             invoice.amount,
@@ -230,9 +231,10 @@ async def store_lightning_invoice(
             invoice.payment_hash,
             invoice.preimage,
             invoice.paid,
-            invoice.time_created,
-            invoice.time_paid,
             invoice.out,
+            invoice.time_created,
+            
+            
         ),
     )
 
