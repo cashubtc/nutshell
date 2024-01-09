@@ -55,13 +55,45 @@ async def get_proofs(
     rows = (
         await (conn or db).fetchall(
             f"""
-            SELECT * from {table}
+            SELECT amount, c, secret, reserved, send_id, time_created, time_reserved,id,derivation_path,dleq, mint_id, melt_id from {table}
             {where}
             """,
             tuple(values),
         ),
     )
-    return [Proof.from_dict(dict(r)) for r in rows[0]] if rows else []
+    print(rows)
+    Proof_list = []
+    for each in rows:   
+        # handle datetime casting. 
+        #TODO yes, I know there is a shorter way of doing this check
+
+        arg_time_created = each[0][5].timestamp()
+        if each[0][6] == None:
+            arg_time_reserved = datetime.now().timestamp()
+        else:
+            arg_time_reserved = each[0][6].timestamp()
+
+        each_proof = Proof(     amount              =   each[0][0], 
+                                C                   =   each[0][1],
+                                secret              =   each[0][2],
+                                reserved            =   each[0][3],                                
+                                send_id             =   each[0][4],
+                                time_created        =   arg_time_created,
+                                time_reserved       =   arg_time_reserved,                                
+                                id                  =   each[0][7],
+                                derivation_path     =   each[0][8],
+                                dleq                =   each[0][9],
+                                mint_id             =   each[0][10],
+                                melt_id             =   each[0][11]                 
+                                )
+        
+        
+        print("each_proof:", each[0][6])
+        Proof_list.append(each_proof)
+        
+        
+
+    return Proof_list
 
 
 async def get_reserved_proofs(
