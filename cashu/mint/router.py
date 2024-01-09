@@ -190,7 +190,7 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
 
 
 @router.get(
-    "/v1/mint/quote/{quote}",
+    "/v1/mint/quote/bolt11/{quote}",
     summary="Get mint quote",
     response_model=PostMintQuoteResponse,
     response_description="Get an existing mint quote to check its status.",
@@ -199,7 +199,7 @@ async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
     """
     Get mint quote state.
     """
-    logger.trace(f"> POST /v1/mint/quote/{quote}")
+    logger.trace(f"> GET /v1/mint/quote/bolt11/{quote}")
     mint_quote = await ledger.get_mint_quote(quote)
     resp = PostMintQuoteResponse(
         quote=mint_quote.quote,
