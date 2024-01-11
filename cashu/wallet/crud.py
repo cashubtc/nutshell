@@ -131,7 +131,7 @@ async def invalidate_proof(
         """
         INSERT INTO proofs_used
           (amount, C, secret, time_used, id, derivation_path, mint_id, melt_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, to_timestamp(?), ?, ?, ?, ?)
         """,
         (
             proof.amount,
@@ -261,7 +261,7 @@ async def store_lightning_invoice(
         """
         INSERT INTO invoices
           (amount, bolt11, id, payment_hash, preimage, paid,out, time_created)
-        VALUES (?, ?, ?, ?, ?, ?, ?, to_timestamp(?))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             invoice.amount,
@@ -271,7 +271,7 @@ async def store_lightning_invoice(
             invoice.preimage,
             invoice.paid,
             invoice.out,
-            invoice.time_created,
+            datetime.fromtimestamp(time.time()),
             
             
         ),
