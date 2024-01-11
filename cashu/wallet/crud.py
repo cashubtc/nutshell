@@ -16,7 +16,7 @@ async def store_proof(
         """
         INSERT INTO proofs
           (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, to_timestamp(?), ?, ?, ?, ?)
         """,
         (
             proof.id,
@@ -61,15 +61,15 @@ async def get_proofs(
             tuple(values),
         ),
     )
-    print(rows)
+    # print(rows)
     Proof_list = []
     
     for each_row in rows:   
         # handle datetime casting. 
         #TODO yes, I know there is a shorter way of doing this check
-        print("EACH ROW:", each_row)
+        # print("EACH ROW:", each_row)
         for each_proof in each_row:
-            print("each proof", each_proof)
+            # print("each proof", each_proof)
 
             if each_proof==[]:
                 continue
@@ -78,7 +78,7 @@ async def get_proofs(
                 arg_time_reserved = datetime.now().timestamp()
             else:
                 arg_time_reserved = each_proof[6].timestamp()
-            print("are we here?")
+            
             each_proof = Proof(     amount              =   each_proof[0], 
                                     C                   =   each_proof[1],
                                     secret              =   each_proof[2],
@@ -88,7 +88,7 @@ async def get_proofs(
                                     time_reserved       =   arg_time_reserved,                               
                                     id                  =   each_proof[7],
                                     derivation_path     =   each_proof[8],
-                                    dleq                =   each_proof[9],
+                                    dleq                =   json.loads(each_proof[9]),
                                     mint_id             =   each_proof[10],
                                     melt_id             =   each_proof[11]                 
                                     )
@@ -357,14 +357,13 @@ async def update_lightning_invoice(
     if preimage:
         clauses.append("preimage = ?")
         values.append(preimage)
+    
+    update_clause = f"UPDATE invoices SET paid=true WHERE id = '{id}'"
 
-    await (conn or db).execute(
-        f"UPDATE invoices SET {', '.join(clauses)} WHERE id = ?",
-        (
-            *values,
-            id,
-        ),
-    )
+    print(f"UPDATE {update_clause}")
+
+    await (conn or db).execute(update_clause)
+   
 
 
 async def bump_secret_derivation(

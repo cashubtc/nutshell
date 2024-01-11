@@ -18,7 +18,7 @@ from .protocols import SupportsDb, SupportsKeysets
 
 
 class WalletSecrets(SupportsDb, SupportsKeysets):
-    keyset_id: str
+    keyset_id: str 
     db: Database
 
     async def _init_private_key(self, from_mnemonic: Optional[str] = None) -> None:
@@ -147,9 +147,12 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
 
         """
+        print(f"WalletSecrets>generate_n_secrets:150")
+        print(f"WalletSecrets>generate_n_secrets:151 {self.keyset_id}")
+       
         if n < 1:
             return [], [], []
-
+        # print(f"WalletSecrets>generate_n_secrets:153 {self.keyset_id}")
         secret_counters_start = await bump_secret_derivation(
             db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump
         )

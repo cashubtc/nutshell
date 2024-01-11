@@ -641,7 +641,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     async def load_proofs(self, reload: bool = False) -> None:
         """Load all proofs from the database."""
-
+        
         if self.proofs and not reload:
             logger.debug("Proofs already loaded.")
             return
@@ -681,6 +681,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             List[Proof]: Newly minted proofs.
         """
         # specific split
+        print("wallet>mint:684")
         if split:
             logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
@@ -692,14 +693,17 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                     )
 
         # if no split was specified, we use the canonical split
+        print("wallet>mint:696")
         amounts = split or amount_split(amount)
 
         # quirk: we skip bumping the secret counter in the database since we are
         # not sure if the minting will succeed. If it succeeds, we will bump it
         # in the next step.
+        # print(f"wallet>mint:702 keyset_id: {self.keyset_id}")
         secrets, rs, derivation_paths = await self.generate_n_secrets(
             len(amounts), skip_bump=True
         )
+        print("wallet>mint:705")
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
@@ -711,7 +715,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             db=self.db, keyset_id=self.keyset_id, by=len(amounts)
         )
         proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
-
+        print("wallet>mint:716")
         if id:
             await update_lightning_invoice(
                 db=self.db, id=id, paid=True, time_paid=int(time.time())

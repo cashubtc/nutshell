@@ -140,3 +140,5 @@ tor.pid
 
 # extra
 testclient.py
+
+cashu-old
