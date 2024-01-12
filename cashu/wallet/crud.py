@@ -167,7 +167,7 @@ async def update_proof(
 
     if reserved is not None:
         clauses.append("time_reserved = ?")
-        values.append(int(time.time()))
+        values.append(datetime.fromtimestamp(time.time()))
 
     if mint_id is not None:
         clauses.append("mint_id = ?")
