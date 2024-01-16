@@ -17,8 +17,6 @@ from .base import (
 
 
 class StrikeUSDWallet(LightningBackend):
-    """https://github.com/lnbits/lnbits"""
-
     units = [Unit.usd]
 
     def __init__(self):
