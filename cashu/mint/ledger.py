@@ -55,10 +55,6 @@ from .verification import LedgerVerification
 
 class Ledger(LedgerVerification, LedgerSpendingConditions):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
-    # locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
-    # proofs_pending_lock: asyncio.Lock = (
-    #     asyncio.Lock()
-    # )  # holds locks for proofs_pending database
     keysets: Dict[str, MintKeyset] = {}
 
     def __init__(
@@ -955,20 +951,3 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             await self.crud.unset_quote_pending(
                 quote_id=quote_id, db=self.db, conn=conn
             )
-
-    # async def _validate_proofs_pending(
-    #     self, proofs: List[Proof], conn: Optional[Connection] = None
-    # ) -> None:
-    #     """Checks if any of the provided proofs is in the pending proofs table.
-
-    #     Args:
-    #         proofs (List[Proof]): Proofs to check.
-
-    #     Raises:
-    #         Exception: At least one of the proofs is in the pending table.
-    #     """
-    #     proofs_pending = await self.crud.get_proofs_pending(db=self.db, conn=conn)
-    #     for p in proofs:
-    #         for pp in proofs_pending:
-    #             if p.secret == pp.secret:
-    #                 raise TransactionError("proofs are pending.")
