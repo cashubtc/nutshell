@@ -458,7 +458,7 @@ async def test_split_race_condition(wallet1: Wallet, wallet2: Wallet):
 
 
 @pytest.mark.asyncio
-async def test_mint_race_condition(wallet1: Wallet):
+async def test_mint_race_condition(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
     pay_if_regtest(invoice.bolt11)
 
@@ -466,7 +466,12 @@ async def test_mint_race_condition(wallet1: Wallet):
         await wallet1.mint(64, id=invoice.id)
 
     # if the lock fails, this throws a promises.B_b UNIQUENESS constraint error
-    await assert_err(asyncio.gather(mint(), mint()), "quote already pending.")
+    await assert_err(
+        asyncio.gather(
+            wallet1.mint(64, id=invoice.id), wallet2.mint(64, id=invoice.id)
+        ),
+        "quote already pending.",
+    )
 
 
 @pytest.mark.asyncio
