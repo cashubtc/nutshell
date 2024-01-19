@@ -78,6 +78,20 @@ class LedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
+    async def set_quote_pending(
+        self,
+        *,
+        db: Database,
+        quote_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def unset_quote_pending(
+        self, *, quote_id: str, db: Database, conn: Optional[Connection] = None
+    ) -> None: ...
+
+    @abstractmethod
     async def store_keyset(
         self,
         *,
@@ -89,6 +103,7 @@ class LedgerCrud(ABC):
     @abstractmethod
     async def get_balance(
         self,
+        *,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> int: ...
@@ -403,23 +418,6 @@ class LedgerCrudSqlite(LedgerCrud):
             ),
         )
 
-    # async def update_mint_quote_paid(
-    #     self,
-    #     *,
-    #     quote_id: str,
-    #     paid: bool,
-    #     db: Database,
-    #     conn: Optional[Connection] = None,
-    # ) -> None:
-    #     await (conn or db).execute(
-    #         f"UPDATE {table_with_schema(db, 'mint_quotes')} SET paid = ? WHERE"
-    #         " quote = ?",
-    #         (
-    #             paid,
-    #             quote_id,
-    #         ),
-    #     )
-
     async def store_melt_quote(
         self,
         *,
@@ -453,9 +451,9 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         quote_id: str,
-        db: Database,
         checking_id: Optional[str] = None,
         request: Optional[str] = None,
+        db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MeltQuote]:
         clauses = []
@@ -505,8 +503,8 @@ class LedgerCrudSqlite(LedgerCrud):
     async def store_keyset(
         self,
         *,
-        db: Database,
         keyset: MintKeyset,
+        db: Database,
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(  # type: ignore
@@ -528,8 +526,40 @@ class LedgerCrudSqlite(LedgerCrud):
             ),
         )
 
+    async def set_quote_pending(
+        self,
+        *,
+        quote_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            INSERT INTO {table_with_schema(db, 'quotes_pending')}
+            (quote)
+            VALUES (?)
+            """,
+            (quote_id,),
+        )
+
+    async def unset_quote_pending(
+        self,
+        *,
+        quote_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            DELETE FROM {table_with_schema(db, 'quotes_pending')}
+            WHERE quote = ?
+            """,
+            (quote_id,),
+        )
+
     async def get_balance(
         self,
+        *,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> int:
@@ -578,6 +608,7 @@ class LedgerCrudSqlite(LedgerCrud):
 
     async def get_proof_used(
         self,
+        *,
         db: Database,
         secret: str,
         conn: Optional[Connection] = None,

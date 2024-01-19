@@ -147,13 +147,19 @@ class Database(Compat):
         self.lock = asyncio.Lock()
 
     @asynccontextmanager
-    async def connect(self):
-        await self.lock.acquire()
-        try:
-            async with self.engine.connect() as conn:  # type: ignore
-                async with conn.begin() as txn:
-                    wconn = Connection(conn, txn, self.type, self.name, self.schema)
-
+    async def connect(self, lock_table: Optional[str] = None):
+        async with self.engine.connect() as conn:  # type: ignore
+            async with conn.begin() as txn:
+                wconn = Connection(conn, txn, self.type, self.name, self.schema)
+                if lock_table:
+                    if self.type in {POSTGRES, COCKROACH}:
+                        await wconn.execute(
+                            f"LOCK TABLE {table_with_schema(self, lock_table)} IN"
+                            " EXCLUSIVE MODE;"
+                        )
+                    else:
+                        await wconn.execute("BEGIN EXCLUSIVE;")
+                try:
                     if self.schema:
                         if self.type in {POSTGRES, COCKROACH}:
                             await wconn.execute(
@@ -163,10 +169,13 @@ class Database(Compat):
                             await wconn.execute(
                                 f"ATTACH '{self.path}' AS {self.schema}"
                             )
-
                     yield wconn
-        finally:
-            self.lock.release()
+                finally:
+                    if lock_table:
+                        if self.type in {POSTGRES, COCKROACH}:
+                            pass
+                        elif self.type == SQLITE:
+                            await wconn.execute("COMMIT;")
 
     async def fetchall(self, query: str, values: tuple = ()) -> list:
         async with self.connect() as conn:

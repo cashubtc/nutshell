@@ -304,3 +304,18 @@ async def m011_add_quote_tables(db: Database):
 
         # drop table invoices
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'invoices')}")
+
+
+async def m012_pending_quotes_table(db: Database) -> None:
+    """
+    Store pending quotes.
+    """
+    async with db.connect() as conn:
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'quotes_pending')} (
+                    quote TEXT NOT NULL,
+
+                    UNIQUE (quote)
+
+                );
+            """)

@@ -85,11 +85,13 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         # Verify that input keyset units are the same as output keyset unit
         # We have previously verified that all outputs have the same keyset id in `_verify_outputs`
         assert outputs[0].id, "output id not set"
-        if not all([
-            self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
-            for p in proofs
-            if p.id
-        ]):
+        if not all(
+            [
+                self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
+                for p in proofs
+                if p.id
+            ]
+        ):
             raise TransactionError("input and output keysets have different units.")
 
         # Verify output spending conditions
@@ -210,7 +212,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
 
     def _verify_no_duplicate_outputs(self, outputs: List[BlindedMessage]) -> bool:
         B_s = [od.B_ for od in outputs]
-        if len(B_s) != len(list(set(B_s))):
+        if len(B_s) != len(set(B_s)):
             return False
         return True
 

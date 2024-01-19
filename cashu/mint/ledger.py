@@ -1,4 +1,3 @@
-import asyncio
 import copy
 import math
 import time
@@ -56,10 +55,10 @@ from .verification import LedgerVerification
 
 class Ledger(LedgerVerification, LedgerSpendingConditions):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
-    locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
-    proofs_pending_lock: asyncio.Lock = (
-        asyncio.Lock()
-    )  # holds locks for proofs_pending database
+    # locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
+    # proofs_pending_lock: asyncio.Lock = (
+    #     asyncio.Lock()
+    # )  # holds locks for proofs_pending database
     keysets: Dict[str, MintKeyset] = {}
 
     def __init__(
@@ -399,10 +398,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
 
-        self.locks[quote_id] = (
-            self.locks.get(quote_id) or asyncio.Lock()
-        )  # create a new lock if it doesn't exist
-        async with self.locks[quote_id]:
+        quote = await self.get_mint_quote(quote_id=quote_id)
+
+        # set quote pending to avoid race conditions
+        await self._set_quote_pending(quote_id)
+        try:
             quote = await self.get_mint_quote(quote_id=quote_id)
             assert quote.paid, "quote not paid"
             assert not quote.issued, "quote already issued"
@@ -418,7 +418,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             logger.trace(f"crud: setting quote {quote_id} as issued")
             quote.issued = True
             await self.crud.update_mint_quote(quote=quote, db=self.db)
-        del self.locks[quote_id]
+        except Exception as e:
+            logger.trace(f"Mint exception: {e}")
+            raise e
+        finally:
+            await self._unset_quote_pending(quote_id)
+
         return promises
 
     async def melt_quote(
@@ -650,8 +655,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # verify inputs and their spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs)
 
-        # set proofs to pending to avoid race conditions
+        # set proofs and quote to pending to avoid race conditions
         await self._set_proofs_pending(proofs)
+        await self._set_quote_pending(quote)
         try:
             melt_quote = await self.melt_mint_settle_internally(melt_quote)
 
@@ -697,8 +703,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             logger.trace(f"Melt exception: {e}")
             raise e
         finally:
-            # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
+            await self._unset_quote_pending(quote)
 
         return melt_quote.proof or "", return_promises
 
@@ -725,6 +731,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         logger.trace("split called")
 
+        # set proofs pending to avoid race conditions
         await self._set_proofs_pending(proofs)
         try:
             # explicitly check that amount of inputs is equal to amount of outputs
@@ -745,7 +752,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             logger.trace(f"split failed: {e}")
             raise e
         finally:
-            # delete proofs from pending list
             await self._unset_proofs_pending(proofs)
 
         logger.trace("split successful")
@@ -888,8 +894,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         return states
 
     async def _set_proofs_pending(self, proofs: List[Proof]) -> None:
-        """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
-        the list of pending proofs or removes them. Used as a mutex for proofs.
+        """Adds proofs to the list of pending proofs. If any of the proofs is
+        already in the list of pending proofs, raises an exception.
+
+        Note: The lock is enforced by the unique constraint on the secret column
+        in the database.
 
         Args:
             proofs (List[Proof]): Proofs to add to pending table.
@@ -897,17 +906,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Raises:
             Exception: At least one proof already in pending table.
         """
-        # first we check whether these proofs are pending already
-        async with self.proofs_pending_lock:
-            async with self.db.connect() as conn:
-                await self._validate_proofs_pending(proofs, conn)
-                for p in proofs:
-                    try:
-                        await self.crud.set_proof_pending(
-                            proof=p, db=self.db, conn=conn
-                        )
-                    except Exception:
-                        raise TransactionError("proofs already pending.")
+        async with self.db.connect("proofs_pending") as conn:
+            # await self._validate_proofs_pending(proofs, conn)
+            for p in proofs:
+                try:
+                    await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
+                except Exception as e:
+                    logger.trace(f"crud: set_proof_pending failed: {e}")
+                    raise TransactionError("proofs already pending.")
 
     async def _unset_proofs_pending(self, proofs: List[Proof]) -> None:
         """Deletes proofs from pending table.
@@ -915,24 +921,54 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Args:
             proofs (List[Proof]): Proofs to delete.
         """
-        async with self.proofs_pending_lock:
-            async with self.db.connect() as conn:
-                for p in proofs:
-                    await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+        async with self.db.connect("proofs_pending") as conn:
+            for p in proofs:
+                await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
 
-    async def _validate_proofs_pending(
-        self, proofs: List[Proof], conn: Optional[Connection] = None
-    ) -> None:
-        """Checks if any of the provided proofs is in the pending proofs table.
+    async def _set_quote_pending(self, quote_id: str) -> None:
+        """Adds quote to the list of pending quotes. If the quote is already in the list of pending quotes, raises an exception.
+
+        Note: The lock is enforced by the unique constraint on the checking_id column in the database.
 
         Args:
-            proofs (List[Proof]): Proofs to check.
+            quote_id (str): Quote id to add to pending table.
 
         Raises:
-            Exception: At least one of the proofs is in the pending table.
+            Exception: Quote already in pending table.
         """
-        proofs_pending = await self.crud.get_proofs_pending(db=self.db, conn=conn)
-        for p in proofs:
-            for pp in proofs_pending:
-                if p.secret == pp.secret:
-                    raise TransactionError("proofs are pending.")
+        async with self.db.connect("quotes_pending") as conn:
+            try:
+                await self.crud.set_quote_pending(
+                    quote_id=quote_id, db=self.db, conn=conn
+                )
+            except Exception as e:
+                logger.trace(f"crud: set_quote_pending failed: {e}")
+                raise TransactionError("quote already pending.")
+
+    async def _unset_quote_pending(self, quote_id: str) -> None:
+        """Deletes quote from pending table.
+
+        Args:
+            quote_id (str): Quote id to delete.
+        """
+        async with self.db.connect("quotes_pending") as conn:
+            await self.crud.unset_quote_pending(
+                quote_id=quote_id, db=self.db, conn=conn
+            )
+
+    # async def _validate_proofs_pending(
+    #     self, proofs: List[Proof], conn: Optional[Connection] = None
+    # ) -> None:
+    #     """Checks if any of the provided proofs is in the pending proofs table.
+
+    #     Args:
+    #         proofs (List[Proof]): Proofs to check.
+
+    #     Raises:
+    #         Exception: At least one of the proofs is in the pending table.
+    #     """
+    #     proofs_pending = await self.crud.get_proofs_pending(db=self.db, conn=conn)
+    #     for p in proofs:
+    #         for pp in proofs_pending:
+    #             if p.secret == pp.secret:
+    #                 raise TransactionError("proofs are pending.")
