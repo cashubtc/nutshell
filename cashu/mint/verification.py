@@ -111,11 +111,9 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
             raise TransactionError("keyset id inactive.")
         # Verify amounts of outputs
         # we skip the amount check for NUT-8 change outputs (which can have amount 0)
-        if (
-            not all([self._verify_amount(o.amount) for o in outputs])
-            and not skip_amount_check
-        ):
-            raise TransactionError("invalid amount.")
+        if not skip_amount_check:
+            if not all([self._verify_amount(o.amount) for o in outputs]):
+                raise TransactionError("invalid amount.")
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate outputs.")
