@@ -96,7 +96,9 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         if outputs and not self._verify_output_spending_conditions(proofs, outputs):
             raise TransactionError("validation of output spending conditions failed.")
 
-    async def _verify_outputs(self, outputs: List[BlindedMessage]):
+    async def _verify_outputs(
+        self, outputs: List[BlindedMessage], skip_amount_check=False
+    ):
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
         # Verify all outputs have the same keyset id
@@ -108,7 +110,11 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         if not self.keysets[outputs[0].id].active:
             raise TransactionError("keyset id inactive.")
         # Verify amounts of outputs
-        if not all([self._verify_amount(o.amount) for o in outputs]):
+        # we skip the amount check for NUT-8 change outputs (which can have amount 0)
+        if (
+            not all([self._verify_amount(o.amount) for o in outputs])
+            and not skip_amount_check
+        ):
             raise TransactionError("invalid amount.")
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
