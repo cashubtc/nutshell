@@ -253,7 +253,7 @@ async def get_melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse
 
 
 @router.get(
-    "/v1/melt/quote/{quote}",
+    "/v1/melt/quote/bolt11/{quote}",
     summary="Get melt quote",
     response_model=PostMeltQuoteResponse,
     response_description="Get an existing melt quote to check its status.",
@@ -262,7 +262,7 @@ async def melt_quote(quote: str) -> PostMeltQuoteResponse:
     """
     Get melt quote state.
     """
-    logger.trace(f"> POST /v1/melt/quote/{quote}")
+    logger.trace(f"> POST /v1/melt/quote/bolt11/{quote}")
     melt_quote = await ledger.get_melt_quote(quote)
     resp = PostMeltQuoteResponse(
         quote=melt_quote.quote,
@@ -270,7 +270,7 @@ async def melt_quote(quote: str) -> PostMeltQuoteResponse:
         fee_reserve=melt_quote.fee_reserve,
         paid=melt_quote.paid,
     )
-    logger.trace(f"< POST /v1/melt/quote/{quote}")
+    logger.trace(f"< POST /v1/melt/quote/bolt11/{quote}")
     return resp
 
 
