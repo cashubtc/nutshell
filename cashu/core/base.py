@@ -365,7 +365,7 @@ class PostMeltRequest(BaseModel):
     quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
     inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     outputs: Union[List[BlindedMessage], None] = Field(
-        ..., max_items=settings.mint_max_request_length
+        None, max_items=settings.mint_max_request_length
     )
 
 
@@ -379,7 +379,7 @@ class PostMeltRequest_deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     pr: str = Field(..., max_length=settings.mint_max_request_length)
     outputs: Union[List[BlindedMessage], None] = Field(
-        ..., max_items=settings.mint_max_request_length
+        None, max_items=settings.mint_max_request_length
     )
 
 
