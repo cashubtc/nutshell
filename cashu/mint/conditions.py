@@ -83,7 +83,7 @@ class LedgerSpendingConditions:
                 logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
                 logger.trace(f"Message: {p2pk_secret.serialize().encode('utf-8')}")
                 if verify_p2pk_signature(
-                    message=p2pk_secret.serialize().encode("utf-8"),
+                    message=proof.secret.encode("utf-8"),
                     pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
                     signature=bytes.fromhex(input_sig),
                 ):
