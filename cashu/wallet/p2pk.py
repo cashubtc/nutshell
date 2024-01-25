@@ -79,7 +79,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             sign_p2pk_sign(
                 message=proof.secret.encode("utf-8"),
                 private_key=private_key,
-            )
+            ).hex()
             for proof in proofs
         ]
         logger.debug(f"Signatures: {signatures}")
@@ -95,7 +95,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             sign_p2pk_sign(
                 message=output.B_.encode("utf-8"),
                 private_key=private_key,
-            )
+            ).hex()
             for output in outputs
         ]
 
