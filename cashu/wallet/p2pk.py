@@ -93,7 +93,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         assert private_key.pubkey
         return [
             sign_p2pk_sign(
-                message=output.B_.encode("utf-8"),
+                message=bytes.fromhex(output.B_),
                 private_key=private_key,
             ).hex()
             for output in outputs
