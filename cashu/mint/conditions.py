@@ -154,7 +154,7 @@ class LedgerSpendingConditions:
                 assert signature, TransactionError("no HTLC refund signature provided")
                 for pubkey in refund_pubkeys:
                     if verify_p2pk_signature(
-                        message=htlc_secret.serialize().encode("utf-8"),
+                        message=proof.secret.encode("utf-8"),
                         pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
                         signature=bytes.fromhex(signature),
                     ):
@@ -181,7 +181,7 @@ class LedgerSpendingConditions:
             assert signature, TransactionError("HTLC no hash lock signatures provided.")
             for pubkey in hashlock_pubkeys:
                 if verify_p2pk_signature(
-                    message=htlc_secret.serialize().encode("utf-8"),
+                    message=proof.secret.encode("utf-8"),
                     pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
                     signature=bytes.fromhex(signature),
                 ):
@@ -305,7 +305,7 @@ class LedgerSpendingConditions:
             for sig in p2pksigs:
                 for pubkey in pubkeys:
                     if verify_p2pk_signature(
-                        message=output.B_.encode("utf-8"),
+                        message=bytes.fromhex(output.B_),
                         pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
                         signature=bytes.fromhex(sig),
                     ):
