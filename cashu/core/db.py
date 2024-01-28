@@ -31,7 +31,8 @@ class Compat:
         if self.type in {POSTGRES, COCKROACH}:
             return "now()"
         elif self.type == SQLITE:
-            return "(strftime('%s', 'now'))"
+            # return "(strftime('%s', 'now'))"
+            return str(int(time.time()))
         return "<nothing>"
 
     @property

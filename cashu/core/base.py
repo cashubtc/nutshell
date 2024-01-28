@@ -640,7 +640,7 @@ class MintKeyset:
     active: bool
     unit: Unit
     derivation_path: str
-    seed: Optional[str] = None
+    seed: str
     public_keys: Union[Dict[int, PublicKey], None] = None
     valid_from: Union[str, None] = None
     valid_to: Union[str, None] = None
@@ -652,17 +652,17 @@ class MintKeyset:
     def __init__(
         self,
         *,
+        seed: str,
+        derivation_path: str,
         id="",
         valid_from=None,
         valid_to=None,
         first_seen=None,
         active=None,
-        seed: Optional[str] = None,
-        derivation_path: Optional[str] = None,
         unit: Optional[str] = None,
         version: str = "0",
     ):
-        self.derivation_path = derivation_path or ""
+        self.derivation_path = derivation_path
         self.seed = seed
         self.id = id
         self.valid_from = valid_from
@@ -696,8 +696,10 @@ class MintKeyset:
             self.unit = Unit[unit]
 
         # generate keys from seed
-        if self.seed and self.derivation_path:
-            self.generate_keys()
+        assert self.seed, "seed not set"
+        assert self.derivation_path, "derivation path not set"
+
+        self.generate_keys()
 
         logger.debug(f"Keyset id: {self.id} ({self.unit.name})")
 

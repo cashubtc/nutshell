@@ -56,7 +56,7 @@ async def rotate_keys(n_seconds=60):
         incremented_derivation_path = (
             "/".join(ledger.derivation_path.split("/")[:-1]) + f"/{i}"
         )
-        await ledger.activate_keyset(incremented_derivation_path)
+        await ledger.activate_keyset(derivation_path=incremented_derivation_path)
         logger.info(f"Current keyset: {ledger.keyset.id}")
         await asyncio.sleep(n_seconds)
 
@@ -68,7 +68,7 @@ async def start_mint_init():
     await ledger.init_keysets()
 
     for derivation_path in settings.mint_derivation_path_list:
-        await ledger.activate_keyset(derivation_path)
+        await ledger.activate_keyset(derivation_path=derivation_path)
 
     for method in ledger.backends:
         for unit in ledger.backends[method]:
