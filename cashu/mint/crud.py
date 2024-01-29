@@ -369,7 +369,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             (quote_id,),
         )
-        return MintQuote(**dict(row)) if row else None
+        return MintQuote.from_row(row) if row else None
 
     async def get_mint_quote_by_checking_id(
         self,
@@ -385,7 +385,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             (checking_id,),
         )
-        return MintQuote(**dict(row)) if row else None
+        return MintQuote.from_row(row) if row else None
 
     async def update_mint_quote(
         self,
@@ -485,7 +485,7 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         if row is None:
             return None
-        return MeltQuote(**dict(row)) if row else None
+        return MeltQuote.from_row(row) if row else None
 
     async def update_melt_quote(
         self,

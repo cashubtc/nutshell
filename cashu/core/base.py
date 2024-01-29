@@ -1,6 +1,8 @@
 import base64
+import datetime
 import json
 import math
+import time
 from dataclasses import dataclass
 from enum import Enum
 from sqlite3 import Row
@@ -223,6 +225,35 @@ class MeltQuote(BaseModel):
     fee_paid: int = 0
     proof: str = ""
 
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            quote=row["quote"],
+            method=row["method"],
+            request=row["request"],
+            checking_id=row["checking_id"],
+            unit=row["unit"],
+            amount=row["amount"],
+            fee_reserve=row["fee_reserve"],
+            paid=row["paid"],
+            created_time=int(
+                time.mktime(
+                    datetime.datetime.strptime(
+                        row["created_time"], "%Y-%m-%d %H:%M:%S"
+                    ).timetuple()
+                )
+            ),
+            paid_time=int(
+                time.mktime(
+                    datetime.datetime.strptime(
+                        row["paid_time"], "%Y-%m-%d %H:%M:%S"
+                    ).timetuple()
+                )
+            ),
+            fee_paid=row["fee_paid"],
+            proof=row["proof"],
+        )
+
 
 class MintQuote(BaseModel):
     quote: str
@@ -236,6 +267,34 @@ class MintQuote(BaseModel):
     created_time: int = 0
     paid_time: int = 0
     expiry: int = 0
+
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            quote=row["quote"],
+            method=row["method"],
+            request=row["request"],
+            checking_id=row["checking_id"],
+            unit=row["unit"],
+            amount=row["amount"],
+            paid=row["paid"],
+            issued=row["issued"],
+            created_time=int(
+                time.mktime(
+                    datetime.datetime.strptime(
+                        row["created_time"], "%Y-%m-%d %H:%M:%S"
+                    ).timetuple()
+                )
+            ),
+            paid_time=int(
+                time.mktime(
+                    datetime.datetime.strptime(
+                        row["paid_time"], "%Y-%m-%d %H:%M:%S"
+                    ).timetuple()
+                )
+            ),
+            expiry=0,
+        )
 
 
 # ------- API -------
@@ -602,9 +661,9 @@ class WalletKeyset:
             self.id = id
 
     def serialize(self):
-        return json.dumps(
-            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
-        )
+        return json.dumps({
+            amount: key.serialize().hex() for amount, key in self.public_keys.items()
+        })
 
     @classmethod
     def from_row(cls, row: Row):
