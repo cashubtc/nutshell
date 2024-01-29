@@ -205,6 +205,19 @@ def lock_table(db: Database, table: str) -> str:
     return "<nothing>"
 
 
+def timestamp_from_seconds(
+    db: Database, seconds: Union[int, float, None]
+) -> Union[str, None]:
+    if seconds is None:
+        return None
+    seconds = int(seconds)
+    if db.type in {POSTGRES, COCKROACH}:
+        return datetime.datetime.fromtimestamp(seconds).strftime("%Y-%m-%d %H:%M:%S")
+    elif db.type == SQLITE:
+        return str(seconds)
+    return None
+
+
 @asynccontextmanager
 async def get_db_connection(db: Database, conn: Optional[Connection] = None):
     """Either yield the existing database connection or create a new one.

@@ -1,8 +1,6 @@
 import base64
-import datetime
 import json
 import math
-import time
 from dataclasses import dataclass
 from enum import Enum
 from sqlite3 import Row
@@ -220,13 +218,22 @@ class MeltQuote(BaseModel):
     amount: int
     fee_reserve: int
     paid: bool
-    created_time: int = 0
-    paid_time: int = 0
+    created_time: Union[int, None] = None
+    paid_time: Union[int, None] = None
     fee_paid: int = 0
     proof: str = ""
 
     @classmethod
     def from_row(cls, row: Row):
+        try:
+            created_time = int(row["created_time"]) if row["created_time"] else None
+            paid_time = int(row["paid_time"]) if row["paid_time"] else None
+        except Exception:
+            created_time = (
+                int(row["created_time"].timestamp()) if row["created_time"] else None
+            )
+            paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
+
         return cls(
             quote=row["quote"],
             method=row["method"],
@@ -236,20 +243,8 @@ class MeltQuote(BaseModel):
             amount=row["amount"],
             fee_reserve=row["fee_reserve"],
             paid=row["paid"],
-            created_time=int(
-                time.mktime(
-                    datetime.datetime.strptime(
-                        row["created_time"], "%Y-%m-%d %H:%M:%S"
-                    ).timetuple()
-                )
-            ),
-            paid_time=int(
-                time.mktime(
-                    datetime.datetime.strptime(
-                        row["paid_time"], "%Y-%m-%d %H:%M:%S"
-                    ).timetuple()
-                )
-            ),
+            created_time=created_time,
+            paid_time=paid_time,
             fee_paid=row["fee_paid"],
             proof=row["proof"],
         )
@@ -264,12 +259,23 @@ class MintQuote(BaseModel):
     amount: int
     paid: bool
     issued: bool
-    created_time: int = 0
-    paid_time: int = 0
+    created_time: Union[int, None] = None
+    paid_time: Union[int, None] = None
     expiry: int = 0
 
     @classmethod
     def from_row(cls, row: Row):
+
+        try:
+            #  SQLITE: row is timestamp (string)
+            created_time = int(row["created_time"]) if row["created_time"] else None
+            paid_time = int(row["paid_time"]) if row["paid_time"] else None
+        except Exception:
+            # POSTGRES: row is datetime.datetime
+            created_time = (
+                int(row["created_time"].timestamp()) if row["created_time"] else None
+            )
+            paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
         return cls(
             quote=row["quote"],
             method=row["method"],
@@ -279,20 +285,8 @@ class MintQuote(BaseModel):
             amount=row["amount"],
             paid=row["paid"],
             issued=row["issued"],
-            created_time=int(
-                time.mktime(
-                    datetime.datetime.strptime(
-                        row["created_time"], "%Y-%m-%d %H:%M:%S"
-                    ).timetuple()
-                )
-            ),
-            paid_time=int(
-                time.mktime(
-                    datetime.datetime.strptime(
-                        row["paid_time"], "%Y-%m-%d %H:%M:%S"
-                    ).timetuple()
-                )
-            ),
+            created_time=created_time,
+            paid_time=paid_time,
             expiry=0,
         )
 

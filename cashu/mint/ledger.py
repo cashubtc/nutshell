@@ -357,6 +357,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             if status.paid:
                 logger.trace(f"Setting quote {quote_id} as paid")
                 quote.paid = True
+                quote.paid_time = int(time.time())
                 await self.crud.update_mint_quote(quote=quote, db=self.db)
 
         return quote
@@ -582,6 +583,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
 
         mint_quote.paid = True
+        mint_quote.paid_time = melt_quote.paid_time
         await self.crud.update_mint_quote(quote=mint_quote, db=self.db)
 
         return melt_quote
