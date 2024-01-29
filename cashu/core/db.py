@@ -218,6 +218,13 @@ def timestamp_from_seconds(
     return None
 
 
+def timestamp_now(db: Database) -> str:
+    timestamp = timestamp_from_seconds(db, time.time())
+    if timestamp is None:
+        raise Exception("Timestamp is None")
+    return timestamp
+
+
 @asynccontextmanager
 async def get_db_connection(db: Database, conn: Optional[Connection] = None):
     """Either yield the existing database connection or create a new one.

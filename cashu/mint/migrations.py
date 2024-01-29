@@ -1,4 +1,4 @@
-from ..core.db import Connection, Database, table_with_schema
+from ..core.db import Connection, Database, table_with_schema, timestamp_now
 from ..core.settings import settings
 
 
@@ -232,7 +232,7 @@ async def m011_add_quote_tables(db: Database):
             )
             await conn.execute(
                 f"UPDATE {table_with_schema(db, table)} SET created ="
-                f" '{conn.timestamp_now}'"
+                f" '{timestamp_now(db)}'"
             )
 
         # add column "witness" to table proofs_used

@@ -1,4 +1,3 @@
-import time
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
@@ -9,7 +8,13 @@ from ..core.base import (
     MintQuote,
     Proof,
 )
-from ..core.db import Connection, Database, table_with_schema, timestamp_from_seconds
+from ..core.db import (
+    Connection,
+    Database,
+    table_with_schema,
+    timestamp_from_seconds,
+    timestamp_now,
+)
 
 
 class LedgerCrud(ABC):
@@ -223,7 +228,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 e,
                 s,
                 id,
-                timestamp_from_seconds(db, time.time()),
+                timestamp_now(db),
             ),
         )
 
@@ -274,7 +279,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 proof.secret,
                 proof.id,
                 proof.witness,
-                timestamp_from_seconds(db, time.time()),
+                timestamp_now(db),
             ),
         )
 
@@ -307,7 +312,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 proof.amount,
                 str(proof.C),
                 str(proof.secret),
-                timestamp_from_seconds(db, time.time()),
+                timestamp_now(db),
             ),
         )
 
@@ -519,9 +524,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 keyset.id,
                 keyset.seed,
                 keyset.derivation_path,
-                keyset.valid_from or timestamp_from_seconds(db, time.time()),
-                keyset.valid_to or timestamp_from_seconds(db, time.time()),
-                keyset.first_seen or timestamp_from_seconds(db, time.time()),
+                keyset.valid_from or timestamp_now(db),
+                keyset.valid_to or timestamp_now(db),
+                keyset.first_seen or timestamp_now(db),
                 True,
                 keyset.version,
                 keyset.unit.name,
