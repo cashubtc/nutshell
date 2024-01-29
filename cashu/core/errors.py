@@ -75,8 +75,8 @@ class LightningError(CashuError):
         super().__init__(detail or self.detail, code=code or self.code)
 
 
-class InvoiceNotPaidError(CashuError):
-    detail = "Lightning invoice not paid yet."
+class QuoteNotPaidError(CashuError):
+    detail = "Quote invoice not paid yet."
     code = 20001
 
     def __init__(self):

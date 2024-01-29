@@ -1,5 +1,5 @@
-import time
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any, List, Optional
 
 from ..core.base import (
@@ -223,7 +223,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 e,
                 s,
                 id,
-                int(time.time()),
+                (conn or db).timestamp_now,
             ),
         )
 
@@ -274,7 +274,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 proof.secret,
                 proof.id,
                 proof.witness,
-                int(time.time()),
+                (conn or db).timestamp_now,
             ),
         )
 
@@ -307,7 +307,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 proof.amount,
                 str(proof.C),
                 str(proof.secret),
-                int(time.time()),
+                (conn or db).timestamp_now,
             ),
         )
 
@@ -348,8 +348,10 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.issued,
                 quote.paid,
-                quote.created_time,
-                quote.paid_time,
+                datetime.fromtimestamp(quote.created_time).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                datetime.fromtimestamp(quote.paid_time).strftime("%Y-%m-%d %H:%M:%S"),
             ),
         )
 
@@ -398,7 +400,7 @@ class LedgerCrudSqlite(LedgerCrud):
             (
                 quote.issued,
                 quote.paid,
-                quote.paid_time,
+                datetime.fromtimestamp(quote.paid_time).strftime("%Y-%m-%d %H:%M:%S"),
                 quote.quote,
             ),
         )
@@ -442,8 +444,10 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.fee_reserve or 0,
                 quote.paid,
-                quote.created_time,
-                quote.paid_time,
+                datetime.fromtimestamp(quote.created_time).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                datetime.fromtimestamp(quote.paid_time).strftime("%Y-%m-%d %H:%M:%S"),
                 quote.fee_paid,
                 quote.proof,
             ),
@@ -496,7 +500,7 @@ class LedgerCrudSqlite(LedgerCrud):
             (
                 quote.paid,
                 quote.fee_paid,
-                quote.paid_time,
+                datetime.fromtimestamp(quote.paid_time).strftime("%Y-%m-%d %H:%M:%S"),
                 quote.proof,
                 quote.quote,
             ),
@@ -519,9 +523,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 keyset.id,
                 keyset.seed,
                 keyset.derivation_path,
-                keyset.valid_from or int(time.time()),
-                keyset.valid_to or int(time.time()),
-                keyset.first_seen or int(time.time()),
+                keyset.valid_from or (conn or db).timestamp_now,
+                keyset.valid_to or (conn or db).timestamp_now,
+                keyset.first_seen or (conn or db).timestamp_now,
                 True,
                 keyset.version,
                 keyset.unit.name,

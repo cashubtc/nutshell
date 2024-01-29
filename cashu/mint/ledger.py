@@ -38,6 +38,7 @@ from ..core.errors import (
     KeysetNotFoundError,
     LightningError,
     NotAllowedError,
+    QuoteNotPaidError,
     TransactionError,
 )
 from ..core.helpers import sum_proofs
@@ -392,7 +393,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         )  # create a new lock if it doesn't exist
         async with self.locks[quote_id]:
             quote = await self.get_mint_quote(quote_id=quote_id)
-            assert quote.paid, "quote not paid"
+            assert quote.paid, QuoteNotPaidError()
             assert not quote.issued, "quote already issued"
             assert (
                 quote.amount == sum_amount_outputs

@@ -206,8 +206,8 @@ async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
 
 @router.post(
     "/v1/mint/bolt11",
-    name="Mint tokens",
-    summary="Mint tokens in exchange for a Bitcoin payment that the user has made",
+    name="Mint tokens with a Lightning payment",
+    summary="Mint tokens by paying a bolt11 Lightning invoice.",
     response_model=PostMintResponse,
     response_description=(
         "A list of blinded signatures that can be used to create proofs."
@@ -304,7 +304,7 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
         "An array of blinded signatures that can be used to create proofs."
     ),
 )
-async def split(
+async def swap(
     payload: PostSplitRequest,
 ) -> PostSplitResponse:
     """
