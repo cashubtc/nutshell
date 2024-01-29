@@ -126,7 +126,7 @@ async def keyset_keys(keyset_id: str) -> KeysResponse:
 
     keyset = ledger.keysets.get(keyset_id)
     if keyset is None:
-        raise CashuError(code=0, detail="Keyset not found.")
+        raise CashuError(code=0, detail="keyset not found")
 
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
