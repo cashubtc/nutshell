@@ -302,3 +302,42 @@ async def m011_add_quote_tables(db: Database):
 
         # drop table invoices
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'invoices')}")
+
+
+async def m012_keysets_uniqueness_with_seed(db: Database):
+    # copy table keysets to keysets_old, create a new table keysets
+    # with the same columns but with a unique constraint on (seed, derivation_path)
+    # and copy the data from keysets_old to keysets, then drop keysets_old
+    async with db.connect() as conn:
+        await conn.execute(
+            f"DROP TABLE IF EXISTS {table_with_schema(db, 'keysets_old')}"
+        )
+        await conn.execute(
+            f"CREATE TABLE {table_with_schema(db, 'keysets_old')} AS"
+            f" SELECT * FROM {table_with_schema(db, 'keysets')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'keysets')}")
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'keysets')} (
+                    id TEXT NOT NULL,
+                    derivation_path TEXT,
+                    seed TEXT,
+                    valid_from TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                    valid_to TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                    first_seen TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                    active BOOL DEFAULT TRUE,
+                    version TEXT,
+                    unit TEXT,
+
+                    UNIQUE (seed, derivation_path)
+
+                );
+            """)
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'keysets')} (id,"
+            " derivation_path, valid_from, valid_to, first_seen,"
+            " active, version, seed, unit) SELECT id, derivation_path,"
+            " valid_from, valid_to, first_seen, active, version, seed,"
+            f" unit FROM {table_with_schema(db, 'keysets_old')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'keysets_old')}")
