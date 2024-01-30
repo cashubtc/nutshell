@@ -3,7 +3,15 @@ import hashlib
 import random
 from typing import Dict
 
-from bip32 import BIP32
+# we import bip32 from embit if bip32 is not installed
+try:
+    from bip32 import BIP32
+
+    use_bip32_lib = True
+except ImportError:
+    from embit import bip32  # type: ignore
+
+    use_bip32_lib = False
 
 from ..settings import settings
 from .secp import PrivateKey, PublicKey
@@ -13,16 +21,28 @@ def derive_keys(mnemonic: str, derivation_path: str):
     """
     Deterministic derivation of keys for 2^n values.
     """
-    bip32 = BIP32.from_seed(mnemonic.encode())
-    orders_str = [f"/{i}'" for i in range(settings.max_order)]
-    return {
-        2
-        ** i: PrivateKey(
-            bip32.get_privkey_from_path(derivation_path + orders_str[i]),
-            raw=True,
-        )
-        for i in range(settings.max_order)
-    }
+    if use_bip32_lib:
+        root = BIP32.from_seed(mnemonic.encode())  # type: ignore
+        orders_str = [f"/{i}'" for i in range(settings.max_order)]
+        return {
+            2
+            ** i: PrivateKey(
+                root.get_privkey_from_path(derivation_path + orders_str[i]),
+                raw=True,
+            )
+            for i in range(settings.max_order)
+        }
+    else:
+        root = bip32.HDKey.from_seed(mnemonic.encode())  # type: ignore
+        orders_str = [f"/{i}'" for i in range(settings.max_order)]
+        return {
+            2
+            ** i: PrivateKey(
+                root.derive(derivation_path + orders_str[i]).key.serialize(),  # type: ignore
+                raw=True,
+            )
+            for i in range(settings.max_order)
+        }
 
 
 def derive_keys_sha256(master_key: str, derivation_path: str = ""):
