@@ -32,6 +32,7 @@ class LedgerCrud(ABC):
         db: Database,
         id: str = "",
         derivation_path: str = "",
+        seed: str = "",
         conn: Optional[Connection] = None,
     ) -> List[MintKeyset]: ...
 
@@ -550,6 +551,7 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         id: Optional[str] = None,
         derivation_path: Optional[str] = None,
+        seed: Optional[str] = None,
         unit: Optional[str] = None,
         active: Optional[bool] = None,
         conn: Optional[Connection] = None,
@@ -565,6 +567,9 @@ class LedgerCrudSqlite(LedgerCrud):
         if derivation_path is not None:
             clauses.append("derivation_path = ?")
             values.append(derivation_path)
+        if seed is not None:
+            clauses.append("seed = ?")
+            values.append(seed)
         if unit is not None:
             clauses.append("unit = ?")
             values.append(unit)

@@ -100,11 +100,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             MintKeyset: Keyset
         """
         assert derivation_path, "derivation path not set"
+        seed = seed or self.master_key
         logger.debug(f"Activating keyset for derivation path {derivation_path}")
         # load the keyset from db
         logger.trace(f"crud: loading keyset for {derivation_path}")
         tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
-            derivation_path=derivation_path, db=self.db
+            derivation_path=derivation_path, seed=seed, db=self.db
         )
         logger.trace(f"crud: loaded {len(tmp_keyset_local)} keysets")
         if tmp_keyset_local:
