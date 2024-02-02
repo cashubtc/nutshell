@@ -40,8 +40,8 @@ def configure_logger() -> None:
 
     logger.remove()
     log_level = settings.log_level
-    # if settings.debug and log_level == "INFO":
-    #     log_level = "DEBUG"
+    if settings.debug and log_level == "INFO":
+        log_level = "DEBUG"
     formatter = Formatter()
     logger.add(sys.stderr, level=log_level, format=formatter.format)
 
