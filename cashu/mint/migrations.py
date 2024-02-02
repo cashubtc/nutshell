@@ -1,6 +1,4 @@
-import time
-
-from ..core.db import Connection, Database, table_with_schema
+from ..core.db import SQLITE, Connection, Database, table_with_schema, timestamp_now
 from ..core.settings import settings
 
 
@@ -224,18 +222,34 @@ async def m010_add_index_to_proofs_used(db: Database):
 
 
 async def m011_add_quote_tables(db: Database):
+    async def get_columns(db: Database, conn: Connection, table: str):
+        if db.type == SQLITE:
+            query = f"PRAGMA table_info({table})"
+        else:
+            query = (
+                "SELECT column_name FROM information_schema.columns WHERE table_name ="
+                f" '{table}'"
+            )
+        res = await conn.execute(query)
+        if db.type == SQLITE:
+            return [r["name"] async for r in res]
+        else:
+            return [r["column_name"] async for r in res]
+
     async with db.connect() as conn:
         # add column "created" to tables invoices, promises, proofs_used, proofs_pending
         tables = ["invoices", "promises", "proofs_used", "proofs_pending"]
         for table in tables:
-            await conn.execute(
-                f"ALTER TABLE {table_with_schema(db, table)} ADD COLUMN created"
-                " TIMESTAMP"
-            )
-            await conn.execute(
-                f"UPDATE {table_with_schema(db, table)} SET created ="
-                f" '{int(time.time())}'"
-            )
+            columns = await get_columns(db, conn, table)
+            if "created" not in columns:
+                await conn.execute(
+                    f"ALTER TABLE {table_with_schema(db, table)} ADD COLUMN created"
+                    " TIMESTAMP"
+                )
+                await conn.execute(
+                    f"UPDATE {table_with_schema(db, table)} SET created ="
+                    f" '{timestamp_now(db)}'"
+                )
 
         # add column "witness" to table proofs_used
         await conn.execute(
@@ -299,8 +313,47 @@ async def m011_add_quote_tables(db: Database):
             f"INSERT INTO {table_with_schema(db, 'mint_quotes')} (quote, method,"
             " request, checking_id, unit, amount, paid, issued, created_time,"
             " paid_time) SELECT id, 'bolt11', bolt11, payment_hash, 'sat', amount,"
-            f" False, issued, created, 0 FROM {table_with_schema(db, 'invoices')} "
+            f" False, issued, created, NULL FROM {table_with_schema(db, 'invoices')} "
         )
 
         # drop table invoices
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'invoices')}")
+
+
+async def m012_keysets_uniqueness_with_seed(db: Database):
+    # copy table keysets to keysets_old, create a new table keysets
+    # with the same columns but with a unique constraint on (seed, derivation_path)
+    # and copy the data from keysets_old to keysets, then drop keysets_old
+    async with db.connect() as conn:
+        await conn.execute(
+            f"DROP TABLE IF EXISTS {table_with_schema(db, 'keysets_old')}"
+        )
+        await conn.execute(
+            f"CREATE TABLE {table_with_schema(db, 'keysets_old')} AS"
+            f" SELECT * FROM {table_with_schema(db, 'keysets')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'keysets')}")
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'keysets')} (
+                    id TEXT NOT NULL,
+                    derivation_path TEXT,
+                    seed TEXT,
+                    valid_from TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                    valid_to TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                    first_seen TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
+                    active BOOL DEFAULT TRUE,
+                    version TEXT,
+                    unit TEXT,
+
+                    UNIQUE (seed, derivation_path)
+
+                );
+            """)
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'keysets')} (id,"
+            " derivation_path, valid_from, valid_to, first_seen,"
+            " active, version, seed, unit) SELECT id, derivation_path,"
+            " valid_from, valid_to, first_seen, active, version, seed,"
+            f" unit FROM {table_with_schema(db, 'keysets_old')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'keysets_old')}")

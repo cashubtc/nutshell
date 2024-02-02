@@ -218,10 +218,36 @@ class MeltQuote(BaseModel):
     amount: int
     fee_reserve: int
     paid: bool
-    created_time: int = 0
-    paid_time: int = 0
+    created_time: Union[int, None] = None
+    paid_time: Union[int, None] = None
     fee_paid: int = 0
     proof: str = ""
+
+    @classmethod
+    def from_row(cls, row: Row):
+        try:
+            created_time = int(row["created_time"]) if row["created_time"] else None
+            paid_time = int(row["paid_time"]) if row["paid_time"] else None
+        except Exception:
+            created_time = (
+                int(row["created_time"].timestamp()) if row["created_time"] else None
+            )
+            paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
+
+        return cls(
+            quote=row["quote"],
+            method=row["method"],
+            request=row["request"],
+            checking_id=row["checking_id"],
+            unit=row["unit"],
+            amount=row["amount"],
+            fee_reserve=row["fee_reserve"],
+            paid=row["paid"],
+            created_time=created_time,
+            paid_time=paid_time,
+            fee_paid=row["fee_paid"],
+            proof=row["proof"],
+        )
 
 
 class MintQuote(BaseModel):
@@ -233,9 +259,36 @@ class MintQuote(BaseModel):
     amount: int
     paid: bool
     issued: bool
-    created_time: int = 0
-    paid_time: int = 0
+    created_time: Union[int, None] = None
+    paid_time: Union[int, None] = None
     expiry: int = 0
+
+    @classmethod
+    def from_row(cls, row: Row):
+
+        try:
+            #  SQLITE: row is timestamp (string)
+            created_time = int(row["created_time"]) if row["created_time"] else None
+            paid_time = int(row["paid_time"]) if row["paid_time"] else None
+        except Exception:
+            # POSTGRES: row is datetime.datetime
+            created_time = (
+                int(row["created_time"].timestamp()) if row["created_time"] else None
+            )
+            paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
+        return cls(
+            quote=row["quote"],
+            method=row["method"],
+            request=row["request"],
+            checking_id=row["checking_id"],
+            unit=row["unit"],
+            amount=row["amount"],
+            paid=row["paid"],
+            issued=row["issued"],
+            created_time=created_time,
+            paid_time=paid_time,
+            expiry=0,
+        )
 
 
 # ------- API -------
@@ -640,7 +693,7 @@ class MintKeyset:
     active: bool
     unit: Unit
     derivation_path: str
-    seed: Optional[str] = None
+    seed: str
     public_keys: Union[Dict[int, PublicKey], None] = None
     valid_from: Union[str, None] = None
     valid_to: Union[str, None] = None
@@ -652,17 +705,17 @@ class MintKeyset:
     def __init__(
         self,
         *,
+        seed: str,
+        derivation_path: str,
         id="",
         valid_from=None,
         valid_to=None,
         first_seen=None,
         active=None,
-        seed: Optional[str] = None,
-        derivation_path: Optional[str] = None,
         unit: Optional[str] = None,
         version: str = "0",
     ):
-        self.derivation_path = derivation_path or ""
+        self.derivation_path = derivation_path
         self.seed = seed
         self.id = id
         self.valid_from = valid_from
@@ -696,8 +749,10 @@ class MintKeyset:
             self.unit = Unit[unit]
 
         # generate keys from seed
-        if self.seed and self.derivation_path:
-            self.generate_keys()
+        assert self.seed, "seed not set"
+        assert self.derivation_path, "derivation path not set"
+
+        self.generate_keys()
 
         logger.debug(f"Keyset id: {self.id} ({self.unit.name})")
 

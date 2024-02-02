@@ -1,4 +1,3 @@
-import time
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
@@ -9,7 +8,13 @@ from ..core.base import (
     MintQuote,
     Proof,
 )
-from ..core.db import Connection, Database, table_with_schema
+from ..core.db import (
+    Connection,
+    Database,
+    table_with_schema,
+    timestamp_from_seconds,
+    timestamp_now,
+)
 
 
 class LedgerCrud(ABC):
@@ -27,6 +32,7 @@ class LedgerCrud(ABC):
         db: Database,
         id: str = "",
         derivation_path: str = "",
+        seed: str = "",
         conn: Optional[Connection] = None,
     ) -> List[MintKeyset]: ...
 
@@ -223,7 +229,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 e,
                 s,
                 id,
-                int(time.time()),
+                timestamp_now(db),
             ),
         )
 
@@ -274,7 +280,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 proof.secret,
                 proof.id,
                 proof.witness,
-                int(time.time()),
+                timestamp_now(db),
             ),
         )
 
@@ -307,7 +313,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 proof.amount,
                 str(proof.C),
                 str(proof.secret),
-                int(time.time()),
+                timestamp_now(db),
             ),
         )
 
@@ -348,8 +354,8 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.issued,
                 quote.paid,
-                quote.created_time,
-                quote.paid_time,
+                timestamp_from_seconds(db, quote.created_time),
+                timestamp_from_seconds(db, quote.paid_time),
             ),
         )
 
@@ -367,7 +373,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             (quote_id,),
         )
-        return MintQuote(**dict(row)) if row else None
+        return MintQuote.from_row(row) if row else None
 
     async def get_mint_quote_by_checking_id(
         self,
@@ -383,7 +389,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             (checking_id,),
         )
-        return MintQuote(**dict(row)) if row else None
+        return MintQuote.from_row(row) if row else None
 
     async def update_mint_quote(
         self,
@@ -398,7 +404,7 @@ class LedgerCrudSqlite(LedgerCrud):
             (
                 quote.issued,
                 quote.paid,
-                quote.paid_time,
+                timestamp_from_seconds(db, quote.paid_time),
                 quote.quote,
             ),
         )
@@ -442,8 +448,8 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.fee_reserve or 0,
                 quote.paid,
-                quote.created_time,
-                quote.paid_time,
+                timestamp_from_seconds(db, quote.created_time),
+                timestamp_from_seconds(db, quote.paid_time),
                 quote.fee_paid,
                 quote.proof,
             ),
@@ -481,7 +487,7 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         if row is None:
             return None
-        return MeltQuote(**dict(row)) if row else None
+        return MeltQuote.from_row(row) if row else None
 
     async def update_melt_quote(
         self,
@@ -496,7 +502,7 @@ class LedgerCrudSqlite(LedgerCrud):
             (
                 quote.paid,
                 quote.fee_paid,
-                quote.paid_time,
+                timestamp_from_seconds(db, quote.paid_time),
                 quote.proof,
                 quote.quote,
             ),
@@ -519,9 +525,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 keyset.id,
                 keyset.seed,
                 keyset.derivation_path,
-                keyset.valid_from or int(time.time()),
-                keyset.valid_to or int(time.time()),
-                keyset.first_seen or int(time.time()),
+                keyset.valid_from or timestamp_now(db),
+                keyset.valid_to or timestamp_now(db),
+                keyset.first_seen or timestamp_now(db),
                 True,
                 keyset.version,
                 keyset.unit.name,
@@ -545,6 +551,7 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         id: Optional[str] = None,
         derivation_path: Optional[str] = None,
+        seed: Optional[str] = None,
         unit: Optional[str] = None,
         active: Optional[bool] = None,
         conn: Optional[Connection] = None,
@@ -560,6 +567,9 @@ class LedgerCrudSqlite(LedgerCrud):
         if derivation_path is not None:
             clauses.append("derivation_path = ?")
             values.append(derivation_path)
+        if seed is not None:
+            clauses.append("seed = ?")
+            values.append(seed)
         if unit is not None:
             clauses.append("unit = ?")
             values.append(unit)
