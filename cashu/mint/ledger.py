@@ -52,10 +52,11 @@ from ..lightning.base import (
 )
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
+from .decrypt import LedgerDecrypt
 from .verification import LedgerVerification
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions):
+class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerDecrypt):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
     proofs_pending_lock: asyncio.Lock = (
@@ -68,10 +69,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         db: Database,
         seed: str,
         backends: Mapping[Method, Mapping[Unit, LightningBackend]],
+        seed_decryption_key: Optional[str] = None,
         derivation_path="",
         crud=LedgerCrudSqlite(),
     ):
-        self.master_key = seed
+
+        # decrypt seed if seed_decryption_key is set
+        self.master_key = (
+            LedgerDecrypt(seed_decryption_key).decrypt(seed)
+            if seed_decryption_key
+            else seed
+        )
         self.derivation_path = derivation_path
 
         self.db = db

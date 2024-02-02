@@ -49,6 +49,7 @@ class EnvSettings(CashuSettings):
 
 class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
+    mint_seed_decryption_key: str = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
     mint_listen_host: str = Field(default="127.0.0.1")
