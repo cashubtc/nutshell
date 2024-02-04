@@ -17,7 +17,7 @@ def find_env_file():
     if not os.path.isfile(env_file):
         env_file = os.path.join(str(Path.home()), ".cashu", ".env")
     if os.path.isfile(env_file):
-        env.read_env(env_file)
+        env.read_env(env_file, recurse=False, override=True)
     else:
         env_file = ""
     return env_file

@@ -357,3 +357,53 @@ async def m012_keysets_uniqueness_with_seed(db: Database):
             f" unit FROM {table_with_schema(db, 'keysets_old')}"
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'keysets_old')}")
+
+
+async def m013_keysets_add_encrypted_seed(db: Database):
+    async with db.connect() as conn:
+        # set keysets table unique constraint to id
+        # copy table keysets to keysets_old, create a new table keysets
+        # with the same columns but with a unique constraint on id
+        # and copy the data from keysets_old to keysets, then drop keysets_old
+        await conn.execute(
+            f"DROP TABLE IF EXISTS {table_with_schema(db, 'keysets_old')}"
+        )
+        await conn.execute(
+            f"CREATE TABLE {table_with_schema(db, 'keysets_old')} AS"
+            f" SELECT * FROM {table_with_schema(db, 'keysets')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'keysets')}")
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'keysets')} (
+                    id TEXT NOT NULL,
+                    derivation_path TEXT,
+                    seed TEXT,
+                    valid_from TIMESTAMP,
+                    valid_to TIMESTAMP,
+                    first_seen TIMESTAMP,
+                    active BOOL DEFAULT TRUE,
+                    version TEXT,
+                    unit TEXT,
+
+                    UNIQUE (id)
+
+                );
+            """)
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'keysets')} (id,"
+            " derivation_path, valid_from, valid_to, first_seen,"
+            " active, version, seed, unit) SELECT id, derivation_path,"
+            " valid_from, valid_to, first_seen, active, version, seed,"
+            f" unit FROM {table_with_schema(db, 'keysets_old')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'keysets_old')}")
+
+        # add columns encrypted_seed and seed_encryption_method to keysets
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN encrypted_seed"
+            " TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN"
+            " seed_encryption_method TEXT"
+        )

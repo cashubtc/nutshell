@@ -38,6 +38,7 @@ settings.mint_database = "./test_data/test_mint"
 settings.mint_derivation_path = "m/0'/0'/0'"
 settings.mint_derivation_path_list = []
 settings.mint_private_key = "TEST_PRIVATE_KEY"
+settings.mint_seed_decryption_key = ""
 settings.mint_max_balance = 0
 
 assert "test" in settings.cashu_dir

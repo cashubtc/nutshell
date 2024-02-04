@@ -1,5 +1,5 @@
 import base64
-from hashlib import md5
+from hashlib import sha256
 
 from Cryptodome import Random
 from Cryptodome.Cipher import AES
@@ -33,10 +33,10 @@ class AESCipher:
         # extended from https://gist.github.com/gsakkis/4546068
         assert len(salt) == 8, len(salt)
         data += salt
-        key = md5(data).digest()
+        key = sha256(data).digest()
         final_key = key
         while len(final_key) < output:
-            key = md5(key + data).digest()
+            key = sha256(key + data).digest()
             final_key += key
         return final_key[:output]
 
