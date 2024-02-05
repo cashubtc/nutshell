@@ -77,6 +77,10 @@ async def migrate(no_dry_run):
         "Decryption key:"
         f" {settings.mint_seed_decryption_key[0]}{'*'*10}{settings.mint_seed_decryption_key[-1]}"
     )
+    click.echo(
+        "Seed:"
+        f" {settings.mint_private_key[0]}{'*'*10}{settings.mint_private_key[-1]}"
+    )
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
         seed=settings.mint_private_key,
