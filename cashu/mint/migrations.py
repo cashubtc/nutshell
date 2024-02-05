@@ -3,17 +3,20 @@ from ..core.settings import settings
 
 
 async def m000_create_migrations_table(conn: Connection):
-    await conn.execute(f"""
+    await conn.execute(
+        f"""
     CREATE TABLE IF NOT EXISTS {table_with_schema(conn, 'dbversions')} (
         db TEXT PRIMARY KEY,
         version INT NOT NULL
     )
-    """)
+    """
+    )
 
 
 async def m001_initial(db: Database):
     async with db.connect() as conn:
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'promises')} (
                     amount {db.big_int} NOT NULL,
                     B_b TEXT NOT NULL,
@@ -22,9 +25,11 @@ async def m001_initial(db: Database):
                     UNIQUE (B_b)
 
                 );
-            """)
+            """
+        )
 
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_used')} (
                     amount {db.big_int} NOT NULL,
                     C TEXT NOT NULL,
@@ -33,9 +38,11 @@ async def m001_initial(db: Database):
                     UNIQUE (secret)
 
                 );
-            """)
+            """
+        )
 
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'invoices')} (
                     amount {db.big_int} NOT NULL,
                     pr TEXT NOT NULL,
@@ -45,37 +52,44 @@ async def m001_initial(db: Database):
                     UNIQUE (hash)
 
                 );
-            """)
+            """
+        )
 
 
 async def m002_add_balance_views(db: Database):
     async with db.connect() as conn:
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
             CREATE VIEW {table_with_schema(db, 'balance_issued')} AS
             SELECT COALESCE(SUM(s), 0) AS balance FROM (
                 SELECT SUM(amount) AS s
                 FROM {table_with_schema(db, 'promises')}
                 WHERE amount > 0
             ) AS balance_issued;
-        """)
+        """
+        )
 
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
             CREATE VIEW {table_with_schema(db, 'balance_redeemed')} AS
             SELECT COALESCE(SUM(s), 0) AS balance FROM (
                 SELECT SUM(amount) AS s
                 FROM {table_with_schema(db, 'proofs_used')}
                 WHERE amount > 0
             ) AS balance_redeemed;
-        """)
+        """
+        )
 
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
             CREATE VIEW {table_with_schema(db, 'balance')} AS
             SELECT s_issued - s_used FROM (
                 SELECT bi.balance AS s_issued, bu.balance AS s_used
                 FROM {table_with_schema(db, 'balance_issued')} bi
                 CROSS JOIN {table_with_schema(db, 'balance_redeemed')} bu
             ) AS balance;
-        """)
+        """
+        )
 
 
 async def m003_mint_keysets(db: Database):
@@ -83,7 +97,8 @@ async def m003_mint_keysets(db: Database):
     Stores mint keysets from different mints and epochs.
     """
     async with db.connect() as conn:
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'keysets')} (
                     id TEXT NOT NULL,
                     derivation_path TEXT,
@@ -95,8 +110,10 @@ async def m003_mint_keysets(db: Database):
                     UNIQUE (derivation_path)
 
                 );
-            """)
-        await conn.execute(f"""
+            """
+        )
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'mint_pubkeys')} (
                     id TEXT NOT NULL,
                     amount INTEGER NOT NULL,
@@ -105,7 +122,8 @@ async def m003_mint_keysets(db: Database):
                     UNIQUE (id, pubkey)
 
                 );
-            """)
+            """
+        )
 
 
 async def m004_keysets_add_version(db: Database):
@@ -123,7 +141,8 @@ async def m005_pending_proofs_table(db: Database) -> None:
     Store pending proofs.
     """
     async with db.connect() as conn:
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_pending')} (
                     amount INTEGER NOT NULL,
                     C TEXT NOT NULL,
@@ -132,7 +151,8 @@ async def m005_pending_proofs_table(db: Database) -> None:
                     UNIQUE (secret)
 
                 );
-            """)
+            """
+        )
 
 
 async def m006_invoices_add_payment_hash(db: Database):
@@ -271,7 +291,8 @@ async def m011_add_quote_tables(db: Database):
             f" '{settings.mint_private_key}', unit = 'sat'"
         )
 
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'mint_quotes')} (
                     quote TEXT NOT NULL,
                     method TEXT NOT NULL,
@@ -287,9 +308,11 @@ async def m011_add_quote_tables(db: Database):
                     UNIQUE (quote)
 
                 );
-            """)
+            """
+        )
 
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'melt_quotes')} (
                     quote TEXT NOT NULL,
                     method TEXT NOT NULL,
@@ -307,13 +330,14 @@ async def m011_add_quote_tables(db: Database):
                     UNIQUE (quote)
 
                 );
-            """)
+            """
+        )
 
         await conn.execute(
             f"INSERT INTO {table_with_schema(db, 'mint_quotes')} (quote, method,"
             " request, checking_id, unit, amount, paid, issued, created_time,"
-            " paid_time) SELECT id, 'bolt11', bolt11, payment_hash, 'sat', amount,"
-            f" False, issued, created, NULL FROM {table_with_schema(db, 'invoices')} "
+            " paid_time) SELECT id, 'bolt11', bolt11, COALESCE(payment_hash, 'None'), 'sat', amount,"
+            f" False, issued, COALESCE(created, '{timestamp_now(db)}'), NULL FROM {table_with_schema(db, 'invoices')} "
         )
 
         # drop table invoices
@@ -333,7 +357,8 @@ async def m012_keysets_uniqueness_with_seed(db: Database):
             f" SELECT * FROM {table_with_schema(db, 'keysets')}"
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'keysets')}")
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'keysets')} (
                     id TEXT NOT NULL,
                     derivation_path TEXT,
@@ -348,7 +373,8 @@ async def m012_keysets_uniqueness_with_seed(db: Database):
                     UNIQUE (seed, derivation_path)
 
                 );
-            """)
+            """
+        )
         await conn.execute(
             f"INSERT INTO {table_with_schema(db, 'keysets')} (id,"
             " derivation_path, valid_from, valid_to, first_seen,"
@@ -373,7 +399,8 @@ async def m013_keysets_add_encrypted_seed(db: Database):
             f" SELECT * FROM {table_with_schema(db, 'keysets')}"
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'keysets')}")
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'keysets')} (
                     id TEXT NOT NULL,
                     derivation_path TEXT,
@@ -388,7 +415,8 @@ async def m013_keysets_add_encrypted_seed(db: Database):
                     UNIQUE (id)
 
                 );
-            """)
+            """
+        )
         await conn.execute(
             f"INSERT INTO {table_with_schema(db, 'keysets')} (id,"
             " derivation_path, valid_from, valid_to, first_seen,"
