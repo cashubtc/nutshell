@@ -68,6 +68,7 @@ def decrypt(encrypted, key):
 @click.option("--no-dry-run", is_flag=True, help="Dry run.", default=False)
 async def migrate(no_dry_run):
     """Migrate the database to encrypted seeds."""
+    click.echo(f"Database: directory: {settings.mint_database}")
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
         seed=settings.mint_private_key,
