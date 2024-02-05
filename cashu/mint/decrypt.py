@@ -84,7 +84,6 @@ async def migrate(no_dry_run):
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
         seed=settings.mint_private_key,
-        seed_decryption_key=settings.mint_seed_decryption_key,
         derivation_path=settings.mint_derivation_path,
         backends={},
         crud=LedgerCrudSqlite(),
