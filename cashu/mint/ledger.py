@@ -156,14 +156,19 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
 
-    async def init_keysets(self, autosave=True) -> None:
+    async def init_keysets(
+        self, autosave: bool = True, duplicate_keysets: Optional[bool] = None
+    ) -> None:
         """Initializes all keysets of the mint from the db. Loads all past keysets from db
         and generate their keys. Then activate the current keyset set by self.derivation_path.
 
         Args:
             autosave (bool, optional): Whether the current keyset should be saved if it is
-            not in the database yet. Will be passed to `self.activate_keyset` where it is
-            generated from `self.derivation_path`. Defaults to True.
+                not in the database yet. Will be passed to `self.activate_keyset` where it is
+                generated from `self.derivation_path`. Defaults to True.
+            duplicate_keysets (bool, optional): Whether to duplicate new keysets and compute
+                their old keyset id, and duplicate old keysets and compute their new keyset id.
+                Defaults to False.
         """
         # load all past keysets from db, the keys will be generated at instantiation
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
@@ -190,17 +195,22 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         # we duplicate new keysets and compute their old keyset id, and
         # we duplicate old keysets and compute their new keyset id
-        for _, keyset in copy.copy(self.keysets).items():
-            keyset_copy = copy.copy(keyset)
-            assert keyset_copy.public_keys
-            if keyset.version_tuple >= (0, 15):
-                keyset_copy.id = derive_keyset_id_deprecated(keyset_copy.public_keys)
-            else:
-                keyset_copy.id = derive_keyset_id(keyset_copy.public_keys)
-            keyset_copy.duplicate_keyset_id = keyset.id
-            self.keysets[keyset_copy.id] = keyset_copy
-            # remember which keyset this keyset was duplicated from
-            logger.debug(f"Duplicated keyset id {keyset.id} -> {keyset_copy.id}")
+        if (
+            duplicate_keysets is None and settings.mint_duplicate_keysets
+        ) or duplicate_keysets:
+            for _, keyset in copy.copy(self.keysets).items():
+                keyset_copy = copy.copy(keyset)
+                assert keyset_copy.public_keys
+                if keyset.version_tuple >= (0, 15):
+                    keyset_copy.id = derive_keyset_id_deprecated(
+                        keyset_copy.public_keys
+                    )
+                else:
+                    keyset_copy.id = derive_keyset_id(keyset_copy.public_keys)
+                keyset_copy.duplicate_keyset_id = keyset.id
+                self.keysets[keyset_copy.id] = keyset_copy
+                # remember which keyset this keyset was duplicated from
+                logger.debug(f"Duplicated keyset id {keyset.id} -> {keyset_copy.id}")
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:

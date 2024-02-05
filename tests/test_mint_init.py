@@ -31,6 +31,36 @@ def assert_amt(proofs: List[Proof], expected: int):
 
 
 @pytest.mark.asyncio
+async def test_init_keysets_with_duplicates(ledger: Ledger):
+    ledger.keysets = {}
+    await ledger.init_keysets(duplicate_keysets=True)
+    assert len(ledger.keysets) == 2
+
+
+@pytest.mark.asyncio
+async def test_init_keysets_with_duplicates_via_settings(ledger: Ledger):
+    ledger.keysets = {}
+    settings.mint_duplicate_keysets = True
+    await ledger.init_keysets()
+    assert len(ledger.keysets) == 2
+
+
+@pytest.mark.asyncio
+async def test_init_keysets_without_duplicates(ledger: Ledger):
+    ledger.keysets = {}
+    await ledger.init_keysets(duplicate_keysets=False)
+    assert len(ledger.keysets) == 1
+
+
+@pytest.mark.asyncio
+async def test_init_keysets_without_duplicates_via_settings(ledger: Ledger):
+    ledger.keysets = {}
+    settings.mint_duplicate_keysets = False
+    await ledger.init_keysets()
+    assert len(ledger.keysets) == 1
+
+
+@pytest.mark.asyncio
 async def test_ledger_encrypt():
     aes = AESCipher(DECRYPTON_KEY)
     encrypted = aes.encrypt(SEED.encode())
