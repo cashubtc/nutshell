@@ -56,11 +56,37 @@ class MintSettings(CashuSettings):
     mint_listen_port: int = Field(default=3338)
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
-    mint_peg_out_only: bool = Field(default=False)
-    mint_max_peg_in: int = Field(default=None)
-    mint_max_peg_out: int = Field(default=None)
-    mint_max_request_length: int = Field(default=1000)
-    mint_max_balance: int = Field(default=None)
+    mint_peg_out_only: bool = Field(
+        default=False,
+        title="Peg-out only",
+        description="Mint allows no mint operations.",
+    )
+    mint_max_peg_in: int = Field(
+        default=None,
+        title="Maximum peg-in",
+        description="Maximum amount for a mint operation.",
+    )
+    mint_max_peg_out: int = Field(
+        default=None,
+        title="Maximum peg-out",
+        description="Maximum amount for a melt operation.",
+    )
+    mint_max_request_length: int = Field(
+        default=1000,
+        title="Maximum request length",
+        description="Maximum length of REST API request arrays.",
+    )
+    mint_max_balance: int = Field(
+        default=None, title="Maximum mint balance", description="Maximum mint balance."
+    )
+    mint_duplicate_keysets: bool = Field(
+        default=True,
+        title="Duplicate keysets",
+        description=(
+            "Whether to duplicate keysets for backwards compatibility before v1 API"
+            " (Nutshell 0.15.0)."
+        ),
+    )
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
@@ -85,7 +111,7 @@ class MintInformation(CashuSettings):
 
 
 class WalletSettings(CashuSettings):
-    tor: bool = Field(default=True)
+    tor: bool = Field(default=False)
     socks_host: str = Field(default=None)  # deprecated
     socks_port: int = Field(default=9050)  # deprecated
     socks_proxy: str = Field(default=None)
