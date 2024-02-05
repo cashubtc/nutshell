@@ -177,17 +177,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         for k in tmp_keysets:
             self.keysets[k.id] = k
 
+        logger.info(f"Loaded {len(self.keysets)} keysets from database.")
+
         # activate the current keyset set by self.derivation_path
         if self.derivation_path:
             self.keyset = await self.activate_keyset(
                 derivation_path=self.derivation_path, autosave=autosave
             )
             logger.info(f"Current keyset: {self.keyset.id}")
-
-        logger.info(
-            f"Loaded {len(self.keysets)} keysets:"
-            f" {[f'{k} ({v.unit.name})' for k, v in self.keysets.items()]}"
-        )
 
         # check that we have a least one active keyset
         assert any([k.active for k in self.keysets.values()]), "No active keyset found."
