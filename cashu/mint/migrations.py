@@ -312,8 +312,9 @@ async def m011_add_quote_tables(db: Database):
         await conn.execute(
             f"INSERT INTO {table_with_schema(db, 'mint_quotes')} (quote, method,"
             " request, checking_id, unit, amount, paid, issued, created_time,"
-            " paid_time) SELECT id, 'bolt11', bolt11, COALESCE(payment_hash, 'None'), 'sat', amount,"
-            f" False, issued, COALESCE(created, '{timestamp_now(db)}'), NULL FROM {table_with_schema(db, 'invoices')} "
+            " paid_time) SELECT id, 'bolt11', bolt11, COALESCE(payment_hash, 'None'),"
+            f" 'sat', amount, False, issued, COALESCE(created, '{timestamp_now(db)}'),"
+            f" NULL FROM {table_with_schema(db, 'invoices')} "
         )
 
         # drop table invoices
