@@ -1,4 +1,4 @@
-from ..core.db import SQLITE, Connection, Database, table_with_schema, timestamp_now
+from ..core.db import Connection, Database, table_with_schema, timestamp_now
 from ..core.settings import settings
 
 
@@ -222,34 +222,18 @@ async def m010_add_index_to_proofs_used(db: Database):
 
 
 async def m011_add_quote_tables(db: Database):
-    async def get_columns(db: Database, conn: Connection, table: str):
-        if db.type == SQLITE:
-            query = f"PRAGMA table_info({table})"
-        else:
-            query = (
-                "SELECT column_name FROM information_schema.columns WHERE table_name ="
-                f" '{table}'"
-            )
-        res = await conn.execute(query)
-        if db.type == SQLITE:
-            return [r["name"] async for r in res]
-        else:
-            return [r["column_name"] async for r in res]
-
     async with db.connect() as conn:
         # add column "created" to tables invoices, promises, proofs_used, proofs_pending
         tables = ["invoices", "promises", "proofs_used", "proofs_pending"]
         for table in tables:
-            columns = await get_columns(db, conn, table)
-            if "created" not in columns:
-                await conn.execute(
-                    f"ALTER TABLE {table_with_schema(db, table)} ADD COLUMN created"
-                    " TIMESTAMP"
-                )
-                await conn.execute(
-                    f"UPDATE {table_with_schema(db, table)} SET created ="
-                    f" '{timestamp_now(db)}'"
-                )
+            await conn.execute(
+                f"ALTER TABLE {table_with_schema(db, table)} ADD COLUMN created"
+                " TIMESTAMP"
+            )
+            await conn.execute(
+                f"UPDATE {table_with_schema(db, table)} SET created ="
+                f" '{timestamp_now(db)}'"
+            )
 
         # add column "witness" to table proofs_used
         await conn.execute(
