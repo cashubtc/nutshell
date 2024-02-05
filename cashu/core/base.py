@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from .crypto.aes import AESCipher
 from .crypto.keys import (
     derive_keys,
     derive_keys_sha256,
@@ -693,36 +694,51 @@ class MintKeyset:
     active: bool
     unit: Unit
     derivation_path: str
-    seed: str
-    public_keys: Union[Dict[int, PublicKey], None] = None
-    valid_from: Union[str, None] = None
-    valid_to: Union[str, None] = None
-    first_seen: Union[str, None] = None
-    version: Union[str, None] = None
+    seed: Optional[str] = None
+    encrypted_seed: Optional[str] = None
+    seed_encryption_method: Optional[str] = None
+    public_keys: Optional[Dict[int, PublicKey]] = None
+    valid_from: Optional[str] = None
+    valid_to: Optional[str] = None
+    first_seen: Optional[str] = None
+    version: Optional[str] = None
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
     def __init__(
         self,
         *,
-        seed: str,
         derivation_path: str,
-        id="",
-        valid_from=None,
-        valid_to=None,
-        first_seen=None,
-        active=None,
+        seed: Optional[str] = None,
+        encrypted_seed: Optional[str] = None,
+        seed_encryption_method: Optional[str] = None,
+        valid_from: Optional[str] = None,
+        valid_to: Optional[str] = None,
+        first_seen: Optional[str] = None,
+        active: Optional[bool] = None,
         unit: Optional[str] = None,
-        version: str = "0",
+        version: Optional[str] = None,
+        id: str = "",
     ):
         self.derivation_path = derivation_path
-        self.seed = seed
+
+        if encrypted_seed and not settings.mint_seed_decryption_key:
+            raise Exception("MINT_SEED_DECRYPTION_KEY not set, but seed is encrypted.")
+        if settings.mint_seed_decryption_key and encrypted_seed:
+            self.seed = AESCipher(settings.mint_seed_decryption_key).decrypt(
+                encrypted_seed
+            )
+        else:
+            self.seed = seed
+
+        assert self.seed, "seed not set"
+
         self.id = id
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = bool(active) if active is not None else False
-        self.version = version
+        self.version = version or settings.version
 
         self.version_tuple = tuple(
             [int(i) for i in self.version.split(".")] if self.version else []
@@ -730,7 +746,7 @@ class MintKeyset:
 
         # infer unit from derivation path
         if not unit:
-            logger.warning(
+            logger.trace(
                 f"Unit for keyset {self.derivation_path} not set – attempting to parse"
                 " from derivation path"
             )
@@ -738,9 +754,9 @@ class MintKeyset:
                 self.unit = Unit(
                     int(self.derivation_path.split("/")[2].replace("'", ""))
                 )
-                logger.warning(f"Inferred unit: {self.unit.name}")
+                logger.trace(f"Inferred unit: {self.unit.name}")
             except Exception:
-                logger.warning(
+                logger.trace(
                     "Could not infer unit from derivation path"
                     f" {self.derivation_path} – assuming 'sat'"
                 )
@@ -754,7 +770,7 @@ class MintKeyset:
 
         self.generate_keys()
 
-        logger.debug(f"Keyset id: {self.id} ({self.unit.name})")
+        logger.trace(f"Loaded keyset id: {self.id} ({self.unit.name})")
 
     @property
     def public_keys_hex(self) -> Dict[int, str]:
@@ -775,14 +791,14 @@ class MintKeyset:
                 self.seed, self.derivation_path
             )
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            logger.warning(
+            logger.trace(
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
             self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
             self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
-            logger.warning(
+            logger.trace(
                 f"WARNING: Using non-bip32 derivation for keyset {self.id} (backwards"
                 " compatibility < 0.15)"
             )

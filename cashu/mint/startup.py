@@ -16,6 +16,18 @@ from ..mint.ledger import Ledger
 
 logger.debug("Enviroment Settings:")
 for key, value in settings.dict().items():
+    if key in [
+        "mint_private_key",
+        "mint_seed_decryption_key",
+        "nostr_private_key",
+        "mint_lnbits_key",
+        "mint_strike_key",
+        "mint_lnd_rest_macaroon",
+        "mint_lnd_rest_admin_macaroon",
+        "mint_lnd_rest_invoice_macaroon",
+        "mint_corelightning_rest_macaroon",
+    ]:
+        value = "********" if value is not None else None
     logger.debug(f"{key}: {value}")
 
 wallets_module = importlib.import_module("cashu.lightning")
@@ -39,6 +51,7 @@ backends = {
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
     seed=settings.mint_private_key,
+    seed_decryption_key=settings.mint_seed_decryption_key,
     derivation_path=settings.mint_derivation_path,
     backends=backends,
     crud=LedgerCrudSqlite(),

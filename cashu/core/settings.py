@@ -17,7 +17,7 @@ def find_env_file():
     if not os.path.isfile(env_file):
         env_file = os.path.join(str(Path.home()), ".cashu", ".env")
     if os.path.isfile(env_file):
-        env.read_env(env_file)
+        env.read_env(env_file, recurse=False, override=True)
     else:
         env_file = ""
     return env_file
@@ -49,6 +49,7 @@ class EnvSettings(CashuSettings):
 
 class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
+    mint_seed_decryption_key: str = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
     mint_listen_host: str = Field(default="127.0.0.1")

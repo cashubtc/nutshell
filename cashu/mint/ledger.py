@@ -25,6 +25,7 @@ from ..core.base import (
     Unit,
 )
 from ..core.crypto import b_dhke
+from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
     derive_keyset_id,
     derive_keyset_id_deprecated,
@@ -68,10 +69,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         db: Database,
         seed: str,
         backends: Mapping[Method, Mapping[Unit, LightningBackend]],
+        seed_decryption_key: Optional[str] = None,
         derivation_path="",
         crud=LedgerCrudSqlite(),
     ):
-        self.master_key = seed
+        assert seed, "seed not set"
+
+        # decrypt seed if seed_decryption_key is set
+        self.master_key = (
+            AESCipher(seed_decryption_key).decrypt(seed)
+            if seed_decryption_key
+            else seed
+        )
         self.derivation_path = derivation_path
 
         self.db = db
@@ -101,16 +110,24 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         assert derivation_path, "derivation path not set"
         seed = seed or self.master_key
-        logger.debug(f"Activating keyset for derivation path {derivation_path}")
+        tmp_keyset_local = MintKeyset(
+            seed=seed,
+            derivation_path=derivation_path,
+            version=version or settings.version,
+        )
+        logger.debug(
+            f"Activating keyset for derivation path {derivation_path} with id"
+            f" {tmp_keyset_local.id}."
+        )
         # load the keyset from db
         logger.trace(f"crud: loading keyset for {derivation_path}")
-        tmp_keyset_local: List[MintKeyset] = await self.crud.get_keyset(
-            derivation_path=derivation_path, seed=seed, db=self.db
+        tmp_keysets_local: List[MintKeyset] = await self.crud.get_keyset(
+            id=tmp_keyset_local.id, db=self.db
         )
-        logger.trace(f"crud: loaded {len(tmp_keyset_local)} keysets")
-        if tmp_keyset_local:
+        logger.trace(f"crud: loaded {len(tmp_keysets_local)} keysets")
+        if tmp_keysets_local:
             # we have a keyset with this derivation path in the database
-            keyset = tmp_keyset_local[0]
+            keyset = tmp_keysets_local[0]
         else:
             # no keyset for this derivation path yet
             # we create a new keyset (keys will be generated at instantiation)
@@ -141,7 +158,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     async def init_keysets(self, autosave=True) -> None:
         """Initializes all keysets of the mint from the db. Loads all past keysets from db
-        and generate their keys. Then load the current keyset.
+        and generate their keys. Then activate the current keyset set by self.derivation_path.
 
         Args:
             autosave (bool, optional): Whether the current keyset should be saved if it is
