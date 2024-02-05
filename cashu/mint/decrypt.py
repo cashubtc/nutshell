@@ -69,14 +69,6 @@ def decrypt(encrypted, key):
 async def migrate(no_dry_run):
     """Migrate the database to encrypted seeds."""
     click.echo(f"Database: directory: {settings.mint_database}")
-    ledger = Ledger(
-        db=Database("mint", settings.mint_database),
-        seed=settings.mint_private_key,
-        seed_decryption_key=settings.mint_seed_decryption_key,
-        derivation_path=settings.mint_derivation_path,
-        backends={},
-        crud=LedgerCrudSqlite(),
-    )
     assert settings.mint_seed_decryption_key, "MINT_SEED_DECRYPTION_KEY not set."
     assert (
         len(settings.mint_seed_decryption_key) > 12
@@ -85,7 +77,14 @@ async def migrate(no_dry_run):
         "Decryption key:"
         f" {settings.mint_seed_decryption_key[0]}{'*'*10}{settings.mint_seed_decryption_key[-1]}"
     )
-
+    ledger = Ledger(
+        db=Database("mint", settings.mint_database),
+        seed=settings.mint_private_key,
+        seed_decryption_key=settings.mint_seed_decryption_key,
+        derivation_path=settings.mint_derivation_path,
+        backends={},
+        crud=LedgerCrudSqlite(),
+    )
     aes = AESCipher(settings.mint_seed_decryption_key)
 
     click.echo("Making sure that db is migrated to latest version first.")
