@@ -214,7 +214,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
 
     def _verify_no_duplicate_outputs(self, outputs: List[BlindedMessage]) -> bool:
         B_s = [od.B_ for od in outputs]
-        if len(B_s) != len(list(set(B_s))):
+        if len(B_s) != len(set(B_s)):
             return False
         return True
 

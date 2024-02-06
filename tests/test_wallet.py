@@ -1,3 +1,4 @@
+import asyncio
 import copy
 from typing import List, Union
 
@@ -428,4 +429,67 @@ async def test_load_mint_keys_specific_keyset(wallet1: Wallet):
     await assert_err(
         wallet1._load_mint_keys(keyset_id="nonexistent"),
         KeysetNotFoundError(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_split_race_condition(wallet1: Wallet, wallet2: Wallet):
+    invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id)
+    assert wallet1.balance == 64
+
+    async def split():
+        await wallet1.split(wallet1.proofs, 20)
+
+    # if the lock fails, this throws a promises.B_b UNIQUENESS constraint error
+    await assert_err(
+        asyncio.gather(split(), split()),
+        "proofs already pending.",
+    )
+
+    # if the lock fails, this throws a proofs_used.secret UNIQUENESS constraint error
+    await assert_err(
+        asyncio.gather(
+            wallet1.split(wallet1.proofs, 20), wallet2.split(wallet1.proofs, 20)
+        ),
+        "proofs already pending.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_mint_race_condition(wallet1: Wallet, wallet2: Wallet):
+    invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+
+    async def mint():
+        await wallet1.mint(64, id=invoice.id)
+
+    # if the lock fails, this throws a promises.B_b UNIQUENESS constraint error
+    await assert_err(
+        asyncio.gather(
+            wallet1.mint(64, id=invoice.id), wallet2.mint(64, id=invoice.id)
+        ),
+        "quote already pending.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_melt_race_condition(wallet1: Wallet, wallet2: Wallet):
+    invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id)
+    assert wallet1.balance == 64
+
+    invoice2 = await wallet2.request_mint(4)
+    quote = await wallet1.get_pay_amount_with_fees(invoice2.bolt11)
+
+    # await wallet1.melt(quote.quote, wallet1.proofs, outputs=[])
+    async def melt():
+        await wallet1.melt(quote.quote, wallet1.proofs, outputs=[])
+
+    # if the lock fails, this throws a proofs_used.secret UNIQUENESS constraint error
+    await assert_err(
+        asyncio.gather(melt(), melt()),
+        "proofs already pending.",
     )

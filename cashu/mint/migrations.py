@@ -392,3 +392,19 @@ async def m013_keysets_add_encrypted_seed(db: Database):
             f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN"
             " seed_encryption_method TEXT"
         )
+
+
+async def m014_pending_quotes_table(db: Database) -> None:
+    """
+    Store pending quotes.
+    """
+    async with db.connect() as conn:
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'quotes_pending')} (
+                    quote TEXT NOT NULL,
+
+                    UNIQUE (quote)
+
+                );
+            """)
+
