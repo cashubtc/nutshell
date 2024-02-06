@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from .crypto.aes import AESCipher
 from .crypto.keys import (
     derive_keys,
     derive_keys_sha256,
@@ -218,10 +219,36 @@ class MeltQuote(BaseModel):
     amount: int
     fee_reserve: int
     paid: bool
-    created_time: int = 0
-    paid_time: int = 0
+    created_time: Union[int, None] = None
+    paid_time: Union[int, None] = None
     fee_paid: int = 0
     proof: str = ""
+
+    @classmethod
+    def from_row(cls, row: Row):
+        try:
+            created_time = int(row["created_time"]) if row["created_time"] else None
+            paid_time = int(row["paid_time"]) if row["paid_time"] else None
+        except Exception:
+            created_time = (
+                int(row["created_time"].timestamp()) if row["created_time"] else None
+            )
+            paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
+
+        return cls(
+            quote=row["quote"],
+            method=row["method"],
+            request=row["request"],
+            checking_id=row["checking_id"],
+            unit=row["unit"],
+            amount=row["amount"],
+            fee_reserve=row["fee_reserve"],
+            paid=row["paid"],
+            created_time=created_time,
+            paid_time=paid_time,
+            fee_paid=row["fee_paid"],
+            proof=row["proof"],
+        )
 
 
 class MintQuote(BaseModel):
@@ -233,9 +260,36 @@ class MintQuote(BaseModel):
     amount: int
     paid: bool
     issued: bool
-    created_time: int = 0
-    paid_time: int = 0
+    created_time: Union[int, None] = None
+    paid_time: Union[int, None] = None
     expiry: int = 0
+
+    @classmethod
+    def from_row(cls, row: Row):
+
+        try:
+            #  SQLITE: row is timestamp (string)
+            created_time = int(row["created_time"]) if row["created_time"] else None
+            paid_time = int(row["paid_time"]) if row["paid_time"] else None
+        except Exception:
+            # POSTGRES: row is datetime.datetime
+            created_time = (
+                int(row["created_time"].timestamp()) if row["created_time"] else None
+            )
+            paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
+        return cls(
+            quote=row["quote"],
+            method=row["method"],
+            request=row["request"],
+            checking_id=row["checking_id"],
+            unit=row["unit"],
+            amount=row["amount"],
+            paid=row["paid"],
+            issued=row["issued"],
+            created_time=created_time,
+            paid_time=paid_time,
+            expiry=0,
+        )
 
 
 # ------- API -------
@@ -365,7 +419,7 @@ class PostMeltRequest(BaseModel):
     quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
     inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     outputs: Union[List[BlindedMessage], None] = Field(
-        ..., max_items=settings.mint_max_request_length
+        None, max_items=settings.mint_max_request_length
     )
 
 
@@ -379,7 +433,7 @@ class PostMeltRequest_deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     pr: str = Field(..., max_length=settings.mint_max_request_length)
     outputs: Union[List[BlindedMessage], None] = Field(
-        ..., max_items=settings.mint_max_request_length
+        None, max_items=settings.mint_max_request_length
     )
 
 
@@ -641,35 +695,50 @@ class MintKeyset:
     unit: Unit
     derivation_path: str
     seed: Optional[str] = None
-    public_keys: Union[Dict[int, PublicKey], None] = None
-    valid_from: Union[str, None] = None
-    valid_to: Union[str, None] = None
-    first_seen: Union[str, None] = None
-    version: Union[str, None] = None
+    encrypted_seed: Optional[str] = None
+    seed_encryption_method: Optional[str] = None
+    public_keys: Optional[Dict[int, PublicKey]] = None
+    valid_from: Optional[str] = None
+    valid_to: Optional[str] = None
+    first_seen: Optional[str] = None
+    version: Optional[str] = None
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
     def __init__(
         self,
         *,
-        id="",
-        valid_from=None,
-        valid_to=None,
-        first_seen=None,
-        active=None,
+        derivation_path: str,
         seed: Optional[str] = None,
-        derivation_path: Optional[str] = None,
+        encrypted_seed: Optional[str] = None,
+        seed_encryption_method: Optional[str] = None,
+        valid_from: Optional[str] = None,
+        valid_to: Optional[str] = None,
+        first_seen: Optional[str] = None,
+        active: Optional[bool] = None,
         unit: Optional[str] = None,
-        version: str = "0",
+        version: Optional[str] = None,
+        id: str = "",
     ):
-        self.derivation_path = derivation_path or ""
-        self.seed = seed
+        self.derivation_path = derivation_path
+
+        if encrypted_seed and not settings.mint_seed_decryption_key:
+            raise Exception("MINT_SEED_DECRYPTION_KEY not set, but seed is encrypted.")
+        if settings.mint_seed_decryption_key and encrypted_seed:
+            self.seed = AESCipher(settings.mint_seed_decryption_key).decrypt(
+                encrypted_seed
+            )
+        else:
+            self.seed = seed
+
+        assert self.seed, "seed not set"
+
         self.id = id
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = bool(active) if active is not None else False
-        self.version = version
+        self.version = version or settings.version
 
         self.version_tuple = tuple(
             [int(i) for i in self.version.split(".")] if self.version else []
@@ -677,7 +746,7 @@ class MintKeyset:
 
         # infer unit from derivation path
         if not unit:
-            logger.warning(
+            logger.trace(
                 f"Unit for keyset {self.derivation_path} not set – attempting to parse"
                 " from derivation path"
             )
@@ -685,9 +754,9 @@ class MintKeyset:
                 self.unit = Unit(
                     int(self.derivation_path.split("/")[2].replace("'", ""))
                 )
-                logger.warning(f"Inferred unit: {self.unit.name}")
+                logger.trace(f"Inferred unit: {self.unit.name}")
             except Exception:
-                logger.warning(
+                logger.trace(
                     "Could not infer unit from derivation path"
                     f" {self.derivation_path} – assuming 'sat'"
                 )
@@ -696,10 +765,12 @@ class MintKeyset:
             self.unit = Unit[unit]
 
         # generate keys from seed
-        if self.seed and self.derivation_path:
-            self.generate_keys()
+        assert self.seed, "seed not set"
+        assert self.derivation_path, "derivation path not set"
 
-        logger.debug(f"Keyset id: {self.id} ({self.unit.name})")
+        self.generate_keys()
+
+        logger.trace(f"Loaded keyset id: {self.id} ({self.unit.name})")
 
     @property
     def public_keys_hex(self) -> Dict[int, str]:
@@ -720,14 +791,14 @@ class MintKeyset:
                 self.seed, self.derivation_path
             )
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            logger.warning(
+            logger.trace(
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
             self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
             self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
-            logger.warning(
+            logger.trace(
                 f"WARNING: Using non-bip32 derivation for keyset {self.id} (backwards"
                 " compatibility < 0.15)"
             )

@@ -31,7 +31,8 @@ class Compat:
         if self.type in {POSTGRES, COCKROACH}:
             return "now()"
         elif self.type == SQLITE:
-            return "(strftime('%s', 'now'))"
+            # return "(strftime('%s', 'now'))"
+            return str(int(time.time()))
         return "<nothing>"
 
     @property
@@ -211,6 +212,26 @@ def lock_table(db: Database, table: str) -> str:
     elif db.type == SQLITE:
         return "BEGIN EXCLUSIVE TRANSACTION;"
     return "<nothing>"
+
+
+def timestamp_from_seconds(
+    db: Database, seconds: Union[int, float, None]
+) -> Union[str, None]:
+    if seconds is None:
+        return None
+    seconds = int(seconds)
+    if db.type in {POSTGRES, COCKROACH}:
+        return datetime.datetime.fromtimestamp(seconds).strftime("%Y-%m-%d %H:%M:%S")
+    elif db.type == SQLITE:
+        return str(seconds)
+    return None
+
+
+def timestamp_now(db: Database) -> str:
+    timestamp = timestamp_from_seconds(db, time.time())
+    if timestamp is None:
+        raise Exception("Timestamp is None")
+    return timestamp
 
 
 @asynccontextmanager

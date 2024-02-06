@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter
 from loguru import logger
 
 from ..core.base import (
@@ -80,8 +80,7 @@ async def info() -> GetInfoResponse:
     name="Mint public keys",
     summary="Get the public keys of the newest mint keyset",
     response_description=(
-        "A dictionary of all supported token values of the mint and their associated"
-        " public key of the current keyset."
+        "All supported token values their associated public keys for all active keysets"
     ),
     response_model=KeysResponse,
 )
@@ -107,12 +106,12 @@ async def keys():
     name="Keyset public keys",
     summary="Public keys of a specific keyset",
     response_description=(
-        "A dictionary of all supported token values of the mint and their associated"
+        "All supported token values of the mint and their associated"
         " public key for a specific keyset."
     ),
     response_model=KeysResponse,
 )
-async def keyset_keys(keyset_id: str, request: Request) -> KeysResponse:
+async def keyset_keys(keyset_id: str) -> KeysResponse:
     """
     Get the public keys of the mint from a specific keyset id.
     """
@@ -127,7 +126,7 @@ async def keyset_keys(keyset_id: str, request: Request) -> KeysResponse:
 
     keyset = ledger.keysets.get(keyset_id)
     if keyset is None:
-        raise CashuError(code=0, detail="Keyset not found.")
+        raise CashuError(code=0, detail="keyset not found")
 
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,
@@ -172,12 +171,6 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
     Call `POST /v1/mint/bolt11` after paying the invoice.
     """
     logger.trace(f"> POST /v1/mint/quote/bolt11: payload={payload}")
-    amount = payload.amount
-    if amount > 21_000_000 * 100_000_000 or amount <= 0:
-        raise CashuError(code=0, detail="Amount must be a valid amount of sat.")
-    if settings.mint_peg_out_only:
-        raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
-
     quote = await ledger.mint_quote(payload)
     resp = PostMintQuoteResponse(
         request=quote.request,
@@ -190,7 +183,7 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
 
 
 @router.get(
-    "/v1/mint/quote/{quote}",
+    "/v1/mint/quote/bolt11/{quote}",
     summary="Get mint quote",
     response_model=PostMintQuoteResponse,
     response_description="Get an existing mint quote to check its status.",
@@ -199,7 +192,7 @@ async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
     """
     Get mint quote state.
     """
-    logger.trace(f"> POST /v1/mint/quote/{quote}")
+    logger.trace(f"> GET /v1/mint/quote/bolt11/{quote}")
     mint_quote = await ledger.get_mint_quote(quote)
     resp = PostMintQuoteResponse(
         quote=mint_quote.quote,
@@ -207,14 +200,14 @@ async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
         paid=mint_quote.paid,
         expiry=mint_quote.expiry,
     )
-    logger.trace(f"< POST /v1/mint/quote/{quote}")
+    logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
 
 
 @router.post(
     "/v1/mint/bolt11",
-    name="Mint tokens",
-    summary="Mint tokens in exchange for a Bitcoin payment that the user has made",
+    name="Mint tokens with a Lightning payment",
+    summary="Mint tokens by paying a bolt11 Lightning invoice.",
     response_model=PostMintResponse,
     response_description=(
         "A list of blinded signatures that can be used to create proofs."
@@ -253,7 +246,7 @@ async def get_melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse
 
 
 @router.get(
-    "/v1/melt/quote/{quote}",
+    "/v1/melt/quote/bolt11/{quote}",
     summary="Get melt quote",
     response_model=PostMeltQuoteResponse,
     response_description="Get an existing melt quote to check its status.",
@@ -262,7 +255,7 @@ async def melt_quote(quote: str) -> PostMeltQuoteResponse:
     """
     Get melt quote state.
     """
-    logger.trace(f"> POST /v1/melt/quote/{quote}")
+    logger.trace(f"> GET /v1/melt/quote/bolt11/{quote}")
     melt_quote = await ledger.get_melt_quote(quote)
     resp = PostMeltQuoteResponse(
         quote=melt_quote.quote,
@@ -270,7 +263,7 @@ async def melt_quote(quote: str) -> PostMeltQuoteResponse:
         fee_reserve=melt_quote.fee_reserve,
         paid=melt_quote.paid,
     )
-    logger.trace(f"< POST /v1/melt/quote/{quote}")
+    logger.trace(f"< GET /v1/melt/quote/bolt11/{quote}")
     return resp
 
 
@@ -311,7 +304,7 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
         "An array of blinded signatures that can be used to create proofs."
     ),
 )
-async def split(
+async def swap(
     payload: PostSplitRequest,
 ) -> PostSplitResponse:
     """
