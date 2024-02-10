@@ -233,7 +233,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        self.spent_proofs.update({p.secret: p for p in proofs})
+        self.spent_proofs.update({p.Y: p for p in proofs})
         async with get_db_connection(self.db, conn) as conn:
             # store in db
             for p in proofs:
@@ -873,7 +873,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.debug("Loading used proofs into memory")
         spent_proofs_list = await self.crud.get_spent_proofs(db=self.db) or []
         logger.debug(f"Loaded {len(spent_proofs_list)} used proofs")
-        self.spent_proofs = {p.secret: p for p in spent_proofs_list}
+        self.spent_proofs = {p.Y: p for p in spent_proofs_list}
 
     async def check_proofs_state(self, secrets: List[str]) -> List[ProofState]:
         """Checks if provided proofs are spend or are pending.

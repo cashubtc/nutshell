@@ -154,14 +154,18 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         if settings.mint_cache_secrets:
             # check used secrets in memory
             for secret in secrets:
-                if secret in self.spent_proofs:
-                    proofs_spent.append(self.spent_proofs[secret])
+                Y: str = b_dhke.hash_to_curve(secret.encode("utf-8")).serialize().hex()
+                if Y in self.spent_proofs:
+                    proofs_spent.append(self.spent_proofs[Y])
         else:
             # check used secrets in database
             async with self.db.connect() as conn:
                 for secret in secrets:
+                    Ys: str = (
+                        b_dhke.hash_to_curve(secret.encode("utf-8")).serialize().hex()
+                    )
                     spent_proof = await self.crud.get_proof_used(
-                        db=self.db, secret=secret, conn=conn
+                        db=self.db, Y=Ys, conn=conn
                     )
                     if spent_proof:
                         proofs_spent.append(spent_proof)
