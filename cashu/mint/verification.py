@@ -143,7 +143,9 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
 
     async def _get_proofs_pending(self, secrets: List[str]) -> Dict[str, Proof]:
         """Returns only those proofs that are pending."""
-        all_proofs_pending = await self.crud.get_proofs_pending(db=self.db)
+        all_proofs_pending = await self.crud.get_proofs_pending(
+            proofs=[Proof(secret=s) for s in secrets], db=self.db
+        )
         proofs_pending = list(filter(lambda p: p.secret in secrets, all_proofs_pending))
         proofs_pending_dict = {p.secret: p for p in proofs_pending}
         return proofs_pending_dict

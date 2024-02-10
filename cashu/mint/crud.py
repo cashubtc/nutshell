@@ -65,6 +65,7 @@ class LedgerCrud(ABC):
     async def get_proofs_pending(
         self,
         *,
+        proofs: List[Proof],
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[Proof]: ...
@@ -288,12 +289,17 @@ class LedgerCrudSqlite(LedgerCrud):
     async def get_proofs_pending(
         self,
         *,
+        proofs: List[Proof],
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
-        rows = await (conn or db).fetchall(f"""
+        rows = await (conn or db).fetchall(
+            f"""
             SELECT * from {table_with_schema(db, 'proofs_pending')}
-            """)
+            WHERE Y IN ({','.join(['?']*len(proofs))})
+            """,
+            tuple(proof.Y for proof in proofs),
+        )
         return [Proof(**r) for r in rows]
 
     async def set_proof_pending(
@@ -307,14 +313,14 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'proofs_pending')}
-            (amount, C, secret, created)
-            VALUES (?, ?, ?, ?)
+            (amount, C, secret, Y, created)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 proof.amount,
                 proof.C,
                 proof.secret,
-                # proof.Y,
+                proof.Y,
                 timestamp_now(db),
             ),
         )

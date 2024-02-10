@@ -396,19 +396,24 @@ async def m013_keysets_add_encrypted_seed(db: Database):
         )
 
 
-async def m015_proofs_used_add_Y_column(db: Database):
-    # get all proofs_used from the database and compute Y for each of them
+async def m014_proofs_add_Y_column(db: Database):
+    # get all proofs_used and proofs_pending from the database and compute Y for each of them
     async with db.connect() as conn:
         rows = await conn.fetchall(
             f"SELECT * FROM {table_with_schema(db, 'proofs_used')}"
         )
         # Proof() will compute Y from secret upon initialization
-        proofs = [Proof(**r) for r in rows]
+        proofs_used = [Proof(**r) for r in rows]
+
+        rows = await conn.fetchall(
+            f"SELECT * FROM {table_with_schema(db, 'proofs_pending')}"
+        )
+        proofs_pending = [Proof(**r) for r in rows]
     async with db.connect() as conn:
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN Y TEXT"
         )
-        for proof in proofs:
+        for proof in proofs_used:
             await conn.execute(
                 f"UPDATE {table_with_schema(db, 'proofs_used')} SET Y = '{proof.Y}'"
                 f" WHERE secret = '{proof.secret}'"
@@ -444,3 +449,47 @@ async def m015_proofs_used_add_Y_column(db: Database):
             f" created, witness FROM {table_with_schema(db, 'proofs_used_old')}"
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_used_old')}")
+
+        # add column Y to proofs_pending
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'proofs_pending')} ADD COLUMN Y TEXT"
+        )
+        for proof in proofs_pending:
+            await conn.execute(
+                f"UPDATE {table_with_schema(db, 'proofs_pending')} SET Y = '{proof.Y}'"
+                f" WHERE secret = '{proof.secret}'"
+            )
+
+        # Copy proofs_pending to proofs_pending_old and create a new table proofs_pending
+        # with the same columns but with a unique constraint on (Y)
+        # and copy the data from proofs_pending_old to proofs_pending, then drop proofs_pending_old
+        await conn.execute(
+            f"DROP TABLE IF EXISTS {table_with_schema(db, 'proofs_pending_old')}"
+        )
+
+        await conn.execute(
+            f"CREATE TABLE {table_with_schema(db, 'proofs_pending_old')} AS"
+            f" SELECT * FROM {table_with_schema(db, 'proofs_pending')}"
+        )
+
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_pending')}")
+        await conn.execute(f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_pending')} (
+                    amount INTEGER NOT NULL,
+                    C TEXT NOT NULL,
+                    secret TEXT NOT NULL,
+                    Y TEXT,
+                    id TEXT,
+                    created TIMESTAMP,
+
+                    UNIQUE (Y)
+
+                );
+            """)
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'proofs_pending')} (amount, C, "
+            "secret, Y, id, created) SELECT amount, C, secret, Y, id, created"
+            f" FROM {table_with_schema(db, 'proofs_pending_old')}"
+        )
+
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_pending_old')}")

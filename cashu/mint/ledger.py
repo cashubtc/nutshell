@@ -923,12 +923,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             async with self.db.connect() as conn:
                 await self._validate_proofs_pending(proofs, conn)
                 for p in proofs:
-                    try:
-                        await self.crud.set_proof_pending(
-                            proof=p, db=self.db, conn=conn
-                        )
-                    except Exception:
-                        raise TransactionError("proofs already pending.")
+                    await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
 
     async def _unset_proofs_pending(self, proofs: List[Proof]) -> None:
         """Deletes proofs from pending table.
@@ -952,8 +947,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Raises:
             Exception: At least one of the proofs is in the pending table.
         """
-        proofs_pending = await self.crud.get_proofs_pending(db=self.db, conn=conn)
-        for p in proofs:
-            for pp in proofs_pending:
-                if p.secret == pp.secret:
-                    raise TransactionError("proofs are pending.")
+        assert (
+            len(
+                await self.crud.get_proofs_pending(proofs=proofs, db=self.db, conn=conn)
+            )
+            == 0
+        ), TransactionError("proofs are pending.")
