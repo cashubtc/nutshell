@@ -7,6 +7,8 @@ from typing import Dict, List, Mapping, Optional, Tuple
 import bolt11
 from loguru import logger
 
+from cashu.mint.quotes import QuoteQueue
+
 from ..core.base import (
     DLEQ,
     Amount,
@@ -63,6 +65,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         asyncio.Lock()
     )  # holds locks for proofs_pending database
     keysets: Dict[str, MintKeyset] = {}
+    quote_queue = QuoteQueue()
 
     def __init__(
         self,
@@ -355,10 +358,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             created_time=int(time.time()),
             expiry=invoice_obj.expiry or 0,
         )
-        await self.crud.store_mint_quote(
-            quote=quote,
-            db=self.db,
-        )
+        await self.crud.store_mint_quote(quote=quote, db=self.db)
+        await self.quote_queue.submit(quote.quote, quote)
+
         return quote
 
     async def get_mint_quote(self, quote_id: str) -> MintQuote:
@@ -389,6 +391,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 quote.paid = True
                 quote.paid_time = int(time.time())
                 await self.crud.update_mint_quote(quote=quote, db=self.db)
+                await self.quote_queue.submit(quote.quote, quote)
 
         return quote
 
@@ -438,6 +441,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             logger.trace(f"crud: setting quote {quote_id} as issued")
             quote.issued = True
             await self.crud.update_mint_quote(quote=quote, db=self.db)
+            await self.quote_queue.submit(quote.quote, quote)
+
         del self.locks[quote_id]
         return promises
 
@@ -509,6 +514,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             created_time=int(time.time()),
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
+        await self.quote_queue.submit(quote.quote, quote)
+
         return PostMeltQuoteResponse(
             quote=quote.quote,
             amount=quote.amount,
@@ -561,6 +568,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     melt_quote.proof = status.preimage
                 melt_quote.paid_time = int(time.time())
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+                await self.quote_queue.submit(melt_quote.quote, melt_quote)
 
         return melt_quote
 
@@ -611,10 +619,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         melt_quote.paid = True
         melt_quote.paid_time = int(time.time())
         await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+        await self.quote_queue.submit(melt_quote.quote, melt_quote)
 
         mint_quote.paid = True
         mint_quote.paid_time = melt_quote.paid_time
         await self.crud.update_mint_quote(quote=mint_quote, db=self.db)
+        await self.quote_queue.submit(mint_quote.quote, mint_quote)
 
         return melt_quote
 
@@ -698,6 +708,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 melt_quote.paid = True
                 melt_quote.paid_time = int(time.time())
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+                await self.quote_queue.submit(melt_quote.quote, melt_quote)
 
             # melt successful, invalidate proofs
             await self._invalidate_proofs(proofs)
