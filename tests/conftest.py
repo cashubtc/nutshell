@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import multiprocessing
 import os
 import shutil
@@ -45,7 +46,7 @@ assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
 
-from cashu.mint.startup import lightning_backend  # noqa
+# from cashu.mint.startup import lightning_backend  # noqa
 
 
 @pytest.fixture(scope="session")
@@ -99,7 +100,8 @@ async def ledger():
         db_file = os.path.join(settings.mint_database, "mint.sqlite3")
         if os.path.exists(db_file):
             os.remove(db_file)
-
+    wallets_module = importlib.import_module("cashu.lightning")
+    lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
     backends = {
         Method.bolt11: {Unit.sat: lightning_backend},
     }
