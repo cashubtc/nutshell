@@ -71,10 +71,39 @@ def hash_to_curve(message: bytes) -> PublicKey:
     return point
 
 
+DOMAIN_SEPARATOR = b"Secp256k1_HashToCurve_"
+
+
+def hash_to_curve_domain_separated(message: bytes) -> PublicKey:
+    """Generates a point from the message hash and checks if the point lies on the curve.
+    If it does not, iteratively tries to compute a new point from the hash."""
+    point = None
+    msg_to_hash = DOMAIN_SEPARATOR + message
+    counter = 0
+    while point is None:
+        _hash = hashlib.sha256(msg_to_hash + str(counter).encode()).digest()
+        try:
+            # will error if point does not lie on curve
+            point = PublicKey(b"\x02" + _hash, raw=True)
+        except Exception:
+            msg_to_hash = _hash
+            counter += 1
+    return point
+
+
 def step1_alice(
     secret_msg: str, blinding_factor: Optional[PrivateKey] = None
 ) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    r = blinding_factor or PrivateKey()
+    B_: PublicKey = Y + r.pubkey  # type: ignore
+    return B_, r
+
+
+def step1_alice_domain_separated(
+    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
+) -> tuple[PublicKey, PrivateKey]:
+    Y: PublicKey = hash_to_curve_domain_separated(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
     B_: PublicKey = Y + r.pubkey  # type: ignore
     return B_, r
@@ -94,7 +123,13 @@ def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
 
 def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    return C == Y.mult(a)  # type: ignore
+    valid = C == Y.mult(a)  # type: ignore
+    # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
+    if not valid:
+        Y1: PublicKey = hash_to_curve_domain_separated(secret_msg.encode("utf-8"))
+        return C == Y1.mult(a)  # type: ignore
+    # END: BACKWARDS COMPATIBILITY < 0.15.1
+    return valid
 
 
 def hash_e(*publickeys: PublicKey) -> bytes:
@@ -149,7 +184,14 @@ def carol_verify_dleq(
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     C_: PublicKey = C + A.mult(r)  # type: ignore
     B_: PublicKey = Y + r.pubkey  # type: ignore
-    return alice_verify_dleq(B_, C_, e, s, A)
+    valid = alice_verify_dleq(B_, C_, e, s, A)
+    # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
+    if not valid:
+        Y1: PublicKey = hash_to_curve_domain_separated(secret_msg.encode("utf-8"))
+        B_1: PublicKey = Y1 + r.pubkey  # type: ignore
+        return alice_verify_dleq(B_1, C_, e, s, A)
+    # END: BACKWARDS COMPATIBILITY < 0.15.1
+    return valid
 
 
 # Below is a test of a simple positive and negative case

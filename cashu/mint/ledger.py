@@ -233,7 +233,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        self.spent_proofs.update({p.secret: p for p in proofs})
+        self.spent_proofs.update({p.Y: p for p in proofs})
         async with get_db_connection(self.db, conn) as conn:
             # store in db
             for p in proofs:
@@ -873,7 +873,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.debug("Loading used proofs into memory")
         spent_proofs_list = await self.crud.get_spent_proofs(db=self.db) or []
         logger.debug(f"Loaded {len(spent_proofs_list)} used proofs")
-        self.spent_proofs = {p.secret: p for p in spent_proofs_list}
+        self.spent_proofs = {p.Y: p for p in spent_proofs_list}
 
     async def check_proofs_state(self, secrets: List[str]) -> List[ProofState]:
         """Checks if provided proofs are spend or are pending.
@@ -891,19 +891,25 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             List[bool]: List of which proof are pending (True if pending, else False)
         """
         states: List[ProofState] = []
-        proofs_spent = await self._get_proofs_spent(secrets)
-        proofs_pending = await self._get_proofs_pending(secrets)
+        proofs_spent_idx_secret = await self._get_proofs_spent_idx_secret(secrets)
+        proofs_pending_idx_secret = await self._get_proofs_pending_idx_secret(secrets)
         for secret in secrets:
-            if secret not in proofs_spent and secret not in proofs_pending:
+            if (
+                secret not in proofs_spent_idx_secret
+                and secret not in proofs_pending_idx_secret
+            ):
                 states.append(ProofState(secret=secret, state=SpentState.unspent))
-            elif secret not in proofs_spent and secret in proofs_pending:
+            elif (
+                secret not in proofs_spent_idx_secret
+                and secret in proofs_pending_idx_secret
+            ):
                 states.append(ProofState(secret=secret, state=SpentState.pending))
             else:
                 states.append(
                     ProofState(
                         secret=secret,
                         state=SpentState.spent,
-                        witness=proofs_spent[secret].witness,
+                        witness=proofs_spent_idx_secret[secret].witness,
                     )
                 )
         return states
@@ -922,13 +928,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         async with self.proofs_pending_lock:
             async with self.db.connect() as conn:
                 await self._validate_proofs_pending(proofs, conn)
-                for p in proofs:
-                    try:
+                try:
+                    for p in proofs:
                         await self.crud.set_proof_pending(
                             proof=p, db=self.db, conn=conn
                         )
-                    except Exception:
-                        raise TransactionError("proofs already pending.")
+                except Exception:
+                    raise TransactionError("Failed to set proofs pending.")
 
     async def _unset_proofs_pending(self, proofs: List[Proof]) -> None:
         """Deletes proofs from pending table.
@@ -952,8 +958,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Raises:
             Exception: At least one of the proofs is in the pending table.
         """
-        proofs_pending = await self.crud.get_proofs_pending(db=self.db, conn=conn)
-        for p in proofs:
-            for pp in proofs_pending:
-                if p.secret == pp.secret:
-                    raise TransactionError("proofs are pending.")
+        assert (
+            len(
+                await self.crud.get_proofs_pending(proofs=proofs, db=self.db, conn=conn)
+            )
+            == 0
+        ), TransactionError("proofs are pending.")
