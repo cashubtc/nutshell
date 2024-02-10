@@ -163,8 +163,9 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         if settings.mint_cache_secrets:
             # check used secrets in memory
             for proof in proofs:
-                if proof.Y in self.spent_proofs:
-                    proofs_spent.append(proof)
+                spent_proof = self.spent_proofs.get(proof.Y)
+                if spent_proof:
+                    proofs_spent.append(spent_proof)
         else:
             # check used secrets in database
             async with self.db.connect() as conn:
