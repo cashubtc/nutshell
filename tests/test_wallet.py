@@ -13,7 +13,13 @@ from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import (
+    get_real_invoice,
+    is_fake,
+    is_github_actions,
+    is_regtest,
+    pay_if_regtest,
+)
 
 
 async def assert_err(f, msg: Union[str, CashuError]):
@@ -356,10 +362,7 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(
-    reason="This test is not deterministic, it fails on GitHub Actions"
-    "with 'Mint Error: Token already spent.' (the mint is too slow)"
-)
+@pytest.mark.skipif(is_github_actions, reason="GITHUB_ACTIONS")
 async def test_split_race_condition(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
     pay_if_regtest(invoice.bolt11)
