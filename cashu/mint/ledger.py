@@ -928,8 +928,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         async with self.proofs_pending_lock:
             async with self.db.connect() as conn:
                 await self._validate_proofs_pending(proofs, conn)
-                for p in proofs:
-                    await self.crud.set_proof_pending(proof=p, db=self.db, conn=conn)
+                try:
+                    for p in proofs:
+                        await self.crud.set_proof_pending(
+                            proof=p, db=self.db, conn=conn
+                        )
+                except Exception:
+                    raise TransactionError("Failed to set proofs pending.")
 
     async def _unset_proofs_pending(self, proofs: List[Proof]) -> None:
         """Deletes proofs from pending table.

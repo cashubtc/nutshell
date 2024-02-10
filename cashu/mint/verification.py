@@ -174,7 +174,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
                     )
                     if spent_proof:
                         proofs_spent.append(spent_proof)
-        proofs_spent_dict = {p.Y: p for p in proofs_spent}
+        proofs_spent_dict = {p.secret: p for p in proofs_spent}
         return proofs_spent_dict
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
