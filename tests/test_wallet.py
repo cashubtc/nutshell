@@ -356,6 +356,23 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_split_race_condition(wallet1: Wallet):
+    invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id)
+    # run two splits in parallel
+    import asyncio
+
+    await assert_err(
+        asyncio.gather(
+            wallet1.split(wallet1.proofs, 20),
+            wallet1.split(wallet1.proofs, 20),
+        ),
+        "proofs are pending.",
+    )
+
+
+@pytest.mark.asyncio
 async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
     pay_if_regtest(invoice.bolt11)
