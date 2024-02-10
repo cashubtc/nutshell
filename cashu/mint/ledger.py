@@ -891,19 +891,25 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             List[bool]: List of which proof are pending (True if pending, else False)
         """
         states: List[ProofState] = []
-        proofs_spent = await self._get_proofs_spent(secrets)
-        proofs_pending = await self._get_proofs_pending(secrets)
+        proofs_spent_idx_secret = await self._get_proofs_spent_idx_secret(secrets)
+        proofs_pending_idx_secret = await self._get_proofs_pending_idx_secret(secrets)
         for secret in secrets:
-            if secret not in proofs_spent and secret not in proofs_pending:
+            if (
+                secret not in proofs_spent_idx_secret
+                and secret not in proofs_pending_idx_secret
+            ):
                 states.append(ProofState(secret=secret, state=SpentState.unspent))
-            elif secret not in proofs_spent and secret in proofs_pending:
+            elif (
+                secret not in proofs_spent_idx_secret
+                and secret in proofs_pending_idx_secret
+            ):
                 states.append(ProofState(secret=secret, state=SpentState.pending))
             else:
                 states.append(
                     ProofState(
                         secret=secret,
                         state=SpentState.spent,
-                        witness=proofs_spent[secret].witness,
+                        witness=proofs_spent_idx_secret[secret].witness,
                     )
                 )
         return states

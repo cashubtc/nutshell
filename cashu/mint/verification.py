@@ -51,8 +51,10 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         """
         # Verify inputs
         # Verify proofs are spendable
-        spent_proofs = await self._get_proofs_spent([p.secret for p in proofs])
-        if not len(spent_proofs) == 0:
+        if (
+            not len(await self._get_proofs_spent_idx_secret([p.secret for p in proofs]))
+            == 0
+        ):
             raise TokenAlreadySpentError()
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
@@ -141,7 +143,9 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
                 result.append(False if promise is None else True)
         return result
 
-    async def _get_proofs_pending(self, secrets: List[str]) -> Dict[str, Proof]:
+    async def _get_proofs_pending_idx_secret(
+        self, secrets: List[str]
+    ) -> Dict[str, Proof]:
         """Returns only those proofs that are pending."""
         all_proofs_pending = await self.crud.get_proofs_pending(
             proofs=[Proof(secret=s) for s in secrets], db=self.db
@@ -150,28 +154,27 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         proofs_pending_dict = {p.secret: p for p in proofs_pending}
         return proofs_pending_dict
 
-    async def _get_proofs_spent(self, secrets: List[str]) -> Dict[str, Proof]:
+    async def _get_proofs_spent_idx_secret(
+        self, secrets: List[str]
+    ) -> Dict[str, Proof]:
         """Returns all proofs that are spent."""
+        proofs = [Proof(secret=s) for s in secrets]
         proofs_spent: List[Proof] = []
         if settings.mint_cache_secrets:
             # check used secrets in memory
-            for secret in secrets:
-                Y: str = b_dhke.hash_to_curve(secret.encode("utf-8")).serialize().hex()
-                if Y in self.spent_proofs:
-                    proofs_spent.append(self.spent_proofs[Y])
+            for proof in proofs:
+                if proof.Y in self.spent_proofs:
+                    proofs_spent.append(proof)
         else:
             # check used secrets in database
             async with self.db.connect() as conn:
-                for secret in secrets:
-                    Ys: str = (
-                        b_dhke.hash_to_curve(secret.encode("utf-8")).serialize().hex()
-                    )
+                for proof in proofs:
                     spent_proof = await self.crud.get_proof_used(
-                        db=self.db, Y=Ys, conn=conn
+                        db=self.db, Y=proof.Y, conn=conn
                     )
                     if spent_proof:
                         proofs_spent.append(spent_proof)
-        proofs_spent_dict = {p.secret: p for p in proofs_spent}
+        proofs_spent_dict = {p.Y: p for p in proofs_spent}
         return proofs_spent_dict
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
