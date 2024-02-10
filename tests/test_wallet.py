@@ -356,6 +356,10 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skip(
+    reason="This test is not deterministic, it fails on GitHub Actions"
+    "with 'Mint Error: Token already spent.' (the mint is too slow)"
+)
 async def test_split_race_condition(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
     pay_if_regtest(invoice.bolt11)
