@@ -39,3 +39,4 @@ jobs:
     with:
       python-version: ${{ matrix.python-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
+      mint-database: "./test_data/test_mint"
