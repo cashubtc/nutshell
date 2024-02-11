@@ -9,11 +9,16 @@ from cashu.core.db import Connection, timestamp_now
 from cashu.core.migrations import backup_database
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
-from tests.helpers import is_github_actions
+from tests.helpers import is_github_actions, is_postgres
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(is_github_actions, reason="Fails on GitHub Actions")
+@pytest.mark.skipif(
+    is_github_actions and is_postgres,
+    reason=(
+        "Fails on GitHub Actions because pg_dump is not the same version as postgres"
+    ),
+)
 async def test_backup_db_migration(ledger: Ledger):
     settings.db_backup_path = "./test_data/backups/"
     filepath = await backup_database(ledger.db, 999)
