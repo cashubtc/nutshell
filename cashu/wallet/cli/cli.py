@@ -14,10 +14,9 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.logging import configure_logger
-
 from ...core.base import TokenV3, Unit
 from ...core.helpers import sum_proofs
+from ...core.logging import configure_logger
 from ...core.settings import settings
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy

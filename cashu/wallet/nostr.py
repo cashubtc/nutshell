@@ -6,8 +6,7 @@ import click
 from httpx import ConnectError
 from loguru import logger
 
-from cashu.core.base import TokenV3
-
+from ..core.base import TokenV3
 from ..core.settings import settings
 from ..nostr.client.client import NostrClient
 from ..nostr.event import Event
