@@ -36,18 +36,7 @@ async def backup_database(db: Database, version: int = 0) -> str:
     elif db.type in {POSTGRES, COCKROACH}:
         filepath = f"{filepath}.dump"
         logger.info(f"Creating {db.type} backup of {db.name} db to {filepath}")
-        try:
-            os.system(f"pg_dump --dbname={db.db_location} --file={filepath}")
-        except Exception as e:
-            logger.error(
-                f"Error creating backup of {db.name} db: {e}. Run with"
-                " BACKUP_DB_MIGRATION=False to disable backups before database"
-                " migrations."
-            )
-            logger.warning("Trying pg_dump with option to ignore version mismatch")
-            os.system(
-                f"pg_dump --ignore-version --dbname={db.db_location} --file={filepath}"
-            )
+        os.system(f"pg_dump --dbname={db.db_location} --file={filepath}")
 
     return filepath
 
