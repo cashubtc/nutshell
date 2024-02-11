@@ -1,5 +1,4 @@
-from cashu.core.base import Proof
-
+from ..core.base import Proof
 from ..core.db import Connection, Database, table_with_schema, timestamp_now
 from ..core.settings import settings
 
