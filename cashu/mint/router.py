@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from loguru import logger
 
 from ..core.base import (
@@ -202,6 +202,18 @@ async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
+
+
+@router.websocket("/v1/quote/{quote_id}", name="Quote updates")
+@router.websocket("/v1/mint/quote/bolt11/{quote_id}", name="Mint quote updates")
+@router.websocket("/v1/melt/quote/bolt11/{quote_id}", name="Melt quote updates")
+async def websocket_endpoint(websocket: WebSocket, quote_id: str):
+    await websocket.accept()
+    try:
+        async for quote in ledger.quote_queue.watch(quote_id):
+            await websocket.send_json(quote.dict())
+    except WebSocketDisconnect:
+        pass
 
 
 @router.post(
