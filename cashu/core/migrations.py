@@ -8,27 +8,26 @@ from ..core.db import COCKROACH, POSTGRES, SQLITE, Database, table_with_schema
 from ..core.settings import settings
 
 
-async def backup_database(db: Database, version: int = 0):
+async def backup_database(db: Database, version: int = 0) -> str:
     # for postgres: use pg_dump
     # for sqlite: use sqlite3
 
-    # skip backups if backup_db_migration is False
+    # skip backups if db_backup_path is None
     # and if version is 0 (fresh database)
-    if not settings.backup_db_migration or not version:
-        return
+    if not settings.db_backup_path or not version:
+        return ""
 
     filename = f"backup_{db.name}_{int(time.time())}_v{version}"
     try:
-        os.mkdir(os.path.join(settings.cashu_dir, "backup"))
-    except FileExistsError:
-        pass
+        # create backup directory if it doesn't exist
+        os.makedirs(os.path.join(settings.db_backup_path), exist_ok=True)
     except Exception as e:
         logger.error(
             f"Error creating backup directory: {e}. Run with BACKUP_DB_MIGRATION=False"
             " to disable backups before database migrations."
         )
         raise e
-    filepath = os.path.join(settings.cashu_dir, "backup", filename)
+    filepath = os.path.join(settings.db_backup_path, filename)
 
     if db.type == SQLITE:
         filepath = f"{filepath}.sqlite3"
@@ -41,6 +40,8 @@ async def backup_database(db: Database, version: int = 0):
         host = db.db_location.split("@")[-1].split(":")[0]
         name = db.db_location.split("/")[-1]
         os.system(f"pg_dump -U {user} -h {host} -d {name} -f {filepath}")
+
+    return filepath
 
 
 async def migrate_databases(db: Database, migrations_module):

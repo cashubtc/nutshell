@@ -499,8 +499,8 @@ async def m014_proofs_add_Y_column(db: Database):
         await create_balance_views(db, conn)
 
 
-async def m015_add_index_to_proofs_used(db: Database):
-    # create index on proofs_used table for secret
+async def m015_add_index_Y_to_proofs_used(db: Database):
+    # create index on proofs_used table for Y
     async with db.connect() as conn:
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS"
