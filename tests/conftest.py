@@ -104,6 +104,13 @@ async def ledger():
         db_file = os.path.join(settings.mint_database, "mint.sqlite3")
         if os.path.exists(db_file):
             os.remove(db_file)
+    else:
+        # clear postgres database
+        db = Database("mint", settings.mint_database)
+        async with db.connect() as conn:
+            await conn.execute("DROP SCHEMA public CASCADE;")
+            await conn.execute("CREATE SCHEMA public;")
+
     wallets_module = importlib.import_module("cashu.lightning")
     lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
     backends = {
