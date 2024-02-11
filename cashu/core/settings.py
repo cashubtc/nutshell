@@ -45,6 +45,7 @@ class EnvSettings(CashuSettings):
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
     debug_profiling: bool = Field(default=False)
     debug_mint_only_deprecated: bool = Field(default=False)
+    db_backup_path: str = Field(default=False)
 
 
 class MintSettings(CashuSettings):
