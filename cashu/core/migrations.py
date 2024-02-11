@@ -36,10 +36,7 @@ async def backup_database(db: Database, version: int = 0) -> str:
     elif db.type in {POSTGRES, COCKROACH}:
         filepath = f"{filepath}.dump"
         logger.info(f"Creating {db.type} backup of {db.name} db to {filepath}")
-        user = db.db_location.split("/")[-1]
-        host = db.db_location.split("@")[-1].split(":")[0]
-        name = db.db_location.split("/")[-1]
-        os.system(f"pg_dump -U {user} -h {host} -d {name} -f {filepath}")
+        os.system(f"pg_dump --dbname={db.db_location} --file={filepath}")
 
     return filepath
 
