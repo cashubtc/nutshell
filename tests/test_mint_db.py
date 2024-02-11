@@ -63,6 +63,7 @@ async def test_melt_quote(wallet1: Wallet, ledger: Ledger):
     assert quote.paid_time is None
     assert quote.created_time
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(not is_postgres, reason="only works with Postgres")
 async def test_postgres_working():
