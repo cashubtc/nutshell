@@ -497,3 +497,13 @@ async def m014_proofs_add_Y_column(db: Database):
 
         # recreate the balance views
         await create_balance_views(db, conn)
+
+
+async def m015_add_index_to_proofs_used(db: Database):
+    # create index on proofs_used table for secret
+    async with db.connect() as conn:
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS"
+            " proofs_used_Y_idx ON"
+            f" {table_with_schema(db, 'proofs_used')} (Y)"
+        )
