@@ -9,9 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from cashu.core.crypto.b_dhke import hash_to_curve
-
 from .crypto.aes import AESCipher
+from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
     derive_keys,
     derive_keys_sha256,
