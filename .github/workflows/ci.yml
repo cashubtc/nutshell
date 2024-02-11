@@ -17,7 +17,7 @@ jobs:
         poetry-version: ["1.7.1"]
         mint-cache-secrets: ["false", "true"]
         mint-only-deprecated: ["false", "true"]
-        mint-database: ["", "postgres://cashu:cashu@localhost:5432/cashu"]
+        mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         # mint-database: [""]
         backend-wallet-class: ["FakeWallet"]
     uses: ./.github/workflows/tests.yml
@@ -27,6 +27,7 @@ jobs:
       poetry-version: ${{ matrix.poetry-version }}
       mint-cache-secrets: ${{ matrix.mint-cache-secrets }}
       mint-only-deprecated: ${{ matrix.mint-only-deprecated }}
+      mint-database: ${{ matrix.mint-database }}
   regtest:
     uses: ./.github/workflows/regtest.yml
     strategy:
