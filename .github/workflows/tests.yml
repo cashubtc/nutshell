@@ -9,7 +9,7 @@ on:
       poetry-version:
         default: "1.7.1"
         type: string
-      db-url:
+      mint-database:
         default: ""
         type: string
       os:
@@ -40,6 +40,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      if: startsWith(inputs.mint-database, 'postgres')
     steps:
       - name: Checkout repository and submodules
         uses: actions/checkout@v2
@@ -53,7 +54,7 @@ jobs:
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
-          MINT_DATABASE: ${{ inputs.db-url }}
+          MINT_DATABASE: ${{ inputs.mint-database }}
           MINT_CACHE_SECRETS: ${{ inputs.mint-cache-secrets }}
           DEBUG_MINT_ONLY_DEPRECATED: ${{ inputs.mint-only-deprecated }}
           TOR: false

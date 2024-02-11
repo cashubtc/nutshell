@@ -17,8 +17,8 @@ jobs:
         poetry-version: ["1.7.1"]
         mint-cache-secrets: ["false", "true"]
         mint-only-deprecated: ["false", "true"]
-        db-url: ["", "postgres://cashu:cashu@localhost:5432/cashu"] # TODO: Postgres test not working
-        # db-url: [""]
+        mint-database: ["", "postgres://cashu:cashu@localhost:5432/cashu"]
+        # mint-database: [""]
         backend-wallet-class: ["FakeWallet"]
     uses: ./.github/workflows/tests.yml
     with:
