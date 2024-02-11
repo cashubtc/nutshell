@@ -53,7 +53,7 @@ jobs:
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
-          MINT_DATABASE: ${{ inputs.mint-database }}
+          MINT_TEST_DATABASE: ${{ inputs.mint-database }}
           MINT_CACHE_SECRETS: ${{ inputs.mint-cache-secrets }}
           DEBUG_MINT_ONLY_DEPRECATED: ${{ inputs.mint-only-deprecated }}
           TOR: false

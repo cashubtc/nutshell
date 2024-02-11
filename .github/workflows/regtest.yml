@@ -61,7 +61,7 @@ jobs:
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
-          MINT_DATABASE: ${{ inputs.mint-database }}
+          MINT_TEST_DATABASE: ${{ inputs.mint-database }}
           TOR: false
           MINT_LIGHTNING_BACKEND: ${{ inputs.backend-wallet-class }}
           MINT_LNBITS_ENDPOINT: http://localhost:5001

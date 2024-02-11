@@ -35,11 +35,7 @@ settings.mint_lightning_backend = settings.mint_lightning_backend or "FakeWallet
 settings.fakewallet_brr = True
 settings.fakewallet_delay_payment = False
 settings.fakewallet_stochastic_invoice = False
-settings.mint_database = (
-    settings.mint_database
-    if settings.mint_database.startswith("postgres")
-    else "./test_data/test_mint"
-)
+settings.mint_database = settings.mint_test_database
 settings.mint_derivation_path = "m/0'/0'/0'"
 settings.mint_derivation_path_list = []
 settings.mint_private_key = "TEST_PRIVATE_KEY"

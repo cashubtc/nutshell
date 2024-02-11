@@ -56,6 +56,7 @@ class MintSettings(CashuSettings):
     mint_listen_port: int = Field(default=3338)
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
+    mint_test_database: str = Field(default="test_data/test_mint")
     mint_peg_out_only: bool = Field(
         default=False,
         title="Peg-out only",
