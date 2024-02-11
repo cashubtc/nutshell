@@ -18,7 +18,6 @@ jobs:
         mint-cache-secrets: ["false", "true"]
         mint-only-deprecated: ["false", "true"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
-        # mint-database: [""]
         backend-wallet-class: ["FakeWallet"]
     uses: ./.github/workflows/tests.yml
     with:
