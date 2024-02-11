@@ -24,7 +24,7 @@ on:
 
 jobs:
   poetry:
-    name: Run (mint-cache-secrets ${{ inputs.mint-cache-secrets }}, mint-only-deprecated ${{ inputs.mint-only-deprecated }})
+    name: Run (mint-cache-secrets ${{ inputs.mint-cache-secrets }}, mint-only-deprecated ${{ inputs.mint-only-deprecated }}, mint-database ${{ inputs.mint-database }})
     runs-on: ${{ inputs.os }}
     services:
       postgres:
