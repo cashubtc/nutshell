@@ -49,34 +49,46 @@ async def m001_initial(db: Database):
             """)
 
 
+async def drop_balance_views(db: Database, conn: Connection):
+    await conn.execute(f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance')}")
+    await conn.execute(f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_issued')}")
+    await conn.execute(
+        f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_redeemed')}"
+    )
+
+
+async def create_balance_views(db: Database, conn: Connection):
+    await conn.execute(f"""
+        CREATE VIEW {table_with_schema(db, 'balance_issued')} AS
+        SELECT COALESCE(SUM(s), 0) AS balance FROM (
+            SELECT SUM(amount) AS s
+            FROM {table_with_schema(db, 'promises')}
+            WHERE amount > 0
+        ) AS balance_issued;
+    """)
+
+    await conn.execute(f"""
+        CREATE VIEW {table_with_schema(db, 'balance_redeemed')} AS
+        SELECT COALESCE(SUM(s), 0) AS balance FROM (
+            SELECT SUM(amount) AS s
+            FROM {table_with_schema(db, 'proofs_used')}
+            WHERE amount > 0
+        ) AS balance_redeemed;
+    """)
+
+    await conn.execute(f"""
+        CREATE VIEW {table_with_schema(db, 'balance')} AS
+        SELECT s_issued - s_used FROM (
+            SELECT bi.balance AS s_issued, bu.balance AS s_used
+            FROM {table_with_schema(db, 'balance_issued')} bi
+            CROSS JOIN {table_with_schema(db, 'balance_redeemed')} bu
+        ) AS balance;
+    """)
+
+
 async def m002_add_balance_views(db: Database):
     async with db.connect() as conn:
-        await conn.execute(f"""
-            CREATE VIEW {table_with_schema(db, 'balance_issued')} AS
-            SELECT COALESCE(SUM(s), 0) AS balance FROM (
-                SELECT SUM(amount) AS s
-                FROM {table_with_schema(db, 'promises')}
-                WHERE amount > 0
-            ) AS balance_issued;
-        """)
-
-        await conn.execute(f"""
-            CREATE VIEW {table_with_schema(db, 'balance_redeemed')} AS
-            SELECT COALESCE(SUM(s), 0) AS balance FROM (
-                SELECT SUM(amount) AS s
-                FROM {table_with_schema(db, 'proofs_used')}
-                WHERE amount > 0
-            ) AS balance_redeemed;
-        """)
-
-        await conn.execute(f"""
-            CREATE VIEW {table_with_schema(db, 'balance')} AS
-            SELECT s_issued - s_used FROM (
-                SELECT bi.balance AS s_issued, bu.balance AS s_used
-                FROM {table_with_schema(db, 'balance_issued')} bi
-                CROSS JOIN {table_with_schema(db, 'balance_redeemed')} bu
-            ) AS balance;
-        """)
+        await create_balance_views(db, conn)
 
 
 async def m003_mint_keysets(db: Database):
@@ -184,15 +196,6 @@ async def m008_promises_dleq(db: Database):
 async def m009_add_out_to_invoices(db: Database):
     # column in invoices for marking whether the invoice is incoming (out=False) or outgoing (out=True)
     async with db.connect() as conn:
-        # we have to drop the balance views first and recreate them later
-        await conn.execute(f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance')}")
-        await conn.execute(
-            f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_issued')}"
-        )
-        await conn.execute(
-            f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_redeemed')}"
-        )
-
         # rename column pr to bolt11
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN pr TO"
@@ -203,10 +206,6 @@ async def m009_add_out_to_invoices(db: Database):
             f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN hash TO id"
         )
 
-    # recreate balance views
-    await m002_add_balance_views(db)
-
-    async with db.connect() as conn:
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN out BOOL"
         )
@@ -409,6 +408,9 @@ async def m014_proofs_add_Y_column(db: Database):
         )
         proofs_pending = [Proof(**r) for r in rows]
     async with db.connect() as conn:
+        # we have to drop the balance views first and recreate them later
+        await drop_balance_views(db, conn)
+
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN Y TEXT"
         )
@@ -492,3 +494,16 @@ async def m014_proofs_add_Y_column(db: Database):
         )
 
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_pending_old')}")
+
+        # recreate the balance views
+        await create_balance_views(db, conn)
+
+
+async def m015_add_index_Y_to_proofs_used(db: Database):
+    # create index on proofs_used table for Y
+    async with db.connect() as conn:
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS"
+            " proofs_used_Y_idx ON"
+            f" {table_with_schema(db, 'proofs_used')} (Y)"
+        )

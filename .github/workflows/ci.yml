@@ -17,8 +17,7 @@ jobs:
         poetry-version: ["1.7.1"]
         mint-cache-secrets: ["false", "true"]
         mint-only-deprecated: ["false", "true"]
-        # db-url: ["", "postgres://cashu:cashu@localhost:5432/cashu"] # TODO: Postgres test not working
-        db-url: [""]
+        mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         backend-wallet-class: ["FakeWallet"]
     uses: ./.github/workflows/tests.yml
     with:
@@ -27,6 +26,7 @@ jobs:
       poetry-version: ${{ matrix.poetry-version }}
       mint-cache-secrets: ${{ matrix.mint-cache-secrets }}
       mint-only-deprecated: ${{ matrix.mint-only-deprecated }}
+      mint-database: ${{ matrix.mint-database }}
   regtest:
     uses: ./.github/workflows/regtest.yml
     strategy:
@@ -38,3 +38,4 @@ jobs:
     with:
       python-version: ${{ matrix.python-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
+      mint-database: "./test_data/test_mint"
