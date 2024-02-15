@@ -90,7 +90,7 @@ def hash_to_curve_domain_separated(message: bytes) -> PublicKey:
     """
     msg_to_hash = hashlib.sha256(DOMAIN_SEPARATOR + message).digest()
     counter = 0
-    while True and counter < 2**16:
+    while counter < 2**16:
         _hash = hashlib.sha256(msg_to_hash + counter.to_bytes(4, "little")).digest()
         try:
             # will error if point does not lie on curve
