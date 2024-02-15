@@ -64,7 +64,7 @@ async def migrate_databases(db: Database, migrations_module):
                 if version > current_versions.get(db_name, 0):
                     migration_needed = True
                     break
-        if migration_needed:
+        if migration_needed and settings.db_backup_path:
             logger.debug(f"Creating backup of {db_name} db")
             current_version = current_versions.get(db_name, 0)
             await backup_database(db, current_version)
