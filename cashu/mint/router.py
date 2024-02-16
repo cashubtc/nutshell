@@ -262,6 +262,7 @@ async def melt_quote(quote: str) -> PostMeltQuoteResponse:
         amount=melt_quote.amount,
         fee_reserve=melt_quote.fee_reserve,
         paid=melt_quote.paid,
+        expiry=melt_quote.expiry,
     )
     logger.trace(f"< GET /v1/melt/quote/bolt11/{quote}")
     return resp

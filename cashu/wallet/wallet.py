@@ -543,6 +543,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 amount=invoice_obj.amount_msat // 1000,
                 fee_reserve=ret.fee or 0,
                 paid=False,
+                expiry=invoice_obj.expiry,
             )
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
