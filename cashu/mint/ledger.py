@@ -353,7 +353,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             issued=False,
             paid=False,
             created_time=int(time.time()),
-            expiry=invoice_obj.expiry or 0,
+            expiry=invoice_obj.expiry,
         )
         await self.crud.store_mint_quote(
             quote=quote,
@@ -507,7 +507,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             paid=False,
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=int(time.time()),
-            expiry=invoice_obj.expiry or 0,
+            expiry=invoice_obj.expiry,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         return PostMeltQuoteResponse(

@@ -230,7 +230,7 @@ class MeltQuote(BaseModel):
     paid_time: Union[int, None] = None
     fee_paid: int = 0
     proof: str = ""
-    expiry: int = 0
+    expiry: Optional[int] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -270,7 +270,7 @@ class MintQuote(BaseModel):
     issued: bool
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
-    expiry: int = 0
+    expiry: Optional[int] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -296,7 +296,6 @@ class MintQuote(BaseModel):
             issued=row["issued"],
             created_time=created_time,
             paid_time=paid_time,
-            expiry=0,
         )
 
 
@@ -371,7 +370,7 @@ class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
     paid: bool  # whether the request has been paid
-    expiry: int  # expiry of the quote
+    expiry: Optional[int]  # expiry of the quote
 
 
 # ------- API: MINT -------
@@ -418,7 +417,7 @@ class PostMeltQuoteResponse(BaseModel):
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
     paid: bool  # whether the request has been paid
-    expiry: int  # expiry of the quote
+    expiry: Optional[int]  # expiry of the quote
 
 
 # ------- API: MELT -------
