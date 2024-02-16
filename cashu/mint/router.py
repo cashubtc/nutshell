@@ -1,4 +1,3 @@
-from gc import disable
 from typing import Any, Dict, List
 
 from fastapi import APIRouter
