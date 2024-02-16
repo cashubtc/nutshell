@@ -576,8 +576,11 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
     if delete:
         await wallet.invalidate(proofs)
     else:
-        # batch check proofs
-        for _proofs in [proofs[i : i + 100] for i in range(0, len(proofs), 100)]:
+        # invalidate proofs in batches
+        for _proofs in [
+            proofs[i : i + settings.proofs_batch_size]
+            for i in range(0, len(proofs), settings.proofs_batch_size)
+        ]:
             await wallet.invalidate(_proofs, check_spendable=True)
     print_balance(ctx)
 
