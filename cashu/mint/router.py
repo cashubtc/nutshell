@@ -50,6 +50,7 @@ async def info() -> GetInfoResponse:
     mint_features: Dict[int, Dict[str, Any]] = {
         4: dict(
             methods=method_unit_pairs,
+            disabled=False,
         ),
         5: dict(
             methods=method_unit_pairs,
