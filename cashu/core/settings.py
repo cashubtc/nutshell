@@ -139,6 +139,7 @@ class WalletSettings(CashuSettings):
     )
 
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
+    proofs_batch_size: int = Field(default=1000)
 
 
 class LndRestFundingSource(MintSettings):
