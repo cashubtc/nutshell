@@ -230,6 +230,7 @@ class MeltQuote(BaseModel):
     paid_time: Union[int, None] = None
     fee_paid: int = 0
     proof: str = ""
+    expiry: int = 0
 
     @classmethod
     def from_row(cls, row: Row):
@@ -417,6 +418,7 @@ class PostMeltQuoteResponse(BaseModel):
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
     paid: bool  # whether the request has been paid
+    expiry: int  # expiry of the quote
 
 
 # ------- API: MELT -------

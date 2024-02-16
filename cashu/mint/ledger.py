@@ -507,6 +507,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             paid=False,
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=int(time.time()),
+            expiry=invoice_obj.expiry or 0,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         return PostMeltQuoteResponse(
@@ -514,6 +515,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             amount=quote.amount,
             fee_reserve=quote.fee_reserve,
             paid=quote.paid,
+            expiry=quote.expiry,
         )
 
     async def get_melt_quote(self, quote_id: str) -> MeltQuote:
