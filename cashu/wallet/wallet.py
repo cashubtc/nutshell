@@ -157,7 +157,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             Exception: if the response contains an error
         """
-        resp_dict = resp.json()
+        try:
+            resp_dict = resp.json()
+        except json.JSONDecodeError:
+            # if we can't decode the response, raise for status
+            resp.raise_for_status()
+            return
         if "detail" in resp_dict:
             logger.trace(f"Error from mint: {resp_dict}")
             error_message = f"Mint Error: {resp_dict['detail']}"
