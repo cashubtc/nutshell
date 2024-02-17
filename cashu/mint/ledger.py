@@ -640,7 +640,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             Tuple[str, List[BlindedMessage]]: Proof of payment and signed outputs for returning overpaid fees to wallet.
         """
-        # get melt quote and settle transaction internally if possible
+        # get melt quote and check if it is paid
         melt_quote = await self.get_melt_quote(quote_id=quote)
         method = Method[melt_quote.method]
         unit = Unit[melt_quote.unit]
@@ -676,6 +676,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # set proofs to pending to avoid race conditions
         await self._set_proofs_pending(proofs)
         try:
+            # settle the transaction internally if there is a mint quote with the same payment request
             melt_quote = await self.melt_mint_settle_internally(melt_quote)
 
             # quote not paid yet (not internal), pay it with the backend
@@ -689,7 +690,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     f" fee: {payment.fee.str() if payment.fee else 0}"
                 )
                 if not payment.ok:
-                    raise LightningError("Lightning payment unsuccessful.")
+                    raise LightningError(
+                        f"Lightning payment unsuccessful. {payment.error_message}"
+                    )
                 if payment.fee:
                     melt_quote.fee_paid = payment.fee.to(
                         to_unit=unit, round="up"

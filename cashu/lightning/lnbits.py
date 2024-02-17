@@ -46,7 +46,7 @@ class LNbitsWallet(LightningBackend):
         except Exception:
             return StatusResponse(
                 error_message=(
-                    f"Failed to connect to {self.endpoint}, got: '{r.text[:200]}...'"
+                    f"Received invalid response from {self.endpoint}: {r.text}"
                 ),
                 balance=0,
             )

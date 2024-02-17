@@ -46,6 +46,7 @@ pytest = "^7.4.0"
 ruff = "^0.0.284"
 pre-commit = "^3.3.3"
 fastapi-profiler = "^1.2.0"
+respx = "^0.20.2"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
