@@ -3,9 +3,10 @@ import respx
 from httpx import Response
 
 from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.settings import settings
+from cashu.lightning.blink import BlinkWallet
 
-from ..cashu.lightning.blink import BlinkWallet
-
+settings.mint_blink_key = "123"
 blink = BlinkWallet()
 payment_request = (
     "lnbc10u1pjap7phpp50s9lzr3477j0tvacpfy2ucrs4q0q6cvn232ex7nt2zqxxxj8gxrsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsss"
