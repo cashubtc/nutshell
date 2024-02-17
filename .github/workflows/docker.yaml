@@ -1,9 +1,9 @@
-name: Docker Build and Optionally Push
+name: Docker Build
 
 on:
   push:
   release:
-    types: [created]
+    types: [published]
 
 jobs:
   build-and-push:
@@ -30,7 +30,7 @@ jobs:
             echo "::set-output name=tag::${{ github.event.release.tag_name }}"
           fi
 
-      - name: Build and optionally push
+      - name: Build and push on release
         uses: docker/build-push-action@v5
         with:
           context: .
