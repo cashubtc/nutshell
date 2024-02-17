@@ -11,7 +11,7 @@ on:
         type: string
 
 jobs:
-  format:
+  formatting:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -26,8 +26,8 @@ jobs:
           cache: "poetry"
       - name: Install packages
         run: poetry install
-      - name: Ruff check
-        run: make ruff-check
+      - name: Check black
+        run: make black-check
   mypy:
     runs-on: ubuntu-latest
     steps:
