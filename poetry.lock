@@ -1269,6 +1269,20 @@ six = ">=1.8.0"
 test = ["ipython", "mock", "pytest (>=3.0.5)"]
 
 [[package]]
+name = "respx"
+version = "0.20.2"
+description = "A utility for mocking out the Python HTTPX and HTTP Core libraries."
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "respx-0.20.2-py2.py3-none-any.whl", hash = "sha256:ab8e1cf6da28a5b2dd883ea617f8130f77f676736e6e9e4a25817ad116a172c9"},
+    {file = "respx-0.20.2.tar.gz", hash = "sha256:07cf4108b1c88b82010f67d3c831dae33a375c7b436e54d87737c7f9f99be643"},
+]
+
+[package.dependencies]
+httpx = ">=0.21.0"
+
+[[package]]
 name = "ruff"
 version = "0.0.284"
 description = "An extremely fast Python linter, written in Rust."
@@ -1598,4 +1612,4 @@ pgsql = ["psycopg2-binary"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8.1"
-content-hash = "f7aa2919aca77aa4d1dfcba18c6fc9694a2cc1d5cfd60e7ec991a615251fa86e"
+content-hash = "7ad5150f23bb8ba229e43b3d329b4ec747791622f5e83357a5fae8aee9315fdc"
