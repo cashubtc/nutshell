@@ -69,10 +69,10 @@ preview = true
 [tool.ruff]
 # Same as Black. but black has a 10% overflow rule
 line-length = 150
-
-# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
+show-fixes = true
+target-version = "py38"
 # (`I`) means isorting
-select = ["E", "F", "I"]
+extend-select = ["I"]
 ignore = []
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
