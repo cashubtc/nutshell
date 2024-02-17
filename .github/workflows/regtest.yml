@@ -12,7 +12,7 @@ on:
       os-version:
         default: "ubuntu-latest"
         type: string
-      db-url:
+      mint-database:
         default: ""
         type: string
       backend-wallet-class:
@@ -23,6 +23,20 @@ jobs:
   regtest:
     runs-on: ${{ inputs.os-version }}
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: cashu
+          POSTGRES_PASSWORD: cashu
+          POSTGRES_DB: cashu
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v3
 
@@ -47,7 +61,7 @@ jobs:
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
-          MINT_DATABASE: ${{ inputs.db-url }}
+          MINT_TEST_DATABASE: ${{ inputs.mint-database }}
           TOR: false
           MINT_LIGHTNING_BACKEND: ${{ inputs.backend-wallet-class }}
           MINT_LNBITS_ENDPOINT: http://localhost:5001

@@ -14,10 +14,9 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.core.logging import configure_logger
-
 from ...core.base import TokenV3, Unit
 from ...core.helpers import sum_proofs
+from ...core.logging import configure_logger
 from ...core.settings import settings
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
@@ -577,7 +576,12 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
     if delete:
         await wallet.invalidate(proofs)
     else:
-        await wallet.invalidate(proofs, check_spendable=True)
+        # invalidate proofs in batches
+        for _proofs in [
+            proofs[i : i + settings.proofs_batch_size]
+            for i in range(0, len(proofs), settings.proofs_batch_size)
+        ]:
+            await wallet.invalidate(_proofs, check_spendable=True)
     print_balance(ctx)
 
 

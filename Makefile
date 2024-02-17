@@ -59,3 +59,11 @@ install-pre-commit-hook:
 
 pre-commit:
 	poetry run pre-commit run --all-files
+
+docker-build:
+	rm -rf docker-build || true
+	mkdir -p docker-build
+	git clone . docker-build
+	cd docker-build
+	docker buildx build -f Dockerfile -t cashubtc/nutshell:0.15.0 --platform linux/amd64 .
+	# docker push cashubtc/nutshell:0.15.0

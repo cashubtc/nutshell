@@ -66,8 +66,7 @@ class FakeWallet(LightningBackend):
         else:
             tags.add(TagChar.description, memo or "")
 
-        if expiry:
-            tags.add(TagChar.expire_time, expiry)
+        tags.add(TagChar.expire_time, expiry or 3600)
 
         if payment_secret:
             secret = payment_secret.hex()
