@@ -45,7 +45,7 @@ async def test_blink_create_invoice():
     mock_response = {
         "data": {
             "lnInvoiceCreateOnBehalfOfRecipient": {
-                "invoice": {"paymentRequest": (payment_request)}
+                "invoice": {"paymentRequest": payment_request}
             }
         }
     }
@@ -59,7 +59,6 @@ async def test_blink_create_invoice():
 @respx.mock
 @pytest.mark.asyncio
 async def test_blink_pay_invoice():
-
     mock_response = {
         "data": {
             "lnInvoicePaymentSend": {
