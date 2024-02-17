@@ -4,8 +4,7 @@ from httpx import Response
 
 from cashu.core.base import Amount, MeltQuote, Unit
 
-# mypy ignore this import
-from cashu.lightning.blink import BlinkWallet  # noqa: F401
+from ..cashu.lightning.blink import BlinkWallet
 
 blink = BlinkWallet()
 payment_request = (
