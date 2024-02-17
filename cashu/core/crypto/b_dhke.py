@@ -68,7 +68,6 @@ def hash_to_curve(message: bytes) -> PublicKey:
             point = PublicKey(b"\x02" + _hash, raw=True)
         except Exception:
             msg_to_hash = _hash
-            print(_hash)
     return point
 
 
@@ -102,14 +101,18 @@ def hash_to_curve_domain_separated(message: bytes) -> PublicKey:
     raise ValueError("No valid point found")
 
 
-def step1_alice(secret_msg: str, blinding_factor: Optional[PrivateKey] = None) -> tuple[PublicKey, PrivateKey]:
+def step1_alice(
+    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
+) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
     B_: PublicKey = Y + r.pubkey  # type: ignore
     return B_, r
 
 
-def step1_alice_domain_separated(secret_msg: str, blinding_factor: Optional[PrivateKey] = None) -> tuple[PublicKey, PrivateKey]:
+def step1_alice_domain_separated(
+    secret_msg: str, blinding_factor: Optional[PrivateKey] = None
+) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve_domain_separated(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
     B_: PublicKey = Y + r.pubkey  # type: ignore
@@ -148,7 +151,9 @@ def hash_e(*publickeys: PublicKey) -> bytes:
     return e
 
 
-def step2_bob_dleq(B_: PublicKey, a: PrivateKey, p_bytes: bytes = b"") -> Tuple[PrivateKey, PrivateKey]:
+def step2_bob_dleq(
+    B_: PublicKey, a: PrivateKey, p_bytes: bytes = b""
+) -> Tuple[PrivateKey, PrivateKey]:
     if p_bytes:
         # deterministic p for testing
         p = PrivateKey(privkey=p_bytes, raw=True)
@@ -169,7 +174,9 @@ def step2_bob_dleq(B_: PublicKey, a: PrivateKey, p_bytes: bytes = b"") -> Tuple[
     return epk, spk
 
 
-def alice_verify_dleq(B_: PublicKey, C_: PublicKey, e: PrivateKey, s: PrivateKey, A: PublicKey) -> bool:
+def alice_verify_dleq(
+    B_: PublicKey, C_: PublicKey, e: PrivateKey, s: PrivateKey, A: PublicKey
+) -> bool:
     R1 = s.pubkey - A.mult(e)  # type: ignore
     R2 = B_.mult(s) - C_.mult(e)  # type: ignore
     e_bytes = e.private_key

@@ -1,7 +1,7 @@
 exclude: "^cashu/nostr/.*"
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v4.3.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -12,12 +12,16 @@ repos:
       - id: debug-statements
       - id: mixed-line-ending
       - id: check-case-conflict
+  # - repo: https://github.com/psf/black
+  #   rev: 23.11.0
+  #   hooks:
+  #     - id: black
+  #       args: [--line-length=150]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.2.1
+    rev: v0.0.283
     hooks:
       - id: ruff
-        args: [--fix]
-      - id: ruff-format
+        args: [--fix, --exit-non-zero-on-fix]
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.6.0
     hooks:
