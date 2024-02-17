@@ -4,18 +4,12 @@ ruff:
 ruff-check:
 	poetry run ruff check .
 
-black:
-	poetry run black .
-
-black-check:
-	poetry run black . --check
-
 mypy:
 	poetry run mypy cashu --check-untyped-defs
 
-format: black ruff
+format: ruff
 
-check: black-check ruff-check mypy
+check: ruff-check mypy
 
 clean:
 	rm -r cashu.egg-info/ || true
