@@ -71,6 +71,8 @@ preview = true
 line-length = 150
 show-fixes = true
 target-version = "py38"
+
+[tool.ruff.lint]
 # (`I`) means isorting
 extend-select = ["I"]
 ignore = []
