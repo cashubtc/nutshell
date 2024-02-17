@@ -2,9 +2,6 @@
 from typing import Optional
 
 import httpx
-from bolt11 import (
-    decode,
-)
 
 from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
@@ -155,7 +152,7 @@ class LNbitsWallet(LightningBackend):
         )
 
     async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
-        invoice_obj = decode(bolt11)
+        invoice_obj = bolt11.decode(bolt11)
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)
