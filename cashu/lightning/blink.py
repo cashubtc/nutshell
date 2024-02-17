@@ -39,6 +39,7 @@ class BlinkWallet(LightningBackend):
     payment_statuses = {"SUCCESS": True, "PENDING": None, "FAILURE": False}
 
     def __init__(self):
+        assert settings.mint_blink_key, "MINT_BLINK_KEY not set"
         self.client = httpx.AsyncClient(
             verify=not settings.debug,
             headers={
