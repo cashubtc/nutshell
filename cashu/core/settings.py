@@ -92,8 +92,8 @@ class MintSettings(CashuSettings):
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
-
     mint_strike_key: str = Field(default=None)
+    mint_blink_key: str = Field(default=None)
 
 
 class FakeWalletSettings(MintSettings):

@@ -689,7 +689,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     f" fee: {payment.fee.str() if payment.fee else 0}"
                 )
                 if not payment.ok:
-                    raise LightningError("Lightning payment unsuccessful.")
+                    raise LightningError(
+                        f"Lightning payment unsuccessful. {payment.error_message}"
+                    )
                 if payment.fee:
                     melt_quote.fee_paid = payment.fee.to(
                         to_unit=unit, round="up"
