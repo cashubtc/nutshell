@@ -54,7 +54,10 @@ class BlinkWallet(LightningBackend):
         try:
             r = await self.client.post(
                 url=self.endpoint,
-                data=('{"query":"query me { me { defaultAccount { wallets { id' ' walletCurrency balance }}}}", "variables":{}}'),
+                data=(
+                    '{"query":"query me { me { defaultAccount { wallets { id'
+                    ' walletCurrency balance }}}}", "variables":{}}'
+                ),
             )
             r.raise_for_status()
         except Exception as exc:
@@ -68,7 +71,9 @@ class BlinkWallet(LightningBackend):
             resp: dict = r.json()
         except Exception:
             return StatusResponse(
-                error_message=(f"Received invalid response from {self.endpoint}: {r.text}"),
+                error_message=(
+                    f"Received invalid response from {self.endpoint}: {r.text}"
+                ),
                 balance=0,
             )
 
@@ -132,7 +137,9 @@ class BlinkWallet(LightningBackend):
 
         resp = r.json()
         assert resp, "invalid response"
-        payment_request = resp["data"]["lnInvoiceCreateOnBehalfOfRecipient"]["invoice"]["paymentRequest"]
+        payment_request = resp["data"]["lnInvoiceCreateOnBehalfOfRecipient"]["invoice"][
+            "paymentRequest"
+        ]
         checking_id = payment_request
 
         return InvoiceResponse(
@@ -141,7 +148,9 @@ class BlinkWallet(LightningBackend):
             payment_request=payment_request,
         )
 
-    async def pay_invoice(self, quote: MeltQuote, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(
+        self, quote: MeltQuote, fee_limit_msat: int
+    ) -> PaymentResponse:
         variables = {
             "input": {
                 "paymentRequest": quote.request,
@@ -176,7 +185,9 @@ class BlinkWallet(LightningBackend):
             return PaymentResponse(ok=False, error_message=str(e))
 
         resp: dict = r.json()
-        paid = self.payment_execution_statuses[resp["data"]["lnInvoicePaymentSend"]["status"]]
+        paid = self.payment_execution_statuses[
+            resp["data"]["lnInvoicePaymentSend"]["status"]
+        ]
         fee = resp["data"]["lnInvoicePaymentSend"]["transaction"]["settlementFee"]
         checking_id = quote.request
 
@@ -211,7 +222,9 @@ class BlinkWallet(LightningBackend):
             return PaymentStatus(paid=None)
         resp: dict = r.json()
         if resp["data"]["lnInvoicePaymentStatus"]["errors"]:
-            logger.error("Blink Error", resp["data"]["lnInvoicePaymentStatus"]["errors"])
+            logger.error(
+                "Blink Error", resp["data"]["lnInvoicePaymentStatus"]["errors"]
+            )
             return PaymentStatus(paid=None)
         paid = self.invoice_statuses[resp["data"]["lnInvoicePaymentStatus"]["status"]]
         return PaymentStatus(paid=paid)
@@ -254,11 +267,19 @@ class BlinkWallet(LightningBackend):
 
         resp: dict = r.json()
         # no result found
-        if not resp["data"]["me"]["defaultAccount"]["walletById"]["transactionsByPaymentHash"]:
+        if not resp["data"]["me"]["defaultAccount"]["walletById"][
+            "transactionsByPaymentHash"
+        ]:
             return PaymentStatus(paid=None)
 
-        paid = self.payment_statuses[resp["data"]["me"]["defaultAccount"]["walletById"]["transactionsByPaymentHash"][0]["status"]]
-        fee = resp["data"]["me"]["defaultAccount"]["walletById"]["transactionsByPaymentHash"][0]["settlementFee"]
+        paid = self.payment_statuses[
+            resp["data"]["me"]["defaultAccount"]["walletById"][
+                "transactionsByPaymentHash"
+            ][0]["status"]
+        ]
+        fee = resp["data"]["me"]["defaultAccount"]["walletById"][
+            "transactionsByPaymentHash"
+        ][0]["settlementFee"]
 
         return PaymentStatus(
             paid=paid,
@@ -305,7 +326,9 @@ class BlinkWallet(LightningBackend):
 
         fees_response_msat = int(resp["data"]["lnInvoiceFeeProbe"]["amount"]) * 1000
         # we either take fee_msat_response or the BLINK_MAX_FEE_PERCENT, whichever is higher
-        fees_msat = max(fees_response_msat, math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT))
+        fees_msat = max(
+            fees_response_msat, math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT)
+        )
 
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
