@@ -42,13 +42,7 @@ async def test_blink_status():
 @respx.mock
 @pytest.mark.asyncio
 async def test_blink_create_invoice():
-    mock_response = {
-        "data": {
-            "lnInvoiceCreateOnBehalfOfRecipient": {
-                "invoice": {"paymentRequest": payment_request}
-            }
-        }
-    }
+    mock_response = {"data": {"lnInvoiceCreateOnBehalfOfRecipient": {"invoice": {"paymentRequest": payment_request}}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     invoice = await blink.create_invoice(Amount(Unit.sat, 1000))
     assert invoice.checking_id == invoice.payment_request
@@ -110,7 +104,11 @@ async def test_blink_get_payment_status():
                 "defaultAccount": {
                     "walletById": {
                         "transactionsByPaymentHash": [
-                            {"status": "SUCCESS", "settlementFee": 10}
+                            {
+                                "status": "SUCCESS",
+                                "settlementFee": 10,
+                                "direction": "SEND",
+                            }
                         ]
                     }
                 }
