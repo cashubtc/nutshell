@@ -287,7 +287,8 @@ class BlinkWallet(LightningBackend):
             return PaymentResponse(ok=False, error_message=str(e))
 
         resp: dict = r.json()
-        # no result found
+
+        # no result found, this payment has not been attempted before
         if (
             not resp.get("data", {})
             .get("me", {})
@@ -305,7 +306,7 @@ class BlinkWallet(LightningBackend):
             .get("transactionsByPaymentHash")
         )
 
-        # Blink API edge case: for a failed payment attempt, it returns two payments with the same hash
+        # Blink API edge case: for a previously failed payment attempt, it returns the two payments with the same hash
         # if there are two payments with the same hash with "direction" == "SEND" and "RECEIVE"
         # it means that the payment previously failed and we can ignore the attempt and return
         # PaymentStatus(paid=None)
