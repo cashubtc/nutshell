@@ -521,15 +521,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             expiry=quote.expiry,
         )
 
-    async def get_melt_quote(self, quote_id: str) -> MeltQuote:
+    async def get_melt_quote(
+        self, quote_id: str, check_quote_with_backend: bool = False
+    ) -> MeltQuote:
         """Returns a melt quote.
 
-        If melt quote is not paid yet, checks with the backend for the state of the payment request.
-
-        If the quote has been paid, updates the melt quote in the database.
+        If melt quote is not paid yet and `check_quote_with_backend` is set to `True`,
+        checks with the backend for the state of the payment request. If the backend
+        says that the quote has been paid, updates the melt quote in the database.
 
         Args:
             quote_id (str): ID of the melt quote.
+            check_quote_with_backend (bool, optional): Whether to check the state of the payment request with the backend. Defaults to False.
 
         Raises:
             Exception: Quote not found.
@@ -549,7 +552,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             checking_id=melt_quote.checking_id, db=self.db
         )
 
-        if not melt_quote.paid and not mint_quote:
+        if not melt_quote.paid and not mint_quote and check_quote_with_backend:
             logger.trace(
                 "Lightning: checking outgoing Lightning payment"
                 f" {melt_quote.checking_id}"
@@ -643,7 +646,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             Tuple[str, List[BlindedMessage]]: Proof of payment and signed outputs for returning overpaid fees to wallet.
         """
-        # get melt quote and check if it is paid
+        # get melt quote and check if it was already paid
         melt_quote = await self.get_melt_quote(quote_id=quote)
         method = Method[melt_quote.method]
         unit = Unit[melt_quote.unit]
