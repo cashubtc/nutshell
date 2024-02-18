@@ -60,7 +60,10 @@ class BlinkWallet(LightningBackend):
         try:
             r = await self.client.post(
                 url=self.endpoint,
-                data=('{"query":"query me { me { defaultAccount { wallets { id' ' walletCurrency balance }}}}", "variables":{}}'),
+                data=(
+                    '{"query":"query me { me { defaultAccount { wallets { id'
+                    ' walletCurrency balance }}}}", "variables":{}}'
+                ),
             )
             r.raise_for_status()
         except Exception as exc:
@@ -74,12 +77,16 @@ class BlinkWallet(LightningBackend):
             resp: dict = r.json()
         except Exception:
             return StatusResponse(
-                error_message=(f"Received invalid response from {self.endpoint}: {r.text}"),
+                error_message=(
+                    f"Received invalid response from {self.endpoint}: {r.text}"
+                ),
                 balance=0,
             )
 
         balance = 0
-        for wallet_dict in resp.get("data", {}).get("me", {}).get("defaultAccount", {}).get("wallets"):
+        for wallet_dict in (
+            resp.get("data", {}).get("me", {}).get("defaultAccount", {}).get("wallets")
+        ):
             if wallet_dict.get("walletCurrency") == "USD":
                 self.wallet_ids[Unit.usd] = wallet_dict["id"]
             elif wallet_dict.get("walletCurrency") == "BTC":
@@ -138,7 +145,12 @@ class BlinkWallet(LightningBackend):
 
         resp = r.json()
         assert resp, "invalid response"
-        payment_request = resp.get("data", {}).get("lnInvoiceCreateOnBehalfOfRecipient", {}).get("invoice", {}).get("paymentRequest")
+        payment_request = (
+            resp.get("data", {})
+            .get("lnInvoiceCreateOnBehalfOfRecipient", {})
+            .get("invoice", {})
+            .get("paymentRequest")
+        )
         assert payment_request, "payment request not found"
         checking_id = payment_request
 
@@ -148,7 +160,9 @@ class BlinkWallet(LightningBackend):
             payment_request=payment_request,
         )
 
-    async def pay_invoice(self, quote: MeltQuote, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(
+        self, quote: MeltQuote, fee_limit_msat: int
+    ) -> PaymentResponse:
         variables = {
             "input": {
                 "paymentRequest": quote.request,
@@ -184,8 +198,15 @@ class BlinkWallet(LightningBackend):
             return PaymentResponse(ok=False, error_message=str(e))
 
         resp: dict = r.json()
-        paid = self.payment_execution_statuses[resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("status")]
-        fee = resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {}).get("settlementFee")
+        paid = self.payment_execution_statuses[
+            resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("status")
+        ]
+        fee = (
+            resp.get("data", {})
+            .get("lnInvoicePaymentSend", {})
+            .get("transaction", {})
+            .get("settlementFee")
+        )
         checking_id = quote.request
 
         return PaymentResponse(
@@ -224,7 +245,9 @@ class BlinkWallet(LightningBackend):
                 resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("errors"),
             )
             return PaymentStatus(paid=None)
-        paid = self.invoice_statuses[resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("status")]
+        paid = self.invoice_statuses[
+            resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("status")
+        ]
         return PaymentStatus(paid=paid)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
@@ -265,24 +288,41 @@ class BlinkWallet(LightningBackend):
 
         resp: dict = r.json()
         # no result found
-        if not resp.get("data", {}).get("me", {}).get("defaultAccount", {}).get("walletById", {}).get("transactionsByPaymentHash"):
+        if (
+            not resp.get("data", {})
+            .get("me", {})
+            .get("defaultAccount", {})
+            .get("walletById", {})
+            .get("transactionsByPaymentHash")
+        ):
             return PaymentStatus(paid=None)
 
         all_payments_with_this_hash = (
-            resp.get("data", {}).get("me", {}).get("defaultAccount", {}).get("walletById", {}).get("transactionsByPaymentHash")
+            resp.get("data", {})
+            .get("me", {})
+            .get("defaultAccount", {})
+            .get("walletById", {})
+            .get("transactionsByPaymentHash")
         )
 
         # Blink API edge case: for a failed payment attempt, it returns two payments with the same hash
         # if there are two payments with the same hash with "direction" == "SEND" and "RECEIVE"
         # it means that the payment previously failed and we can ignore the attempt and return
         # PaymentStatus(paid=None)
-        if len(all_payments_with_this_hash) == 2 and all(p["direction"] in [DIRECTION_SEND, DIRECTION_RECEIVE] for p in all_payments_with_this_hash):
+        if len(all_payments_with_this_hash) == 2 and all(
+            p["direction"] in [DIRECTION_SEND, DIRECTION_RECEIVE]
+            for p in all_payments_with_this_hash
+        ):
             return PaymentStatus(paid=None)
 
         # if there is only one payment with the same hash, it means that the payment might have succeeded
         # we only care about the payment with "direction" == "SEND"
         payment = next(
-            (p for p in all_payments_with_this_hash if p.get("direction") == DIRECTION_SEND),
+            (
+                p
+                for p in all_payments_with_this_hash
+                if p.get("direction") == DIRECTION_SEND
+            ),
             None,
         )
         if not payment:
@@ -330,17 +370,19 @@ class BlinkWallet(LightningBackend):
             logger.error(f"Blink API error: {str(e)}")
             raise e
         resp: dict = r.json()
-        # if resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("errors"):
-        #     raise Exception(
-        #         resp["data"]["lnInvoiceFeeProbe"]["errors"][0].get("message")
-        #         or "Unknown error"
-        #     )
+        if resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("errors"):
+            raise Exception(
+                resp["data"]["lnInvoiceFeeProbe"]["errors"][0].get("message")
+                or "Unknown error"
+            )
         invoice_obj = decode(bolt11)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
         amount_msat = int(invoice_obj.amount_msat)
 
-        fees_response_msat = int(resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("amount")) * 1000
+        fees_response_msat = (
+            int(resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("amount")) * 1000
+        )
         # we either take fee_msat_response or the BLINK_MAX_FEE_PERCENT, whichever is higher
         fees_msat = max(
             fees_response_msat,
