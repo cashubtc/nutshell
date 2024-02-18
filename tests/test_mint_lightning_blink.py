@@ -4,7 +4,7 @@ from httpx import Response
 
 from cashu.core.base import Amount, MeltQuote, Unit
 from cashu.core.settings import settings
-from cashu.lightning.blink import BlinkWallet  # noqa: F401
+from cashu.lightning.blink import BlinkWallet
 
 settings.mint_blink_key = "123"
 blink = BlinkWallet()
