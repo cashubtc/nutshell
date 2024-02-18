@@ -24,8 +24,11 @@ from .base import (
 
 # according to https://github.com/GaloyMoney/galoy/blob/7e79cc27304de9b9c2e7d7f4fdd3bac09df23aac/core/api/src/domain/bitcoin/index.ts#L59
 BLINK_MAX_FEE_PERCENT = 0.5
+
 DIRECTION_SEND = "SEND"
 DIRECTION_RECEIVE = "RECEIVE"
+PROBE_FEE_TIMEOUT_SEC = 1
+MINIMUM_FEE_MSAT = 2000
 
 
 class BlinkWallet(LightningBackend):
@@ -360,34 +363,40 @@ class BlinkWallet(LightningBackend):
             "variables": variables,
         }
 
+        fees_response_msat = 0
         try:
             r = await self.client.post(
                 url=self.endpoint,
                 data=json.dumps(data),
-                timeout=None,
+                timeout=PROBE_FEE_TIMEOUT_SEC,
             )
             r.raise_for_status()
+            resp: dict = r.json()
+            if resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("errors"):
+                raise Exception(
+                    resp["data"]["lnInvoiceFeeProbe"]["errors"][0].get("message")
+                    or "Unknown error"
+                )
+
+            fees_response_msat = (
+                int(resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("amount"))
+                * 1000
+            )
+        except httpx.ReadTimeout:
+            pass
         except Exception as e:
             logger.error(f"Blink API error: {str(e)}")
             raise e
-        resp: dict = r.json()
-        if resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("errors"):
-            raise Exception(
-                resp["data"]["lnInvoiceFeeProbe"]["errors"][0].get("message")
-                or "Unknown error"
-            )
+
         invoice_obj = decode(bolt11)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
         amount_msat = int(invoice_obj.amount_msat)
 
-        fees_response_msat = (
-            int(resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("amount")) * 1000
-        )
-        # we either take fee_msat_response or the BLINK_MAX_FEE_PERCENT, whichever is higher
+        # we take the highest: fee_msat_response, or BLINK_MAX_FEE_PERCENT, or 2000 msat
         fees_msat = max(
             fees_response_msat,
-            max(math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT), 1000),
+            max(math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT), MINIMUM_FEE_MSAT),
         )
 
         fees = Amount(unit=Unit.msat, amount=fees_msat)
