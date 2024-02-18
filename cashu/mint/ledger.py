@@ -498,6 +498,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             payment_quote = await self.backends[method][unit].get_payment_quote(
                 melt_quote.request
             )
+            assert payment_quote.checking_id, "quote has no checking id"
 
         quote = MeltQuote(
             quote=random_hash(),

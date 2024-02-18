@@ -110,7 +110,11 @@ async def test_blink_get_payment_status():
                 "defaultAccount": {
                     "walletById": {
                         "transactionsByPaymentHash": [
-                            {"status": "SUCCESS", "settlementFee": 10}
+                            {
+                                "status": "SUCCESS",
+                                "settlementFee": 10,
+                                "direction": "SEND",
+                            }
                         ]
                     }
                 }
