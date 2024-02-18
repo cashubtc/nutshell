@@ -380,6 +380,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         method = Method[quote.method]
 
         if not quote.paid:
+            assert quote.checking_id, "quote has no checking id"
             logger.trace(f"Lightning: checking invoice {quote.checking_id}")
             status: PaymentStatus = await self.backends[method][
                 unit
@@ -482,6 +483,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             assert mint_quote.method == method.name, "methods do not match"
             assert not mint_quote.paid, "mint quote already paid"
             assert not mint_quote.issued, "mint quote already issued"
+            assert mint_quote.checking_id, "mint quote has no checking id"
             payment_quote = PaymentQuoteResponse(
                 checking_id=mint_quote.checking_id,
                 amount=Amount(unit, mint_quote.amount),
