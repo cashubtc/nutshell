@@ -611,6 +611,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             f"Settling bolt11 payment internally: {melt_quote.quote} ->"
             f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
         )
+
         # we handle this transaction internally
         melt_quote.fee_paid = 0
         melt_quote.paid = True
