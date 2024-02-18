@@ -55,18 +55,8 @@ mint = "cashu.mint.main:main"
 cashu = "cashu.wallet.cli.cli:cli"
 wallet-test = "tests.test_wallet:test"
 
-
-[tool.black]
-line-length = 88
-
-# previously experimental-string-processing = true
-# this should autoformat string properly but does not work
-preview = true
-
-
 [tool.ruff]
-# Same as Black. but black has a 10% overflow rule
-line-length = 150
+line-length = 88
 show-fixes = true
 
 [tool.ruff.lint]
