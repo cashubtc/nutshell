@@ -27,6 +27,7 @@ BLINK_MAX_FEE_PERCENT = 0.5
 DIRECTION_SEND = "SEND"
 DIRECTION_RECEIVE = "RECEIVE"
 PROBE_FEE_TIMEOUT_SEC = 1
+MINIMUM_FEE_MSAT = 2000
 
 
 class BlinkWallet(LightningBackend):
@@ -394,7 +395,7 @@ class BlinkWallet(LightningBackend):
         # we take the highest: fee_msat_response, or BLINK_MAX_FEE_PERCENT, or 2000 msat
         fees_msat = max(
             fees_response_msat,
-            max(math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT), 2000),
+            max(math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT), MINIMUM_FEE_MSAT),
         )
 
         fees = Amount(unit=Unit.msat, amount=fees_msat)
