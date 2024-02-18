@@ -4,7 +4,7 @@ from httpx import Response
 
 from cashu.core.base import Amount, MeltQuote, Unit
 from cashu.core.settings import settings
-from cashu.lightning.blink import BlinkWallet
+from cashu.lightning.blink import BlinkWallet  # noqa: F401
 
 settings.mint_blink_key = "123"
 blink = BlinkWallet()
@@ -42,14 +42,7 @@ async def test_blink_status():
 @respx.mock
 @pytest.mark.asyncio
 async def test_blink_create_invoice():
-    mock_response = {
-        "data": {
-            "lnInvoiceCreateOnBehalfOfRecipient": {
-                "invoice": {"paymentRequest": payment_request}
-            }
-        }
-    }
-
+    mock_response = {"data": {"lnInvoiceCreateOnBehalfOfRecipient": {"invoice": {"paymentRequest": payment_request}}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     invoice = await blink.create_invoice(Amount(Unit.sat, 1000))
     assert invoice.checking_id == invoice.payment_request
@@ -105,19 +98,7 @@ async def test_blink_get_invoice_status():
 @respx.mock
 @pytest.mark.asyncio
 async def test_blink_get_payment_status():
-    mock_response = {
-        "data": {
-            "me": {
-                "defaultAccount": {
-                    "walletById": {
-                        "transactionsByPaymentHash": [
-                            {"status": "SUCCESS", "settlementFee": 10}
-                        ]
-                    }
-                }
-            }
-        }
-    }
+    mock_response = {"data": {"me": {"defaultAccount": {"walletById": {"transactionsByPaymentHash": [{"status": "SUCCESS", "settlementFee": 10}]}}}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     status = await blink.get_payment_status(payment_request)
     assert status.paid
@@ -129,9 +110,18 @@ async def test_blink_get_payment_status():
 @respx.mock
 @pytest.mark.asyncio
 async def test_blink_get_payment_quote():
+    # response says 1 sat fees but invoice * 0.5% is 5 sat so we expect 5 sat
+    mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 1}}}
+    respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
+    quote = await blink.get_payment_quote(payment_request)
+    assert quote.checking_id == payment_request
+    assert quote.amount == Amount(Unit.msat, 1000000)  # msat
+    assert quote.fee == Amount(Unit.msat, 5000)  # msat
+
+    # response says 10 sat fees but invoice * 0.5% is 5 sat so we expect 10 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 10}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     quote = await blink.get_payment_quote(payment_request)
     assert quote.checking_id == payment_request
     assert quote.amount == Amount(Unit.msat, 1000000)  # msat
-    assert quote.fee == Amount(Unit.msat, 500000)  # msat
+    assert quote.fee == Amount(Unit.msat, 10000)  # msat
