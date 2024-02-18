@@ -557,7 +557,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             status: PaymentStatus = await self.backends[method][
                 unit
             ].get_payment_status(melt_quote.checking_id)
-
             if status.paid:
                 logger.trace(f"Setting quote {quote_id} as paid")
                 melt_quote.paid = True
