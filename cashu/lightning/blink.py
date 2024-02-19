@@ -223,13 +223,20 @@ class BlinkWallet(LightningBackend):
                 .get("transaction", {})
                 .get("settlementFee")
             )
+
         checking_id = quote.request
+
+        # we check the payment status to get the preimage
+        preimage: Union[None, str] = None
+        payment_status = await self.get_payment_status(checking_id)
+        if payment_status.paid:
+            preimage = payment_status.preimage
 
         return PaymentResponse(
             ok=paid,
             checking_id=checking_id,
             fee=Amount(Unit.sat, fee) if fee else None,
-            preimage=None,
+            preimage=preimage,
             error_message=error_message,
         )
 
@@ -283,6 +290,14 @@ class BlinkWallet(LightningBackend):
                                 status
                                 direction
                                 settlementFee
+                                settlementVia {
+                                    ... on SettlementViaIntraLedger {
+                                        preImage
+                                    }
+                                    ... on SettlementViaLn {
+                                        preImage
+                                    }
+                                } 
                             }
                         }
                     }
@@ -348,11 +363,12 @@ class BlinkWallet(LightningBackend):
         # we read the status of the payment
         paid = self.payment_statuses[payment["status"]]
         fee = payment["settlementFee"]
+        preimage = payment["settlementVia"].get("preImage")
 
         return PaymentStatus(
             paid=paid,
             fee=Amount(Unit.sat, fee),
-            preimage=None,
+            preimage=preimage,
         )
 
     async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
