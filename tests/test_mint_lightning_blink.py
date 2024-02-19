@@ -79,7 +79,12 @@ async def test_blink_pay_invoice():
         "data": {
             "lnInvoicePaymentSend": {
                 "status": "SUCCESS",
-                "transaction": {"settlementFee": 10},
+                "transaction": {
+                    "settlementFee": 10,
+                    "settlementVia": {
+                        "preImage": "123",
+                    },
+                },
             }
         }
     }
@@ -163,6 +168,9 @@ async def test_blink_get_payment_status():
                                 "status": "SUCCESS",
                                 "settlementFee": 10,
                                 "direction": "SEND",
+                                "settlementVia": {
+                                    "preImage": "123",
+                                },
                             }
                         ]
                     }
@@ -175,7 +183,7 @@ async def test_blink_get_payment_status():
     assert status.paid
     assert status.fee
     assert status.fee.amount == 10
-    assert status.preimage is None
+    assert status.preimage == "123"
 
 
 @respx.mock
