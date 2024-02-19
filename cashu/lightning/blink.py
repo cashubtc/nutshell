@@ -2,7 +2,7 @@
 import asyncio
 import json
 import math
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 import bolt11
 import httpx
@@ -201,23 +201,36 @@ class BlinkWallet(LightningBackend):
             return PaymentResponse(ok=False, error_message=str(e))
 
         resp: dict = r.json()
+
+        error_message: Union[None, str] = None
+        fee: Union[None, int] = None
+        if resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("errors"):
+            error_message = (
+                resp["data"]["lnInvoicePaymentSend"]["errors"][0].get("message")
+                or "Unknown error"
+            )
+
         paid = self.payment_execution_statuses[
             resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("status")
         ]
-        fee = (
-            resp.get("data", {})
-            .get("lnInvoicePaymentSend", {})
-            .get("transaction", {})
-            .get("settlementFee")
-        )
+        if paid is None:
+            error_message = "Invoice already paid."
+
+        if resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {}):
+            fee = (
+                resp.get("data", {})
+                .get("lnInvoicePaymentSend", {})
+                .get("transaction", {})
+                .get("settlementFee")
+            )
         checking_id = quote.request
 
         return PaymentResponse(
             ok=paid,
             checking_id=checking_id,
-            fee=Amount(Unit.sat, fee),
+            fee=Amount(Unit.sat, fee) if fee else None,
             preimage=None,
-            error_message="Invoice already paid." if paid is None else None,
+            error_message=error_message,
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
@@ -373,15 +386,17 @@ class BlinkWallet(LightningBackend):
             r.raise_for_status()
             resp: dict = r.json()
             if resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("errors"):
-                raise Exception(
-                    resp["data"]["lnInvoiceFeeProbe"]["errors"][0].get("message")
-                    or "Unknown error"
+                # if there was an error, we simply ignore the response and decide the fees ourselves
+                fees_response_msat = 0
+                logger.debug(
+                    f"Blink probe error: {resp['data']['lnInvoiceFeeProbe']['errors'][0].get('message')}"
                 )
 
-            fees_response_msat = (
-                int(resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("amount"))
-                * 1000
-            )
+            else:
+                fees_response_msat = (
+                    int(resp.get("data", {}).get("lnInvoiceFeeProbe", {}).get("amount"))
+                    * 1000
+                )
         except httpx.ReadTimeout:
             pass
         except Exception as e:

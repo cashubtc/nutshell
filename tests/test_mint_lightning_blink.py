@@ -104,6 +104,38 @@ async def test_blink_pay_invoice():
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_blink_pay_invoice_failure():
+    mock_response = {
+        "data": {
+            "lnInvoicePaymentSend": {
+                "status": "FAILURE",
+                "errors": [
+                    {"message": "This is the error", "codee": "ROUTE_FINDING_ERROR"},
+                ],
+            }
+        }
+    }
+    respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
+    quote = MeltQuote(
+        request=payment_request,
+        quote="asd",
+        method="bolt11",
+        checking_id=payment_request,
+        unit="sat",
+        amount=100,
+        fee_reserve=12,
+        paid=False,
+    )
+    payment = await blink.pay_invoice(quote, 1000)
+    assert not payment.ok
+    assert payment.fee is None
+    assert payment.error_message
+    assert "This is the error" in payment.error_message
+    assert payment.checking_id == payment_request
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_blink_get_invoice_status():
     mock_response = {
         "data": {
@@ -180,3 +212,15 @@ async def test_blink_get_payment_quote():
     assert quote.checking_id == payment_request_1
     assert quote.amount == Amount(Unit.msat, 1000)  # msat
     assert quote.fee == Amount(Unit.msat, MINIMUM_FEE_MSAT)  # msat
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_blink_get_payment_quote_backend_error():
+    # response says error but invoice (1000 sat) * 0.5% is 5 sat so we expect 10 sat
+    mock_response = {"data": {"lnInvoiceFeeProbe": {"errors": [{"message": "error"}]}}}
+    respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
+    quote = await blink.get_payment_quote(payment_request)
+    assert quote.checking_id == payment_request
+    assert quote.amount == Amount(Unit.msat, 1000000)  # msat
+    assert quote.fee == Amount(Unit.msat, 5000)  # msat
