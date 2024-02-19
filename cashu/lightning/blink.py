@@ -393,10 +393,18 @@ class BlinkWallet(LightningBackend):
 
         amount_msat = int(invoice_obj.amount_msat)
 
-        # we take the highest: fee_msat_response, or BLINK_MAX_FEE_PERCENT, or 2000 msat
-        fees_msat = max(
+        # we take the highest: fee_msat_response, or BLINK_MAX_FEE_PERCENT, or MINIMUM_FEE_MSAT msat
+        # Note: fees with BLINK_MAX_FEE_PERCENT are rounded to the nearest 1000 msat
+        fees_amount_msat: int = (
+            math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT / 1000) * 1000
+        )
+
+        fees_msat: int = max(
             fees_response_msat,
-            max(math.ceil(amount_msat / 100 * BLINK_MAX_FEE_PERCENT), MINIMUM_FEE_MSAT),
+            max(
+                fees_amount_msat,
+                MINIMUM_FEE_MSAT,
+            ),
         )
 
         fees = Amount(unit=Unit.msat, amount=fees_msat)
