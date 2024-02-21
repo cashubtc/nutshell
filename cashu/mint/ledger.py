@@ -343,6 +343,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # get invoice expiry time
         invoice_obj = bolt11.decode(invoice_response.payment_request)
 
+        expiry = None
+        if invoice_obj.expiry is not None:
+            expiry = invoice_obj.date + invoice_obj.expiry
+
         quote = MintQuote(
             quote=random_hash(),
             method=method.name,
@@ -353,7 +357,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             issued=False,
             paid=False,
             created_time=int(time.time()),
-            expiry=invoice_obj.expiry,
+            expiry=expiry,
         )
         await self.crud.store_mint_quote(
             quote=quote,
@@ -499,6 +503,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 melt_quote.request
             )
             assert payment_quote.checking_id, "quote has no checking id"
+        
+        expiry = None
+        if invoice_obj.expiry is not None:
+            expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MeltQuote(
             quote=random_hash(),
@@ -510,7 +518,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             paid=False,
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=int(time.time()),
-            expiry=invoice_obj.expiry,
+            expiry=expiry,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         return PostMeltQuoteResponse(

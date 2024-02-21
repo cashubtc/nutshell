@@ -182,7 +182,12 @@ async def test_mint_quote(ledger: Ledger):
     assert result["request"]
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
-    assert result["expiry"] == invoice.expiry
+    
+    expiry = None
+    if invoice.expiry is not None:
+        expiry = invoice.date + invoice.expiry
+        
+    assert result["expiry"] == expiry
 
     # get mint quote again from api
     response = httpx.get(
@@ -245,7 +250,12 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     # TODO: internal invoice, fee should be 0
     assert result["fee_reserve"] == 0
     invoice_obj = bolt11.decode(request)
-    assert result["expiry"] == invoice_obj.expiry
+    
+    expiry = None
+    if invoice_obj.expiry is not None:
+        expiry = invoice_obj.date + invoice_obj.expiry
+
+    assert result["expiry"] == expiry
 
     # get melt quote again from api
     response = httpx.get(
