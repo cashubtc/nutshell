@@ -136,9 +136,14 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     valid = C == Y.mult(a)  # type: ignore
     # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
     if not valid:
-        Y1: PublicKey = hash_to_curve_domain_separated(secret_msg.encode("utf-8"))
-        return C == Y1.mult(a)  # type: ignore
+        return verify_domain_separated(a, C, secret_msg)
     # END: BACKWARDS COMPATIBILITY < 0.15.1
+    return valid
+
+
+def verify_domain_separated(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
+    Y: PublicKey = hash_to_curve_domain_separated(secret_msg.encode("utf-8"))
+    valid = C == Y.mult(a)  # type: ignore
     return valid
 
 
@@ -197,10 +202,23 @@ def carol_verify_dleq(
     valid = alice_verify_dleq(B_, C_, e, s, A)
     # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
     if not valid:
-        Y1: PublicKey = hash_to_curve_domain_separated(secret_msg.encode("utf-8"))
-        B_1: PublicKey = Y1 + r.pubkey  # type: ignore
-        return alice_verify_dleq(B_1, C_, e, s, A)
+        return carol_verify_dleq_domain_separated(secret_msg, r, C, e, s, A)
     # END: BACKWARDS COMPATIBILITY < 0.15.1
+    return valid
+
+
+def carol_verify_dleq_domain_separated(
+    secret_msg: str,
+    r: PrivateKey,
+    C: PublicKey,
+    e: PrivateKey,
+    s: PrivateKey,
+    A: PublicKey,
+) -> bool:
+    Y: PublicKey = hash_to_curve_domain_separated(secret_msg.encode("utf-8"))
+    C_: PublicKey = C + A.mult(r)  # type: ignore
+    B_: PublicKey = Y + r.pubkey  # type: ignore
+    valid = alice_verify_dleq(B_, C_, e, s, A)
     return valid
 
 

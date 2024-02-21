@@ -1,9 +1,12 @@
 from cashu.core.crypto.b_dhke import (
     alice_verify_dleq,
     carol_verify_dleq,
+    carol_verify_dleq_domain_separated,
     hash_e,
     hash_to_curve,
+    hash_to_curve_domain_separated,
     step1_alice,
+    step1_alice_domain_separated,
     step2_bob,
     step2_bob_dleq,
     step3_alice,
@@ -277,7 +280,7 @@ def test_dleq_alice_direct_verify_dleq():
     assert alice_verify_dleq(B_, C_, e, s, A)
 
 
-def test_dleq_carol_varify_from_bob():
+def test_dleq_carol_verify_from_bob():
     a = PrivateKey(
         privkey=bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001"
@@ -300,3 +303,77 @@ def test_dleq_carol_varify_from_bob():
 
     # carol does not know B_ and C_, but she receives C and r from Alice
     assert carol_verify_dleq(secret_msg=secret_msg, C=C, r=r, e=e, s=s, A=A)
+
+
+# TESTS FOR DOMAIN SEPARATED HASH TO CURVE
+
+
+def test_hash_to_curve_domain_separated():
+    result = hash_to_curve_domain_separated(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        )
+    )
+    assert (
+        result.serialize().hex()
+        == "024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725"
+    )
+
+
+def test_hash_to_curve_domain_separated_iterative():
+    result = hash_to_curve_domain_separated(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        )
+    )
+    assert (
+        result.serialize().hex()
+        == "022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf"
+    )
+
+
+def test_step1_domain_separated():
+    secret_msg = "test_message"
+    B_, blinding_factor = step1_alice_domain_separated(
+        secret_msg,
+        blinding_factor=PrivateKey(
+            privkey=bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            )  # 32 bytes
+        ),
+    )
+
+    assert (
+        B_.serialize().hex()
+        == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
+    )
+    assert blinding_factor.private_key == bytes.fromhex(
+        "0000000000000000000000000000000000000000000000000000000000000001"
+    )
+
+
+def test_dleq_carol_verify_from_bob_domain_separated():
+    a = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),
+        raw=True,
+    )
+    A = a.pubkey
+    assert A
+    secret_msg = "test_message"
+    r = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),
+        raw=True,
+    )
+    B_, _ = step1_alice_domain_separated(secret_msg, r)
+    C_, e, s = step2_bob(B_, a)
+    assert alice_verify_dleq(B_, C_, e, s, A)
+    C = step3_alice(C_, r, A)
+
+    # carol does not know B_ and C_, but she receives C and r from Alice
+    assert carol_verify_dleq_domain_separated(
+        secret_msg=secret_msg, C=C, r=r, e=e, s=s, A=A
+    )
