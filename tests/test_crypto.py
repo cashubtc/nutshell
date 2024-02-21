@@ -3,7 +3,9 @@ from cashu.core.crypto.b_dhke import (
     carol_verify_dleq,
     hash_e,
     hash_to_curve,
+    hash_to_curve_domain_separated,
     step1_alice,
+    step1_alice_domain_separated,
     step2_bob,
     step2_bob_dleq,
     step3_alice,
@@ -46,6 +48,30 @@ def test_hash_to_curve_iteration():
     )
 
 
+def test_hash_to_curve_domain_separated():
+    result = hash_to_curve_domain_separated(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        )
+    )
+    assert (
+        result.serialize().hex()
+        == "024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725"
+    )
+
+
+def test_hash_to_curve_domain_separated_iterative():
+    result = hash_to_curve_domain_separated(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        )
+    )
+    assert (
+        result.serialize().hex()
+        == "022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf"
+    )
+
+
 def test_step1():
     secret_msg = "test_message"
     B_, blinding_factor = step1_alice(
@@ -60,6 +86,26 @@ def test_step1():
     assert (
         B_.serialize().hex()
         == "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
+    )
+    assert blinding_factor.private_key == bytes.fromhex(
+        "0000000000000000000000000000000000000000000000000000000000000001"
+    )
+
+
+def test_step1_domain_separated():
+    secret_msg = "test_message"
+    B_, blinding_factor = step1_alice_domain_separated(
+        secret_msg,
+        blinding_factor=PrivateKey(
+            privkey=bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            )  # 32 bytes
+        ),
+    )
+
+    assert (
+        B_.serialize().hex()
+        == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
     )
     assert blinding_factor.private_key == bytes.fromhex(
         "0000000000000000000000000000000000000000000000000000000000000001"
