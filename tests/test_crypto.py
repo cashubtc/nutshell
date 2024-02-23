@@ -94,6 +94,7 @@ def test_step2():
 
 def test_step3():
     # C = C_ - A.mult(r)
+    # B_ from test_step1
     C_ = PublicKey(
         bytes.fromhex(
             "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
@@ -372,6 +373,36 @@ def test_step2_domain_separated():
     assert (
         C_.serialize().hex()
         == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
+    )
+
+
+def test_step3_domain_separated():
+    # C = C_ - A.mult(r)
+    # B_ from test_step1
+    C_ = PublicKey(
+        bytes.fromhex(
+            "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
+        ),
+        raw=True,
+    )
+    r = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        )
+    )
+
+    A = PublicKey(
+        pubkey=b"\x02"
+        + bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001",
+        ),
+        raw=True,
+    )
+    C = step3_alice(C_, r, A)
+
+    assert (
+        C.serialize().hex()
+        == "0271bf0d702dbad86cbe0af3ab2bfba70a0338f22728e412d88a830ed0580b9de4"
     )
 
 
