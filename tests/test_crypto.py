@@ -352,6 +352,29 @@ def test_step1_domain_separated():
     )
 
 
+def test_step2_domain_separated():
+    B_, _ = step1_alice_domain_separated(
+        "test_message",
+        blinding_factor=PrivateKey(
+            privkey=bytes.fromhex(
+                "0000000000000000000000000000000000000000000000000000000000000001"
+            ),
+            raw=True,
+        ),
+    )
+    a = PrivateKey(
+        privkey=bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000001"
+        ),
+        raw=True,
+    )
+    C_, e, s = step2_bob(B_, a)
+    assert (
+        C_.serialize().hex()
+        == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
+    )
+
+
 def test_dleq_carol_verify_from_bob_domain_separated():
     a = PrivateKey(
         privkey=bytes.fromhex(

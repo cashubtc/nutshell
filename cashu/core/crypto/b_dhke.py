@@ -136,7 +136,7 @@ def verify(a: PrivateKey, C: PublicKey, secret_msg: str) -> bool:
     valid = C == Y.mult(a)  # type: ignore
     # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
     if not valid:
-        return verify_domain_separated(a, C, secret_msg)
+        valid = verify_domain_separated(a, C, secret_msg)
     # END: BACKWARDS COMPATIBILITY < 0.15.1
     return valid
 
