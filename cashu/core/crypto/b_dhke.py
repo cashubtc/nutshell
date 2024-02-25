@@ -165,7 +165,7 @@ def carol_verify_dleq(
     s: PrivateKey,
     A: PublicKey,
 ) -> bool:
-    Y: PublicKey = hash_to_curve_deprecated(secret_msg.encode("utf-8"))
+    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     C_: PublicKey = C + A.mult(r)  # type: ignore
     B_: PublicKey = Y + r.pubkey  # type: ignore
     valid = alice_verify_dleq(B_, C_, e, s, A)
@@ -217,7 +217,7 @@ def carol_verify_dleq_deprecated(
     s: PrivateKey,
     A: PublicKey,
 ) -> bool:
-    Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
+    Y: PublicKey = hash_to_curve_deprecated(secret_msg.encode("utf-8"))
     C_: PublicKey = C + A.mult(r)  # type: ignore
     B_: PublicKey = Y + r.pubkey  # type: ignore
     valid = alice_verify_dleq(B_, C_, e, s, A)
