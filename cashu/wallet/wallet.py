@@ -998,9 +998,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # NUT-08, the mint will imprint these outputs with a value depending on the
         # amount of fees we overpaid.
         n_change_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
-        change_secrets, change_rs, change_derivation_paths = (
-            await self.generate_n_secrets(n_change_outputs)
-        )
+        (
+            change_secrets,
+            change_rs,
+            change_derivation_paths,
+        ) = await self.generate_n_secrets(n_change_outputs)
         change_outputs, change_rs = self._construct_outputs(
             n_change_outputs * [1], change_secrets, change_rs
         )
@@ -1126,14 +1128,15 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             C = b_dhke.step3_alice(
                 C_, r, self.keysets[promise.id].public_keys[promise.amount]
             )
-            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
-            if not settings.wallet_domain_separation:
+
+            if not settings.wallet_use_deprecated_h2c:
                 B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
-            # END: BACKWARDS COMPATIBILITY < 0.15.1
+            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_domain_separated(
+                B_, r = b_dhke.step1_alice_deprecated(
                     secret, r
                 )  # recompute B_ for dleq proofs
+            # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             proof = Proof(
                 id=promise.id,
@@ -1196,12 +1199,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
         for secret, amount, r in zip(secrets, amounts, rs_):
-            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
-            if not settings.wallet_domain_separation:
+            if not settings.wallet_use_deprecated_h2c:
                 B_, r = b_dhke.step1_alice(secret, r or None)
-            # END: BACKWARDS COMPATIBILITY < 0.15.1
+            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_domain_separated(secret, r or None)
+                B_, r = b_dhke.step1_alice_deprecated(secret, r or None)
+            # END: BACKWARDS COMPATIBILITY < 0.15.1
+
             rs_return.append(r)
             output = BlindedMessage(
                 amount=amount, B_=B_.serialize().hex(), id=self.keyset_id
