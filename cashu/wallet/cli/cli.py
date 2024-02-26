@@ -512,6 +512,10 @@ async def receive_cli(
         await receive(wallet, tokenObj)
     elif nostr:
         await receive_nostr(wallet)
+        # exit on keypress
+        print("Press any key to exit.")
+        click.getchar()
+        os._exit(0)
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
