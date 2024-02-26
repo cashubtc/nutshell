@@ -101,17 +101,16 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
-    mint_id: Union[None, str] = (
-        None  # holds the id of the mint operation that created this proof
-    )
-    melt_id: Union[None, str] = (
-        None  # holds the id of the melt operation that destroyed this proof
-    )
+    mint_id: Union[
+        None, str
+    ] = None  # holds the id of the mint operation that created this proof
+    melt_id: Union[
+        None, str
+    ] = None  # holds the id of the melt operation that destroyed this proof
 
     def __init__(self, **data):
         super().__init__(**data)
-        if not self.Y:
-            self.Y = hash_to_curve(self.secret.encode("utf-8")).serialize().hex()
+        self.Y = hash_to_curve(self.secret.encode("utf-8")).serialize().hex()
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
@@ -274,7 +273,6 @@ class MintQuote(BaseModel):
 
     @classmethod
     def from_row(cls, row: Row):
-
         try:
             #  SQLITE: row is timestamp (string)
             created_time = int(row["created_time"]) if row["created_time"] else None
@@ -664,9 +662,9 @@ class WalletKeyset:
             self.id = id
 
     def serialize(self):
-        return json.dumps({
-            amount: key.serialize().hex() for amount, key in self.public_keys.items()
-        })
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
 
     @classmethod
     def from_row(cls, row: Row):
