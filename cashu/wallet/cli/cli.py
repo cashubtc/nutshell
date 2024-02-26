@@ -515,6 +515,7 @@ async def receive_cli(
         # exit on keypress
         print("Press any key to exit.")
         click.getchar()
+        print("Exiting.")
         os._exit(0)
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
