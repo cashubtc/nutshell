@@ -132,9 +132,15 @@ class WalletSettings(CashuSettings):
         default=[
             "wss://nostr-pub.wellorder.net",
             "wss://relay.damus.io",
-            "wss://nostr.zebedee.cloud",
+            "wss://nostr.mom",
             "wss://relay.snort.social",
             "wss://nostr.fmt.wiz.biz",
+            "wss://relay.minibits.cash",
+            "wss://nos.lol",
+            "wss://relay.nostr.band",
+            "wss://relay.bitcoiner.social",
+            "wss://140.f7z.io",
+            "wss://relayable.org",
         ]
     )
 
