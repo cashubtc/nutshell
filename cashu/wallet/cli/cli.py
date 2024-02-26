@@ -513,8 +513,7 @@ async def receive_cli(
     elif nostr:
         await receive_nostr(wallet)
         # exit on keypress
-        print("Press any key to exit.")
-        click.getchar()
+        input("Enter any text to exit.")
         print("Exiting.")
         os._exit(0)
     elif all:
