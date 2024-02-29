@@ -1,6 +1,7 @@
 import base64
 import copy
 import json
+import math
 import time
 import uuid
 from itertools import groupby
@@ -16,10 +17,24 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
-    CheckFeesResponse_deprecated,
     DLEQWallet,
-    GetInfoResponse,
     Invoice,
+    Proof,
+    TokenV2,
+    TokenV2Mint,
+    TokenV3,
+    TokenV3Token,
+    Unit,
+    WalletKeyset,
+)
+from ..core.crypto import b_dhke
+from ..core.crypto.secp import PrivateKey, PublicKey
+from ..core.db import Database
+from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
+from ..core.migrations import migrate_databases
+from ..core.models import (
+    CheckFeesResponse_deprecated,
+    GetInfoResponse,
     KeysetsResponse,
     KeysResponse,
     PostCheckStateRequest,
@@ -36,21 +51,9 @@ from ..core.base import (
     PostRestoreResponse,
     PostSplitRequest,
     PostSplitResponse,
-    Proof,
     ProofState,
     SpentState,
-    TokenV2,
-    TokenV2Mint,
-    TokenV3,
-    TokenV3Token,
-    Unit,
-    WalletKeyset,
 )
-from ..core.crypto import b_dhke
-from ..core.crypto.secp import PrivateKey, PublicKey
-from ..core.db import Database
-from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
-from ..core.migrations import migrate_databases
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -898,7 +901,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """
         # verify DLEQ of incoming proofs
         self.verify_proofs_dleq(proofs)
-        return await self.split(proofs, sum_proofs(proofs))
+        return await self.split(proofs=proofs, amount=sum_proofs(proofs))
 
     async def split(
         self,
@@ -906,8 +909,10 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         amount: int,
         secret_lock: Optional[Secret] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
-        """If secret_lock is None, random secrets will be generated for the tokens to keep (frst_outputs)
-        and the promises to send (scnd_outputs).
+        """Calls the swap API to split the proofs into two sets of proofs, one for keeping and one for sending.
+
+        If secret_lock is None, random secrets will be generated for the tokens to keep (keep_outputs)
+        and the promises to send (send_outputs).
 
         If secret_lock is provided, the wallet will create blinded secrets with those to attach a
         predefined spending condition to the tokens they want to send.
@@ -931,11 +936,14 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
         # create a suitable amount split based on the proofs provided
         total = sum_proofs(proofs)
-        frst_amt, scnd_amt = total - amount, amount
-        frst_outputs = amount_split(frst_amt)
-        scnd_outputs = amount_split(scnd_amt)
+        keep_amt, send_amt = total - amount, amount
 
-        amounts = frst_outputs + scnd_outputs
+        # generate splits for outputs
+        keep_outputs = amount_split(keep_amt)
+        send_outputs = amount_split(send_amt)
+        print(keep_outputs, send_outputs)
+
+        amounts = keep_outputs + send_outputs
         # generate secrets for new outputs
         if secret_lock is None:
             secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
@@ -944,12 +952,12 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             # restore these tokens from a backup
             rs = []
             # generate secrets for receiver
-            secret_locks = [secret_lock.serialize() for i in range(len(scnd_outputs))]
+            secret_locks = [secret_lock.serialize() for i in range(len(send_outputs))]
             logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
             # append predefined secrets (to send) to random secrets (to keep)
             # generate secrets to keep
             secrets = [
-                await self._generate_secret() for s in range(len(frst_outputs))
+                await self._generate_secret() for s in range(len(keep_outputs))
             ] + secret_locks
             # TODO: derive derivation paths from secrets
             derivation_paths = ["custom"] * len(secrets)
@@ -976,8 +984,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
         await self.invalidate(proofs)
 
-        keep_proofs = new_proofs[: len(frst_outputs)]
-        send_proofs = new_proofs[len(frst_outputs) :]
+        keep_proofs = new_proofs[: len(keep_outputs)]
+        send_proofs = new_proofs[len(keep_outputs) :]
         return keep_proofs, send_proofs
 
     async def pay_lightning(
@@ -1403,9 +1411,12 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         ).decode()
         return token_base64
 
+    def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
+        return math.ceil(len(proofs) * 0.1)
+
     async def _select_proofs_to_send(
         self, proofs: List[Proof], amount_to_send: int
-    ) -> List[Proof]:
+    ) -> Tuple[List[Proof], int]:
         """
         Selects proofs that can be used with the current mint. Implements a simple coin selection algorithm.
 
@@ -1423,7 +1434,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             amount_to_send (int): Amount to select proofs for
 
         Returns:
-            List[Proof]: List of proofs to send
+            List[Proof]: List of proofs to send (including fees)
+            int: Fees for the transaction
 
         Raises:
             Exception: If the balance is too low to send the amount
@@ -1455,12 +1467,16 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             proofs_current_epoch, key=lambda p: p.amount
         )
 
-        while sum_proofs(send_proofs) < amount_to_send:
+        fees = self.get_fees_for_proofs(send_proofs)
+
+        while sum_proofs(send_proofs) < amount_to_send + fees:
             proof_to_add = sorted_proofs_of_current_keyset.pop()
             send_proofs.append(proof_to_add)
+            # update fees
+            fees = self.get_fees_for_proofs(send_proofs)
 
         logger.trace(f"selected proof amounts: {[p.amount for p in send_proofs]}")
-        return send_proofs
+        return send_proofs, fees
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool) -> None:
         """Mark a proof as reserved or reset it in the wallet db to avoid reuse when it is sent.
@@ -1547,8 +1563,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """
         if secret_lock:
             logger.debug(f"Spending conditions: {secret_lock}")
-        spendable_proofs = await self._select_proofs_to_send(proofs, amount)
-
+        spendable_proofs, fees = await self._select_proofs_to_send(proofs, amount)
+        print(f"Amount to send: {self.unit.str(amount+fees)}")
         keep_proofs, send_proofs = await self.split(
             spendable_proofs, amount, secret_lock
         )

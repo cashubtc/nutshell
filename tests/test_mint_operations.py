@@ -1,8 +1,8 @@
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.helpers import sum_proofs
+from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -153,6 +153,18 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
     promises = await ledger.split(proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
+
+
+@pytest.mark.asyncio
+async def test_split_with_no_outputs(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id)
+    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10, set_reserved=False)
+    await assert_err(
+        ledger.split(proofs=send_proofs, outputs=[]),
+        "inputs do not have same amount as outputs.",
+    )
 
 
 @pytest.mark.asyncio

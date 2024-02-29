@@ -3,7 +3,8 @@ from typing import Any, Dict, List
 from fastapi import APIRouter
 from loguru import logger
 
-from ..core.base import (
+from ..core.errors import CashuError
+from ..core.models import (
     GetInfoResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
@@ -23,7 +24,6 @@ from ..core.base import (
     PostSplitRequest,
     PostSplitResponse,
 )
-from ..core.errors import CashuError
 from ..core.settings import settings
 from ..mint.startup import ledger
 
@@ -48,6 +48,16 @@ async def info() -> GetInfoResponse:
     supported_dict = dict(supported=True)
 
     mint_features: Dict[int, Dict[str, Any]] = {
+        # 3: dict(
+        #     fees=[
+        #         dict(
+        #             unit=fee_entry.get("unit"),
+        #             fee=fee_entry.get("fee"),
+        #             batch=fee_entry.get("batch"),
+        #         )
+        #         for fee_entry in settings.mint_swap_fee
+        #     ],
+        # ),
         4: dict(
             methods=method_unit_pairs,
             disabled=False,

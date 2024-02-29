@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from environs import Env  # type: ignore
 from pydantic import BaseSettings, Extra, Field
@@ -58,6 +58,10 @@ class MintSettings(CashuSettings):
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
+    mint_swap_fee: Dict[str, Dict[str, int]] = Field(
+        default={"sat": {"fee": 1, "batch": 10}}
+    )
+    mint_max_secret_length: int = Field(default=512)
     mint_peg_out_only: bool = Field(
         default=False,
         title="Peg-out only",

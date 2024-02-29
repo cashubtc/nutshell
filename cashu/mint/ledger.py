@@ -16,12 +16,7 @@ from ..core.base import (
     Method,
     MintKeyset,
     MintQuote,
-    PostMeltQuoteRequest,
-    PostMeltQuoteResponse,
-    PostMintQuoteRequest,
     Proof,
-    ProofState,
-    SpentState,
     Unit,
 )
 from ..core.crypto import b_dhke
@@ -43,6 +38,13 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.helpers import sum_proofs
+from ..core.models import (
+    PostMeltQuoteRequest,
+    PostMeltQuoteResponse,
+    PostMintQuoteRequest,
+    ProofState,
+    SpentState,
+)
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -759,11 +761,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         await self._set_proofs_pending(proofs)
         try:
-            # explicitly check that amount of inputs is equal to amount of outputs
-            # note: we check this again in verify_inputs_and_outputs but only if any
-            # outputs are provided at all. To make sure of that before calling
-            # verify_inputs_and_outputs, we check it here.
+            # we verify the input and output amount balance here already for
+            # good measure although we do it in verify_inputs_and_outputs again
             self._verify_equation_balanced(proofs, outputs)
+
             # verify spending inputs, outputs, and spending conditions
             await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
 

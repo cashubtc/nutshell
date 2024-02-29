@@ -1,3 +1,4 @@
+import math
 from typing import Dict, List, Literal, Optional, Union
 
 from loguru import logger
@@ -7,6 +8,7 @@ from ..core.base import (
     BlindedSignature,
     MintKeyset,
     Proof,
+    Unit,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
@@ -17,6 +19,8 @@ from ..core.errors import (
     SecretTooLongError,
     TokenAlreadySpentError,
     TransactionError,
+    TransactionNotBalancedError,
+    TransactionUnitError,
 )
 from ..core.settings import settings
 from ..mint.crud import LedgerCrud
@@ -41,7 +45,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         Args:
             proofs (List[Proof]): List of proofs to check.
             outputs (Optional[List[BlindedMessage]], optional): List of outputs to check.
-            Must be provided for a swap but not for a melt. Defaults to None.
+                Must be provided for a swap but not for a melt. Defaults to None.
 
         Raises:
             Exception: Scripts did not validate.
@@ -72,7 +76,8 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         if not all([self._verify_input_spending_conditions(p) for p in proofs]):
             raise TransactionError("validation of input spending conditions failed.")
 
-        if not outputs:
+        if outputs is None:
+            # If no outputs are provided, we are melting
             return
 
         # Verify input and output amounts
@@ -87,11 +92,12 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         # Verify that input keyset units are the same as output keyset unit
         # We have previously verified that all outputs have the same keyset id in `_verify_outputs`
         assert outputs[0].id, "output id not set"
-        if not all([
-            self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
-            for p in proofs
-            if p.id
-        ]):
+        if not all(
+            [
+                self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
+                for p in proofs
+            ]
+        ):
             raise TransactionError("input and output keysets have different units.")
 
         # Verify output spending conditions
@@ -182,8 +188,10 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         """Verifies that a secret is present and is not too long (DOS prevention)."""
         if proof.secret is None or proof.secret == "":
             raise NoSecretInProofsError()
-        if len(proof.secret) > 512:
-            raise SecretTooLongError()
+        if len(proof.secret) > settings.mint_max_secret_length:
+            raise SecretTooLongError(
+                f"secret too long. max: {settings.mint_max_secret_length}"
+            )
         return True
 
     def _verify_proof_bdhke(self, proof: Proof) -> bool:
@@ -236,6 +244,22 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
             raise NotAllowedError("invalid amount: " + str(amount))
         return amount
 
+    def _verify_units_match(
+        self,
+        proofs: List[Proof],
+        outs: Union[List[BlindedSignature], List[BlindedMessage]],
+    ) -> Unit:
+        """Verifies that the units of the inputs and outputs match."""
+        units_proofs = [self.keysets[p.id].unit for p in proofs]
+        units_outputs = [self.keysets[o.id].unit for o in outs if o.id]
+        if not len(set(units_proofs)) == 1:
+            raise TransactionUnitError("inputs have different units.")
+        if not len(set(units_outputs)) == 1:
+            raise TransactionUnitError("outputs have different units.")
+        if not units_proofs[0] == units_outputs[0]:
+            raise TransactionUnitError("input and output keysets have different units.")
+        return units_proofs[0]
+
     def _verify_equation_balanced(
         self,
         proofs: List[Proof],
@@ -244,8 +268,13 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         """Verify that Σinputs - Σoutputs = 0.
         Outputs can be BlindedSignature or BlindedMessage.
         """
+        unit = self._verify_units_match(proofs, outs)
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
-        assert sum_outputs - sum_inputs == 0, TransactionError(
-            "inputs do not have same amount as outputs."
-        )
+        fee_per_batch = settings.mint_swap_fee[unit.name].get("fee", 0)
+        batch_size = settings.mint_swap_fee[unit.name].get("batch", 1)
+        fee = math.ceil(len(proofs) / batch_size * fee_per_batch)
+        if not sum_inputs - sum_outputs >= fee:
+            raise TransactionNotBalancedError(
+                f"inputs less than outputs: {sum_inputs} {unit.name} - {sum_outputs} {unit.name} < {fee} {unit.name} fee"
+            )

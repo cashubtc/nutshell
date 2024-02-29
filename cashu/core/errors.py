@@ -35,12 +35,18 @@ class TokenAlreadySpentError(TransactionError):
         super().__init__(self.detail, code=self.code)
 
 
+class TransactionNotBalancedError(TransactionError):
+    code = 11002
+
+    def __init__(self, detail):
+        super().__init__(detail, code=self.code)
+
+
 class SecretTooLongError(TransactionError):
-    detail = "secret too long"
     code = 11003
 
-    def __init__(self):
-        super().__init__(self.detail, code=self.code)
+    def __init__(self, detail="secret too long"):
+        super().__init__(detail, code=self.code)
 
 
 class NoSecretInProofsError(TransactionError):
@@ -49,6 +55,13 @@ class NoSecretInProofsError(TransactionError):
 
     def __init__(self):
         super().__init__(self.detail, code=self.code)
+
+
+class TransactionUnitError(TransactionError):
+    code = 11005
+
+    def __init__(self, detail):
+        super().__init__(detail, code=self.code)
 
 
 class KeysetError(CashuError):

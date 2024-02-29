@@ -9,6 +9,12 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
+    Invoice,
+    Proof,
+    WalletKeyset,
+)
+from ..core.crypto.secp import PublicKey
+from ..core.models import (
     CheckFeesRequest_deprecated,
     CheckFeesResponse_deprecated,
     CheckSpendableRequest_deprecated,
@@ -16,7 +22,6 @@ from ..core.base import (
     GetInfoResponse,
     GetInfoResponse_deprecated,
     GetMintResponse_deprecated,
-    Invoice,
     KeysetsResponse_deprecated,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
@@ -25,10 +30,7 @@ from ..core.base import (
     PostRestoreResponse,
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
-    Proof,
-    WalletKeyset,
 )
-from ..core.crypto.secp import PublicKey
 from ..core.settings import settings
 from ..tor.tor import TorProxy
 from .protocols import SupportsHttpxClient, SupportsMintURL
