@@ -78,6 +78,7 @@ source ~/.bashrc
 # install cashu
 git clone https://github.com/cashubtc/nutshell.git cashu
 cd cashu
+git checkout <latest_tag>
 pyenv local 3.10.4
 poetry install
 ```
