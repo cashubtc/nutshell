@@ -697,7 +697,14 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         self.raise_on_error_request(resp)
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)
-        return returnObj.outputs, returnObj.promises
+
+        # BEGIN backwards compatibility < 0.15.1
+        # if the mint returns promises, duplicate into signatures
+        if returnObj.promises:
+            returnObj.signatures = returnObj.promises
+        # END backwards compatibility < 0.15.1
+
+        return returnObj.outputs, returnObj.signatures
 
 
 class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
