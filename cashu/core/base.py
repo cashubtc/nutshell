@@ -533,7 +533,7 @@ class PostRestoreResponse(BaseModel):
     signatures: List[BlindedSignature] = []
     promises: Optional[List[BlindedSignature]] = []  # deprecated since 0.15.1
 
-    # duplicate value of "signatures" in "promises" for backwards compatibility with old clients < 0.15.1 upon initialization
+    # duplicate value of "signatures" for backwards compatibility with old clients < 0.15.1
     def __init__(self, **data):
         super().__init__(**data)
         self.promises = self.signatures
