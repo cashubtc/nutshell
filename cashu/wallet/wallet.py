@@ -654,7 +654,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
-        payload = PostCheckStateRequest(secrets=[p.secret for p in proofs])
+        payload = PostCheckStateRequest(Ys=[p.Y for p in proofs])
         resp = await self.httpx.post(
             join(self.url, "/v1/checkstate"),
             json=payload.dict(),
@@ -667,11 +667,11 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             states: List[ProofState] = []
             for spendable, pending, p in zip(ret.spendable, ret.pending, proofs):
                 if spendable and not pending:
-                    states.append(ProofState(secret=p.secret, state=SpentState.unspent))
+                    states.append(ProofState(Y=p.Y, state=SpentState.unspent))
                 elif spendable and pending:
-                    states.append(ProofState(secret=p.secret, state=SpentState.pending))
+                    states.append(ProofState(Y=p.Y, state=SpentState.pending))
                 else:
-                    states.append(ProofState(secret=p.secret, state=SpentState.spent))
+                    states.append(ProofState(Y=p.Y, state=SpentState.spent))
             ret = PostCheckStateResponse(states=states)
             return ret
         # END backwards compatibility < 0.15.0
