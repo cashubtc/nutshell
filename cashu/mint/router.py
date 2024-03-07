@@ -3,8 +3,6 @@ from typing import Any, Dict, List
 from fastapi import APIRouter
 from loguru import logger
 
-from cashu.core.crypto import b_dhke
-
 from ..core.base import (
     GetInfoResponse,
     KeysetsResponse,
@@ -340,24 +338,7 @@ async def check_state(
 ) -> PostCheckStateResponse:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /v1/checkstate: {payload}")
-
-    # BEGIN BACKWARDS COMPATIBILITY < 0.15.1
-    # If the request includes "secret", compuate Ys from them and continue request
-    if payload.secrets:
-        payload.Ys = [
-            b_dhke.hash_to_curve(s.encode()).serialize().hex() for s in payload.secrets
-        ]
-    # END BACKWARDS COMPATIBILITY < 0.15.1
-
     proof_states = await ledger.check_proofs_state(payload.Ys)
-
-    # BEGIN BACKWARDS COMPATIBILITY < 0.15.1
-    # If the request includes "secret", remove add the secret to the response
-    if payload.secrets:
-        for i, state in enumerate(proof_states):
-            state.secret = payload.secrets[i]
-    # END BACKWARDS COMPATIBILITY < 0.15.1
-
     return PostCheckStateResponse(states=proof_states)
 
 
