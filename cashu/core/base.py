@@ -408,6 +408,7 @@ class PostMeltQuoteRequest(BaseModel):
     request: str = Field(
         ..., max_length=settings.mint_max_request_length
     )  # output payment request
+    amount: Optional[int] = Field(default=None, gt=0)  # input amount
 
 
 class PostMeltQuoteResponse(BaseModel):

@@ -527,11 +527,15 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def melt_quote(self, payment_request: str) -> PostMeltQuoteResponse:
+    async def melt_quote(
+        self, payment_request: str, amount: Optional[int] = None
+    ) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
-        payload = PostMeltQuoteRequest(unit=self.unit.name, request=payment_request)
+        payload = PostMeltQuoteRequest(
+            unit=self.unit.name, request=payment_request, amount=amount
+        )
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote/bolt11"),
             json=payload.dict(),
@@ -545,7 +549,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             quote_id = "deprecated_" + str(uuid.uuid4())
             return PostMeltQuoteResponse(
                 quote=quote_id,
-                amount=invoice_obj.amount_msat // 1000,
+                amount=amount or invoice_obj.amount_msat // 1000,
                 fee_reserve=ret.fee or 0,
                 paid=False,
                 expiry=invoice_obj.expiry,
@@ -1513,12 +1517,14 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     # ---------- TRANSACTION HELPERS ----------
 
-    async def get_pay_amount_with_fees(self, invoice: str):
+    async def get_pay_amount_with_fees(
+        self, invoice: str, amount: Optional[int] = None
+    ) -> PostMeltQuoteResponse:
         """
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
         """
-        melt_quote = await self.melt_quote(invoice)
+        melt_quote = await self.melt_quote(invoice, amount)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
         )
