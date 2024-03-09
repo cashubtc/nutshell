@@ -217,6 +217,15 @@ class LndRestWallet(LightningBackend):
         )
 
         data = r.json()
+        if r.is_error or data.get("message"):
+            error_message = data.get("message") or r.text
+            return PaymentResponse(
+                ok=False,
+                checking_id=None,
+                fee=None,
+                preimage=None,
+                error_message=error_message,
+            )
 
         # We need to set the mpp_record for a partial payment
         mpp_record = {
@@ -243,6 +252,16 @@ class LndRestWallet(LightningBackend):
         )
 
         data = r.json()
+        if r.is_error or data.get("message"):
+            error_message = data.get("message") or r.text
+            return PaymentResponse(
+                ok=False,
+                checking_id=None,
+                fee=None,
+                preimage=None,
+                error_message=error_message,
+            )
+
         ok = data.get("status") == "SUCCEEDED"
         checking_id = invoice.payment_hash
         fee_msat = int(data["route"]["total_fees_msat"])
