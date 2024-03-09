@@ -212,6 +212,7 @@ class LndRestWallet(LightningBackend):
         # get the route
         r = await self.client.post(
             url=f"/v1/graph/routes/{pubkey}/{amount.to(Unit.sat).amount}",
+            json={"fee_limit": lnrpcFeeLimit},
             timeout=None,
         )
 
