@@ -41,12 +41,16 @@ async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
 
     # determine all method-unit pairs
-    method_unit_pairs: List[List[str]] = []
+    method_unit_pairs: List[List[Any]] = []
     for method, unit_dict in ledger.backends.items():
         for unit in unit_dict.keys():
-            method_unit_pairs.append([method.name, unit.name])
-    supported_dict = dict(supported=True)
+            # settings for each method-unit pair
+            method_unit_settings = dict(
+                mpp=ledger.backends[method][unit].supports_mpp,
+            )
+            method_unit_pairs.append([method.name, unit.name, method_unit_settings])
 
+    supported_dict = dict(supported=True)
     mint_features: Dict[int, Dict[str, Any]] = {
         4: dict(
             methods=method_unit_pairs,

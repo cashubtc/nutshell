@@ -30,6 +30,7 @@ class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
     units = set([Unit.sat, Unit.msat])
+    supports_mpp = True
 
     def __init__(self):
         endpoint = settings.mint_lnd_rest_endpoint

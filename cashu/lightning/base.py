@@ -63,6 +63,7 @@ class PaymentStatus(BaseModel):
 
 class LightningBackend(ABC):
     units: set[Unit]
+    supports_mpp: bool = False
 
     def assert_unit_supported(self, unit: Unit):
         if unit not in self.units:
