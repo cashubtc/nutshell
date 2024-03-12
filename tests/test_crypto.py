@@ -23,9 +23,6 @@ def test_hash_to_curve():
         result.serialize().hex()
         == "024cce997d3b518f739663b757deaec95bcd9473c30a14ac2fd04023a739d1a725"
     )
-
-
-def test_hash_to_curve_iteration():
     result = hash_to_curve(
         bytes.fromhex(
             "0000000000000000000000000000000000000000000000000000000000000001"
@@ -34,6 +31,15 @@ def test_hash_to_curve_iteration():
     assert (
         result.serialize().hex()
         == "022e7158e11c9506f1aa4248bf531298daa7febd6194f003edcd9b93ade6253acf"
+    )
+    result = hash_to_curve(
+        bytes.fromhex(
+            "0000000000000000000000000000000000000000000000000000000000000002"
+        )
+    )
+    assert (
+        result.serialize().hex()
+        == "026cdbe15362df59cd1dd3c9c11de8aedac2106eca69236ecd9fbe117af897be4f"
     )
 
 
