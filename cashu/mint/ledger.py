@@ -353,7 +353,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             issued=False,
             paid=False,
             created_time=int(time.time()),
-            expiry=invoice_obj.expiry or 0,
+            expiry=invoice_obj.expiry,
         )
         await self.crud.store_mint_quote(
             quote=quote,
@@ -380,6 +380,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         method = Method[quote.method]
 
         if not quote.paid:
+            assert quote.checking_id, "quote has no checking id"
             logger.trace(f"Lightning: checking invoice {quote.checking_id}")
             status: PaymentStatus = await self.backends[method][
                 unit
@@ -471,6 +472,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         if mint_quote:
             # internal transaction, validate and return amount from
             # associated mint quote and demand zero fees
+            if (
+                melt_quote.amount
+                and Amount(unit, mint_quote.amount).to(unit).amount != melt_quote.amount
+            ):
+                raise TransactionError("internal amounts do not match")
             assert (
                 Amount(unit, mint_quote.amount).to(Unit.msat).amount
                 == invoice_obj.amount_msat
@@ -482,6 +488,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             assert mint_quote.method == method.name, "methods do not match"
             assert not mint_quote.paid, "mint quote already paid"
             assert not mint_quote.issued, "mint quote already issued"
+            assert mint_quote.checking_id, "mint quote has no checking id"
             payment_quote = PaymentQuoteResponse(
                 checking_id=mint_quote.checking_id,
                 amount=Amount(unit, mint_quote.amount),
@@ -493,9 +500,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             )
         else:
             # not internal, get quote by backend
+            amount = Amount(unit, melt_quote.amount) if melt_quote.amount else None
             payment_quote = await self.backends[method][unit].get_payment_quote(
-                melt_quote.request
+                melt_quote.request, amount=amount
             )
+            assert payment_quote.checking_id, "quote has no checking id"
 
         quote = MeltQuote(
             quote=random_hash(),
@@ -507,6 +516,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             paid=False,
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=int(time.time()),
+            expiry=invoice_obj.expiry,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         return PostMeltQuoteResponse(
@@ -514,17 +524,21 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             amount=quote.amount,
             fee_reserve=quote.fee_reserve,
             paid=quote.paid,
+            expiry=quote.expiry,
         )
 
-    async def get_melt_quote(self, quote_id: str) -> MeltQuote:
+    async def get_melt_quote(
+        self, quote_id: str, check_quote_with_backend: bool = False
+    ) -> MeltQuote:
         """Returns a melt quote.
 
-        If melt quote is not paid yet, checks with the backend for the state of the payment request.
-
-        If the quote has been paid, updates the melt quote in the database.
+        If melt quote is not paid yet and `check_quote_with_backend` is set to `True`,
+        checks with the backend for the state of the payment request. If the backend
+        says that the quote has been paid, updates the melt quote in the database.
 
         Args:
             quote_id (str): ID of the melt quote.
+            check_quote_with_backend (bool, optional): Whether to check the state of the payment request with the backend. Defaults to False.
 
         Raises:
             Exception: Quote not found.
@@ -544,7 +558,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             checking_id=melt_quote.checking_id, db=self.db
         )
 
-        if not melt_quote.paid and not mint_quote:
+        if not melt_quote.paid and not mint_quote and check_quote_with_backend:
             logger.trace(
                 "Lightning: checking outgoing Lightning payment"
                 f" {melt_quote.checking_id}"
@@ -638,7 +652,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             Tuple[str, List[BlindedMessage]]: Proof of payment and signed outputs for returning overpaid fees to wallet.
         """
-        # get melt quote and settle transaction internally if possible
+        # get melt quote and check if it was already paid
         melt_quote = await self.get_melt_quote(quote_id=quote)
         method = Method[melt_quote.method]
         unit = Unit[melt_quote.unit]
@@ -674,6 +688,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # set proofs to pending to avoid race conditions
         await self._set_proofs_pending(proofs)
         try:
+            # settle the transaction internally if there is a mint quote with the same payment request
             melt_quote = await self.melt_mint_settle_internally(melt_quote)
 
             # quote not paid yet (not internal), pay it with the backend
@@ -683,11 +698,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     melt_quote, melt_quote.fee_reserve * 1000
                 )
                 logger.debug(
-                    f"Melt status: {payment.ok}: preimage: {payment.preimage},"
-                    f" fee: {payment.fee.str() if payment.fee else 0}"
+                    f"Melt – Ok: {payment.ok}: preimage: {payment.preimage},"
+                    f" fee: {payment.fee.str() if payment.fee is not None else 'None'}"
                 )
                 if not payment.ok:
-                    raise LightningError("Lightning payment unsuccessful.")
+                    raise LightningError(
+                        f"Lightning payment unsuccessful. {payment.error_message}"
+                    )
                 if payment.fee:
                     melt_quote.fee_paid = payment.fee.to(
                         to_unit=unit, round="up"

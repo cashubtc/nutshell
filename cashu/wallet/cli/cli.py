@@ -9,6 +9,7 @@ from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
+from typing import Optional
 
 import click
 from click import Context
@@ -176,16 +177,17 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 
 @cli.command("pay", help="Pay Lightning invoice.")
 @click.argument("invoice", type=str)
+@click.argument("amount", type=int, required=False)
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
 @click.pass_context
 @coro
-async def pay(ctx: Context, invoice: str, yes: bool):
+async def pay(ctx: Context, invoice: str, amount: Optional[int], yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     print_balance(ctx)
-    quote = await wallet.get_pay_amount_with_fees(invoice)
+    quote = await wallet.get_pay_amount_with_fees(invoice, amount)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
     if not yes:
@@ -512,6 +514,10 @@ async def receive_cli(
         await receive(wallet, tokenObj)
     elif nostr:
         await receive_nostr(wallet)
+        # exit on keypress
+        input("Enter any text to exit.")
+        print("Exiting.")
+        os._exit(0)
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
@@ -576,7 +582,12 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
     if delete:
         await wallet.invalidate(proofs)
     else:
-        await wallet.invalidate(proofs, check_spendable=True)
+        # invalidate proofs in batches
+        for _proofs in [
+            proofs[i : i + settings.proofs_batch_size]
+            for i in range(0, len(proofs), settings.proofs_batch_size)
+        ]:
+            await wallet.invalidate(_proofs, check_spendable=True)
     print_balance(ctx)
 
 
@@ -757,25 +768,11 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
     if settings.debug:
         print(f"Debug: {settings.debug}")
     print(f"Cashu dir: {settings.cashu_dir}")
-    if settings.env_file:
-        print(f"Settings: {settings.env_file}")
-    if settings.tor:
-        print(f"Tor enabled: {settings.tor}")
-    if settings.nostr_private_key:
-        try:
-            client = NostrClient(private_key=settings.nostr_private_key, connect=False)
-            print(f"Nostr public key: {client.public_key.bech32()}")
-            print(f"Nostr relays: {settings.nostr_relays}")
-        except Exception:
-            print("Nostr: Error. Invalid key.")
-    if settings.socks_proxy:
-        print(f"Socks proxy: {settings.socks_proxy}")
-    if settings.http_proxy:
-        print(f"HTTP proxy: {settings.http_proxy}")
     mint_list = await list_mints(wallet)
-    print(f"Mint URLs: {mint_list}")
-    if mint:
-        for mint_url in mint_list:
+    print("Mints:")
+    for mint_url in mint_list:
+        print(f"  - {mint_url}")
+        if mint:
             wallet.url = mint_url
             try:
                 mint_info: dict = (await wallet._load_mint_info()).dict()
@@ -800,13 +797,29 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
                             "Supported NUTS:"
                             f" {', '.join(['NUT-'+str(k) for k in mint_info['nuts'].keys()])}"
                         )
+                        print("")
             except Exception as e:
                 print("")
                 print(f"Error fetching mint information for {mint_url}: {e}")
 
     if mnemonic:
         assert wallet.mnemonic
-        print(f"Mnemonic: {wallet.mnemonic}")
+        print(f"Mnemonic:\n - {wallet.mnemonic}")
+    if settings.env_file:
+        print(f"Settings: {settings.env_file}")
+    if settings.tor:
+        print(f"Tor enabled: {settings.tor}")
+    if settings.nostr_private_key:
+        try:
+            client = NostrClient(private_key=settings.nostr_private_key, connect=False)
+            print(f"Nostr public key: {client.public_key.bech32()}")
+            print(f"Nostr relays: {', '.join(settings.nostr_relays)}")
+        except Exception:
+            print("Nostr: Error. Invalid key.")
+    if settings.socks_proxy:
+        print(f"Socks proxy: {settings.socks_proxy}")
+    if settings.http_proxy:
+        print(f"HTTP proxy: {settings.http_proxy}")
     return
 
 

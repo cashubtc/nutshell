@@ -50,6 +50,7 @@ async def info() -> GetInfoResponse:
     mint_features: Dict[int, Dict[str, Any]] = {
         4: dict(
             methods=method_unit_pairs,
+            disabled=False,
         ),
         5: dict(
             methods=method_unit_pairs,
@@ -262,6 +263,7 @@ async def melt_quote(quote: str) -> PostMeltQuoteResponse:
         amount=melt_quote.amount,
         fee_reserve=melt_quote.fee_reserve,
         paid=melt_quote.paid,
+        expiry=melt_quote.expiry,
     )
     logger.trace(f"< GET /v1/melt/quote/bolt11/{quote}")
     return resp

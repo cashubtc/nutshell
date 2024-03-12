@@ -157,7 +157,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             Exception: if the response contains an error
         """
-        resp_dict = resp.json()
+        try:
+            resp_dict = resp.json()
+        except json.JSONDecodeError:
+            # if we can't decode the response, raise for status
+            resp.raise_for_status()
+            return
         if "detail" in resp_dict:
             logger.trace(f"Error from mint: {resp_dict}")
             error_message = f"Mint Error: {resp_dict['detail']}"
@@ -522,11 +527,15 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def melt_quote(self, payment_request: str) -> PostMeltQuoteResponse:
+    async def melt_quote(
+        self, payment_request: str, amount: Optional[int] = None
+    ) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
-        payload = PostMeltQuoteRequest(unit=self.unit.name, request=payment_request)
+        payload = PostMeltQuoteRequest(
+            unit=self.unit.name, request=payment_request, amount=amount
+        )
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote/bolt11"),
             json=payload.dict(),
@@ -540,9 +549,10 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             quote_id = "deprecated_" + str(uuid.uuid4())
             return PostMeltQuoteResponse(
                 quote=quote_id,
-                amount=invoice_obj.amount_msat // 1000,
+                amount=amount or invoice_obj.amount_msat // 1000,
                 fee_reserve=ret.fee or 0,
                 paid=False,
+                expiry=invoice_obj.expiry,
             )
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
@@ -992,9 +1002,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # NUT-08, the mint will imprint these outputs with a value depending on the
         # amount of fees we overpaid.
         n_change_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
-        change_secrets, change_rs, change_derivation_paths = (
-            await self.generate_n_secrets(n_change_outputs)
-        )
+        (
+            change_secrets,
+            change_rs,
+            change_derivation_paths,
+        ) = await self.generate_n_secrets(n_change_outputs)
         change_outputs, change_rs = self._construct_outputs(
             n_change_outputs * [1], change_secrets, change_rs
         )
@@ -1120,14 +1132,15 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             C = b_dhke.step3_alice(
                 C_, r, self.keysets[promise.id].public_keys[promise.amount]
             )
-            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
-            if not settings.wallet_domain_separation:
+
+            if not settings.wallet_use_deprecated_h2c:
                 B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
-            # END: BACKWARDS COMPATIBILITY < 0.15.1
+            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_domain_separated(
+                B_, r = b_dhke.step1_alice_deprecated(
                     secret, r
                 )  # recompute B_ for dleq proofs
+            # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             proof = Proof(
                 id=promise.id,
@@ -1190,12 +1203,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
         for secret, amount, r in zip(secrets, amounts, rs_):
-            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
-            if not settings.wallet_domain_separation:
+            if not settings.wallet_use_deprecated_h2c:
                 B_, r = b_dhke.step1_alice(secret, r or None)
-            # END: BACKWARDS COMPATIBILITY < 0.15.1
+            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
             else:
-                B_, r = b_dhke.step1_alice_domain_separated(secret, r or None)
+                B_, r = b_dhke.step1_alice_deprecated(secret, r or None)
+            # END: BACKWARDS COMPATIBILITY < 0.15.1
+
             rs_return.append(r)
             output = BlindedMessage(
                 amount=amount, B_=B_.serialize().hex(), id=self.keyset_id
@@ -1503,12 +1517,14 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     # ---------- TRANSACTION HELPERS ----------
 
-    async def get_pay_amount_with_fees(self, invoice: str):
+    async def get_pay_amount_with_fees(
+        self, invoice: str, amount: Optional[int] = None
+    ) -> PostMeltQuoteResponse:
         """
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
         """
-        melt_quote = await self.melt_quote(invoice)
+        melt_quote = await self.melt_quote(invoice, amount)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
         )

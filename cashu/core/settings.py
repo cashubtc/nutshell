@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.15.0"
+VERSION = "0.15.1"
 
 
 def find_env_file():
@@ -50,7 +50,7 @@ class EnvSettings(CashuSettings):
 
 class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
-    mint_seed_decryption_key: str = Field(default=None)
+    mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
     mint_listen_host: str = Field(default="127.0.0.1")
@@ -92,8 +92,8 @@ class MintSettings(CashuSettings):
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
-
     mint_strike_key: str = Field(default=None)
+    mint_blink_key: str = Field(default=None)
 
 
 class FakeWalletSettings(MintSettings):
@@ -123,7 +123,7 @@ class WalletSettings(CashuSettings):
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")
     wallet_unit: str = Field(default="sat")
-    wallet_domain_separation: bool = Field(default=False)
+    wallet_use_deprecated_h2c: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
 
@@ -132,13 +132,20 @@ class WalletSettings(CashuSettings):
         default=[
             "wss://nostr-pub.wellorder.net",
             "wss://relay.damus.io",
-            "wss://nostr.zebedee.cloud",
+            "wss://nostr.mom",
             "wss://relay.snort.social",
             "wss://nostr.fmt.wiz.biz",
+            "wss://relay.minibits.cash",
+            "wss://nos.lol",
+            "wss://relay.nostr.band",
+            "wss://relay.bitcoiner.social",
+            "wss://140.f7z.io",
+            "wss://relayable.org",
         ]
     )
 
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
+    proofs_batch_size: int = Field(default=1000)
 
 
 class LndRestFundingSource(MintSettings):

@@ -56,12 +56,18 @@ async def migrate_databases(db: Database, migrations_module):
     async def run_migration(db, migrations_module):
         db_name = migrations_module.__name__.split(".")[-2]
         # we first check whether any migration is needed and create a backup if so
+        migration_needed = False
         for key, migrate in migrations_module.__dict__.items():
             match = matcher.match(key)
             if match:
                 version = int(match.group(1))
                 if version > current_versions.get(db_name, 0):
+                    migration_needed = True
                     break
+        if migration_needed and settings.db_backup_path:
+            logger.debug(f"Creating backup of {db_name} db")
+            current_version = current_versions.get(db_name, 0)
+            await backup_database(db, current_version)
 
         # then we run the migrations
         for key, migrate in migrations_module.__dict__.items():

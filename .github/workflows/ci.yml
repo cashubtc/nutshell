@@ -1,4 +1,4 @@
-name: Nutshell CI
+name: CI
 on:
   push:
     branches:
