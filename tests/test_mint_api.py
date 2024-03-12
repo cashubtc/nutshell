@@ -54,7 +54,8 @@ async def test_api_keys(ledger: Ledger):
                 "id": keyset.id,
                 "unit": keyset.unit.name,
                 "keys": {
-                    str(k): v.serialize().hex() for k, v in keyset.public_keys.items()  # type: ignore
+                    str(k): v.serialize().hex()
+                    for k, v in keyset.public_keys.items()  # type: ignore
                 },
             }
             for keyset in ledger.keysets.values()
@@ -378,7 +379,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_check_state(ledger: Ledger):
-    payload = PostCheckStateRequest(secrets=["asdasdasd", "asdasdasd1"])
+    payload = PostCheckStateRequest(Ys=["asdasdasd", "asdasdasd1"])
     response = httpx.post(
         f"{BASE_URL}/v1/checkstate",
         json=payload.dict(),

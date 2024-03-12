@@ -338,7 +338,7 @@ async def check_state(
 ) -> PostCheckStateResponse:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /v1/checkstate: {payload}")
-    proof_states = await ledger.check_proofs_state(payload.secrets)
+    proof_states = await ledger.check_proofs_state(payload.Ys)
     return PostCheckStateResponse(states=proof_states)
 
 

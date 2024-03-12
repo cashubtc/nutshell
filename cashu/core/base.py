@@ -486,7 +486,7 @@ class PostSplitResponse_Very_Deprecated(BaseModel):
 
 
 class PostCheckStateRequest(BaseModel):
-    secrets: List[str] = Field(..., max_items=settings.mint_max_request_length)
+    Ys: List[str] = Field(..., max_items=settings.mint_max_request_length)
 
 
 class SpentState(Enum):
@@ -499,7 +499,7 @@ class SpentState(Enum):
 
 
 class ProofState(BaseModel):
-    secret: str
+    Y: str
     state: SpentState
     witness: Optional[str] = None
 

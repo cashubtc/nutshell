@@ -328,7 +328,7 @@ async def check_spendable_deprecated(
 ) -> CheckSpendableResponse_deprecated:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /check: {payload}")
-    proofs_state = await ledger.check_proofs_state([p.secret for p in payload.proofs])
+    proofs_state = await ledger.check_proofs_state([p.Y for p in payload.proofs])
     spendableList: List[bool] = []
     pendingList: List[bool] = []
     for proof_state in proofs_state:
