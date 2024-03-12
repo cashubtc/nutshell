@@ -472,11 +472,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         if mint_quote:
             # internal transaction, validate and return amount from
             # associated mint quote and demand zero fees
-            if (
-                melt_quote.amount
-                and Amount(unit, mint_quote.amount).to(unit).amount != melt_quote.amount
-            ):
-                raise TransactionError("internal amounts do not match")
             assert (
                 Amount(unit, mint_quote.amount).to(Unit.msat).amount
                 == invoice_obj.amount_msat
@@ -500,9 +495,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             )
         else:
             # not internal, get quote by backend
-            amount = Amount(unit, melt_quote.amount) if melt_quote.amount else None
             payment_quote = await self.backends[method][unit].get_payment_quote(
-                melt_quote.request, amount=amount
+                melt_quote.request
             )
             assert payment_quote.checking_id, "quote has no checking id"
 

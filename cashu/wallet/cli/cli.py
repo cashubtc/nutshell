@@ -9,7 +9,6 @@ from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
-from typing import Optional
 
 import click
 from click import Context
@@ -177,17 +176,16 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 
 @cli.command("pay", help="Pay Lightning invoice.")
 @click.argument("invoice", type=str)
-@click.argument("amount", type=int, required=False)
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
 @click.pass_context
 @coro
-async def pay(ctx: Context, invoice: str, amount: Optional[int], yes: bool):
+async def pay(ctx: Context, invoice: str, yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     print_balance(ctx)
-    quote = await wallet.get_pay_amount_with_fees(invoice, amount)
+    quote = await wallet.get_pay_amount_with_fees(invoice)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
     if not yes:

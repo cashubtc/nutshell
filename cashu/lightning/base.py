@@ -103,7 +103,6 @@ class LightningBackend(ABC):
     async def get_payment_quote(
         self,
         bolt11: str,
-        amount: Optional[Amount] = None,
     ) -> PaymentQuoteResponse:
         pass
 
