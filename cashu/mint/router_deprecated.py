@@ -360,4 +360,4 @@ async def check_spendable_deprecated(
 async def restore(payload: PostMintRequest_deprecated) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, promises = await ledger.restore(payload.outputs)
-    return PostRestoreResponse(outputs=outputs, promises=promises)
+    return PostRestoreResponse(outputs=outputs, signatures=promises)

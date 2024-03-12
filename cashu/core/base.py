@@ -530,7 +530,13 @@ class CheckFeesResponse_deprecated(BaseModel):
 
 class PostRestoreResponse(BaseModel):
     outputs: List[BlindedMessage] = []
-    promises: List[BlindedSignature] = []
+    signatures: List[BlindedSignature] = []
+    promises: Optional[List[BlindedSignature]] = []  # deprecated since 0.15.1
+
+    # duplicate value of "signatures" for backwards compatibility with old clients < 0.15.1
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.promises = self.signatures
 
 
 # ------- KEYSETS -------
