@@ -892,7 +892,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.debug(f"Loaded {len(spent_proofs_list)} used proofs")
         self.spent_proofs = {p.Y: p for p in spent_proofs_list}
 
-    async def check_proofs_state(self, secrets: List[str]) -> List[ProofState]:
+    async def check_proofs_state(self, Ys: List[str]) -> List[ProofState]:
         """Checks if provided proofs are spend or are pending.
         Used by wallets to check if their proofs have been redeemed by a receiver or they are still in-flight in a transaction.
 
@@ -901,32 +901,26 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         and which isn't.
 
         Args:
-            proofs (List[Proof]): List of proofs to check.
+            Ys (List[str]): List of Y's of proofs to check
 
         Returns:
             List[bool]: List of which proof is still spendable (True if still spendable, else False)
             List[bool]: List of which proof are pending (True if pending, else False)
         """
         states: List[ProofState] = []
-        proofs_spent_idx_secret = await self._get_proofs_spent_idx_secret(secrets)
-        proofs_pending_idx_secret = await self._get_proofs_pending_idx_secret(secrets)
-        for secret in secrets:
-            if (
-                secret not in proofs_spent_idx_secret
-                and secret not in proofs_pending_idx_secret
-            ):
-                states.append(ProofState(secret=secret, state=SpentState.unspent))
-            elif (
-                secret not in proofs_spent_idx_secret
-                and secret in proofs_pending_idx_secret
-            ):
-                states.append(ProofState(secret=secret, state=SpentState.pending))
+        proofs_spent = await self._get_proofs_spent(Ys)
+        proofs_pending = await self._get_proofs_pending(Ys)
+        for Y in Ys:
+            if Y not in proofs_spent and Y not in proofs_pending:
+                states.append(ProofState(Y=Y, state=SpentState.unspent))
+            elif Y not in proofs_spent and Y in proofs_pending:
+                states.append(ProofState(Y=Y, state=SpentState.pending))
             else:
                 states.append(
                     ProofState(
-                        secret=secret,
+                        Y=Y,
                         state=SpentState.spent,
-                        witness=proofs_spent_idx_secret[secret].witness,
+                        witness=proofs_spent[Y].witness,
                     )
                 )
         return states
@@ -977,7 +971,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         assert (
             len(
-                await self.crud.get_proofs_pending(proofs=proofs, db=self.db, conn=conn)
+                await self.crud.get_proofs_pending(
+                    Ys=[p.Y for p in proofs], db=self.db, conn=conn
+                )
             )
             == 0
         ), TransactionError("proofs are pending.")
