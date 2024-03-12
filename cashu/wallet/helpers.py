@@ -196,13 +196,12 @@ async def send(
             wallet.proofs, amount, secret_lock, set_reserved=True
         )
     else:
+        await wallet.load_mint()
         # get a proof with specific amount
-        send_proofs = []
-        for p in wallet.proofs:
-            if not p.reserved and p.amount == amount:
-                send_proofs = [p]
-                break
-        assert send_proofs, Exception(
+        send_proofs, fees = await wallet.select_to_send(
+            wallet.proofs, amount, set_reserved=False
+        )
+        assert len(send_proofs), Exception(
             "No proof with this amount found. Available amounts:"
             f" {set([p.amount for p in wallet.proofs])}"
         )

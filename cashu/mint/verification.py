@@ -268,5 +268,5 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         fee = math.ceil(len(proofs) / batch_size * fee_per_batch)
         if not sum_inputs - sum_outputs >= fee:
             raise TransactionNotBalancedError(
-                f"inputs less than outputs: {sum_inputs} {unit.name} - {sum_outputs} {unit.name} < {fee} {unit.name} fee"
+                f"Inputs and outputs not balanced: {sum_inputs} {unit.name} - {sum_outputs} {unit.name} < {fee} {unit.name} fee"
             )

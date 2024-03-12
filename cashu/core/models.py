@@ -212,7 +212,7 @@ class SpentState(Enum):
 
 
 class ProofState(BaseModel):
-    secret: str
+    Y: str
     state: SpentState
     witness: Optional[str] = None
 

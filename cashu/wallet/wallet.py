@@ -1422,6 +1422,30 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         return math.ceil(len(proofs) * 0.1)
 
     async def _select_proofs_to_send(
+        self, proofs: List[Proof], amount_to_send: int, overpay_percent: int = 0
+    ) -> Tuple[List[Proof], int]:
+        send_proofs: List[Proof] = []
+        # select proofs that are not reserved
+        proofs = [p for p in proofs if not p.reserved]
+        # select proofs that are in the active keysets of the mint
+        proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
+        # sort proofs by amount (descending)
+        sorted_proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
+
+        # start with the lowest possible fee (single proof)
+        fees_single_proof = self.get_fees_for_proofs([Proof()])
+
+        # find the smallest proof with an amount larger than the target amount
+        larger_proof: Union[None, Proof] = None
+        if len(sorted_proofs) > 1:
+            for i, proof in enumerate(sorted_proofs):
+                if proof.amount < amount_to_send + fees_single_proof:
+                    larger_proof = sorted_proofs[i - 1]
+                    break
+        print(larger_proof)
+        return send_proofs, fees_single_proof
+
+    async def _select_proofs_to_split(
         self, proofs: List[Proof], amount_to_send: int
     ) -> Tuple[List[Proof], int]:
         """
@@ -1547,13 +1571,36 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         )
         return melt_quote
 
+    async def select_to_send(
+        self,
+        proofs: List[Proof],
+        amount: int,
+        set_reserved: bool = False,
+    ) -> Tuple[List[Proof], int]:
+        """
+        Selects proofs such that a certain amount can be sent.
+
+        Args:
+            proofs (List[Proof]): Proofs to split
+            amount (int): Amount to split to
+            set_reserved (bool, optional): If set, the proofs are marked as reserved.
+
+        Returns:
+            List[Proof]: Proofs to send
+            int: Fees for the transaction
+        """
+        send_proofs, fees = await self._select_proofs_to_send(proofs, amount)
+        if set_reserved:
+            await self.set_reserved(send_proofs, reserved=True)
+        return send_proofs, fees
+
     async def split_to_send(
         self,
         proofs: List[Proof],
         amount: int,
         secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
-    ):
+    ) -> Tuple[List[Proof], List[Proof]]:
         """
         Splits proofs such that a certain amount can be sent.
 
@@ -1568,10 +1615,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Returns:
             Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
         """
+
+        spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
+        print(f"Amount to send: {self.unit.str(amount+fees)}")
         if secret_lock:
             logger.debug(f"Spending conditions: {secret_lock}")
-        spendable_proofs, fees = await self._select_proofs_to_send(proofs, amount)
-        print(f"Amount to send: {self.unit.str(amount+fees)}")
         keep_proofs, send_proofs = await self.split(
             spendable_proofs, amount, secret_lock
         )
