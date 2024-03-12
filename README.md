@@ -53,6 +53,7 @@ You can skip the entire next section about Poetry and jump right to [Using Cashu
 ## Manual install: Poetry
 These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Install Cashu](#poetry-install-cashu).
 
+
 #### Poetry: Prerequisites
 
 ```bash
