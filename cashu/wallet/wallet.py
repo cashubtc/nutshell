@@ -157,7 +157,12 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             Exception: if the response contains an error
         """
-        resp_dict = resp.json()
+        try:
+            resp_dict = resp.json()
+        except json.JSONDecodeError:
+            # if we can't decode the response, raise for status
+            resp.raise_for_status()
+            return
         if "detail" in resp_dict:
             logger.trace(f"Error from mint: {resp_dict}")
             error_message = f"Mint Error: {resp_dict['detail']}"
@@ -543,6 +548,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 amount=invoice_obj.amount_msat // 1000,
                 fee_reserve=ret.fee or 0,
                 paid=False,
+                expiry=invoice_obj.expiry,
             )
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
@@ -648,7 +654,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
-        payload = PostCheckStateRequest(secrets=[p.secret for p in proofs])
+        payload = PostCheckStateRequest(Ys=[p.Y for p in proofs])
         resp = await self.httpx.post(
             join(self.url, "/v1/checkstate"),
             json=payload.dict(),
@@ -661,11 +667,11 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             states: List[ProofState] = []
             for spendable, pending, p in zip(ret.spendable, ret.pending, proofs):
                 if spendable and not pending:
-                    states.append(ProofState(secret=p.secret, state=SpentState.unspent))
+                    states.append(ProofState(Y=p.Y, state=SpentState.unspent))
                 elif spendable and pending:
-                    states.append(ProofState(secret=p.secret, state=SpentState.pending))
+                    states.append(ProofState(Y=p.Y, state=SpentState.pending))
                 else:
-                    states.append(ProofState(secret=p.secret, state=SpentState.spent))
+                    states.append(ProofState(Y=p.Y, state=SpentState.spent))
             ret = PostCheckStateResponse(states=states)
             return ret
         # END backwards compatibility < 0.15.0
@@ -691,7 +697,14 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         self.raise_on_error_request(resp)
         response_dict = resp.json()
         returnObj = PostRestoreResponse.parse_obj(response_dict)
-        return returnObj.outputs, returnObj.promises
+
+        # BEGIN backwards compatibility < 0.15.1
+        # if the mint returns promises, duplicate into signatures
+        if returnObj.promises:
+            returnObj.signatures = returnObj.promises
+        # END backwards compatibility < 0.15.1
+
+        return returnObj.outputs, returnObj.signatures
 
 
 class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
@@ -992,9 +1005,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # NUT-08, the mint will imprint these outputs with a value depending on the
         # amount of fees we overpaid.
         n_change_outputs = calculate_number_of_blank_outputs(fee_reserve_sat)
-        change_secrets, change_rs, change_derivation_paths = (
-            await self.generate_n_secrets(n_change_outputs)
-        )
+        (
+            change_secrets,
+            change_rs,
+            change_derivation_paths,
+        ) = await self.generate_n_secrets(n_change_outputs)
         change_outputs, change_rs = self._construct_outputs(
             n_change_outputs * [1], change_secrets, change_rs
         )
@@ -1120,7 +1135,15 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             C = b_dhke.step3_alice(
                 C_, r, self.keysets[promise.id].public_keys[promise.amount]
             )
-            B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+
+            if not settings.wallet_use_deprecated_h2c:
+                B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
+            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
+            else:
+                B_, r = b_dhke.step1_alice_deprecated(
+                    secret, r
+                )  # recompute B_ for dleq proofs
+            # END: BACKWARDS COMPATIBILITY < 0.15.1
 
             proof = Proof(
                 id=promise.id,
@@ -1183,7 +1206,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
         for secret, amount, r in zip(secrets, amounts, rs_):
-            B_, r = b_dhke.step1_alice(secret, r or None)
+            if not settings.wallet_use_deprecated_h2c:
+                B_, r = b_dhke.step1_alice(secret, r or None)
+            # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
+            else:
+                B_, r = b_dhke.step1_alice_deprecated(secret, r or None)
+            # END: BACKWARDS COMPATIBILITY < 0.15.1
+
             rs_return.append(r)
             output = BlindedMessage(
                 amount=amount, B_=B_.serialize().hex(), id=self.keyset_id

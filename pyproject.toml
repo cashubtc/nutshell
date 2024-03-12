@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cashu"
-version = "0.15.0"
+version = "0.15.1"
 description = "Ecash wallet and mint"
 authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
@@ -31,21 +31,20 @@ httpx = {extras = ["socks"], version = "^0.25.1"}
 bip32 = "^3.4"
 mnemonic = "^0.20"
 bolt11 = "^2.0.5"
-black = "23.11.0"
 pre-commit = "^3.5.0"
 
 [tool.poetry.extras]
 pgsql = ["psycopg2-binary"]
 
 [tool.poetry.group.dev.dependencies]
-mypy = "^1.5.1"
-black = "^23.11.0"
 pytest-asyncio = "^0.21.1"
 pytest-cov = "^4.0.0"
 pytest = "^7.4.0"
-ruff = "^0.0.284"
 pre-commit = "^3.3.3"
 fastapi-profiler = "^1.2.0"
+respx = "^0.20.2"
+ruff = "^0.2.1"
+mypy = "^1.8.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -56,22 +55,13 @@ mint = "cashu.mint.main:main"
 cashu = "cashu.wallet.cli.cli:cli"
 wallet-test = "tests.test_wallet:test"
 
-
-[tool.black]
-line-length = 88
-
-# previously experimental-string-processing = true
-# this should autoformat string properly but does not work
-preview = true
-
-
 [tool.ruff]
-# Same as Black. but black has a 10% overflow rule
-line-length = 150
+line-length = 88
+show-fixes = true
 
-# Enable pycodestyle (`E`) and Pyflakes (`F`) codes by default.
+[tool.ruff.lint]
 # (`I`) means isorting
-select = ["E", "F", "I"]
+extend-select = ["I"]
 ignore = []
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
@@ -80,7 +70,7 @@ unfixable = []
 
 # Exclude a variety of commonly ignored directories.
 exclude = [
-    "cashu/nostr",
+    "cashu/nostr/*",
     "cashu/core/bolt11.py",
     ".bzr",
     ".direnv",
@@ -108,9 +98,6 @@ exclude = [
 # Allow unused variables when underscore-prefixed.
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
-# Assume Python 3.8
-# target-version = "py38"
-
-[tool.ruff.mccabe]
+[tool.ruff.lint.mccabe]
 # Unlike Flake8, default to a complexity level of 10.
 max-complexity = 10

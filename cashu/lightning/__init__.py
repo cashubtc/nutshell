@@ -1,5 +1,6 @@
 # type: ignore
 from ..core.settings import settings
+from .blink import BlinkWallet  # noqa: F401
 from .corelightningrest import CoreLightningRestWallet  # noqa: F401
 from .fake import FakeWallet  # noqa: F401
 from .lnbits import LNbitsWallet  # noqa: F401

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter
 from loguru import logger
@@ -70,7 +70,7 @@ async def info() -> GetInfoResponse_deprecated:
     response_model=KeysResponse_deprecated,
     deprecated=True,
 )
-async def keys_deprecated():
+async def keys_deprecated() -> Dict[str, str]:
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
     logger.trace("> GET /keys")
     keyset = ledger.get_keyset()
@@ -86,10 +86,10 @@ async def keys_deprecated():
         "A dictionary of all supported token values of the mint and their associated"
         " public key for a specific keyset."
     ),
-    response_model=KeysResponse_deprecated,
+    response_model=Dict[str, str],
     deprecated=True,
 )
-async def keyset_deprecated(idBase64Urlsafe: str):
+async def keyset_deprecated(idBase64Urlsafe: str) -> Dict[str, str]:
     """
     Get the public keys of the mint from a specific keyset id.
     The id is encoded in idBase64Urlsafe (by a wallet) and is converted back to
@@ -323,12 +323,12 @@ async def split_deprecated(
     ),
     deprecated=True,
 )
-async def check_spendable(
+async def check_spendable_deprecated(
     payload: CheckSpendableRequest_deprecated,
 ) -> CheckSpendableResponse_deprecated:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /check: {payload}")
-    proofs_state = await ledger.check_proofs_state([p.secret for p in payload.proofs])
+    proofs_state = await ledger.check_proofs_state([p.Y for p in payload.proofs])
     spendableList: List[bool] = []
     pendingList: List[bool] = []
     for proof_state in proofs_state:
@@ -360,4 +360,4 @@ async def check_spendable(
 async def restore(payload: PostMintRequest_deprecated) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, promises = await ledger.restore(payload.outputs)
-    return PostRestoreResponse(outputs=outputs, promises=promises)
+    return PostRestoreResponse(outputs=outputs, signatures=promises)

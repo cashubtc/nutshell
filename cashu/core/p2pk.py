@@ -68,16 +68,16 @@ class P2PKSecret(Secret):
         return int(n_sigs) if n_sigs else None
 
 
-def sign_p2pk_sign(message: bytes, private_key: PrivateKey):
+def sign_p2pk_sign(message: bytes, private_key: PrivateKey) -> bytes:
     # ecdsa version
     # signature = private_key.ecdsa_serialize(private_key.ecdsa_sign(message))
     signature = private_key.schnorr_sign(
         hashlib.sha256(message).digest(), None, raw=True
     )
-    return signature.hex()
+    return signature
 
 
-def verify_p2pk_signature(message: bytes, pubkey: PublicKey, signature: bytes):
+def verify_p2pk_signature(message: bytes, pubkey: PublicKey, signature: bytes) -> bool:
     # ecdsa version
     # return pubkey.ecdsa_verify(message, pubkey.ecdsa_deserialize(signature))
     return pubkey.schnorr_verify(

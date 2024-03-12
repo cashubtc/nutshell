@@ -54,7 +54,8 @@ async def test_api_keys(ledger: Ledger):
                 "id": keyset.id,
                 "unit": keyset.unit.name,
                 "keys": {
-                    str(k): v.serialize().hex() for k, v in keyset.public_keys.items()  # type: ignore
+                    str(k): v.serialize().hex()
+                    for k, v in keyset.public_keys.items()  # type: ignore
                 },
             }
             for keyset in ledger.keysets.values()
@@ -182,6 +183,15 @@ async def test_mint_quote(ledger: Ledger):
     assert result["request"]
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
+    assert result["expiry"] == invoice.expiry
+
+    # get mint quote again from api
+    response = httpx.get(
+        f"{BASE_URL}/v1/mint/quote/bolt11/{result['quote']}",
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result2 = response.json()
+    assert result2["quote"] == result["quote"]
 
 
 @pytest.mark.asyncio
@@ -235,6 +245,16 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     assert result["amount"] == 64
     # TODO: internal invoice, fee should be 0
     assert result["fee_reserve"] == 0
+    invoice_obj = bolt11.decode(request)
+    assert result["expiry"] == invoice_obj.expiry
+
+    # get melt quote again from api
+    response = httpx.get(
+        f"{BASE_URL}/v1/melt/quote/bolt11/{result['quote']}",
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result2 = response.json()
+    assert result2["quote"] == result["quote"]
 
 
 @pytest.mark.asyncio
@@ -359,7 +379,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_check_state(ledger: Ledger):
-    payload = PostCheckStateRequest(secrets=["asdasdasd", "asdasdasd1"])
+    payload = PostCheckStateRequest(Ys=["asdasdasd", "asdasdasd1"])
     response = httpx.post(
         f"{BASE_URL}/v1/checkstate",
         json=payload.dict(),

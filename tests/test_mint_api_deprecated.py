@@ -187,6 +187,44 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
+async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
+    # Clients without NUT-08 will not send change outputs
+    # internal invoice
+    invoice = await wallet.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id)
+    assert wallet.balance == 64
+
+    # create invoice to melt to
+    invoice = await wallet.request_mint(64)
+
+    invoice_payment_request = invoice.bolt11
+
+    quote = await wallet.melt_quote(invoice_payment_request)
+    assert quote.amount == 64
+    assert quote.fee_reserve == 0
+
+    inputs_payload = [p.to_dict() for p in wallet.proofs]
+
+    # outputs for change
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
+    outputs, rs = wallet._construct_outputs([2], secrets, rs)
+
+    response = httpx.post(
+        f"{BASE_URL}/melt",
+        json={
+            "pr": invoice_payment_request,
+            "proofs": inputs_payload,
+        },
+        timeout=None,
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    assert result.get("preimage") is not None
+    assert result["paid"] is True
+
+
+@pytest.mark.asyncio
 @pytest.mark.skipif(
     is_fake,
     reason="only works on regtest",

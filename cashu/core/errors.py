@@ -12,7 +12,7 @@ class CashuError(Exception):
 
 
 class NotAllowedError(CashuError):
-    detail = "Not allowed."
+    detail = "not allowed"
     code = 10000
 
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
@@ -20,7 +20,7 @@ class NotAllowedError(CashuError):
 
 
 class TransactionError(CashuError):
-    detail = "Transaction error."
+    detail = "transaction error"
     code = 11000
 
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
@@ -36,7 +36,7 @@ class TokenAlreadySpentError(TransactionError):
 
 
 class SecretTooLongError(TransactionError):
-    detail = "Secret too long."
+    detail = "secret too long"
     code = 11003
 
     def __init__(self):
@@ -44,7 +44,7 @@ class SecretTooLongError(TransactionError):
 
 
 class NoSecretInProofsError(TransactionError):
-    detail = "No secret in proofs."
+    detail = "no secret in proofs"
     code = 11004
 
     def __init__(self):
@@ -52,7 +52,7 @@ class NoSecretInProofsError(TransactionError):
 
 
 class KeysetError(CashuError):
-    detail = "Keyset error."
+    detail = "keyset error"
     code = 12000
 
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
@@ -60,7 +60,7 @@ class KeysetError(CashuError):
 
 
 class KeysetNotFoundError(KeysetError):
-    detail = "Keyset not found."
+    detail = "keyset not found"
     code = 12001
 
     def __init__(self):
@@ -68,15 +68,15 @@ class KeysetNotFoundError(KeysetError):
 
 
 class LightningError(CashuError):
-    detail = "Lightning error."
+    detail = "Lightning error"
     code = 20000
 
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
         super().__init__(detail or self.detail, code=code or self.code)
 
 
-class InvoiceNotPaidError(CashuError):
-    detail = "Lightning invoice not paid yet."
+class QuoteNotPaidError(CashuError):
+    detail = "quote not paid"
     code = 20001
 
     def __init__(self):

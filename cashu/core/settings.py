@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.15.0"
+VERSION = "0.15.1"
 
 
 def find_env_file():
@@ -17,7 +17,7 @@ def find_env_file():
     if not os.path.isfile(env_file):
         env_file = os.path.join(str(Path.home()), ".cashu", ".env")
     if os.path.isfile(env_file):
-        env.read_env(env_file)
+        env.read_env(env_file, recurse=False, override=True)
     else:
         env_file = ""
     return env_file
@@ -45,10 +45,12 @@ class EnvSettings(CashuSettings):
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
     debug_profiling: bool = Field(default=False)
     debug_mint_only_deprecated: bool = Field(default=False)
+    db_backup_path: Optional[str] = Field(default=None)
 
 
 class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
+    mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
     mint_listen_host: str = Field(default="127.0.0.1")
@@ -56,17 +58,44 @@ class MintSettings(CashuSettings):
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
     mint_cache_secrets: bool = Field(default=True)
-
-    mint_peg_out_only: bool = Field(default=False)
-    mint_max_peg_in: int = Field(default=None)
-    mint_max_peg_out: int = Field(default=None)
-    mint_max_request_length: int = Field(default=1000)
-    mint_max_balance: int = Field(default=None)
+    mint_test_database: str = Field(default="test_data/test_mint")
+      
+    mint_peg_out_only: bool = Field(
+        default=False,
+        title="Peg-out only",
+        description="Mint allows no mint operations.",
+    )
+    mint_max_peg_in: int = Field(
+        default=None,
+        title="Maximum peg-in",
+        description="Maximum amount for a mint operation.",
+    )
+    mint_max_peg_out: int = Field(
+        default=None,
+        title="Maximum peg-out",
+        description="Maximum amount for a melt operation.",
+    )
+    mint_max_request_length: int = Field(
+        default=1000,
+        title="Maximum request length",
+        description="Maximum length of REST API request arrays.",
+    )
+    mint_max_balance: int = Field(
+        default=None, title="Maximum mint balance", description="Maximum mint balance."
+    )
+    mint_duplicate_keysets: bool = Field(
+        default=True,
+        title="Duplicate keysets",
+        description=(
+            "Whether to duplicate keysets for backwards compatibility before v1 API"
+            " (Nutshell 0.15.0)."
+        ),
+    )
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
-
     mint_strike_key: str = Field(default=None)
+    mint_blink_key: str = Field(default=None)
 
 
 class FakeWalletSettings(MintSettings):
@@ -85,7 +114,7 @@ class MintInformation(CashuSettings):
 
 
 class WalletSettings(CashuSettings):
-    tor: bool = Field(default=True)
+    tor: bool = Field(default=False)
     socks_host: str = Field(default=None)  # deprecated
     socks_port: int = Field(default=9050)  # deprecated
     socks_proxy: str = Field(default=None)
@@ -95,7 +124,7 @@ class WalletSettings(CashuSettings):
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")
     wallet_unit: str = Field(default="sat")
-
+    wallet_use_deprecated_h2c: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
 
@@ -104,13 +133,20 @@ class WalletSettings(CashuSettings):
         default=[
             "wss://nostr-pub.wellorder.net",
             "wss://relay.damus.io",
-            "wss://nostr.zebedee.cloud",
+            "wss://nostr.mom",
             "wss://relay.snort.social",
             "wss://nostr.fmt.wiz.biz",
+            "wss://relay.minibits.cash",
+            "wss://nos.lol",
+            "wss://relay.nostr.band",
+            "wss://relay.bitcoiner.social",
+            "wss://140.f7z.io",
+            "wss://relayable.org",
         ]
     )
 
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
+    proofs_batch_size: int = Field(default=1000)
 
 
 class LndRestFundingSource(MintSettings):

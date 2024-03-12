@@ -4,18 +4,12 @@ ruff:
 ruff-check:
 	poetry run ruff check .
 
-black:
-	poetry run black .
-
-black-check:
-	poetry run black . --check
-
 mypy:
 	poetry run mypy cashu --check-untyped-defs
 
-format: black ruff
+format: ruff
 
-check: black-check ruff-check mypy
+check: ruff-check mypy
 
 clean:
 	rm -r cashu.egg-info/ || true
@@ -59,3 +53,11 @@ install-pre-commit-hook:
 
 pre-commit:
 	poetry run pre-commit run --all-files
+
+docker-build:
+	rm -rf docker-build || true
+	mkdir -p docker-build
+	git clone . docker-build
+	cd docker-build
+	docker buildx build -f Dockerfile -t cashubtc/nutshell:0.15.0 --platform linux/amd64 .
+	# docker push cashubtc/nutshell:0.15.0
