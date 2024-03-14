@@ -799,7 +799,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     async def restore(
         self, outputs: List[BlindedMessage]
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
-        promises: List[BlindedSignature] = []
+        signatures: List[BlindedSignature] = []
         return_outputs: List[BlindedMessage] = []
         async with self.db.connect() as conn:
             for output in outputs:
@@ -814,10 +814,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     if not promise.id and len(self.keysets) == 1:
                         promise.id = self.keyset.id
                     # END backwards compatibility
-                    promises.append(promise)
+                    signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")
-        return return_outputs, promises
+        return return_outputs, signatures
 
     # ------- BLIND SIGNATURES -------
 
