@@ -11,6 +11,7 @@ from cashu.core.base import (
 )
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
+from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
 from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
 
@@ -331,7 +332,12 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
-    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(0, 0)
+    secret_counter = await bump_secret_derivation(
+        db=wallet.db, keyset_id=wallet.keyset_id, by=0, skip=True
+    )
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(
+        secret_counter - 1, secret_counter - 1
+    )
     outputs, rs = wallet._construct_outputs([64], secrets, rs)
 
     payload = PostMintRequest(outputs=outputs, quote="placeholder")
