@@ -76,17 +76,22 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         assert seed, "seed not set"
 
         # decrypt seed if seed_decryption_key is set
-        self.master_key = (
-            AESCipher(seed_decryption_key).decrypt(seed)
-            if seed_decryption_key
-            else seed
-        )
+        try:
+            self.seed = (
+                AESCipher(seed_decryption_key).decrypt(seed)
+                if seed_decryption_key
+                else seed
+            )
+        except Exception as e:
+            raise Exception(
+                f"Could not decrypt seed. Make sure that the seed is correct and the decryption key is set. {e}"
+            )
         self.derivation_path = derivation_path
 
         self.db = db
         self.crud = crud
         self.backends = backends
-        self.pubkey = derive_pubkey(self.master_key)
+        self.pubkey = derive_pubkey(self.seed)
         self.spent_proofs: Dict[str, Proof] = {}
 
     # ------- KEYS -------
@@ -109,7 +114,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             MintKeyset: Keyset
         """
         assert derivation_path, "derivation path not set"
-        seed = seed or self.master_key
+        seed = seed or self.seed
         tmp_keyset_local = MintKeyset(
             seed=seed,
             derivation_path=derivation_path,
@@ -132,7 +137,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # no keyset for this derivation path yet
             # we create a new keyset (keys will be generated at instantiation)
             keyset = MintKeyset(
-                seed=seed or self.master_key,
+                seed=seed or self.seed,
                 derivation_path=derivation_path,
                 version=version or settings.version,
             )
@@ -503,7 +508,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 melt_quote.request
             )
             assert payment_quote.checking_id, "quote has no checking id"
-        
+
         expiry = None
         if invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
