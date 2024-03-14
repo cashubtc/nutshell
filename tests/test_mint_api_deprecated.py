@@ -307,10 +307,6 @@ async def test_checkfees_external(ledger: Ledger, wallet: Wallet):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_api_check_state(ledger: Ledger):
     proofs = [
         Proof(id="1234", amount=0, secret="asdasdasd", C="asdasdasd"),
@@ -330,10 +326,6 @@ async def test_api_check_state(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
     pay_if_regtest(invoice.bolt11)
