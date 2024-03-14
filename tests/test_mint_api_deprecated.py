@@ -5,6 +5,8 @@ import pytest_asyncio
 from cashu.core.base import (
     CheckSpendableRequest_deprecated,
     CheckSpendableResponse_deprecated,
+    PostMintRequest,
+    PostRestoreResponse,
     Proof,
 )
 from cashu.core.settings import settings
@@ -325,3 +327,33 @@ async def test_api_check_state(ledger: Ledger):
     assert len(states.spendable) == 2
     assert states.pending
     assert len(states.pending) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
+async def test_api_restore(ledger: Ledger, wallet: Wallet):
+    invoice = await wallet.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id)
+    assert wallet.balance == 64
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(0, 0)
+    outputs, rs = wallet._construct_outputs([64], secrets, rs)
+
+    payload = PostMintRequest(outputs=outputs, quote="placeholder")
+    response = httpx.post(
+        f"{BASE_URL}/restore",
+        json=payload.dict(),
+    )
+    data = response.json()
+    assert "promises" in data
+    assert "outputs" in data
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    response = PostRestoreResponse.parse_obj(response.json())
+    assert response
+    assert response.promises
+    assert len(response.promises) == 1
+    assert len(response.outputs) == 1
+    assert response.outputs == outputs

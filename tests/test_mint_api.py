@@ -6,6 +6,8 @@ import pytest_asyncio
 from cashu.core.base import (
     PostCheckStateRequest,
     PostCheckStateResponse,
+    PostMintRequest,
+    PostRestoreResponse,
     SpentState,
 )
 from cashu.core.settings import settings
@@ -183,11 +185,11 @@ async def test_mint_quote(ledger: Ledger):
     assert result["request"]
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
-    
+
     expiry = None
     if invoice.expiry is not None:
         expiry = invoice.date + invoice.expiry
-        
+
     assert result["expiry"] == expiry
 
     # get mint quote again from api
@@ -251,7 +253,7 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     # TODO: internal invoice, fee should be 0
     assert result["fee_reserve"] == 0
     invoice_obj = bolt11.decode(request)
-    
+
     expiry = None
     if invoice_obj.expiry is not None:
         expiry = invoice_obj.date + invoice_obj.expiry
@@ -399,3 +401,33 @@ async def test_api_check_state(ledger: Ledger):
     assert response
     assert len(response.states) == 2
     assert response.states[0].state == SpentState.unspent
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
+async def test_api_restore(ledger: Ledger, wallet: Wallet):
+    invoice = await wallet.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id)
+    assert wallet.balance == 64
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(0, 0)
+    outputs, rs = wallet._construct_outputs([64], secrets, rs)
+
+    payload = PostMintRequest(outputs=outputs, quote="placeholder")
+    response = httpx.post(
+        f"{BASE_URL}/v1/restore",
+        json=payload.dict(),
+    )
+    data = response.json()
+    assert "signatures" in data
+    assert "outputs" in data
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    response = PostRestoreResponse.parse_obj(response.json())
+    assert response
+    assert response
+    assert len(response.signatures) == 1
+    assert len(response.outputs) == 1
+    assert response.outputs == outputs
