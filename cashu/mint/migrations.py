@@ -22,6 +22,9 @@ async def m001_initial(db: Database):
                     amount {db.big_int} NOT NULL,
                     B_b TEXT NOT NULL,
                     C_b TEXT NOT NULL,
+                    id TEXT NOT NULL,
+                    e TEXT NOT NULL,
+                    s TEXT NOT NULL,
 
                     UNIQUE (B_b)
 
@@ -35,6 +38,21 @@ async def m001_initial(db: Database):
                     amount {db.big_int} NOT NULL,
                     C TEXT NOT NULL,
                     secret TEXT NOT NULL,
+                    id TEXT NOT NULL,
+
+                    UNIQUE (secret)
+
+                );
+            """
+        )
+
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_pending')} (
+                    amount INTEGER NOT NULL,
+                    C TEXT NOT NULL,
+                    secret TEXT NOT NULL,
+                    id TEXT NOT NULL,
 
                     UNIQUE (secret)
 
@@ -46,11 +64,12 @@ async def m001_initial(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'invoices')} (
                     amount {db.big_int} NOT NULL,
-                    pr TEXT NOT NULL,
-                    hash TEXT NOT NULL,
+                    bolt11 TEXT NOT NULL,
+                    id TEXT NOT NULL,
                     issued BOOL NOT NULL,
+                    out BOOL NOT NULL,
 
-                    UNIQUE (hash)
+                    UNIQUE (id)
 
                 );
             """
@@ -62,6 +81,15 @@ async def drop_balance_views(db: Database, conn: Connection):
     await conn.execute(f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_issued')}")
     await conn.execute(
         f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_redeemed')}"
+    )
+    await conn.execute(
+        f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_keysets')}"
+    )
+    await conn.execute(
+        f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_issued_keysets')}"
+    )
+    await conn.execute(
+        f"DROP VIEW IF EXISTS {table_with_schema(db, 'balance_redeemed_keysets')}"
     )
 
 
@@ -99,6 +127,43 @@ async def create_balance_views(db: Database, conn: Connection):
     """
     )
 
+    # create same set of views but group proofs and promises by keyset column "id" and calculate amount per keyset
+    # each balance view should have a column "id" and "balance" where "id" is the keyset id and "balance" is the
+    # amount for that keyset
+
+    # issued balance per keyset:
+    await conn.execute(
+        f"""
+        CREATE VIEW {table_with_schema(db, 'balance_issued_keysets')} AS
+        SELECT id, COALESCE(SUM(amount), 0) AS balance
+            FROM {table_with_schema(db, 'promises')}
+            WHERE amount > 0
+            GROUP BY id
+    """
+    )
+
+    # redeemed balance per keyset:
+    await conn.execute(
+        f"""
+        CREATE VIEW {table_with_schema(db, 'balance_redeemed_keysets')} AS
+        SELECT id, COALESCE(SUM(amount), 0) AS balance
+            FROM {table_with_schema(db, 'proofs_used')}
+            WHERE amount > 0
+            GROUP BY id
+    """
+    )
+
+    # total balance per keyset (issued - redeemed):
+    await conn.execute(
+        f"""
+        CREATE VIEW {table_with_schema(db, 'balance_keysets')} AS
+        SELECT bi.id, COALESCE(bi.balance, 0) - COALESCE(br.balance, 0) AS balance
+            FROM {table_with_schema(db, 'balance_issued_keysets')} bi
+            LEFT JOIN {table_with_schema(db, 'balance_redeemed_keysets')} br
+            ON bi.id = br.id
+    """
+    )
+
 
 async def m002_add_balance_views(db: Database):
     async with db.connect() as conn:
@@ -119,6 +184,7 @@ async def m003_mint_keysets(db: Database):
                     valid_to TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
                     first_seen TIMESTAMP NOT NULL DEFAULT {db.timestamp_now},
                     active BOOL DEFAULT TRUE,
+                    version TEXT,
 
                     UNIQUE (derivation_path)
 
@@ -136,98 +202,6 @@ async def m003_mint_keysets(db: Database):
 
                 );
             """
-        )
-
-
-async def m004_keysets_add_version(db: Database):
-    """
-    Column that remembers with which version
-    """
-    async with db.connect() as conn:
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN version TEXT"
-        )
-
-
-async def m005_pending_proofs_table(db: Database) -> None:
-    """
-    Store pending proofs.
-    """
-    async with db.connect() as conn:
-        await conn.execute(
-            f"""
-                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_pending')} (
-                    amount INTEGER NOT NULL,
-                    C TEXT NOT NULL,
-                    secret TEXT NOT NULL,
-
-                    UNIQUE (secret)
-
-                );
-            """
-        )
-
-
-async def m006_invoices_add_payment_hash(db: Database):
-    """
-    Column that remembers the payment_hash as we're using
-    the column hash as a random identifier now
-    (see https://github.com/cashubtc/nuts/pull/14).
-    """
-    async with db.connect() as conn:
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN payment_hash"
-            " TEXT"
-        )
-        await conn.execute(
-            f"UPDATE {table_with_schema(db, 'invoices')} SET payment_hash = hash"
-        )
-
-
-async def m007_proofs_and_promises_store_id(db: Database):
-    """
-    Column that stores the id of the proof or promise.
-    """
-    async with db.connect() as conn:
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN id TEXT"
-        )
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'proofs_pending')} ADD COLUMN id TEXT"
-        )
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN id TEXT"
-        )
-
-
-async def m008_promises_dleq(db: Database):
-    """
-    Add columns for DLEQ proof to promises table.
-    """
-    async with db.connect() as conn:
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN e TEXT"
-        )
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'promises')} ADD COLUMN s TEXT"
-        )
-
-
-async def m009_add_out_to_invoices(db: Database):
-    # column in invoices for marking whether the invoice is incoming (out=False) or outgoing (out=True)
-    async with db.connect() as conn:
-        # rename column pr to bolt11
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN pr TO"
-            " bolt11"
-        )
-        # rename column hash to payment_hash
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'invoices')} RENAME COLUMN hash TO id"
-        )
-
-        await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'invoices')} ADD COLUMN out BOOL"
         )
 
 
@@ -547,8 +521,10 @@ async def m016_recompute_Y_with_new_h2c(db: Database):
         rows = await conn.fetchall(
             f"SELECT * FROM {table_with_schema(db, 'proofs_used')}"
         )
+        from tqdm import tqdm
+
         # Proof() will compute Y from secret upon initialization
-        proofs_used = [Proof(**r) for r in rows]
+        proofs_used = [Proof(**r) for r in tqdm(rows)]
 
         rows = await conn.fetchall(
             f"SELECT * FROM {table_with_schema(db, 'proofs_pending')}"
@@ -557,13 +533,65 @@ async def m016_recompute_Y_with_new_h2c(db: Database):
 
     # overwrite the old Y columns with the new Y
     async with db.connect() as conn:
-        for proof in proofs_used:
-            await conn.execute(
-                f"UPDATE {table_with_schema(db, 'proofs_used')} SET Y = '{proof.Y}'"
-                f" WHERE secret = '{proof.secret}'"
+        # we create a temporary table tmp_proofs_update and update the Y rows all at once
+        # much faster than doing it entry by entry
+        await conn.execute(
+            """
+            CREATE TEMPORARY TABLE tmp_proofs_update (
+                secret string,
+                Y string
             )
-        for proof in proofs_pending:
-            await conn.execute(
-                f"UPDATE {table_with_schema(db, 'proofs_pending')} SET Y = '{proof.Y}'"
-                f" WHERE secret = '{proof.secret}'"
+            """
+        )
+        values_str = ", ".join(
+            [f"('{proof.secret}', '{proof.Y}')" for proof in proofs_used]
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO tmp_proofs_update (secret, Y)
+                VALUES {values_str}
+            """
+        )
+        await conn.execute(
+            f"""
+            UPDATE {table_with_schema(db, 'proofs_used')}
+                SET Y = tmp_proofs_update.Y
+                FROM tmp_proofs_update
+                WHERE {table_with_schema(db, 'proofs_used')}.secret = tmp_proofs_update.secret
+            """
+        )
+        await conn.execute("DROP TABLE tmp_proofs_update")
+
+        # we do the same for proofs_pending
+        await conn.execute(
+            """
+            CREATE TEMPORARY TABLE tmp_proofs_update (
+                secret string,
+                Y string
             )
+            """
+        )
+        values_str = ", ".join(
+            [f"('{proof.secret}', '{proof.Y}')" for proof in proofs_pending]
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO tmp_proofs_update (secret, Y)
+                VALUES {values_str}
+            """
+        )
+        await conn.execute(
+            f"""
+            UPDATE {table_with_schema(db, 'proofs_pending')}
+                SET Y = tmp_proofs_update.Y
+                FROM tmp_proofs_update
+                WHERE {table_with_schema(db, 'proofs_pending')}.secret = tmp_proofs_update.secret
+            """
+        )
+        await conn.execute("DROP TABLE tmp_proofs_update")
+
+
+async def m017_recreate_balance_views(db: Database):
+    async with db.connect() as conn:
+        await drop_balance_views(db, conn)
+        await create_balance_views(db, conn)
