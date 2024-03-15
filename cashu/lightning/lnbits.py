@@ -7,7 +7,7 @@ from bolt11 import (
 )
 
 from ..core.base import Amount, MeltQuote, Unit
-from ..core.helpers import fee_reserve
+from ..core.helpers import fee_reserve_msat
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
@@ -158,7 +158,7 @@ class LNbitsWallet(LightningBackend):
         invoice_obj = decode(bolt11)
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
-        fees_msat = fee_reserve(amount_msat)
+        fees_msat = fee_reserve_msat(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
         return PaymentQuoteResponse(

@@ -26,7 +26,7 @@ def find_env_file():
 class CashuSettings(BaseSettings):
     env_file: str = Field(default=None)
     lightning_fee_percent: float = Field(default=1.0)
-    lightning_reserve_fee_min: int = Field(default=2000)
+    lightning_reserve_fee_min_msat: int = Field(default=2000)
     max_order: int = Field(default=64)
 
     class Config(BaseSettings.Config):
@@ -57,7 +57,9 @@ class MintSettings(CashuSettings):
     mint_listen_port: int = Field(default=3338)
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
+    mint_cache_secrets: bool = Field(default=True)
     mint_test_database: str = Field(default="test_data/test_mint")
+      
     mint_peg_out_only: bool = Field(
         default=False,
         title="Peg-out only",
@@ -100,7 +102,6 @@ class FakeWalletSettings(MintSettings):
     fakewallet_brr: bool = Field(default=True)
     fakewallet_delay_payment: bool = Field(default=False)
     fakewallet_stochastic_invoice: bool = Field(default=False)
-    mint_cache_secrets: bool = Field(default=True)
 
 
 class MintInformation(CashuSettings):
