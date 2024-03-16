@@ -475,8 +475,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # check if there is a mint quote with the same payment request
         # so that we can handle the transaction internally without lightning
         # and respond with zero fees
-        mint_quote = await self.crud.get_mint_quote_by_checking_id(
-            checking_id=invoice_obj.payment_hash, db=self.db
+        mint_quote = await self.crud.get_mint_quote_by_request(
+            request=melt_quote.request, db=self.db
         )
         if mint_quote:
             # internal transaction, validate and return amount from
@@ -561,8 +561,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # we only check the state with the backend if there is no associated internal
         # mint quote for this melt quote
-        mint_quote = await self.crud.get_mint_quote_by_checking_id(
-            checking_id=melt_quote.checking_id, db=self.db
+        mint_quote = await self.crud.get_mint_quote_by_request(
+            request=melt_quote.request, db=self.db
         )
 
         if not melt_quote.paid and not mint_quote and check_quote_with_backend:
@@ -600,8 +600,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         # first we check if there is a mint quote with the same payment request
         # so that we can handle the transaction internally without the backend
-        mint_quote = await self.crud.get_mint_quote_by_checking_id(
-            checking_id=melt_quote.checking_id, db=self.db
+        mint_quote = await self.crud.get_mint_quote_by_request(
+            request=melt_quote.request, db=self.db
         )
         if not mint_quote:
             return melt_quote
