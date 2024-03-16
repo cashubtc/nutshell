@@ -58,6 +58,17 @@ class MintSettings(CashuSettings):
     mint_lightning_backend: str = Field(default="LNbitsWallet")
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
+
+    mint_lnbits_endpoint: str = Field(default=None)
+    mint_lnbits_key: str = Field(default=None)
+    mint_strike_key: str = Field(default=None)
+    mint_blink_key: str = Field(default=None)
+
+
+class MintLimits(MintSettings):
+    mint_rate_limit: bool = Field(default=False)
+    mint_rate_limit_per_minute: int = Field(default=20, gt=0)
+
     mint_peg_out_only: bool = Field(
         default=False,
         title="Peg-out only",
@@ -89,11 +100,6 @@ class MintSettings(CashuSettings):
             " (Nutshell 0.15.0)."
         ),
     )
-
-    mint_lnbits_endpoint: str = Field(default=None)
-    mint_lnbits_key: str = Field(default=None)
-    mint_strike_key: str = Field(default=None)
-    mint_blink_key: str = Field(default=None)
 
 
 class FakeWalletSettings(MintSettings):
@@ -167,6 +173,7 @@ class Settings(
     LndRestFundingSource,
     CoreLightningRestFundingSource,
     FakeWalletSettings,
+    MintLimits,
     MintSettings,
     MintInformation,
     WalletSettings,
