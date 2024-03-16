@@ -469,6 +469,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         unit = Unit[melt_quote.unit]
         method = Method.bolt11
+        request = melt_quote.request.lower()
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
@@ -476,7 +477,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # so that we can handle the transaction internally without lightning
         # and respond with zero fees
         mint_quote = await self.crud.get_mint_quote_by_request(
-            request=melt_quote.request, db=self.db
+            request=request, db=self.db
         )
         if mint_quote:
             # internal transaction, validate and return amount from
@@ -485,9 +486,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 Amount(unit, mint_quote.amount).to(Unit.msat).amount
                 == invoice_obj.amount_msat
             ), "amounts do not match"
-            assert (
-                melt_quote.request == mint_quote.request
-            ), "bolt11 requests do not match"
+            assert request == mint_quote.request, "bolt11 requests do not match"
             assert mint_quote.unit == melt_quote.unit, "units do not match"
             assert mint_quote.method == method.name, "methods do not match"
             assert not mint_quote.paid, "mint quote already paid"
@@ -499,14 +498,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 fee=Amount(unit=Unit.msat, amount=0),
             )
             logger.info(
-                f"Issuing internal melt quote: {melt_quote.request} ->"
+                f"Issuing internal melt quote: {request} ->"
                 f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
             )
         else:
             # not internal, get quote by backend
-            payment_quote = await self.backends[method][unit].get_payment_quote(
-                melt_quote.request
-            )
+            payment_quote = await self.backends[method][unit].get_payment_quote(request)
             assert payment_quote.checking_id, "quote has no checking id"
 
         expiry = None
@@ -516,9 +513,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         quote = MeltQuote(
             quote=random_hash(),
             method=method.name,
-            request=melt_quote.request,
+            request=request,
             checking_id=payment_quote.checking_id,
-            unit=melt_quote.unit,
+            unit=unit.name,
             amount=payment_quote.amount.to(unit).amount,
             paid=False,
             fee_reserve=payment_quote.fee.to(unit).amount,
