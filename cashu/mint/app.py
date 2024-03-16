@@ -1,5 +1,4 @@
 import sys
-from contextlib import asynccontextmanager
 from traceback import print_exception
 
 from fastapi import FastAPI, status
@@ -23,13 +22,14 @@ if settings.mint_rate_limit:
 
 from .middleware import add_middlewares, request_validation_exception_handler
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # startup routines here
-    await start_mint_init()
-    yield
-    # shutdown routines here
+# this errors with the tests but is the appropriate way to handle startup and shutdown
+# until then, we use @app.on_event("startup")
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # startup routines here
+#     await start_mint_init()
+#     yield
+#     # shutdown routines here
 
 
 def create_app(config_object="core.settings") -> FastAPI:
@@ -98,3 +98,8 @@ if settings.debug_mint_only_deprecated:
 else:
     app.include_router(router=router, tags=["Mint"])
     app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
+
+
+@app.on_event("startup")
+async def startup_mint():
+    await start_mint_init()
