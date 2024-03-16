@@ -348,6 +348,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # get invoice expiry time
         invoice_obj = bolt11.decode(invoice_response.payment_request)
 
+        # NOTE: we normalize the request to lowercase to avoid case sensitivity
+        # This works with Lightning but might not work with other methods
+        request = invoice_response.payment_request.lower()
+
         expiry = None
         if invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
@@ -355,7 +359,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         quote = MintQuote(
             quote=random_hash(),
             method=method.name,
-            request=invoice_response.payment_request,
+            request=request,
             checking_id=invoice_response.checking_id,
             unit=quote_request.unit,
             amount=quote_request.amount,
@@ -469,6 +473,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         unit = Unit[melt_quote.unit]
         method = Method.bolt11
+        # NOTE: we normalize the request to lowercase to avoid case sensitivity
+        # This works with Lightning but might not work with other methods
         request = melt_quote.request.lower()
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
