@@ -25,11 +25,11 @@ jobs:
         run: |
           poetry build
 
-      - name: Install package (optional)
+      - name: Install package
         run: |
           pip install --upgrade dist/*.whl
 
-      - name: Upload to PyPI
+      - name: Upload to PyPI on release
         if: github.event_name == 'release'
         run: |
           poetry publish -u __token__ -p ${{ secrets.PYPI_API_TOKEN }}
