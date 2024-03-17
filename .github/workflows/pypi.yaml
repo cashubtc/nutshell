@@ -30,8 +30,6 @@ jobs:
           pip install --upgrade dist/*.whl
 
       - name: Upload to PyPI
-        env:
-          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          poetry config pypi-token.pypi $PYPI_API_TOKEN
+          poetry config pypi-token.pypi ${{ secrets.PYPI_API_TOKEN }}
           poetry publish --build -r pypi
