@@ -1,4 +1,4 @@
-name: Upload package to PyPi
+name: Python package build and publish
 
 on:
   push:
@@ -17,10 +17,17 @@ jobs:
           python-version: ${{ inputs.python-version }}
           poetry-version: ${{ inputs.poetry-version }}
 
-      - name: Build and publish
+      - name: Build package
+        run: |
+          poetry build
+
+      - name: Install package (optional)
+        run: |
+          pip install --upgrade dist/*
+
+      - name: Upload to PyPI
+        if: github.event_name == 'release'
         env:
           PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          poetry run python setup.py sdist bdist_wheel
-          pip install --upgrade dist/*
-        #   twine upload dist/* --verbose --non-interactive --repository pypi -u __token__ -p $PYPI_API_TOKEN
+          poetry publish --build -r pypi -u __token__ -p $PYPI_API_TOKEN --non-interactive
