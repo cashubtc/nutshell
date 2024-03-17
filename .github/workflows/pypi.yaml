@@ -1,0 +1,26 @@
+name: Upload package to PyPi
+
+on:
+  push:
+  release:
+    types: [published]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Build and publish
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          poetry run python setup.py sdist bdist_wheel
+          pip install --upgrade dist/*
+        #   twine upload dist/* --verbose --non-interactive --repository pypi -u __token__ -p $PYPI_API_TOKEN
