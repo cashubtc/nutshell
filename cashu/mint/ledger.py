@@ -78,17 +78,22 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         assert seed, "seed not set"
 
         # decrypt seed if seed_decryption_key is set
-        self.master_key = (
-            AESCipher(seed_decryption_key).decrypt(seed)
-            if seed_decryption_key
-            else seed
-        )
+        try:
+            self.seed = (
+                AESCipher(seed_decryption_key).decrypt(seed)
+                if seed_decryption_key
+                else seed
+            )
+        except Exception as e:
+            raise Exception(
+                f"Could not decrypt seed. Make sure that the seed is correct and the decryption key is set. {e}"
+            )
         self.derivation_path = derivation_path
 
         self.db = db
         self.crud = crud
         self.backends = backends
-        self.pubkey = derive_pubkey(self.master_key)
+        self.pubkey = derive_pubkey(self.seed)
         self.spent_proofs: Dict[str, Proof] = {}
 
     # ------- KEYS -------
@@ -111,7 +116,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             MintKeyset: Keyset
         """
         assert derivation_path, "derivation path not set"
-        seed = seed or self.master_key
+        seed = seed or self.seed
         tmp_keyset_local = MintKeyset(
             seed=seed,
             derivation_path=derivation_path,
@@ -134,7 +139,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # no keyset for this derivation path yet
             # we create a new keyset (keys will be generated at instantiation)
             keyset = MintKeyset(
-                seed=seed or self.master_key,
+                seed=seed or self.seed,
                 derivation_path=derivation_path,
                 version=version or settings.version,
             )
@@ -345,17 +350,25 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # get invoice expiry time
         invoice_obj = bolt11.decode(invoice_response.payment_request)
 
+        # NOTE: we normalize the request to lowercase to avoid case sensitivity
+        # This works with Lightning but might not work with other methods
+        request = invoice_response.payment_request.lower()
+
+        expiry = None
+        if invoice_obj.expiry is not None:
+            expiry = invoice_obj.date + invoice_obj.expiry
+
         quote = MintQuote(
             quote=random_hash(),
             method=method.name,
-            request=invoice_response.payment_request,
+            request=request,
             checking_id=invoice_response.checking_id,
             unit=quote_request.unit,
             amount=quote_request.amount,
             issued=False,
             paid=False,
             created_time=int(time.time()),
-            expiry=invoice_obj.expiry,
+            expiry=expiry,
         )
         await self.crud.store_mint_quote(
             quote=quote,
@@ -462,14 +475,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         unit = Unit[melt_quote.unit]
         method = Method.bolt11
+        # NOTE: we normalize the request to lowercase to avoid case sensitivity
+        # This works with Lightning but might not work with other methods
+        request = melt_quote.request.lower()
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
         # check if there is a mint quote with the same payment request
         # so that we can handle the transaction internally without lightning
         # and respond with zero fees
-        mint_quote = await self.crud.get_mint_quote_by_checking_id(
-            checking_id=invoice_obj.payment_hash, db=self.db
+        mint_quote = await self.crud.get_mint_quote_by_request(
+            request=request, db=self.db
         )
         if mint_quote:
             # internal transaction, validate and return amount from
@@ -478,9 +494,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 Amount(unit, mint_quote.amount).to(Unit.msat).amount
                 == invoice_obj.amount_msat
             ), "amounts do not match"
-            assert (
-                melt_quote.request == mint_quote.request
-            ), "bolt11 requests do not match"
+            assert request == mint_quote.request, "bolt11 requests do not match"
             assert mint_quote.unit == melt_quote.unit, "units do not match"
             assert mint_quote.method == method.name, "methods do not match"
             assert not mint_quote.paid, "mint quote already paid"
@@ -492,27 +506,29 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 fee=Amount(unit=Unit.msat, amount=0),
             )
             logger.info(
-                f"Issuing internal melt quote: {melt_quote.request} ->"
+                f"Issuing internal melt quote: {request} ->"
                 f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
             )
         else:
             # not internal, get quote by backend
-            payment_quote = await self.backends[method][unit].get_payment_quote(
-                melt_quote.request
-            )
+            payment_quote = await self.backends[method][unit].get_payment_quote(request)
             assert payment_quote.checking_id, "quote has no checking id"
+
+        expiry = None
+        if invoice_obj.expiry is not None:
+            expiry = invoice_obj.date + invoice_obj.expiry
 
         quote = MeltQuote(
             quote=random_hash(),
             method=method.name,
-            request=melt_quote.request,
+            request=request,
             checking_id=payment_quote.checking_id,
-            unit=melt_quote.unit,
+            unit=unit.name,
             amount=payment_quote.amount.to(unit).amount,
             paid=False,
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=int(time.time()),
-            expiry=invoice_obj.expiry,
+            expiry=expiry,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         return PostMeltQuoteResponse(
@@ -550,8 +566,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # we only check the state with the backend if there is no associated internal
         # mint quote for this melt quote
-        mint_quote = await self.crud.get_mint_quote_by_checking_id(
-            checking_id=melt_quote.checking_id, db=self.db
+        mint_quote = await self.crud.get_mint_quote_by_request(
+            request=melt_quote.request, db=self.db
         )
 
         if not melt_quote.paid and not mint_quote and check_quote_with_backend:
@@ -589,8 +605,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         # first we check if there is a mint quote with the same payment request
         # so that we can handle the transaction internally without the backend
-        mint_quote = await self.crud.get_mint_quote_by_checking_id(
-            checking_id=melt_quote.checking_id, db=self.db
+        mint_quote = await self.crud.get_mint_quote_by_request(
+            request=melt_quote.request, db=self.db
         )
         if not mint_quote:
             return melt_quote
@@ -787,7 +803,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     async def restore(
         self, outputs: List[BlindedMessage]
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
-        promises: List[BlindedSignature] = []
+        signatures: List[BlindedSignature] = []
         return_outputs: List[BlindedMessage] = []
         async with self.db.connect() as conn:
             for output in outputs:
@@ -802,10 +818,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     if not promise.id and len(self.keysets) == 1:
                         promise.id = self.keyset.id
                     # END backwards compatibility
-                    promises.append(promise)
+                    signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")
-        return return_outputs, promises
+        return return_outputs, signatures
 
     # ------- BLIND SIGNATURES -------
 

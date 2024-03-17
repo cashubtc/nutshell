@@ -155,10 +155,10 @@ class LedgerCrud(ABC):
         ...
 
     @abstractmethod
-    async def get_mint_quote_by_checking_id(
+    async def get_mint_quote_by_request(
         self,
         *,
-        checking_id: str,
+        request: str,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MintQuote]:
@@ -403,19 +403,19 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return MintQuote.from_row(row) if row else None
 
-    async def get_mint_quote_by_checking_id(
+    async def get_mint_quote_by_request(
         self,
         *,
-        checking_id: str,
+        request: str,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MintQuote]:
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'mint_quotes')}
-            WHERE checking_id = ?
+            WHERE request = ?
             """,
-            (checking_id,),
+            (request,),
         )
         return MintQuote.from_row(row) if row else None
 

@@ -364,5 +364,5 @@ async def check_state(
 )
 async def restore(payload: PostMintRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
-    outputs, promises = await ledger.restore(payload.outputs)
-    return PostRestoreResponse(outputs=outputs, signatures=promises)
+    outputs, signatures = await ledger.restore(payload.outputs)
+    return PostRestoreResponse(outputs=outputs, signatures=signatures)
