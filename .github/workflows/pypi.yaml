@@ -31,4 +31,4 @@ jobs:
 
       - name: Upload to PyPI
         run: |
-          poetry publish --build -r pypi -u __token__ -p ${{ secrets.PYPI_API_TOKEN }}
+          poetry publish -u __token__ -p ${{ secrets.PYPI_API_TOKEN }}
