@@ -27,7 +27,7 @@ jobs:
 
       - name: Install package (optional)
         run: |
-          pip install --upgrade dist/*
+          pip install --upgrade dist/*.whl
 
       - name: Upload to PyPI
         if: github.event_name == 'release'
