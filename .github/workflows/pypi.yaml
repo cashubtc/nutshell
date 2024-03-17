@@ -1,4 +1,4 @@
-name: Python package build and publish
+name: Pip package
 
 on:
   push:
@@ -18,8 +18,8 @@ jobs:
 
       - uses: ./.github/actions/prepare
         with:
-          python-version: ${{ inputs.python-version }}
-          poetry-version: ${{ inputs.poetry-version }}
+          python-version: ${{ matrix.python-version }}
+          poetry-version: ${{ matrix.poetry-version }}
 
       - name: Build package
         run: |
