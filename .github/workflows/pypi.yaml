@@ -4,7 +4,14 @@ on:
   push:
   release:
     types: [published]
-
+  workflow_call:
+    inputs:
+      python-version:
+          default: "3.10.4"
+          type: string
+      poetry-version:
+          default: "1.7.1"
+          type: string
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
