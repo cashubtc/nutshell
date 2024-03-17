@@ -30,7 +30,9 @@ jobs:
           pip install --upgrade dist/*.whl
 
       - name: Upload to PyPI
+        if: github.event_name == 'release'
         env:
           PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          poetry publish --build -r pypi -u __token__ -p $PYPI_API_TOKEN --non-interactive
+          poetry config pypi-token.pypi $PYPI_API_TOKEN
+          poetry publish --build -r pypi
