@@ -6,7 +6,7 @@ import pytest_asyncio
 from cashu.core.base import (
     PostCheckStateRequest,
     PostCheckStateResponse,
-    PostMintRequest,
+    PostRestoreRequest,
     PostRestoreResponse,
     SpentState,
 )
@@ -422,7 +422,7 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     )
     outputs, rs = wallet._construct_outputs([64], secrets, rs)
 
-    payload = PostMintRequest(outputs=outputs, quote="placeholder")
+    payload = PostRestoreRequest(outputs=outputs)
     response = httpx.post(
         f"{BASE_URL}/v1/restore",
         json=payload.dict(),

@@ -528,6 +528,12 @@ class CheckFeesResponse_deprecated(BaseModel):
 # ------- API: RESTORE -------
 
 
+class PostRestoreRequest(BaseModel):
+    outputs: List[BlindedMessage] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
+
+
 class PostRestoreResponse(BaseModel):
     outputs: List[BlindedMessage] = []
     signatures: List[BlindedSignature] = []

@@ -19,6 +19,7 @@ from ..core.base import (
     PostMintQuoteResponse,
     PostMintRequest,
     PostMintResponse,
+    PostRestoreRequest,
     PostRestoreResponse,
     PostSplitRequest,
     PostSplitResponse,
@@ -345,14 +346,14 @@ async def check_state(
 @router.post(
     "/v1/restore",
     name="Restore",
-    summary="Restores a blinded signature from a secret",
+    summary="Restores blind signature for a set of outputs.",
     response_model=PostRestoreResponse,
     response_description=(
         "Two lists with the first being the list of the provided outputs that "
         "have an associated blinded signature which is given in the second list."
     ),
 )
-async def restore(payload: PostMintRequest) -> PostRestoreResponse:
+async def restore(payload: PostRestoreRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, signatures = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, signatures=signatures)
