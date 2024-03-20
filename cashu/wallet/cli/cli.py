@@ -438,11 +438,11 @@ async def balance(ctx: Context, verbose):
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
 @click.option(
-    "--nosplit",
-    "-s",
+    "--offline",
+    "-o",
     default=False,
     is_flag=True,
-    help="Do not split tokens before sending.",
+    help="Force offline send.",
     type=bool,
 )
 @click.pass_context
@@ -457,7 +457,7 @@ async def send_command(
     legacy: bool,
     verbose: bool,
     yes: bool,
-    nosplit: bool,
+    offline: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
@@ -467,7 +467,7 @@ async def send_command(
             amount=amount,
             lock=lock,
             legacy=legacy,
-            split=not nosplit,
+            offline=offline,
             include_dleq=dleq,
         )
     else:

@@ -948,7 +948,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # generate splits for outputs
         keep_outputs = amount_split(keep_amt)
         send_outputs = amount_split(send_amt)
-        print(keep_outputs, send_outputs)
 
         amounts = keep_outputs + send_outputs
         # generate secrets for new outputs
@@ -1422,7 +1421,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         return math.ceil(len(proofs) * 0.1)
 
     async def _select_proofs_to_send(
-        self, proofs: List[Proof], amount_to_send: int, overpay_percent: int = 0
+        self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
     ) -> Tuple[List[Proof], int]:
         send_proofs: List[Proof] = []
         # select proofs that are not reserved
@@ -1431,6 +1430,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
         # sort proofs by amount (descending)
         sorted_proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
+        remaining_proofs = sorted_proofs.copy()
 
         # start with the lowest possible fee (single proof)
         fees_single_proof = self.get_fees_for_proofs([Proof()])
@@ -1438,12 +1438,26 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         # find the smallest proof with an amount larger than the target amount
         larger_proof: Union[None, Proof] = None
         if len(sorted_proofs) > 1:
-            for i, proof in enumerate(sorted_proofs):
-                if proof.amount < amount_to_send + fees_single_proof:
-                    larger_proof = sorted_proofs[i - 1]
+            for proof in sorted_proofs:
+                if proof.amount > amount_to_send + fees_single_proof:
+                    larger_proof = proof
+                    remaining_proofs.pop(0)
+                else:
                     break
-        print(larger_proof)
-        return send_proofs, fees_single_proof
+
+        # compose the target amount from the remaining_proofs
+        while sum_proofs(send_proofs) < amount_to_send + self.get_fees_for_proofs(
+            send_proofs
+        ):
+            proof_to_add = remaining_proofs.pop(0)
+            send_proofs.append(proof_to_add)
+
+        # if the larger proof is cheaper to spend, we use it
+        if larger_proof and sum_proofs(send_proofs) > larger_proof.amount:
+            send_proofs = [larger_proof]
+
+        fees = self.get_fees_for_proofs(send_proofs)
+        return send_proofs, fees
 
     async def _select_proofs_to_split(
         self, proofs: List[Proof], amount_to_send: int
@@ -1500,11 +1514,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
         fees = self.get_fees_for_proofs(send_proofs)
 
-        while sum_proofs(send_proofs) < amount_to_send + fees:
+        while sum_proofs(send_proofs) < amount_to_send + self.get_fees_for_proofs(
+            send_proofs
+        ):
             proof_to_add = sorted_proofs_of_current_keyset.pop()
             send_proofs.append(proof_to_add)
-            # update fees
-            fees = self.get_fees_for_proofs(send_proofs)
 
         logger.trace(f"selected proof amounts: {[p.amount for p in send_proofs]}")
         return send_proofs, fees
@@ -1576,6 +1590,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         proofs: List[Proof],
         amount: int,
         set_reserved: bool = False,
+        offline: bool = False,
+        tolerance: int = 0,
     ) -> Tuple[List[Proof], int]:
         """
         Selects proofs such that a certain amount can be sent.
@@ -1589,7 +1605,22 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             List[Proof]: Proofs to send
             int: Fees for the transaction
         """
-        send_proofs, fees = await self._select_proofs_to_send(proofs, amount)
+        # TODO: load mint from database for offline mode!
+        await self.load_mint()
+
+        send_proofs, fees = await self._select_proofs_to_send(proofs, amount, tolerance)
+        if not send_proofs and offline:
+            raise Exception(
+                "Could not select proofs in offline mode. Available amounts:"
+                f" {set([p.amount for p in proofs])}"
+            )
+
+        if not send_proofs and not offline:
+            # we set the proofs as reserved later
+            _, send_proofs = await self.split_to_send(
+                proofs, amount, set_reserved=False
+            )
+
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
         return send_proofs, fees
@@ -1617,7 +1648,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """
 
         spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
-        print(f"Amount to send: {self.unit.str(amount+fees)}")
+        print(f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)")
         if secret_lock:
             logger.debug(f"Spending conditions: {secret_lock}")
         keep_proofs, send_proofs = await self.split(

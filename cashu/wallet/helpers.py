@@ -163,7 +163,7 @@ async def send(
     amount: int,
     lock: str,
     legacy: bool,
-    split: bool = True,
+    offline: bool = False,
     include_dleq: bool = False,
 ):
     """
@@ -188,23 +188,15 @@ async def send(
                 sig_all=True,
                 n_sigs=1,
             )
+            print(f"Secret lock: {secret_lock}")
 
     await wallet.load_proofs()
-    if split:
-        await wallet.load_mint()
-        _, send_proofs = await wallet.split_to_send(
-            wallet.proofs, amount, secret_lock, set_reserved=True
-        )
-    else:
-        await wallet.load_mint()
-        # get a proof with specific amount
-        send_proofs, fees = await wallet.select_to_send(
-            wallet.proofs, amount, set_reserved=False
-        )
-        assert len(send_proofs), Exception(
-            "No proof with this amount found. Available amounts:"
-            f" {set([p.amount for p in wallet.proofs])}"
-        )
+
+    await wallet.load_mint()
+    # get a proof with specific amount
+    send_proofs, fees = await wallet.select_to_send(
+        wallet.proofs, amount, set_reserved=False, offline=offline, tolerance=0
+    )
 
     token = await wallet.serialize_proofs(
         send_proofs,
