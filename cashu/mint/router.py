@@ -9,6 +9,7 @@ from ..core.base import (
     KeysetsResponseKeyset,
     KeysResponse,
     KeysResponseKeyset,
+    MintMeltMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostMeltQuoteRequest,
@@ -41,19 +42,21 @@ async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
 
     # determine all method-unit pairs
-    method_unit_pairs: List[List[str]] = []
+    method_settings: List[MintMeltMethodSetting] = []
     for method, unit_dict in ledger.backends.items():
         for unit in unit_dict.keys():
-            method_unit_pairs.append([method.name, unit.name])
+            method_settings.append(
+                MintMeltMethodSetting(method=method.name, unit=unit.name)
+            )
     supported_dict = dict(supported=True)
 
     mint_features: Dict[int, Dict[str, Any]] = {
         4: dict(
-            methods=method_unit_pairs,
+            methods=method_settings,
             disabled=False,
         ),
         5: dict(
-            methods=method_unit_pairs,
+            methods=method_settings,
             disabled=False,
         ),
         7: supported_dict,
