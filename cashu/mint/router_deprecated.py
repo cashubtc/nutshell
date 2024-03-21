@@ -19,6 +19,7 @@ from ..core.base import (
     PostMintQuoteRequest,
     PostMintRequest_deprecated,
     PostMintResponse_deprecated,
+    PostRestoreRequest,
     PostRestoreResponse,
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
@@ -357,7 +358,7 @@ async def check_spendable_deprecated(
     ),
     deprecated=True,
 )
-async def restore(payload: PostMintRequest_deprecated) -> PostRestoreResponse:
+async def restore(payload: PostRestoreRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, promises = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, signatures=promises)

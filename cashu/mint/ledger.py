@@ -325,8 +325,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             )
         if settings.mint_peg_out_only:
             raise NotAllowedError("Mint does not allow minting new tokens.")
-        unit = Unit[quote_request.unit]
-        method = Method.bolt11
+
+        unit, method = self._verify_and_get_unit_method(
+            quote_request.unit, Method.bolt11.name
+        )
+
         if settings.mint_max_balance:
             balance = await self.get_balance()
             if balance + quote_request.amount > settings.mint_max_balance:
@@ -387,10 +390,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             MintQuote: Mint quote object.
         """
         quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db)
-        assert quote, "quote not found"
-        assert quote.method == Method.bolt11.name, "only bolt11 supported"
-        unit = Unit[quote.unit]
-        method = Method[quote.method]
+        if not quote:
+            raise Exception("quote not found")
+
+        unit, method = self._verify_and_get_unit_method(quote.unit, quote.method)
 
         if not quote.paid:
             assert quote.checking_id, "quote has no checking id"
@@ -471,8 +474,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             PostMeltQuoteResponse: Melt quote response.
         """
-        unit = Unit[melt_quote.unit]
-        method = Method.bolt11
+        unit, method = self._verify_and_get_unit_method(
+            melt_quote.unit, Method.bolt11.name
+        )
+
         # NOTE: we normalize the request to lowercase to avoid case sensitivity
         # This works with Lightning but might not work with other methods
         request = melt_quote.request.lower()
@@ -557,10 +562,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             MeltQuote: Melt quote object.
         """
         melt_quote = await self.crud.get_melt_quote(quote_id=quote_id, db=self.db)
-        assert melt_quote, "quote not found"
-        assert melt_quote.method == Method.bolt11.name, "only bolt11 supported"
-        unit = Unit[melt_quote.unit]
-        method = Method[melt_quote.method]
+        if not melt_quote:
+            raise Exception("quote not found")
+
+        unit, method = self._verify_and_get_unit_method(
+            melt_quote.unit, melt_quote.method
+        )
 
         # we only check the state with the backend if there is no associated internal
         # mint quote for this melt quote
@@ -664,8 +671,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         # get melt quote and check if it was already paid
         melt_quote = await self.get_melt_quote(quote_id=quote)
-        method = Method[melt_quote.method]
-        unit = Unit[melt_quote.unit]
+
+        unit, method = self._verify_and_get_unit_method(
+            melt_quote.unit, melt_quote.method
+        )
+
         assert not melt_quote.paid, "melt quote already paid"
 
         # make sure that the outputs (for fee return) are in the same unit as the quote
