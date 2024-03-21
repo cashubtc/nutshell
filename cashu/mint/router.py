@@ -9,6 +9,7 @@ from ..core.base import (
     KeysetsResponseKeyset,
     KeysResponse,
     KeysResponseKeyset,
+    MintMeltMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostMeltQuoteRequest,
@@ -41,19 +42,31 @@ async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
 
     # determine all method-unit pairs
-    method_unit_pairs: List[List[str]] = []
-    for method, unit_dict in ledger.backends.items():
-        for unit in unit_dict.keys():
-            method_unit_pairs.append([method.name, unit.name])
+    method_settings: Dict[int, List[MintMeltMethodSetting]] = {}
+    for nut in [4, 5]:
+        method_settings[nut] = []
+        for method, unit_dict in ledger.backends.items():
+            for unit in unit_dict.keys():
+                setting = MintMeltMethodSetting(method=method.name, unit=unit.name)
+
+                if nut == 4 and settings.mint_max_peg_in:
+                    setting.max_amount = settings.mint_max_peg_in
+                    setting.min_amount = 0
+                elif nut == 5 and settings.mint_max_peg_out:
+                    setting.max_amount = settings.mint_max_peg_out
+                    setting.min_amount = 0
+
+                method_settings[nut].append(setting)
+
     supported_dict = dict(supported=True)
 
     mint_features: Dict[int, Dict[str, Any]] = {
         4: dict(
-            methods=method_unit_pairs,
-            disabled=False,
+            methods=method_settings[4],
+            disabled=settings.mint_peg_out_only,
         ),
         5: dict(
-            methods=method_unit_pairs,
+            methods=method_settings[5],
             disabled=False,
         ),
         7: supported_dict,
