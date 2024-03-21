@@ -27,9 +27,12 @@ from .macaroon import load_macaroon
 class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
-    units = set([Unit.sat, Unit.msat])
+    supported_units = set([Unit.sat, Unit.msat])
+    unit = Unit.sat
 
-    def __init__(self):
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         endpoint = settings.mint_lnd_rest_endpoint
         cert = settings.mint_lnd_rest_cert
 

@@ -28,7 +28,7 @@ from .base import (
 
 
 class FakeWallet(LightningBackend):
-    units = set([Unit.sat, Unit.msat])
+    fake_btc_price = 1e8 / 1337
     queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
     paid_invoices: Set[str] = set()
@@ -40,6 +40,13 @@ class FakeWallet(LightningBackend):
         2048,
         32,
     ).hex()
+
+    supported_units = set([Unit.sat, Unit.msat])
+    unit = Unit.sat
+
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
 
     async def status(self) -> StatusResponse:
         return StatusResponse(error_message=None, balance=1337)
@@ -141,6 +148,7 @@ class FakeWallet(LightningBackend):
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
+
         return PaymentQuoteResponse(
             checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
         )

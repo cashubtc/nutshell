@@ -242,11 +242,12 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 )
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool):
+async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     print_balance(ctx)
     amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
+    print(f"Requesting invoice for {wallet.unit.str(amount)} {wallet.unit}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:
