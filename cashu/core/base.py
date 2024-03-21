@@ -302,6 +302,13 @@ class MintQuote(BaseModel):
 # ------- API: INFO -------
 
 
+class MintMeltMethodSetting(BaseModel):
+    method: str
+    unit: str
+    min_amount: Optional[int] = None
+    max_amount: Optional[int] = None
+
+
 class GetInfoResponse(BaseModel):
     name: Optional[str] = None
     pubkey: Optional[str] = None

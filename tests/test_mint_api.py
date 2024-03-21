@@ -4,6 +4,8 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import (
+    GetInfoResponse,
+    MintMeltMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostRestoreRequest,
@@ -40,6 +42,12 @@ async def test_info(ledger: Ledger):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.pubkey
     assert response.json()["pubkey"] == ledger.pubkey.serialize().hex()
+    info = GetInfoResponse(**response.json())
+    assert info.nuts
+    assert info.nuts[4]["disabled"] is False
+    setting = MintMeltMethodSetting.parse_obj(info.nuts[4]["methods"][0])
+    assert setting.method == "bolt11"
+    assert setting.unit == "sat"
 
 
 @pytest.mark.asyncio
