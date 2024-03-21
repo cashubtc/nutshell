@@ -1,12 +1,14 @@
-from typing import Dict, List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
 
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
+    Method,
     MintKeyset,
     Proof,
+    Unit,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
@@ -19,12 +21,15 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.settings import settings
+from ..lightning.base import LightningBackend
 from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
-from .protocols import SupportsDb, SupportsKeysets
+from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
 
-class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
+class LedgerVerification(
+    LedgerSpendingConditions, SupportsKeysets, SupportsDb, SupportsBackends
+):
     """Verification functions for the ledger."""
 
     keyset: MintKeyset
@@ -32,6 +37,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
     spent_proofs: Dict[str, Proof]
     crud: LedgerCrud
     db: Database
+    lightning: Dict[Unit, LightningBackend]
 
     async def verify_inputs_and_outputs(
         self, *, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
@@ -240,6 +246,22 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         """
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
-        assert sum_outputs - sum_inputs == 0, TransactionError(
-            "inputs do not have same amount as outputs."
-        )
+        if not sum_outputs - sum_inputs == 0:
+            raise TransactionError("inputs do not have same amount as outputs.")
+
+    def _verify_and_get_unit_method(
+        self, unit_str: str, method_str: str
+    ) -> Tuple[Unit, Method]:
+        """Verify that the unit is supported by the ledger."""
+        method = Method[method_str]
+        unit = Unit[unit_str]
+
+        if not any([unit == k.unit for k in self.keysets.values()]):
+            raise NotAllowedError(f"unit '{unit.name}' not supported in any keyset.")
+
+        if not self.backends.get(method) or unit not in self.backends[method]:
+            raise NotAllowedError(
+                f"no support for method '{method.name}' with unit '{unit.name}'."
+            )
+
+        return unit, method

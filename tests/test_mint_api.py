@@ -4,9 +4,11 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import (
+    GetInfoResponse,
+    MintMeltMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
-    PostMintRequest,
+    PostRestoreRequest,
     PostRestoreResponse,
     SpentState,
 )
@@ -40,6 +42,12 @@ async def test_info(ledger: Ledger):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.pubkey
     assert response.json()["pubkey"] == ledger.pubkey.serialize().hex()
+    info = GetInfoResponse(**response.json())
+    assert info.nuts
+    assert info.nuts[4]["disabled"] is False
+    setting = MintMeltMethodSetting.parse_obj(info.nuts[4]["methods"][0])
+    assert setting.method == "bolt11"
+    assert setting.unit == "sat"
 
 
 @pytest.mark.asyncio
@@ -422,7 +430,7 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     )
     outputs, rs = wallet._construct_outputs([64], secrets, rs)
 
-    payload = PostMintRequest(outputs=outputs, quote="placeholder")
+    payload = PostRestoreRequest(outputs=outputs)
     response = httpx.post(
         f"{BASE_URL}/v1/restore",
         json=payload.dict(),
