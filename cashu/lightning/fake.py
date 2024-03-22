@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import math
 import random
 from datetime import datetime
 from os import urandom
@@ -41,7 +42,7 @@ class FakeWallet(LightningBackend):
         32,
     ).hex()
 
-    supported_units = set([Unit.sat, Unit.msat])
+    supported_units = set([Unit.sat, Unit.msat, Unit.usd])
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
@@ -87,9 +88,19 @@ class FakeWallet(LightningBackend):
 
         self.payment_secrets[payment_hash] = secret
 
+        amount_msat = 0
+        if self.unit == Unit.sat:
+            amount_msat = MilliSatoshi(amount.to(Unit.msat, round="up").amount)
+        elif self.unit == Unit.usd:
+            amount_msat = MilliSatoshi(
+                math.ceil(amount.amount / self.fake_btc_price * 1e9)
+            )
+        else:
+            raise NotImplementedError()
+
         bolt11 = Bolt11(
             currency="bc",
-            amount_msat=MilliSatoshi(amount.to(Unit.msat, round="up").amount),
+            amount_msat=amount_msat,
             date=int(datetime.now().timestamp()),
             tags=tags,
         )
@@ -144,10 +155,18 @@ class FakeWallet(LightningBackend):
     async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
         invoice_obj = decode(bolt11)
         assert invoice_obj.amount_msat, "invoice has no amount."
-        amount_msat = int(invoice_obj.amount_msat)
-        fees_msat = fee_reserve(amount_msat)
-        fees = Amount(unit=Unit.msat, amount=fees_msat)
-        amount = Amount(unit=Unit.msat, amount=amount_msat)
+
+        if self.unit == Unit.sat:
+            amount_msat = int(invoice_obj.amount_msat)
+            fees_msat = fee_reserve(amount_msat)
+            fees = Amount(unit=Unit.msat, amount=fees_msat)
+            amount = Amount(unit=Unit.msat, amount=amount_msat)
+        elif self.unit == Unit.usd:
+            amount_usd = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btc_price)
+            amount = Amount(unit=Unit.usd, amount=amount_usd)
+            fees = Amount(unit=Unit.usd, amount=1)
+        else:
+            raise NotImplementedError()
 
         return PaymentQuoteResponse(
             checking_id=invoice_obj.payment_hash, fee=fees, amount=amount

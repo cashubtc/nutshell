@@ -55,7 +55,11 @@ class MintSettings(CashuSettings):
     mint_derivation_path_list: List[str] = Field(default=[])
     mint_listen_host: str = Field(default="127.0.0.1")
     mint_listen_port: int = Field(default=3338)
-    mint_lightning_backend: str = Field(default="LNbitsWallet")
+
+    mint_lightning_backend: str = Field(default="")
+    mint_backend_bolt11_sat: str = Field(default="")
+    mint_backend_bolt11_usd: str = Field(default="")
+
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
     mint_peg_out_only: bool = Field(
@@ -203,6 +207,10 @@ def startup_settings_tasks():
     # backwards compatibility: set socks_proxy from socks_host and socks_port
     if settings.socks_host and settings.socks_port:
         settings.socks_proxy = f"socks5://{settings.socks_host}:{settings.socks_port}"
+
+    # backwards compatibility: set mint_backend_bolt11_sat from mint_lightning_backend
+    if settings.mint_lightning_backend:
+        settings.mint_backend_bolt11_sat = settings.mint_lightning_backend
 
 
 startup_settings_tasks()
