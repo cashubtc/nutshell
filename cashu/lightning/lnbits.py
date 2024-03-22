@@ -165,5 +165,7 @@ class LNbitsWallet(LightningBackend):
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
         return PaymentQuoteResponse(
-            checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
+            checking_id=invoice_obj.payment_hash,
+            fee=fees.to(self.unit, round="up"),
+            amount=amount.to(self.unit, round="up"),
         )

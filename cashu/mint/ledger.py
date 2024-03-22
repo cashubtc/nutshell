@@ -516,7 +516,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 payment_quote.fee.unit == unit
             ), "payment quote fee units do not match"
 
-        # Lightning bolt11 idiosyncrasy below
+        # We assume that the request is a bolt11 invoice, this works since we
+        # support only the bol11 method for now.
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
         # we set the expiry of this quote to the expiry of the bolt11 invoice

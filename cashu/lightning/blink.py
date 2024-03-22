@@ -444,7 +444,11 @@ class BlinkWallet(LightningBackend):
 
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
-        return PaymentQuoteResponse(checking_id=bolt11, fee=fees, amount=amount)
+        return PaymentQuoteResponse(
+            checking_id=bolt11,
+            fee=fees.to(self.unit, round="up"),
+            amount=amount.to(self.unit, round="up"),
+        )
 
 
 async def main():
