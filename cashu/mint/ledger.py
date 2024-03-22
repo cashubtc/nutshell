@@ -480,22 +480,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # NOTE: we normalize the request to lowercase to avoid case sensitivity
         # This works with Lightning but might not work with other methods
         request = melt_quote.request.lower()
-        invoice_obj = bolt11.decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
 
         # check if there is a mint quote with the same payment request
-        # so that we can handle the transaction internally without lightning
-        # and respond with zero fees
+        # so that we would be able to handle the transaction internally
+        # and therefore respond with internal transaction fees (0 for now)
         mint_quote = await self.crud.get_mint_quote_by_request(
             request=request, db=self.db
         )
         if mint_quote:
-            # internal transaction, validate and return amount from
-            # associated mint quote and demand zero fees
-            # assert (
-            #     Amount(unit, mint_quote.amount).to(Unit.msat).amount
-            #     == invoice_obj.amount_msat
-            # ), "amounts do not match"
             assert request == mint_quote.request, "bolt11 requests do not match"
             assert mint_quote.unit == melt_quote.unit, "units do not match"
             assert mint_quote.method == method.name, "methods do not match"
@@ -512,10 +504,22 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
             )
         else:
-            # not internal, get quote by backend
+            # not internal, get payment quote by backend
             payment_quote = await self.backends[method][unit].get_payment_quote(request)
             assert payment_quote.checking_id, "quote has no checking id"
+            # make sure the backend returned the amount with a correct unit
+            assert (
+                payment_quote.amount.unit == unit
+            ), "payment quote amount units do not match"
+            # fee from the backend must be in the same unit as the amount
+            assert (
+                payment_quote.fee.unit == unit
+            ), "payment quote fee units do not match"
 
+        # Lightning bolt11 idiosyncrasy below
+        invoice_obj = bolt11.decode(melt_quote.request)
+        assert invoice_obj.amount_msat, "invoice has no amount."
+        # we set the expiry of this quote to the expiry of the bolt11 invoice
         expiry = None
         if invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
