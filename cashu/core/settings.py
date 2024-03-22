@@ -56,7 +56,7 @@ class MintSettings(CashuSettings):
     mint_listen_host: str = Field(default="127.0.0.1")
     mint_listen_port: int = Field(default=3338)
 
-    mint_lightning_backend: str = Field(default="")
+    mint_lightning_backend: str = Field(default="")  # deprecated
     mint_backend_bolt11_sat: str = Field(default="")
     mint_backend_bolt11_usd: str = Field(default="")
 
