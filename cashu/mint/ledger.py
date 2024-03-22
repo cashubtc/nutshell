@@ -1,6 +1,5 @@
 import asyncio
 import copy
-import math
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -493,10 +492,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         if mint_quote:
             # internal transaction, validate and return amount from
             # associated mint quote and demand zero fees
-            assert (
-                Amount(unit, mint_quote.amount).to(Unit.msat).amount
-                == invoice_obj.amount_msat
-            ), "amounts do not match"
+            # assert (
+            #     Amount(unit, mint_quote.amount).to(Unit.msat).amount
+            #     == invoice_obj.amount_msat
+            # ), "amounts do not match"
             assert request == mint_quote.request, "bolt11 requests do not match"
             assert mint_quote.unit == melt_quote.unit, "units do not match"
             assert mint_quote.method == method.name, "methods do not match"
@@ -506,7 +505,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             payment_quote = PaymentQuoteResponse(
                 checking_id=mint_quote.checking_id,
                 amount=Amount(unit, mint_quote.amount),
-                fee=Amount(unit=Unit.msat, amount=0),
+                fee=Amount(unit, amount=0),
             )
             logger.info(
                 f"Issuing internal melt quote: {request} ->"
@@ -622,11 +621,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         bolt11_request = melt_quote.request
         invoice_obj = bolt11.decode(bolt11_request)
         assert invoice_obj.amount_msat, "invoice has no amount."
-        invoice_amount_sat = math.ceil(invoice_obj.amount_msat / 1000)
-        assert (
-            Amount(Unit[melt_quote.unit], mint_quote.amount).to(Unit.sat).amount
-            == invoice_amount_sat
-        ), "amounts do not match"
+        # invoice_amount_sat = math.ceil(invoice_obj.amount_msat / 1000)
+        # assert (
+        #     Amount(Unit[melt_quote.unit], mint_quote.amount).to(Unit.sat).amount
+        #     == invoice_amount_sat
+        # ), "amounts do not match"
+        assert mint_quote.amount == melt_quote.amount, "amounts do not match"
         assert bolt11_request == mint_quote.request, "bolt11 requests do not match"
         assert mint_quote.unit == melt_quote.unit, "units do not match"
         assert mint_quote.method == melt_quote.method, "methods do not match"

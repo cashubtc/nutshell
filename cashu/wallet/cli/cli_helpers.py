@@ -10,8 +10,9 @@ from ...wallet.crud import get_keysets
 from ...wallet.wallet import Wallet as Wallet
 
 
-def print_balance(ctx: Context):
+async def print_balance(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_proofs(reload=True, unit=wallet.unit)
     print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
 
 

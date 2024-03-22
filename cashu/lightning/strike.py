@@ -19,9 +19,11 @@ from .base import (
 class StrikeUSDWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
-    units = [Unit.usd]
+    supported_units = [Unit.usd]
 
-    def __init__(self):
+    def __init__(self, unit: Unit = Unit.usd, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         self.endpoint = "https://api.strike.me"
 
         # bearer auth with settings.mint_strike_key

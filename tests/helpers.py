@@ -25,7 +25,7 @@ async def get_random_invoice_data():
 
 
 wallets_module = importlib.import_module("cashu.lightning")
-wallet_class = getattr(wallets_module, settings.mint_lightning_backend)
+wallet_class = getattr(wallets_module, settings.mint_backend_bolt11_sat)
 WALLET = wallet_class()
 is_fake: bool = WALLET.__class__.__name__ == "FakeWallet"
 is_regtest: bool = not is_fake

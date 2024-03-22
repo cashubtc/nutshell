@@ -22,9 +22,12 @@ from .base import (
 class LNbitsWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
-    units = set([Unit.sat])
+    supported_units = set([Unit.sat])
+    unit = Unit.sat
 
-    def __init__(self):
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         self.endpoint = settings.mint_lnbits_endpoint
         self.client = httpx.AsyncClient(
             verify=not settings.debug,

@@ -3,6 +3,7 @@
 
 import asyncio
 import importlib
+from typing import Dict
 
 from loguru import logger
 
@@ -10,6 +11,7 @@ from ..core.base import Method, Unit
 from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
+from ..lightning.base import LightningBackend
 from ..mint import migrations
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
@@ -31,23 +33,24 @@ for key, value in settings.dict().items():
     logger.debug(f"{key}: {value}")
 
 wallets_module = importlib.import_module("cashu.lightning")
-lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
 
-assert settings.mint_private_key is not None, "No mint private key set."
+backends: Dict[Method, Dict[Unit, LightningBackend]] = {}
+if settings.mint_backend_bolt11_sat:
+    backend_bolt11_sat = getattr(wallets_module, settings.mint_backend_bolt11_sat)(
+        unit=Unit.sat
+    )
+    backends.setdefault(Method.bolt11, {})[Unit.sat] = backend_bolt11_sat
+if settings.mint_backend_bolt11_usd:
+    backend_bolt11_usd = getattr(wallets_module, settings.mint_backend_bolt11_usd)(
+        unit=Unit.usd
+    )
+    backends.setdefault(Method.bolt11, {})[Unit.usd] = backend_bolt11_usd
+if not backends:
+    raise Exception("No backends are set.")
 
-# strike_backend = getattr(wallets_module, "StrikeUSDWallet")()
-# backends = {
-#     Method.bolt11: {Unit.sat: lightning_backend, Unit.usd: strike_backend},
-# }
-# backends = {
-#     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend},
-# }
-# backends = {
-#     Method.bolt11: {Unit.sat: lightning_backend, Unit.msat: lightning_backend,
-# }
-backends = {
-    Method.bolt11: {Unit.sat: lightning_backend},
-}
+if not settings.mint_private_key:
+    raise Exception("No mint private key is set.")
+
 ledger = Ledger(
     db=Database("mint", settings.mint_database),
     seed=settings.mint_private_key,
