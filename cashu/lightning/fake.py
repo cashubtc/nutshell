@@ -123,7 +123,7 @@ class FakeWallet(LightningBackend):
             return PaymentResponse(
                 ok=True,
                 checking_id=invoice.payment_hash,
-                fee=Amount(unit=Unit.msat, amount=0),
+                fee=Amount(unit=self.unit, amount=1),
                 preimage=self.payment_secrets.get(invoice.payment_hash) or "0" * 64,
             )
         else:
@@ -164,7 +164,7 @@ class FakeWallet(LightningBackend):
         elif self.unit == Unit.usd:
             amount_usd = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btc_price)
             amount = Amount(unit=Unit.usd, amount=amount_usd)
-            fees = Amount(unit=Unit.usd, amount=1)
+            fees = Amount(unit=Unit.usd, amount=2)
         else:
             raise NotImplementedError()
 
