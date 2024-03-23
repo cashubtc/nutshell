@@ -66,14 +66,29 @@ async def rotate_keys(n_seconds=60):
     Note: This is just a helper function for testing purposes.
     """
     i = 0
+    new_keyset = ledger.keyset
     while True:
         i += 1
-        logger.info("Rotating keys.")
+        old_keyset = new_keyset
+        logger.info(f"Rotating keys. Old keyset: {old_keyset.id}.")
         incremented_derivation_path = (
             "/".join(ledger.derivation_path.split("/")[:-1]) + f"/{i}"
         )
-        await ledger.activate_keyset(derivation_path=incremented_derivation_path)
-        logger.info(f"Current keyset: {ledger.keyset.id}")
+        new_keyset = await ledger.activate_keyset(
+            derivation_path=incremented_derivation_path
+        )
+
+        logger.info(
+            f"Derivation path: {incremented_derivation_path} – New keyset: {new_keyset.id}. Deactivating old keyset {old_keyset.id}."
+        )
+
+        # deactivate old keyset and update ledger.keyset
+        ledger.keysets[old_keyset.id] = await ledger.crud.deactivate_keyset(
+            db=ledger.db, keyset=old_keyset
+        )
+
+        logger.info(f"All keysets: {ledger.keysets}")
+
         await asyncio.sleep(n_seconds)
 
 
