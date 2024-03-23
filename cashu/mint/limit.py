@@ -28,12 +28,14 @@ def get_remote_address_excluding_local(request: Request) -> str:
 
 limiter_global = Limiter(
     key_func=get_remote_address_excluding_local,
+    strategy="fixed-window-elastic-expiry",
     default_limits=[f"{settings.mint_global_rate_limit_per_minute}/minute"],
     enabled=settings.mint_rate_limit,
 )
 
 limiter = Limiter(
     key_func=get_remote_address_excluding_local,
+    strategy="fixed-window-elastic-expiry",
     default_limits=[f"{settings.mint_transaction_rate_limit_per_minute}/minute"],
     enabled=settings.mint_rate_limit,
 )
