@@ -26,9 +26,12 @@ from .macaroon import load_macaroon
 
 
 class CoreLightningRestWallet(LightningBackend):
-    units = set([Unit.sat, Unit.msat])
+    supported_units = set([Unit.sat, Unit.msat])
+    unit = Unit.sat
 
-    def __init__(self):
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         macaroon = settings.mint_corelightning_rest_macaroon
         assert macaroon, "missing cln-rest macaroon"
 
@@ -317,5 +320,7 @@ class CoreLightningRestWallet(LightningBackend):
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
         return PaymentQuoteResponse(
-            checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
+            checking_id=invoice_obj.payment_hash,
+            fee=fees.to(self.unit, round="up"),
+            amount=amount.to(self.unit, round="up"),
         )

@@ -63,7 +63,7 @@ jobs:
           MINT_PORT: 3337
           MINT_TEST_DATABASE: ${{ inputs.mint-database }}
           TOR: false
-          MINT_LIGHTNING_BACKEND: ${{ inputs.backend-wallet-class }}
+          MINT_BACKEND_BOLT11_SAT: ${{ inputs.backend-wallet-class }}
           MINT_LNBITS_ENDPOINT: http://localhost:5001
           MINT_LNBITS_KEY: d08a3313322a4514af75d488bcc27eee
           MINT_LND_REST_ENDPOINT: https://localhost:8081/

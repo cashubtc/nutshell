@@ -265,10 +265,9 @@ async def receive_command(
     if token:
         tokenObj: TokenV3 = deserialize_token_from_string(token)
         await verify_mints(wallet, tokenObj)
-        balance = await receive(wallet, tokenObj)
+        await receive(wallet, tokenObj)
     elif nostr:
         await receive_nostr(wallet)
-        balance = wallet.available_balance
     elif all:
         reserved_proofs = await get_reserved_proofs(wallet.db)
         balance = None
@@ -278,10 +277,10 @@ async def receive_command(
                 token = await wallet.serialize_proofs(proofs)
                 tokenObj = deserialize_token_from_string(token)
                 await verify_mints(wallet, tokenObj)
-                balance = await receive(wallet, tokenObj)
+                await receive(wallet, tokenObj)
     else:
         raise Exception("enter token or use either flag --nostr or --all.")
-    assert balance
+    balance = wallet.available_balance
     return ReceiveResponse(initial_balance=initial_balance, balance=balance)
 
 
@@ -359,15 +358,17 @@ async def pending(
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)  # type: ignore
             ).strftime("%Y-%m-%d %H:%M:%S")
-            result.update({
-                f"{i}": {
-                    "amount": sum_proofs(grouped_proofs),
-                    "time": reserved_date,
-                    "ID": key,
-                    "token": token,
-                    "mint": mint,
+            result.update(
+                {
+                    f"{i}": {
+                        "amount": sum_proofs(grouped_proofs),
+                        "time": reserved_date,
+                        "ID": key,
+                        "token": token,
+                        "mint": mint,
+                    }
                 }
-            })
+            )
     return PendingResponse(pending_token=result)
 
 
@@ -412,14 +413,16 @@ async def wallets():
                 if w == wallet.name:
                     active_wallet = True
                 if active_wallet:
-                    result.update({
-                        f"{w}": {
-                            "balance": sum_proofs(wallet.proofs),
-                            "available": sum_proofs([
-                                p for p in wallet.proofs if not p.reserved
-                            ]),
+                    result.update(
+                        {
+                            f"{w}": {
+                                "balance": sum_proofs(wallet.proofs),
+                                "available": sum_proofs(
+                                    [p for p in wallet.proofs if not p.reserved]
+                                ),
+                            }
                         }
-                    })
+                    )
         except Exception:
             pass
     return WalletsResponse(wallets=result)

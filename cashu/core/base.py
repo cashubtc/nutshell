@@ -302,6 +302,13 @@ class MintQuote(BaseModel):
 # ------- API: INFO -------
 
 
+class MintMeltMethodSetting(BaseModel):
+    method: str
+    unit: str
+    min_amount: Optional[int] = None
+    max_amount: Optional[int] = None
+
+
 class GetInfoResponse(BaseModel):
     name: Optional[str] = None
     pubkey: Optional[str] = None
@@ -526,6 +533,12 @@ class CheckFeesResponse_deprecated(BaseModel):
 
 
 # ------- API: RESTORE -------
+
+
+class PostRestoreRequest(BaseModel):
+    outputs: List[BlindedMessage] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
 
 
 class PostRestoreResponse(BaseModel):
