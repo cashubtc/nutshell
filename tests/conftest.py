@@ -31,7 +31,7 @@ settings.mint_listen_port = SERVER_PORT
 settings.mint_url = SERVER_ENDPOINT
 settings.tor = False
 settings.wallet_unit = "sat"
-settings.mint_lightning_backend = settings.mint_lightning_backend or "FakeWallet"
+settings.mint_backend_bolt11_sat = settings.mint_backend_bolt11_sat or "FakeWallet"
 settings.fakewallet_brr = True
 settings.fakewallet_delay_payment = False
 settings.fakewallet_stochastic_invoice = False
@@ -111,7 +111,7 @@ async def ledger():
             await conn.execute("CREATE SCHEMA public;")
 
     wallets_module = importlib.import_module("cashu.lightning")
-    lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
+    lightning_backend = getattr(wallets_module, settings.mint_backend_bolt11_sat)()
     backends = {
         Method.bolt11: {Unit.sat: lightning_backend},
     }

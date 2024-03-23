@@ -118,7 +118,7 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=128, unit="sat"))
 
     mint_quote = await ledger.get_mint_quote(quote.quote)
-    assert not mint_quote.paid, "mint quote not should be paid"
+    assert not mint_quote.paid, "mint quote already paid"
 
     await assert_err(
         wallet1.mint(128, id=quote.quote),
@@ -357,7 +357,5 @@ async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
 
-    proof_states = await ledger.check_proofs_state(
-        secrets=[p.secret for p in send_proofs]
-    )
+    proof_states = await ledger.check_proofs_state(Ys=[p.Y for p in send_proofs])
     assert all([p.state.value == "UNSPENT" for p in proof_states])

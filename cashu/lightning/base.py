@@ -62,12 +62,17 @@ class PaymentStatus(BaseModel):
 
 
 class LightningBackend(ABC):
-    units: set[Unit]
     supports_mpp: bool = False
+    supported_units: set[Unit]
+    unit: Unit
 
     def assert_unit_supported(self, unit: Unit):
-        if unit not in self.units:
+        if unit not in self.supported_units:
             raise Unsupported(f"Unit {unit} is not supported")
+
+    @abstractmethod
+    def __init__(self, unit: Unit, **kwargs):
+        pass
 
     @abstractmethod
     def status(self) -> Coroutine[None, None, StatusResponse]:

@@ -186,7 +186,7 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 async def pay(ctx: Context, invoice: str, amount: Optional[int], yes: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    print_balance(ctx)
+    await print_balance(ctx)
     quote = await wallet.get_pay_amount_with_fees(invoice, amount)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
@@ -221,7 +221,7 @@ async def pay(ctx: Context, invoice: str, amount: Optional[int], yes: bool):
         print(f" (Preimage: {melt_response.payment_preimage}).")
     else:
         print(".")
-    print_balance(ctx)
+    await print_balance(ctx)
 
 
 @cli.command("invoice", help="Create Lighting invoice.")
@@ -244,11 +244,12 @@ async def pay(ctx: Context, invoice: str, amount: Optional[int], yes: bool):
 )
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool):
+async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
-    print_balance(ctx)
+    await print_balance(ctx)
     amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
+    print(f"Requesting invoice for {wallet.unit.str(amount)} {wallet.unit}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:
@@ -307,7 +308,7 @@ async def invoice(ctx: Context, amount: int, id: str, split: int, no_check: bool
     elif amount and id:
         await wallet.mint(amount, split=optional_split, id=id)
     print("")
-    print_balance(ctx)
+    await print_balance(ctx)
     return
 
 
@@ -476,7 +477,7 @@ async def send_command(
         await send_nostr(
             wallet, amount=amount, pubkey=nostr or nopt, verbose=verbose, yes=yes
         )
-    print_balance(ctx)
+    await print_balance(ctx)
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -510,8 +511,9 @@ async def receive_cli(
                 mint_url, os.path.join(settings.cashu_dir, wallet.name)
             )
             await verify_mint(mint_wallet, mint_url)
+        receive_wallet = await receive(wallet, tokenObj)
+        ctx.obj["WALLET"] = receive_wallet
 
-        await receive(wallet, tokenObj)
     elif nostr:
         await receive_nostr(wallet)
         # exit on keypress
@@ -532,11 +534,12 @@ async def receive_cli(
                         mint_url, os.path.join(settings.cashu_dir, wallet.name)
                     )
                     await verify_mint(mint_wallet, mint_url)
-                await receive(wallet, tokenObj)
+                receive_wallet = await receive(wallet, tokenObj)
+                ctx.obj["WALLET"] = receive_wallet
     else:
         print("Error: enter token or use either flag --nostr or --all.")
         return
-    print_balance(ctx)
+    await print_balance(ctx)
 
 
 @cli.command("burn", help="Burn spent tokens.")
@@ -588,7 +591,7 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
             for i in range(0, len(proofs), settings.proofs_batch_size)
         ]:
             await wallet.invalidate(_proofs, check_spendable=True)
-    print_balance(ctx)
+    await print_balance(ctx)
 
 
 @cli.command("pending", help="Show pending tokens.")
@@ -867,7 +870,7 @@ async def restore(ctx: Context, to: int, batch: int):
 
     await wallet.restore_wallet_from_mnemonic(mnemonic, to=to, batch=batch)
     await wallet.load_proofs()
-    print_balance(ctx)
+    await print_balance(ctx)
 
 
 @cli.command("selfpay", help="Refresh tokens.")
