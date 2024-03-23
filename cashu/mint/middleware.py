@@ -1,4 +1,4 @@
-from fastapi import FastAPI, status
+from fastapi import FastAPI
 from fastapi.exception_handlers import (
     request_validation_exception_handler as _request_validation_exception_handler,
 )
@@ -9,15 +9,13 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
 from ..core.settings import settings
+from .limit import _rate_limit_exceeded_handler, limiter_global
 
 if settings.debug_profiling:
     from fastapi_profiler import PyInstrumentProfilerMiddleware
 
-if settings.mint_rate_limit:
-    from slowapi import Limiter
-    from slowapi.errors import RateLimitExceeded
-    from slowapi.middleware import SlowAPIMiddleware
-    from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 
 def add_middlewares(app: FastAPI):
@@ -34,31 +32,7 @@ def add_middlewares(app: FastAPI):
         app.add_middleware(PyInstrumentProfilerMiddleware)
 
     if settings.mint_rate_limit:
-
-        def get_remote_address_excluding_local(request: Request) -> str:
-            remote_address = get_remote_address(request)
-            if remote_address == "127.0.0.1":
-                return ""
-            return remote_address
-
-        limiter = Limiter(
-            key_func=get_remote_address_excluding_local,
-            default_limits=[f"{settings.mint_rate_limit_per_minute}/minute"],
-        )
-        app.state.limiter = limiter
-
-        def _rate_limit_exceeded_handler(
-            request: Request, exc: Exception
-        ) -> JSONResponse:
-            remote_address = get_remote_address(request)
-            logger.warning(
-                f"Rate limit {settings.mint_rate_limit_per_minute}/minute exceeded: {remote_address}"
-            )
-            return JSONResponse(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                content={"detail": "Rate limit exceeded."},
-            )
-
+        app.state.limiter = limiter_global
         app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
         app.add_middleware(SlowAPIMiddleware)
 

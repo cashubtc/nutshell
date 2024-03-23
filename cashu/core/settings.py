@@ -83,11 +83,17 @@ class MintLimits(MintSettings):
     mint_rate_limit: bool = Field(
         default=False, title="Rate limit", description="IP-based rate limiter."
     )
-    mint_rate_limit_per_minute: int = Field(
+    mint_global_rate_limit_per_minute: int = Field(
+        default=60,
+        gt=0,
+        title="Global rate limit per minute",
+        description="Number of requests an IP can make per minute to all endpoints.",
+    )
+    mint_transaction_rate_limit_per_minute: int = Field(
         default=20,
         gt=0,
-        title="Rate limit per minute",
-        description="Number of requests an IP can make per minute.",
+        title="Transaction rate limit per minute",
+        description="Number of requests an IP can make per minute to transaction endpoints.",
     )
     mint_max_request_length: int = Field(
         default=1000,

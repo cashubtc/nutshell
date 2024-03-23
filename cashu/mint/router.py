@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from loguru import logger
 
 from ..core.base import (
@@ -28,6 +28,7 @@ from ..core.base import (
 from ..core.errors import CashuError
 from ..core.settings import settings
 from ..mint.startup import ledger
+from .limit import limiter
 
 router: APIRouter = APIRouter()
 
@@ -178,7 +179,10 @@ async def keysets() -> KeysetsResponse:
     response_model=PostMintQuoteResponse,
     response_description="A payment request to mint tokens of a denomination",
 )
-async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def mint_quote(
+    request: Request, payload: PostMintQuoteRequest
+) -> PostMintQuoteResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
@@ -203,7 +207,8 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
     response_model=PostMintQuoteResponse,
     response_description="Get an existing mint quote to check its status.",
 )
-async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     """
     Get mint quote state.
     """
@@ -228,7 +233,9 @@ async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
         "A list of blinded signatures that can be used to create proofs."
     ),
 )
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def mint(
+    request: Request,
     payload: PostMintRequest,
 ) -> PostMintResponse:
     """
@@ -250,7 +257,10 @@ async def mint(
     response_model=PostMeltQuoteResponse,
     response_description="Melt tokens for a payment on a supported payment method.",
 )
-async def get_melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def get_melt_quote(
+    request: Request, payload: PostMeltQuoteRequest
+) -> PostMeltQuoteResponse:
     """
     Request a quote for melting tokens.
     """
@@ -266,7 +276,8 @@ async def get_melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse
     response_model=PostMeltQuoteResponse,
     response_description="Get an existing melt quote to check its status.",
 )
-async def melt_quote(quote: str) -> PostMeltQuoteResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
     """
     Get melt quote state.
     """
@@ -296,7 +307,8 @@ async def melt_quote(quote: str) -> PostMeltQuoteResponse:
         " promises for change."
     ),
 )
-async def melt(payload: PostMeltRequest) -> PostMeltResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def melt(request: Request, payload: PostMeltRequest) -> PostMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
@@ -320,7 +332,9 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
         "An array of blinded signatures that can be used to create proofs."
     ),
 )
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def swap(
+    request: Request,
     payload: PostSplitRequest,
 ) -> PostSplitResponse:
     """
