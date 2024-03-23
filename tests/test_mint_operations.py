@@ -118,7 +118,7 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=128, unit="sat"))
 
     mint_quote = await ledger.get_mint_quote(quote.quote)
-    assert not mint_quote.paid, "mint quote not should be paid"
+    assert not mint_quote.paid, "mint quote already paid"
 
     await assert_err(
         wallet1.mint(128, id=quote.quote),

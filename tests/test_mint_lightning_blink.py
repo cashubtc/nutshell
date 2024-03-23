@@ -7,7 +7,7 @@ from cashu.core.settings import settings
 from cashu.lightning.blink import MINIMUM_FEE_MSAT, BlinkWallet
 
 settings.mint_blink_key = "123"
-blink = BlinkWallet()
+blink = BlinkWallet(unit=Unit.sat)
 payment_request = (
     "lnbc10u1pjap7phpp50s9lzr3477j0tvacpfy2ucrs4q0q6cvn232ex7nt2zqxxxj8gxrsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsss"
     "p575z0n39w2j7zgnpqtdlrgz9rycner4eptjm3lz363dzylnrm3h4s9qyyssqfz8jglcshnlcf0zkw4qu8fyr564lg59x5al724kms3h6gpuhx9xrfv27tgx3l3u3cyf6"
@@ -194,32 +194,32 @@ async def test_blink_get_payment_quote():
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     quote = await blink.get_payment_quote(payment_request)
     assert quote.checking_id == payment_request
-    assert quote.amount == Amount(Unit.msat, 1000000)  # msat
-    assert quote.fee == Amount(Unit.msat, 5000)  # msat
+    assert quote.amount == Amount(Unit.sat, 1000)  # sat
+    assert quote.fee == Amount(Unit.sat, 5)  # sat
 
     # response says 10 sat fees but invoice (1000 sat) * 0.5% is 5 sat so we expect 10 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 10}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     quote = await blink.get_payment_quote(payment_request)
     assert quote.checking_id == payment_request
-    assert quote.amount == Amount(Unit.msat, 1000000)  # msat
-    assert quote.fee == Amount(Unit.msat, 10000)  # msat
+    assert quote.amount == Amount(Unit.sat, 1000)  # sat
+    assert quote.fee == Amount(Unit.sat, 10)  # sat
 
     # response says 10 sat fees but invoice (4973 sat) * 0.5% is 24.865 sat so we expect 25 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 10}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     quote = await blink.get_payment_quote(payment_request_4973)
     assert quote.checking_id == payment_request_4973
-    assert quote.amount == Amount(Unit.msat, 4973000)  # msat
-    assert quote.fee == Amount(Unit.msat, 25000)  # msat
+    assert quote.amount == Amount(Unit.sat, 4973)  # sat
+    assert quote.fee == Amount(Unit.sat, 25)  # sat
 
     # response says 0 sat fees but invoice (1 sat) * 0.5% is 0.005 sat so we expect MINIMUM_FEE_MSAT/1000 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 0}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     quote = await blink.get_payment_quote(payment_request_1)
     assert quote.checking_id == payment_request_1
-    assert quote.amount == Amount(Unit.msat, 1000)  # msat
-    assert quote.fee == Amount(Unit.msat, MINIMUM_FEE_MSAT)  # msat
+    assert quote.amount == Amount(Unit.sat, 1)  # sat
+    assert quote.fee == Amount(Unit.sat, MINIMUM_FEE_MSAT // 1000)  # msat
 
 
 @respx.mock
@@ -230,5 +230,5 @@ async def test_blink_get_payment_quote_backend_error():
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     quote = await blink.get_payment_quote(payment_request)
     assert quote.checking_id == payment_request
-    assert quote.amount == Amount(Unit.msat, 1000000)  # msat
-    assert quote.fee == Amount(Unit.msat, 5000)  # msat
+    assert quote.amount == Amount(Unit.sat, 1000)  # sat
+    assert quote.fee == Amount(Unit.sat, 5)  # sat
