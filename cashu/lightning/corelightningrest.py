@@ -315,8 +315,7 @@ class CoreLightningRestWallet(LightningBackend):
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
-        bolt11 = melt_quote.request
-        invoice_obj = decode(bolt11)
+        invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)
