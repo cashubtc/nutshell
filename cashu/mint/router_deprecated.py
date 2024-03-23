@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from loguru import logger
 
 from ..core.base import (
@@ -28,6 +28,7 @@ from ..core.base import (
 )
 from ..core.errors import CashuError
 from ..core.settings import settings
+from .limit import limiter
 from .startup import ledger
 
 router_deprecated: APIRouter = APIRouter()
@@ -129,7 +130,10 @@ async def keysets_deprecated() -> KeysetsResponse_deprecated:
     ),
     deprecated=True,
 )
-async def request_mint_deprecated(amount: int = 0) -> GetMintResponse_deprecated:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def request_mint_deprecated(
+    request: Request, amount: int = 0
+) -> GetMintResponse_deprecated:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
@@ -157,7 +161,9 @@ async def request_mint_deprecated(amount: int = 0) -> GetMintResponse_deprecated
     ),
     deprecated=True,
 )
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def mint_deprecated(
+    request: Request,
     payload: PostMintRequest_deprecated,
     hash: Optional[str] = None,
     payment_hash: Optional[str] = None,
@@ -204,7 +210,9 @@ async def mint_deprecated(
     ),
     deprecated=True,
 )
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def melt_deprecated(
+    request: Request,
     payload: PostMeltRequest_deprecated,
 ) -> PostMeltResponse_deprecated:
     """
@@ -267,7 +275,9 @@ async def check_fees(
     ),
     deprecated=True,
 )
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def split_deprecated(
+    request: Request,
     payload: PostSplitRequest_Deprecated,
     # ) -> Union[PostSplitResponse_Very_Deprecated, PostSplitResponse_Deprecated]:
 ):
