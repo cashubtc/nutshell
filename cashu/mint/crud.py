@@ -26,25 +26,12 @@ class LedgerCrud(ABC):
     """
 
     @abstractmethod
-    async def get_keyset(
-        self,
-        *,
-        db: Database,
-        id: str = "",
-        derivation_path: str = "",
-        seed: str = "",
-        conn: Optional[Connection] = None,
-    ) -> List[MintKeyset]:
-        ...
-
-    @abstractmethod
     async def get_spent_proofs(
         self,
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[Proof]:
-        ...
+    ) -> List[Proof]: ...
 
     async def get_proof_used(
         self,
@@ -52,8 +39,7 @@ class LedgerCrud(ABC):
         Y: str,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[Proof]:
-        ...
+    ) -> Optional[Proof]: ...
 
     @abstractmethod
     async def invalidate_proof(
@@ -62,8 +48,7 @@ class LedgerCrud(ABC):
         db: Database,
         proof: Proof,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_proofs_pending(
@@ -72,8 +57,7 @@ class LedgerCrud(ABC):
         Ys: List[str],
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[Proof]:
-        ...
+    ) -> List[Proof]: ...
 
     @abstractmethod
     async def set_proof_pending(
@@ -82,14 +66,23 @@ class LedgerCrud(ABC):
         db: Database,
         proof: Proof,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def unset_proof_pending(
         self, *, proof: Proof, db: Database, conn: Optional[Connection] = None
-    ) -> None:
-        ...
+    ) -> None: ...
+
+    @abstractmethod
+    async def get_keyset(
+        self,
+        *,
+        db: Database,
+        id: str = "",
+        derivation_path: str = "",
+        seed: str = "",
+        conn: Optional[Connection] = None,
+    ) -> List[MintKeyset]: ...
 
     @abstractmethod
     async def store_keyset(
@@ -98,16 +91,23 @@ class LedgerCrud(ABC):
         db: Database,
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
+
+    @abstractmethod
+    async def deactivate_keyset(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        conn: Optional[Connection] = None,
+    ) -> MintKeyset: ...
 
     @abstractmethod
     async def get_balance(
         self,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> int:
-        ...
+    ) -> int: ...
 
     @abstractmethod
     async def store_promise(
@@ -121,8 +121,7 @@ class LedgerCrud(ABC):
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_promise(
@@ -131,8 +130,7 @@ class LedgerCrud(ABC):
         db: Database,
         B_: str,
         conn: Optional[Connection] = None,
-    ) -> Optional[BlindedSignature]:
-        ...
+    ) -> Optional[BlindedSignature]: ...
 
     @abstractmethod
     async def store_mint_quote(
@@ -141,8 +139,7 @@ class LedgerCrud(ABC):
         quote: MintQuote,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_mint_quote(
@@ -151,8 +148,7 @@ class LedgerCrud(ABC):
         quote_id: str,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[MintQuote]:
-        ...
+    ) -> Optional[MintQuote]: ...
 
     @abstractmethod
     async def get_mint_quote_by_request(
@@ -161,8 +157,7 @@ class LedgerCrud(ABC):
         request: str,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[MintQuote]:
-        ...
+    ) -> Optional[MintQuote]: ...
 
     @abstractmethod
     async def update_mint_quote(
@@ -171,8 +166,7 @@ class LedgerCrud(ABC):
         quote: MintQuote,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     # @abstractmethod
     # async def update_mint_quote_paid(
@@ -191,8 +185,7 @@ class LedgerCrud(ABC):
         quote: MeltQuote,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_melt_quote(
@@ -202,8 +195,7 @@ class LedgerCrud(ABC):
         db: Database,
         checking_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> Optional[MeltQuote]:
-        ...
+    ) -> Optional[MeltQuote]: ...
 
     @abstractmethod
     async def update_melt_quote(
@@ -212,8 +204,7 @@ class LedgerCrud(ABC):
         quote: MeltQuote,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class LedgerCrudSqlite(LedgerCrud):
@@ -563,6 +554,33 @@ class LedgerCrudSqlite(LedgerCrud):
                 keyset.unit.name,
             ),
         )
+
+    async def deactivate_keyset(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        conn: Optional[Connection] = None,
+    ) -> MintKeyset:
+        await (conn or db).execute(
+            f"""
+            UPDATE {table_with_schema(db, 'keysets')}
+            SET active = ?
+            WHERE id = ?
+            """,
+            (False, keyset.id),
+        )
+
+        # we return the keyset from the database
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT * from {table_with_schema(db, 'keysets')}
+            WHERE id = ?
+            """,
+            (keyset.id,),
+        )
+
+        return MintKeyset(**row)
 
     async def get_balance(
         self,
