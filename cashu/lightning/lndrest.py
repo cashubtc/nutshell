@@ -12,7 +12,7 @@ from bolt11 import (
 )
 from loguru import logger
 
-from ..core.base import Amount, MeltQuote, Unit
+from ..core.base import Amount, MeltQuote, PostMeltQuoteRequest, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -29,7 +29,7 @@ from .macaroon import load_macaroon
 class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
-    supports_mpp = True
+    supports_mpp = settings.mint_lnd_enable_mpp_experimental
     supported_units = set([Unit.sat, Unit.msat])
     unit = Unit.sat
 
@@ -73,6 +73,8 @@ class LndRestWallet(LightningBackend):
         self.client = httpx.AsyncClient(
             base_url=self.endpoint, headers=self.auth, verify=self.cert
         )
+        if self.supports_mpp:
+            logger.info("LNDRestWallet enabling MPP experimental feature")
 
     async def status(self) -> StatusResponse:
         try:
@@ -363,8 +365,15 @@ class LndRestWallet(LightningBackend):
                 await asyncio.sleep(5)
 
     async def get_payment_quote(
-        self, bolt11: str, amount: Optional[Amount] = None
+        self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
+        # get amount from melt_quote or from bolt11
+        amount = (
+            Amount(Unit(melt_quote.unit), melt_quote.amount)
+            if melt_quote.amount
+            else None
+        )
+
         invoice_obj = decode(bolt11)
         assert invoice_obj.amount_msat, "invoice has no amount."
 

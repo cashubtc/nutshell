@@ -505,9 +505,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             )
         else:
             # not internal, get quote by backend
-            amount = Amount(unit, melt_quote.amount) if melt_quote.amount else None
             payment_quote = await self.backends[method][unit].get_payment_quote(
-                melt_quote.request, amount=amount
+                melt_quote=melt_quote
             )
             assert payment_quote.checking_id, "quote has no checking id"
             # make sure the backend returned the amount with a correct unit

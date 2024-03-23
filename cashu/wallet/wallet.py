@@ -595,7 +595,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         if resp.status_code == 404:
             invoice = await get_lightning_invoice(id=quote, db=self.db)
             assert invoice, f"no invoice found for id {quote}"
-            ret: PostMeltResponse_deprecated = await self.pay_lightning_deprecated(
+            ret: PostMeltResponse_deprecated = await self.melt_deprecated(
                 proofs=proofs, outputs=outputs, invoice=invoice.bolt11
             )
             return PostMeltResponse(
@@ -820,82 +820,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         for keyset in keysets:
             self.keysets[keyset.id] = keyset
 
-    async def request_mint(self, amount: int) -> Invoice:
-        """Request a Lightning invoice for minting tokens.
-
-        Args:
-            amount (int): Amount for Lightning invoice in satoshis
-
-        Returns:
-            Invoice: Lightning invoice
-        """
-        invoice = await super().mint_quote(amount)
-        await store_lightning_invoice(db=self.db, invoice=invoice)
-        return invoice
-
-    async def mint(
-        self,
-        amount: int,
-        id: str,
-        split: Optional[List[int]] = None,
-    ) -> List[Proof]:
-        """Mint tokens of a specific amount after an invoice has been paid.
-
-        Args:
-            amount (int): Total amount of tokens to be minted
-            id (str): Id for looking up the paid Lightning invoice.
-            split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
-
-        Raises:
-            Exception: Raises exception if `amounts` does not sum to `amount` or has unsupported value.
-            Exception: Raises exception if no proofs have been provided
-
-        Returns:
-            List[Proof]: Newly minted proofs.
-        """
-        # specific split
-        if split:
-            logger.trace(f"Mint with split: {split}")
-            assert sum(split) == amount, "split must sum to amount"
-            allowed_amounts = [2**i for i in range(settings.max_order)]
-            for a in split:
-                if a not in allowed_amounts:
-                    raise Exception(
-                        f"Can only mint amounts with 2^n up to {2**settings.max_order}."
-                    )
-
-        # if no split was specified, we use the canonical split
-        amounts = split or amount_split(amount)
-
-        # quirk: we skip bumping the secret counter in the database since we are
-        # not sure if the minting will succeed. If it succeeds, we will bump it
-        # in the next step.
-        secrets, rs, derivation_paths = await self.generate_n_secrets(
-            len(amounts), skip_bump=True
-        )
-        await self._check_used_secrets(secrets)
-        outputs, rs = self._construct_outputs(amounts, secrets, rs)
-
-        # will raise exception if mint is unsuccessful
-        promises = await super().mint(outputs, id)
-
-        promises_keyset_id = promises[0].id
-        await bump_secret_derivation(
-            db=self.db, keyset_id=promises_keyset_id, by=len(amounts)
-        )
-        proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
-
-        if id:
-            await update_lightning_invoice(
-                db=self.db, id=id, paid=True, time_paid=int(time.time())
-            )
-            # store the mint_id in proofs
-            async with self.db.connect() as conn:
-                for p in proofs:
-                    p.mint_id = id
-                    await update_proof(p, mint_id=id, conn=conn)
-        return proofs
-
     async def redeem(
         self,
         proofs: List[Proof],
@@ -991,7 +915,95 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         send_proofs = new_proofs[len(frst_outputs) :]
         return keep_proofs, send_proofs
 
-    async def pay_lightning(
+    async def request_mint(self, amount: int) -> Invoice:
+        """Request a Lightning invoice for minting tokens.
+
+        Args:
+            amount (int): Amount for Lightning invoice in satoshis
+
+        Returns:
+            Invoice: Lightning invoice
+        """
+        invoice = await super().mint_quote(amount)
+        await store_lightning_invoice(db=self.db, invoice=invoice)
+        return invoice
+
+    async def mint(
+        self,
+        amount: int,
+        id: str,
+        split: Optional[List[int]] = None,
+    ) -> List[Proof]:
+        """Mint tokens of a specific amount after an invoice has been paid.
+
+        Args:
+            amount (int): Total amount of tokens to be minted
+            id (str): Id for looking up the paid Lightning invoice.
+            split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
+
+        Raises:
+            Exception: Raises exception if `amounts` does not sum to `amount` or has unsupported value.
+            Exception: Raises exception if no proofs have been provided
+
+        Returns:
+            List[Proof]: Newly minted proofs.
+        """
+        # specific split
+        if split:
+            logger.trace(f"Mint with split: {split}")
+            assert sum(split) == amount, "split must sum to amount"
+            allowed_amounts = [2**i for i in range(settings.max_order)]
+            for a in split:
+                if a not in allowed_amounts:
+                    raise Exception(
+                        f"Can only mint amounts with 2^n up to {2**settings.max_order}."
+                    )
+
+        # if no split was specified, we use the canonical split
+        amounts = split or amount_split(amount)
+
+        # quirk: we skip bumping the secret counter in the database since we are
+        # not sure if the minting will succeed. If it succeeds, we will bump it
+        # in the next step.
+        secrets, rs, derivation_paths = await self.generate_n_secrets(
+            len(amounts), skip_bump=True
+        )
+        await self._check_used_secrets(secrets)
+        outputs, rs = self._construct_outputs(amounts, secrets, rs)
+
+        # will raise exception if mint is unsuccessful
+        promises = await super().mint(outputs, id)
+
+        promises_keyset_id = promises[0].id
+        await bump_secret_derivation(
+            db=self.db, keyset_id=promises_keyset_id, by=len(amounts)
+        )
+        proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
+
+        if id:
+            await update_lightning_invoice(
+                db=self.db, id=id, paid=True, time_paid=int(time.time())
+            )
+            # store the mint_id in proofs
+            async with self.db.connect() as conn:
+                for p in proofs:
+                    p.mint_id = id
+                    await update_proof(p, mint_id=id, conn=conn)
+        return proofs
+
+    async def request_melt(
+        self, invoice: str, amount: Optional[int] = None
+    ) -> PostMeltQuoteResponse:
+        """
+        Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
+        """
+        melt_quote = await self.melt_quote(invoice, amount)
+        logger.debug(
+            f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
+        )
+        return melt_quote
+
+    async def melt(
         self, proofs: List[Proof], invoice: str, fee_reserve_sat: int, quote_id: str
     ) -> PostMeltResponse:
         """Pays a lightning invoice and returns the status of the payment.
@@ -1523,19 +1535,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         return [p for p in proofs if p not in invalidated_proofs]
 
     # ---------- TRANSACTION HELPERS ----------
-
-    async def get_pay_amount_with_fees(
-        self, invoice: str, amount: Optional[int] = None
-    ) -> PostMeltQuoteResponse:
-        """
-        Decodes the amount from a Lightning invoice and returns the
-        total amount (amount+fees) to be paid.
-        """
-        melt_quote = await self.melt_quote(invoice, amount)
-        logger.debug(
-            f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
-        )
-        return melt_quote
 
     async def split_to_send(
         self,

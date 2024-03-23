@@ -10,7 +10,7 @@ from bolt11 import (
 )
 from loguru import logger
 
-from ..core.base import Amount, MeltQuote, Unit
+from ..core.base import Amount, MeltQuote, PostMeltQuoteRequest, Unit
 from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
@@ -312,7 +312,10 @@ class CoreLightningRestWallet(LightningBackend):
                 )
                 await asyncio.sleep(0.02)
 
-    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
+    async def get_payment_quote(
+        self, melt_quote: PostMeltQuoteRequest
+    ) -> PaymentQuoteResponse:
+        bolt11 = melt_quote.request
         invoice_obj = decode(bolt11)
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
