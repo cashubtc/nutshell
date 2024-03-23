@@ -111,7 +111,7 @@ async def ledger():
             await conn.execute("CREATE SCHEMA public;")
 
     wallets_module = importlib.import_module("cashu.lightning")
-    lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
+    lightning_backend = getattr(wallets_module, settings.mint_backend_bolt11_sat)()
     backends = {
         Method.bolt11: {Unit.sat: lightning_backend},
     }
