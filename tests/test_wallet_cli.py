@@ -27,6 +27,21 @@ def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, st
     ][0]
     return invoice, invoice_id
 
+def get_invoice_from_invoices_command(output: str) -> dict[str, str]:
+    splitted = output.split("\n")
+    removed_empty_and_hiphens = [
+        value for value in splitted if value and not value.startswith("-----")
+    ]
+    dict_output = {
+        f"{value.split(': ')[0]}": value.split(": ")[1]
+        for value in removed_empty_and_hiphens
+    }
+
+    return dict_output
+
+async def reset_invoices(wallet: Wallet):
+    await wallet.db.execute("DELETE FROM invoices")
+
 
 async def init_wallet():
     settings.debug = False
@@ -157,6 +172,107 @@ def test_invoice_with_split(mint, cli_prefix):
     assert result.exception is None
     wallet = asyncio.run(init_wallet())
     assert wallet.proof_amounts.count(1) >= 10
+
+
+def test_invoices(cli_prefix):
+    # arrange
+    wallet1 = asyncio.run(init_wallet())
+    asyncio.run(reset_invoices(wallet=wallet1))
+    invoice = asyncio.run(wallet1.request_mint(64))
+
+    # act
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoices"],
+    )
+
+    # assert
+    print("INVOICES")
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "No invoices found." not in result.output
+    assert "ID" in result.output
+    assert get_invoice_from_invoices_command(result.output)["ID"] == invoice.id
+
+
+def test_invoices_with_onlypaid(cli_prefix):
+    # arrange
+    wallet1 = asyncio.run(init_wallet())
+    asyncio.run(reset_invoices(wallet=wallet1))
+    asyncio.run(wallet1.request_mint(64))
+
+    # act
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoices", "--only-paid"],
+    )
+
+    # assert
+    print("INVOICES --only-paid")
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "No invoices found." in result.output
+
+
+def test_invoices_with_onlyunpaid(cli_prefix):
+    # arrange
+    wallet1 = asyncio.run(init_wallet())
+    asyncio.run(reset_invoices(wallet=wallet1))
+    invoice = asyncio.run(wallet1.request_mint(64))
+
+    # act
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoices", "--only-unpaid"],
+    )
+
+    # assert
+    print("INVOICES --only-unpaid")
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "No invoices found." not in result.output
+    assert "ID" in result.output
+    assert get_invoice_from_invoices_command(result.output)["ID"] == invoice.id
+
+
+def test_invoices_with_both_onlypaid_and_onlyunpaid(cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoices", "--only-paid", "--only-unpaid"],
+    )
+    assert result.exception is None
+    print("INVOICES --only-paid --only-unpaid")
+    assert result.exit_code == 0
+    assert (
+        "You should only choose one option: either --only-paid or --only-unpaid"
+        in result.output
+    )
+
+
+def test_invoices_with_pending(cli_prefix):
+    # arrange
+    wallet1 = asyncio.run(init_wallet())
+    asyncio.run(reset_invoices(wallet=wallet1))
+    invoice = asyncio.run(wallet1.request_mint(64))
+
+    # act
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoices", "--pending"],
+    )
+
+    # assert
+    print("INVOICES --pending")
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "No invoices found." not in result.output
+    assert "ID" in result.output
+    assert get_invoice_from_invoices_command(result.output)["ID"] == invoice.id
 
 
 def test_wallets(cli_prefix):

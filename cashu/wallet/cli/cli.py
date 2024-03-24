@@ -691,12 +691,54 @@ async def locks(ctx):
     return True
 
 
-@cli.command("invoices", help="List of all pending invoices.")
+@cli.command("invoices", help="List of all invoices.")
+@click.option(
+    "-op",
+    "--only-paid",
+    "paid",
+    default=False,
+    is_flag=True,
+    help="Show only paid invoices.",
+    type=bool,
+)
+@click.option(
+    "-ou",
+    "--only-unpaid",
+    "unpaid",
+    default=False,
+    is_flag=True,
+    help="Show only unpaid invoices.",
+    type=bool,
+)
+@click.option(
+    "-p",
+    "--pending",
+    "pending",
+    default=False,
+    is_flag=True,
+    help="Show all pending invoices",
+    type=bool,
+)
 @click.pass_context
 @coro
-async def invoices(ctx):
+async def invoices(ctx, paid: bool, unpaid: bool, pending: bool):
     wallet: Wallet = ctx.obj["WALLET"]
-    invoices = await get_lightning_invoices(db=wallet.db)
+
+    if paid and unpaid:
+        print("You should only choose one option: either --only-paid or --only-unpaid")
+        return
+    
+    paid_arg = None
+    if unpaid:
+        paid_arg = False
+    elif paid:
+        paid_arg = True
+
+    invoices = await get_lightning_invoices(
+        db=wallet.db,
+        paid=paid_arg,
+        pending=pending or None,
+    )
     if len(invoices):
         print("")
         print("--------------------------\n")
