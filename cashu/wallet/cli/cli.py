@@ -3,7 +3,7 @@
 import asyncio
 import os
 import time
-from datetime import datetime
+import datetime
 from functools import wraps
 from itertools import groupby, islice
 from operator import itemgetter
@@ -124,7 +124,7 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
             env_path = settings.env_file
         else:
             error_str += (
-                "Ceate a new Cashu config file here:"
+                "Create a new Cashu config file here:"
                 f" {os.path.join(settings.cashu_dir, '.env')}"
             )
             env_path = os.path.join(settings.cashu_dir, ".env")
@@ -158,7 +158,6 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 
     assert wallet, "Wallet not found."
     ctx.obj["WALLET"] = wallet
-    # await init_wallet(ctx.obj["WALLET"], load_proofs=False)
 
     # only if a command is one of a subset that needs to specify a mint host
     # if a mint host is already specified as an argument `host`, use it
@@ -166,7 +165,7 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
         return
     # ------ MULTIUNIT ------- : Select a unit
     ctx.obj["WALLET"] = await get_unit_wallet(ctx)
-    # ------ MUTLIMINT ------- : Select a wallet
+    # ------ MULTIMINT ------- : Select a wallet
     # else: we ask the user to select one
     ctx.obj["WALLET"] = await get_mint_wallet(
         ctx
@@ -637,8 +636,8 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             mint = [t.mint for t in tokenObj.token][0]
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
             assert grouped_proofs[0].time_reserved
-            reserved_date = datetime.utcfromtimestamp(
-                int(grouped_proofs[0].time_reserved)
+            reserved_date = datetime.datetime.fromtimestamp(
+                int(grouped_proofs[0].time_reserved), datetime.UTC
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
                 f"#{i} Amount:"
@@ -710,14 +709,14 @@ async def invoices(ctx):
             if invoice.preimage:
                 print(f"Preimage: {invoice.preimage}")
             if invoice.time_created:
-                d = datetime.utcfromtimestamp(
-                    int(float(invoice.time_created))
+                d = datetime.datetime.fromtimestamp(
+                    int(float(invoice.time_created)), datetime.UTC
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 print(f"Created: {d}")
             if invoice.time_paid:
-                d = datetime.utcfromtimestamp(int(float(invoice.time_paid))).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
+                d = datetime.datetime.fromtimestamp(
+                    (int(float(invoice.time_paid))), datetime.UTC
+                ).strftime("%Y-%m-%d %H:%M:%S")
                 print(f"Paid: {d}")
             print("")
             print(f"Payment request: {invoice.bolt11}")
