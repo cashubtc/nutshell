@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 import asyncio
+import datetime
 import os
 import time
-import datetime
 from functools import wraps
 from itertools import groupby, islice
 from operator import itemgetter
