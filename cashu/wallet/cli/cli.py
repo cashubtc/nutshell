@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import asyncio
-import datetime
+from datetime import datetime, timezone
 import os
 import time
 from functools import wraps
@@ -636,8 +636,8 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             mint = [t.mint for t in tokenObj.token][0]
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
             assert grouped_proofs[0].time_reserved
-            reserved_date = datetime.datetime.fromtimestamp(
-                int(grouped_proofs[0].time_reserved), datetime.UTC
+            reserved_date = datetime.fromtimestamp(
+                int(grouped_proofs[0].time_reserved), timezone.utc
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
                 f"#{i} Amount:"
@@ -751,13 +751,13 @@ async def invoices(ctx, paid: bool, unpaid: bool, pending: bool):
             if invoice.preimage:
                 print(f"Preimage: {invoice.preimage}")
             if invoice.time_created:
-                d = datetime.datetime.fromtimestamp(
-                    int(float(invoice.time_created)), datetime.UTC
+                d = datetime.fromtimestamp(
+                    int(float(invoice.time_created)), timezone.utc
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 print(f"Created: {d}")
             if invoice.time_paid:
-                d = datetime.datetime.fromtimestamp(
-                    (int(float(invoice.time_paid))), datetime.UTC
+                d = datetime.fromtimestamp(
+                    (int(float(invoice.time_paid))), timezone.utc
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 print(f"Paid: {d}")
             print("")
