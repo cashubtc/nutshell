@@ -19,9 +19,11 @@ from .base import (
 class StrikeUSDWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
-    units = [Unit.usd]
+    supported_units = [Unit.usd]
 
-    def __init__(self):
+    def __init__(self, unit: Unit = Unit.usd, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         self.endpoint = "https://api.strike.me"
 
         # bearer auth with settings.mint_strike_key
@@ -193,27 +195,3 @@ class StrikeUSDWallet(LightningBackend):
             fee_msat=data["details"]["fee"],
             preimage=data["preimage"],
         )
-
-    # async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
-    #     url = f"{self.endpoint}/api/v1/payments/sse"
-
-    #     while True:
-    #         try:
-    #             async with requests.stream("GET", url) as r:
-    #                 async for line in r.aiter_lines():
-    #                     if line.startswith("data:"):
-    #                         try:
-    #                             data = json.loads(line[5:])
-    #                         except json.decoder.JSONDecodeError:
-    #                             continue
-
-    #                         if type(data) is not dict:
-    #                             continue
-
-    #                         yield data["payment_hash"]  # payment_hash
-
-    #         except:
-    #             pass
-
-    #         print("lost connection to lnbits /payments/sse, retrying in 5 seconds")
-    #         await asyncio.sleep(5)

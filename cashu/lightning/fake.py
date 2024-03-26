@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import math
 import random
 from datetime import datetime
 from os import urandom
@@ -28,7 +29,7 @@ from .base import (
 
 
 class FakeWallet(LightningBackend):
-    units = set([Unit.sat, Unit.msat])
+    fake_btc_price = 1e8 / 1337
     queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
     paid_invoices: Set[str] = set()
@@ -40,6 +41,13 @@ class FakeWallet(LightningBackend):
         2048,
         32,
     ).hex()
+
+    supported_units = set([Unit.sat, Unit.msat, Unit.usd])
+    unit = Unit.sat
+
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
 
     async def status(self) -> StatusResponse:
         return StatusResponse(error_message=None, balance=1337)
@@ -80,9 +88,19 @@ class FakeWallet(LightningBackend):
 
         self.payment_secrets[payment_hash] = secret
 
+        amount_msat = 0
+        if self.unit == Unit.sat:
+            amount_msat = MilliSatoshi(amount.to(Unit.msat, round="up").amount)
+        elif self.unit == Unit.usd:
+            amount_msat = MilliSatoshi(
+                math.ceil(amount.amount / self.fake_btc_price * 1e9)
+            )
+        else:
+            raise NotImplementedError()
+
         bolt11 = Bolt11(
             currency="bc",
-            amount_msat=MilliSatoshi(amount.to(Unit.msat, round="up").amount),
+            amount_msat=amount_msat,
             date=int(datetime.now().timestamp()),
             tags=tags,
         )
@@ -105,7 +123,7 @@ class FakeWallet(LightningBackend):
             return PaymentResponse(
                 ok=True,
                 checking_id=invoice.payment_hash,
-                fee=Amount(unit=Unit.msat, amount=0),
+                fee=Amount(unit=self.unit, amount=1),
                 preimage=self.payment_secrets.get(invoice.payment_hash) or "0" * 64,
             )
         else:
@@ -137,10 +155,21 @@ class FakeWallet(LightningBackend):
     async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
         invoice_obj = decode(bolt11)
         assert invoice_obj.amount_msat, "invoice has no amount."
-        amount_msat = int(invoice_obj.amount_msat)
-        fees_msat = fee_reserve(amount_msat)
-        fees = Amount(unit=Unit.msat, amount=fees_msat)
-        amount = Amount(unit=Unit.msat, amount=amount_msat)
+
+        if self.unit == Unit.sat:
+            amount_msat = int(invoice_obj.amount_msat)
+            fees_msat = fee_reserve(amount_msat)
+            fees = Amount(unit=Unit.msat, amount=fees_msat)
+            amount = Amount(unit=Unit.msat, amount=amount_msat)
+        elif self.unit == Unit.usd:
+            amount_usd = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btc_price)
+            amount = Amount(unit=Unit.usd, amount=amount_usd)
+            fees = Amount(unit=Unit.usd, amount=2)
+        else:
+            raise NotImplementedError()
+
         return PaymentQuoteResponse(
-            checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
+            checking_id=invoice_obj.payment_hash,
+            fee=fees.to(self.unit, round="up"),
+            amount=amount.to(self.unit, round="up"),
         )

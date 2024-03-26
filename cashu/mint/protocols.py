@@ -1,6 +1,6 @@
-from typing import Dict, Protocol
+from typing import Dict, Mapping, Protocol
 
-from ..core.base import MintKeyset, Unit
+from ..core.base import Method, MintKeyset, Unit
 from ..core.db import Database
 from ..lightning.base import LightningBackend
 from ..mint.crud import LedgerCrud
@@ -11,8 +11,8 @@ class SupportsKeysets(Protocol):
     keysets: Dict[str, MintKeyset]
 
 
-class SupportLightning(Protocol):
-    lightning: Dict[Unit, LightningBackend]
+class SupportsBackends(Protocol):
+    backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
 
 
 class SupportsDb(Protocol):

@@ -7,5 +7,5 @@ from .lnbits import LNbitsWallet  # noqa: F401
 from .lndrest import LndRestWallet  # noqa: F401
 from .strike import StrikeUSDWallet  # noqa: F401
 
-if settings.mint_lightning_backend is None:
-    raise Exception("MINT_LIGHTNING_BACKEND not configured")
+if settings.mint_backend_bolt11_sat is None or settings.mint_backend_bolt11_usd is None:
+    raise Exception("MINT_BACKEND_BOLT11_SAT or MINT_BACKEND_BOLT11_USD not set")

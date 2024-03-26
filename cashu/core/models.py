@@ -3,10 +3,19 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from .base import BlindedMessage, BlindedSignature, Proof, Unit
+from .base import BlindedMessage, BlindedSignature, Proof
 from .settings import settings
 
+# ------- API -------
+
 # ------- API: INFO -------
+
+
+class MintMeltMethodSetting(BaseModel):
+    method: str
+    unit: str
+    min_amount: Optional[int] = None
+    max_amount: Optional[int] = None
 
 
 class GetInfoResponse(BaseModel):
@@ -18,12 +27,6 @@ class GetInfoResponse(BaseModel):
     contact: Optional[List[List[str]]] = None
     motd: Optional[str] = None
     nuts: Optional[Dict[int, Dict[str, Any]]] = None
-
-
-class MintFee(BaseModel):
-    unit: Unit
-    fee: int
-    batch: int
 
 
 class GetInfoResponse_deprecated(BaseModel):
@@ -239,6 +242,12 @@ class CheckFeesResponse_deprecated(BaseModel):
 
 
 # ------- API: RESTORE -------
+
+
+class PostRestoreRequest(BaseModel):
+    outputs: List[BlindedMessage] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
 
 
 class PostRestoreResponse(BaseModel):
