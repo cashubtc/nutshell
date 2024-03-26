@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
 import asyncio
-from datetime import datetime, timezone
 import os
 import time
+from datetime import datetime, timezone
 from functools import wraps
 from itertools import groupby, islice
 from operator import itemgetter
@@ -727,7 +727,7 @@ async def invoices(ctx, paid: bool, unpaid: bool, pending: bool):
     if paid and unpaid:
         print("You should only choose one option: either --only-paid or --only-unpaid")
         return
-    
+
     paid_arg = None
     if unpaid:
         paid_arg = False
