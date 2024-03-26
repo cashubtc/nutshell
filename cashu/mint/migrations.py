@@ -558,15 +558,54 @@ async def m016_recompute_Y_with_new_h2c(db: Database):
         )
         proofs_pending = [Proof(**r) for r in rows]
 
-    # overwrite the old Y columns with the new Y
+    # Prepare data for batch update
+    proofs_used_data = [(proof.Y, proof.secret) for proof in proofs_used]
+    proofs_pending_data = [(proof.Y, proof.secret) for proof in proofs_pending]
+
+    # Perform batch update in a single transaction
     async with db.connect() as conn:
-        for proof in proofs_used:
+        if len(proofs_used_data):
+            # For proofs_used
             await conn.execute(
-                f"UPDATE {table_with_schema(db, 'proofs_used')} SET Y = '{proof.Y}'"
-                f" WHERE secret = '{proof.secret}'"
+                "CREATE TABLE IF NOT EXISTS tmp_proofs_used (Y TEXT, secret TEXT)"
             )
-        for proof in proofs_pending:
+            values_placeholder = ", ".join(
+                f"('{y}', '{secret}')" for y, secret in proofs_used_data
+            )
             await conn.execute(
-                f"UPDATE {table_with_schema(db, 'proofs_pending')} SET Y = '{proof.Y}'"
-                f" WHERE secret = '{proof.secret}'"
+                f"INSERT INTO tmp_proofs_used (Y, secret) VALUES {values_placeholder}",
             )
+            await conn.execute(
+                f"""
+                UPDATE {table_with_schema(db, 'proofs_used')}
+                SET Y = tmp_proofs_used.Y
+                FROM tmp_proofs_used
+                WHERE {table_with_schema(db, 'proofs_used')}.secret = tmp_proofs_used.secret
+                """
+            )
+
+        if len(proofs_pending_data):
+            # For proofs_pending
+            await conn.execute(
+                "CREATE TABLE IF NOT EXISTS tmp_proofs_pending (Y TEXT, secret TEXT)"
+            )
+            values_placeholder = ", ".join(
+                f"('{y}', '{secret}')" for y, secret in proofs_pending_data
+            )
+            await conn.execute(
+                f"INSERT INTO tmp_proofs_used (Y, secret) VALUES {values_placeholder}",
+            )
+            await conn.execute(
+                f"""
+                UPDATE {table_with_schema(db, 'proofs_pending')}
+                SET Y = tmp_proofs_pending.Y
+                FROM tmp_proofs_pending
+                WHERE {table_with_schema(db, 'proofs_pending')}.secret = tmp_proofs_pending.secret
+                """
+            )
+
+    async with db.connect() as conn:
+        if len(proofs_used_data):
+            await conn.execute("DROP TABLE tmp_proofs_used")
+        if len(proofs_pending_data):
+            await conn.execute("DROP TABLE tmp_proofs_pending")
