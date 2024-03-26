@@ -829,6 +829,48 @@ class Wallet(
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
+    def split_wallet_state(self, amount: int, n_target: int = 3) -> List[int]:
+        """This function produces an amount split for outputs based on the current state of the wallet.
+        It's objective is to fill up the wallet so that it reaches `n_target` of each amount.
+
+        Args:
+            amount (int): Amount to split
+            n_target (int, optional): Number of outputs to target for each amount. Defaults to 3.
+
+        Returns:
+            List[int]: List of amounts to mint
+        """
+        amounts_we_have = [p.amount for p in self.proofs if p.reserved is not True]
+        amounts_we_have.sort()
+        all_possible_amounts = [2**i for i in range(settings.max_order)]
+        amounts_we_want = [
+            [a] * max(0, n_target - amounts_we_have.count(a))
+            for a in all_possible_amounts
+        ]
+        # flatten list of lists to list
+        amounts_we_want = [item for sublist in amounts_we_want for item in sublist]
+        # sort by increasing amount
+        amounts_we_want.sort()
+
+        logger.debug(
+            f"Amounts we have: {[(a, amounts_we_have.count(a)) for a in set(amounts_we_have)]}"
+        )
+        amounts = []
+        while sum(amounts) < amount and amounts_we_want:
+            if sum(amounts) + amounts_we_want[0] > amount:
+                break
+            amounts.append(amounts_we_want.pop(0))
+
+        remaining_amount = amount - sum(amounts)
+        if remaining_amount > 0:
+            amounts += amount_split(remaining_amount)
+
+        logger.debug(f"Amounts we want: {amounts}")
+        if sum(amounts) != amount:
+            raise Exception(f"Amounts do not sum to {amount}.")
+
+        return amounts
+
     async def mint(
         self,
         amount: int,
@@ -861,7 +903,8 @@ class Wallet(
                     )
 
         # if no split was specified, we use the canonical split
-        amounts = split or amount_split(amount)
+        amounts = self.split_wallet_state(amount)
+        # amounts = split or amount_split(amount)
 
         # quirk: we skip bumping the secret counter in the database since we are
         # not sure if the minting will succeed. If it succeeds, we will bump it
@@ -942,9 +985,23 @@ class Wallet(
         total = sum_proofs(proofs)
         keep_amt, send_amt = total - amount, amount
 
+        logger.debug(f"Total input: {sum_proofs(proofs)}")
         # generate splits for outputs
-        keep_outputs = amount_split(keep_amt)
-        send_outputs = amount_split(send_amt)
+        send_outputs_no_fee = amount_split(send_amt)
+        # add fees to outputs to send because we're nice
+        fees_for_outputs = amount_split(self.get_fees_for_proofs(send_outputs_no_fee))
+        send_outputs = send_outputs_no_fee + fees_for_outputs
+        logger.debug(
+            f"Send {sum(send_outputs_no_fee)} plus fees: {sum(fees_for_outputs)}"
+        )
+        # we subtract the fee we add to the output from the amount to keep
+        keep_amt -= self.get_fees_for_proofs(send_outputs_no_fee)
+        logger.debug(f"Keep amount: {keep_amt}")
+
+        # we subtract the fee for the entire transaction from the amount to keep
+        keep_amt -= self.get_fees_for_proofs(proofs)
+        # we determine the amounts to keep based on the wallet state
+        keep_outputs = self.split_wallet_state(keep_amt)
 
         amounts = keep_outputs + send_outputs
         # generate secrets for new outputs
@@ -1309,11 +1366,16 @@ class Wallet(
         # TODO: load mint from database for offline mode!
         await self.load_mint()
 
+        # select proofs that are not reserved
+        proofs = [p for p in proofs if not p.reserved]
+        # select proofs that are in the active keysets of the mint
+        proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
+
         send_proofs, fees = await self._select_proofs_to_send(proofs, amount, tolerance)
         if not send_proofs and offline:
             raise Exception(
                 "Could not select proofs in offline mode. Available amounts:"
-                f" {set([p.amount for p in proofs])}"
+                f" {[p.amount for p in proofs]}"
             )
 
         if not send_proofs and not offline:
@@ -1347,9 +1409,16 @@ class Wallet(
         Returns:
             Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
         """
+        # select proofs that are not reserved
+        proofs = [p for p in proofs if not p.reserved]
+
+        # select proofs that are in the active keysets of the mint
+        proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
 
         spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
-        print(f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)")
+        logger.debug(
+            f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
+        )
         if secret_lock:
             logger.debug(f"Spending conditions: {secret_lock}")
         keep_proofs, send_proofs = await self.split(

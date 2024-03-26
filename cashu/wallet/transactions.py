@@ -1,6 +1,6 @@
 import math
 import uuid
-from typing import Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
 from loguru import logger
 
@@ -24,46 +24,50 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
     mint_keyset_ids: List[str]  # holds active keyset ids of the mint
     unit: Unit
 
-    def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
+    def get_fees_for_proofs(self, proofs: List[Any]) -> int:
+        """TODO: THIS IS A DUMMY FUNCTION. IMPLEMENT."""
         return math.ceil(len(proofs) * 0.1)
 
     async def _select_proofs_to_send(
         self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
     ) -> Tuple[List[Proof], int]:
         send_proofs: List[Proof] = []
-        # select proofs that are not reserved
-        proofs = [p for p in proofs if not p.reserved]
-        # select proofs that are in the active keysets of the mint
-        proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
+        NO_SELECTION = [], 0
+
+        logger.trace(f"proofs: {[p.amount for p in proofs]}")
         # sort proofs by amount (descending)
         sorted_proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
-        remaining_proofs = sorted_proofs.copy()
+        # only consider proofs smaller than the amount we want to send (+ tolerance) for coin selection
+        fee_for_single_proof = self.get_fees_for_proofs([sorted_proofs[0]])
+        sorted_proofs = [
+            p
+            for p in sorted_proofs
+            if p.amount <= amount_to_send + tolerance + fee_for_single_proof
+        ]
+        if not sorted_proofs:
+            logger.info(
+                f"no small-enough proofs to send. Have: {[p.amount for p in proofs]}"
+            )
+            return NO_SELECTION
 
-        # start with the lowest possible fee (single proof)
-        fees_single_proof = self.get_fees_for_proofs([Proof()])
-
-        # find the smallest proof with an amount larger than the target amount
-        larger_proof: Union[None, Proof] = None
-        if len(sorted_proofs) > 1:
-            for proof in sorted_proofs:
-                if proof.amount > amount_to_send + fees_single_proof:
-                    larger_proof = proof
-                    remaining_proofs.pop(0)
-                else:
-                    break
+        target_amount = amount_to_send
 
         # compose the target amount from the remaining_proofs
-        while sum_proofs(send_proofs) < amount_to_send + self.get_fees_for_proofs(
-            send_proofs
-        ):
-            proof_to_add = remaining_proofs.pop(0)
-            send_proofs.append(proof_to_add)
+        logger.debug(f"sorted_proofs: {[p.amount for p in sorted_proofs]}")
+        for p in sorted_proofs:
+            logger.debug(f"send_proofs: {[p.amount for p in send_proofs]}")
+            logger.debug(f"target_amount: {target_amount}")
+            logger.debug(f"p.amount: {p.amount}")
+            if sum_proofs(send_proofs) + p.amount < target_amount + tolerance:
+                send_proofs.append(p)
+                target_amount = amount_to_send + self.get_fees_for_proofs(send_proofs)
 
-        # if the larger proof is cheaper to spend, we use it
-        if larger_proof and sum_proofs(send_proofs) > larger_proof.amount:
-            send_proofs = [larger_proof]
+        if sum_proofs(send_proofs) < amount_to_send:
+            logger.info("could not select proofs to reach target amount (too little).")
+            return NO_SELECTION
 
         fees = self.get_fees_for_proofs(send_proofs)
+        logger.debug(f"Selected sum of proofs: {sum_proofs(send_proofs)}, fees: {fees}")
         return send_proofs, fees
 
     async def _select_proofs_to_split(
@@ -94,12 +98,6 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         """
         send_proofs: List[Proof] = []
 
-        # select proofs that are not reserved
-        proofs = [p for p in proofs if not p.reserved]
-
-        # select proofs that are in the active keysets of the mint
-        proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
-
         # check that enough spendable proofs exist
         if sum_proofs(proofs) < amount_to_send:
             raise Exception("balance too low.")
@@ -119,8 +117,6 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             proofs_current_epoch, key=lambda p: p.amount
         )
 
-        fees = self.get_fees_for_proofs(send_proofs)
-
         while sum_proofs(send_proofs) < amount_to_send + self.get_fees_for_proofs(
             send_proofs
         ):
@@ -128,6 +124,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             send_proofs.append(proof_to_add)
 
         logger.trace(f"selected proof amounts: {[p.amount for p in send_proofs]}")
+        fees = self.get_fees_for_proofs(send_proofs)
         return send_proofs, fees
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool) -> None:

@@ -1,3 +1,4 @@
+import math
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
@@ -234,7 +235,6 @@ class LedgerVerification(
     def _verify_amount(self, amount: int) -> int:
         """Any amount used should be positive and not larger than 2^MAX_ORDER."""
         valid = amount > 0 and amount < 2**settings.max_order
-        logger.trace(f"Verifying amount {amount} is valid: {valid}")
         if not valid:
             raise NotAllowedError("invalid amount: " + str(amount))
         return amount
@@ -255,19 +255,26 @@ class LedgerVerification(
             raise TransactionUnitError("input and output keysets have different units.")
         return units_proofs[0]
 
+    def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
+        """TODO: THIS IS A DUMMY FUNCTION. IMPLEMENT."""
+        return math.ceil(len(proofs) * 0.1)
+
     def _verify_equation_balanced(
         self,
         proofs: List[Proof],
-        outs: Union[List[BlindedSignature], List[BlindedMessage]],
+        outs: List[BlindedMessage],
     ) -> None:
         """Verify that Σinputs - Σoutputs = 0.
         Outputs can be BlindedSignature or BlindedMessage.
         """
         unit = self._verify_units_match(proofs, outs)
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
+        fees_inputs = self.get_fees_for_proofs(proofs)
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
-        if not sum_outputs - sum_inputs == 0:
-            raise TransactionError("inputs do not have same amount as outputs.")
+        if not sum_outputs + fees_inputs - sum_inputs == 0:
+            raise TransactionError(
+                f"inputs ({sum_inputs}) - fees ({fees_inputs}) vs outputs ({sum_outputs}) are not balanced."
+            )
 
     def _verify_and_get_unit_method(
         self, unit_str: str, method_str: str
