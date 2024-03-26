@@ -2,9 +2,10 @@ from typing import List
 
 import pytest
 
-from cashu.core.base import BlindedMessage, PostMintQuoteRequest, Proof
+from cashu.core.base import BlindedMessage, Proof
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.helpers import calculate_number_of_blank_outputs
+from cashu.core.models import PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest

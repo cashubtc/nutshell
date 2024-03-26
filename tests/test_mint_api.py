@@ -3,14 +3,14 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import (
+from cashu.core.base import SpentState
+from cashu.core.models import (
     GetInfoResponse,
     MintMeltMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostRestoreRequest,
     PostRestoreResponse,
-    SpentState,
 )
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger

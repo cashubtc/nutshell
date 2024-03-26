@@ -1,8 +1,7 @@
 import bolt11
 
-from ...core.base import Amount, Unit
+from ...core.base import Amount, SpentState, Unit
 from ...core.helpers import sum_promises
-from ...core.models import SpentState
 from ...core.settings import settings
 from ...lightning.base import (
     InvoiceResponse,

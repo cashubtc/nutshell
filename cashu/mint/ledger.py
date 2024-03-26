@@ -16,6 +16,8 @@ from ..core.base import (
     MintKeyset,
     MintQuote,
     Proof,
+    ProofState,
+    SpentState,
     Unit,
 )
 from ..core.crypto import b_dhke
@@ -41,8 +43,6 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
-    ProofState,
-    SpentState,
 )
 from ..core.settings import settings
 from ..core.split import amount_split

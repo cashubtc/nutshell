@@ -1,9 +1,8 @@
-from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from .base import BlindedMessage, BlindedSignature, Proof
+from .base import BlindedMessage, BlindedSignature, Proof, ProofState
 from .settings import settings
 
 # ------- API -------
@@ -203,21 +202,6 @@ class PostSplitResponse_Very_Deprecated(BaseModel):
 
 class PostCheckStateRequest(BaseModel):
     Ys: List[str] = Field(..., max_items=settings.mint_max_request_length)
-
-
-class SpentState(Enum):
-    unspent = "UNSPENT"
-    spent = "SPENT"
-    pending = "PENDING"
-
-    def __str__(self):
-        return self.name
-
-
-class ProofState(BaseModel):
-    Y: str
-    state: SpentState
-    witness: Optional[str] = None
 
 
 class PostCheckStateResponse(BaseModel):

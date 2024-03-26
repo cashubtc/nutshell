@@ -2,12 +2,12 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import (
+from cashu.core.base import Proof
+from cashu.core.models import (
     CheckSpendableRequest_deprecated,
     CheckSpendableResponse_deprecated,
     PostRestoreRequest,
     PostRestoreResponse,
-    Proof,
 )
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger

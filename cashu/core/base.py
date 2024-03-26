@@ -45,6 +45,21 @@ class DLEQWallet(BaseModel):
 # ------- PROOFS -------
 
 
+class SpentState(Enum):
+    unspent = "UNSPENT"
+    spent = "SPENT"
+    pending = "PENDING"
+
+    def __str__(self):
+        return self.name
+
+
+class ProofState(BaseModel):
+    Y: str
+    state: SpentState
+    witness: Optional[str] = None
+
+
 class HTLCWitness(BaseModel):
     preimage: Optional[str] = None
     signature: Optional[str] = None
