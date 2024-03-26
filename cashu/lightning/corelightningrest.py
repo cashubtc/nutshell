@@ -70,7 +70,7 @@ class CoreLightningRestWallet(LightningBackend):
             logger.warning(f"Error closing wallet connection: {e}")
 
     async def status(self) -> StatusResponse:
-        r = await self.client.get(f"{self.url}/v1/channel/localremotebal", timeout=5)
+        r = await self.client.get(f"{self.url}/v1/listFunds", timeout=5)
         r.raise_for_status()
         if r.is_error or "error" in r.json():
             try:
@@ -88,7 +88,7 @@ class CoreLightningRestWallet(LightningBackend):
         data = r.json()
         if len(data) == 0:
             return StatusResponse(error_message="no data", balance=0)
-        balance_msat = int(data.get("localBalance") * 1000)
+        balance_msat = int(sum([c["our_amount_msat"] for c in data["channels"]]))
         return StatusResponse(error_message=None, balance=balance_msat)
 
     async def create_invoice(
@@ -212,7 +212,7 @@ class CoreLightningRestWallet(LightningBackend):
 
         checking_id = data["payment_hash"]
         preimage = data["payment_preimage"]
-        fee_msat = data["msatoshi_sent"] - data["msatoshi"]
+        fee_msat = data["amount_sent_msat"] - data["amount_msat"]
 
         return PaymentResponse(
             ok=self.statuses.get(data["status"]),
