@@ -1,21 +1,28 @@
 import math
-from typing import List, Optional, Tuple, Union
+import uuid
+from typing import Dict, List, Tuple, Union
 
 from loguru import logger
 
 from ..core.base import (
     Proof,
+    Unit,
+    WalletKeyset,
 )
 from ..core.db import Database
 from ..core.helpers import sum_proofs
-from ..core.p2pk import Secret
+from ..wallet.crud import (
+    update_proof,
+)
 from .protocols import SupportsDb, SupportsKeysets
 
 
 class WalletTransactions(SupportsDb, SupportsKeysets):
+    keysets: Dict[str, WalletKeyset]  # holds keysets
     keyset_id: str
     db: Database
     mint_keyset_ids: List[str]  # holds active keyset ids of the mint
+    unit: Unit
 
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         return math.ceil(len(proofs) * 0.1)
@@ -59,146 +66,78 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         fees = self.get_fees_for_proofs(send_proofs)
         return send_proofs, fees
 
+    async def _select_proofs_to_split(
+        self, proofs: List[Proof], amount_to_send: int
+    ) -> Tuple[List[Proof], int]:
+        """
+        Selects proofs that can be used with the current mint. Implements a simple coin selection algorithm.
 
-async def _select_proofs_to_split(
-    self, proofs: List[Proof], amount_to_send: int
-) -> Tuple[List[Proof], int]:
-    """
-    Selects proofs that can be used with the current mint. Implements a simple coin selection algorithm.
+        The algorithm has two objectives: Get rid of all tokens from old epochs and include additional proofs from
+        the current epoch starting from the proofs with the largest amount.
 
-    The algorithm has two objectives: Get rid of all tokens from old epochs and include additional proofs from
-    the current epoch starting from the proofs with the largest amount.
+        Rules:
+        1) Proofs that are not marked as reserved
+        2) Proofs that have a keyset id that is in self.mint_keyset_ids (all active keysets of mint)
+        3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
+        4) If the target amount is not reached, add proofs of the current keyset until it is.
 
-    Rules:
-    1) Proofs that are not marked as reserved
-    2) Proofs that have a keyset id that is in self.mint_keyset_ids (all active keysets of mint)
-    3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
-    4) If the target amount is not reached, add proofs of the current keyset until it is.
+        Args:
+            proofs (List[Proof]): List of proofs to select from
+            amount_to_send (int): Amount to select proofs for
 
-    Args:
-        proofs (List[Proof]): List of proofs to select from
-        amount_to_send (int): Amount to select proofs for
+        Returns:
+            List[Proof]: List of proofs to send (including fees)
+            int: Fees for the transaction
 
-    Returns:
-        List[Proof]: List of proofs to send (including fees)
-        int: Fees for the transaction
+        Raises:
+            Exception: If the balance is too low to send the amount
+        """
+        send_proofs: List[Proof] = []
 
-    Raises:
-        Exception: If the balance is too low to send the amount
-    """
-    send_proofs: List[Proof] = []
+        # select proofs that are not reserved
+        proofs = [p for p in proofs if not p.reserved]
 
-    # select proofs that are not reserved
-    proofs = [p for p in proofs if not p.reserved]
+        # select proofs that are in the active keysets of the mint
+        proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
 
-    # select proofs that are in the active keysets of the mint
-    proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
+        # check that enough spendable proofs exist
+        if sum_proofs(proofs) < amount_to_send:
+            raise Exception("balance too low.")
 
-    # check that enough spendable proofs exist
-    if sum_proofs(proofs) < amount_to_send:
-        raise Exception("balance too low.")
+        # add all proofs that have an older keyset than the current keyset of the mint
+        proofs_old_epochs = [
+            p for p in proofs if p.id != self.keysets[self.keyset_id].id
+        ]
+        send_proofs += proofs_old_epochs
 
-    # add all proofs that have an older keyset than the current keyset of the mint
-    proofs_old_epochs = [p for p in proofs if p.id != self.keysets[self.keyset_id].id]
-    send_proofs += proofs_old_epochs
-
-    # coinselect based on amount only from the current keyset
-    # start with the proofs with the largest amount and add them until the target amount is reached
-    proofs_current_epoch = [
-        p for p in proofs if p.id == self.keysets[self.keyset_id].id
-    ]
-    sorted_proofs_of_current_keyset = sorted(
-        proofs_current_epoch, key=lambda p: p.amount
-    )
-
-    fees = self.get_fees_for_proofs(send_proofs)
-
-    while sum_proofs(send_proofs) < amount_to_send + self.get_fees_for_proofs(
-        send_proofs
-    ):
-        proof_to_add = sorted_proofs_of_current_keyset.pop()
-        send_proofs.append(proof_to_add)
-
-    logger.trace(f"selected proof amounts: {[p.amount for p in send_proofs]}")
-    return send_proofs, fees
-
-
-async def get_pay_amount_with_fees(self, invoice: str):
-    """
-    Decodes the amount from a Lightning invoice and returns the
-    total amount (amount+fees) to be paid.
-    """
-    melt_quote = await self.melt_quote(invoice)
-    logger.debug(f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve.")
-    return melt_quote
-
-
-async def select_to_send(
-    self,
-    proofs: List[Proof],
-    amount: int,
-    set_reserved: bool = False,
-    offline: bool = False,
-    tolerance: int = 0,
-) -> Tuple[List[Proof], int]:
-    """
-    Selects proofs such that a certain amount can be sent.
-
-    Args:
-        proofs (List[Proof]): Proofs to split
-        amount (int): Amount to split to
-        set_reserved (bool, optional): If set, the proofs are marked as reserved.
-
-    Returns:
-        List[Proof]: Proofs to send
-        int: Fees for the transaction
-    """
-    # TODO: load mint from database for offline mode!
-    await self.load_mint()
-
-    send_proofs, fees = await self._select_proofs_to_send(proofs, amount, tolerance)
-    if not send_proofs and offline:
-        raise Exception(
-            "Could not select proofs in offline mode. Available amounts:"
-            f" {set([p.amount for p in proofs])}"
+        # coinselect based on amount only from the current keyset
+        # start with the proofs with the largest amount and add them until the target amount is reached
+        proofs_current_epoch = [
+            p for p in proofs if p.id == self.keysets[self.keyset_id].id
+        ]
+        sorted_proofs_of_current_keyset = sorted(
+            proofs_current_epoch, key=lambda p: p.amount
         )
 
-    if not send_proofs and not offline:
-        # we set the proofs as reserved later
-        _, send_proofs = await self.split_to_send(proofs, amount, set_reserved=False)
+        fees = self.get_fees_for_proofs(send_proofs)
 
-    if set_reserved:
-        await self.set_reserved(send_proofs, reserved=True)
-    return send_proofs, fees
+        while sum_proofs(send_proofs) < amount_to_send + self.get_fees_for_proofs(
+            send_proofs
+        ):
+            proof_to_add = sorted_proofs_of_current_keyset.pop()
+            send_proofs.append(proof_to_add)
 
+        logger.trace(f"selected proof amounts: {[p.amount for p in send_proofs]}")
+        return send_proofs, fees
 
-async def split_to_send(
-    self,
-    proofs: List[Proof],
-    amount: int,
-    secret_lock: Optional[Secret] = None,
-    set_reserved: bool = False,
-) -> Tuple[List[Proof], List[Proof]]:
-    """
-    Splits proofs such that a certain amount can be sent.
+    async def set_reserved(self, proofs: List[Proof], reserved: bool) -> None:
+        """Mark a proof as reserved or reset it in the wallet db to avoid reuse when it is sent.
 
-    Args:
-        proofs (List[Proof]): Proofs to split
-        amount (int): Amount to split to
-        secret_lock (Optional[str], optional): If set, a custom secret is used to lock new outputs. Defaults to None.
-        set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
-        is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
-        displayed to the user to be then sent to someone else. Defaults to False.
-
-    Returns:
-        Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
-    """
-
-    spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
-    print(f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)")
-    if secret_lock:
-        logger.debug(f"Spending conditions: {secret_lock}")
-    keep_proofs, send_proofs = await self.split(spendable_proofs, amount, secret_lock)
-    if set_reserved:
-        await self.set_reserved(send_proofs, reserved=True)
-    return keep_proofs, send_proofs
+        Args:
+            proofs (List[Proof]): List of proofs to mark as reserved
+            reserved (bool): Whether to mark the proofs as reserved or not
+        """
+        uuid_str = str(uuid.uuid1())
+        for proof in proofs:
+            proof.reserved = True
+            await update_proof(proof, reserved=reserved, send_id=uuid_str, db=self.db)

@@ -1,7 +1,8 @@
-from typing import Protocol
+from typing import Dict, Protocol
 
 import httpx
 
+from ..core.base import Unit, WalletKeyset
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 
@@ -15,7 +16,10 @@ class SupportsDb(Protocol):
 
 
 class SupportsKeysets(Protocol):
+    keysets: Dict[str, WalletKeyset]  # holds keysets
     keyset_id: str
+    mint_keyset_ids: list[str]
+    unit: Unit
 
 
 class SupportsHttpxClient(Protocol):
