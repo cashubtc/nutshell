@@ -212,7 +212,7 @@ class CoreLightningRestWallet(LightningBackend):
 
         checking_id = data["payment_hash"]
         preimage = data["payment_preimage"]
-        fee_msat = data["msatoshi_sent"] - data["msatoshi"]
+        fee_msat = data["amount_sent_msat"] - data["amount_msat"]
 
         return PaymentResponse(
             ok=self.statuses.get(data["status"]),
