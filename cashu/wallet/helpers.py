@@ -35,7 +35,7 @@ async def list_mints(wallet: Wallet):
     return mints
 
 
-async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
+async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3) -> Wallet:
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
@@ -57,6 +57,9 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
             redeem_proofs = [p for p in t.proofs if p.id == keyset_id]
             _, _ = await mint_wallet.redeem(redeem_proofs)
             print(f"Received {mint_wallet.unit.str(sum_proofs(redeem_proofs))}")
+
+    # return the last mint_wallet
+    return mint_wallet
 
 
 def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
@@ -120,7 +123,7 @@ def deserialize_token_from_string(token: str) -> TokenV3:
 async def receive(
     wallet: Wallet,
     tokenObj: TokenV3,
-):
+) -> Wallet:
     logger.debug(f"receive: {tokenObj}")
     proofs = [p for t in tokenObj.token for p in t.proofs]
 
@@ -128,7 +131,7 @@ async def receive(
 
     if includes_mint_info:
         # redeem tokens with new wallet instances
-        await redeem_TokenV3_multimint(
+        mint_wallet = await redeem_TokenV3_multimint(
             wallet,
             tokenObj,
         )
@@ -154,7 +157,7 @@ async def receive(
 
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)
-    return wallet.available_balance
+    return mint_wallet
 
 
 async def send(

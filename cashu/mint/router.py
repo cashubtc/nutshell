@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from loguru import logger
 
 from ..core.base import (
@@ -9,6 +9,7 @@ from ..core.base import (
     KeysetsResponseKeyset,
     KeysResponse,
     KeysResponseKeyset,
+    MintMeltMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostMeltQuoteRequest,
@@ -19,6 +20,7 @@ from ..core.base import (
     PostMintQuoteResponse,
     PostMintRequest,
     PostMintResponse,
+    PostRestoreRequest,
     PostRestoreResponse,
     PostSplitRequest,
     PostSplitResponse,
@@ -26,6 +28,7 @@ from ..core.base import (
 from ..core.errors import CashuError
 from ..core.settings import settings
 from ..mint.startup import ledger
+from .limit import limiter
 
 router: APIRouter = APIRouter()
 
@@ -41,19 +44,31 @@ async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
 
     # determine all method-unit pairs
-    method_unit_pairs: List[List[str]] = []
-    for method, unit_dict in ledger.backends.items():
-        for unit in unit_dict.keys():
-            method_unit_pairs.append([method.name, unit.name])
+    method_settings: Dict[int, List[MintMeltMethodSetting]] = {}
+    for nut in [4, 5]:
+        method_settings[nut] = []
+        for method, unit_dict in ledger.backends.items():
+            for unit in unit_dict.keys():
+                setting = MintMeltMethodSetting(method=method.name, unit=unit.name)
+
+                if nut == 4 and settings.mint_max_peg_in:
+                    setting.max_amount = settings.mint_max_peg_in
+                    setting.min_amount = 0
+                elif nut == 5 and settings.mint_max_peg_out:
+                    setting.max_amount = settings.mint_max_peg_out
+                    setting.min_amount = 0
+
+                method_settings[nut].append(setting)
+
     supported_dict = dict(supported=True)
 
     mint_features: Dict[int, Dict[str, Any]] = {
         4: dict(
-            methods=method_unit_pairs,
-            disabled=False,
+            methods=method_settings[4],
+            disabled=settings.mint_peg_out_only,
         ),
         5: dict(
-            methods=method_unit_pairs,
+            methods=method_settings[5],
             disabled=False,
         ),
         7: supported_dict,
@@ -164,7 +179,10 @@ async def keysets() -> KeysetsResponse:
     response_model=PostMintQuoteResponse,
     response_description="A payment request to mint tokens of a denomination",
 )
-async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def mint_quote(
+    request: Request, payload: PostMintQuoteRequest
+) -> PostMintQuoteResponse:
     """
     Request minting of new tokens. The mint responds with a Lightning invoice.
     This endpoint can be used for a Lightning invoice UX flow.
@@ -189,7 +207,8 @@ async def mint_quote(payload: PostMintQuoteRequest) -> PostMintQuoteResponse:
     response_model=PostMintQuoteResponse,
     response_description="Get an existing mint quote to check its status.",
 )
-async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     """
     Get mint quote state.
     """
@@ -214,7 +233,9 @@ async def get_mint_quote(quote: str) -> PostMintQuoteResponse:
         "A list of blinded signatures that can be used to create proofs."
     ),
 )
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def mint(
+    request: Request,
     payload: PostMintRequest,
 ) -> PostMintResponse:
     """
@@ -236,7 +257,10 @@ async def mint(
     response_model=PostMeltQuoteResponse,
     response_description="Melt tokens for a payment on a supported payment method.",
 )
-async def get_melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def get_melt_quote(
+    request: Request, payload: PostMeltQuoteRequest
+) -> PostMeltQuoteResponse:
     """
     Request a quote for melting tokens.
     """
@@ -252,7 +276,8 @@ async def get_melt_quote(payload: PostMeltQuoteRequest) -> PostMeltQuoteResponse
     response_model=PostMeltQuoteResponse,
     response_description="Get an existing melt quote to check its status.",
 )
-async def melt_quote(quote: str) -> PostMeltQuoteResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
     """
     Get melt quote state.
     """
@@ -282,7 +307,8 @@ async def melt_quote(quote: str) -> PostMeltQuoteResponse:
         " promises for change."
     ),
 )
-async def melt(payload: PostMeltRequest) -> PostMeltResponse:
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def melt(request: Request, payload: PostMeltRequest) -> PostMeltResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
@@ -306,7 +332,9 @@ async def melt(payload: PostMeltRequest) -> PostMeltResponse:
         "An array of blinded signatures that can be used to create proofs."
     ),
 )
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def swap(
+    request: Request,
     payload: PostSplitRequest,
 ) -> PostSplitResponse:
     """
@@ -345,14 +373,14 @@ async def check_state(
 @router.post(
     "/v1/restore",
     name="Restore",
-    summary="Restores a blinded signature from a secret",
+    summary="Restores blind signature for a set of outputs.",
     response_model=PostRestoreResponse,
     response_description=(
         "Two lists with the first being the list of the provided outputs that "
         "have an associated blinded signature which is given in the second list."
     ),
 )
-async def restore(payload: PostMintRequest) -> PostRestoreResponse:
+async def restore(payload: PostRestoreRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, signatures = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, signatures=signatures)

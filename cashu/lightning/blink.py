@@ -36,7 +36,6 @@ class BlinkWallet(LightningBackend):
     Create API Key at: https://dashboard.blink.sv/
     """
 
-    units = set([Unit.sat, Unit.usd])
     wallet_ids: Dict[Unit, str] = {}
     endpoint = "https://api.blink.sv/graphql"
     invoice_statuses = {"PENDING": None, "PAID": True, "EXPIRED": False}
@@ -47,7 +46,12 @@ class BlinkWallet(LightningBackend):
     }
     payment_statuses = {"SUCCESS": True, "PENDING": None, "FAILURE": False}
 
-    def __init__(self):
+    supported_units = set([Unit.sat, Unit.msat])
+    unit = Unit.sat
+
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         assert settings.mint_blink_key, "MINT_BLINK_KEY not set"
         self.client = httpx.AsyncClient(
             verify=not settings.debug,
@@ -297,7 +301,7 @@ class BlinkWallet(LightningBackend):
                                     ... on SettlementViaLn {
                                         preImage
                                     }
-                                } 
+                                }
                             }
                         }
                     }
@@ -440,7 +444,11 @@ class BlinkWallet(LightningBackend):
 
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
-        return PaymentQuoteResponse(checking_id=bolt11, fee=fees, amount=amount)
+        return PaymentQuoteResponse(
+            checking_id=bolt11,
+            fee=fees.to(self.unit, round="up"),
+            amount=amount.to(self.unit, round="up"),
+        )
 
 
 async def main():
