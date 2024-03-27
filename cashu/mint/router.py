@@ -63,16 +63,6 @@ async def info() -> GetInfoResponse:
     supported_dict = dict(supported=True)
 
     mint_features: Dict[int, Dict[str, Any]] = {
-        # 3: dict(
-        #     fees=[
-        #         dict(
-        #             unit=fee_entry.get("unit"),
-        #             fee=fee_entry.get("fee"),
-        #             batch=fee_entry.get("batch"),
-        #         )
-        #         for fee_entry in settings.mint_swap_fee
-        #     ],
-        # ),
         4: dict(
             methods=method_settings[4],
             disabled=settings.mint_peg_out_only,

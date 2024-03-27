@@ -1,5 +1,5 @@
 import math
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
 
@@ -255,9 +255,17 @@ class LedgerVerification(
             raise TransactionUnitError("input and output keysets have different units.")
         return units_proofs[0]
 
-    def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
+    def get_fees_for_proofs(self, proofs: List[Any]) -> int:
         """TODO: THIS IS A DUMMY FUNCTION. IMPLEMENT."""
-        return math.ceil(len(proofs) * 0.1)
+        if not len(set([self.keysets[p.id].unit for p in proofs])) == 1:
+            raise TransactionUnitError("inputs have different units.")
+        unit = self.keysets[proofs[0].id].unit
+        if not settings.mint_swap_fee.get(unit.name):
+            return 0
+
+        fee_per_batch = settings.mint_swap_fee[unit.name]["fee"]
+        batch_size = settings.mint_swap_fee[unit.name]["batch"]
+        return math.ceil(len(proofs) * fee_per_batch / batch_size)
 
     def _verify_equation_balanced(
         self,

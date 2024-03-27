@@ -176,6 +176,8 @@ class WalletSettings(CashuSettings):
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
     proofs_batch_size: int = Field(default=1000)
 
+    wallet_target_amount_count: int = Field(default=3)
+
 
 class LndRestFundingSource(MintSettings):
     mint_lnd_rest_endpoint: Optional[str] = Field(default=None)

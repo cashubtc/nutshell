@@ -394,6 +394,7 @@ class WalletKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: Union[bool, None] = True
+    input_fee_ppm: Optional[int] = None
 
     def __init__(
         self,
@@ -405,6 +406,7 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=True,
+        input_fee_ppm=None,
         use_deprecated_id=False,  # BACKWARDS COMPATIBILITY < 0.15.0
     ):
         self.valid_from = valid_from
@@ -412,6 +414,7 @@ class WalletKeyset:
         self.first_seen = first_seen
         self.active = active
         self.mint_url = mint_url
+        self.input_fee_ppm = input_fee_ppm
 
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
@@ -486,6 +489,7 @@ class MintKeyset:
     valid_to: Optional[str] = None
     first_seen: Optional[str] = None
     version: Optional[str] = None
+    input_fee_ppm: Optional[int] = None
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -502,6 +506,7 @@ class MintKeyset:
         active: Optional[bool] = None,
         unit: Optional[str] = None,
         version: Optional[str] = None,
+        input_fee_ppm: Optional[int] = None,
         id: str = "",
     ):
         self.derivation_path = derivation_path
@@ -523,6 +528,7 @@ class MintKeyset:
         self.first_seen = first_seen
         self.active = bool(active) if active is not None else False
         self.version = version or settings.version
+        self.input_fee_ppm = input_fee_ppm
 
         self.version_tuple = tuple(
             [int(i) for i in self.version.split(".")] if self.version else []

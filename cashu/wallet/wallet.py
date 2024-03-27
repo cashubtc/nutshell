@@ -829,17 +829,18 @@ class Wallet(
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
-    def split_wallet_state(self, amount: int, n_target: int = 3) -> List[int]:
+    def split_wallet_state(self, amount: int) -> List[int]:
         """This function produces an amount split for outputs based on the current state of the wallet.
-        It's objective is to fill up the wallet so that it reaches `n_target` of each amount.
+        Its objective is to fill up the wallet so that it reaches `n_target` coins of each amount.
 
         Args:
             amount (int): Amount to split
-            n_target (int, optional): Number of outputs to target for each amount. Defaults to 3.
 
         Returns:
             List[int]: List of amounts to mint
         """
+        # read the target count for each amount from settings
+        n_target = settings.wallet_target_amount_count
         amounts_we_have = [p.amount for p in self.proofs if p.reserved is not True]
         amounts_we_have.sort()
         all_possible_amounts = [2**i for i in range(settings.max_order)]
