@@ -9,18 +9,20 @@ from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
+from typing import Optional
 
 import click
 from click import Context
 from loguru import logger
 
-from ...core.base import TokenV3, Unit
+from ...core.base import Invoice, TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.logging import configure_logger
 from ...core.settings import settings
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
+    get_lightning_invoice,
     get_lightning_invoices,
     get_reserved_proofs,
     get_seed_and_mnemonic,
@@ -719,14 +721,23 @@ async def locks(ctx):
     help="Show all pending invoices",
     type=bool,
 )
+@click.option(
+    "--tests",
+    "-t",
+    is_flag=True,
+    default=False,
+    help="Run in test mode (do not try to mint pending invoices)",
+)
 @click.pass_context
 @coro
-async def invoices(ctx, paid: bool, unpaid: bool, pending: bool):
+async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, tests: bool):
     wallet: Wallet = ctx.obj["WALLET"]
 
     if paid and unpaid:
         print("You should only choose one option: either --only-paid or --only-unpaid")
         return
+
+    await wallet.load_mint()
 
     paid_arg = None
     if unpaid:
@@ -739,33 +750,62 @@ async def invoices(ctx, paid: bool, unpaid: bool, pending: bool):
         paid=paid_arg,
         pending=pending or None,
     )
-    if len(invoices):
-        print("")
-        print("--------------------------\n")
-        for invoice in invoices:
-            print(f"Paid: {invoice.paid}")
-            print(f"Incoming: {invoice.amount > 0}")
-            print(f"Amount: {abs(invoice.amount)}")
-            if invoice.id:
-                print(f"ID: {invoice.id}")
-            if invoice.preimage:
-                print(f"Preimage: {invoice.preimage}")
-            if invoice.time_created:
-                d = datetime.fromtimestamp(
-                    int(float(invoice.time_created)), timezone.utc
-                ).strftime("%Y-%m-%d %H:%M:%S")
-                print(f"Created: {d}")
-            if invoice.time_paid:
-                d = datetime.fromtimestamp(
-                    (int(float(invoice.time_paid))), timezone.utc
-                ).strftime("%Y-%m-%d %H:%M:%S")
-                print(f"Paid: {d}")
-            print("")
-            print(f"Payment request: {invoice.bolt11}")
-            print("")
-            print("--------------------------\n")
-    else:
+
+    if len(invoices) == 0:
         print("No invoices found.")
+        return
+
+    async def _try_to_mint_pending_invoice(amount: int, id: str) -> Optional[Invoice]:
+        try:
+            await wallet.mint(amount, id)
+            return await get_lightning_invoice(db=wallet.db, id=id)
+        except Exception as e:
+            logger.error(f"Could not mint pending invoice [{id}]: {e}")
+            return None
+
+    def _print_invoice_info(invoice: Invoice):
+        print("\n--------------------------\n")
+        print(f"Amount: {abs(invoice.amount)}")
+        print(f"ID: {invoice.id}")
+        print(f"Paid: {invoice.paid}")
+        print(f"Incoming: {invoice.amount > 0}")
+
+        if invoice.preimage:
+            print(f"Preimage: {invoice.preimage}")
+        if invoice.time_created:
+            d = datetime.fromtimestamp(
+                int(float(invoice.time_created)), timezone.utc
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"Created at: {d}")
+        if invoice.time_paid:
+            d = datetime.fromtimestamp(
+                (int(float(invoice.time_paid))), timezone.utc
+            ).strftime("%Y-%m-%d %H:%M:%S")
+            print(f"Paid at: {d}")
+        print(f"\nPayment request: {invoice.bolt11}")
+
+    invoices_printed_count = 0
+    for invoice in invoices:
+        # Tries to mint pending invoice
+        is_pending_invoice = invoice.out is False and invoice.paid is False
+        if is_pending_invoice and not tests:
+            updated_invoice = await _try_to_mint_pending_invoice(
+                invoice.amount, invoice.id
+            )
+            # If the mint ran successfully and we are querying for pending or unpaid invoices, do not print it
+            if pending or unpaid:
+                continue
+            # Otherwise, print the invoice with updated values
+            if updated_invoice:
+                invoice = updated_invoice
+
+        _print_invoice_info(invoice)
+        invoices_printed_count += 1
+
+    if invoices_printed_count == 0:
+        print("No invoices found.")
+    else:
+        print("\n--------------------------\n")
 
 
 @cli.command("wallets", help="List of all available wallets.")
