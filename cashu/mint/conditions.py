@@ -255,9 +255,9 @@ class LedgerSpendingConditions:
         # check if all secrets are P2PK
         # NOTE: This is redundant, because P2PKSecret.from_secret() already checks for the kind
         # Leaving it in for explicitness
-        if not all([
-            SecretKind(secret.kind) == SecretKind.P2PK for secret in p2pk_secrets
-        ]):
+        if not all(
+            [SecretKind(secret.kind) == SecretKind.P2PK for secret in p2pk_secrets]
+        ):
             # not all secrets are P2PK
             return True
 

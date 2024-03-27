@@ -2,17 +2,20 @@ from ..core.db import Connection, Database
 
 
 async def m000_create_migrations_table(conn: Connection):
-    await conn.execute("""
+    await conn.execute(
+        """
     CREATE TABLE IF NOT EXISTS dbversions (
         db TEXT PRIMARY KEY,
         version INT NOT NULL
     )
-    """)
+    """
+    )
 
 
 async def m001_initial(db: Database):
     async with db.connect() as conn:
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS proofs (
                     amount {db.big_int} NOT NULL,
                     C TEXT NOT NULL,
@@ -21,9 +24,11 @@ async def m001_initial(db: Database):
                     UNIQUE (secret)
 
                 );
-            """)
+            """
+        )
 
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS proofs_used (
                     amount {db.big_int} NOT NULL,
                     C TEXT NOT NULL,
@@ -32,25 +37,30 @@ async def m001_initial(db: Database):
                     UNIQUE (secret)
 
                 );
-            """)
+            """
+        )
 
-        await conn.execute("""
+        await conn.execute(
+            """
             CREATE VIEW IF NOT EXISTS balance AS
             SELECT COALESCE(SUM(s), 0) AS balance FROM (
                 SELECT SUM(amount) AS s
                 FROM proofs
                 WHERE amount > 0
             );
-        """)
+        """
+        )
 
-        await conn.execute("""
+        await conn.execute(
+            """
             CREATE VIEW IF NOT EXISTS balance_used AS
             SELECT COALESCE(SUM(s), 0) AS used FROM (
                 SELECT SUM(amount) AS s
                 FROM proofs_used
                 WHERE amount > 0
             );
-        """)
+        """
+        )
 
 
 async def m002_add_proofs_reserved(db: Database):
@@ -96,7 +106,8 @@ async def m005_wallet_keysets(db: Database):
     Stores mint keysets from different mints and epochs.
     """
     async with db.connect() as conn:
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
                 CREATE TABLE IF NOT EXISTS keysets (
                     id TEXT,
                     mint_url TEXT,
@@ -108,7 +119,8 @@ async def m005_wallet_keysets(db: Database):
                     UNIQUE (id, mint_url)
 
                 );
-            """)
+            """
+        )
 
         await conn.execute("ALTER TABLE proofs ADD COLUMN id TEXT")
         await conn.execute("ALTER TABLE proofs_used ADD COLUMN id TEXT")
@@ -119,7 +131,8 @@ async def m006_invoices(db: Database):
     Stores Lightning invoices.
     """
     async with db.connect() as conn:
-        await conn.execute(f"""
+        await conn.execute(
+            f"""
             CREATE TABLE IF NOT EXISTS invoices (
                 amount INTEGER NOT NULL,
                 pr TEXT NOT NULL,
@@ -132,7 +145,8 @@ async def m006_invoices(db: Database):
                 UNIQUE (hash)
 
             );
-        """)
+        """
+        )
 
 
 async def m007_nostr(db: Database):
@@ -140,12 +154,14 @@ async def m007_nostr(db: Database):
     Stores timestamps of nostr operations.
     """
     async with db.connect() as conn:
-        await conn.execute("""
+        await conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS nostr (
                 type TEXT NOT NULL,
                 last TIMESTAMP DEFAULT NULL
             )
-            """)
+            """
+        )
         await conn.execute(
             """
             INSERT INTO nostr
@@ -172,14 +188,16 @@ async def m009_privatekey_and_determinstic_key_derivation(db: Database):
         await conn.execute("ALTER TABLE keysets ADD COLUMN counter INTEGER DEFAULT 0")
         await conn.execute("ALTER TABLE proofs ADD COLUMN derivation_path TEXT")
         await conn.execute("ALTER TABLE proofs_used ADD COLUMN derivation_path TEXT")
-        await conn.execute("""
+        await conn.execute(
+            """
                 CREATE TABLE IF NOT EXISTS seed (
                 seed TEXT NOT NULL,
                 mnemonic TEXT NOT NULL,
 
                 UNIQUE (seed, mnemonic)
                 );
-            """)
+            """
+        )
         # await conn.execute("INSERT INTO secret_derivation (counter) VALUES (0)")
 
 

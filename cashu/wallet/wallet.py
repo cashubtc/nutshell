@@ -1488,7 +1488,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
         Args:
             proofs (List[Proof]): Which proofs to delete
-            check_spendable (bool, optional): Asks the mint to check whether proofs are already spent before deleting them. Defaults to True.
+            check_spendable (bool, optional): Asks the mint to check whether proofs are already spent before deleting them. Defaults to False.
 
         Returns:
             List[Proof]: List of proofs that are still spendable.

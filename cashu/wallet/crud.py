@@ -67,10 +67,12 @@ async def get_reserved_proofs(
     db: Database,
     conn: Optional[Connection] = None,
 ) -> List[Proof]:
-    rows = await (conn or db).fetchall("""
+    rows = await (conn or db).fetchall(
+        """
         SELECT * from proofs
         WHERE reserved
-        """)
+        """
+    )
     return [Proof.from_dict(dict(r)) for r in rows]
 
 
@@ -279,14 +281,21 @@ async def get_lightning_invoice(
 async def get_lightning_invoices(
     db: Database,
     paid: Optional[bool] = None,
+    pending: Optional[bool] = None,
     conn: Optional[Connection] = None,
 ) -> List[Invoice]:
     clauses: List[Any] = []
     values: List[Any] = []
 
-    if paid is not None:
+    if paid is not None and not pending:
         clauses.append("paid = ?")
         values.append(paid)
+
+    if pending:
+        clauses.append("paid = ?")
+        values.append(False)
+        clauses.append("out = ?")
+        values.append(False)
 
     where = ""
     if clauses:
