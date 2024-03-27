@@ -27,6 +27,7 @@ def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, st
     ][0]
     return invoice, invoice_id
 
+
 def get_invoice_from_invoices_command(output: str) -> dict[str, str]:
     splitted = output.split("\n")
     removed_empty_and_hiphens = [
@@ -38,6 +39,7 @@ def get_invoice_from_invoices_command(output: str) -> dict[str, str]:
     }
 
     return dict_output
+
 
 async def reset_invoices(wallet: Wallet):
     await wallet.db.execute("DELETE FROM invoices")
@@ -197,6 +199,7 @@ def test_invoices(cli_prefix):
     assert get_invoice_from_invoices_command(result.output)["ID"] == invoice.id
     assert get_invoice_from_invoices_command(result.output)["Paid"] == "True"
 
+
 def test_invoices_without_minting(cli_prefix):
     # arrange
     wallet1 = asyncio.run(init_wallet())
@@ -238,7 +241,8 @@ def test_invoices_with_onlypaid_option(cli_prefix):
     print("INVOICES --only-paid")
     assert result.exception is None
     assert result.exit_code == 0
-    assert "No invoices found." in result.output  
+    assert "No invoices found." in result.output
+
 
 def test_invoices_with_onlypaid_option_without_minting(cli_prefix):
     # arrange
@@ -257,7 +261,7 @@ def test_invoices_with_onlypaid_option_without_minting(cli_prefix):
     print("INVOICES --only-paid --tests")
     assert result.exception is None
     assert result.exit_code == 0
-    assert "No invoices found." in result.output    
+    assert "No invoices found." in result.output
 
 
 def test_invoices_with_onlyunpaid_option(cli_prefix):
@@ -278,6 +282,7 @@ def test_invoices_with_onlyunpaid_option(cli_prefix):
     assert result.exception is None
     assert result.exit_code == 0
     assert "No invoices found." in result.output
+
 
 def test_invoices_with_onlyunpaid_option_without_minting(cli_prefix):
     # arrange
@@ -336,6 +341,7 @@ def test_invoices_with_pending_option(cli_prefix):
     assert result.exception is None
     assert result.exit_code == 0
     assert "No invoices found." in result.output
+
 
 def test_invoices_with_pending_option_without_minting(cli_prefix):
     # arrange

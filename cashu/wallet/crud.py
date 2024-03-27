@@ -67,10 +67,12 @@ async def get_reserved_proofs(
     db: Database,
     conn: Optional[Connection] = None,
 ) -> List[Proof]:
-    rows = await (conn or db).fetchall("""
+    rows = await (conn or db).fetchall(
+        """
         SELECT * from proofs
         WHERE reserved
-        """)
+        """
+    )
     return [Proof.from_dict(dict(r)) for r in rows]
 
 

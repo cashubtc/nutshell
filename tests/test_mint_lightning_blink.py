@@ -4,7 +4,7 @@ from httpx import Response
 
 from cashu.core.base import Amount, MeltQuote, Unit
 from cashu.core.settings import settings
-from cashu.lightning.blink import MINIMUM_FEE_MSAT, BlinkWallet
+from cashu.lightning.blink import MINIMUM_FEE_MSAT, BlinkWallet  # type: ignore
 
 settings.mint_blink_key = "123"
 blink = BlinkWallet(unit=Unit.sat)
