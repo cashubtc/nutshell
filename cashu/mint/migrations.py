@@ -439,6 +439,7 @@ async def m014_proofs_add_Y_column(db: Database):
         # we have to drop the balance views first and recreate them later
         await drop_balance_views(db, conn)
 
+    async with db.connect() as conn:
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN Y TEXT"
         )
@@ -481,6 +482,7 @@ async def m014_proofs_add_Y_column(db: Database):
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_used_old')}")
 
+    async with db.connect() as conn:
         # add column Y to proofs_pending
         await conn.execute(
             f"ALTER TABLE {table_with_schema(db, 'proofs_pending')} ADD COLUMN Y TEXT"
@@ -527,6 +529,7 @@ async def m014_proofs_add_Y_column(db: Database):
 
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_pending_old')}")
 
+    async with db.connect() as conn:
         # recreate the balance views
         await create_balance_views(db, conn)
 
