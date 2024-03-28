@@ -179,6 +179,7 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_enable_mpp_experimental: bool = Field(default=False)
 
 
 class CoreLightningRestFundingSource(MintSettings):

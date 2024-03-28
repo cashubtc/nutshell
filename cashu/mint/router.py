@@ -49,7 +49,9 @@ async def info() -> GetInfoResponse:
         method_settings[nut] = []
         for method, unit_dict in ledger.backends.items():
             for unit in unit_dict.keys():
-                setting = MintMeltMethodSetting(method=method.name, unit=unit.name)
+                setting = MintMeltMethodSetting(
+                    method=method.name, unit=unit.name, mpp=unit_dict[unit].supports_mpp
+                )
 
                 if nut == 4 and settings.mint_max_peg_in:
                     setting.max_amount = settings.mint_max_peg_in
@@ -62,6 +64,7 @@ async def info() -> GetInfoResponse:
 
     supported_dict = dict(supported=True)
 
+    supported_dict = dict(supported=True)
     mint_features: Dict[int, Dict[str, Any]] = {
         4: dict(
             methods=method_settings[4],

@@ -3,7 +3,12 @@ from typing import Coroutine, Optional, Union
 
 from pydantic import BaseModel
 
-from ..core.base import Amount, MeltQuote, Unit
+from ..core.base import (
+    Amount,
+    MeltQuote,
+    PostMeltQuoteRequest,
+    Unit,
+)
 
 
 class StatusResponse(BaseModel):
@@ -62,6 +67,7 @@ class PaymentStatus(BaseModel):
 
 
 class LightningBackend(ABC):
+    supports_mpp: bool = False
     supported_units: set[Unit]
     unit: Unit
 
@@ -107,7 +113,7 @@ class LightningBackend(ABC):
     @abstractmethod
     async def get_payment_quote(
         self,
-        bolt11: str,
+        melt_quote: PostMeltQuoteRequest,
     ) -> PaymentQuoteResponse:
         pass
 

@@ -101,12 +101,12 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
-    mint_id: Union[
-        None, str
-    ] = None  # holds the id of the mint operation that created this proof
-    melt_id: Union[
-        None, str
-    ] = None  # holds the id of the melt operation that destroyed this proof
+    mint_id: Union[None, str] = (
+        None  # holds the id of the mint operation that created this proof
+    )
+    melt_id: Union[None, str] = (
+        None  # holds the id of the melt operation that destroyed this proof
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -307,6 +307,7 @@ class MintMeltMethodSetting(BaseModel):
     unit: str
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
+    mpp: Optional[bool] = None
 
 
 class GetInfoResponse(BaseModel):
@@ -415,6 +416,7 @@ class PostMeltQuoteRequest(BaseModel):
     request: str = Field(
         ..., max_length=settings.mint_max_request_length
     )  # output payment request
+    amount: Optional[int] = Field(default=None, gt=0)  # input amount
 
 
 class PostMeltQuoteResponse(BaseModel):

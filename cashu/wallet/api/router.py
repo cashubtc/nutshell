@@ -189,7 +189,7 @@ async def swap(
 
     # pay invoice from outgoing mint
     await outgoing_wallet.load_proofs(reload=True)
-    quote = await outgoing_wallet.get_pay_amount_with_fees(invoice.bolt11)
+    quote = await outgoing_wallet.request_melt(invoice.bolt11)
     total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
@@ -197,7 +197,7 @@ async def swap(
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(
+    await outgoing_wallet.melt(
         send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
     )
 
