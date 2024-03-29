@@ -990,6 +990,7 @@ class Wallet(
         # generate splits for outputs
         send_outputs_no_fee = amount_split(send_amt)
         # add fees to outputs to send because we're nice
+        # TODO: fees_for_outputs does not include the fees to pay for themselves!
         fees_for_outputs = amount_split(self.get_fees_for_proofs(send_outputs_no_fee))
         send_outputs = send_outputs_no_fee + fees_for_outputs
         logger.debug(
