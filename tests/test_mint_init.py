@@ -2,7 +2,7 @@ from typing import List
 
 import pytest
 
-from cashu.core.base import Proof
+from cashu.core.base import MeltQuote, Proof, SpentState
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
 from cashu.core.settings import settings
@@ -126,3 +126,92 @@ async def test_decrypt_seed():
         pubkeys_encrypted[1].serialize().hex()
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
+
+
+async def create_pending_melts(ledger: Ledger) -> Proof:
+    quote_id = "test1"
+    await ledger.crud.store_melt_quote(
+        quote=MeltQuote(
+            quote=quote_id,
+            method="bolt11",
+            request="asdasd",
+            checking_id="checking_id",
+            unit="sat",
+            paid=False,
+            amount=100,
+            fee_reserve=1,
+        ),
+        db=ledger.db,
+    )
+    pending_proof = Proof(amount=123, C="asdasd", secret="asdasd", id=quote_id)
+    await ledger.crud.set_proof_pending(
+        db=ledger.db,
+        proof=pending_proof,
+        quote_id=quote_id,
+    )
+    # expect that no pending tokens are in db anymore
+    melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
+        db=ledger.db
+    )
+    assert melt_quotes
+    return pending_proof
+
+
+@pytest.mark.asyncio
+async def test_startup_pending_quote_success(ledger: Ledger):
+    pending_proof = await create_pending_melts(ledger)
+    states = await ledger.check_proofs_state([pending_proof.Y])
+    assert states[0].state == SpentState.pending
+    settings.fakewallet_payment_state = True
+    # run startup routinge
+    await ledger.startup_ledger()
+
+    # expect that no pending tokens are in db anymore
+    melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
+        db=ledger.db
+    )
+    assert not melt_quotes
+
+    # expect that proofs are spent
+    states = await ledger.check_proofs_state([pending_proof.Y])
+    assert states[0].state == SpentState.spent
+
+
+@pytest.mark.asyncio
+async def test_startup_pending_quote_failure(ledger: Ledger):
+    pending_proof = await create_pending_melts(ledger)
+    states = await ledger.check_proofs_state([pending_proof.Y])
+    assert states[0].state == SpentState.pending
+    settings.fakewallet_payment_state = False
+    # run startup routinge
+    await ledger.startup_ledger()
+
+    # expect that no pending tokens are in db anymore
+    melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
+        db=ledger.db
+    )
+    assert not melt_quotes
+
+    # expect that proofs are unspent
+    states = await ledger.check_proofs_state([pending_proof.Y])
+    assert states[0].state == SpentState.unspent
+
+
+@pytest.mark.asyncio
+async def test_startup_pending_quote_pending(ledger: Ledger):
+    pending_proof = await create_pending_melts(ledger)
+    states = await ledger.check_proofs_state([pending_proof.Y])
+    assert states[0].state == SpentState.pending
+    settings.fakewallet_payment_state = None
+    # run startup routinge
+    await ledger.startup_ledger()
+
+    # expect that melt quote is still pending
+    melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
+        db=ledger.db
+    )
+    assert melt_quotes
+
+    # expect that proofs are unspent
+    states = await ledger.check_proofs_state([pending_proof.Y])
+    assert states[0].state == SpentState.pending
