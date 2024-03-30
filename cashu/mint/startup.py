@@ -79,31 +79,6 @@ async def rotate_keys(n_seconds=60):
 
 async def start_mint_init():
     await migrate_databases(ledger.db, migrations)
-    if settings.mint_cache_secrets:
-        await ledger.load_used_proofs()
-    await ledger.init_keysets()
-
-    for derivation_path in settings.mint_derivation_path_list:
-        await ledger.activate_keyset(derivation_path=derivation_path)
-
-    for method in ledger.backends:
-        for unit in ledger.backends[method]:
-            logger.info(
-                f"Using {ledger.backends[method][unit].__class__.__name__} backend for"
-                f" method: '{method.name}' and unit: '{unit.name}'"
-            )
-            status = await ledger.backends[method][unit].status()
-            if status.error_message:
-                logger.warning(
-                    "The backend for"
-                    f" {ledger.backends[method][unit].__class__.__name__} isn't"
-                    f" working properly: '{status.error_message}'",
-                    RuntimeWarning,
-                )
-            logger.info(f"Backend balance: {status.balance} {unit.name}")
-
-    logger.info(f"Data dir: {settings.cashu_dir}")
-
     await ledger.startup_ledger()
     logger.info("Mint started.")
     # asyncio.create_task(rotate_keys())

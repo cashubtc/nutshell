@@ -96,9 +96,36 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     # ------- STARTUP -------
 
     async def startup_ledger(self):
-        await self.check_pending_proofs_and_melt_quotes()
+        await self._startup_ledger()
+        await self._check_pending_proofs_and_melt_quotes()
 
-    async def check_pending_proofs_and_melt_quotes(self):
+    async def _startup_ledger(self):
+        if settings.mint_cache_secrets:
+            await self.load_used_proofs()
+        await self.init_keysets()
+
+        for derivation_path in settings.mint_derivation_path_list:
+            await self.activate_keyset(derivation_path=derivation_path)
+
+        for method in self.backends:
+            for unit in self.backends[method]:
+                logger.info(
+                    f"Using {self.backends[method][unit].__class__.__name__} backend for"
+                    f" method: '{method.name}' and unit: '{unit.name}'"
+                )
+                status = await self.backends[method][unit].status()
+                if status.error_message:
+                    logger.warning(
+                        "The backend for"
+                        f" {self.backends[method][unit].__class__.__name__} isn't"
+                        f" working properly: '{status.error_message}'",
+                        RuntimeWarning,
+                    )
+                logger.info(f"Backend balance: {status.balance} {unit.name}")
+
+        logger.info(f"Data dir: {settings.cashu_dir}")
+
+    async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending proofs for their melt state and either invalidates
         them for a successful melt or deletes them if the melt failed.
         """
@@ -114,7 +141,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 quote_id=quote.quote, db=self.db
             )
             # check with the backend whether the quote has been paid during downtime
-            payment = await self.backends[Method.bolt11][
+            payment = await self.backends[Method[quote.method]][
                 Unit[quote.unit]
             ].get_payment_status(quote.checking_id)
             if payment.paid:
@@ -125,24 +152,20 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     quote.fee_paid = payment.fee.to(Unit[quote.unit]).amount
                 quote.proof = payment.preimage or ""
                 await self.crud.update_melt_quote(quote=quote, db=self.db)
-
                 # invalidate proofs
                 await self._invalidate_proofs(
                     proofs=pending_proofs, quote_id=quote.quote
                 )
-
                 # unset pending
                 await self._unset_proofs_pending(pending_proofs)
-
             elif payment.failed:
                 logger.info(f"Melt quote {quote.quote} state: failed")
 
                 # unset pending
                 await self._unset_proofs_pending(pending_proofs)
-
             elif payment.pending:
                 logger.info(f"Melt quote {quote.quote} state: pending")
-                continue
+                pass
             else:
                 logger.error("Melt quote state unknown")
                 pass
