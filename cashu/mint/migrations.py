@@ -531,13 +531,19 @@ async def m014_proofs_add_Y_column(db: Database):
         await create_balance_views(db, conn)
 
 
-async def m015_add_index_Y_to_proofs_used(db: Database):
+async def m015_add_index_Y_to_proofs_used_and_pending(db: Database):
     # create index on proofs_used table for Y
     async with db.connect() as conn:
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS"
             " proofs_used_Y_idx ON"
             f" {table_with_schema(db, 'proofs_used')} (Y)"
+        )
+
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS"
+            " proofs_pending_Y_idx ON"
+            f" {table_with_schema(db, 'proofs_pending')} (Y)"
         )
 
 
@@ -606,3 +612,112 @@ async def m016_recompute_Y_with_new_h2c(db: Database):
             await conn.execute("DROP TABLE tmp_proofs_used")
         if len(proofs_pending_data):
             await conn.execute("DROP TABLE tmp_proofs_pending")
+
+
+async def m017_foreign_keys_proof_tables(db: Database):
+    """
+    Create a foreign key relationship between the keyset id in the proof tables and the keyset table.
+
+    Create a foreign key relationship between the keyset id in the promises table and the keyset table.
+
+    Create a foreign key relationship between the quote id in the melt_quotes
+    and the proofs_used and proofs_pending tables.
+
+    NOTE: We do not use ALTER TABLE directly to add the new column with a foreign key relation because SQLIte does not support it.
+    """
+
+    async with db.connect() as conn:
+        # drop the balance views first
+        await drop_balance_views(db, conn)
+
+        # add foreign key constraints to proofs_used table
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_used_new')} (
+                    amount INTEGER NOT NULL,
+                    C TEXT NOT NULL,
+                    secret TEXT NOT NULL,
+                    Y TEXT,
+                    id TEXT,
+                    witness TEXT,
+                    created TIMESTAMP,
+                    melt_quote TEXT,
+
+                    FOREIGN KEY (id) REFERENCES {table_with_schema(db, 'keysets')}(id),
+                    FOREIGN KEY (melt_quote) REFERENCES {table_with_schema(db, 'melt_quotes')}(quote),
+
+                    UNIQUE (Y)
+                );
+            """
+        )
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'proofs_used_new')} (amount, C, secret, Y, id, witness, created) SELECT amount, C, secret, Y, id, witness, created FROM {table_with_schema(db, 'proofs_used')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_used')}")
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'proofs_used_new')} RENAME TO {table_with_schema(db, 'proofs_used')}"
+        )
+
+        # add foreign key constraints to proofs_pending table
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_pending_new')} (
+                    amount INTEGER NOT NULL,
+                    C TEXT NOT NULL,
+                    secret TEXT NOT NULL,
+                    Y TEXT,
+                    id TEXT,
+                    witness TEXT,
+                    created TIMESTAMP,
+                    melt_quote TEXT,
+
+                    FOREIGN KEY (id) REFERENCES {table_with_schema(db, 'keysets')}(id),
+                    FOREIGN KEY (melt_quote) REFERENCES {table_with_schema(db, 'melt_quotes')}(quote),
+
+                    UNIQUE (Y)
+                );
+            """
+        )
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'proofs_pending_new')} (amount, C, secret, Y, id, created) SELECT amount, C, secret, Y, id, created FROM {table_with_schema(db, 'proofs_pending')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_pending')}")
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'proofs_pending_new')} RENAME TO {table_with_schema(db, 'proofs_pending')}"
+        )
+
+        # add foreign key constraints to promises table
+        await conn.execute(
+            f"""
+                    CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'promises_new')} (
+                        amount INTEGER NOT NULL,
+                        B_b TEXT NOT NULL,
+                        C_b TEXT NOT NULL,
+                        id TEXT,
+                        e TEXT,
+                        s TEXT,
+                        created TIMESTAMP,
+                        mint_quote TEXT,
+                        swap_id TEXT,
+
+                        FOREIGN KEY (id) REFERENCES {table_with_schema(db, 'keysets')}(id),
+                        FOREIGN KEY (mint_quote) REFERENCES {table_with_schema(db, 'mint_quotes')}(quote),
+                        
+                        UNIQUE (B_b)
+                    );
+                """
+        )
+
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'promises_new')} (amount, B_b, C_b, id, e, s, created) SELECT amount, B_b, C_b, id, e, s, created FROM {table_with_schema(db, 'promises')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'promises')}")
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'promises_new')} RENAME TO {table_with_schema(db, 'promises')}"
+        )
+
+        # recreate the balance views
+        await create_balance_views(db, conn)
+
+    # recreate indices
+    await m015_add_index_Y_to_proofs_used_and_pending(db)

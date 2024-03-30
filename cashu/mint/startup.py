@@ -103,5 +103,7 @@ async def start_mint_init():
             logger.info(f"Backend balance: {status.balance} {unit.name}")
 
     logger.info(f"Data dir: {settings.cashu_dir}")
+
+    await ledger.startup_ledger()
     logger.info("Mint started.")
     # asyncio.create_task(rotate_keys())

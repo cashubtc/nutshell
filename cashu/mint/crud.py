@@ -34,8 +34,7 @@ class LedgerCrud(ABC):
         derivation_path: str = "",
         seed: str = "",
         conn: Optional[Connection] = None,
-    ) -> List[MintKeyset]:
-        ...
+    ) -> List[MintKeyset]: ...
 
     @abstractmethod
     async def get_spent_proofs(
@@ -43,8 +42,7 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[Proof]:
-        ...
+    ) -> List[Proof]: ...
 
     async def get_proof_used(
         self,
@@ -52,8 +50,7 @@ class LedgerCrud(ABC):
         Y: str,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[Proof]:
-        ...
+    ) -> Optional[Proof]: ...
 
     @abstractmethod
     async def invalidate_proof(
@@ -61,9 +58,26 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         proof: Proof,
+        quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
+
+    @abstractmethod
+    async def get_all_melt_quotes_from_pending_proofs(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]: ...
+
+    @abstractmethod
+    async def get_pending_proofs_for_quote(
+        self,
+        *,
+        quote_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Proof]: ...
 
     @abstractmethod
     async def get_proofs_pending(
@@ -72,8 +86,7 @@ class LedgerCrud(ABC):
         Ys: List[str],
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[Proof]:
-        ...
+    ) -> List[Proof]: ...
 
     @abstractmethod
     async def set_proof_pending(
@@ -81,15 +94,18 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         proof: Proof,
+        quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def unset_proof_pending(
-        self, *, proof: Proof, db: Database, conn: Optional[Connection] = None
-    ) -> None:
-        ...
+        self,
+        *,
+        proof: Proof,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
 
     @abstractmethod
     async def store_keyset(
@@ -98,16 +114,14 @@ class LedgerCrud(ABC):
         db: Database,
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_balance(
         self,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> int:
-        ...
+    ) -> int: ...
 
     @abstractmethod
     async def store_promise(
@@ -121,8 +135,7 @@ class LedgerCrud(ABC):
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_promise(
@@ -131,8 +144,7 @@ class LedgerCrud(ABC):
         db: Database,
         B_: str,
         conn: Optional[Connection] = None,
-    ) -> Optional[BlindedSignature]:
-        ...
+    ) -> Optional[BlindedSignature]: ...
 
     @abstractmethod
     async def store_mint_quote(
@@ -141,8 +153,7 @@ class LedgerCrud(ABC):
         quote: MintQuote,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_mint_quote(
@@ -151,8 +162,7 @@ class LedgerCrud(ABC):
         quote_id: str,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[MintQuote]:
-        ...
+    ) -> Optional[MintQuote]: ...
 
     @abstractmethod
     async def get_mint_quote_by_request(
@@ -161,8 +171,7 @@ class LedgerCrud(ABC):
         request: str,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[MintQuote]:
-        ...
+    ) -> Optional[MintQuote]: ...
 
     @abstractmethod
     async def update_mint_quote(
@@ -171,8 +180,7 @@ class LedgerCrud(ABC):
         quote: MintQuote,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     # @abstractmethod
     # async def update_mint_quote_paid(
@@ -191,8 +199,7 @@ class LedgerCrud(ABC):
         quote: MeltQuote,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_melt_quote(
@@ -202,8 +209,7 @@ class LedgerCrud(ABC):
         db: Database,
         checking_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> Optional[MeltQuote]:
-        ...
+    ) -> Optional[MeltQuote]: ...
 
     @abstractmethod
     async def update_melt_quote(
@@ -212,8 +218,7 @@ class LedgerCrud(ABC):
         quote: MeltQuote,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
 
 class LedgerCrudSqlite(LedgerCrud):
@@ -286,14 +291,15 @@ class LedgerCrudSqlite(LedgerCrud):
         *,
         db: Database,
         proof: Proof,
+        quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
     ) -> None:
         # we add the proof and secret to the used list
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'proofs_used')}
-            (amount, C, secret, Y, id, witness, created)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (amount, C, secret, Y, id, witness, created, melt_quote)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 proof.amount,
@@ -303,8 +309,38 @@ class LedgerCrudSqlite(LedgerCrud):
                 proof.id,
                 proof.witness,
                 timestamp_now(db),
+                quote_id,
             ),
         )
+
+    async def get_all_melt_quotes_from_pending_proofs(
+        self,
+        *,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]:
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT * from {table_with_schema(db, 'melt_quotes')} WHERE quote in (SELECT DISTINCT melt_quote FROM {table_with_schema(db, 'proofs_pending')})
+            """
+        )
+        return [MeltQuote.from_row(r) for r in rows]
+
+    async def get_pending_proofs_for_quote(
+        self,
+        *,
+        quote_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Proof]:
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT * from {table_with_schema(db, 'proofs_pending')}
+            WHERE melt_quote = ?
+            """,
+            (quote_id,),
+        )
+        return [Proof(**r) for r in rows]
 
     async def get_proofs_pending(
         self,
@@ -327,21 +363,25 @@ class LedgerCrudSqlite(LedgerCrud):
         *,
         db: Database,
         proof: Proof,
+        quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
     ) -> None:
         # we add the proof and secret to the used list
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'proofs_pending')}
-            (amount, C, secret, Y, created)
-            VALUES (?, ?, ?, ?, ?)
+            (amount, C, secret, Y, id, witness, created, melt_quote)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 proof.amount,
                 proof.C,
                 proof.secret,
                 proof.Y,
+                proof.id,
+                proof.witness,
                 timestamp_now(db),
+                quote_id,
             ),
         )
 

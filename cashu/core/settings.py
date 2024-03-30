@@ -125,6 +125,7 @@ class FakeWalletSettings(MintSettings):
     fakewallet_brr: bool = Field(default=True)
     fakewallet_delay_payment: bool = Field(default=False)
     fakewallet_stochastic_invoice: bool = Field(default=False)
+    fakewallet_payment_state: Optional[bool] = Field(default=None)
     mint_cache_secrets: bool = Field(default=True)
 
 
