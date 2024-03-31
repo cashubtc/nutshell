@@ -217,14 +217,23 @@ class LndRestWallet(LightningBackend):
             async for json_line in r.aiter_lines():
                 try:
                     line = json.loads(json_line)
+
+                    # check for errors
                     if line.get("error"):
-                        logger.error(
+                        message = (
                             line["error"]["message"]
                             if "message" in line["error"]
                             else line["error"]
                         )
+                        logger.error(f"LND get_payment_status error: {message}")
+                        if "payment isn't initiated" in message:
+                            # payment has not been initiated yet, return False
+                            return PaymentStatus(paid=False)
                         return PaymentStatus(paid=None)
+
                     payment = line.get("result")
+
+                    # payment exists
                     if payment is not None and payment.get("status"):
                         return PaymentStatus(
                             paid=statuses[payment["status"]],

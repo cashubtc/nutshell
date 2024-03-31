@@ -149,7 +149,7 @@ async def create_pending_melts(ledger: Ledger) -> Proof:
         proof=pending_proof,
         quote_id=quote_id,
     )
-    # expect that no pending tokens are in db anymore
+    # expect a pending melt quote
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
         db=ledger.db
     )
