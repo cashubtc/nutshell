@@ -175,8 +175,32 @@ def test_invoice_with_split(mint, cli_prefix):
     wallet = asyncio.run(init_wallet())
     assert wallet.proof_amounts.count(1) >= 10
 
+@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
+def test_invoices_with_minting(cli_prefix):
+    # arrange
+    wallet1 = asyncio.run(init_wallet())
+    asyncio.run(reset_invoices(wallet=wallet1))
+    invoice = asyncio.run(wallet1.request_mint(64))
 
-def test_invoices(cli_prefix):
+    # act
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoices", "--mint"],
+    )
+
+    # assert
+    print("INVOICES --mint")
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "No invoices found." not in result.output
+    assert "ID" in result.output
+    assert "Paid" in result.output
+    assert get_invoice_from_invoices_command(result.output)["ID"] == invoice.id
+    assert get_invoice_from_invoices_command(result.output)["Paid"] == "True"
+
+
+def test_invoices_without_minting(cli_prefix):
     # arrange
     wallet1 = asyncio.run(init_wallet())
     asyncio.run(reset_invoices(wallet=wallet1))
@@ -197,34 +221,30 @@ def test_invoices(cli_prefix):
     assert "ID" in result.output
     assert "Paid" in result.output
     assert get_invoice_from_invoices_command(result.output)["ID"] == invoice.id
-    assert get_invoice_from_invoices_command(result.output)["Paid"] == "True"
+    assert get_invoice_from_invoices_command(result.output)["Paid"] == str(invoice.paid)
 
-
-def test_invoices_without_minting(cli_prefix):
+@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
+def test_invoices_with_onlypaid_option(cli_prefix):
     # arrange
     wallet1 = asyncio.run(init_wallet())
     asyncio.run(reset_invoices(wallet=wallet1))
-    invoice = asyncio.run(wallet1.request_mint(64))
+    asyncio.run(wallet1.request_mint(64))
 
     # act
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "invoices", "--tests"],
+        [*cli_prefix, "invoices", "--only-paid", "--mint"],
     )
 
     # assert
-    print("INVOICES --tests")
+    print("INVOICES --only-paid --mint")
     assert result.exception is None
     assert result.exit_code == 0
-    assert "No invoices found." not in result.output
-    assert "ID" in result.output
-    assert "Paid" in result.output
-    assert get_invoice_from_invoices_command(result.output)["ID"] == invoice.id
-    assert get_invoice_from_invoices_command(result.output)["Paid"] == str(invoice.paid)
+    assert "No invoices found." in result.output
 
 
-def test_invoices_with_onlypaid_option(cli_prefix):
+def test_invoices_with_onlypaid_option_without_minting(cli_prefix):
     # arrange
     wallet1 = asyncio.run(init_wallet())
     asyncio.run(reset_invoices(wallet=wallet1))
@@ -243,27 +263,7 @@ def test_invoices_with_onlypaid_option(cli_prefix):
     assert result.exit_code == 0
     assert "No invoices found." in result.output
 
-
-def test_invoices_with_onlypaid_option_without_minting(cli_prefix):
-    # arrange
-    wallet1 = asyncio.run(init_wallet())
-    asyncio.run(reset_invoices(wallet=wallet1))
-    asyncio.run(wallet1.request_mint(64))
-
-    # act
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [*cli_prefix, "invoices", "--only-paid", "--tests"],
-    )
-
-    # assert
-    print("INVOICES --only-paid --tests")
-    assert result.exception is None
-    assert result.exit_code == 0
-    assert "No invoices found." in result.output
-
-
+@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_onlyunpaid_option(cli_prefix):
     # arrange
     wallet1 = asyncio.run(init_wallet())
@@ -274,11 +274,11 @@ def test_invoices_with_onlyunpaid_option(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "invoices", "--only-unpaid"],
+        [*cli_prefix, "invoices", "--only-unpaid", "--mint"],
     )
 
     # assert
-    print("INVOICES --only-unpaid")
+    print("INVOICES --only-unpaid --mint")
     assert result.exception is None
     assert result.exit_code == 0
     assert "No invoices found." in result.output
@@ -294,11 +294,11 @@ def test_invoices_with_onlyunpaid_option_without_minting(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "invoices", "--only-unpaid", "--tests"],
+        [*cli_prefix, "invoices", "--only-unpaid"],
     )
 
     # assert
-    print("INVOICES --only-unpaid --tests")
+    print("INVOICES --only-unpaid")
     assert result.exception is None
     assert result.exit_code == 0
     assert "No invoices found." not in result.output
@@ -322,7 +322,7 @@ def test_invoices_with_both_onlypaid_and_onlyunpaid_options(cli_prefix):
         in result.output
     )
 
-
+@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_pending_option(cli_prefix):
     # arrange
     wallet1 = asyncio.run(init_wallet())
@@ -333,11 +333,11 @@ def test_invoices_with_pending_option(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "invoices", "--pending"],
+        [*cli_prefix, "invoices", "--pending", "--mint"],
     )
 
     # assert
-    print("INVOICES --pending")
+    print("INVOICES --pending --mint")
     assert result.exception is None
     assert result.exit_code == 0
     assert "No invoices found." in result.output
@@ -353,11 +353,11 @@ def test_invoices_with_pending_option_without_minting(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "invoices", "--pending", "--tests"],
+        [*cli_prefix, "invoices", "--pending"],
     )
 
     # assert
-    print("INVOICES --pending --tests")
+    print("INVOICES --pending")
     assert result.exception is None
     assert result.exit_code == 0
     assert "No invoices found." not in result.output

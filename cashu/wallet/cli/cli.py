@@ -722,22 +722,23 @@ async def locks(ctx):
     type=bool,
 )
 @click.option(
-    "--tests",
-    "-t",
+    "--mint",
+    "-m",
     is_flag=True,
     default=False,
-    help="Run in test mode (do not try to mint pending invoices)",
+    help="Try to mint pending invoices",
 )
 @click.pass_context
 @coro
-async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, tests: bool):
+async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, mint: bool):
     wallet: Wallet = ctx.obj["WALLET"]
 
     if paid and unpaid:
         print("You should only choose one option: either --only-paid or --only-unpaid")
         return
 
-    await wallet.load_mint()
+    if mint:
+      await wallet.load_mint()
 
     paid_arg = None
     if unpaid:
@@ -786,9 +787,9 @@ async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, tests: bool):
 
     invoices_printed_count = 0
     for invoice in invoices:
-        # Tries to mint pending invoice
         is_pending_invoice = invoice.out is False and invoice.paid is False
-        if is_pending_invoice and not tests:
+        if is_pending_invoice and mint:
+            # Tries to mint pending invoice
             updated_invoice = await _try_to_mint_pending_invoice(
                 invoice.amount, invoice.id
             )
