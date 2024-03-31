@@ -424,7 +424,7 @@ async def balance(ctx: Context, verbose):
     "-l",
     default=False,
     is_flag=True,
-    help="Print legacy token without mint information.",
+    help="Print legacy TokenV3 format.",
     type=bool,
 )
 @click.option(
@@ -652,7 +652,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                     grouped_proofs,
                     legacy=True,
                 )
-                print(f"{token_legacy}\n")
+                print(f"Legacy token: {token_legacy}\n")
             print("--------------------------\n")
         print("To remove all spent tokens use: cashu burn -a")
 
@@ -890,7 +890,7 @@ async def selfpay(ctx: Context, all: bool = False):
         print("No balance on this mint.")
         return
 
-    token = await wallet.serialize_proofs(reserved_proofs)
+    token = await wallet.serialize_proofs(reserved_proofs, legacy=True)
     print(f"Selfpay token for mint {wallet.url}:")
     print("")
     print(token)

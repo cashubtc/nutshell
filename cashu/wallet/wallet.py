@@ -1,4 +1,3 @@
-import base64
 import copy
 import json
 import time
@@ -39,10 +38,9 @@ from ..core.base import (
     Proof,
     ProofState,
     SpentState,
-    TokenV2,
-    TokenV2Mint,
     TokenV3,
     TokenV3Token,
+    TokenV4,
     Unit,
     WalletKeyset,
 )
@@ -1299,7 +1297,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 )
         return mint_urls
 
-    async def _make_token(self, proofs: List[Proof], include_mints=True) -> TokenV3:
+    async def _make_tokenv3(self, proofs: List[Proof], include_mints=True) -> TokenV3:
         """
         Takes list of proofs and produces a TokenV3 by looking up
         the mint URLs by the keyset id from the database.
@@ -1331,6 +1329,19 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             token.token.append(token_proofs)
         return token
 
+    async def _make_token(self, token: TokenV3, include_dleq=False) -> TokenV4:
+        """
+        Takes a TokenV3 and returns a TokenV4
+
+        Args:
+            token (TokenV3): TokenV3 object to be serialized
+
+        Returns:
+            bytes: Serialized token
+        """
+
+        return TokenV4().from_tokenv3(token)
+
     async def serialize_proofs(
         self, proofs: List[Proof], include_mints=True, include_dleq=False, legacy=False
     ) -> str:
@@ -1345,70 +1356,13 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             str: Serialized Cashu token
         """
 
-        if legacy:
-            # V2 tokens
-            token_v2 = await self._make_token_v2(proofs, include_mints)
-            return await self._serialize_token_base64_tokenv2(token_v2)
-
-            # # deprecated code for V1 tokens
-            # proofs_serialized = [p.to_dict() for p in proofs]
-            # return base64.urlsafe_b64encode(
-            #     json.dumps(proofs_serialized).encode()
-            # ).decode()
-
         # V3 tokens
-        token = await self._make_token(proofs, include_mints)
-        return token.serialize(include_dleq)
-
-    async def _make_token_v2(self, proofs: List[Proof], include_mints=True) -> TokenV2:
-        """
-        Takes list of proofs and produces a TokenV2 by looking up
-        the keyset id and mint URLs from the database.
-        """
-        # build token
-        token = TokenV2(proofs=proofs)
-
-        # add mint information to the token, if requested
-        if include_mints:
-            # dummy object to hold information about the mint
-            mints: Dict[str, TokenV2Mint] = {}
-            # dummy object to hold all keyset id's we need to fetch from the db later
-            keysets: List[str] = [proof.id for proof in proofs if proof.id]
-            # iterate through unique keyset ids
-            for id in set(keysets):
-                # load the keyset from the db
-                keysets_db = await get_keysets(id=id, db=self.db)
-                keyset_db = keysets_db[0] if keysets_db else None
-                if keyset_db and keyset_db.mint_url and keyset_db.id:
-                    # we group all mints according to URL
-                    if keyset_db.mint_url not in mints:
-                        mints[keyset_db.mint_url] = TokenV2Mint(
-                            url=keyset_db.mint_url,
-                            ids=[keyset_db.id],
-                        )
-                    else:
-                        # if a mint URL has multiple keysets, append to the already existing list
-                        mints[keyset_db.mint_url].ids.append(keyset_db.id)
-            if len(mints) > 0:
-                # add mints grouped by url to the token
-                token.mints = list(mints.values())
-        return token
-
-    async def _serialize_token_base64_tokenv2(self, token: TokenV2) -> str:
-        """
-        Takes a TokenV2 and serializes it in urlsafe_base64.
-
-        Args:
-            token (TokenV2): TokenV2 object to be serialized
-
-        Returns:
-            str: Serialized token
-        """
-        # encode the token as a base64 string
-        token_base64 = base64.urlsafe_b64encode(
-            json.dumps(token.to_dict()).encode()
-        ).decode()
-        return token_base64
+        tokenv3 = await self._make_tokenv3(proofs, include_mints)
+        if legacy:
+            return tokenv3.serialize(include_dleq)
+        else:
+            tokenv4 = await self._make_token(tokenv3, include_dleq)
+            return tokenv4.serialize(include_dleq)
 
     async def _select_proofs_to_send(
         self, proofs: List[Proof], amount_to_send: int

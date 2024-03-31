@@ -1,10 +1,8 @@
-import base64
-import json
 import os
 
 from loguru import logger
 
-from ..core.base import TokenV1, TokenV2, TokenV3, TokenV3Token
+from ..core.base import TokenV3, TokenV4
 from ..core.db import Database
 from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
@@ -62,57 +60,16 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3) -> Wallet:
     return mint_wallet
 
 
-def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
-    """Helper function to receive legacy TokenV2 tokens.
-    Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
-    the ordinary path.
-
-    Returns:
-        TokenV3: TokenV3
-    """
-    tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv2.proofs)])
-    if tokenv2.mints:
-        tokenv3.token[0].mint = tokenv2.mints[0].url
-    token_serialized = tokenv3.serialize()
-    return token_serialized
-
-
-def serialize_TokenV1_to_TokenV3(tokenv1: TokenV1):
-    """Helper function to receive legacy TokenV1 tokens.
-    Takes a list of proofs and constructs a *serialized* TokenV3 to be received through
-    the ordinary path.
-
-    Returns:
-        TokenV3: TokenV3
-    """
-    tokenv3 = TokenV3(token=[TokenV3Token(proofs=tokenv1.__root__)])
-    token_serialized = tokenv3.serialize()
-    return token_serialized
-
-
 def deserialize_token_from_string(token: str) -> TokenV3:
     # deserialize token
 
-    # ----- backwards compatibility -----
-
-    # V2Tokens (0.7-0.11.0) (eyJwcm9...)
-    if token.startswith("eyJwcm9"):
-        try:
-            tokenv2 = TokenV2.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-            token = serialize_TokenV2_to_TokenV3(tokenv2)
-        except Exception:
-            pass
-
-    # V1Tokens (<0.7) (W3siaWQ...)
-    if token.startswith("W3siaWQ"):
-        try:
-            tokenv1 = TokenV1.parse_obj(json.loads(base64.urlsafe_b64decode(token)))
-            token = serialize_TokenV1_to_TokenV3(tokenv1)
-        except Exception:
-            pass
-
-    if token.startswith("cashu"):
+    if token.startswith("cashuA"):
         tokenObj = TokenV3.deserialize(token)
+        assert len(tokenObj.token), Exception("no proofs in token")
+        assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
+        return tokenObj
+    if token.startswith("cashuB"):
+        tokenObj = TokenV4.deserialize(token).to_tokenv3()
         assert len(tokenObj.token), Exception("no proofs in token")
         assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
         return tokenObj
@@ -214,18 +171,9 @@ async def send(
         send_proofs,
         include_mints=True,
         include_dleq=include_dleq,
+        legacy=legacy,
     )
     print(token)
     await wallet.set_reserved(send_proofs, reserved=True)
-    if legacy:
-        print("")
-        print("Old token format:")
-        print("")
-        token = await wallet.serialize_proofs(
-            send_proofs,
-            legacy=True,
-            include_dleq=include_dleq,
-        )
-        print(token)
 
     return wallet.available_balance, token
