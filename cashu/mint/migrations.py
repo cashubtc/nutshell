@@ -650,7 +650,7 @@ async def m017_foreign_keys_proof_tables(db: Database):
             """
         )
         await conn.execute(
-            f"INSERT INTO {table_with_schema(db, 'proofs_used_new')} (amount, id, C, secret, Y, id, witness, created) SELECT amount, id, C, secret, Y, id, witness, created FROM {table_with_schema(db, 'proofs_used')}"
+            f"INSERT INTO {table_with_schema(db, 'proofs_used_new')} (amount, id, C, secret, Y, witness, created) SELECT amount, id, C, secret, Y, witness, created FROM {table_with_schema(db, 'proofs_used')}"
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_used')}")
         await conn.execute(
@@ -677,7 +677,7 @@ async def m017_foreign_keys_proof_tables(db: Database):
             """
         )
         await conn.execute(
-            f"INSERT INTO {table_with_schema(db, 'proofs_pending_new')} (amount, id, C, secret, Y, id, created) SELECT amount, id, C, secret, Y, id, created FROM {table_with_schema(db, 'proofs_pending')}"
+            f"INSERT INTO {table_with_schema(db, 'proofs_pending_new')} (amount, id, C, secret, Y, created) SELECT amount, id, C, secret, Y, created FROM {table_with_schema(db, 'proofs_pending')}"
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_pending')}")
         await conn.execute(
@@ -706,7 +706,7 @@ async def m017_foreign_keys_proof_tables(db: Database):
         )
 
         await conn.execute(
-            f"INSERT INTO {table_with_schema(db, 'promises_new')} (amount, id, B_, C_, id, e, s, created) SELECT amount, id, B_b, C_b, id, e, s, created FROM {table_with_schema(db, 'promises')}"
+            f"INSERT INTO {table_with_schema(db, 'promises_new')} (amount, id, B_, C_, e, s, created) SELECT amount, id, B_b, C_b, e, s, created FROM {table_with_schema(db, 'promises')}"
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'promises')}")
         await conn.execute(
