@@ -907,7 +907,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             for output in outputs:
                 logger.trace(f"looking for promise: {output}")
                 promise = await self.crud.get_promise(
-                    B_=output.B_, db=self.db, conn=conn
+                    b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
                     # BEGIN backwards compatibility mints pre `m007_proofs_and_promises_store_id`
@@ -974,8 +974,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 await self.crud.store_promise(
                     amount=amount,
                     id=keyset_id,
-                    B_=B_.serialize().hex(),
-                    C_=C_.serialize().hex(),
+                    b_=B_.serialize().hex(),
+                    c_=C_.serialize().hex(),
                     e=e.serialize(),
                     s=s.serialize(),
                     db=self.db,

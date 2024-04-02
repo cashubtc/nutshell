@@ -129,8 +129,8 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         amount: int,
-        B_: str,
-        C_: str,
+        b_: str,
+        c_: str,
         id: str,
         e: str = "",
         s: str = "",
@@ -142,7 +142,7 @@ class LedgerCrud(ABC):
         self,
         *,
         db: Database,
-        B_: str,
+        b_: str,
         conn: Optional[Connection] = None,
     ) -> Optional[BlindedSignature]: ...
 
@@ -233,8 +233,8 @@ class LedgerCrudSqlite(LedgerCrud):
         *,
         db: Database,
         amount: int,
-        B_: str,
-        C_: str,
+        b_: str,
+        c_: str,
         id: str,
         e: str = "",
         s: str = "",
@@ -243,13 +243,13 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'promises')}
-            (amount, B_, C_, e, s, id, created)
+            (amount, b_, c_, dleq_e, dleq_s, id, created)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 amount,
-                B_,
-                C_,
+                b_,
+                c_,
                 e,
                 s,
                 id,
@@ -261,15 +261,15 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         db: Database,
-        B_: str,
+        b_: str,
         conn: Optional[Connection] = None,
     ) -> Optional[BlindedSignature]:
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'promises')}
-            WHERE B_ = ?
+            WHERE b_ = ?
             """,
-            (str(B_),),
+            (str(b_),),
         )
         return BlindedSignature.from_row(row) if row else None
 
@@ -298,7 +298,7 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'proofs_used')}
-            (amount, C, secret, Y, id, witness, created, melt_quote)
+            (amount, c, secret, y, id, witness, created, melt_quote)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -352,7 +352,7 @@ class LedgerCrudSqlite(LedgerCrud):
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {table_with_schema(db, 'proofs_pending')}
-            WHERE Y IN ({','.join(['?']*len(Ys))})
+            WHERE y IN ({','.join(['?']*len(Ys))})
             """,
             tuple(Ys),
         )
@@ -370,7 +370,7 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'proofs_pending')}
-            (amount, C, secret, Y, id, witness, created, melt_quote)
+            (amount, c, secret, y, id, witness, created, melt_quote)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -668,7 +668,7 @@ class LedgerCrudSqlite(LedgerCrud):
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'proofs_used')}
-            WHERE Y = ?
+            WHERE y = ?
             """,
             (Y,),
         )
