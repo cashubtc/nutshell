@@ -243,7 +243,7 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'promises')}
-            (amount, B_b, C_b, e, s, id, created)
+            (amount, B_, C_, e, s, id, created)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -267,11 +267,11 @@ class LedgerCrudSqlite(LedgerCrud):
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'promises')}
-            WHERE B_b = ?
+            WHERE B_ = ?
             """,
             (str(B_),),
         )
-        return BlindedSignature(amount=row[0], C_=row[2], id=row[3]) if row else None
+        return BlindedSignature.from_row(row) if row else None
 
     async def get_spent_proofs(
         self,

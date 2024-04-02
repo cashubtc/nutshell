@@ -101,12 +101,12 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
-    mint_id: Union[
-        None, str
-    ] = None  # holds the id of the mint operation that created this proof
-    melt_id: Union[
-        None, str
-    ] = None  # holds the id of the melt operation that destroyed this proof
+    mint_id: Union[None, str] = (
+        None  # holds the id of the mint operation that created this proof
+    )
+    melt_id: Union[None, str] = (
+        None  # holds the id of the melt operation that destroyed this proof
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -193,6 +193,15 @@ class BlindedSignature(BaseModel):
     amount: int
     C_: str  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
+
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            id=row["id"],
+            amount=row["amount"],
+            C_=row["C_"],
+            dleq=DLEQ(e=row["e"], s=row["s"]),
+        )
 
 
 class BlindedMessages(BaseModel):

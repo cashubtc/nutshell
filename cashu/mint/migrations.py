@@ -690,8 +690,8 @@ async def m017_foreign_keys_proof_tables(db: Database):
                     CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'promises_new')} (
                         amount INTEGER NOT NULL,
                         id TEXT,
-                        B_b TEXT NOT NULL,
-                        C_b TEXT NOT NULL,
+                        B_ TEXT NOT NULL,
+                        C_ TEXT NOT NULL,
                         e TEXT,
                         s TEXT,
                         created TIMESTAMP,
@@ -700,13 +700,13 @@ async def m017_foreign_keys_proof_tables(db: Database):
 
                         FOREIGN KEY (mint_quote) REFERENCES {table_with_schema(db, 'mint_quotes')}(quote),
                         
-                        UNIQUE (B_b)
+                        UNIQUE (B_)
                     );
                 """
         )
 
         await conn.execute(
-            f"INSERT INTO {table_with_schema(db, 'promises_new')} (amount, id, B_b, C_b, id, e, s, created) SELECT amount, id, B_b, C_b, id, e, s, created FROM {table_with_schema(db, 'promises')}"
+            f"INSERT INTO {table_with_schema(db, 'promises_new')} (amount, id, B_, C_, id, e, s, created) SELECT amount, id, B_b, C_b, id, e, s, created FROM {table_with_schema(db, 'promises')}"
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'promises')}")
         await conn.execute(
