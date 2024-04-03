@@ -333,6 +333,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     assert all([s.state == SpentState.pending for s in states])
 
     settle_invoice(preimage=preimage)
+    await asyncio.sleep(1)
 
     # run startup routinge
     await ledger.startup_ledger()
@@ -383,6 +384,7 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     assert all([s.state == SpentState.pending for s in states])
 
     cancel_invoice(preimage_hash=preimage_hash)
+    await asyncio.sleep(1)
 
     # run startup routinge
     await ledger.startup_ledger()
