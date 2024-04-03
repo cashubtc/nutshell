@@ -267,6 +267,7 @@ class MeltQuote(LedgerEvent):
             proof=row["proof"],
         )
 
+    @property
     def identifier(self) -> str:
         """Implementation of the abstract method from LedgerEventManager"""
         return self.quote
@@ -310,6 +311,7 @@ class MintQuote(LedgerEvent):
             paid_time=paid_time,
         )
 
+    @property
     def identifier(self) -> str:
         """Implementation of the abstract method from LedgerEventManager"""
         return self.quote
@@ -535,6 +537,7 @@ class ProofState(LedgerEvent):
             raise ValueError('Witness can only be set if the spent state is "SPENT"')
         return values
 
+    @property
     def identifier(self) -> str:
         """Implementation of the abstract method from LedgerEventManager"""
         return self.Y
