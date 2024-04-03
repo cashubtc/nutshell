@@ -10,9 +10,12 @@ from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_hold_invoice,
     is_fake,
+    is_github_actions,
     pay_if_regtest,
     settle_invoice,
 )
+
+SLEEP_TIME = 1 if not is_github_actions else 2
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -51,7 +54,7 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
             quote_id=quote.quote,
         )
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
     # settle_invoice(preimage=preimage)
 
     # expect that melt quote is still pending
@@ -66,7 +69,7 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
 
     # only now settle the invoice
     settle_invoice(preimage=preimage)
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
 
     # expect that proofs are now spent
     states = await ledger.check_proofs_state([p.Y for p in send_proofs])

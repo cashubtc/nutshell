@@ -17,6 +17,7 @@ from tests.helpers import (
     cancel_invoice,
     get_hold_invoice,
     is_fake,
+    is_github_actions,
     is_regtest,
     pay_if_regtest,
     settle_invoice,
@@ -26,6 +27,7 @@ SEED = "TEST_PRIVATE_KEY"
 DERIVATION_PATH = "m/0'/0'/0'"
 DECRYPTON_KEY = "testdecryptionkey"
 ENCRYPTED_SEED = "U2FsdGVkX1_7UU_-nVBMBWDy_9yDu4KeYb7MH8cJTYQGD4RWl82PALH8j-HKzTrI"
+SLEEP_TIME = 1 if not is_github_actions else 2
 
 
 async def assert_err(f, msg):
@@ -282,7 +284,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
             quote_id=quote.quote,
         )
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
     # settle_invoice(preimage=preimage)
 
     # run startup routinge
@@ -327,13 +329,13 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
             quote_id=quote.quote,
         )
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
     # expect that proofs are pending
     states = await ledger.check_proofs_state([p.Y for p in send_proofs])
     assert all([s.state == SpentState.pending for s in states])
 
     settle_invoice(preimage=preimage)
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
 
     # run startup routinge
     await ledger.startup_ledger()
@@ -377,14 +379,14 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
             quote_id=quote.quote,
         )
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
 
     # expect that proofs are pending
     states = await ledger.check_proofs_state([p.Y for p in send_proofs])
     assert all([s.state == SpentState.pending for s in states])
 
     cancel_invoice(preimage_hash=preimage_hash)
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
 
     # run startup routinge
     await ledger.startup_ledger()

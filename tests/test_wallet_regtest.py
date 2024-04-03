@@ -12,9 +12,12 @@ from tests.helpers import (
     cancel_invoice,
     get_hold_invoice,
     is_fake,
+    is_github_actions,
     pay_if_regtest,
     settle_invoice,
 )
+
+SLEEP_TIME = 1 if not is_github_actions else 2
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -53,14 +56,14 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
             quote_id=quote.quote,
         )
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.state == SpentState.pending for s in states.states])
 
     settle_invoice(preimage=preimage)
 
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.state == SpentState.spent for s in states.states])
@@ -93,14 +96,14 @@ async def test_regtest_failed_quote(wallet: Wallet, ledger: Ledger):
             quote_id=quote.quote,
         )
     )
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.state == SpentState.pending for s in states.states])
 
     cancel_invoice(preimage_hash=preimage_hash)
 
-    await asyncio.sleep(1)
+    await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
     assert all([s.state == SpentState.unspent for s in states.states])
