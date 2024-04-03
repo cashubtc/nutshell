@@ -44,14 +44,15 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     quote = await wallet.get_pay_amount_with_fees(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
-    asyncio.create_task(
-        wallet.pay_lightning(
-            proofs=send_proofs,
-            invoice=invoice_payment_request,
-            fee_reserve_sat=quote.fee_reserve,
-            quote_id=quote.quote,
-        )
-    )
+    asyncio.create_task(ledger.melt(proofs=send_proofs, quote=quote.quote))
+    # asyncio.create_task(
+    #     wallet.pay_lightning(
+    #         proofs=send_proofs,
+    #         invoice=invoice_payment_request,
+    #         fee_reserve_sat=quote.fee_reserve,
+    #         quote_id=quote.quote,
+    #     )
+    # )
     await asyncio.sleep(SLEEP_TIME)
 
     # expect that melt quote is still pending
@@ -67,9 +68,6 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     # only now settle the invoice
     settle_invoice(preimage=preimage)
     await asyncio.sleep(SLEEP_TIME)
-
-    # run startup routinge
-    await ledger.startup_ledger()
 
     # expect that proofs are now spent
     states = await ledger.check_proofs_state([p.Y for p in send_proofs])
