@@ -226,9 +226,6 @@ class LndRestWallet(LightningBackend):
                             else line["error"]
                         )
                         logger.error(f"LND get_payment_status error: {message}")
-                        if "payment isn't initiated" in message:
-                            # payment has not been initiated yet, return False
-                            return PaymentStatus(paid=False)
                         return PaymentStatus(paid=None)
 
                     payment = line.get("result")

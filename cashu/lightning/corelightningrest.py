@@ -250,7 +250,7 @@ class CoreLightningRestWallet(LightningBackend):
             if not data.get("pays"):
                 # payment not found
                 logger.error(f"payment not found: {data.get('pays')}")
-                return PaymentStatus(paid=False)
+                raise Exception("payment not found")
 
             if r.is_error or "error" in data:
                 message = data.get("error") or data
