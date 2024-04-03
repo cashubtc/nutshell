@@ -7,7 +7,7 @@
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
 
-Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding ([protocol specs](https://github.com/cashubtc/nuts)). Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406). The database mechanics in Cashu Nutshell and the Lightning backend uses parts from [LNbits](https://github.com/lnbits/lnbits-legend).
+Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding ([protocol specs](https://github.com/cashubtc/nuts)). Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406).
 
 <p align="center">
 <a href="#the-cashu-protocol">Cashu protocol</a> ·
@@ -78,6 +78,7 @@ source ~/.bashrc
 # install cashu
 git clone https://github.com/cashubtc/nutshell.git cashu
 cd cashu
+git checkout <latest_tag>
 pyenv local 3.10.4
 poetry install
 ```
@@ -168,12 +169,19 @@ You can find the API docs at [http://localhost:4448/docs](http://localhost:4448/
 # Running a mint
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
 
-Before you can run your own mint, make sure to enable a Lightning backend in `MINT_LIGHTNING_BACKEND` and set `MINT_PRIVATE_KEY` in your `.env` file.
+## Docker
+
+```
+docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.15.2 poetry run mint
+```
+
+## From this repository
+Before you can run your own mint, make sure to enable a Lightning backend in `MINT_BACKEND_BOLT11_SAT` and set `MINT_PRIVATE_KEY` in your `.env` file.
 ```bash
 poetry run mint
 ```
 
-For testing, you can use Nutshell without a Lightning backend by setting `MINT_LIGHTNING_BACKEND=FakeWallet` in the `.env` file.
+For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
 
 
 # Running tests
@@ -184,7 +192,7 @@ poetry install --with dev
 
 Then, make sure to set up your mint's `.env` file to use a fake Lightning backend and disable Tor:
 ```bash
-MINT_LIGHTNING_BACKEND=FakeWallet
+MINT_BACKEND_BOLT11_SAT=FakeWallet
 TOR=FALSE
 ```
 You can run the tests with

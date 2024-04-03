@@ -31,11 +31,14 @@ settings.mint_listen_port = SERVER_PORT
 settings.mint_url = SERVER_ENDPOINT
 settings.tor = False
 settings.wallet_unit = "sat"
-settings.mint_lightning_backend = settings.mint_lightning_backend or "FakeWallet"
+settings.mint_backend_bolt11_sat = settings.mint_backend_bolt11_sat or "FakeWallet"
 settings.fakewallet_brr = True
 settings.fakewallet_delay_payment = False
 settings.fakewallet_stochastic_invoice = False
-settings.mint_database = "./test_data/test_mint"
+assert (
+    settings.mint_test_database != settings.mint_database
+), "Test database is the same as the main database"
+settings.mint_database = settings.mint_test_database
 settings.mint_derivation_path = "m/0'/0'/0'"
 settings.mint_derivation_path_list = []
 settings.mint_private_key = "TEST_PRIVATE_KEY"
@@ -91,17 +94,22 @@ def mint():
 async def ledger():
     async def start_mint_init(ledger: Ledger):
         await migrate_databases(ledger.db, migrations_mint)
-        if settings.mint_cache_secrets:
-            await ledger.load_used_proofs()
-        await ledger.init_keysets()
+        await ledger.startup_ledger()
 
     if not settings.mint_database.startswith("postgres"):
         # clear sqlite database
         db_file = os.path.join(settings.mint_database, "mint.sqlite3")
         if os.path.exists(db_file):
             os.remove(db_file)
+    else:
+        # clear postgres database
+        db = Database("mint", settings.mint_database)
+        async with db.connect() as conn:
+            await conn.execute("DROP SCHEMA public CASCADE;")
+            await conn.execute("CREATE SCHEMA public;")
+
     wallets_module = importlib.import_module("cashu.lightning")
-    lightning_backend = getattr(wallets_module, settings.mint_lightning_backend)()
+    lightning_backend = getattr(wallets_module, settings.mint_backend_bolt11_sat)()
     backends = {
         Method.bolt11: {Unit.sat: lightning_backend},
     }

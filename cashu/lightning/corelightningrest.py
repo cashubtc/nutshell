@@ -26,9 +26,12 @@ from .macaroon import load_macaroon
 
 
 class CoreLightningRestWallet(LightningBackend):
-    units = set([Unit.sat, Unit.msat])
+    supported_units = set([Unit.sat, Unit.msat])
+    unit = Unit.sat
 
-    def __init__(self):
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         macaroon = settings.mint_corelightning_rest_macaroon
         assert macaroon, "missing cln-rest macaroon"
 
@@ -67,7 +70,7 @@ class CoreLightningRestWallet(LightningBackend):
             logger.warning(f"Error closing wallet connection: {e}")
 
     async def status(self) -> StatusResponse:
-        r = await self.client.get(f"{self.url}/v1/channel/localremotebal", timeout=5)
+        r = await self.client.get(f"{self.url}/v1/listFunds", timeout=5)
         r.raise_for_status()
         if r.is_error or "error" in r.json():
             try:
@@ -85,7 +88,7 @@ class CoreLightningRestWallet(LightningBackend):
         data = r.json()
         if len(data) == 0:
             return StatusResponse(error_message="no data", balance=0)
-        balance_msat = int(data.get("localBalance") * 1000)
+        balance_msat = int(sum([c["our_amount_msat"] for c in data["channels"]]))
         return StatusResponse(error_message=None, balance=balance_msat)
 
     async def create_invoice(
@@ -209,7 +212,7 @@ class CoreLightningRestWallet(LightningBackend):
 
         checking_id = data["payment_hash"]
         preimage = data["payment_preimage"]
-        fee_msat = data["msatoshi_sent"] - data["msatoshi"]
+        fee_msat = data["amount_sent_msat"] - data["amount_msat"]
 
         return PaymentResponse(
             ok=self.statuses.get(data["status"]),
@@ -244,17 +247,21 @@ class CoreLightningRestWallet(LightningBackend):
             r.raise_for_status()
             data = r.json()
 
-            if r.is_error or "error" in data or not data.get("pays"):
-                raise Exception("error in corelightning-rest response")
+            if not data.get("pays"):
+                # payment not found
+                logger.error(f"payment not found: {data.get('pays')}")
+                raise Exception("payment not found")
+
+            if r.is_error or "error" in data:
+                message = data.get("error") or data
+                raise Exception(f"error in corelightning-rest response: {message}")
 
             pay = data["pays"][0]
 
             fee_msat, preimage = None, None
             if self.statuses[pay["status"]]:
                 # cut off "msat" and convert to int
-                fee_msat = -int(pay["amount_sent_msat"][:-4]) - int(
-                    pay["amount_msat"][:-4]
-                )
+                fee_msat = -int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
                 preimage = pay["preimage"]
 
             return PaymentStatus(
@@ -317,5 +324,7 @@ class CoreLightningRestWallet(LightningBackend):
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
         return PaymentQuoteResponse(
-            checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
+            checking_id=invoice_obj.payment_hash,
+            fee=fees.to(self.unit, round="up"),
+            amount=amount.to(self.unit, round="up"),
         )

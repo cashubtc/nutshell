@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.15.0"
+VERSION = "0.15.2"
 
 
 def find_env_file():
@@ -45,17 +45,62 @@ class EnvSettings(CashuSettings):
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
     debug_profiling: bool = Field(default=False)
     debug_mint_only_deprecated: bool = Field(default=False)
+    db_backup_path: Optional[str] = Field(default=None)
 
 
 class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
-    mint_seed_decryption_key: str = Field(default=None)
+    mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
     mint_listen_host: str = Field(default="127.0.0.1")
     mint_listen_port: int = Field(default=3338)
-    mint_lightning_backend: str = Field(default="LNbitsWallet")
+
     mint_database: str = Field(default="data/mint")
+    mint_test_database: str = Field(default="test_data/test_mint")
+    mint_duplicate_keysets: bool = Field(
+        default=True,
+        title="Duplicate keysets",
+        description=(
+            "Whether to duplicate keysets for backwards compatibility before v1 API"
+            " (Nutshell 0.15.0)."
+        ),
+    )
+
+
+class MintBackends(MintSettings):
+    mint_lightning_backend: str = Field(default="")  # deprecated
+    mint_backend_bolt11_sat: str = Field(default="")
+    mint_backend_bolt11_usd: str = Field(default="")
+
+    mint_lnbits_endpoint: str = Field(default=None)
+    mint_lnbits_key: str = Field(default=None)
+    mint_strike_key: str = Field(default=None)
+    mint_blink_key: str = Field(default=None)
+
+
+class MintLimits(MintSettings):
+    mint_rate_limit: bool = Field(
+        default=False, title="Rate limit", description="IP-based rate limiter."
+    )
+    mint_global_rate_limit_per_minute: int = Field(
+        default=60,
+        gt=0,
+        title="Global rate limit per minute",
+        description="Number of requests an IP can make per minute to all endpoints.",
+    )
+    mint_transaction_rate_limit_per_minute: int = Field(
+        default=20,
+        gt=0,
+        title="Transaction rate limit per minute",
+        description="Number of requests an IP can make per minute to transaction endpoints.",
+    )
+    mint_max_request_length: int = Field(
+        default=1000,
+        title="Maximum request length",
+        description="Maximum length of REST API request arrays.",
+    )
+
     mint_peg_out_only: bool = Field(
         default=False,
         title="Peg-out only",
@@ -71,33 +116,16 @@ class MintSettings(CashuSettings):
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
-    mint_max_request_length: int = Field(
-        default=1000,
-        title="Maximum request length",
-        description="Maximum length of REST API request arrays.",
-    )
     mint_max_balance: int = Field(
         default=None, title="Maximum mint balance", description="Maximum mint balance."
     )
-    mint_duplicate_keysets: bool = Field(
-        default=True,
-        title="Duplicate keysets",
-        description=(
-            "Whether to duplicate keysets for backwards compatibility before v1 API"
-            " (Nutshell 0.15.0)."
-        ),
-    )
-
-    mint_lnbits_endpoint: str = Field(default=None)
-    mint_lnbits_key: str = Field(default=None)
-
-    mint_strike_key: str = Field(default=None)
 
 
 class FakeWalletSettings(MintSettings):
     fakewallet_brr: bool = Field(default=True)
     fakewallet_delay_payment: bool = Field(default=False)
     fakewallet_stochastic_invoice: bool = Field(default=False)
+    fakewallet_payment_state: Optional[bool] = Field(default=None)
     mint_cache_secrets: bool = Field(default=True)
 
 
@@ -121,7 +149,7 @@ class WalletSettings(CashuSettings):
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")
     wallet_unit: str = Field(default="sat")
-    wallet_domain_separation: bool = Field(default=False)
+    wallet_use_deprecated_h2c: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
 
@@ -130,13 +158,20 @@ class WalletSettings(CashuSettings):
         default=[
             "wss://nostr-pub.wellorder.net",
             "wss://relay.damus.io",
-            "wss://nostr.zebedee.cloud",
+            "wss://nostr.mom",
             "wss://relay.snort.social",
-            "wss://nostr.fmt.wiz.biz",
+            "wss://nostr.mutinywallet.com",
+            "wss://relay.minibits.cash",
+            "wss://nos.lol",
+            "wss://relay.nostr.band",
+            "wss://relay.bitcoiner.social",
+            "wss://140.f7z.io",
+            "wss://relay.primal.net",
         ]
     )
 
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
+    proofs_batch_size: int = Field(default=1000)
 
 
 class LndRestFundingSource(MintSettings):
@@ -158,6 +193,8 @@ class Settings(
     LndRestFundingSource,
     CoreLightningRestFundingSource,
     FakeWalletSettings,
+    MintLimits,
+    MintBackends,
     MintSettings,
     MintInformation,
     WalletSettings,
@@ -194,6 +231,10 @@ def startup_settings_tasks():
     # backwards compatibility: set socks_proxy from socks_host and socks_port
     if settings.socks_host and settings.socks_port:
         settings.socks_proxy = f"socks5://{settings.socks_host}:{settings.socks_port}"
+
+    # backwards compatibility: set mint_backend_bolt11_sat from mint_lightning_backend
+    if settings.mint_lightning_backend:
+        settings.mint_backend_bolt11_sat = settings.mint_lightning_backend
 
 
 startup_settings_tasks()

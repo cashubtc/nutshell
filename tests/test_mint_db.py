@@ -6,6 +6,7 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import is_postgres
 
 
 async def assert_err(f, msg):
@@ -46,6 +47,22 @@ async def test_mint_quote(wallet1: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_get_mint_quote_by_request(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(128)
+    assert invoice is not None
+    quote = await ledger.crud.get_mint_quote_by_request(
+        request=invoice.bolt11, db=ledger.db
+    )
+    assert quote is not None
+    assert quote.quote == invoice.id
+    assert quote.amount == 128
+    assert quote.unit == "sat"
+    assert not quote.paid
+    assert quote.paid_time is None
+    assert quote.created_time
+
+
+@pytest.mark.asyncio
 async def test_melt_quote(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(128)
     assert invoice is not None
@@ -61,3 +78,10 @@ async def test_melt_quote(wallet1: Wallet, ledger: Ledger):
     assert quote.checking_id == invoice.payment_hash
     assert quote.paid_time is None
     assert quote.created_time
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_postgres, reason="only works with Postgres")
+async def test_postgres_working():
+    assert is_postgres
+    assert True

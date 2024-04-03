@@ -25,12 +25,14 @@ async def get_random_invoice_data():
 
 
 wallets_module = importlib.import_module("cashu.lightning")
-wallet_class = getattr(wallets_module, settings.mint_lightning_backend)
+wallet_class = getattr(wallets_module, settings.mint_backend_bolt11_sat)
 WALLET = wallet_class()
 is_fake: bool = WALLET.__class__.__name__ == "FakeWallet"
 is_regtest: bool = not is_fake
 is_deprecated_api_only = settings.debug_mint_only_deprecated
 is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
+is_postgres = settings.mint_database.startswith("postgres")
+SLEEP_TIME = 1 if not is_github_actions else 2
 
 docker_lightning_cli = [
     "docker",
@@ -153,31 +155,6 @@ def pay_onchain(address: str, sats: int) -> str:
     cmd = docker_bitcoin_cli.copy()
     cmd.extend(["sendtoaddress", address, str(btc)])
     return run_cmd(cmd)
-
-
-# def clean_database(settings):
-#     if DB_TYPE == POSTGRES:
-#         db_url = make_url(settings.lnbits_database_url)
-
-#         conn = psycopg2.connect(settings.lnbits_database_url)
-#         conn.autocommit = True
-#         with conn.cursor() as cur:
-#             try:
-#                 cur.execute("DROP DATABASE lnbits_test")
-#             except psycopg2.errors.InvalidCatalogName:
-#                 pass
-#             cur.execute("CREATE DATABASE lnbits_test")
-
-#         db_url.database = "lnbits_test"
-#         settings.lnbits_database_url = str(db_url)
-
-#         core.db.__init__("database")
-
-#         conn.close()
-#     else:
-#         # FIXME: do this once mock data is removed from test data folder
-#         # os.remove(settings.lnbits_data_folder + "/database.sqlite3")
-#         pass
 
 
 def pay_if_regtest(bolt11: str):

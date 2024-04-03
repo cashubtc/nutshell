@@ -27,9 +27,12 @@ from .macaroon import load_macaroon
 class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
-    units = set([Unit.sat, Unit.msat])
+    supported_units = set([Unit.sat, Unit.msat])
+    unit = Unit.sat
 
-    def __init__(self):
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         endpoint = settings.mint_lnd_rest_endpoint
         cert = settings.mint_lnd_rest_cert
 
@@ -214,14 +217,20 @@ class LndRestWallet(LightningBackend):
             async for json_line in r.aiter_lines():
                 try:
                     line = json.loads(json_line)
+
+                    # check for errors
                     if line.get("error"):
-                        logger.error(
+                        message = (
                             line["error"]["message"]
                             if "message" in line["error"]
                             else line["error"]
                         )
+                        logger.error(f"LND get_payment_status error: {message}")
                         return PaymentStatus(paid=None)
+
                     payment = line.get("result")
+
+                    # payment exists
                     if payment is not None and payment.get("status"):
                         return PaymentStatus(
                             paid=statuses[payment["status"]],
@@ -269,5 +278,7 @@ class LndRestWallet(LightningBackend):
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
         return PaymentQuoteResponse(
-            checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
+            checking_id=invoice_obj.payment_hash,
+            fee=fees.to(self.unit, round="up"),
+            amount=amount.to(self.unit, round="up"),
         )

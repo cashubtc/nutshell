@@ -9,9 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 from pydantic import BaseModel, Field
 
-from cashu.core.crypto.b_dhke import hash_to_curve
-
 from .crypto.aes import AESCipher
+from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
     derive_keys,
     derive_keys_sha256,
@@ -111,8 +110,7 @@ class Proof(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        if not self.Y:
-            self.Y = hash_to_curve(self.secret.encode("utf-8")).serialize().hex()
+        self.Y = hash_to_curve(self.secret.encode("utf-8")).serialize().hex()
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
@@ -196,6 +194,15 @@ class BlindedSignature(BaseModel):
     C_: str  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
 
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            id=row["id"],
+            amount=row["amount"],
+            C_=row["c_"],
+            dleq=DLEQ(e=row["dleq_e"], s=row["dleq_s"]),
+        )
+
 
 class BlindedMessages(BaseModel):
     # NOTE: not used in Pydantic validation
@@ -231,6 +238,7 @@ class MeltQuote(BaseModel):
     paid_time: Union[int, None] = None
     fee_paid: int = 0
     proof: str = ""
+    expiry: Optional[int] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -270,11 +278,10 @@ class MintQuote(BaseModel):
     issued: bool
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
-    expiry: int = 0
+    expiry: Optional[int] = None
 
     @classmethod
     def from_row(cls, row: Row):
-
         try:
             #  SQLITE: row is timestamp (string)
             created_time = int(row["created_time"]) if row["created_time"] else None
@@ -296,13 +303,19 @@ class MintQuote(BaseModel):
             issued=row["issued"],
             created_time=created_time,
             paid_time=paid_time,
-            expiry=0,
         )
 
 
 # ------- API -------
 
 # ------- API: INFO -------
+
+
+class MintMeltMethodSetting(BaseModel):
+    method: str
+    unit: str
+    min_amount: Optional[int] = None
+    max_amount: Optional[int] = None
 
 
 class GetInfoResponse(BaseModel):
@@ -371,7 +384,7 @@ class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
     paid: bool  # whether the request has been paid
-    expiry: int  # expiry of the quote
+    expiry: Optional[int]  # expiry of the quote
 
 
 # ------- API: MINT -------
@@ -418,6 +431,7 @@ class PostMeltQuoteResponse(BaseModel):
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
     paid: bool  # whether the request has been paid
+    expiry: Optional[int]  # expiry of the quote
 
 
 # ------- API: MELT -------
@@ -488,7 +502,7 @@ class PostSplitResponse_Very_Deprecated(BaseModel):
 
 
 class PostCheckStateRequest(BaseModel):
-    secrets: List[str] = Field(..., max_items=settings.mint_max_request_length)
+    Ys: List[str] = Field(..., max_items=settings.mint_max_request_length)
 
 
 class SpentState(Enum):
@@ -501,7 +515,7 @@ class SpentState(Enum):
 
 
 class ProofState(BaseModel):
-    secret: str
+    Y: str
     state: SpentState
     witness: Optional[str] = None
 
@@ -530,9 +544,21 @@ class CheckFeesResponse_deprecated(BaseModel):
 # ------- API: RESTORE -------
 
 
+class PostRestoreRequest(BaseModel):
+    outputs: List[BlindedMessage] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
+
+
 class PostRestoreResponse(BaseModel):
     outputs: List[BlindedMessage] = []
-    promises: List[BlindedSignature] = []
+    signatures: List[BlindedSignature] = []
+    promises: Optional[List[BlindedSignature]] = []  # deprecated since 0.15.1
+
+    # duplicate value of "signatures" for backwards compatibility with old clients < 0.15.1
+    def __init__(self, **data):
+        super().__init__(**data)
+        self.promises = self.signatures
 
 
 # ------- KEYSETS -------
@@ -664,9 +690,9 @@ class WalletKeyset:
             self.id = id
 
     def serialize(self):
-        return json.dumps({
-            amount: key.serialize().hex() for amount, key in self.public_keys.items()
-        })
+        return json.dumps(
+            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+        )
 
     @classmethod
     def from_row(cls, row: Row):

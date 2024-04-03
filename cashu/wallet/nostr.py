@@ -6,8 +6,7 @@ import click
 from httpx import ConnectError
 from loguru import logger
 
-from cashu.core.base import TokenV3
-
+from ..core.base import TokenV3
 from ..core.settings import settings
 from ..nostr.client.client import NostrClient
 from ..nostr.event import Event
@@ -112,7 +111,7 @@ async def receive_nostr(
         private_key=settings.nostr_private_key, relays=settings.nostr_relays
     )
     print(f"Your nostr public key: {client.public_key.bech32()}")
-    # print(f"Your nostr private key (do not share!): {client.private_key.bech32()}")
+
     await asyncio.sleep(2)
 
     def get_token_callback(event: Event, decrypted_content: str):
@@ -127,10 +126,6 @@ async def receive_nostr(
         words = decrypted_content.split(" ")
         for w in words:
             try:
-                logger.trace(
-                    "Nostr: setting last check timestamp to"
-                    f" {event.created_at} ({date_str})"
-                )
                 # call the receive method
                 tokenObj: TokenV3 = deserialize_token_from_string(w)
                 print(
@@ -143,6 +138,10 @@ async def receive_nostr(
                         wallet,
                         tokenObj,
                     )
+                )
+                logger.trace(
+                    "Nostr: setting last check timestamp to"
+                    f" {event.created_at} ({date_str})"
                 )
                 asyncio.run(
                     set_nostr_last_check_timestamp(

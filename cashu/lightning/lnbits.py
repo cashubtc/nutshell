@@ -22,9 +22,12 @@ from .base import (
 class LNbitsWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
-    units = set([Unit.sat])
+    supported_units = set([Unit.sat])
+    unit = Unit.sat
 
-    def __init__(self):
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         self.endpoint = settings.mint_lnbits_endpoint
         self.client = httpx.AsyncClient(
             verify=not settings.debug,
@@ -46,7 +49,7 @@ class LNbitsWallet(LightningBackend):
         except Exception:
             return StatusResponse(
                 error_message=(
-                    f"Failed to connect to {self.endpoint}, got: '{r.text[:200]}...'"
+                    f"Received invalid response from {self.endpoint}: {r.text}"
                 ),
                 balance=0,
             )
@@ -148,8 +151,18 @@ class LNbitsWallet(LightningBackend):
         if "paid" not in data and "details" not in data:
             return PaymentStatus(paid=None)
 
+        paid_value = None
+        if data["paid"]:
+            paid_value = True
+        elif not data["paid"] and data["details"]["pending"]:
+            paid_value = None
+        elif not data["paid"] and not data["details"]["pending"]:
+            paid_value = False
+        else:
+            raise ValueError(f"unexpected value for paid: {data['paid']}")
+
         return PaymentStatus(
-            paid=data["paid"],
+            paid=paid_value,
             fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
             preimage=data["preimage"],
         )
@@ -162,5 +175,7 @@ class LNbitsWallet(LightningBackend):
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
         return PaymentQuoteResponse(
-            checking_id=invoice_obj.payment_hash, fee=fees, amount=amount
+            checking_id=invoice_obj.payment_hash,
+            fee=fees.to(self.unit, round="up"),
+            amount=amount.to(self.unit, round="up"),
         )
