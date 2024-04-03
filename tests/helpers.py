@@ -32,7 +32,7 @@ is_regtest: bool = not is_fake
 is_deprecated_api_only = settings.debug_mint_only_deprecated
 is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
 is_postgres = settings.mint_database.startswith("postgres")
-SLEEP_TIME = 1 if not is_github_actions else 3
+SLEEP_TIME = 1 if not is_github_actions else 2
 
 docker_lightning_cli = [
     "docker",
