@@ -157,31 +157,6 @@ def pay_onchain(address: str, sats: int) -> str:
     return run_cmd(cmd)
 
 
-# def clean_database(settings):
-#     if DB_TYPE == POSTGRES:
-#         db_url = make_url(settings.lnbits_database_url)
-
-#         conn = psycopg2.connect(settings.lnbits_database_url)
-#         conn.autocommit = True
-#         with conn.cursor() as cur:
-#             try:
-#                 cur.execute("DROP DATABASE lnbits_test")
-#             except psycopg2.errors.InvalidCatalogName:
-#                 pass
-#             cur.execute("CREATE DATABASE lnbits_test")
-
-#         db_url.database = "lnbits_test"
-#         settings.lnbits_database_url = str(db_url)
-
-#         core.db.__init__("database")
-
-#         conn.close()
-#     else:
-#         # FIXME: do this once mock data is removed from test data folder
-#         # os.remove(settings.lnbits_data_folder + "/database.sqlite3")
-#         pass
-
-
 def pay_if_regtest(bolt11: str):
     if is_regtest:
         pay_real_invoice(bolt11)

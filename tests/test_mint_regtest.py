@@ -52,7 +52,7 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
             quote_id=quote.quote,
         )
     )
-    await asyncio.sleep(SLEEP_TIME)
+    await asyncio.sleep(SLEEP_TIME * 3)
     # settle_invoice(preimage=preimage)
 
     # expect that melt quote is still pending
@@ -67,7 +67,7 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
 
     # only now settle the invoice
     settle_invoice(preimage=preimage)
-    await asyncio.sleep(SLEEP_TIME)
+    await asyncio.sleep(SLEEP_TIME * 3)
 
     # expect that proofs are now spent
     states = await ledger.check_proofs_state([p.Y for p in send_proofs])
