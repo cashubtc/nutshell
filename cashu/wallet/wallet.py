@@ -1014,7 +1014,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             n_change_outputs * [1], change_secrets, change_rs
         )
 
-        # store the melt_id in proofs
+        # store the melt_id in proofs db
         async with self.db.connect() as conn:
             for p in proofs:
                 p.melt_id = quote_id
