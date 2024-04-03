@@ -1,7 +1,9 @@
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Request, WebSocket
 from loguru import logger
+
+from cashu.mint.events.client import LedgerEventClientManager
 
 from ..core.base import (
     GetInfoResponse,
@@ -224,16 +226,18 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     return resp
 
 
-@router.websocket("/v1/quote/{quote_id}", name="Quote updates")
-@router.websocket("/v1/mint/quote/bolt11/{quote_id}", name="Mint quote updates")
-@router.websocket("/v1/melt/quote/bolt11/{quote_id}", name="Melt quote updates")
-async def websocket_endpoint(websocket: WebSocket, quote_id: str):
-    await websocket.accept()
+@router.websocket("/v1/ws/checkstate", name="Subscribe to updates")
+async def websocket_endpoint(websocket: WebSocket):
+    client = LedgerEventClientManager(websocket=websocket)
+    success = ledger.events.add_client(client)
+    if not success:
+        await websocket.close()
+        return
     try:
-        async for quote in ledger.quote_queue.watch(quote_id):
-            await websocket.send_json(quote.dict())
-    except WebSocketDisconnect:
-        pass
+        await client.start()
+    except Exception as e:
+        logger.warning(e)
+        ledger.events.remove_client(client)
 
 
 @router.post(

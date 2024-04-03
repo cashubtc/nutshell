@@ -7,8 +7,9 @@ from sqlite3 import Row
 from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, root_validator
 
+from ..mint.events.base import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
@@ -101,12 +102,12 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
-    mint_id: Union[None, str] = (
-        None  # holds the id of the mint operation that created this proof
-    )
-    melt_id: Union[None, str] = (
-        None  # holds the id of the melt operation that destroyed this proof
-    )
+    mint_id: Union[
+        None, str
+    ] = None  # holds the id of the mint operation that created this proof
+    melt_id: Union[
+        None, str
+    ] = None  # holds the id of the melt operation that destroyed this proof
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -225,7 +226,7 @@ class Invoice(BaseModel):
     time_paid: Union[None, str, int, float] = ""
 
 
-class MeltQuote(BaseModel):
+class MeltQuote(LedgerEvent):
     quote: str
     method: str
     request: str
@@ -266,8 +267,12 @@ class MeltQuote(BaseModel):
             proof=row["proof"],
         )
 
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.quote
 
-class MintQuote(BaseModel):
+
+class MintQuote(LedgerEvent):
     quote: str
     method: str
     request: str
@@ -304,6 +309,10 @@ class MintQuote(BaseModel):
             created_time=created_time,
             paid_time=paid_time,
         )
+
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.quote
 
 
 # ------- API -------
@@ -514,10 +523,21 @@ class SpentState(Enum):
         return self.name
 
 
-class ProofState(BaseModel):
+class ProofState(LedgerEvent):
     Y: str
     state: SpentState
     witness: Optional[str] = None
+
+    @root_validator(pre=True)
+    def check_witness(cls, values):
+        state, witness = values.get("state"), values.get("witness")
+        if witness is not None and state != SpentState.spent:
+            raise ValueError('Witness can only be set if the spent state is "SPENT"')
+        return values
+
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.Y
 
 
 class PostCheckStateResponse(BaseModel):

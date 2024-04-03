@@ -6,7 +6,7 @@ from typing import Dict, List, Mapping, Optional, Tuple
 import bolt11
 from loguru import logger
 
-from cashu.mint.quotes import QuoteQueue
+from cashu.mint.events.events import LedgerEventManager
 
 from ..core.base import (
     DLEQ,
@@ -64,7 +64,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         asyncio.Lock()
     )  # holds locks for proofs_pending database
     keysets: Dict[str, MintKeyset] = {}
-    quote_queue = QuoteQueue()
+    events = LedgerEventManager()
 
     def __init__(
         self,
@@ -165,7 +165,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 logger.info(f"Melt quote {quote.quote} state: failed")
 
                 # unset pending
-                await self._unset_proofs_pending(pending_proofs)
+                await self._unset_proofs_pending(pending_proofs, spent=False)
             elif payment.pending:
                 logger.info(f"Melt quote {quote.quote} state: pending")
                 pass
@@ -328,6 +328,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 await self.crud.invalidate_proof(
                     proof=p, db=self.db, quote_id=quote_id, conn=conn
                 )
+                await self.events.submit(
+                    ProofState(Y=p.Y, state=SpentState.spent, witness=p.witness or None)
+                )
 
     async def _generate_change_promises(
         self,
@@ -457,7 +460,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             expiry=expiry,
         )
         await self.crud.store_mint_quote(quote=quote, db=self.db)
-        await self.quote_queue.submit(quote.quote, quote)
+        await self.events.submit(quote)
 
         return quote
 
@@ -490,7 +493,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 quote.paid = True
                 quote.paid_time = int(time.time())
                 await self.crud.update_mint_quote(quote=quote, db=self.db)
-                await self.quote_queue.submit(quote.quote, quote)
+                await self.events.submit(quote)
 
         return quote
 
@@ -540,7 +543,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             logger.trace(f"crud: setting quote {quote_id} as issued")
             quote.issued = True
             await self.crud.update_mint_quote(quote=quote, db=self.db)
-            await self.quote_queue.submit(quote.quote, quote)
+            await self.events.submit(quote)
 
         del self.locks[quote_id]
         return promises
@@ -626,7 +629,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             expiry=expiry,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
-        await self.quote_queue.submit(quote.quote, quote)
+        await self.events.submit(quote)
 
         return PostMeltQuoteResponse(
             quote=quote.quote,
@@ -686,7 +689,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     melt_quote.proof = status.preimage
                 melt_quote.paid_time = int(time.time())
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-                await self.quote_queue.submit(melt_quote.quote, melt_quote)
+                await self.events.submit(melt_quote)
 
         return melt_quote
 
@@ -738,12 +741,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         melt_quote.paid = True
         melt_quote.paid_time = int(time.time())
         await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-        await self.quote_queue.submit(melt_quote.quote, melt_quote)
+        await self.events.submit(melt_quote)
 
         mint_quote.paid = True
         mint_quote.paid_time = melt_quote.paid_time
         await self.crud.update_mint_quote(quote=mint_quote, db=self.db)
-        await self.quote_queue.submit(mint_quote.quote, mint_quote)
+        await self.events.submit(mint_quote)
 
         return melt_quote
 
@@ -834,7 +837,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 melt_quote.paid = True
                 melt_quote.paid_time = int(time.time())
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-                await self.quote_queue.submit(melt_quote.quote, melt_quote)
+                await self.events.submit(melt_quote)
 
             # melt successful, invalidate proofs
             await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
@@ -1067,20 +1070,31 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                         await self.crud.set_proof_pending(
                             proof=p, db=self.db, quote_id=quote_id, conn=conn
                         )
+                        await self.events.submit(
+                            ProofState(Y=p.Y, state=SpentState.pending)
+                        )
                 except Exception as e:
                     logger.error(f"Failed to set proofs pending: {e}")
                     raise TransactionError("Failed to set proofs pending.")
 
-    async def _unset_proofs_pending(self, proofs: List[Proof]) -> None:
+    async def _unset_proofs_pending(self, proofs: List[Proof], spent=True) -> None:
         """Deletes proofs from pending table.
 
         Args:
             proofs (List[Proof]): Proofs to delete.
+            spent (bool): Whether the proofs have been spent or not. Defaults to True.
+                This should be False if the proofs were NOT invalidated before calling this function.
+                It is used to emit the unspent state for the proofs (otherwise the spent state is emitted
+                by the _invalidate_proofs function when the proofs are spent).
         """
         async with self.proofs_pending_lock:
             async with self.db.connect() as conn:
                 for p in proofs:
                     await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+                    if not spent:
+                        await self.events.submit(
+                            ProofState(Y=p.Y, state=SpentState.unspent)
+                        )
 
     async def _validate_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
