@@ -52,10 +52,6 @@ jobs:
           chmod -R 777 .
           bash ./start.sh
 
-      - name: Create fake admin
-        if: ${{ inputs.backend-wallet-class == 'LNbitsWallet' }}
-        run: docker exec cashu-lnbits-1 poetry run python tools/create_fake_admin.py
-
       - name: Run Tests
         env:
           WALLET_NAME: test_wallet

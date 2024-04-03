@@ -93,6 +93,83 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         self.pubkey = derive_pubkey(self.seed)
         self.spent_proofs: Dict[str, Proof] = {}
 
+    # ------- STARTUP -------
+
+    async def startup_ledger(self):
+        await self._startup_ledger()
+        await self._check_pending_proofs_and_melt_quotes()
+
+    async def _startup_ledger(self):
+        if settings.mint_cache_secrets:
+            await self.load_used_proofs()
+        await self.init_keysets()
+
+        for derivation_path in settings.mint_derivation_path_list:
+            await self.activate_keyset(derivation_path=derivation_path)
+
+        for method in self.backends:
+            for unit in self.backends[method]:
+                logger.info(
+                    f"Using {self.backends[method][unit].__class__.__name__} backend for"
+                    f" method: '{method.name}' and unit: '{unit.name}'"
+                )
+                status = await self.backends[method][unit].status()
+                if status.error_message:
+                    logger.warning(
+                        "The backend for"
+                        f" {self.backends[method][unit].__class__.__name__} isn't"
+                        f" working properly: '{status.error_message}'",
+                        RuntimeWarning,
+                    )
+                logger.info(f"Backend balance: {status.balance} {unit.name}")
+
+        logger.info(f"Data dir: {settings.cashu_dir}")
+
+    async def _check_pending_proofs_and_melt_quotes(self):
+        """Startup routine that checks all pending proofs for their melt state and either invalidates
+        them for a successful melt or deletes them if the melt failed.
+        """
+        # get all pending melt quotes
+        melt_quotes = await self.crud.get_all_melt_quotes_from_pending_proofs(
+            db=self.db
+        )
+        if not melt_quotes:
+            return
+        for quote in melt_quotes:
+            # get pending proofs for quote
+            pending_proofs = await self.crud.get_pending_proofs_for_quote(
+                quote_id=quote.quote, db=self.db
+            )
+            # check with the backend whether the quote has been paid during downtime
+            payment = await self.backends[Method[quote.method]][
+                Unit[quote.unit]
+            ].get_payment_status(quote.checking_id)
+            if payment.paid:
+                logger.info(f"Melt quote {quote.quote} state: paid")
+                quote.paid_time = int(time.time())
+                quote.paid = True
+                if payment.fee:
+                    quote.fee_paid = payment.fee.to(Unit[quote.unit]).amount
+                quote.proof = payment.preimage or ""
+                await self.crud.update_melt_quote(quote=quote, db=self.db)
+                # invalidate proofs
+                await self._invalidate_proofs(
+                    proofs=pending_proofs, quote_id=quote.quote
+                )
+                # unset pending
+                await self._unset_proofs_pending(pending_proofs)
+            elif payment.failed:
+                logger.info(f"Melt quote {quote.quote} state: failed")
+
+                # unset pending
+                await self._unset_proofs_pending(pending_proofs)
+            elif payment.pending:
+                logger.info(f"Melt quote {quote.quote} state: pending")
+                pass
+            else:
+                logger.error("Melt quote state unknown")
+                pass
+
     # ------- KEYS -------
 
     async def activate_keyset(
@@ -229,7 +306,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     # ------- ECASH -------
 
     async def _invalidate_proofs(
-        self, proofs: List[Proof], conn: Optional[Connection] = None
+        self,
+        *,
+        proofs: List[Proof],
+        quote_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
     ) -> None:
         """Adds proofs to the set of spent proofs and stores them in the db.
 
@@ -241,7 +322,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         async with get_db_connection(self.db, conn) as conn:
             # store in db
             for p in proofs:
-                await self.crud.invalidate_proof(proof=p, db=self.db, conn=conn)
+                await self.crud.invalidate_proof(
+                    proof=p, db=self.db, quote_id=quote_id, conn=conn
+                )
 
     async def _generate_change_promises(
         self,
@@ -708,14 +791,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             )
 
         # verify inputs and their spending conditions
+        # note, we do not verify outputs here, as they are only used for returning overpaid fees
+        # we should have used _verify_outputs here already (see above)
         await self.verify_inputs_and_outputs(proofs=proofs)
 
         # set proofs to pending to avoid race conditions
-        await self._set_proofs_pending(proofs)
+        await self._set_proofs_pending(proofs, quote_id=melt_quote.quote)
         try:
             # settle the transaction internally if there is a mint quote with the same payment request
             melt_quote = await self.melt_mint_settle_internally(melt_quote)
-
             # quote not paid yet (not internal), pay it with the backend
             if not melt_quote.paid:
                 logger.debug(f"Lightning: pay invoice {melt_quote.request}")
@@ -742,7 +826,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
 
             # melt successful, invalidate proofs
-            await self._invalidate_proofs(proofs)
+            await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
 
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []
@@ -802,7 +886,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             async with get_db_connection(self.db) as conn:
                 # we do this in a single db transaction
                 promises = await self._generate_promises(outputs, keyset, conn)
-                await self._invalidate_proofs(proofs, conn)
+                await self._invalidate_proofs(proofs=proofs, conn=conn)
 
         except Exception as e:
             logger.trace(f"split failed: {e}")
@@ -823,7 +907,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             for output in outputs:
                 logger.trace(f"looking for promise: {output}")
                 promise = await self.crud.get_promise(
-                    B_=output.B_, db=self.db, conn=conn
+                    b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
                     # BEGIN backwards compatibility mints pre `m007_proofs_and_promises_store_id`
@@ -890,8 +974,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 await self.crud.store_promise(
                     amount=amount,
                     id=keyset_id,
-                    B_=B_.serialize().hex(),
-                    C_=C_.serialize().hex(),
+                    b_=B_.serialize().hex(),
+                    c_=C_.serialize().hex(),
                     e=e.serialize(),
                     s=s.serialize(),
                     db=self.db,
@@ -950,12 +1034,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 )
         return states
 
-    async def _set_proofs_pending(self, proofs: List[Proof]) -> None:
+    async def _set_proofs_pending(
+        self, proofs: List[Proof], quote_id: Optional[str] = None
+    ) -> None:
         """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
         the list of pending proofs or removes them. Used as a mutex for proofs.
 
         Args:
             proofs (List[Proof]): Proofs to add to pending table.
+            quote_id (Optional[str]): Melt quote ID. If it is not set, we assume the pending tokens to be from a swap.
 
         Raises:
             Exception: At least one proof already in pending table.
@@ -967,9 +1054,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 try:
                     for p in proofs:
                         await self.crud.set_proof_pending(
-                            proof=p, db=self.db, conn=conn
+                            proof=p, db=self.db, quote_id=quote_id, conn=conn
                         )
-                except Exception:
+                except Exception as e:
+                    logger.error(f"Failed to set proofs pending: {e}")
                     raise TransactionError("Failed to set proofs pending.")
 
     async def _unset_proofs_pending(self, proofs: List[Proof]) -> None:

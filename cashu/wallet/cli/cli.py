@@ -247,7 +247,7 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
     await wallet.load_mint()
     await print_balance(ctx)
     amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
-    print(f"Requesting invoice for {wallet.unit.str(amount)} {wallet.unit}.")
+    print(f"Requesting invoice for {wallet.unit.str(amount)}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:

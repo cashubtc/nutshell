@@ -139,7 +139,7 @@ class FakeWallet(LightningBackend):
         return PaymentStatus(paid=paid or None)
 
     async def get_payment_status(self, _: str) -> PaymentStatus:
-        return PaymentStatus(paid=None)
+        return PaymentStatus(paid=settings.fakewallet_payment_state)
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:
