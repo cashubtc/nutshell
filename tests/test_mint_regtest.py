@@ -65,6 +65,10 @@ async def test_pending_melt_startup_routine(wallet: Wallet, ledger: Ledger):
         quote_id=quote.quote,
     )
 
+    # expect that proofs are pending
+    states = await ledger.check_proofs_state([pending_proof.Y])
+    assert all([s.state == SpentState.pending for s in states])
+
     # run startup routinge
     await ledger.startup_ledger()
 
@@ -76,7 +80,7 @@ async def test_pending_melt_startup_routine(wallet: Wallet, ledger: Ledger):
 
     # expect that proofs are spent
     states = await ledger.check_proofs_state([pending_proof.Y])
-    assert states[0].state == SpentState.spent
+    assert all([s.state == SpentState.spent for s in states])
 
     # expect that no pending tokens are in db anymore
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -106,7 +110,12 @@ async def test_pending_failed_melt_startup_routine(wallet: Wallet, ledger: Ledge
         quote_id=quote.quote,
     )
 
-    # run startup routinge
+    # expect that proofs are pending
+    states = await ledger.check_proofs_state([pending_proof.Y])
+    assert all([s.state == SpentState.pending for s in states])
+
+    # run startup routinge, this checks whether there is an associated payment in the backend
+    # to the melt quote. Since it was never paid, the pending proofs should be removed from the db.
     await ledger.startup_ledger()
 
     # expect that no pending tokens are in db anymore
@@ -117,7 +126,7 @@ async def test_pending_failed_melt_startup_routine(wallet: Wallet, ledger: Ledge
 
     # expect that proofs are unspent
     states = await ledger.check_proofs_state([pending_proof.Y])
-    assert states[0].state == SpentState.unspent
+    assert all([s.state == SpentState.unspent for s in states])
 
     # expect that no pending tokens are in db anymore
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
