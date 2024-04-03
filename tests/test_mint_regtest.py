@@ -68,16 +68,12 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     settle_invoice(preimage=preimage)
     await asyncio.sleep(SLEEP_TIME)
 
-    is_spent = False
-    for _ in range(10):
-        # expect that proofs are now spent
-        states = await ledger.check_proofs_state([p.Y for p in send_proofs])
-        is_spent = all([s.state == SpentState.spent for s in states])
-        if is_spent:
-            break
-        await asyncio.sleep(SLEEP_TIME)
+    # run startup routinge
+    await ledger.startup_ledger()
 
-    assert is_spent
+    # expect that proofs are now spent
+    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
+    assert all([s.state == SpentState.spent for s in states])
 
     # expect that no melt quote is pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
