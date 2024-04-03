@@ -68,7 +68,7 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     settle_invoice(preimage=preimage)
     await asyncio.sleep(1)
 
-    # expect that proofs are still pending
+    # expect that proofs are now spent
     states = await ledger.check_proofs_state([p.Y for p in send_proofs])
     assert all([s.state == SpentState.spent for s in states])
 

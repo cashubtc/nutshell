@@ -12,6 +12,7 @@ from cashu.core.settings import settings
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
+from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     cancel_invoice,
     get_hold_invoice,
@@ -25,7 +26,6 @@ SEED = "TEST_PRIVATE_KEY"
 DERIVATION_PATH = "m/0'/0'/0'"
 DECRYPTON_KEY = "testdecryptionkey"
 ENCRYPTED_SEED = "U2FsdGVkX1_7UU_-nVBMBWDy_9yDu4KeYb7MH8cJTYQGD4RWl82PALH8j-HKzTrI"
-BASE_URL = "http://localhost:3337"
 
 
 async def assert_err(f, msg):
@@ -46,7 +46,7 @@ def assert_amt(proofs: List[Proof], expected: int):
 @pytest_asyncio.fixture(scope="function")
 async def wallet(ledger: Ledger):
     wallet1 = await Wallet.with_db(
-        url=BASE_URL,
+        url=SERVER_ENDPOINT,
         db="test_data/wallet_mint_api_deprecated",
         name="wallet_mint_api_deprecated",
     )
@@ -393,6 +393,6 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     )
     assert not melt_quotes
 
-    # expect that proofs are spent
+    # expect that proofs are unspent
     states = await ledger.check_proofs_state([p.Y for p in send_proofs])
     assert all([s.state == SpentState.unspent for s in states])
