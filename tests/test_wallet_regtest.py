@@ -9,15 +9,13 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
+    SLEEP_TIME,
     cancel_invoice,
     get_hold_invoice,
     is_fake,
-    is_github_actions,
     pay_if_regtest,
     settle_invoice,
 )
-
-SLEEP_TIME = 1 if not is_github_actions else 2
 
 
 @pytest_asyncio.fixture(scope="function")

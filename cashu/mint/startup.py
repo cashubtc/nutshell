@@ -16,6 +16,11 @@ from ..mint import migrations
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
 
+# kill the program if python runs in non-__debug__ mode
+# which could lead to asserts not being executed for optimized code
+if not __debug__:
+    raise Exception("Nutshell cannot run in non-debug mode.")
+
 logger.debug("Enviroment Settings:")
 for key, value in settings.dict().items():
     if key in [

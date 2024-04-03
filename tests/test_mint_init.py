@@ -14,10 +14,10 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
+    SLEEP_TIME,
     cancel_invoice,
     get_hold_invoice,
     is_fake,
-    is_github_actions,
     is_regtest,
     pay_if_regtest,
     settle_invoice,
@@ -27,7 +27,6 @@ SEED = "TEST_PRIVATE_KEY"
 DERIVATION_PATH = "m/0'/0'/0'"
 DECRYPTON_KEY = "testdecryptionkey"
 ENCRYPTED_SEED = "U2FsdGVkX1_7UU_-nVBMBWDy_9yDu4KeYb7MH8cJTYQGD4RWl82PALH8j-HKzTrI"
-SLEEP_TIME = 1 if not is_github_actions else 2
 
 
 async def assert_err(f, msg):
