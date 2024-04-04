@@ -1,11 +1,12 @@
 import base64
 import copy
 import json
+import threading
 import time
 import uuid
 from itertools import groupby
 from posixpath import join
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import bolt11
 import httpx
@@ -73,6 +74,7 @@ from . import migrations
 from .htlc import WalletHTLC
 from .p2pk import WalletP2PK
 from .secrets import WalletSecrets
+from .subscriptions import SubscriptionManager
 from .wallet_deprecated import LedgerAPIDeprecated
 
 
@@ -444,7 +446,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def mint_quote(self, amount) -> Invoice:
+    async def mint_quote(self, amount) -> PostMintQuoteResponse:
         """Requests a mint quote from the server and returns a payment request.
 
         Args:
@@ -469,16 +471,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         return_dict = resp.json()
-        mint_response = PostMintQuoteResponse.parse_obj(return_dict)
-        decoded_invoice = bolt11.decode(mint_response.request)
-        return Invoice(
-            amount=amount,
-            bolt11=mint_response.request,
-            payment_hash=decoded_invoice.payment_hash,
-            id=mint_response.quote,
-            out=False,
-            time_created=int(time.time()),
-        )
+        return PostMintQuoteResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -816,16 +809,57 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         for keyset in keysets:
             self.keysets[keyset.id] = keyset
 
+    async def request_mint_subscription(
+        self, amount: int, callback: Callable
+    ) -> Tuple[Invoice, SubscriptionManager]:
+        """Request a Lightning invoice for minting tokens.
+
+        Args:
+            amount (int): Amount for Lightning invoice in satoshis
+            callback (Optional[Callable], optional): Callback function to be called when the invoice is paid. Defaults to None.
+
+        Returns:
+            Invoice: Lightning invoice
+        """
+        mint_qoute = await super().mint_quote(amount)
+        subscriptions = SubscriptionManager(self.url)
+        threading.Thread(target=subscriptions.connect).start()
+        subscriptions.subscribe(filters=[mint_qoute.quote], callback=callback)
+        # return the invoice
+        decoded_invoice = bolt11.decode(mint_qoute.request)
+        invoice = Invoice(
+            amount=amount,
+            bolt11=mint_qoute.request,
+            payment_hash=decoded_invoice.payment_hash,
+            id=mint_qoute.quote,
+            out=False,
+            time_created=int(time.time()),
+        )
+        await store_lightning_invoice(db=self.db, invoice=invoice)
+        return invoice, subscriptions
+
     async def request_mint(self, amount: int) -> Invoice:
         """Request a Lightning invoice for minting tokens.
 
         Args:
             amount (int): Amount for Lightning invoice in satoshis
+            callback (Optional[Callable], optional): Callback function to be called when the invoice is paid. Defaults to None.
 
         Returns:
             Invoice: Lightning invoice
         """
-        invoice = await super().mint_quote(amount)
+        mint_qoute = await super().mint_quote(amount)
+
+        # return the invoice
+        decoded_invoice = bolt11.decode(mint_qoute.request)
+        invoice = Invoice(
+            amount=amount,
+            bolt11=mint_qoute.request,
+            payment_hash=decoded_invoice.payment_hash,
+            id=mint_qoute.quote,
+            out=False,
+            time_created=int(time.time()),
+        )
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 

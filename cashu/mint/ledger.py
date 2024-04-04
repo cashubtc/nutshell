@@ -7,6 +7,7 @@ import bolt11
 from loguru import logger
 
 from cashu.mint.events.events import LedgerEventManager
+from cashu.mint.tasks import LedgerTasks
 
 from ..core.base import (
     DLEQ,
@@ -57,7 +58,7 @@ from .conditions import LedgerSpendingConditions
 from .verification import LedgerVerification
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions):
+class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
     proofs_pending_lock: asyncio.Lock = (
@@ -101,6 +102,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
     async def startup_ledger(self):
         await self._startup_ledger()
         await self._check_pending_proofs_and_melt_quotes()
+        await self.dispatch_listeners()
 
     async def _startup_ledger(self):
         if settings.mint_cache_secrets:
@@ -575,9 +577,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # check if there is a mint quote with the same payment request
         # so that we would be able to handle the transaction internally
         # and therefore respond with internal transaction fees (0 for now)
-        mint_quote = await self.crud.get_mint_quote_by_request(
-            request=request, db=self.db
-        )
+        mint_quote = await self.crud.get_mint_quote(request=request, db=self.db)
         if mint_quote:
             assert request == mint_quote.request, "bolt11 requests do not match"
             assert mint_quote.unit == melt_quote.unit, "units do not match"
@@ -668,7 +668,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # we only check the state with the backend if there is no associated internal
         # mint quote for this melt quote
-        mint_quote = await self.crud.get_mint_quote_by_request(
+        mint_quote = await self.crud.get_mint_quote(
             request=melt_quote.request, db=self.db
         )
 
@@ -708,7 +708,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """
         # first we check if there is a mint quote with the same payment request
         # so that we can handle the transaction internally without the backend
-        mint_quote = await self.crud.get_mint_quote_by_request(
+        mint_quote = await self.crud.get_mint_quote(
             request=melt_quote.request, db=self.db
         )
         if not mint_quote:

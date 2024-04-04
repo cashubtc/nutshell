@@ -260,9 +260,23 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
             f"Requesting split with {n_splits} * {wallet.unit.str(split)} tokens."
         )
 
+    paid = False
+
+    def mint_invoice_callback(msg):
+        nonlocal ctx, wallet, amount, optional_split, paid
+        print("Received callback for invoice.")
+        asyncio.run(wallet.mint(int(amount), split=optional_split, id=invoice.id))
+        print(" Invoice callback paid.")
+        print("")
+        asyncio.run(print_balance(ctx))
+        os._exit(0)
+
     # user requests an invoice
     if amount and not id:
-        invoice = await wallet.request_mint(amount)
+        mint_supports_websockets = True
+        invoice, subscription = await wallet.request_mint_subscription(
+            amount, callback=mint_invoice_callback
+        )
         if invoice.bolt11:
             print("")
             print(f"Pay invoice to mint {wallet.unit.str(amount)}:")
@@ -275,20 +289,26 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
             )
             if no_check:
                 return
-            check_until = time.time() + 5 * 60  # check for five minutes
             print("")
             print(
                 "Checking invoice ...",
                 end="",
                 flush=True,
             )
+        if mint_supports_websockets:
+            while not paid:
+                await asyncio.sleep(0.1)
+
+        if not mint_supports_websockets:
+            check_until = time.time() + 5 * 60  # check for five minutes
             paid = False
             while time.time() < check_until and not paid:
-                time.sleep(3)
+                await asyncio.sleep(10)
                 try:
-                    await wallet.mint(amount, split=optional_split, id=invoice.id)
+                    # await wallet.mint(amount, split=optional_split, id=invoice.id)
                     paid = True
                     print(" Invoice paid.")
+                    subscription.close()
                 except Exception as e:
                     # TODO: user error codes!
                     if "not paid" in str(e):

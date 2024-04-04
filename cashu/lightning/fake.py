@@ -4,7 +4,7 @@ import math
 import random
 from datetime import datetime
 from os import urandom
-from typing import AsyncGenerator, Dict, Optional, Set
+from typing import AsyncGenerator, Dict, List, Optional
 
 from bolt11 import (
     Bolt11,
@@ -30,9 +30,11 @@ from .base import (
 
 class FakeWallet(LightningBackend):
     fake_btc_price = 1e8 / 1337
-    queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
+    paid_invoices_queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
-    paid_invoices: Set[str] = set()
+    created_invoices: List[Bolt11] = []
+    paid_invoices_outgoing: List[Bolt11] = []
+    paid_invoices_incoming: List[Bolt11] = []
     secret: str = "FAKEWALLET SECRET"
     privkey: str = hashlib.pbkdf2_hmac(
         "sha256",
@@ -51,6 +53,11 @@ class FakeWallet(LightningBackend):
 
     async def status(self) -> StatusResponse:
         return StatusResponse(error_message=None, balance=1337)
+
+    async def mark_invoice_paid(self, invoice: Bolt11) -> None:
+        await asyncio.sleep(1)
+        self.paid_invoices_incoming.append(invoice)
+        await self.paid_invoices_queue.put(invoice)
 
     async def create_invoice(
         self,
@@ -105,7 +112,14 @@ class FakeWallet(LightningBackend):
             tags=tags,
         )
 
+        if bolt11 not in self.created_invoices:
+            self.created_invoices.append(bolt11)
+        else:
+            raise ValueError("Invoice already created")
+
         payment_request = encode(bolt11, self.privkey)
+
+        asyncio.create_task(self.mark_invoice_paid(bolt11))
 
         return InvoiceResponse(
             ok=True, checking_id=payment_hash, payment_request=payment_request
@@ -118,8 +132,11 @@ class FakeWallet(LightningBackend):
             await asyncio.sleep(5)
 
         if invoice.payment_hash in self.payment_secrets or settings.fakewallet_brr:
-            await self.queue.put(invoice)
-            self.paid_invoices.add(invoice.payment_hash)
+            if invoice not in self.paid_invoices_outgoing:
+                self.paid_invoices_outgoing.append(invoice)
+            else:
+                raise ValueError("Invoice already paid")
+
             return PaymentResponse(
                 ok=True,
                 checking_id=invoice.payment_hash,
@@ -132,19 +149,29 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        if settings.fakewallet_stochastic_invoice:
-            paid = random.random() > 0.7
-            return PaymentStatus(paid=paid)
-        paid = checking_id in self.paid_invoices or settings.fakewallet_brr
-        return PaymentStatus(paid=paid or None)
+        is_created_invoice = any(
+            [checking_id == i.payment_hash for i in self.created_invoices]
+        )
+        if not is_created_invoice:
+            return PaymentStatus(paid=None)
+        invoice = next(
+            i for i in self.created_invoices if i.payment_hash == checking_id
+        )
+        paid = False
+        if is_created_invoice or (
+            settings.fakewallet_brr
+            or (settings.fakewallet_stochastic_invoice and random.random() > 0.7)
+        ):
+            paid = True
+
+        # invoice is paid but not in paid_invoices_incoming yet
+        # so we add it to the paid_invoices_queue
+        if paid and invoice not in self.paid_invoices_incoming:
+            await self.paid_invoices_queue.put(invoice)
+        return PaymentStatus(paid=paid)
 
     async def get_payment_status(self, _: str) -> PaymentStatus:
         return PaymentStatus(paid=settings.fakewallet_payment_state)
-
-    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
-        while True:
-            value: Bolt11 = await self.queue.get()
-            yield value.payment_hash
 
     # async def get_invoice_quote(self, bolt11: str) -> InvoiceQuoteResponse:
     #     invoice_obj = decode(bolt11)
@@ -173,3 +200,8 @@ class FakeWallet(LightningBackend):
             fee=fees.to(self.unit, round="up"),
             amount=amount.to(self.unit, round="up"),
         )
+
+    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+        while True:
+            value: Bolt11 = await self.paid_invoices_queue.get()
+            yield value.payment_hash

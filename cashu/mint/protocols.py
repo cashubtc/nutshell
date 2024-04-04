@@ -4,6 +4,7 @@ from ..core.base import Method, MintKeyset, Unit
 from ..core.db import Database
 from ..lightning.base import LightningBackend
 from ..mint.crud import LedgerCrud
+from .events.events import LedgerEventManager
 
 
 class SupportsKeysets(Protocol):
@@ -18,3 +19,7 @@ class SupportsBackends(Protocol):
 class SupportsDb(Protocol):
     db: Database
     crud: LedgerCrud
+
+
+class SupportsEvents(Protocol):
+    events: LedgerEventManager

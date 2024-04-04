@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Request, WebSocket
 from loguru import logger
 
-from cashu.mint.events.client import LedgerEventClientManager
+from cashu.mint.events.client_manager import LedgerEventClientManager
 
 from ..core.base import (
     GetInfoResponse,
@@ -226,7 +226,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     return resp
 
 
-@router.websocket("/v1/ws/checkstate", name="Subscribe to updates")
+@router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
     client = LedgerEventClientManager(websocket=websocket)
     success = ledger.events.add_client(client)
@@ -235,8 +235,7 @@ async def websocket_endpoint(websocket: WebSocket):
         return
     try:
         await client.start()
-    except Exception as e:
-        logger.warning(e)
+    except Exception:
         ledger.events.remove_client(client)
 
 

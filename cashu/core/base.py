@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 from pydantic import BaseModel, Field, root_validator
 
-from ..mint.events.base import LedgerEvent
+from ..mint.events.events import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
