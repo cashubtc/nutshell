@@ -539,12 +539,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks):
             if quote.expiry:
                 assert quote.expiry > int(time.time()), "quote expired"
 
-            promises = await self._generate_promises(outputs)
-            logger.trace("generated promises")
-
             logger.trace(f"crud: setting quote {quote_id} as issued")
             quote.issued = True
             await self.crud.update_mint_quote(quote=quote, db=self.db)
+
+            promises = await self._generate_promises(outputs)
+            logger.trace("generated promises")
+
+            # submit the quote update to the event manager
             await self.events.submit(quote)
 
         del self.locks[quote_id]
