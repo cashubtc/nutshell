@@ -823,7 +823,9 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """
         mint_qoute = await super().mint_quote(amount)
         subscriptions = SubscriptionManager(self.url)
-        threading.Thread(target=subscriptions.connect).start()
+        threading.Thread(
+            target=subscriptions.connect, name="SubscriptionManager", daemon=True
+        ).start()
         subscriptions.subscribe(filters=[mint_qoute.quote], callback=callback)
         # return the invoice
         decoded_invoice = bolt11.decode(mint_qoute.request)

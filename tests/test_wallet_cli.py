@@ -175,6 +175,7 @@ def test_invoice_with_split(mint, cli_prefix):
     wallet = asyncio.run(init_wallet())
     assert wallet.proof_amounts.count(1) >= 10
 
+
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_minting(cli_prefix):
     # arrange
@@ -223,6 +224,7 @@ def test_invoices_without_minting(cli_prefix):
     assert get_invoice_from_invoices_command(result.output)["ID"] == invoice.id
     assert get_invoice_from_invoices_command(result.output)["Paid"] == str(invoice.paid)
 
+
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_onlypaid_option(cli_prefix):
     # arrange
@@ -262,6 +264,7 @@ def test_invoices_with_onlypaid_option_without_minting(cli_prefix):
     assert result.exception is None
     assert result.exit_code == 0
     assert "No invoices found." in result.output
+
 
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_onlyunpaid_option(cli_prefix):
@@ -321,6 +324,7 @@ def test_invoices_with_both_onlypaid_and_onlyunpaid_options(cli_prefix):
         "You should only choose one option: either --only-paid or --only-unpaid"
         in result.output
     )
+
 
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_pending_option(cli_prefix):

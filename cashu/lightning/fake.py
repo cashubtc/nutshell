@@ -55,9 +55,20 @@ class FakeWallet(LightningBackend):
         return StatusResponse(error_message=None, balance=1337)
 
     async def mark_invoice_paid(self, invoice: Bolt11) -> None:
-        await asyncio.sleep(1)
+        await asyncio.sleep(2)
         self.paid_invoices_incoming.append(invoice)
         await self.paid_invoices_queue.put(invoice)
+
+    def create_dummy_bolt11(self, payment_hash: str) -> Bolt11:
+        tags = Tags()
+        tags.add(TagChar.payment_hash, payment_hash)
+        tags.add(TagChar.payment_secret, urandom(32).hex())
+        return Bolt11(
+            currency="bc",
+            amount_msat=MilliSatoshi(1337),
+            date=int(datetime.now().timestamp()),
+            tags=tags,
+        )
 
     async def create_invoice(
         self,
@@ -119,7 +130,8 @@ class FakeWallet(LightningBackend):
 
         payment_request = encode(bolt11, self.privkey)
 
-        asyncio.create_task(self.mark_invoice_paid(bolt11))
+        if settings.fakewallet_brr:
+            asyncio.create_task(self.mark_invoice_paid(bolt11))
 
         return InvoiceResponse(
             ok=True, checking_id=payment_hash, payment_request=payment_request
@@ -149,25 +161,27 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        is_created_invoice = any(
-            [checking_id == i.payment_hash for i in self.created_invoices]
-        )
-        if not is_created_invoice:
-            return PaymentStatus(paid=None)
-        invoice = next(
-            i for i in self.created_invoices if i.payment_hash == checking_id
-        )
+        # is_created_invoice = any(
+        #     [checking_id == i.payment_hash for i in self.created_invoices]
+        # )
+        # if not is_created_invoice:
+        #     return PaymentStatus(paid=None)
+        # invoice = next(
+        #     i for i in self.created_invoices if i.payment_hash == checking_id
+        # )
         paid = False
-        if is_created_invoice or (
-            settings.fakewallet_brr
-            or (settings.fakewallet_stochastic_invoice and random.random() > 0.7)
+        if settings.fakewallet_brr or (
+            settings.fakewallet_stochastic_invoice and random.random() > 0.7
         ):
             paid = True
 
         # invoice is paid but not in paid_invoices_incoming yet
         # so we add it to the paid_invoices_queue
-        if paid and invoice not in self.paid_invoices_incoming:
-            await self.paid_invoices_queue.put(invoice)
+        # if paid and invoice not in self.paid_invoices_incoming:
+        if paid:
+            await self.paid_invoices_queue.put(
+                self.create_dummy_bolt11(payment_hash=checking_id)
+            )
         return PaymentStatus(paid=paid)
 
     async def get_payment_status(self, _: str) -> PaymentStatus:

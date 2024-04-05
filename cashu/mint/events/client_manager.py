@@ -9,6 +9,7 @@ from ...core.json_rpc.base import (
     JSONRPCErrorCode,
     JSONRPCErrorResponse,
     JSONRPCMethods,
+    JSONRPCNotficationParams,
     JSONRPCNotification,
     JSONRPCRequest,
     JSONRPCResponse,
@@ -108,12 +109,9 @@ class LedgerEventClientManager:
 
     async def _send_obj(self, data: dict, subId: str):
         logger.info(f"Sending object: {data}")
-        method = JSONRPCMethods.SUBSCRIBE.value
-        data.update({"subId": subId})
-        params = data
         resp = JSONRPCNotification(
-            method=method,
-            params=params,
+            method=JSONRPCMethods.SUBSCRIBE.value,
+            params=JSONRPCNotficationParams(subId=subId, payload=data).dict(),
         )
         await self._send_msg(resp)
 

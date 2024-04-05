@@ -69,6 +69,11 @@ class JSONRPCUnubscribeParams(BaseModel):
     subId: str
 
 
+class JSONRPCNotficationParams(BaseModel):
+    subId: str
+    payload: dict
+
+
 class JSONRRPCSubscribeResponse(BaseModel):
     status: JSONRPCStatus
     subId: str

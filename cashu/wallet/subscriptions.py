@@ -7,6 +7,7 @@ from websocket._app import WebSocketApp
 
 from ..core.crypto.keys import random_hash
 from ..core.json_rpc.base import (
+    JSONRPCNotficationParams,
     JSONRPCNotification,
     JSONRPCRequest,
     JSONRPCResponse,
@@ -42,8 +43,9 @@ class SubscriptionManager:
 
         try:
             msg = JSONRPCNotification.parse_raw(message)
+            params = JSONRPCNotficationParams.parse_obj(msg.params)
             logger.debug(f"Received notification: {msg}")
-            self.callback_map[msg.params["subId"]](msg)
+            self.callback_map[params.subId](params)
             return
         except Exception:
             pass
@@ -54,20 +56,8 @@ class SubscriptionManager:
         self.websocket.run_forever(ping_interval=10, ping_timeout=5)
 
     def close(self):
+        self.websocket.keep_running = False
         self.websocket.close()
-
-    # async def listen(self):
-    #     while True:
-    #         await asyncio.sleep(0)
-    #         try:
-    #             msg = self.websocket.recv()
-    #             print(msg)
-    #         except WebSocketConnectionClosedException:
-    #             print("Connection closed")
-    #             break
-    #         except Exception as e:
-    #             print(f"Error receiving message: {e}")
-    #             break
 
     def wait_until_connected(self):
         while not self.websocket.sock or not self.websocket.sock.connected:
