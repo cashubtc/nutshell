@@ -195,6 +195,15 @@ class BlindedSignature(BaseModel):
     C_: str  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
 
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            id=row["id"],
+            amount=row["amount"],
+            C_=row["c_"],
+            dleq=DLEQ(e=row["dleq_e"], s=row["dleq_s"]),
+        )
+
 
 class BlindedMessages(BaseModel):
     # NOTE: not used in Pydantic validation

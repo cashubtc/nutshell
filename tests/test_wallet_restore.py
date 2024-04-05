@@ -172,6 +172,11 @@ async def test_restore_wallet_after_mint(wallet3: Wallet):
     await wallet3.restore_promises_from_to(0, 20)
     assert wallet3.balance == 64
 
+    # expect that DLEQ proofs are restored
+    assert all([p.dleq for p in wallet3.proofs])
+    assert all([p.dleq.e for p in wallet3.proofs])  # type: ignore
+    assert all([p.dleq.s for p in wallet3.proofs])  # type: ignore
+
 
 @pytest.mark.asyncio
 async def test_restore_wallet_with_invalid_mnemonic(wallet3: Wallet):

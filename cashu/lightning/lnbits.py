@@ -151,8 +151,18 @@ class LNbitsWallet(LightningBackend):
         if "paid" not in data and "details" not in data:
             return PaymentStatus(paid=None)
 
+        paid_value = None
+        if data["paid"]:
+            paid_value = True
+        elif not data["paid"] and data["details"]["pending"]:
+            paid_value = None
+        elif not data["paid"] and not data["details"]["pending"]:
+            paid_value = False
+        else:
+            raise ValueError(f"unexpected value for paid: {data['paid']}")
+
         return PaymentStatus(
-            paid=data["paid"],
+            paid=paid_value,
             fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
             preimage=data["preimage"],
         )
