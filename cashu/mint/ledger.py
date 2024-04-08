@@ -517,6 +517,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.trace("called mint")
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
+        output_units = set([k.unit for k in [self.keysets[o.id] for o in outputs]])
+        assert len(output_units) == 1, "outputs have different units"
+        output_unit = list(output_units)[0]
 
         self.locks[quote_id] = (
             self.locks.get(quote_id) or asyncio.Lock()
@@ -525,6 +528,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             quote = await self.get_mint_quote(quote_id=quote_id)
             assert quote.paid, QuoteNotPaidError()
             assert not quote.issued, "quote already issued"
+            assert (
+                quote.unit == output_unit.name
+            ), "quote unit does not match output unit"
             assert (
                 quote.amount == sum_amount_outputs
             ), "amount to mint does not match quote amount"
@@ -871,22 +877,21 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
         """
         logger.trace("split called")
+        # explicitly check that amount of inputs is equal to amount of outputs
+        # note: we check this again in verify_inputs_and_outputs but only if any
+        # outputs are provided at all. To make sure of that before calling
+        # verify_inputs_and_outputs, we check it here.
+        self._verify_equation_balanced(proofs, outputs)
+        # verify spending inputs, outputs, and spending conditions
+        await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
 
         await self._set_proofs_pending(proofs)
         try:
-            # explicitly check that amount of inputs is equal to amount of outputs
-            # note: we check this again in verify_inputs_and_outputs but only if any
-            # outputs are provided at all. To make sure of that before calling
-            # verify_inputs_and_outputs, we check it here.
-            self._verify_equation_balanced(proofs, outputs)
-            # verify spending inputs, outputs, and spending conditions
-            await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
-
             # Mark proofs as used and prepare new promises
             async with get_db_connection(self.db) as conn:
                 # we do this in a single db transaction
-                promises = await self._generate_promises(outputs, keyset, conn)
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
+                promises = await self._generate_promises(outputs, keyset, conn)
 
         except Exception as e:
             logger.trace(f"split failed: {e}")
