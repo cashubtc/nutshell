@@ -843,20 +843,21 @@ class Wallet(
         n_target = settings.wallet_target_amount_count
         amounts_we_have = [p.amount for p in self.proofs if p.reserved is not True]
         amounts_we_have.sort()
-        all_possible_amounts = [2**i for i in range(settings.max_order)]
-        amounts_we_want = [
+        # NOTE: Do not assume 2^n here
+        all_possible_amounts: list[int] = [2**i for i in range(settings.max_order)]
+        amounts_we_want_ll = [
             [a] * max(0, n_target - amounts_we_have.count(a))
             for a in all_possible_amounts
         ]
         # flatten list of lists to list
-        amounts_we_want = [item for sublist in amounts_we_want for item in sublist]
+        amounts_we_want = [item for sublist in amounts_we_want_ll for item in sublist]
         # sort by increasing amount
         amounts_we_want.sort()
 
         logger.debug(
             f"Amounts we have: {[(a, amounts_we_have.count(a)) for a in set(amounts_we_have)]}"
         )
-        amounts = []
+        amounts: list[int] = []
         while sum(amounts) < amount and amounts_we_want:
             if sum(amounts) + amounts_we_want[0] > amount:
                 break
@@ -903,8 +904,9 @@ class Wallet(
                         f"Can only mint amounts with 2^n up to {2**settings.max_order}."
                     )
 
-        # if no split was specified, we use the canonical split
+        # split based on our wallet state
         amounts = self.split_wallet_state(amount)
+        # if no split was specified, we use the canonical split
         # amounts = split or amount_split(amount)
 
         # quirk: we skip bumping the secret counter in the database since we are

@@ -32,7 +32,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
     ) -> Tuple[List[Proof], int]:
         send_proofs: List[Proof] = []
-        NO_SELECTION = [], 0
+        NO_SELECTION: tuple[list, int] = [], 0
 
         logger.trace(f"proofs: {[p.amount for p in proofs]}")
         # sort proofs by amount (descending)
