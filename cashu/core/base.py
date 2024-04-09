@@ -161,11 +161,6 @@ class Proof(BaseModel):
         return HTLCWitness.from_witness(self.witness).preimage
 
 
-class Proofs(BaseModel):
-    # NOTE: not used in Pydantic validation
-    __root__: List[Proof]
-
-
 class BlindedMessage(BaseModel):
     """
     Blinded message or blinded secret or "output" which is to be signed by the mint
@@ -200,11 +195,6 @@ class BlindedSignature(BaseModel):
             C_=row["c_"],
             dleq=DLEQ(e=row["dleq_e"], s=row["dleq_s"]),
         )
-
-
-class BlindedMessages(BaseModel):
-    # NOTE: not used in Pydantic validation
-    __root__: List[BlindedMessage] = []
 
 
 # ------- LIGHTNING INVOICE -------
@@ -339,6 +329,18 @@ class GetInfoResponse_deprecated(BaseModel):
     parameter: Optional[dict] = None
 
 
+class BlindedMessage_Deprecated(BaseModel):
+    # Same as BlindedMessage, but without the id field
+    amount: int
+    B_: str  # Hex-encoded blinded message
+    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
+
+    @property
+    def p2pksigs(self) -> List[str]:
+        assert self.witness, "Witness missing in output"
+        return P2PKWitness.from_witness(self.witness).signatures
+
+
 # ------- API: KEYS -------
 
 
@@ -405,7 +407,7 @@ class GetMintResponse_deprecated(BaseModel):
 
 
 class PostMintRequest_deprecated(BaseModel):
-    outputs: List[BlindedMessage] = Field(
+    outputs: List[BlindedMessage_Deprecated] = Field(
         ..., max_items=settings.mint_max_request_length
     )
 
@@ -452,7 +454,7 @@ class PostMeltResponse(BaseModel):
 class PostMeltRequest_deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     pr: str = Field(..., max_length=settings.mint_max_request_length)
-    outputs: Union[List[BlindedMessage], None] = Field(
+    outputs: Union[List[BlindedMessage_Deprecated], None] = Field(
         None, max_items=settings.mint_max_request_length
     )
 
@@ -481,7 +483,7 @@ class PostSplitResponse(BaseModel):
 class PostSplitRequest_Deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     amount: Optional[int] = None
-    outputs: List[BlindedMessage] = Field(
+    outputs: List[BlindedMessage_Deprecated] = Field(
         ..., max_items=settings.mint_max_request_length
     )
 

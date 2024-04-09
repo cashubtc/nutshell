@@ -34,6 +34,7 @@ from ..core.crypto.keys import (
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database, get_db_connection
 from ..core.errors import (
+    CashuError,
     KeysetError,
     KeysetNotFoundError,
     LightningError,
@@ -72,7 +73,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         derivation_path="",
         crud=LedgerCrudSqlite(),
     ):
-        assert seed, "seed not set"
+        if not seed:
+            raise Exception("seed not set")
 
         # decrypt seed if seed_decryption_key is set
         try:
@@ -189,7 +191,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Returns:
             MintKeyset: Keyset
         """
-        assert derivation_path, "derivation path not set"
+        if not derivation_path:
+            raise Exception("derivation path not set")
         seed = seed or self.seed
         tmp_keyset_local = MintKeyset(
             seed=seed,
@@ -230,7 +233,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         # set the deprecated id
-        assert keyset.public_keys
+        if not keyset.public_keys:
+            raise KeysetError("no public keys for this keyset")
         keyset.duplicate_keyset_id = derive_keyset_id_deprecated(keyset.public_keys)
         # END BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -268,7 +272,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             logger.info(f"Current keyset: {self.keyset.id}")
 
         # check that we have a least one active keyset
-        assert any([k.active for k in self.keysets.values()]), "No active keyset found."
+        if not any([k.active for k in self.keysets.values()]):
+            raise KeysetError("No active keyset found.")
 
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         # we duplicate new keysets and compute their old keyset id, and
@@ -278,7 +283,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         ) or duplicate_keysets:
             for _, keyset in copy.copy(self.keysets).items():
                 keyset_copy = copy.copy(keyset)
-                assert keyset_copy.public_keys
+                if not keyset_copy.public_keys:
+                    raise KeysetError("no public keys for this keyset")
                 if keyset.version_tuple >= (0, 15):
                     keyset_copy.id = derive_keyset_id_deprecated(
                         keyset_copy.public_keys
@@ -296,7 +302,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         if keyset_id and keyset_id not in self.keysets:
             raise KeysetNotFoundError()
         keyset = self.keysets[keyset_id] if keyset_id else self.keyset
-        assert keyset.public_keys, KeysetError("no public keys for this keyset")
+        if not keyset.public_keys:
+            raise KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
     async def get_balance(self) -> int:
@@ -400,7 +407,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             MintQuote: Mint quote object.
         """
         logger.trace("called request_mint")
-        assert quote_request.amount > 0, "amount must be positive"
+        if not quote_request.amount > 0:
+            raise TransactionError("amount must be positive")
         if settings.mint_max_peg_in and quote_request.amount > settings.mint_max_peg_in:
             raise NotAllowedError(
                 f"Maximum mint amount is {settings.mint_max_peg_in} sat."
@@ -426,9 +434,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             f" {invoice_response.checking_id}"
         )
 
-        assert (
-            invoice_response.payment_request and invoice_response.checking_id
-        ), LightningError("could not fetch bolt11 payment request from backend")
+        if not (invoice_response.payment_request and invoice_response.checking_id):
+            raise LightningError("could not fetch bolt11 payment request from backend")
 
         # get invoice expiry time
         invoice_obj = bolt11.decode(invoice_response.payment_request)
@@ -478,7 +485,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         unit, method = self._verify_and_get_unit_method(quote.unit, quote.method)
 
         if not quote.paid:
-            assert quote.checking_id, "quote has no checking id"
+            if not quote.checking_id:
+                raise CashuError("quote has no checking id")
             logger.trace(f"Lightning: checking invoice {quote.checking_id}")
             status: PaymentStatus = await self.backends[method][
                 unit
@@ -517,8 +525,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.trace("called mint")
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
+
         output_units = set([k.unit for k in [self.keysets[o.id] for o in outputs]])
-        assert len(output_units) == 1, "outputs have different units"
+        if not len(output_units) == 1:
+            raise TransactionError("outputs have different units")
         output_unit = list(output_units)[0]
 
         self.locks[quote_id] = (
@@ -526,16 +536,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         )  # create a new lock if it doesn't exist
         async with self.locks[quote_id]:
             quote = await self.get_mint_quote(quote_id=quote_id)
-            assert quote.paid, QuoteNotPaidError()
-            assert not quote.issued, "quote already issued"
-            assert (
-                quote.unit == output_unit.name
-            ), "quote unit does not match output unit"
-            assert (
-                quote.amount == sum_amount_outputs
-            ), "amount to mint does not match quote amount"
-            if quote.expiry:
-                assert quote.expiry > int(time.time()), "quote expired"
+
+            if not quote.paid:
+                raise QuoteNotPaidError()
+            if quote.issued:
+                raise TransactionError("quote already issued")
+            if not quote.unit == output_unit.name:
+                raise TransactionError("quote unit does not match output unit")
+            if not quote.amount == sum_amount_outputs:
+                raise TransactionError("amount to mint does not match quote amount")
+            if quote.expiry and quote.expiry > int(time.time()):
+                raise TransactionError("quote expired")
 
             promises = await self._generate_promises(outputs)
             logger.trace("generated promises")
@@ -577,12 +588,19 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             request=request, db=self.db
         )
         if mint_quote:
-            assert request == mint_quote.request, "bolt11 requests do not match"
-            assert mint_quote.unit == melt_quote.unit, "units do not match"
-            assert mint_quote.method == method.name, "methods do not match"
-            assert not mint_quote.paid, "mint quote already paid"
-            assert not mint_quote.issued, "mint quote already issued"
-            assert mint_quote.checking_id, "mint quote has no checking id"
+            if not request == mint_quote.request:
+                raise TransactionError("bolt11 requests do not match")
+            if not mint_quote.unit == melt_quote.unit:
+                raise TransactionError("units do not match")
+            if not mint_quote.method == method.name:
+                raise TransactionError("methods do not match")
+            if mint_quote.paid:
+                raise TransactionError("mint quote already paid")
+            if mint_quote.issued:
+                raise TransactionError("mint quote already issued")
+            if not mint_quote.checking_id:
+                raise TransactionError("mint quote has no checking id")
+
             payment_quote = PaymentQuoteResponse(
                 checking_id=mint_quote.checking_id,
                 amount=Amount(unit, mint_quote.amount),
@@ -595,20 +613,20 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         else:
             # not internal, get payment quote by backend
             payment_quote = await self.backends[method][unit].get_payment_quote(request)
-            assert payment_quote.checking_id, "quote has no checking id"
+            if not payment_quote.checking_id:
+                raise TransactionError("quote has no checking id")
             # make sure the backend returned the amount with a correct unit
-            assert (
-                payment_quote.amount.unit == unit
-            ), "payment quote amount units do not match"
+            if not payment_quote.amount.unit == unit:
+                raise TransactionError("payment quote amount units do not match")
             # fee from the backend must be in the same unit as the amount
-            assert (
-                payment_quote.fee.unit == unit
-            ), "payment quote fee units do not match"
+            if not payment_quote.fee.unit == unit:
+                raise TransactionError("payment quote fee units do not match")
 
         # We assume that the request is a bolt11 invoice, this works since we
         # support only the bol11 method for now.
         invoice_obj = bolt11.decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
+        if not invoice_obj.amount_msat:
+            raise TransactionError("invoice has no amount.")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
         expiry = None
         if invoice_obj.expiry is not None:
@@ -709,23 +727,28 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         if not mint_quote:
             return melt_quote
         # we settle the transaction internally
-        assert not melt_quote.paid, "melt quote already paid"
+        if melt_quote.paid:
+            raise TransactionError("melt quote already paid")
 
         # verify amounts from bolt11 invoice
         bolt11_request = melt_quote.request
         invoice_obj = bolt11.decode(bolt11_request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-        # invoice_amount_sat = math.ceil(invoice_obj.amount_msat / 1000)
-        # assert (
-        #     Amount(Unit[melt_quote.unit], mint_quote.amount).to(Unit.sat).amount
-        #     == invoice_amount_sat
-        # ), "amounts do not match"
-        assert mint_quote.amount == melt_quote.amount, "amounts do not match"
-        assert bolt11_request == mint_quote.request, "bolt11 requests do not match"
-        assert mint_quote.unit == melt_quote.unit, "units do not match"
-        assert mint_quote.method == melt_quote.method, "methods do not match"
-        assert not mint_quote.paid, "mint quote already paid"
-        assert not mint_quote.issued, "mint quote already issued"
+
+        if not invoice_obj.amount_msat:
+            raise TransactionError("invoice has no amount.")
+        if not mint_quote.amount == melt_quote.amount:
+            raise TransactionError("amounts do not match")
+        if not bolt11_request == mint_quote.request:
+            raise TransactionError("bolt11 requests do not match")
+        if not mint_quote.unit == melt_quote.unit:
+            raise TransactionError("units do not match")
+        if not mint_quote.method == melt_quote.method:
+            raise TransactionError("methods do not match")
+        if mint_quote.paid:
+            raise TransactionError("mint quote already paid")
+        if mint_quote.issued:
+            raise TransactionError("mint quote already issued")
+
         logger.info(
             f"Settling bolt11 payment internally: {melt_quote.quote} ->"
             f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
@@ -770,25 +793,25 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             melt_quote.unit, melt_quote.method
         )
 
-        assert not melt_quote.paid, "melt quote already paid"
+        if melt_quote.paid:
+            raise TransactionError("melt quote already paid")
 
         # make sure that the outputs (for fee return) are in the same unit as the quote
         if outputs:
             await self._verify_outputs(outputs, skip_amount_check=True)
-            assert outputs[0].id, "output id not set"
             outputs_unit = self.keysets[outputs[0].id].unit
-            assert melt_quote.unit == outputs_unit.name, (
-                f"output unit {outputs_unit.name} does not match quote unit"
-                f" {melt_quote.unit}"
-            )
+            if not melt_quote.unit == outputs_unit.name:
+                raise TransactionError(
+                    f"output unit {outputs_unit.name} does not match quote unit {melt_quote.unit}"
+                )
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
         total_needed = melt_quote.amount + (melt_quote.fee_reserve or 0)
-        assert total_provided >= total_needed, (
-            f"not enough inputs provided for melt. Provided: {total_provided}, needed:"
-            f" {total_needed}"
-        )
+        if not total_provided >= total_needed:
+            raise TransactionError(
+                f"not enough inputs provided for melt. Provided: {total_provided}, needed: {total_needed}"
+            )
 
         # verify that the amount of the proofs is not larger than the maximum allowed
         if settings.mint_max_peg_out and total_provided > settings.mint_max_peg_out:
@@ -837,7 +860,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # prepare change to compensate wallet for overpaid fees
             return_promises: List[BlindedSignature] = []
             if outputs:
-                assert outputs[0].id, "output id not set"
                 return_promises = await self._generate_change_promises(
                     input_amount=total_provided,
                     output_amount=melt_quote.amount,
@@ -954,15 +976,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         ] = []
         for output in outputs:
             B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
-            assert output.id, "output id not set"
             keyset = keyset or self.keysets[output.id]
-
-            assert output.id in self.keysets, f"keyset {output.id} not found"
-            assert output.id in [
+            if output.id not in self.keysets:
+                raise TransactionError(f"keyset {output.id} not found")
+            if output.id not in [
                 keyset.id,
                 keyset.duplicate_keyset_id,
-            ], "keyset id does not match output id"
-            assert keyset.active, "keyset is not active"
+            ]:
+                raise TransactionError("keyset id does not match output id")
+            if not keyset.active:
+                raise TransactionError("keyset is not active")
             keyset_id = output.id
             logger.trace(f"Generating promise with keyset {keyset_id}.")
             private_key_amount = keyset.private_keys[output.amount]
@@ -1000,7 +1023,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     async def load_used_proofs(self) -> None:
         """Load all used proofs from database."""
-        assert settings.mint_cache_secrets, "MINT_CACHE_SECRETS must be set to TRUE"
+        if not settings.mint_cache_secrets:
+            raise Exception("MINT_CACHE_SECRETS must be set to TRUE")
         logger.debug("Loading used proofs into memory")
         spent_proofs_list = await self.crud.get_spent_proofs(db=self.db) or []
         logger.debug(f"Loaded {len(spent_proofs_list)} used proofs")
@@ -1087,11 +1111,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         Raises:
             Exception: At least one of the proofs is in the pending table.
         """
-        assert (
+        if not (
             len(
                 await self.crud.get_proofs_pending(
                     Ys=[p.Y for p in proofs], db=self.db, conn=conn
                 )
             )
             == 0
-        ), TransactionError("proofs are pending.")
+        ):
+            raise TransactionError("proofs are pending.")
