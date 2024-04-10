@@ -8,6 +8,7 @@ from loguru import logger
 
 from ..core.base import (
     BlindedMessage,
+    BlindedMessage_Deprecated,
     BlindedSignature,
     Invoice,
     Proof,
@@ -273,7 +274,8 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         Raises:
             Exception: If the minting fails
         """
-        outputs_payload = PostMintRequest_deprecated(outputs=outputs)
+        outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+        outputs_payload = PostMintRequest_deprecated(outputs=outputs_deprecated)
 
         def _mintrequest_include_fields(outputs: List[BlindedMessage]):
             """strips away fields from the model that aren't necessary for the /mint"""
@@ -309,7 +311,14 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         Accepts proofs and a lightning invoice to pay in exchange.
         """
         logger.warning("Using deprecated API call: POST /melt")
-        payload = PostMeltRequest_deprecated(proofs=proofs, pr=invoice, outputs=outputs)
+        outputs_deprecated = (
+            [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+            if outputs
+            else None
+        )
+        payload = PostMeltRequest_deprecated(
+            proofs=proofs, pr=invoice, outputs=outputs_deprecated
+        )
 
         def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
@@ -338,7 +347,10 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
         logger.warning("Using deprecated API call: Calling split. POST /split")
-        split_payload = PostSplitRequest_Deprecated(proofs=proofs, outputs=outputs)
+        outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+        split_payload = PostSplitRequest_Deprecated(
+            proofs=proofs, outputs=outputs_deprecated
+        )
 
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
@@ -405,7 +417,8 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         Asks the mint to restore promises corresponding to outputs.
         """
         logger.warning("Using deprecated API call: POST /restore")
-        payload = PostMintRequest_deprecated(outputs=outputs)
+        outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+        payload = PostMintRequest_deprecated(outputs=outputs_deprecated)
         resp = await self.httpx.post(join(self.url, "/restore"), json=payload.dict())
         self.raise_on_error(resp)
         response_dict = resp.json()

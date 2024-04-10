@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Request
 from loguru import logger
 
-from ..core.errors import CashuError
+from ..core.errors import KeysetNotFoundError
 from ..core.models import (
     GetInfoResponse,
     KeysetsResponse,
@@ -142,7 +142,7 @@ async def keyset_keys(keyset_id: str) -> KeysResponse:
 
     keyset = ledger.keysets.get(keyset_id)
     if keyset is None:
-        raise CashuError(code=0, detail="keyset not found")
+        raise KeysetNotFoundError(keyset_id)
 
     keyset_for_response = KeysResponseKeyset(
         id=keyset.id,

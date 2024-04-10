@@ -1079,7 +1079,7 @@ class Wallet(
             n_change_outputs * [1], change_secrets, change_rs
         )
 
-        # store the melt_id in proofs
+        # store the melt_id in proofs db
         async with self.db.connect() as conn:
             for p in proofs:
                 p.melt_id = quote_id
@@ -1304,7 +1304,7 @@ class Wallet(
 
         Args:
             proofs (List[Proof]): Which proofs to delete
-            check_spendable (bool, optional): Asks the mint to check whether proofs are already spent before deleting them. Defaults to True.
+            check_spendable (bool, optional): Asks the mint to check whether proofs are already spent before deleting them. Defaults to False.
 
         Returns:
             List[Proof]: List of proofs that are still spendable.

@@ -115,12 +115,12 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
-    mint_id: Union[None, str] = (
-        None  # holds the id of the mint operation that created this proof
-    )
-    melt_id: Union[None, str] = (
-        None  # holds the id of the melt operation that destroyed this proof
-    )
+    mint_id: Union[
+        None, str
+    ] = None  # holds the id of the mint operation that created this proof
+    melt_id: Union[
+        None, str
+    ] = None  # holds the id of the melt operation that destroyed this proof
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -175,21 +175,27 @@ class Proof(BaseModel):
         return HTLCWitness.from_witness(self.witness).preimage
 
 
-class Proofs(BaseModel):
-    # NOTE: not used in Pydantic validation
-    __root__: List[Proof]
-
-
 class BlindedMessage(BaseModel):
     """
     Blinded message or blinded secret or "output" which is to be signed by the mint
     """
 
     amount: int
-    id: Optional[
-        str
-    ]  # DEPRECATION: Only Optional for backwards compatibility with old clients < 0.15 for deprecated API route.
+    id: str
     B_: str  # Hex-encoded blinded message
+    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
+
+    @property
+    def p2pksigs(self) -> List[str]:
+        assert self.witness, "Witness missing in output"
+        return P2PKWitness.from_witness(self.witness).signatures
+
+
+class BlindedMessage_Deprecated(BaseModel):
+    # Same as BlindedMessage, but without the id field
+    amount: int
+    B_: str  # Hex-encoded blinded message
+    id: Optional[str] = None
     witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
 
     @property
@@ -208,10 +214,14 @@ class BlindedSignature(BaseModel):
     C_: str  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
 
-
-class BlindedMessages(BaseModel):
-    # NOTE: not used in Pydantic validation
-    __root__: List[BlindedMessage] = []
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            id=row["id"],
+            amount=row["amount"],
+            C_=row["c_"],
+            dleq=DLEQ(e=row["dleq_e"], s=row["dleq_s"]),
+        )
 
 
 # ------- LIGHTNING INVOICE -------

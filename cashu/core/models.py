@@ -2,7 +2,13 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from .base import BlindedMessage, BlindedSignature, Proof, ProofState
+from .base import (
+    BlindedMessage,
+    BlindedMessage_Deprecated,
+    BlindedSignature,
+    Proof,
+    ProofState,
+)
 from .settings import settings
 
 # ------- API -------
@@ -57,7 +63,7 @@ class KeysetsResponseKeyset(BaseModel):
     id: str
     unit: str
     active: bool
-    input_fee_ppm: Optional[int]
+    input_fee_ppm: Optional[int] = None
 
 
 class KeysetsResponse(BaseModel):
@@ -107,7 +113,7 @@ class GetMintResponse_deprecated(BaseModel):
 
 
 class PostMintRequest_deprecated(BaseModel):
-    outputs: List[BlindedMessage] = Field(
+    outputs: List[BlindedMessage_Deprecated] = Field(
         ..., max_items=settings.mint_max_request_length
     )
 
@@ -154,7 +160,7 @@ class PostMeltResponse(BaseModel):
 class PostMeltRequest_deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     pr: str = Field(..., max_length=settings.mint_max_request_length)
-    outputs: Union[List[BlindedMessage], None] = Field(
+    outputs: Union[List[BlindedMessage_Deprecated], None] = Field(
         None, max_items=settings.mint_max_request_length
     )
 
@@ -183,7 +189,7 @@ class PostSplitResponse(BaseModel):
 class PostSplitRequest_Deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     amount: Optional[int] = None
-    outputs: List[BlindedMessage] = Field(
+    outputs: List[BlindedMessage_Deprecated] = Field(
         ..., max_items=settings.mint_max_request_length
     )
 

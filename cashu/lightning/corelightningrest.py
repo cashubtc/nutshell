@@ -247,17 +247,21 @@ class CoreLightningRestWallet(LightningBackend):
             r.raise_for_status()
             data = r.json()
 
-            if r.is_error or "error" in data or not data.get("pays"):
-                raise Exception("error in corelightning-rest response")
+            if not data.get("pays"):
+                # payment not found
+                logger.error(f"payment not found: {data.get('pays')}")
+                raise Exception("payment not found")
+
+            if r.is_error or "error" in data:
+                message = data.get("error") or data
+                raise Exception(f"error in corelightning-rest response: {message}")
 
             pay = data["pays"][0]
 
             fee_msat, preimage = None, None
             if self.statuses[pay["status"]]:
                 # cut off "msat" and convert to int
-                fee_msat = -int(pay["amount_sent_msat"][:-4]) - int(
-                    pay["amount_msat"][:-4]
-                )
+                fee_msat = -int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
                 preimage = pay["preimage"]
 
             return PaymentStatus(

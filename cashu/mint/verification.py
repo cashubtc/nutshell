@@ -145,7 +145,7 @@ class LedgerVerification(
         async with self.db.connect() as conn:
             for output in outputs:
                 promise = await self.crud.get_promise(
-                    B_=output.B_, db=self.db, conn=conn
+                    b_=output.B_, db=self.db, conn=conn
                 )
                 result.append(False if promise is None else True)
         return result
@@ -275,7 +275,7 @@ class LedgerVerification(
         """Verify that Σinputs - Σoutputs = 0.
         Outputs can be BlindedSignature or BlindedMessage.
         """
-        unit = self._verify_units_match(proofs, outs)
+        _ = self._verify_units_match(proofs, outs)
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
         fees_inputs = self.get_fees_for_proofs(proofs)
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)

@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.15.1"
+VERSION = "0.15.3"
 
 
 def find_env_file():
@@ -62,7 +62,7 @@ class MintSettings(CashuSettings):
         default={"sat": {"fee": 1, "batch": 10}}
     )
     mint_max_secret_length: int = Field(default=512)
-    mint_duplicate_keysets: bool = Field(
+    mint_duplicate_old_keysets: bool = Field(
         default=True,
         title="Duplicate keysets",
         description=(
@@ -129,6 +129,7 @@ class FakeWalletSettings(MintSettings):
     fakewallet_brr: bool = Field(default=True)
     fakewallet_delay_payment: bool = Field(default=False)
     fakewallet_stochastic_invoice: bool = Field(default=False)
+    fakewallet_payment_state: Optional[bool] = Field(default=None)
     mint_cache_secrets: bool = Field(default=True)
 
 

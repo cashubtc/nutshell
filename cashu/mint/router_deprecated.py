@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Request
 from loguru import logger
 
-from ..core.base import BlindedSignature, SpentState
+from ..core.base import BlindedMessage, BlindedSignature, SpentState
 from ..core.errors import CashuError
 from ..core.models import (
     CheckFeesRequest_deprecated,
@@ -176,10 +176,14 @@ async def mint_deprecated(
 
     # BEGIN BACKWARDS COMPATIBILITY < 0.15
     # Mint expects "id" in outputs to know which keyset to use to sign them.
-    for output in payload.outputs:
-        if not output.id:
-            # use the deprecated version of the current keyset
-            output.id = ledger.keyset.duplicate_keyset_id
+    # use the deprecated version of the current keyset
+    assert ledger.keyset.duplicate_keyset_id
+    outputs: list[BlindedMessage] = [
+        BlindedMessage(
+            id=o.id or ledger.keyset.duplicate_keyset_id, **o.dict(exclude={"id"})
+        )
+        for o in payload.outputs
+    ]
     # END BACKWARDS COMPATIBILITY < 0.15
 
     # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
@@ -188,7 +192,7 @@ async def mint_deprecated(
     assert hash, "hash must be set."
     # END: backwards compatibility < 0.12
 
-    promises = await ledger.mint(outputs=payload.outputs, quote_id=hash)
+    promises = await ledger.mint(outputs=outputs, quote_id=hash)
     blinded_signatures = PostMintResponse_deprecated(promises=promises)
 
     logger.trace(f"< POST /mint: {blinded_signatures}")
@@ -220,15 +224,18 @@ async def melt_deprecated(
     logger.trace(f"> POST /melt: {payload}")
     # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
     if payload.outputs:
-        for output in payload.outputs:
-            if not output.id:
-                output.id = ledger.keyset.id
+        outputs: list[BlindedMessage] = [
+            BlindedMessage(id=o.id or ledger.keyset.id, **o.dict(exclude={"id"}))
+            for o in payload.outputs
+        ]
+    else:
+        outputs = []
     # END BACKWARDS COMPATIBILITY < 0.14
     quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=payload.pr, unit="sat")
     )
     preimage, change_promises = await ledger.melt(
-        proofs=payload.proofs, quote=quote.quote, outputs=payload.outputs
+        proofs=payload.proofs, quote=quote.quote, outputs=outputs
     )
     resp = PostMeltResponse_deprecated(
         paid=True, preimage=preimage, change=change_promises
@@ -289,12 +296,12 @@ async def split_deprecated(
     logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
     # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
-    if payload.outputs:
-        for output in payload.outputs:
-            if not output.id:
-                output.id = ledger.keyset.id
+    outputs: list[BlindedMessage] = [
+        BlindedMessage(id=o.id or ledger.keyset.id, **o.dict(exclude={"id"}))
+        for o in payload.outputs
+    ]
     # END BACKWARDS COMPATIBILITY < 0.14
-    promises = await ledger.split(proofs=payload.proofs, outputs=payload.outputs)
+    promises = await ledger.split(proofs=payload.proofs, outputs=outputs)
 
     if payload.amount:
         # BEGIN backwards compatibility < 0.13
