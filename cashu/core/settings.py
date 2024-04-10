@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.15.2"
+VERSION = "0.15.3"
 
 
 def find_env_file():
@@ -58,7 +58,7 @@ class MintSettings(CashuSettings):
 
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
-    mint_duplicate_keysets: bool = Field(
+    mint_duplicate_old_keysets: bool = Field(
         default=True,
         title="Duplicate keysets",
         description=(
