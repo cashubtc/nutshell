@@ -333,6 +333,7 @@ class BlindedMessage_Deprecated(BaseModel):
     # Same as BlindedMessage, but without the id field
     amount: int
     B_: str  # Hex-encoded blinded message
+    id: Optional[str] = None
     witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
 
     @property

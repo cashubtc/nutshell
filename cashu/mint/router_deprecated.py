@@ -181,7 +181,9 @@ async def mint_deprecated(
     # use the deprecated version of the current keyset
     assert ledger.keyset.duplicate_keyset_id
     outputs: list[BlindedMessage] = [
-        BlindedMessage(id=ledger.keyset.duplicate_keyset_id, **o.dict())
+        BlindedMessage(
+            id=o.id or ledger.keyset.duplicate_keyset_id, **o.dict(exclude={"id"})
+        )
         for o in payload.outputs
     ]
     # END BACKWARDS COMPATIBILITY < 0.15
@@ -225,7 +227,8 @@ async def melt_deprecated(
     # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
     if payload.outputs:
         outputs: list[BlindedMessage] = [
-            BlindedMessage(id=ledger.keyset.id, **o.dict()) for o in payload.outputs
+            BlindedMessage(id=o.id or ledger.keyset.id, **o.dict(exclude={"id"}))
+            for o in payload.outputs
         ]
     else:
         outputs = []
@@ -296,7 +299,8 @@ async def split_deprecated(
     assert payload.outputs, Exception("no outputs provided.")
     # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
     outputs: list[BlindedMessage] = [
-        BlindedMessage(id=ledger.keyset.id, **o.dict()) for o in payload.outputs
+        BlindedMessage(id=o.id or ledger.keyset.id, **o.dict(exclude={"id"}))
+        for o in payload.outputs
     ]
     # END BACKWARDS COMPATIBILITY < 0.14
     promises = await ledger.split(proofs=payload.proofs, outputs=outputs)
