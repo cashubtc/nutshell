@@ -65,7 +65,7 @@ async def test_init_keysets_with_duplicates(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_init_keysets_with_duplicates_via_settings(ledger: Ledger):
     ledger.keysets = {}
-    settings.mint_duplicate_keysets = True
+    settings.mint_duplicate_old_keysets = True
     await ledger.init_keysets()
     assert len(ledger.keysets) == 2
 
@@ -80,7 +80,7 @@ async def test_init_keysets_without_duplicates(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_init_keysets_without_duplicates_via_settings(ledger: Ledger):
     ledger.keysets = {}
-    settings.mint_duplicate_keysets = False
+    settings.mint_duplicate_old_keysets = False
     await ledger.init_keysets()
     assert len(ledger.keysets) == 1
 
