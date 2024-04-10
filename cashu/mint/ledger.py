@@ -278,11 +278,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
         # we duplicate new keysets and compute their old keyset id, and
         # we duplicate old keysets and compute their new keyset id
-        if settings.mint_duplicate_old_keysets or duplicate_keysets:
+        if duplicate_keysets is not False and (
+            settings.mint_duplicate_old_keysets or duplicate_keysets
+        ):
             for _, keyset in copy.copy(self.keysets).items():
-                if keyset.version_tuple >= (0, 15, 3) and not duplicate_keysets:
-                    # we do not duplicate keysets from version 0.15.3 and above if not forced by duplicate_keysets
-                    continue
+                # if keyset.version_tuple >= (0, 15, 3) and not duplicate_keysets:
+                #     # we do not duplicate keysets from version 0.15.3 and above if not forced by duplicate_keysets
+                #     continue
                 keyset_copy = copy.copy(keyset)
                 if not keyset_copy.public_keys:
                     raise KeysetError("no public keys for this keyset")
