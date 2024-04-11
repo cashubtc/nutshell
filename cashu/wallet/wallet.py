@@ -444,14 +444,14 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def mint_quote(self, amount) -> Invoice:
+    async def mint_quote(self, amount) -> PostMintQuoteResponse:
         """Requests a mint quote from the server and returns a payment request.
 
         Args:
             amount (int): Amount of tokens to mint
 
         Returns:
-            Invoice: Lightning invoice
+            PostMintQuoteResponse: Mint Quote Response
 
         Raises:
             Exception: If the mint request fails
@@ -469,16 +469,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         return_dict = resp.json()
-        mint_response = PostMintQuoteResponse.parse_obj(return_dict)
-        decoded_invoice = bolt11.decode(mint_response.request)
-        return Invoice(
-            amount=amount,
-            bolt11=mint_response.request,
-            payment_hash=decoded_invoice.payment_hash,
-            id=mint_response.quote,
-            out=False,
-            time_created=int(time.time()),
-        )
+        return PostMintQuoteResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -823,9 +814,18 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             amount (int): Amount for Lightning invoice in satoshis
 
         Returns:
-            Invoice: Lightning invoice
+            PostMintQuoteResponse: Mint Quote Response
         """
-        invoice = await super().mint_quote(amount)
+        mint_quote_response = await super().mint_quote(amount)
+        decoded_invoice = bolt11.decode(mint_quote_response.request)
+        invoice = Invoice(
+            amount=amount,
+            bolt11=mint_quote_response.request,
+            payment_hash=decoded_invoice.payment_hash,
+            id=mint_quote_response.quote,
+            out=False,
+            time_created=int(time.time()),
+        )
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
