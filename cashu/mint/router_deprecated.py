@@ -178,12 +178,8 @@ async def mint_deprecated(
 
     # BEGIN BACKWARDS COMPATIBILITY < 0.15
     # Mint expects "id" in outputs to know which keyset to use to sign them.
-    # use the deprecated version of the current keyset
-    assert ledger.keyset.duplicate_keyset_id
     outputs: list[BlindedMessage] = [
-        BlindedMessage(
-            id=o.id or ledger.keyset.duplicate_keyset_id, **o.dict(exclude={"id"})
-        )
+        BlindedMessage(id=o.id or ledger.keyset.id, **o.dict(exclude={"id"}))
         for o in payload.outputs
     ]
     # END BACKWARDS COMPATIBILITY < 0.15

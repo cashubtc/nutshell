@@ -738,8 +738,6 @@ class MintKeyset:
     first_seen: Optional[str] = None
     version: Optional[str] = None
 
-    duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
-
     def __init__(
         self,
         *,
