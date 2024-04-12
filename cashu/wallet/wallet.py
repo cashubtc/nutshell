@@ -1617,28 +1617,25 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 balances_return[key]["unit"] = unit.name
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
 
-    async def restore_wallet_from_mnemonic(
-        self, mnemonic: Optional[str], to: int = 2, batch: int = 25
+    async def restore_tokens_for_keyset(
+        self, keyset_id: str, to: int = 2, batch: int = 25
     ) -> None:
         """
-        Restores the wallet from a mnemonic.
+        Restores tokens for a given keyset_id.
 
         Args:
-            mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.
+            keyset_id (str): The keyset_id to restore tokens for.
             to (int, optional): The number of consecutive empty responses to stop restoring. Defaults to 2.
             batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
         """
-        await self._init_private_key(mnemonic)
-        await self.load_mint()
-        print("Restoring tokens...")
         stop_counter = 0
         # we get the current secret counter and restore from there on
         spendable_proofs = []
         counter_before = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=0
+            db=self.db, keyset_id=keyset_id, by=0
         )
         if counter_before != 0:
-            print("This wallet has already been used. Restoring from it's last state.")
+            print("Keyset has already been used. Restoring from it's last state.")
         i = counter_before
         n_last_restored_proofs = 0
         while stop_counter < to:
@@ -1659,15 +1656,34 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         logger.debug(f"Reverting secret counter by {revert_counter_by}")
         before = await bump_secret_derivation(
             db=self.db,
-            keyset_id=self.keyset_id,
+            keyset_id=keyset_id,
             by=-revert_counter_by,
         )
         logger.debug(
             f"Secret counter reverted from {before} to {before - revert_counter_by}"
         )
         if n_last_restored_proofs == 0:
-            print("No tokens restored.")
+            print("No tokens restored for keyset.")
             return
+
+    async def restore_wallet_from_mnemonic(
+        self, mnemonic: Optional[str], to: int = 2, batch: int = 25
+    ) -> None:
+        """
+        Restores the wallet from a mnemonic.
+
+        Args:
+            mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.
+            to (int, optional): The number of consecutive empty responses to stop restoring. Defaults to 2.
+            batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
+        """
+        await self._init_private_key(mnemonic)
+        await self.load_mint()
+        print("Restoring tokens...")
+        keyset_ids = self.mint_keyset_ids
+        for keyset_id in keyset_ids:
+            await self.restore_tokens_for_keyset(keyset_id, to, batch)
+        
 
     async def restore_promises_from_to(
         self, from_counter: int, to_counter: int
