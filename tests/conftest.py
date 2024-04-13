@@ -78,9 +78,9 @@ class UvicornServer(multiprocessing.Process):
 async def ledger():
     async def start_mint_init(ledger: Ledger) -> Ledger:
         await migrate_databases(ledger.db, migrations_mint)
-        # add keysets
-        # await ledger.activate_keyset(derivation_path="old_derivation", version="0.3.3")
-        await ledger.activate_keyset(derivation_path="m/0'/0'/0'", version="0.15.0")
+        # add a new keyset (with a new ID) which will be duplicated with a keyset with an
+        # old ID by mint migration m018_duplicate_deprecated_keyset_ids
+        # await ledger.activate_keyset(derivation_path=settings.mint_derivation_path, version="0.15.0")
         await migrations_mint.m018_duplicate_deprecated_keyset_ids(ledger.db)
 
         ledger = Ledger(

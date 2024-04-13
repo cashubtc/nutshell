@@ -818,6 +818,12 @@ class MintKeyset:
         assert self.seed, "seed not set"
         assert self.derivation_path, "derivation path not set"
 
+        # we compute the keyset id from the public keys only if it is not
+        # loaded from the database. This is to allow for backwards compatibility
+        # with old keysets with new id's and vice versa. This code can be removed
+        # if there are only new keysets in the mint (> 0.15.0)
+        id_in_db = self.id
+
         if self.version_tuple < (0, 12):
             # WARNING: Broken key derivation for backwards compatibility with < 0.12
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
@@ -828,7 +834,8 @@ class MintKeyset:
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
-            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+            # load from db or derive
+            self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
             self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
             logger.trace(
@@ -836,11 +843,13 @@ class MintKeyset:
                 " compatibility < 0.15)"
             )
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+            # load from db or derive
+            self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         else:
             self.private_keys = derive_keys(self.seed, self.derivation_path)
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            self.id = derive_keyset_id(self.public_keys)  # type: ignore
+            # load from db or derive
+            self.id = id_in_db or derive_keyset_id(self.public_keys)  # type: ignore
 
 
 # ------- TOKEN -------

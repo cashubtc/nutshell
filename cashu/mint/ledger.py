@@ -231,9 +231,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
 
-    async def init_keysets(
-        self, autosave: bool = True, duplicate_keysets: Optional[bool] = None
-    ) -> None:
+    async def init_keysets(self, autosave: bool = True) -> None:
         """Initializes all keysets of the mint from the db. Loads all past keysets from db
         and generate their keys. Then activate the current keyset set by self.derivation_path.
 
@@ -241,9 +239,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             autosave (bool, optional): Whether the current keyset should be saved if it is
                 not in the database yet. Will be passed to `self.activate_keyset` where it is
                 generated from `self.derivation_path`. Defaults to True.
-            duplicate_keysets (bool, optional): Whether to duplicate new keysets and compute
-                their old keyset id, and duplicate old keysets and compute their new keyset id.
-                Defaults to False.
         """
         # load all past keysets from db, the keys will be generated at instantiation
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)

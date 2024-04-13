@@ -58,14 +58,6 @@ class MintSettings(CashuSettings):
 
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
-    mint_duplicate_old_keysets: bool = Field(
-        default=True,
-        title="Duplicate keysets",
-        description=(
-            "Whether to duplicate keysets for backwards compatibility before v1 API"
-            " (Nutshell 0.15.0)."
-        ),
-    )
 
 
 class MintBackends(MintSettings):
