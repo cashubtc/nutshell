@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from fastapi import APIRouter
+from cashu.mint.protocols import SupportsBackends
 
 from ..core.base import (
     MintMeltMethodSetting,
@@ -17,18 +17,15 @@ from ..core.nuts import (
     WEBSOCKETS_NUT,
 )
 from ..core.settings import settings
-from ..mint.startup import ledger
-
-router: APIRouter = APIRouter()
 
 
-class LedgerFeatures:
+class LedgerFeatures(SupportsBackends):
     def mint_features(self) -> Dict[int, Dict[str, Any]]:
         # determine all method-unit pairs
         method_settings: Dict[int, List[MintMeltMethodSetting]] = {}
         for nut in [MINT_NUT, MELT_NUT]:
             method_settings[nut] = []
-            for method, unit_dict in ledger.backends.items():
+            for method, unit_dict in self.backends.items():
                 for unit in unit_dict.keys():
                     setting = MintMeltMethodSetting(method=method.name, unit=unit.name)
 
