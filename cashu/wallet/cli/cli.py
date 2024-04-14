@@ -294,11 +294,11 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
                 asyncio.run(
                     wallet.mint(int(amount), split=optional_split, id=invoice.id)
                 )
+                # set paid so we won't react to any more callbacks
+                paid = True
             except Exception as e:
                 print(f"Error during mint: {str(e)}")
                 return
-        # set paid so we won't react to any more callbacks
-        paid = True
 
     # user requests an invoice
     if amount and not id:

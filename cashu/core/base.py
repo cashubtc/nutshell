@@ -534,7 +534,7 @@ class ProofState(LedgerEvent):
     state: SpentState
     witness: Optional[str] = None
 
-    @root_validator(pre=True)
+    @root_validator()
     def check_witness(cls, values):
         state, witness = values.get("state"), values.get("witness")
         if witness is not None and state != SpentState.spent:

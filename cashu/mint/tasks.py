@@ -35,4 +35,8 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
         if not quote:
             logger.error(f"Quote not found for {checking_id}")
             return
+        # set the quote as paid
+        if not quote.paid:
+            quote.paid = True
+            await self.crud.update_mint_quote(quote=quote, db=self.db)
         await self.events.submit(quote)

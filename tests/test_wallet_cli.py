@@ -117,7 +117,7 @@ def test_invoice_automatic_fakewallet(mint, cli_prefix):
         [*cli_prefix, "invoice", "1000"],
     )
     assert result.exception is None
-    print("INVOICE")
+    print("INVOICE AUTOMATIC")
     print(result.output)
     wallet = asyncio.run(init_wallet())
     assert wallet.available_balance >= 1000
