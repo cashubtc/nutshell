@@ -81,7 +81,7 @@ async def ledger():
         # add a new keyset (with a new ID) which will be duplicated with a keyset with an
         # old ID by mint migration m018_duplicate_deprecated_keyset_ids
         # await ledger.activate_keyset(derivation_path=settings.mint_derivation_path, version="0.15.0")
-        await migrations_mint.m018_duplicate_deprecated_keyset_ids(ledger.db)
+        # await migrations_mint.m018_duplicate_deprecated_keyset_ids(ledger.db)
 
         ledger = Ledger(
             db=Database("mint", settings.mint_database),

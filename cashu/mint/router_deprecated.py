@@ -52,7 +52,7 @@ async def info() -> GetInfoResponse_deprecated:
         description=settings.mint_info_description,
         description_long=settings.mint_info_description_long,
         contact=settings.mint_info_contact,
-        nuts=settings.mint_info_nuts,
+        nuts=["NUT-07", "NUT-08", "NUT-09"],
         motd=settings.mint_info_motd,
         parameter={
             "max_peg_in": settings.mint_max_peg_in,

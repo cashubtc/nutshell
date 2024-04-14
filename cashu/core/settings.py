@@ -52,7 +52,7 @@ class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
     mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
-    mint_derivation_path_list: List[str] = Field(default=[])
+    mint_derivation_path_list: List[str] = Field(default=[""])
     mint_listen_host: str = Field(default="127.0.0.1")
     mint_listen_port: int = Field(default=3338)
 
@@ -126,7 +126,6 @@ class MintInformation(CashuSettings):
     mint_info_description: str = Field(default=None)
     mint_info_description_long: str = Field(default=None)
     mint_info_contact: List[List[str]] = Field(default=[["", ""]])
-    mint_info_nuts: List[str] = Field(default=["NUT-07", "NUT-08", "NUT-09"])
     mint_info_motd: str = Field(default=None)
 
 

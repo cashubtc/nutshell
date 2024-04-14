@@ -56,7 +56,7 @@ async def wallet(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_init_keysets_with_duplicates(ledger: Ledger):
+async def test_init_keysets(ledger: Ledger):
     ledger.keysets = {}
     await ledger.init_keysets()
     assert len(ledger.keysets) == 1

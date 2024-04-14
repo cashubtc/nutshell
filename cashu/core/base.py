@@ -656,7 +656,6 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=True,
-        use_deprecated_id=False,  # BACKWARDS COMPATIBILITY < 0.15.0
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
@@ -671,19 +670,10 @@ class WalletKeyset:
         else:
             self.id = id
 
-        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        if use_deprecated_id:
-            logger.warning(
-                "Using deprecated keyset id derivation for backwards compatibility <"
-                " 0.15.0"
-            )
-            self.id = derive_keyset_id_deprecated(self.public_keys)
-        # END BACKWARDS COMPATIBILITY < 0.15.0
-
         self.unit = Unit[unit]
 
         logger.trace(f"Derived keyset id {self.id} from public keys.")
-        if id and id != self.id and use_deprecated_id:
+        if id and id != self.id:
             logger.warning(
                 f"WARNING: Keyset id {self.id} does not match the given id {id}."
                 " Overwriting."

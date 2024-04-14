@@ -82,10 +82,7 @@ async def test_get_keys(wallet1: Wallet):
     keyset = keysets[0]
     assert keyset.id is not None
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
-    if settings.debug_mint_only_deprecated:
-        assert keyset.id == "eGnEWtdJ0PIM"
-    else:
-        assert keyset.id == "009a1f293253e41e"
+    assert keyset.id == "009a1f293253e41e"
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
