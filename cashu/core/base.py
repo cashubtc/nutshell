@@ -327,6 +327,9 @@ class GetInfoResponse(BaseModel):
     motd: Optional[str] = None
     nuts: Optional[Dict[int, Dict[str, Any]]] = None
 
+    def supports(self, nut: int) -> Optional[bool]:
+        return nut in self.nuts if self.nuts else None
+
 
 class GetInfoResponse_deprecated(BaseModel):
     name: Optional[str] = None

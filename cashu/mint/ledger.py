@@ -6,9 +6,6 @@ from typing import Dict, List, Mapping, Optional, Tuple
 import bolt11
 from loguru import logger
 
-from cashu.mint.events.events import LedgerEventManager
-from cashu.mint.tasks import LedgerTasks
-
 from ..core.base import (
     DLEQ,
     Amount,
@@ -56,10 +53,13 @@ from ..lightning.base import (
 )
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
+from .events.events import LedgerEventManager
+from .features import LedgerFeatures
+from .tasks import LedgerTasks
 from .verification import LedgerVerification
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks):
+class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
     proofs_pending_lock: asyncio.Lock = (

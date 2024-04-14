@@ -19,6 +19,7 @@ from ...core.base import Invoice, MintQuote, TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
+from ...core.nuts import WEBSOCKETS_NUT
 from ...core.settings import settings
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
@@ -301,7 +302,7 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
 
     # user requests an invoice
     if amount and not id:
-        mint_supports_websockets = True
+        mint_supports_websockets = wallet.mint_info.supports(WEBSOCKETS_NUT)
         invoice, subscription = await wallet.request_mint_subscription(
             amount, callback=mint_invoice_callback
         )
@@ -330,11 +331,10 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
 
         # we still check manually every 10 seconds
         check_until = time.time() + 5 * 60  # check for five minutes
-        paid = False
         while time.time() < check_until and not paid:
             await asyncio.sleep(10)
             try:
-                # await wallet.mint(amount, split=optional_split, id=invoice.id)
+                await wallet.mint(amount, split=optional_split, id=invoice.id)
                 paid = True
             except Exception as e:
                 # TODO: user error codes!
@@ -350,7 +350,7 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
                 " recheck after the invoice has been paid."
             )
 
-    # user paid invoice and want to check it
+    # user paid invoice before and wants to check the quote id
     elif amount and id:
         await wallet.mint(amount, split=optional_split, id=id)
 
