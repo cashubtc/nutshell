@@ -73,28 +73,25 @@ class UvicornServer(multiprocessing.Process):
         self.server.run()
 
 
-# # This fixture is used for tests that require API access to the mint
-@pytest.fixture(autouse=True, scope="session")
-def mint():
-    config = uvicorn.Config(
-        "cashu.mint.app:app",
-        port=settings.mint_listen_port,
-        host=settings.mint_listen_host,
-    )
-
-    server = UvicornServer(config=config)
-    server.start()
-    time.sleep(1)
-    yield server
-    server.stop()
-
-
 # This fixture is used for all other tests
 @pytest_asyncio.fixture(scope="function")
 async def ledger():
-    async def start_mint_init(ledger: Ledger):
+    async def start_mint_init(ledger: Ledger) -> Ledger:
         await migrate_databases(ledger.db, migrations_mint)
+        # add a new keyset (with a new ID) which will be duplicated with a keyset with an
+        # old ID by mint migration m018_duplicate_deprecated_keyset_ids
+        # await ledger.activate_keyset(derivation_path=settings.mint_derivation_path, version="0.15.0")
+        # await migrations_mint.m018_duplicate_deprecated_keyset_ids(ledger.db)
+
+        ledger = Ledger(
+            db=Database("mint", settings.mint_database),
+            seed=settings.mint_private_key,
+            derivation_path=settings.mint_derivation_path,
+            backends=backends,
+            crud=LedgerCrudSqlite(),
+        )
         await ledger.startup_ledger()
+        return ledger
 
     if not settings.mint_database.startswith("postgres"):
         # clear sqlite database
@@ -120,6 +117,22 @@ async def ledger():
         backends=backends,
         crud=LedgerCrudSqlite(),
     )
-    await start_mint_init(ledger)
+    ledger = await start_mint_init(ledger)
     yield ledger
     print("teardown")
+
+
+# # This fixture is used for tests that require API access to the mint
+@pytest.fixture(autouse=True, scope="session")
+def mint():
+    config = uvicorn.Config(
+        "cashu.mint.app:app",
+        port=settings.mint_listen_port,
+        host=settings.mint_listen_host,
+    )
+
+    server = UvicornServer(config=config)
+    server.start()
+    time.sleep(1)
+    yield server
+    server.stop()
