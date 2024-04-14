@@ -35,7 +35,8 @@ class SubscriptionManager:
 
     def _on_message(self, ws, message):
         try:
-            msg = JSONRPCResponse.parse_raw(message)
+            # return if message is a response
+            JSONRPCResponse.parse_raw(message)
             return
         except Exception:
             pass

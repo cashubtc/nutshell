@@ -75,7 +75,8 @@ class LedgerEventClientManager:
                 await self._send_msg(resp)
                 continue
             try:
-                resp = await self._handle_request(req)
+                # handle the request
+                await self._handle_request(req)
             except Exception as e:
                 resp = JSONRPCErrorResponse(
                     error=JSONRPCError(
@@ -89,19 +90,19 @@ class LedgerEventClientManager:
     async def _handle_request(self, data: JSONRPCRequest) -> JSONRPCResponse:
         logger.info(f"Received message: {data}")
         if data.method == JSONRPCMethods.SUBSCRIBE.value:
-            params = JSONRPCSubscribeParams.parse_obj(data.params)
-            self.add_subscription(params.filters, params.subId)
+            subscribe_params = JSONRPCSubscribeParams.parse_obj(data.params)
+            self.add_subscription(subscribe_params.filters, subscribe_params.subId)
             result = JSONRRPCSubscribeResponse(
                 status=JSONRPCStatus.OK,
-                subId=params.subId,
+                subId=subscribe_params.subId,
             )
             return JSONRPCResponse(result=result.dict(), id=data.id)
         elif data.method == JSONRPCMethods.UNSUBSCRIBE.value:
-            params = JSONRPCUnubscribeParams.parse_obj(data.params)
-            self.remove_subscription(params.subId)
+            unsubscribe_params = JSONRPCUnubscribeParams.parse_obj(data.params)
+            self.remove_subscription(unsubscribe_params.subId)
             result = JSONRRPCSubscribeResponse(
                 status=JSONRPCStatus.OK,
-                subId=params.subId,
+                subId=unsubscribe_params.subId,
             )
             return JSONRPCResponse(result=result.dict(), id=data.id)
         else:
