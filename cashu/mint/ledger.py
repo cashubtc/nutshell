@@ -1,5 +1,4 @@
 import asyncio
-import copy
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -23,8 +22,6 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
-    derive_keyset_id,
-    derive_keyset_id_deprecated,
     derive_pubkey,
     random_hash,
 )
@@ -233,19 +230,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # load the new keyset in self.keysets
         self.keysets[keyset.id] = keyset
 
-        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        # set the deprecated id
-        if not keyset.public_keys:
-            raise KeysetError("no public keys for this keyset")
-        keyset.duplicate_keyset_id = derive_keyset_id_deprecated(keyset.public_keys)
-        # END BACKWARDS COMPATIBILITY < 0.15.0
-
         logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
 
-    async def init_keysets(
-        self, autosave: bool = True, duplicate_keysets: Optional[bool] = None
-    ) -> None:
+    async def init_keysets(self, autosave: bool = True) -> None:
         """Initializes all keysets of the mint from the db. Loads all past keysets from db
         and generate their keys. Then activate the current keyset set by self.derivation_path.
 
@@ -253,9 +241,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             autosave (bool, optional): Whether the current keyset should be saved if it is
                 not in the database yet. Will be passed to `self.activate_keyset` where it is
                 generated from `self.derivation_path`. Defaults to True.
-            duplicate_keysets (bool, optional): Whether to duplicate new keysets and compute
-                their old keyset id, and duplicate old keysets and compute their new keyset id.
-                Defaults to False.
         """
         # load all past keysets from db, the keys will be generated at instantiation
         tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
@@ -276,31 +261,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         # check that we have a least one active keyset
         if not any([k.active for k in self.keysets.values()]):
             raise KeysetError("No active keyset found.")
-
-        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        # we duplicate new keysets and compute their old keyset id, and
-        # we duplicate old keysets and compute their new keyset id
-        if duplicate_keysets is not False and (
-            settings.mint_duplicate_old_keysets or duplicate_keysets
-        ):
-            for _, keyset in copy.copy(self.keysets).items():
-                # if keyset.version_tuple >= (0, 15, 3) and not duplicate_keysets:
-                #     # we do not duplicate keysets from version 0.15.3 and above if not forced by duplicate_keysets
-                #     continue
-                keyset_copy = copy.copy(keyset)
-                if not keyset_copy.public_keys:
-                    raise KeysetError("no public keys for this keyset")
-                if keyset.version_tuple >= (0, 15):
-                    keyset_copy.id = derive_keyset_id_deprecated(
-                        keyset_copy.public_keys
-                    )
-                else:
-                    keyset_copy.id = derive_keyset_id(keyset_copy.public_keys)
-                keyset_copy.duplicate_keyset_id = keyset.id
-                self.keysets[keyset_copy.id] = keyset_copy
-                # remember which keyset this keyset was duplicated from
-                logger.debug(f"Duplicated keyset id {keyset.id} -> {keyset_copy.id}")
-        # END BACKWARDS COMPATIBILITY < 0.15.0
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
@@ -984,10 +944,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             keyset = keyset or self.keysets[output.id]
             if output.id not in self.keysets:
                 raise TransactionError(f"keyset {output.id} not found")
-            if output.id not in [
-                keyset.id,
-                keyset.duplicate_keyset_id,
-            ]:
+            if output.id != keyset.id:
                 raise TransactionError("keyset id does not match output id")
             if not keyset.active:
                 raise TransactionError("keyset is not active")

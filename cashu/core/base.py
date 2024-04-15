@@ -417,7 +417,6 @@ class WalletKeyset:
         first_seen=None,
         active=True,
         input_fee_ppm=None,
-        use_deprecated_id=False,  # BACKWARDS COMPATIBILITY < 0.15.0
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
@@ -433,19 +432,10 @@ class WalletKeyset:
         else:
             self.id = id
 
-        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        if use_deprecated_id:
-            logger.warning(
-                "Using deprecated keyset id derivation for backwards compatibility <"
-                " 0.15.0"
-            )
-            self.id = derive_keyset_id_deprecated(self.public_keys)
-        # END BACKWARDS COMPATIBILITY < 0.15.0
-
         self.unit = Unit[unit]
 
         logger.trace(f"Derived keyset id {self.id} from public keys.")
-        if id and id != self.id and use_deprecated_id:
+        if id and id != self.id:
             logger.warning(
                 f"WARNING: Keyset id {self.id} does not match the given id {id}."
                 " Overwriting."
@@ -500,8 +490,6 @@ class MintKeyset:
     first_seen: Optional[str] = None
     version: Optional[str] = None
     input_fee_ppm: Optional[int] = None
-
-    duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
     def __init__(
         self,
@@ -585,6 +573,12 @@ class MintKeyset:
         assert self.seed, "seed not set"
         assert self.derivation_path, "derivation path not set"
 
+        # we compute the keyset id from the public keys only if it is not
+        # loaded from the database. This is to allow for backwards compatibility
+        # with old keysets with new id's and vice versa. This code can be removed
+        # if there are only new keysets in the mint (> 0.15.0)
+        id_in_db = self.id
+
         if self.version_tuple < (0, 12):
             # WARNING: Broken key derivation for backwards compatibility with < 0.12
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
@@ -595,7 +589,8 @@ class MintKeyset:
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
-            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+            # load from db or derive
+            self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
             self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
             logger.trace(
@@ -603,11 +598,13 @@ class MintKeyset:
                 " compatibility < 0.15)"
             )
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+            # load from db or derive
+            self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         else:
             self.private_keys = derive_keys(self.seed, self.derivation_path)
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            self.id = derive_keyset_id(self.public_keys)  # type: ignore
+            # load from db or derive
+            self.id = id_in_db or derive_keyset_id(self.public_keys)  # type: ignore
 
 
 # ------- TOKEN -------

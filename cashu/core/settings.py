@@ -52,7 +52,7 @@ class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
     mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
-    mint_derivation_path_list: List[str] = Field(default=[])
+    mint_derivation_path_list: List[str] = Field(default=[""])
     mint_listen_host: str = Field(default="127.0.0.1")
     mint_listen_port: int = Field(default=3338)
 
@@ -62,14 +62,6 @@ class MintSettings(CashuSettings):
         default={"sat": {"fee": 1, "batch": 10}}
     )
     mint_max_secret_length: int = Field(default=512)
-    mint_duplicate_old_keysets: bool = Field(
-        default=True,
-        title="Duplicate keysets",
-        description=(
-            "Whether to duplicate keysets for backwards compatibility before v1 API"
-            " (Nutshell 0.15.0)."
-        ),
-    )
 
 
 class MintBackends(MintSettings):
@@ -138,7 +130,6 @@ class MintInformation(CashuSettings):
     mint_info_description: str = Field(default=None)
     mint_info_description_long: str = Field(default=None)
     mint_info_contact: List[List[str]] = Field(default=[["", ""]])
-    mint_info_nuts: List[str] = Field(default=["NUT-07", "NUT-08", "NUT-09"])
     mint_info_motd: str = Field(default=None)
 
 

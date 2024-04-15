@@ -9,7 +9,6 @@ from cashu.core.models import (
     PostRestoreRequest,
     PostRestoreResponse,
 )
-from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
 from cashu.wallet.wallet import Wallet
@@ -141,10 +140,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert len(result["promises"]) == 2
     assert result["promises"][0]["amount"] == 32
     assert result["promises"][1]["amount"] == 32
-    if settings.debug_mint_only_deprecated:
-        assert result["promises"][0]["id"] == "eGnEWtdJ0PIM"
-    else:
-        assert result["promises"][0]["id"] == "009a1f293253e41e"
+    assert result["promises"][0]["id"] == "009a1f293253e41e"
     assert result["promises"][0]["dleq"]
     assert "e" in result["promises"][0]["dleq"]
     assert "s" in result["promises"][0]["dleq"]

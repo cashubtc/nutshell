@@ -162,9 +162,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.items()
         }
-        keyset = WalletKeyset(
-            unit="sat", public_keys=keyset_keys, mint_url=url, use_deprecated_id=True
-        )
+        keyset = WalletKeyset(unit="sat", public_keys=keyset_keys, mint_url=url)
         return keyset
 
     @async_set_httpx_client
@@ -201,7 +199,6 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             id=keyset_id,
             public_keys=keyset_keys,
             mint_url=url,
-            use_deprecated_id=True,
         )
         return keyset
 

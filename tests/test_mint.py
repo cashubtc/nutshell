@@ -60,17 +60,6 @@ async def test_keysets(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_keysets_backwards_compatibility_pre_v0_15(ledger: Ledger):
-    """Backwards compatibility test for keysets pre v0.15.0
-    We expect two instances of the same keyset but with different IDs.
-    First one is the new hex ID, second one is the old base64 ID.
-    """
-    assert len(ledger.keysets) == 2
-    assert list(ledger.keysets.keys()) == ["009a1f293253e41e", "eGnEWtdJ0PIM"]
-    assert ledger.keyset.id == "009a1f293253e41e"
-
-
-@pytest.mark.asyncio
 async def test_get_keyset(ledger: Ledger):
     keyset = ledger.get_keyset()
     assert isinstance(keyset, dict)
@@ -135,55 +124,6 @@ async def test_generate_promises(ledger: Ledger):
     assert promises[0].dleq
     assert promises[0].dleq.s
     assert promises[0].dleq.e
-
-
-@pytest.mark.asyncio
-async def test_generate_promises_deprecated_keyset_id(ledger: Ledger):
-    blinded_messages_mock = [
-        BlindedMessage(
-            amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="eGnEWtdJ0PIM",
-        )
-    ]
-    promises = await ledger._generate_promises(blinded_messages_mock)
-    assert (
-        promises[0].C_
-        == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
-    )
-    assert promises[0].amount == 8
-    assert promises[0].id == "eGnEWtdJ0PIM"
-
-    # DLEQ proof present
-    assert promises[0].dleq
-    assert promises[0].dleq.s
-    assert promises[0].dleq.e
-
-
-@pytest.mark.asyncio
-async def test_generate_promises_keyset_backwards_compatibility_pre_v0_15(
-    ledger: Ledger,
-):
-    """Backwards compatibility test for keysets pre v0.15.0
-    We want to generate promises using the old keyset ID.
-    We expect the promise to have the old base64 ID.
-    """
-    blinded_messages_mock = [
-        BlindedMessage(
-            amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="eGnEWtdJ0PIM",
-        )
-    ]
-    promises = await ledger._generate_promises(
-        blinded_messages_mock, keyset=ledger.keysets["eGnEWtdJ0PIM"]
-    )
-    assert (
-        promises[0].C_
-        == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
-    )
-    assert promises[0].amount == 8
-    assert promises[0].id == "eGnEWtdJ0PIM"
 
 
 @pytest.mark.asyncio
