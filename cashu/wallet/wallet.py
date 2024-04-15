@@ -951,7 +951,7 @@ class Wallet(
         """
         # verify DLEQ of incoming proofs
         self.verify_proofs_dleq(proofs)
-        return await self.split(proofs=proofs, amount=sum_proofs(proofs))
+        return await self.split(proofs=proofs, amount=0)
 
     async def split(
         self,
@@ -962,22 +962,20 @@ class Wallet(
         """Calls the swap API to split the proofs into two sets of proofs, one for keeping and one for sending.
 
         If secret_lock is None, random secrets will be generated for the tokens to keep (keep_outputs)
-        and the promises to send (send_outputs).
-
-        If secret_lock is provided, the wallet will create blinded secrets with those to attach a
-        predefined spending condition to the tokens they want to send.
+        and the promises to send (send_outputs). If secret_lock is provided, the wallet will create
+        blinded secrets with those to attach a predefined spending condition to the tokens they want to send.
 
         Args:
-            proofs (List[Proof]): _description_
-            amount (int): _description_
-            secret_lock (Optional[Secret], optional): _description_. Defaults to None.
+            proofs (List[Proof]): Proofs to be split.
+            amount (int): Amount to be sent.
+            secret_lock (Optional[Secret], optional): Secret to lock the tokens to be sent. Defaults to None.
 
         Returns:
-            _type_: _description_
+            Tuple[List[Proof], List[Proof]]: Two lists of proofs, one for keeping and one for sending.
         """
         assert len(proofs) > 0, "no proofs provided."
         assert sum_proofs(proofs) >= amount, "amount too large."
-        assert amount > 0, "amount must be positive."
+        assert amount >= 0, "amount can't be negative."
         # make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
 
@@ -987,23 +985,27 @@ class Wallet(
         # create a suitable amount split based on the proofs provided
         total = sum_proofs(proofs)
         keep_amt, send_amt = total - amount, amount
-
-        logger.debug(f"Total input: {sum_proofs(proofs)}")
+        logger.trace(f"Keep amount: {keep_amt}, send amount: {send_amt}")
+        logger.trace(f"Total input: {sum_proofs(proofs)}")
         # generate splits for outputs
-        send_outputs_no_fee = amount_split(send_amt)
+        send_output_amounts_without_fee = amount_split(send_amt)
         # add fees to outputs to send because we're nice
         # TODO: fees_for_outputs does not include the fees to pay for themselves!
-        fees_for_outputs = amount_split(self.get_fees_for_proofs(send_outputs_no_fee))
-        send_outputs = send_outputs_no_fee + fees_for_outputs
-        logger.debug(
-            f"Send {sum(send_outputs_no_fee)} plus fees: {sum(fees_for_outputs)}"
+        fees_for_outputs = amount_split(
+            self.get_fees_for_proofs(send_output_amounts_without_fee)
+        )
+        send_outputs = send_output_amounts_without_fee + fees_for_outputs
+        logger.trace(
+            f"Send {sum(send_output_amounts_without_fee)} plus fees: {sum(fees_for_outputs)}"
         )
         # we subtract the fee we add to the output from the amount to keep
-        keep_amt -= self.get_fees_for_proofs(send_outputs_no_fee)
-        logger.debug(f"Keep amount: {keep_amt}")
+        keep_amt -= self.get_fees_for_proofs(send_output_amounts_without_fee)
+        logger.trace(f"Keep amount: {keep_amt}")
 
         # we subtract the fee for the entire transaction from the amount to keep
         keep_amt -= self.get_fees_for_proofs(proofs)
+        logger.trace(f"Keep amount: {keep_amt}")
+
         # we determine the amounts to keep based on the wallet state
         keep_outputs = self.split_wallet_state(keep_amt)
 
