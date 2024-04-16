@@ -77,8 +77,7 @@ class LedgerEventClientManager:
             try:
                 # handle the request
                 logger.debug(f"Request: {req}")
-                handle_respo = await self._handle_request(req)
-                logger.debug(f"Response: {handle_respo}")
+                resp = await self._handle_request(req)
             except Exception as e:
                 resp = JSONRPCErrorResponse(
                     error=JSONRPCError(
