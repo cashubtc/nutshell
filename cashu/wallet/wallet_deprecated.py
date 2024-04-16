@@ -248,7 +248,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             quote=mint_response.hash,
             request=mint_response.pr,
             paid=False,
-            expiry=decoded_invoice.expiry,
+            expiry=decoded_invoice.date + (decoded_invoice.expiry or 0),
         )
 
     @async_set_httpx_client
