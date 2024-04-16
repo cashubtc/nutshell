@@ -12,6 +12,7 @@ from ..core.json_rpc.base import (
     JSONRPCRequest,
     JSONRPCResponse,
     JSONRPCSubscribeParams,
+    JSONRPCUnsubscribeParams,
 )
 
 
@@ -57,6 +58,16 @@ class SubscriptionManager:
         self.websocket.run_forever(ping_interval=10, ping_timeout=5)
 
     def close(self):
+        # unsubscribe from all subscriptions
+        for subId in self.callback_map.keys():
+            req = JSONRPCRequest(
+                method="unsubscribe",
+                params=JSONRPCUnsubscribeParams(subId=subId).dict(),
+                id=self.id_counter,
+            )
+            self.websocket.send(req.json())
+            self.id_counter += 1
+
         self.websocket.keep_running = False
         self.websocket.close()
 

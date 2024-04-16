@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Request, WebSocket
+from limits import RateLimitItemPerMinute
 from loguru import logger
 
 from cashu.mint.events.client_manager import LedgerEventClientManager
@@ -189,6 +190,13 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
 
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
+    success = limiter._limiter.hit(
+        RateLimitItemPerMinute(settings.mint_transaction_rate_limit_per_minute),
+        websocket.client.host if websocket.client else "unknown",
+    )
+    if not success:
+        await websocket.close(code=1008, reason="Rate limit exceeded")
+        return
     client = LedgerEventClientManager(websocket=websocket)
     success = ledger.events.add_client(client)
     if not success:

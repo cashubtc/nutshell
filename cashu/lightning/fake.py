@@ -55,7 +55,7 @@ class FakeWallet(LightningBackend):
         return StatusResponse(error_message=None, balance=1337)
 
     async def mark_invoice_paid(self, invoice: Bolt11) -> None:
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
         self.paid_invoices_incoming.append(invoice)
         await self.paid_invoices_queue.put(invoice)
 

@@ -65,7 +65,7 @@ class JSONRPCSubscribeParams(BaseModel):
     subId: str
 
 
-class JSONRPCUnubscribeParams(BaseModel):
+class JSONRPCUnsubscribeParams(BaseModel):
     subId: str
 
 

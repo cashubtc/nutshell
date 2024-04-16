@@ -33,7 +33,7 @@ class LedgerEventManager:
         if len(self.clients) >= self.MAX_CLIENTS:
             return False
         self.clients.append(client)
-        logger.success(f"Added websocket subscription client {client}")
+        logger.debug(f"Added websocket subscription client {client}")
         return True
 
     def remove_client(self, client: LedgerEventClientManager) -> None:

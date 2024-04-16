@@ -15,24 +15,26 @@ from ...core.json_rpc.base import (
     JSONRPCResponse,
     JSONRPCStatus,
     JSONRPCSubscribeParams,
-    JSONRPCUnubscribeParams,
+    JSONRPCUnsubscribeParams,
     JSONRRPCSubscribeResponse,
 )
 
 
 class LedgerEventClientManager:
     websocket: WebSocket
-    subscriptions: dict[str, List[str]] = {}  # filter -> List[subId]
+    subscriptions: dict[str, List[str]] = {}  # [filter, List[subId]]
     max_subscriptions = 100
 
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
+        self.subscriptions = {}
 
     async def start(self):
         await self.websocket.accept()
         while True:
             json_data = await self.websocket.receive_text()
 
+            # Parse the JSON data
             try:
                 data = json.loads(json_data)
             except json.JSONDecodeError as e:
@@ -47,6 +49,7 @@ class LedgerEventClientManager:
                 await self._send_msg(resp)
                 continue
 
+            # Parse the JSONRPCRequest
             try:
                 req = JSONRPCRequest.parse_obj(data)
             except Exception as e:
@@ -61,7 +64,7 @@ class LedgerEventClientManager:
                 logger.warning(f"Error handling websocket message: {e}")
                 continue
 
-            # check if method is in the enum
+            # Check if the method is valid
             try:
                 JSONRPCMethods(req.method)
             except ValueError:
@@ -74,8 +77,9 @@ class LedgerEventClientManager:
                 )
                 await self._send_msg(resp)
                 continue
+
+            # Handle the request
             try:
-                # handle the request
                 logger.debug(f"Request: {req}")
                 resp = await self._handle_request(req)
             except Exception as e:
@@ -86,6 +90,8 @@ class LedgerEventClientManager:
                     ),
                     id=req.id,
                 )
+
+            # Send the response
             await self._send_msg(resp)
 
     async def _handle_request(self, data: JSONRPCRequest) -> JSONRPCResponse:
@@ -99,7 +105,7 @@ class LedgerEventClientManager:
             )
             return JSONRPCResponse(result=result.dict(), id=data.id)
         elif data.method == JSONRPCMethods.UNSUBSCRIBE.value:
-            unsubscribe_params = JSONRPCUnubscribeParams.parse_obj(data.params)
+            unsubscribe_params = JSONRPCUnsubscribeParams.parse_obj(data.params)
             self.remove_subscription(unsubscribe_params.subId)
             result = JSONRRPCSubscribeResponse(
                 status=JSONRPCStatus.OK,
@@ -129,12 +135,14 @@ class LedgerEventClientManager:
         for filter in filters:
             if filter not in self.subscriptions:
                 self.subscriptions[filter] = []
+            logger.debug(f"Adding subscription {subId} for filter {filter}")
             self.subscriptions[filter].append(subId)
 
     def remove_subscription(self, subId: str) -> None:
         for filter, subs in self.subscriptions.items():
             for sub in subs:
                 if sub == subId:
+                    logger.debug(f"Removing subscription {subId} for filter {filter}")
                     self.subscriptions[filter].remove(sub)
                     return
         raise ValueError(f"Subscription not found: {subId}")
