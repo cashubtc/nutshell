@@ -4,7 +4,7 @@ from typing import List, Union
 from fastapi import WebSocket
 from loguru import logger
 
-from cashu.mint.limit import assert_limit
+from cashu.mint.limit import limit_websocket
 
 from ...core.json_rpc.base import (
     JSONRPCError,
@@ -38,9 +38,7 @@ class LedgerEventClientManager:
 
             # Check the rate limit
             try:
-                assert_limit(
-                    self.websocket.client.host if self.websocket.client else "unknown"
-                )
+                limit_websocket(self.websocket)
             except Exception as e:
                 logger.error(f"Error: {e}")
                 resp = JSONRPCErrorResponse(

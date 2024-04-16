@@ -27,7 +27,7 @@ from ..core.base import (
 from ..core.errors import KeysetNotFoundError
 from ..core.settings import settings
 from ..mint.startup import ledger
-from .limit import assert_limit, limiter
+from .limit import limit_websocket, limiter
 
 router: APIRouter = APIRouter()
 
@@ -189,7 +189,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
 
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
-    assert_limit(websocket.client.host if websocket.client else "unknown")
+    limit_websocket(websocket)
     client = LedgerEventClientManager(websocket=websocket)
     success = ledger.events.add_client(client)
     if not success:
