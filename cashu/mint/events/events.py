@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+from loguru import logger
 from pydantic import BaseModel
 
 from .client_manager import LedgerEventClientManager
@@ -32,6 +33,7 @@ class LedgerEventManager:
         if len(self.clients) >= self.MAX_CLIENTS:
             return False
         self.clients.append(client)
+        logger.success(f"Added websocket subscription client {client}")
         return True
 
     def remove_client(self, client: LedgerEventClientManager) -> None:
@@ -46,4 +48,7 @@ class LedgerEventManager:
 
         for client in self.clients:
             for sub in client.subscriptions.get(event.identifier, []):
+                logger.trace(
+                    f"Submitting event to sub {sub}: {self.serialize_event(event)}"
+                )
                 await client._send_obj(self.serialize_event(event), subId=sub)

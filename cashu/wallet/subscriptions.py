@@ -34,6 +34,7 @@ class SubscriptionManager:
         self.websocket = WebSocketApp(ws_url, on_message=self._on_message)
 
     def _on_message(self, ws, message):
+        logger.trace(f"Received message: {message}")
         try:
             # return if message is a response
             JSONRPCResponse.parse_raw(message)
