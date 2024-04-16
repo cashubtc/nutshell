@@ -1,5 +1,6 @@
 from fastapi import status
 from fastapi.responses import JSONResponse
+from limits import RateLimitItemPerMinute
 from loguru import logger
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -39,3 +40,16 @@ limiter = Limiter(
     default_limits=[f"{settings.mint_transaction_rate_limit_per_minute}/minute"],
     enabled=settings.mint_rate_limit,
 )
+
+
+def assert_limit(identifier: str):
+    global limiter
+    success = limiter._limiter.hit(
+        RateLimitItemPerMinute(settings.mint_transaction_rate_limit_per_minute),
+        identifier,
+    )
+    if not success:
+        logger.warning(
+            f"Rate limit {settings.mint_transaction_rate_limit_per_minute}/minute exceeded: {identifier}"
+        )
+        raise Exception("Rate limit exceeded")
