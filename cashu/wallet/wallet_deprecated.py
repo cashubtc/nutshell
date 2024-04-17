@@ -17,10 +17,10 @@ from ..core.base import (
     GetInfoResponse,
     GetInfoResponse_deprecated,
     GetMintResponse_deprecated,
-    Invoice,
     KeysetsResponse_deprecated,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
+    PostMintQuoteResponse,
     PostMintRequest_deprecated,
     PostMintResponse_deprecated,
     PostRestoreResponse,
@@ -160,9 +160,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.items()
         }
-        keyset = WalletKeyset(
-            unit="sat", public_keys=keyset_keys, mint_url=url, use_deprecated_id=True
-        )
+        keyset = WalletKeyset(unit="sat", public_keys=keyset_keys, mint_url=url)
         return keyset
 
     @async_set_httpx_client
@@ -199,7 +197,6 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             id=keyset_id,
             public_keys=keyset_keys,
             mint_url=url,
-            use_deprecated_id=True,
         )
         return keyset
 
@@ -229,7 +226,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
-    async def request_mint_deprecated(self, amount) -> Invoice:
+    async def request_mint_deprecated(self, amount) -> PostMintQuoteResponse:
         """Requests a mint from the server and returns Lightning invoice.
 
         Args:
@@ -247,12 +244,11 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         return_dict = resp.json()
         mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
         decoded_invoice = bolt11.decode(mint_response.pr)
-        return Invoice(
-            amount=amount,
-            bolt11=mint_response.pr,
-            id=mint_response.hash,
-            payment_hash=decoded_invoice.payment_hash,
-            out=False,
+        return PostMintQuoteResponse(
+            quote=mint_response.hash,
+            request=mint_response.pr,
+            paid=False,
+            expiry=decoded_invoice.date + (decoded_invoice.expiry or 0),
         )
 
     @async_set_httpx_client

@@ -58,14 +58,6 @@ class MintSettings(CashuSettings):
 
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
-    mint_duplicate_old_keysets: bool = Field(
-        default=True,
-        title="Duplicate keysets",
-        description=(
-            "Whether to duplicate keysets for backwards compatibility before v1 API"
-            " (Nutshell 0.15.0)."
-        ),
-    )
 
 
 class MintBackends(MintSettings):
@@ -134,7 +126,6 @@ class MintInformation(CashuSettings):
     mint_info_description: str = Field(default=None)
     mint_info_description_long: str = Field(default=None)
     mint_info_contact: List[List[str]] = Field(default=[["", ""]])
-    mint_info_nuts: List[str] = Field(default=["NUT-07", "NUT-08", "NUT-09"])
     mint_info_motd: str = Field(default=None)
 
 
