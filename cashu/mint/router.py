@@ -197,7 +197,8 @@ async def websocket_endpoint(websocket: WebSocket):
         return
     try:
         await client.start()
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Exception: {e}")
         ledger.events.remove_client(client)
 
 

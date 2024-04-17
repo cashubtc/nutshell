@@ -55,7 +55,8 @@ class FakeWallet(LightningBackend):
         return StatusResponse(error_message=None, balance=1337)
 
     async def mark_invoice_paid(self, invoice: Bolt11) -> None:
-        await asyncio.sleep(5)
+        if settings.fakewallet_delay_incoming_payment:
+            await asyncio.sleep(settings.fakewallet_delay_incoming_payment)
         self.paid_invoices_incoming.append(invoice)
         await self.paid_invoices_queue.put(invoice)
 
@@ -140,8 +141,8 @@ class FakeWallet(LightningBackend):
     async def pay_invoice(self, quote: MeltQuote, fee_limit: int) -> PaymentResponse:
         invoice = decode(quote.request)
 
-        if settings.fakewallet_delay_payment:
-            await asyncio.sleep(5)
+        if settings.fakewallet_delay_outgoing_payment:
+            await asyncio.sleep(settings.fakewallet_delay_outgoing_payment)
 
         if invoice.payment_hash in self.payment_secrets or settings.fakewallet_brr:
             if invoice not in self.paid_invoices_outgoing:
