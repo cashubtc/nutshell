@@ -1,5 +1,5 @@
 import json
-from typing import List, Union
+from typing import List, Optional, Union
 
 from fastapi import WebSocket
 from loguru import logger
@@ -19,19 +19,24 @@ from ...core.json_rpc.base import (
     JSONRPCUnsubscribeParams,
     JSONRRPCSubscribeResponse,
 )
+from ...mint.ledger import Ledger
 from ..limit import limit_websocket
+from .protocols import SupportsLedger
+from .subscription_init import LedgerEventSubscriptionInint
 
 
-class LedgerEventClientManager:
+class LedgerEventClientManager(LedgerEventSubscriptionInint, SupportsLedger):
     websocket: WebSocket
     subscriptions: dict[
         JSONRPCSubscriptionKinds, dict[str, List[str]]
     ] = {}  # [kind, [filter, List[subId]]]
     max_subscriptions = 100
+    ledger: Optional[Ledger] = None
 
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, ledger: Optional[Ledger] = None):
         self.websocket = websocket
         self.subscriptions = {}
+        self.ledger = ledger
 
     async def start(self):
         await self.websocket.accept()
@@ -150,11 +155,6 @@ class LedgerEventClientManager:
         logger.info(f"Sending message: {data}")
         await self.websocket.send_text(data.json())
 
-    # def handle_subscription_init(self, kind: JSONRPCSubscriptionKinds, filters: List[str], subId: str) -> None:
-    #     async def handle_mint_quote(quote_id: str) -> MintQuote:
-    #         await
-    #         pass
-
     def add_subscription(
         self, kind: JSONRPCSubscriptionKinds, filters: List[str], subId: str
     ) -> None:
@@ -169,7 +169,7 @@ class LedgerEventClientManager:
                 self.subscriptions[kind][filter] = []
             logger.debug(f"Adding subscription {subId} for filter {filter}")
             self.subscriptions[kind][filter].append(subId)
-            # self.handle_subscription_init(kind, filters, subId)
+            self.handle_subscription_init(kind, filters, subId)
 
     def remove_subscription(self, subId: str) -> None:
         for kind, sub_filters in self.subscriptions.items():
