@@ -14,6 +14,8 @@ from bip32 import BIP32
 from httpx import Response
 from loguru import logger
 
+from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
+
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
@@ -826,7 +828,11 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         threading.Thread(
             target=subscriptions.connect, name="SubscriptionManager", daemon=True
         ).start()
-        subscriptions.subscribe(filters=[mint_qoute.quote], callback=callback)
+        subscriptions.subscribe(
+            kind=JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,
+            filters=[mint_qoute.quote],
+            callback=callback,
+        )
         # return the invoice
         decoded_invoice = bolt11.decode(mint_qoute.request)
         invoice = Invoice(

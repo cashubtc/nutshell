@@ -7,11 +7,13 @@ from websocket._app import WebSocketApp
 
 from ..core.crypto.keys import random_hash
 from ..core.json_rpc.base import (
+    JSONRPCMethods,
     JSONRPCNotficationParams,
     JSONRPCNotification,
     JSONRPCRequest,
     JSONRPCResponse,
     JSONRPCSubscribeParams,
+    JSONRPCSubscriptionKinds,
     JSONRPCUnsubscribeParams,
 )
 
@@ -61,7 +63,7 @@ class SubscriptionManager:
         # unsubscribe from all subscriptions
         for subId in self.callback_map.keys():
             req = JSONRPCRequest(
-                method="unsubscribe",
+                method=JSONRPCMethods.UNSUBSCRIBE.value,
                 params=JSONRPCUnsubscribeParams(subId=subId).dict(),
                 id=self.id_counter,
             )
@@ -75,12 +77,16 @@ class SubscriptionManager:
         while not self.websocket.sock or not self.websocket.sock.connected:
             time.sleep(0.025)
 
-    def subscribe(self, filters: List[str], callback: Callable):
+    def subscribe(
+        self, kind: JSONRPCSubscriptionKinds, filters: List[str], callback: Callable
+    ):
         self.wait_until_connected()
         subId = random_hash()
         req = JSONRPCRequest(
-            method="subscribe",
-            params=JSONRPCSubscribeParams(filters=filters, subId=subId).dict(),
+            method=JSONRPCMethods.SUBSCRIBE.value,
+            params=JSONRPCSubscribeParams(
+                kind=kind, filters=filters, subId=subId
+            ).dict(),
             id=self.id_counter,
         )
         self.websocket.send(req.json())

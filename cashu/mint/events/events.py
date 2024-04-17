@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from loguru import logger
 from pydantic import BaseModel
 
+from ...core.json_rpc.base import JSONRPCSubscriptionKinds
 from .client_manager import LedgerEventClientManager
 
 
@@ -14,6 +15,11 @@ class LedgerEvent(ABC, BaseModel):
     @property
     @abstractmethod
     def identifier(self) -> str:
+        pass
+
+    @property
+    @abstractmethod
+    def kind(self) -> JSONRPCSubscriptionKinds:
         pass
 
 
@@ -47,7 +53,8 @@ class LedgerEventManager:
             raise ValueError(f"Unsupported event object type {type(event)}")
 
         for client in self.clients:
-            for sub in client.subscriptions.get(event.identifier, []):
+            kind_sub = client.subscriptions.get(event.kind, {})
+            for sub in kind_sub.get(event.identifier, []):
                 logger.trace(
                     f"Submitting event to sub {sub}: {self.serialize_event(event)}"
                 )

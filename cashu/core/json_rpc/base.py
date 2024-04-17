@@ -52,8 +52,14 @@ class JSONRPCErrorResponse(BaseModel):
 
 
 class JSONRPCMethods(Enum):
-    SUBSCRIBE = "subscribe"
-    UNSUBSCRIBE = "unsubscribe"
+    SUBSCRIBE = "sub"
+    UNSUBSCRIBE = "unsub"
+
+
+class JSONRPCSubscriptionKinds(Enum):
+    BOLT11_MINT_QUOTE = "bolt11_mint_quote"
+    BOLT11_MELT_QUOTE = "bolt11_melt_quote"
+    PROOF_STATE = "proof_state"
 
 
 class JSONRPCStatus(Enum):
@@ -61,6 +67,7 @@ class JSONRPCStatus(Enum):
 
 
 class JSONRPCSubscribeParams(BaseModel):
+    kind: JSONRPCSubscriptionKinds
     filters: List[str] = Field(..., max_length=settings.mint_max_request_length)
     subId: str
 

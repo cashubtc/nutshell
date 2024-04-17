@@ -4,8 +4,6 @@ from typing import List, Union
 from fastapi import WebSocket
 from loguru import logger
 
-from cashu.mint.limit import limit_websocket
-
 from ...core.json_rpc.base import (
     JSONRPCError,
     JSONRPCErrorCode,
@@ -17,14 +15,18 @@ from ...core.json_rpc.base import (
     JSONRPCResponse,
     JSONRPCStatus,
     JSONRPCSubscribeParams,
+    JSONRPCSubscriptionKinds,
     JSONRPCUnsubscribeParams,
     JSONRRPCSubscribeResponse,
 )
+from ..limit import limit_websocket
 
 
 class LedgerEventClientManager:
     websocket: WebSocket
-    subscriptions: dict[str, List[str]] = {}  # [filter, List[subId]]
+    subscriptions: dict[
+        JSONRPCSubscriptionKinds, dict[str, List[str]]
+    ] = {}  # [kind, [filter, List[subId]]]
     max_subscriptions = 100
 
     def __init__(self, websocket: WebSocket):
@@ -115,7 +117,9 @@ class LedgerEventClientManager:
         logger.info(f"Received message: {data}")
         if data.method == JSONRPCMethods.SUBSCRIBE.value:
             subscribe_params = JSONRPCSubscribeParams.parse_obj(data.params)
-            self.add_subscription(subscribe_params.filters, subscribe_params.subId)
+            self.add_subscription(
+                subscribe_params.kind, subscribe_params.filters, subscribe_params.subId
+            )
             result = JSONRRPCSubscribeResponse(
                 status=JSONRPCStatus.OK,
                 subId=subscribe_params.subId,
@@ -146,20 +150,35 @@ class LedgerEventClientManager:
         logger.info(f"Sending message: {data}")
         await self.websocket.send_text(data.json())
 
-    def add_subscription(self, filters: List[str], subId: str) -> None:
-        if len(self.subscriptions) >= self.max_subscriptions:
+    # def handle_subscription_init(self, kind: JSONRPCSubscriptionKinds, filters: List[str], subId: str) -> None:
+    #     async def handle_mint_quote(quote_id: str) -> MintQuote:
+    #         await
+    #         pass
+
+    def add_subscription(
+        self, kind: JSONRPCSubscriptionKinds, filters: List[str], subId: str
+    ) -> None:
+        if kind not in self.subscriptions:
+            self.subscriptions[kind] = {}
+
+        if len(self.subscriptions[kind]) >= self.max_subscriptions:
             raise ValueError("Max subscriptions reached")
+
         for filter in filters:
             if filter not in self.subscriptions:
-                self.subscriptions[filter] = []
+                self.subscriptions[kind][filter] = []
             logger.debug(f"Adding subscription {subId} for filter {filter}")
-            self.subscriptions[filter].append(subId)
+            self.subscriptions[kind][filter].append(subId)
+            # self.handle_subscription_init(kind, filters, subId)
 
     def remove_subscription(self, subId: str) -> None:
-        for filter, subs in self.subscriptions.items():
-            for sub in subs:
-                if sub == subId:
-                    logger.debug(f"Removing subscription {subId} for filter {filter}")
-                    self.subscriptions[filter].remove(sub)
-                    return
+        for kind, sub_filters in self.subscriptions.items():
+            for filter, subs in sub_filters.items():
+                for sub in subs:
+                    if sub == subId:
+                        logger.debug(
+                            f"Removing subscription {subId} for filter {filter}"
+                        )
+                        self.subscriptions[kind][filter].remove(sub)
+                        return
         raise ValueError(f"Subscription not found: {subId}")

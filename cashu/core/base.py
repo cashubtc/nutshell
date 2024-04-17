@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 from pydantic import BaseModel, Field, root_validator
 
+from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
+
 from ..mint.events.events import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
@@ -260,6 +262,10 @@ class MeltQuote(LedgerEvent):
         """Implementation of the abstract method from LedgerEventManager"""
         return self.quote
 
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+
 
 class MintQuote(LedgerEvent):
     quote: str
@@ -303,6 +309,10 @@ class MintQuote(LedgerEvent):
     def identifier(self) -> str:
         """Implementation of the abstract method from LedgerEventManager"""
         return self.quote
+
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
 
 
 # ------- API -------
@@ -545,6 +555,10 @@ class ProofState(LedgerEvent):
     def identifier(self) -> str:
         """Implementation of the abstract method from LedgerEventManager"""
         return self.Y
+
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.PROOF_STATE
 
 
 class PostCheckStateResponse(BaseModel):

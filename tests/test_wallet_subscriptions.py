@@ -38,7 +38,8 @@ async def test_wallet_subscription(wallet: Wallet):
 
     invoice, sub = await wallet.request_mint_subscription(128, callback=callback)
     pay_if_regtest(invoice.bolt11)
-    await asyncio.sleep(settings.fakewallet_delay_incoming_payment or 3)
+    wait = settings.fakewallet_delay_incoming_payment or 2
+    await asyncio.sleep(2 * wait)
     assert triggered
     assert len(msg_stack) == 2
 
