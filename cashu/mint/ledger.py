@@ -94,6 +94,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     # ------- STARTUP -------
 
+class QuoteProcessor:
     async def startup_ledger(self):
         await self._startup_ledger()
         await self._check_pending_proofs_and_melt_quotes()
@@ -106,21 +107,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         for derivation_path in settings.mint_derivation_path_list:
             await self.activate_keyset(derivation_path=derivation_path)
 
-        for method in self.backends:
-            for unit in self.backends[method]:
-                logger.info(
-                    f"Using {self.backends[method][unit].__class__.__name__} backend for"
-                    f" method: '{method.name}' and unit: '{unit.name}'"
-                )
-                status = await self.backends[method][unit].status()
-                if status.error_message:
-                    logger.warning(
-                        "The backend for"
-                        f" {self.backends[method][unit].__class__.__name__} isn't"
-                        f" working properly: '{status.error_message}'",
-                        RuntimeWarning,
-                    )
-                logger.info(f"Backend balance: {status.balance} {unit.name}")
+        await self.log_backend_info()
 
         logger.info(f"Data dir: {settings.cashu_dir}")
 
@@ -128,46 +115,60 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         """Startup routine that checks all pending proofs for their melt state and either invalidates
         them for a successful melt or deletes them if the melt failed.
         """
-        # get all pending melt quotes
-        melt_quotes = await self.crud.get_all_melt_quotes_from_pending_proofs(
-            db=self.db
-        )
+        melt_quotes = await self.get_pending_melt_quotes()
         if not melt_quotes:
             return
         for quote in melt_quotes:
-            # get pending proofs for quote
-            pending_proofs = await self.crud.get_pending_proofs_for_quote(
-                quote_id=quote.quote, db=self.db
-            )
-            # check with the backend whether the quote has been paid during downtime
-            payment = await self.backends[Method[quote.method]][
-                Unit[quote.unit]
-            ].get_payment_status(quote.checking_id)
-            if payment.paid:
-                logger.info(f"Melt quote {quote.quote} state: paid")
-                quote.paid_time = int(time.time())
-                quote.paid = True
-                if payment.fee:
-                    quote.fee_paid = payment.fee.to(Unit[quote.unit]).amount
-                quote.proof = payment.preimage or ""
-                await self.crud.update_melt_quote(quote=quote, db=self.db)
-                # invalidate proofs
-                await self._invalidate_proofs(
-                    proofs=pending_proofs, quote_id=quote.quote
-                )
-                # unset pending
-                await self._unset_proofs_pending(pending_proofs)
-            elif payment.failed:
-                logger.info(f"Melt quote {quote.quote} state: failed")
+            pending_proofs = await self.get_pending_proofs(quote)
+            await self.process_quote_payment(quote, pending_proofs)
 
-                # unset pending
-                await self._unset_proofs_pending(pending_proofs)
-            elif payment.pending:
-                logger.info(f"Melt quote {quote.quote} state: pending")
-                pass
-            else:
-                logger.error("Melt quote state unknown")
-                pass
+    async def log_backend_info(self):
+        for method in self.backends:
+            for unit in self.backends[method]:
+                backend_name = self.backends[method][unit].__class__.__name__
+                logger.info(
+                    f"Using {backend_name} backend for method: '{method.name}' and unit: '{unit.name}'"
+                )
+                status = await self.backends[method][unit].status()
+                if status.error_message:
+                    logger.warning(
+                        f"The backend for {backend_name} isn't working properly: '{status.error_message}'",
+                        RuntimeWarning,
+                    )
+                logger.info(f"Backend balance: {status.balance} {unit.name}")
+
+    async def get_pending_melt_quotes(self):
+        return await self.crud.get_all_melt_quotes_from_pending_proofs(db=self.db)
+
+    async def get_pending_proofs(self, quote):
+        return await self.crud.get_pending_proofs_for_quote(quote_id=quote.quote, db=self.db)
+
+    async def process_quote_payment(self, quote, pending_proofs):
+        payment = await self.get_payment_status(quote)
+        if payment.paid:
+            logger.info(f"Melt quote {quote.quote} state: paid")
+            await self.set_melt_quote_paid(quote, payment, pending_proofs)
+        elif payment.failed:
+            logger.info(f"Melt quote {quote.quote} state: failed")
+            await self._unset_proofs_pending(pending_proofs)
+        elif payment.pending:
+            logger.info(f"Melt quote {quote.quote} state: pending")
+        else:
+            logger.error("Melt quote state unknown")
+
+    async def set_melt_quote_paid(self, quote, payment, pending_proofs):
+        quote.paid_time = int(time.time())
+        quote.paid = True
+        if payment.fee:
+            quote.fee_paid = payment.fee.to(Unit[quote.unit]).amount
+        quote.proof = payment.preimage or ""
+        await self.crud.update_melt_quote(quote=quote, db=self.db)
+        await self._invalidate_proofs(proofs=pending_proofs, quote_id=quote.quote)
+        await self._unset_proofs_pending(pending_proofs)
+
+    async def get_payment_status(self, quote):
+        return await self.backends[Method[quote.method]][Unit[quote.unit]].get_payment_status(quote.checking_id)
+
 
     # ------- KEYS -------
 
