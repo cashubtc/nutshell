@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional, Union
+from typing import List, Union
 
 from fastapi import WebSocket
 from loguru import logger
@@ -19,24 +19,19 @@ from ...core.json_rpc.base import (
     JSONRPCUnsubscribeParams,
     JSONRRPCSubscribeResponse,
 )
-from ...mint.ledger import Ledger
 from ..limit import limit_websocket
-from .protocols import SupportsLedger
-from .subscription_init import LedgerEventSubscriptionInint
 
 
-class LedgerEventClientManager(LedgerEventSubscriptionInint, SupportsLedger):
+class LedgerEventClientManager:
     websocket: WebSocket
     subscriptions: dict[
         JSONRPCSubscriptionKinds, dict[str, List[str]]
     ] = {}  # [kind, [filter, List[subId]]]
     max_subscriptions = 100
-    ledger: Optional[Ledger] = None
 
-    def __init__(self, websocket: WebSocket, ledger: Optional[Ledger] = None):
+    def __init__(self, websocket: WebSocket):
         self.websocket = websocket
         self.subscriptions = {}
-        self.ledger = ledger
 
     async def start(self):
         await self.websocket.accept()
@@ -169,7 +164,7 @@ class LedgerEventClientManager(LedgerEventSubscriptionInint, SupportsLedger):
                 self.subscriptions[kind][filter] = []
             logger.debug(f"Adding subscription {subId} for filter {filter}")
             self.subscriptions[kind][filter].append(subId)
-            self.handle_subscription_init(kind, filters, subId)
+            # self.handle_subscription_init(kind, filters, subId)
 
     def remove_subscription(self, subId: str) -> None:
         for kind, sub_filters in self.subscriptions.items():
