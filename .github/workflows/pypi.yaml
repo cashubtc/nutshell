@@ -3,7 +3,7 @@ name: Pip package
 on:
   push:
   release:
-    types: [published]
+    types: [released]
 
 jobs:
   build-and-push:

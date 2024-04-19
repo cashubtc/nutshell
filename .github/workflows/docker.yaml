@@ -2,7 +2,7 @@ name: Docker Build
 
 on:
   release:
-    types: [published]
+    types: [released]
 
 jobs:
   build-and-push:
@@ -42,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: ${{ github.event_name == 'release' }}
+          push: ${{ github.event_name == 'release' && github.event.action == 'released' }}
           tags: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:${{ steps.get_tag.outputs.tag }}
           platforms: linux/amd64,linux/arm64
           cache-from: type=local,src=/tmp/.buildx-cache
