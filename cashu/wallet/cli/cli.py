@@ -250,6 +250,7 @@ async def gateway(ctx: Context, invoice: str, yes: bool):
     wallet = await mint_wallet()
     await wallet.load_mint()
     await wallet.load_proofs()
+
     gateway_quote = await wallet.gateway_melt_quote(invoice)
     bolt11_invoice = bolt11.decode(invoice)
     preimage = "00000000000000000000000000000000"
