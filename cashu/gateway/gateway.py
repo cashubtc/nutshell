@@ -31,6 +31,10 @@ from .models import (
     GatewayMeltResponse,
 )
 
+# This makes sure that we require ecash htlc lock time and
+# invoice lock time at least LOCKTIME_SAFETY seconds apart
+LOCKTIME_SAFETY = 60  # 1 minute
+
 
 class Gateway:
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
@@ -135,11 +139,31 @@ class Gateway:
 
     async def get_melt_quote(
         self, quote_id: str, check_quote_with_backend: bool = False
-    ) -> MeltQuote:
-        return await self.crud.get_melt_quote(
-            quote_id=quote_id,
-            db=self.db,
-            check_quote_with_backend=check_quote_with_backend,
+    ) -> GatewayMeltQuoteResponse:
+        melt_quote = await self.crud.get_melt_quote(quote_id=quote_id, db=self.db)
+        if not melt_quote:
+            raise TransactionError("quote not found")
+        if check_quote_with_backend:
+            if melt_quote.paid:
+                raise TransactionError("quote is already paid")
+            unit = Unit[melt_quote.unit]
+            if unit not in self.backends[Method.bolt11]:
+                raise Exception("unit not supported by backend")
+            method = Method.bolt11
+            # get the backend for the unit
+            payment_quote = await self.backends[method][unit].get_payment_status(
+                melt_quote.checking_id
+            )
+            if payment_quote.paid:
+                melt_quote.paid = True
+                melt_quote.paid_time = int(time.time())
+                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+
+        return GatewayMeltQuoteResponse(
+            pubkey=self.pubkey,
+            quote=melt_quote.quote,
+            amount=melt_quote.amount,
+            expiry=melt_quote.expiry,
         )
 
     def _verify_input_spending_conditions(
@@ -162,10 +186,14 @@ class Gateway:
         if not is_valid:
             raise TransactionError("proof secret pubkey does not match hashlock pubkey")
 
-        if htlc_secret.tags.get_tag("locktime"):
-            locktime = int(htlc_secret.tags.get_tag("locktime"))
-            if locktime > invoice.date + invoice.expiry:
+        locktime = htlc_secret.tags.get_tag("locktime")
+        if locktime and invoice.date and invoice.expiry:
+            locktime = int(locktime)
+            if locktime < invoice.date + invoice.expiry + LOCKTIME_SAFETY:
                 raise TransactionError("proof secret locktime is not valid")
+        else:
+            logger.error(f"locktime: {locktime}, invoice: {invoice}")
+            raise TransactionError("no locktime in proof secret or in invoice")
 
     async def melt(
         self,

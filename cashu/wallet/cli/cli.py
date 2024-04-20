@@ -16,9 +16,7 @@ import click
 from click import Context
 from loguru import logger
 
-from cashu.wallet.gateway import WalletGateway
-
-from ...core.base import HTLCWitness, Invoice, TokenV3, Unit
+from ...core.base import Invoice, TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.logging import configure_logger
 from ...core.settings import settings
@@ -30,6 +28,7 @@ from ...wallet.crud import (
     get_reserved_proofs,
     get_seed_and_mnemonic,
 )
+from ...wallet.gateway import LOCKTIME_SAFETY, WalletGateway
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
 from ..cli.cli_helpers import (
@@ -254,22 +253,17 @@ async def gateway(ctx: Context, invoice: str, yes: bool):
 
     gateway_quote = await wallet.gateway_melt_quote(invoice)
     bolt11_invoice = bolt11.decode(invoice)
-    preimage = "00000000000000000000000000000000"
-    # pubkey_wallet1 = await wallet.create_p2pk_pubkey()
-    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     assert bolt11_invoice.date
     assert bolt11_invoice.expiry
     bolt11_expiry_absolute = bolt11_invoice.date + bolt11_invoice.expiry
     secret = await wallet.create_htlc_lock(
         preimage_hash=bolt11_invoice.payment_hash,
         hashlock_pubkey=gateway_quote.pubkey,
-        locktime_absolute=bolt11_expiry_absolute,
+        locktime_absolute=bolt11_expiry_absolute + LOCKTIME_SAFETY,
     )
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, gateway_quote.amount, secret_lock=secret, set_reserved=True
     )
-    for p in send_proofs:
-        p.witness = HTLCWitness(preimage=preimage).json()
 
     # _, proofs = await wallet.split_to_send(wallet.proofs, gateway_quote.amount)
     await wallet.load_proofs()
