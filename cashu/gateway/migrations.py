@@ -21,6 +21,7 @@ async def m001_initial(db: Database):
                     method TEXT NOT NULL,
                     request TEXT NOT NULL,
                     checking_id TEXT NOT NULL,
+                    expiry TIMESTAMP NOT NULL,
                     unit TEXT NOT NULL,
                     amount {db.big_int} NOT NULL,
                     fee_reserve {db.big_int},

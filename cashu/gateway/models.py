@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import List, Union
 
 from pydantic import BaseModel, Field
 
@@ -20,7 +20,7 @@ class GatewayMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     pubkey: str  # P2PK pubkey of the gateway
     amount: int  # input amount
-    expiry: Optional[int]  # expiry of the quote
+    expiry: int  # expiry of the quote
 
 
 class GatewayMeltRequest(BaseModel):

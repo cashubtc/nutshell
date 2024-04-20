@@ -94,6 +94,7 @@ class Gateway:
         self, melt_quote_request: GatewayMeltQuoteRequest
     ) -> GatewayMeltQuoteResponse:
         request = melt_quote_request.request
+        invoice = bolt11.decode(pr=request)
         amount_msat = bolt11.decode(pr=request).amount_msat
         if amount_msat is None:
             raise Exception("amount_msat is None")
@@ -114,6 +115,11 @@ class Gateway:
         if not payment_quote.fee.unit == unit:
             raise TransactionError("payment quote fee units do not match")
 
+        if not invoice.date or not invoice.expiry:
+            raise TransactionError("invoice does not have date or expiry")
+
+        invoice_expiry = invoice.date + invoice.expiry
+
         melt_quote = MeltQuote(
             quote=random_hash(),
             method=method.name,
@@ -126,10 +132,11 @@ class Gateway:
             created_time=0,
             paid_time=0,
             fee_paid=0,
+            expiry=invoice_expiry + LOCKTIME_SAFETY,
         )
 
         await self.crud.store_melt_quote(quote=melt_quote, db=self.db)
-
+        assert melt_quote.expiry
         return GatewayMeltQuoteResponse(
             pubkey=self.pubkey,
             quote=melt_quote.quote,
@@ -143,6 +150,8 @@ class Gateway:
         melt_quote = await self.crud.get_melt_quote(quote_id=quote_id, db=self.db)
         if not melt_quote:
             raise TransactionError("quote not found")
+        if not melt_quote.expiry:
+            raise TransactionError("quote does not have expiry")
         if check_quote_with_backend:
             if melt_quote.paid:
                 raise TransactionError("quote is already paid")
@@ -167,7 +176,11 @@ class Gateway:
         )
 
     def _verify_input_spending_conditions(
-        self, proof: Proof, hashlock: str, pubkey: str, invoice: bolt11.Bolt11
+        self,
+        proof: Proof,
+        hashlock: str,
+        pubkey: str,
+        expiry: int,
     ):
         secret = Secret.deserialize(proof.secret)
         if SecretKind(secret.kind) != SecretKind.HTLC:
@@ -187,13 +200,13 @@ class Gateway:
             raise TransactionError("proof secret pubkey does not match hashlock pubkey")
 
         locktime = htlc_secret.tags.get_tag("locktime")
-        if locktime and invoice.date and invoice.expiry:
+        if locktime:
             locktime = int(locktime)
-            if locktime < invoice.date + invoice.expiry + LOCKTIME_SAFETY:
+            if locktime < expiry:
                 raise TransactionError("proof secret locktime is not valid")
         else:
-            logger.error(f"locktime: {locktime}, invoice: {invoice}")
-            raise TransactionError("no locktime in proof secret or in invoice")
+            logger.error(f"locktime: {locktime}")
+            raise TransactionError("no locktime in proof secret")
 
     async def melt(
         self,
@@ -208,6 +221,8 @@ class Gateway:
             raise TransactionError("quote is already paid")
         if melt_quote.amount != sum(p.amount for p in proofs):
             raise TransactionError("proofs amount does not match quote")
+        if not melt_quote.expiry or melt_quote.expiry < int(time.time()):
+            raise TransactionError("quote expired")
         unit = Unit[melt_quote.unit]
         if unit not in self.backends[Method.bolt11]:
             raise Exception("unit not supported by backend")
@@ -222,7 +237,7 @@ class Gateway:
                 proof=proof,
                 hashlock=invoice.payment_hash,
                 pubkey=self.pubkey,
-                invoice=invoice,
+                expiry=melt_quote.expiry,
             )
 
         # proofs are ok

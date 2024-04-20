@@ -56,13 +56,14 @@ class GatewayCrudSqlite(GatewayCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, expiry, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
                 quote.method,
                 quote.request,
+                quote.expiry,
                 quote.checking_id,
                 quote.unit,
                 quote.amount,

@@ -243,6 +243,7 @@ class MeltQuote(BaseModel):
             quote=row["quote"],
             method=row["method"],
             request=row["request"],
+            expiry=row["expiry"],
             checking_id=row["checking_id"],
             unit=row["unit"],
             amount=row["amount"],

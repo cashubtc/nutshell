@@ -255,11 +255,10 @@ async def gateway(ctx: Context, invoice: str, yes: bool):
     bolt11_invoice = bolt11.decode(invoice)
     assert bolt11_invoice.date
     assert bolt11_invoice.expiry
-    bolt11_expiry_absolute = bolt11_invoice.date + bolt11_invoice.expiry
     secret = await wallet.create_htlc_lock(
         preimage_hash=bolt11_invoice.payment_hash,
         hashlock_pubkey=gateway_quote.pubkey,
-        locktime_absolute=bolt11_expiry_absolute + LOCKTIME_SAFETY,
+        locktime_absolute=gateway_quote.expiry + LOCKTIME_SAFETY,
     )
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, gateway_quote.amount, secret_lock=secret, set_reserved=True
