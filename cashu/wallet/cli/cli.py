@@ -182,9 +182,19 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
+@click.option(
+    "--gateway",
+    "-g",
+    default=False,
+    is_flag=True,
+    help="Use Lightning gateway.",
+)
 @click.pass_context
 @coro
-async def pay(ctx: Context, invoice: str, yes: bool):
+async def pay(ctx: Context, invoice: str, yes: bool, gateway: bool):
+    if gateway:
+        await pay_gateway(ctx, invoice, yes)
+        return
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
@@ -225,14 +235,14 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     await print_balance(ctx)
 
 
-@cli.command("gateway", help="Pay invoice over Lightning gateway.")
-@click.argument("invoice", type=str)
-@click.option(
-    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
-)
-@click.pass_context
-@coro
-async def gateway(ctx: Context, invoice: str, yes: bool):
+# @cli.command("gateway", help="Pay invoice over Lightning gateway.")
+# @click.argument("invoice", type=str)
+# @click.option(
+#     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
+# )
+# @click.pass_context
+# @coro
+async def pay_gateway(ctx: Context, invoice: str, yes: bool):
     _wallet: Wallet = ctx.obj["WALLET"]
     await print_balance(ctx)
 
@@ -251,10 +261,23 @@ async def gateway(ctx: Context, invoice: str, yes: bool):
     await wallet.load_mint()
     await wallet.load_proofs()
 
-    gateway_quote = await wallet.gateway_melt_quote(invoice)
     bolt11_invoice = bolt11.decode(invoice)
     assert bolt11_invoice.date
     assert bolt11_invoice.expiry
+    assert bolt11_invoice.amount_msat
+
+    gateway_quote = await wallet.gateway_melt_quote(invoice)
+    if not yes:
+        fee = gateway_quote.amount - bolt11_invoice.amount_msat // 1000
+        fee_str = ""
+        if fee:
+            fee_str = f"(with {wallet.unit.str(fee)} fees)"
+        message = f"Pay {wallet.unit.str(gateway_quote.amount)} {fee_str} via gateway?"
+        click.confirm(
+            message,
+            abort=True,
+            default=True,
+        )
     secret = await wallet.create_htlc_lock(
         preimage_hash=bolt11_invoice.payment_hash,
         hashlock_pubkey=gateway_quote.pubkey,
