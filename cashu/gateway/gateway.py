@@ -1,0 +1,208 @@
+import os
+import time
+from typing import List, Mapping
+
+import bolt11
+from loguru import logger
+
+from cashu.core.htlc import HTLCSecret
+from cashu.core.secret import Secret, SecretKind
+
+from ..core.base import (
+    HTLCWitness,
+    MeltQuote,
+    Method,
+    Proof,
+    Unit,
+)
+from ..core.crypto.keys import random_hash
+from ..core.db import Database
+from ..core.errors import LightningError, TransactionError
+from ..core.settings import settings
+from ..lightning.base import (
+    LightningBackend,
+)
+from ..wallet.wallet import Wallet
+from .crud import GatewayCrudSqlite
+from .models import (
+    GatewayMeltQuoteRequest,
+    GatewayMeltQuoteResponse,
+    GatewayMeltResponse,
+)
+
+
+class Gateway:
+    backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
+    db: Database
+    wallet: Wallet
+    pubkey: str
+
+    def __init__(
+        self,
+        db: Database,
+        seed: str,
+        backends: Mapping[Method, Mapping[Unit, LightningBackend]],
+        crud=GatewayCrudSqlite(),
+    ):
+        self.db = db
+        self.seed = seed
+        self.backends = backends
+        self.crud = crud
+
+    async def init_wallet(self):
+        self.wallet = await Wallet.with_db(
+            settings.mint_url,
+            db=os.path.join(settings.cashu_dir, settings.wallet_name),
+            name=settings.wallet_name,
+        )
+        await self.wallet.load_proofs()
+        await self.wallet.load_mint()
+        self.pubkey = await self.wallet.create_p2pk_pubkey()
+        return self.wallet
+
+    async def melt_quote(
+        self, melt_quote_request: GatewayMeltQuoteRequest
+    ) -> GatewayMeltQuoteResponse:
+        request = melt_quote_request.request
+        amount_msat = bolt11.decode(pr=request).amount_msat
+        if amount_msat is None:
+            raise Exception("amount_msat is None")
+        amount = amount_msat // 1000
+        unit = Unit[melt_quote_request.unit]
+        if unit not in self.backends[Method.bolt11]:
+            raise Exception("unit not supported by backend")
+        method = Method.bolt11
+
+        # not internal, get payment quote by backend
+        payment_quote = await self.backends[method][unit].get_payment_quote(request)
+        if not payment_quote.checking_id:
+            raise TransactionError("quote has no checking id")
+        # make sure the backend returned the amount with a correct unit
+        if not payment_quote.amount.unit == unit:
+            raise TransactionError("payment quote amount units do not match")
+        # fee from the backend must be in the same unit as the amount
+        if not payment_quote.fee.unit == unit:
+            raise TransactionError("payment quote fee units do not match")
+
+        melt_quote = MeltQuote(
+            quote=random_hash(),
+            method=method.name,
+            request=request,
+            checking_id=payment_quote.checking_id,
+            unit=unit.name,
+            amount=amount,
+            fee_reserve=payment_quote.fee.amount,
+            paid=False,
+            created_time=0,
+            paid_time=0,
+            fee_paid=0,
+        )
+
+        await self.crud.store_melt_quote(quote=melt_quote, db=self.db)
+
+        return GatewayMeltQuoteResponse(
+            pubkey=self.pubkey,
+            quote=melt_quote.quote,
+            amount=melt_quote.amount,
+            expiry=melt_quote.expiry,
+        )
+
+    async def get_melt_quote(
+        self, quote_id: str, check_quote_with_backend: bool = False
+    ) -> MeltQuote:
+        return await self.crud.get_melt_quote(
+            quote_id=quote_id,
+            db=self.db,
+            check_quote_with_backend=check_quote_with_backend,
+        )
+
+    def _verify_input_spending_conditions(
+        self, proof: Proof, hashlock: str, pubkey: str, invoice: bolt11.Bolt11
+    ):
+        secret = Secret.deserialize(proof.secret)
+        if SecretKind(secret.kind) != SecretKind.HTLC:
+            raise TransactionError("proof secret kind is not HTLC")
+        htlc_secret = HTLCSecret.from_secret(secret)
+        if htlc_secret.data != hashlock:
+            raise TransactionError("proof secret data does not match hashlock")
+        hashlock_pubkeys = htlc_secret.tags.get_tag_all("pubkeys")
+        if not hashlock_pubkeys:
+            raise TransactionError("proof secret does not have hashlock pubkeys")
+        is_valid = False
+        for htlc_pubkey in hashlock_pubkeys:
+            if htlc_pubkey == pubkey:
+                is_valid = True
+                break
+        if not is_valid:
+            raise TransactionError("proof secret pubkey does not match hashlock pubkey")
+
+        if htlc_secret.tags.get_tag("locktime"):
+            locktime = int(htlc_secret.tags.get_tag("locktime"))
+            if locktime > invoice.date + invoice.expiry:
+                raise TransactionError("proof secret locktime is not valid")
+
+    async def melt(
+        self,
+        *,
+        proofs: List[Proof],
+        quote: str,
+    ) -> GatewayMeltResponse:
+        melt_quote = await self.crud.get_melt_quote(quote_id=quote, db=self.db)
+        if not melt_quote:
+            raise TransactionError("quote not found")
+        if melt_quote.paid:
+            raise TransactionError("quote is already paid")
+        if melt_quote.amount != sum(p.amount for p in proofs):
+            raise TransactionError("proofs amount does not match quote")
+        unit = Unit[melt_quote.unit]
+        if unit not in self.backends[Method.bolt11]:
+            raise Exception("unit not supported by backend")
+        method = Method.bolt11
+
+        # get the backend for the unit
+        invoice = bolt11.decode(melt_quote.request)
+        # check proofs
+        self.wallet.verify_proofs_dleq(proofs=proofs)
+        for proof in proofs:
+            self._verify_input_spending_conditions(
+                proof=proof,
+                hashlock=invoice.payment_hash,
+                pubkey=self.pubkey,
+                invoice=invoice,
+            )
+
+        # proofs are ok
+
+        # pay the backend
+        logger.debug(f"Lightning: pay invoice {melt_quote.request}")
+        payment = await self.backends[method][unit].pay_invoice(
+            melt_quote, melt_quote.fee_reserve * 1000
+        )
+        logger.debug(
+            f"Melt – Ok: {payment.ok}: preimage: {payment.preimage},"
+            f" fee: {payment.fee.str() if payment.fee is not None else 'None'}"
+        )
+        if not payment.ok:
+            raise LightningError(
+                f"Lightning payment unsuccessful. {payment.error_message}"
+            )
+        if payment.fee:
+            melt_quote.fee_paid = payment.fee.to(to_unit=unit, round="up").amount
+        if payment.preimage:
+            melt_quote.proof = payment.preimage
+        # set quote as paid
+        melt_quote.paid = True
+        melt_quote.paid_time = int(time.time())
+        await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+
+        # redeem proofs
+        signatures = await self.wallet.sign_p2pk_proofs(proofs)
+        for p, s in zip(proofs, signatures):
+            p.witness = HTLCWitness(preimage=payment.preimage, signature=s).json()
+
+        await self.wallet.redeem(proofs)
+
+        return GatewayMeltResponse(
+            paid=True,
+            payment_preimage=payment.preimage,
+        )

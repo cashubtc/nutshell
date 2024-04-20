@@ -2,6 +2,7 @@ from typing import Protocol
 
 import httpx
 
+from ..core.base import Unit
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 
@@ -16,6 +17,10 @@ class SupportsDb(Protocol):
 
 class SupportsKeysets(Protocol):
     keyset_id: str
+
+
+class SupportsUnit(Protocol):
+    unit: Unit
 
 
 class SupportsHttpxClient(Protocol):

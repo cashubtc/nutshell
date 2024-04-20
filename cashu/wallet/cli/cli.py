@@ -11,11 +11,14 @@ from os import listdir
 from os.path import isdir, join
 from typing import Optional
 
+import bolt11
 import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, TokenV3, Unit
+from cashu.wallet.gateway import WalletGateway
+
+from ...core.base import HTLCWitness, Invoice, TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.logging import configure_logger
 from ...core.settings import settings
@@ -221,6 +224,57 @@ async def pay(ctx: Context, invoice: str, yes: bool):
     else:
         print(".")
     await print_balance(ctx)
+
+
+@cli.command("gateway", help="Pay invoice over Lightning gateway.")
+@click.argument("invoice", type=str)
+@click.option(
+    "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
+)
+@click.pass_context
+@coro
+async def gateway(ctx: Context, invoice: str, yes: bool):
+    _wallet: Wallet = ctx.obj["WALLET"]
+
+    async def mint_wallet(
+        mint_url: Optional[str] = None, raise_connection_error: bool = True
+    ) -> WalletGateway:
+        lightning_wallet = await WalletGateway.with_db(
+            mint_url or settings.mint_url,
+            db=os.path.join(settings.cashu_dir, settings.wallet_name),
+            name=settings.wallet_name,
+        )
+        await lightning_wallet.async_init(raise_connection_error=raise_connection_error)
+        return lightning_wallet
+
+    wallet = await mint_wallet()
+    await wallet.load_mint()
+    await wallet.load_proofs()
+    gateway_quote = await wallet.gateway_melt_quote(invoice)
+    bolt11_invoice = bolt11.decode(invoice)
+    preimage = "00000000000000000000000000000000"
+    # pubkey_wallet1 = await wallet.create_p2pk_pubkey()
+    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
+    assert bolt11_invoice.date
+    assert bolt11_invoice.expiry
+    bolt11_expiry_absolute = bolt11_invoice.date + bolt11_invoice.expiry
+    secret = await wallet.create_htlc_lock(
+        preimage_hash=bolt11_invoice.payment_hash,
+        hashlock_pubkey=gateway_quote.pubkey,
+        locktime_absolute=bolt11_expiry_absolute,
+    )
+    _, send_proofs = await wallet.split_to_send(
+        wallet.proofs, gateway_quote.amount, secret_lock=secret, set_reserved=True
+    )
+    for p in send_proofs:
+        p.witness = HTLCWitness(preimage=preimage).json()
+
+    # _, proofs = await wallet.split_to_send(wallet.proofs, gateway_quote.amount)
+    await wallet.load_proofs()
+    melt_response = await wallet.gateway_melt(
+        quote=gateway_quote.quote, proofs=send_proofs
+    )
+    print(f"Gateway melt response: {melt_response}")
 
 
 @cli.command("invoice", help="Create Lighting invoice.")
@@ -738,7 +792,7 @@ async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, mint: bool):
         return
 
     if mint:
-      await wallet.load_mint()
+        await wallet.load_mint()
 
     paid_arg = None
     if unpaid:
