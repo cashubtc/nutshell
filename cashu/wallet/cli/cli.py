@@ -32,6 +32,7 @@ from ...wallet.gateway import LOCKTIME_SAFETY, WalletGateway
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
 from ..cli.cli_helpers import (
+    get_gateway,
     get_mint_wallet,
     get_unit_wallet,
     print_balance,
@@ -245,6 +246,7 @@ async def pay(ctx: Context, invoice: str, yes: bool, gateway: bool):
 async def pay_gateway(ctx: Context, invoice: str, yes: bool):
     _wallet: Wallet = ctx.obj["WALLET"]
     await print_balance(ctx)
+    gateway_url = get_gateway(ctx)
 
     async def mint_wallet(
         mint_url: Optional[str] = None, raise_connection_error: bool = True
@@ -254,6 +256,7 @@ async def pay_gateway(ctx: Context, invoice: str, yes: bool):
             db=os.path.join(settings.cashu_dir, settings.wallet_name),
             name=settings.wallet_name,
         )
+        lightning_wallet.gateway = gateway_url
         await lightning_wallet.async_init(raise_connection_error=raise_connection_error)
         return lightning_wallet
 
