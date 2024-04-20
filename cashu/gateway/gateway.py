@@ -156,6 +156,7 @@ class Gateway:
             quote=melt_quote.quote,
             amount=melt_quote.amount,
             expiry=melt_quote.expiry,
+            paid=melt_quote.paid,
         )
 
     async def get_melt_quote(
@@ -166,9 +167,7 @@ class Gateway:
             raise TransactionError("quote not found")
         if not melt_quote.expiry:
             raise TransactionError("quote does not have expiry")
-        if check_quote_with_backend:
-            if melt_quote.paid:
-                raise TransactionError("quote is already paid")
+        if check_quote_with_backend and not melt_quote.paid:
             unit = Unit[melt_quote.unit]
             if unit not in self.backends[Method.bolt11]:
                 raise Exception("unit not supported by backend")
@@ -187,6 +186,7 @@ class Gateway:
             quote=melt_quote.quote,
             amount=melt_quote.amount,
             expiry=melt_quote.expiry,
+            paid=melt_quote.paid,
         )
 
     def _verify_input_spending_conditions(

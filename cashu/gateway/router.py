@@ -2,7 +2,6 @@ from fastapi import APIRouter, Request
 from loguru import logger
 
 from ..core.base import (
-    PostMeltQuoteResponse,
     PostMeltResponse,
 )
 from .models import (
@@ -37,19 +36,19 @@ async def get_melt_quote(
 @router.get(
     "/v1/melt/quote/bolt11/{quote}",
     summary="Get melt quote",
-    response_model=PostMeltQuoteResponse,
+    response_model=GatewayMeltQuoteResponse,
     response_description="Get an existing melt quote to check its status.",
 )
-async def melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
+async def melt_quote(request: Request, quote: str) -> GatewayMeltQuoteResponse:
     """
     Get melt quote state.
     """
     logger.trace(f"> GET /v1/melt/quote/bolt11/{quote}")
-    melt_quote = await gateway.get_melt_quote(quote)
-    resp = PostMeltQuoteResponse(
+    melt_quote = await gateway.get_melt_quote(quote, check_quote_with_backend=True)
+    resp = GatewayMeltQuoteResponse(
+        pubkey=melt_quote.pubkey,
         quote=melt_quote.quote,
         amount=melt_quote.amount,
-        fee_reserve=melt_quote.fee_reserve,
         paid=melt_quote.paid,
         expiry=melt_quote.expiry,
     )

@@ -21,6 +21,7 @@ class GatewayMeltQuoteResponse(BaseModel):
     pubkey: str  # P2PK pubkey of the gateway
     amount: int  # input amount
     expiry: int  # expiry of the quote
+    paid: bool  # whether the quote has been paid
 
 
 class GatewayMeltRequest(BaseModel):
