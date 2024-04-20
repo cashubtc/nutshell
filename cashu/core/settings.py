@@ -67,6 +67,8 @@ class GatewaySettings(CashuSettings):
     gateway_database: str = Field(default="data/gateway")
 
     gateway_backend_bolt11_sat: str = Field(default="")
+    gateway_bolt11_sat_fee_ppm: int = Field(default=1000)
+    gateway_bolt11_sat_base_fee: int = Field(default=2)
 
 
 class MintBackends(MintSettings):

@@ -99,6 +99,13 @@ class Gateway:
         if amount_msat is None:
             raise Exception("amount_msat is None")
         amount = amount_msat // 1000
+
+        # add fees to the amount
+        if settings.gateway_bolt11_sat_fee_ppm:
+            amount += amount * settings.gateway_bolt11_sat_fee_ppm // 1000000
+        if settings.gateway_bolt11_sat_base_fee:
+            amount += settings.gateway_bolt11_sat_base_fee
+
         unit = Unit[melt_quote_request.unit]
         if unit not in self.backends[Method.bolt11]:
             raise Exception("unit not supported by backend")
