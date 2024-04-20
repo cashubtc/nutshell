@@ -28,7 +28,7 @@ async def get_melt_quote(
     Request a quote for melting tokens.
     """
     logger.trace(f"> POST /v1/melt/quote/bolt11: {payload}")
-    quote = await gateway.melt_quote(payload)  # TODO
+    quote = await gateway.gateway_melt_quote(payload)  # TODO
     logger.trace(f"< POST /v1/melt/quote/bolt11: {quote}")
     return quote
 
@@ -44,7 +44,9 @@ async def melt_quote(request: Request, quote: str) -> GatewayMeltQuoteResponse:
     Get melt quote state.
     """
     logger.trace(f"> GET /v1/melt/quote/bolt11/{quote}")
-    melt_quote = await gateway.get_melt_quote(quote, check_quote_with_backend=True)
+    melt_quote = await gateway.gateway_get_melt_quote(
+        quote, check_quote_with_backend=True
+    )
     resp = GatewayMeltQuoteResponse(
         pubkey=melt_quote.pubkey,
         quote=melt_quote.quote,
@@ -74,6 +76,8 @@ async def melt(request: Request, payload: GatewayMeltRequest) -> GatewayMeltResp
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /v1/melt/bolt11: {payload}")
-    melt_response = await gateway.melt(proofs=payload.inputs, quote=payload.quote)
+    melt_response = await gateway.gateway_melt(
+        proofs=payload.inputs, quote=payload.quote
+    )
     logger.trace(f"< POST /v1/melt/bolt11: {melt_response}")
     return melt_response

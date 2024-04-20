@@ -1,12 +1,10 @@
+import asyncio
 import os
 import time
-from typing import List, Mapping
+from typing import Dict, List, Mapping
 
 import bolt11
 from loguru import logger
-
-from cashu.core.htlc import HTLCSecret
-from cashu.core.secret import Secret, SecretKind
 
 from ..core.base import (
     Amount,
@@ -19,10 +17,13 @@ from ..core.base import (
 from ..core.crypto.keys import random_hash
 from ..core.db import Database
 from ..core.errors import LightningError, TransactionError
+from ..core.htlc import HTLCSecret
+from ..core.secret import Secret, SecretKind
 from ..core.settings import settings
 from ..lightning.base import (
     LightningBackend,
 )
+from ..mint.ledger import Ledger
 from ..wallet.wallet import Wallet
 from .crud import GatewayCrudSqlite
 from .models import (
@@ -36,7 +37,8 @@ from .models import (
 LOCKTIME_SAFETY = 60  # 1 minute
 
 
-class Gateway:
+class Gateway(Ledger):
+    locks: Dict[str, asyncio.Lock] = {}  # holds mutex locks
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     db: Database
     wallet: Wallet
@@ -52,7 +54,7 @@ class Gateway:
         self.db = db
         self.seed = seed
         self.backends = backends
-        self.crud = crud
+        self.gwcrud = crud
 
     async def init_wallet(self):
         self.wallet = await Wallet.with_db(
@@ -90,7 +92,7 @@ class Gateway:
 
         logger.info(f"Data dir: {settings.cashu_dir}")
 
-    async def melt_quote(
+    async def gateway_melt_quote(
         self, melt_quote_request: GatewayMeltQuoteRequest
     ) -> GatewayMeltQuoteResponse:
         if melt_quote_request.mint != settings.mint_url:
@@ -154,7 +156,7 @@ class Gateway:
             expiry=invoice_expiry + LOCKTIME_SAFETY,
         )
 
-        await self.crud.store_melt_quote(quote=melt_quote, db=self.db)
+        await self.gwcrud.store_melt_quote(quote=melt_quote, db=self.db)
         assert melt_quote.expiry
         return GatewayMeltQuoteResponse(
             pubkey=self.pubkey,
@@ -164,10 +166,10 @@ class Gateway:
             paid=melt_quote.paid,
         )
 
-    async def get_melt_quote(
+    async def gateway_get_melt_quote(
         self, quote_id: str, check_quote_with_backend: bool = False
     ) -> GatewayMeltQuoteResponse:
-        melt_quote = await self.crud.get_melt_quote(quote_id=quote_id, db=self.db)
+        melt_quote = await self.gwcrud.get_melt_quote(quote_id=quote_id, db=self.db)
         if not melt_quote:
             raise TransactionError("quote not found")
         if not melt_quote.expiry:
@@ -184,7 +186,7 @@ class Gateway:
             if payment_quote.paid:
                 melt_quote.paid = True
                 melt_quote.paid_time = int(time.time())
-                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+                await self.gwcrud.update_melt_quote(quote=melt_quote, db=self.db)
 
         return GatewayMeltQuoteResponse(
             pubkey=self.pubkey,
@@ -194,7 +196,20 @@ class Gateway:
             paid=melt_quote.paid,
         )
 
-    def _verify_input_spending_conditions(
+    def _check_proofs(self, proofs: List[Proof]):
+        if not proofs:
+            raise TransactionError("no proofs")
+        # make sure there are no duplicate proofs
+        if len(proofs) != len(set(p.secret for p in proofs)):
+            raise TransactionError("duplicate proofs")
+        if not all([self._verify_secret_criteria(p) for p in proofs]):
+            raise TransactionError("secrets do not match criteria.")
+        for proof in proofs:
+            # check if proof keysets are from the gateway's wallet's mint
+            if proof.id not in self.wallet.keysets:
+                raise TransactionError("proof keysets not valid")
+
+    def _verify_htlc(
         self,
         proof: Proof,
         hashlock: str,
@@ -227,13 +242,13 @@ class Gateway:
             logger.error(f"locktime: {locktime}")
             raise TransactionError("no locktime in proof secret")
 
-    async def melt(
+    async def gateway_melt(
         self,
         *,
         proofs: List[Proof],
         quote: str,
     ) -> GatewayMeltResponse:
-        melt_quote = await self.crud.get_melt_quote(quote_id=quote, db=self.db)
+        melt_quote = await self.gwcrud.get_melt_quote(quote_id=quote, db=self.db)
         if not melt_quote:
             raise TransactionError("quote not found")
         if melt_quote.paid:
@@ -250,9 +265,12 @@ class Gateway:
         # get the backend for the unit
         invoice = bolt11.decode(melt_quote.request)
         # check proofs
+        self._check_proofs(proofs)
+        # check if signatures of proofs are valid using DLEQ proofs
         self.wallet.verify_proofs_dleq(proofs=proofs)
+        # check if the HTLCs are valid
         for proof in proofs:
-            self._verify_input_spending_conditions(
+            self._verify_htlc(
                 proof=proof,
                 hashlock=invoice.payment_hash,
                 pubkey=self.pubkey,
@@ -267,7 +285,7 @@ class Gateway:
             melt_quote, melt_quote.fee_reserve * 1000
         )
         logger.debug(
-            f"Melt – Ok: {payment.ok}: preimage: {payment.preimage},"
+            f"Lightning payment – Ok: {payment.ok}: preimage: {payment.preimage},"
             f" fee: {payment.fee.str() if payment.fee is not None else 'None'}"
         )
         if not payment.ok:
@@ -281,7 +299,7 @@ class Gateway:
         # set quote as paid
         melt_quote.paid = True
         melt_quote.paid_time = int(time.time())
-        await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+        await self.gwcrud.update_melt_quote(quote=melt_quote, db=self.db)
 
         # redeem proofs
         signatures = await self.wallet.sign_p2pk_proofs(proofs)
