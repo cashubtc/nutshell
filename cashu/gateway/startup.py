@@ -1,5 +1,5 @@
 # startup routine of the standalone app. These are the steps that need
-# to be taken by external apps importing the cashu mint.
+# to be taken by external apps importing the cashu gateway.
 
 import importlib
 from typing import Dict
@@ -23,16 +23,16 @@ if not __debug__:
 # logger.debug("Enviroment Settings:")
 # for key, value in settings.dict().items():
 #     if key in [
-#         "mint_private_key",
-#         "mint_seed_decryption_key",
+#         "gateway_private_key",
+#         "gateway_seed_decryption_key",
 #         "nostr_private_key",
-#         "mint_lnbits_key",
-#         "mint_blink_key",
-#         "mint_strike_key",
-#         "mint_lnd_rest_macaroon",
-#         "mint_lnd_rest_admin_macaroon",
-#         "mint_lnd_rest_invoice_macaroon",
-#         "mint_corelightning_rest_macaroon",
+#         "gateway_lnbits_key",
+#         "gateway_blink_key",
+#         "gateway_strike_key",
+#         "gateway_lnd_rest_macaroon",
+#         "gateway_lnd_rest_admin_macaroon",
+#         "gateway_lnd_rest_invoice_macaroon",
+#         "gateway_corelightning_rest_macaroon",
 #     ]:
 #         value = "********" if value is not None else None
 #     logger.debug(f"{key}: {value}")
@@ -41,7 +41,7 @@ wallets_module = importlib.import_module("cashu.lightning")
 
 backends: Dict[Method, Dict[Unit, LightningBackend]] = {}
 if settings.gateway_backend_bolt11_sat:
-    backend_bolt11_sat = getattr(wallets_module, settings.mint_backend_bolt11_sat)(
+    backend_bolt11_sat = getattr(wallets_module, settings.gateway_backend_bolt11_sat)(
         unit=Unit.sat
     )
     backends.setdefault(Method.bolt11, {})[Unit.sat] = backend_bolt11_sat
@@ -62,4 +62,5 @@ gateway = Gateway(
 async def start_gateway_init():
     await migrate_databases(gateway.db, migrations)
     await gateway.init_wallet()
+    await gateway.startup_gateway()
     logger.info("Gateway started.")

@@ -9,6 +9,7 @@ from cashu.core.htlc import HTLCSecret
 from cashu.core.secret import Secret, SecretKind
 
 from ..core.base import (
+    Amount,
     HTLCWitness,
     MeltQuote,
     Method,
@@ -52,13 +53,38 @@ class Gateway:
     async def init_wallet(self):
         self.wallet = await Wallet.with_db(
             settings.mint_url,
-            db=os.path.join(settings.cashu_dir, settings.wallet_name),
-            name=settings.wallet_name,
+            db=os.path.join(settings.cashu_dir, "gateway"),
+            name="gateway",
         )
         await self.wallet.load_proofs()
         await self.wallet.load_mint()
         self.pubkey = await self.wallet.create_p2pk_pubkey()
         return self.wallet
+
+        # ------- STARTUP -------
+
+    async def startup_gateway(self):
+        await self._startup_gateway()
+        # await self._check_pending_proofs_and_melt_quotes()
+
+    async def _startup_gateway(self):
+        for method in self.backends:
+            for unit in self.backends[method]:
+                logger.info(
+                    f"Using {self.backends[method][unit].__class__.__name__} backend for"
+                    f" method: '{method.name}' and unit: '{unit.name}'"
+                )
+                status = await self.backends[method][unit].status()
+                if status.error_message:
+                    logger.warning(
+                        "The backend for"
+                        f" {self.backends[method][unit].__class__.__name__} isn't"
+                        f" working properly: '{status.error_message}'",
+                        RuntimeWarning,
+                    )
+                logger.info(f"Backend balance: {status.balance} {unit.name}")
+
+        logger.info(f"Data dir: {settings.cashu_dir}")
 
     async def melt_quote(
         self, melt_quote_request: GatewayMeltQuoteRequest
@@ -200,7 +226,9 @@ class Gateway:
         for p, s in zip(proofs, signatures):
             p.witness = HTLCWitness(preimage=payment.preimage, signature=s).json()
 
+        print(f"Balance: {Amount(unit=unit, amount=self.wallet.available_balance)}")
         await self.wallet.redeem(proofs)
+        print(f"Balance: {Amount(unit=unit, amount=self.wallet.available_balance)}")
 
         return GatewayMeltResponse(
             paid=True,

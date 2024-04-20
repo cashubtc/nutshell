@@ -235,6 +235,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
 @coro
 async def gateway(ctx: Context, invoice: str, yes: bool):
     _wallet: Wallet = ctx.obj["WALLET"]
+    await print_balance(ctx)
 
     async def mint_wallet(
         mint_url: Optional[str] = None, raise_connection_error: bool = True
@@ -272,10 +273,8 @@ async def gateway(ctx: Context, invoice: str, yes: bool):
 
     # _, proofs = await wallet.split_to_send(wallet.proofs, gateway_quote.amount)
     await wallet.load_proofs()
-    melt_response = await wallet.gateway_melt(
-        quote=gateway_quote.quote, proofs=send_proofs
-    )
-    print(f"Gateway melt response: {melt_response}")
+    _ = await wallet.gateway_melt(quote=gateway_quote.quote, proofs=send_proofs)
+    await print_balance(ctx)
 
 
 @cli.command("invoice", help="Create Lighting invoice.")

@@ -41,12 +41,12 @@ for key, value in settings.dict().items():
 wallets_module = importlib.import_module("cashu.lightning")
 
 backends: Dict[Method, Dict[Unit, LightningBackend]] = {}
-if settings.gateway_backend_bolt11_sat:
-    backend_bolt11_sat = getattr(wallets_module, settings.gateway_backend_bolt11_sat)(
+if settings.mint_backend_bolt11_sat:
+    backend_bolt11_sat = getattr(wallets_module, settings.mint_backend_bolt11_sat)(
         unit=Unit.sat
     )
     backends.setdefault(Method.bolt11, {})[Unit.sat] = backend_bolt11_sat
-# if settings.gateway_backend_bolt11_usd:
+# if settings.mint_backend_bolt11_usd:
 #     backend_bolt11_usd = getattr(wallets_module, settings.mint_backend_bolt11_usd)(
 #         unit=Unit.usd
 #     )
@@ -54,7 +54,7 @@ if settings.gateway_backend_bolt11_sat:
 if not backends:
     raise Exception("No backends are set.")
 
-if not settings.gateway_private_key:
+if not settings.mint_private_key:
     raise Exception("No mint private key is set.")
 
 ledger = Ledger(
