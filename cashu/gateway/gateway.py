@@ -118,6 +118,13 @@ class Gateway:
         if not invoice.date or not invoice.expiry:
             raise TransactionError("invoice does not have date or expiry")
 
+        # check if invoice is already paid
+        payment_quote_check = await self.backends[method][unit].get_payment_status(
+            payment_quote.checking_id
+        )
+        if payment_quote_check.paid:
+            raise TransactionError("invoice is already paid")
+
         invoice_expiry = invoice.date + invoice.expiry
 
         melt_quote = MeltQuote(
