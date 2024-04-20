@@ -94,7 +94,9 @@ class Gateway:
         self, melt_quote_request: GatewayMeltQuoteRequest
     ) -> GatewayMeltQuoteResponse:
         if melt_quote_request.mint != settings.mint_url:
-            raise TransactionError("mint url does not match gateway mint url")
+            raise TransactionError(
+                f"mint does not match gateway mint: {settings.mint_url}"
+            )
 
         request = melt_quote_request.request
         invoice = bolt11.decode(pr=request)
