@@ -187,9 +187,8 @@ class CoreLightningRestWallet(LightningBackend):
 
         if r.is_error or "error" in r.json():
             try:
-                logger.error(f"Error paying invoice: {r.text}")
                 data = r.json()
-                error_message = data["error"]
+                error_message = str(data["error"])
             except Exception:
                 error_message = r.text
             return PaymentResponse(
