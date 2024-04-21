@@ -112,6 +112,10 @@ def get_gateway(ctx: Context):
     """
     Helper function that shows all settings.wallet_gateways and asks the user to select one.
     """
+    if not settings.wallet_gateways:
+        raise Exception(
+            "No gateways are set. Use the environment variable WALLET_GATEWAYS=[] to add a list of Gateway URLs."
+        )
     gateway = settings.wallet_gateways[0]
     if len(settings.wallet_gateways) > 1:
         print(f"You have {len(settings.wallet_gateways)} gateways:")
