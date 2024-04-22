@@ -22,8 +22,6 @@ from .base import (
     StatusResponse,
     Unsupported,
 )
-from .macaroon import load_macaroon
-
 
 class CoreLightningRestWallet(LightningBackend):
     supported_units = set([Unit.sat, Unit.msat])
@@ -32,24 +30,23 @@ class CoreLightningRestWallet(LightningBackend):
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
         self.unit = unit
-        macaroon = settings.mint_corelightning_rest_macaroon
-        assert macaroon, "missing cln-rest macaroon"
+        rune = settings.mint_corelightning_rune
+        assert rune, "missing cln-rest rune"
 
-        self.macaroon = load_macaroon(macaroon)
+        self.rune = rune
 
         url = settings.mint_corelightning_rest_url
         if not url:
             raise Exception("missing url for corelightning-rest")
-        if not macaroon:
-            raise Exception("missing macaroon for corelightning-rest")
+        if not rune:
+            raise Exception("missing rune for corelightning-rest")
 
         self.url = url[:-1] if url.endswith("/") else url
         self.url = (
             f"https://{self.url}" if not self.url.startswith("http") else self.url
         )
         self.auth = {
-            "macaroon": self.macaroon,
-            "encodingtype": "hex",
+            "rune": self.rune,
             "accept": "application/json",
         }
 
@@ -70,7 +67,7 @@ class CoreLightningRestWallet(LightningBackend):
             logger.warning(f"Error closing wallet connection: {e}")
 
     async def status(self) -> StatusResponse:
-        r = await self.client.get(f"{self.url}/v1/listFunds", timeout=5)
+        r = await self.client.post(f"{self.url}/v1/listfunds", timeout=5)
         r.raise_for_status()
         if r.is_error or "error" in r.json():
             try:
@@ -122,7 +119,7 @@ class CoreLightningRestWallet(LightningBackend):
             data["preimage"] = kwargs["preimage"]
 
         r = await self.client.post(
-            f"{self.url}/v1/invoice/genInvoice",
+            f"{self.url}/v1/invoice",
             data=data,
         )
 
@@ -177,7 +174,7 @@ class CoreLightningRestWallet(LightningBackend):
         r = await self.client.post(
             f"{self.url}/v1/pay",
             data={
-                "invoice": quote.request,
+                "bolt11": quote.request,
                 "maxfeepercent": f"{fee_limit_percent:.11}",
                 "exemptfee": 0,  # so fee_limit_percent is applied even on payments
                 # with fee < 5000 millisatoshi (which is default value of exemptfee)
@@ -223,8 +220,8 @@ class CoreLightningRestWallet(LightningBackend):
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        r = await self.client.get(
-            f"{self.url}/v1/invoice/listInvoices",
+        r = await self.client.post(
+            f"{self.url}/v1/listinvoices",
             params={"payment_hash": checking_id},
         )
         try:
@@ -239,8 +236,8 @@ class CoreLightningRestWallet(LightningBackend):
             return PaymentStatus(paid=None)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        r = await self.client.get(
-            f"{self.url}/v1/pay/listPays",
+        r = await self.client.post(
+            f"{self.url}/v1/listpays",
             params={"payment_hash": checking_id},
         )
         try:
@@ -276,8 +273,8 @@ class CoreLightningRestWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:
             try:
-                url = f"{self.url}/v1/invoice/waitAnyInvoice/{self.last_pay_index}"
-                async with self.client.stream("GET", url, timeout=None) as r:
+                url = f"{self.url}/v1/waitanyinvoice/{self.last_pay_index}"
+                async with self.client.stream("POST", url, timeout=None) as r:
                     async for line in r.aiter_lines():
                         inv = json.loads(line)
                         if "error" in inv and "message" in inv["error"]:
@@ -296,8 +293,8 @@ class CoreLightningRestWallet(LightningBackend):
                         # payment_hash = inv["payment_hash"]
                         # yield payment_hash
                         # hack to return payment_hash if the above shouldn't work
-                        r = await self.client.get(
-                            f"{self.url}/v1/invoice/listInvoices",
+                        r = await self.client.post(
+                            f"{self.url}/v1/listinvoices",
                             params={"label": inv["label"]},
                         )
                         paid_invoce = r.json()
