@@ -61,6 +61,6 @@ gateway = Gateway(
 
 async def start_gateway_init():
     await migrate_databases(gateway.db, migrations)
-    await gateway.init_wallet()
+    await gateway.init_wallets()
     await gateway.startup_gateway()
     logger.info("Gateway started.")

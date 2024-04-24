@@ -70,6 +70,8 @@ class GatewaySettings(CashuSettings):
     gateway_bolt11_sat_fee_ppm: int = Field(default=1000)
     gateway_bolt11_sat_base_fee: int = Field(default=2)
 
+    gateway_mint_urls: List[str] = Field(default=[])
+
 
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated

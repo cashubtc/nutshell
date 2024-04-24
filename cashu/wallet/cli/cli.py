@@ -285,6 +285,7 @@ async def pay_gateway(ctx: Context, invoice: str, yes: bool):
         preimage_hash=bolt11_invoice.payment_hash,
         hashlock_pubkey=gateway_quote.pubkey,
         locktime_absolute=gateway_quote.expiry + LOCKTIME_SAFETY,
+        locktime_pubkey=await wallet.create_p2pk_pubkey(),
     )
     _, send_proofs = await wallet.split_to_send(
         wallet.proofs, gateway_quote.amount, secret_lock=secret, set_reserved=True

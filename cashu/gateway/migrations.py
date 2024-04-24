@@ -17,6 +17,7 @@ async def m001_initial(db: Database):
         await conn.execute(
             f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'melt_quotes')} (
+                    mint TEXT NOT NULL,
                     quote TEXT NOT NULL,
                     method TEXT NOT NULL,
                     request TEXT NOT NULL,

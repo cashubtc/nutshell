@@ -5,14 +5,31 @@ from ..core.base import (
     PostMeltResponse,
 )
 from .models import (
+    GatewayInfo,
     GatewayMeltQuoteRequest,
     GatewayMeltQuoteResponse,
     GatewayMeltRequest,
     GatewayMeltResponse,
+    GatewayMint,
 )
 from .startup import gateway
 
 router: APIRouter = APIRouter()
+
+
+@router.get(
+    "/v1/info",
+    summary="Get gateway information",
+    response_model=GatewayInfo,
+)
+async def get_info(request: Request) -> GatewayInfo:
+    """
+    Get information about the gateway.
+    """
+    logger.trace("> GET /v1/info")
+    info = GatewayInfo(mints=[GatewayMint(mint=url) for url in gateway.wallets.keys()])
+    logger.trace("< GET /v1/info")
+    return info
 
 
 @router.post(

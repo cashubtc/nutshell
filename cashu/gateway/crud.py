@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 from ..core.base import (
     MeltQuote,
@@ -17,6 +17,7 @@ class GatewayCrud(ABC):
     async def store_melt_quote(
         self,
         *,
+        mint: str,
         quote: MeltQuote,
         db: Database,
         conn: Optional[Connection] = None,
@@ -31,7 +32,7 @@ class GatewayCrud(ABC):
         db: Database,
         checking_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> Optional[MeltQuote]:
+    ) -> Tuple[str, MeltQuote]:
         ...
 
     @abstractmethod
@@ -49,6 +50,7 @@ class GatewayCrudSqlite(GatewayCrud):
     async def store_melt_quote(
         self,
         *,
+        mint: str,
         quote: MeltQuote,
         db: Database,
         conn: Optional[Connection] = None,
@@ -56,10 +58,11 @@ class GatewayCrudSqlite(GatewayCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'melt_quotes')}
-            (quote, method, request, expiry, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (mint, quote, method, request, expiry, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                mint,
                 quote.quote,
                 quote.method,
                 quote.request,
@@ -84,7 +87,7 @@ class GatewayCrudSqlite(GatewayCrud):
         checking_id: Optional[str] = None,
         request: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> Optional[MeltQuote]:
+    ) -> Tuple[str, MeltQuote]:
         clauses = []
         values: List[Any] = []
         if quote_id:
@@ -107,8 +110,10 @@ class GatewayCrudSqlite(GatewayCrud):
             tuple(values),
         )
         if row is None:
-            return None
-        return MeltQuote.from_row(row) if row else None
+            raise ValueError("Quote not found")
+
+        mint = row["mint"]
+        return (mint, MeltQuote.from_row(row))
 
     async def update_melt_quote(
         self,

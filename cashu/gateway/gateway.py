@@ -41,8 +41,7 @@ class Gateway(Ledger):
     locks: Dict[str, asyncio.Lock] = {}  # holds mutex locks
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     db: Database
-    wallet: Wallet
-    pubkey: str
+    wallets: Dict[str, Wallet] = {}
 
     def __init__(
         self,
@@ -56,16 +55,16 @@ class Gateway(Ledger):
         self.backends = backends
         self.gwcrud = crud
 
-    async def init_wallet(self):
-        self.wallet = await Wallet.with_db(
-            settings.mint_url,
-            db=os.path.join(settings.cashu_dir, "gateway"),
-            name="gateway",
-        )
-        await self.wallet.load_proofs()
-        await self.wallet.load_mint()
-        self.pubkey = await self.wallet.create_p2pk_pubkey()
-        return self.wallet
+    async def init_wallets(self):
+        for mint in settings.gateway_mint_urls:
+            logger.info(f"Loading wallet for mint: {mint}")
+            self.wallets[mint] = await Wallet.with_db(
+                mint,
+                db=os.path.join(settings.cashu_dir, "gateway"),
+                name="gateway",
+            )
+            await self.wallets[mint].load_proofs()
+            await self.wallets[mint].load_mint()
 
         # ------- STARTUP -------
 
@@ -95,11 +94,12 @@ class Gateway(Ledger):
     async def gateway_melt_quote(
         self, melt_quote_request: GatewayMeltQuoteRequest
     ) -> GatewayMeltQuoteResponse:
-        if melt_quote_request.mint != settings.mint_url:
+        if melt_quote_request.mint not in self.wallets.keys():
             raise TransactionError(
-                f"mint does not match gateway mint: {settings.mint_url}"
+                f"mint does not match gateway mint: {self.wallets.keys()}"
             )
-
+        mint = melt_quote_request.mint
+        pubkey = await self.wallets[mint].create_p2pk_pubkey()
         request = melt_quote_request.request
         invoice = bolt11.decode(pr=request)
         amount_msat = bolt11.decode(pr=request).amount_msat
@@ -156,10 +156,10 @@ class Gateway(Ledger):
             expiry=invoice_expiry + LOCKTIME_SAFETY,
         )
 
-        await self.gwcrud.store_melt_quote(quote=melt_quote, db=self.db)
+        await self.gwcrud.store_melt_quote(mint=mint, quote=melt_quote, db=self.db)
         assert melt_quote.expiry
         return GatewayMeltQuoteResponse(
-            pubkey=self.pubkey,
+            pubkey=pubkey,
             quote=melt_quote.quote,
             amount=melt_quote.amount,
             expiry=melt_quote.expiry,
@@ -169,7 +169,12 @@ class Gateway(Ledger):
     async def gateway_get_melt_quote(
         self, quote_id: str, check_quote_with_backend: bool = False
     ) -> GatewayMeltQuoteResponse:
-        melt_quote = await self.gwcrud.get_melt_quote(quote_id=quote_id, db=self.db)
+        mint, melt_quote = await self.gwcrud.get_melt_quote(
+            quote_id=quote_id, db=self.db
+        )
+        if mint not in self.wallets.keys():
+            raise TransactionError("mint not found")
+        pubkey = await self.wallets[mint].create_p2pk_pubkey()
         if not melt_quote:
             raise TransactionError("quote not found")
         if not melt_quote.expiry:
@@ -189,14 +194,14 @@ class Gateway(Ledger):
                 await self.gwcrud.update_melt_quote(quote=melt_quote, db=self.db)
 
         return GatewayMeltQuoteResponse(
-            pubkey=self.pubkey,
+            pubkey=pubkey,
             quote=melt_quote.quote,
             amount=melt_quote.amount,
             expiry=melt_quote.expiry,
             paid=melt_quote.paid,
         )
 
-    def _check_proofs(self, proofs: List[Proof]):
+    def _check_proofs(self, wallet: Wallet, proofs: List[Proof]):
         if not proofs:
             raise TransactionError("no proofs")
         # make sure there are no duplicate proofs
@@ -206,7 +211,7 @@ class Gateway(Ledger):
             raise TransactionError("secrets do not match criteria.")
         for proof in proofs:
             # check if proof keysets are from the gateway's wallet's mint
-            if proof.id not in self.wallet.keysets:
+            if proof.id not in wallet.keysets:
                 raise TransactionError("proof keysets not valid")
 
     def _verify_htlc(
@@ -248,7 +253,12 @@ class Gateway(Ledger):
         proofs: List[Proof],
         quote: str,
     ) -> GatewayMeltResponse:
-        melt_quote = await self.gwcrud.get_melt_quote(quote_id=quote, db=self.db)
+        try:
+            mint, melt_quote = await self.gwcrud.get_melt_quote(
+                quote_id=quote, db=self.db
+            )
+        except ValueError as e:
+            raise TransactionError(str(e))
         if not melt_quote:
             raise TransactionError("quote not found")
         if melt_quote.paid:
@@ -261,19 +271,22 @@ class Gateway(Ledger):
         if unit not in self.backends[Method.bolt11]:
             raise Exception("unit not supported by backend")
         method = Method.bolt11
-
+        if mint not in self.wallets:
+            raise TransactionError("mint not found")
+        wallet = self.wallets[mint]
+        pubkey = await wallet.create_p2pk_pubkey()
         # get the backend for the unit
         invoice = bolt11.decode(melt_quote.request)
         # check proofs
-        self._check_proofs(proofs)
+        self._check_proofs(wallet, proofs)
         # check if signatures of proofs are valid using DLEQ proofs
-        self.wallet.verify_proofs_dleq(proofs=proofs)
+        wallet.verify_proofs_dleq(proofs=proofs)
         # check if the HTLCs are valid
         for proof in proofs:
             self._verify_htlc(
                 proof=proof,
                 hashlock=invoice.payment_hash,
-                pubkey=self.pubkey,
+                pubkey=pubkey,
                 expiry=melt_quote.expiry,
             )
 
@@ -302,13 +315,13 @@ class Gateway(Ledger):
         await self.gwcrud.update_melt_quote(quote=melt_quote, db=self.db)
 
         # redeem proofs
-        signatures = await self.wallet.sign_p2pk_proofs(proofs)
+        signatures = await wallet.sign_p2pk_proofs(proofs)
         for p, s in zip(proofs, signatures):
             p.witness = HTLCWitness(preimage=payment.preimage, signature=s).json()
 
-        print(f"Balance: {Amount(unit=unit, amount=self.wallet.available_balance)}")
-        await self.wallet.redeem(proofs)
-        print(f"Balance: {Amount(unit=unit, amount=self.wallet.available_balance)}")
+        print(f"Balance: {Amount(unit=unit, amount=wallet.available_balance)}")
+        await wallet.redeem(proofs)
+        print(f"Balance: {Amount(unit=unit, amount=wallet.available_balance)}")
 
         return GatewayMeltResponse(
             paid=True,

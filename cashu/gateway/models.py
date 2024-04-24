@@ -8,6 +8,14 @@ from ..core.base import (
 from ..core.settings import settings
 
 
+class GatewayMint(BaseModel):
+    mint: str
+
+
+class GatewayInfo(BaseModel):
+    mints: List[GatewayMint]
+
+
 class GatewayMeltQuoteRequest(BaseModel):
     unit: str = Field(..., max_length=settings.mint_max_request_length)  # input unit
     request: str = Field(
