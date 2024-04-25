@@ -109,11 +109,11 @@ vim .env
 To use the wallet with the [public test mint](#test-instance), you need to change the appropriate entries in the `.env` file.
 
 #### Test instance
-*Warning: this instance is just for demonstration only. The server could vanish at any moment so consider any Satoshis you deposit a donation.*
+*Warning: this instance is just for demonstration purposes and development only. The satoshis are not real.*
 
 Change the appropriate `.env` file settings to
 ```bash
-MINT_URL=https://8333.space:3338
+MINT_URL=https://testnut.cashu.space
 ```
 
 # Using Cashu
