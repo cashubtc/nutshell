@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Request
+from fastapi.responses import RedirectResponse
 from loguru import logger
 
 from ..core.base import (
@@ -31,6 +32,18 @@ from ..mint.startup import ledger
 from .limit import limiter
 
 router: APIRouter = APIRouter()
+
+@router.get("/", 
+       name="Mint home website",     
+       summary="Redirect users to Mint homepage where they can get more information about the mint",                 
+)
+async def redirect_to_website():
+    website_url = settings.mint_home_url  # Get the URL from the environment variable
+    if website_url:
+        return RedirectResponse(url=website_url)
+    else:
+        # Handle the case where the environment variable is not set
+        return {"message": "WEBSITE_URL environment variable not set"}
 
 
 @router.get(
