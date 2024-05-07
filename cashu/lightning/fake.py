@@ -29,7 +29,8 @@ from .base import (
 
 
 class FakeWallet(LightningBackend):
-    fake_btc_price = 1e8 / 1337
+    fake_btcusd_price = 1e8 / 1556
+    fake_btceur_price = 1e8 / 1672
     queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
     paid_invoices: Set[str] = set()
