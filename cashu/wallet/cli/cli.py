@@ -738,7 +738,7 @@ async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, mint: bool):
         return
 
     if mint:
-      await wallet.load_mint()
+        await wallet.load_mint()
 
     paid_arg = None
     if unpaid:
