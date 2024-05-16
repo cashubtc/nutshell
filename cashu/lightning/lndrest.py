@@ -35,6 +35,7 @@ class LndRestWallet(LightningBackend):
         self.unit = unit
         endpoint = settings.mint_lnd_rest_endpoint
         cert = settings.mint_lnd_rest_cert
+        cert_verify = settings.mint_lnd_rest_cert_verify
 
         macaroon = (
             settings.mint_lnd_rest_macaroon
@@ -54,6 +55,12 @@ class LndRestWallet(LightningBackend):
                 " publicly issued certificate"
             )
 
+        if not cert_verify:
+            logger.warning(
+                "certificate validation will be disabled for lndrest"
+            )
+
+
         endpoint = endpoint[:-1] if endpoint.endswith("/") else endpoint
         endpoint = (
             f"https://{endpoint}" if not endpoint.startswith("http") else endpoint
@@ -65,6 +72,11 @@ class LndRestWallet(LightningBackend):
         # and it will still check for validity of certificate and fail if its not valid
         # even on startup
         self.cert = cert or True
+
+        # disable cert verify if choosen
+        if not cert_verify:
+            self.cert = False
+
 
         self.auth = {"Grpc-Metadata-macaroon": self.macaroon}
         self.client = httpx.AsyncClient(
