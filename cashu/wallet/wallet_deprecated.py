@@ -298,7 +298,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
-    async def pay_lightning_deprecated(
+    async def melt_deprecated(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
     ):
         """

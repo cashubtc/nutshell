@@ -55,7 +55,7 @@ class LightningWallet(Wallet):
         Returns:
             bool: True if successful
         """
-        quote = await self.get_pay_amount_with_fees(pr)
+        quote = await self.request_melt(pr)
         total_amount = quote.amount + quote.fee_reserve
         assert total_amount > 0, "amount is not positive"
         if self.available_balance < total_amount:
@@ -63,9 +63,7 @@ class LightningWallet(Wallet):
             return PaymentResponse(ok=False)
         _, send_proofs = await self.split_to_send(self.proofs, total_amount)
         try:
-            resp = await self.pay_lightning(
-                send_proofs, pr, quote.fee_reserve, quote.quote
-            )
+            resp = await self.melt(send_proofs, pr, quote.fee_reserve, quote.quote)
             if resp.change:
                 fees_paid_sat = quote.fee_reserve - sum_promises(resp.change)
             else:

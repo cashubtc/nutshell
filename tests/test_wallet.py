@@ -271,7 +271,7 @@ async def test_melt(wallet1: Wallet):
         invoice_payment_hash = str(invoice.payment_hash)
         invoice_payment_request = invoice.bolt11
 
-    quote = await wallet1.get_pay_amount_with_fees(invoice_payment_request)
+    quote = await wallet1.request_melt(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
 
     if is_regtest:
@@ -285,7 +285,7 @@ async def test_melt(wallet1: Wallet):
 
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
 
-    melt_response = await wallet1.pay_lightning(
+    melt_response = await wallet1.melt(
         proofs=send_proofs,
         invoice=invoice_payment_request,
         fee_reserve_sat=quote.fee_reserve,

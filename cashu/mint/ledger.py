@@ -575,9 +575,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             )
         else:
             # not internal, get payment quote by backend
-            payment_quote = await self.backends[method][unit].get_payment_quote(request)
-            if not payment_quote.checking_id:
-                raise TransactionError("quote has no checking id")
+            payment_quote = await self.backends[method][unit].get_payment_quote(
+                melt_quote=melt_quote
+            )
+            assert payment_quote.checking_id, "quote has no checking id"
             # make sure the backend returned the amount with a correct unit
             if not payment_quote.amount.unit == unit:
                 raise TransactionError("payment quote amount units do not match")

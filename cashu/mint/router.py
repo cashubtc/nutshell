@@ -62,7 +62,8 @@ async def info() -> GetInfoResponse:
 
     supported_dict = dict(supported=True)
 
-    mint_features: Dict[int, Dict[str, Any]] = {
+    supported_dict = dict(supported=True)
+    mint_features: Dict[int, Any] = {
         4: dict(
             methods=method_settings[4],
             disabled=settings.mint_peg_out_only,
@@ -78,6 +79,21 @@ async def info() -> GetInfoResponse:
         11: supported_dict,
         12: supported_dict,
     }
+
+    # signal which method-unit pairs support MPP
+    for method, unit_dict in ledger.backends.items():
+        for unit in unit_dict.keys():
+            logger.trace(
+                f"method={method.name} unit={unit} supports_mpp={unit_dict[unit].supports_mpp}"
+            )
+            if unit_dict[unit].supports_mpp:
+                mint_features.setdefault(15, []).append(
+                    {
+                        "method": method.name,
+                        "unit": unit.name,
+                        "mpp": True,
+                    }
+                )
 
     return GetInfoResponse(
         name=settings.mint_info_name,
