@@ -199,6 +199,11 @@ class BlindedMessage_Deprecated(BaseModel):
         return P2PKWitness.from_witness(self.witness).signatures
 
 
+class BlindedMessages(BaseModel):
+    # NOTE: not used in Pydantic validation
+    __root__: List[BlindedMessage] = []
+
+
 class BlindedSignature(BaseModel):
     """
     Blinded signature or "promise" which is the signature on a `BlindedMessage`
@@ -209,10 +214,14 @@ class BlindedSignature(BaseModel):
     C_: str  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
 
-
-class BlindedMessages(BaseModel):
-    # NOTE: not used in Pydantic validation
-    __root__: List[BlindedMessage] = []
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            id=row["id"],
+            amount=row["amount"],
+            C_=row["c_"],
+            dleq=DLEQ(e=row["dleq_e"], s=row["dleq_s"]),
+        )
 
 
 # ------- LIGHTNING INVOICE -------
