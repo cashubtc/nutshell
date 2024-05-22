@@ -43,11 +43,11 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     invoice_payment_request = str(invoice_dict["payment_request"])
 
     # wallet pays the invoice
-    quote = await wallet.get_pay_amount_with_fees(invoice_payment_request)
+    quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     asyncio.create_task(
-        wallet.pay_lightning(
+        wallet.melt(
             proofs=send_proofs,
             invoice=invoice_payment_request,
             fee_reserve_sat=quote.fee_reserve,
@@ -83,11 +83,11 @@ async def test_regtest_failed_quote(wallet: Wallet, ledger: Ledger):
     preimage_hash = invoice_obj.payment_hash
 
     # wallet pays the invoice
-    quote = await wallet.get_pay_amount_with_fees(invoice_payment_request)
+    quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     asyncio.create_task(
-        wallet.pay_lightning(
+        wallet.melt(
             proofs=send_proofs,
             invoice=invoice_payment_request,
             fee_reserve_sat=quote.fee_reserve,
