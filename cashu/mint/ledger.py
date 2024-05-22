@@ -616,18 +616,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             expiry=quote.expiry,
         )
 
-    async def get_melt_quote(
-        self, quote_id: str, check_quote_with_backend: bool = False
-    ) -> MeltQuote:
+    async def get_melt_quote(self, quote_id: str) -> MeltQuote:
         """Returns a melt quote.
 
-        If melt quote is not paid yet and `check_quote_with_backend` is set to `True`,
+        If melt quote is not paid yet and no internal mint quote is associated with it,
         checks with the backend for the state of the payment request. If the backend
         says that the quote has been paid, updates the melt quote in the database.
 
         Args:
             quote_id (str): ID of the melt quote.
-            check_quote_with_backend (bool, optional): Whether to check the state of the payment request with the backend. Defaults to False.
 
         Raises:
             Exception: Quote not found.
@@ -649,7 +646,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             request=melt_quote.request, db=self.db
         )
 
-        if not melt_quote.paid and not mint_quote and check_quote_with_backend:
+        if not melt_quote.paid and not mint_quote:
             logger.trace(
                 "Lightning: checking outgoing Lightning payment"
                 f" {melt_quote.checking_id}"
