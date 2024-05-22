@@ -80,7 +80,7 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     # make sure wallet knows the backend supports mpp
     assert wallet.mint_info.supports_mpp("bolt11", wallet.unit)
 
-    # top up wallet twice so we have enough for two payments
+    # top up wallet twice so we have enough for three payments
     topup_invoice = await wallet.request_mint(128)
     pay_if_regtest(topup_invoice.bolt11)
     proofs1 = await wallet.mint(128, id=topup_invoice.id)
@@ -91,6 +91,11 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     proofs2 = await wallet.mint(128, id=topup_invoice.id)
     assert wallet.balance == 256
 
+    topup_invoice = await wallet.request_mint(128)
+    pay_if_regtest(topup_invoice.bolt11)
+    proofs3 = await wallet.mint(128, id=topup_invoice.id)
+    assert wallet.balance == 384
+
     # this is the invoice we want to pay in two parts
     invoice_dict = get_real_invoice(64)
     invoice_payment_request = invoice_dict["payment_request"]
@@ -98,7 +103,7 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     async def pay_mpp(amount: int, proofs: List[Proof], delay: float = 0.0):
         await asyncio.sleep(delay)
         # wallet pays 32 sat of the invoice
-        quote = await wallet.melt_quote(invoice_payment_request, amount=32)
+        quote = await wallet.melt_quote(invoice_payment_request, amount=amount)
         assert quote.amount == amount
         await wallet.melt(
             proofs,
@@ -112,4 +117,11 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     asyncio.create_task(pay_mpp(16, proofs2, delay=0.5))
     await asyncio.sleep(2)
 
-    assert wallet.balance == 256
+    # payment is still pending because the full amount has not been paid
+    assert wallet.balance == 384
+
+    # send the remaining 16 sat to complete the payment
+    asyncio.create_task(pay_mpp(16, proofs3, delay=0.5))
+    await asyncio.sleep(2)
+
+    assert wallet.balance <= 384 - 64
