@@ -89,6 +89,7 @@ class MintLimits(MintSettings):
     )
     mint_max_request_length: int = Field(
         default=1000,
+        gt=0,
         title="Maximum request length",
         description="Maximum length of REST API request arrays.",
     )
@@ -100,16 +101,21 @@ class MintLimits(MintSettings):
     )
     mint_max_peg_in: int = Field(
         default=None,
+        gt=0,
         title="Maximum peg-in",
         description="Maximum amount for a mint operation.",
     )
     mint_max_peg_out: int = Field(
         default=None,
+        gt=0,
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
     mint_max_balance: int = Field(
-        default=None, title="Maximum mint balance", description="Maximum mint balance."
+        default=None,
+        gt=0,
+        title="Maximum mint balance",
+        description="Maximum mint balance.",
     )
 
 
