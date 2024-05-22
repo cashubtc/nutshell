@@ -1,27 +1,19 @@
 from typing import Any, Dict, List, Optional
 
-from ..core.base import GetInfoResponse
+from pydantic import BaseModel
+
+from ..core.base import Nut15MppSupport, Unit
 
 
-class MintInfo:
-    name: Optional[str] = None
-    pubkey: Optional[str] = None
-    version: Optional[str] = None
-    description: Optional[str] = None
-    description_long: Optional[str] = None
-    contact: Optional[List[List[str]]] = None
-    motd: Optional[str] = None
-    nuts: Optional[Dict[int, Any]] = None
-
-    def __init__(self, info_response: GetInfoResponse):
-        self.name = info_response.name
-        self.pubkey = info_response.pubkey
-        self.version = info_response.version
-        self.description = info_response.description
-        self.description_long = info_response.description_long
-        self.contact = info_response.contact
-        self.motd = info_response.motd
-        self.nuts = info_response.nuts
+class MintInfo(BaseModel):
+    name: Optional[str]
+    pubkey: Optional[str]
+    version: Optional[str]
+    description: Optional[str]
+    description_long: Optional[str]
+    contact: Optional[List[List[str]]]
+    motd: Optional[str]
+    nuts: Dict[int, Any]
 
     def __str__(self):
         return f"{self.name} ({self.description})"
@@ -31,5 +23,14 @@ class MintInfo:
             return False
         return nut in self.nuts
 
-    def supports_mpp(self) -> bool:
-        return self.supports_nut(15)
+    def supports_mpp(self, method: str, unit: Unit) -> bool:
+        nut_15 = self.nuts.get(15)
+        if not nut_15 or not self.supports_nut(15):
+            return False
+
+        for entry in nut_15:
+            entry_obj = Nut15MppSupport.parse_obj(entry)
+            if entry_obj.method == method and entry_obj.unit == unit.name:
+                return True
+
+        return False

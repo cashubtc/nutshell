@@ -71,6 +71,7 @@ from ..wallet.crud import (
 )
 from . import migrations
 from .htlc import WalletHTLC
+from .mint_info import MintInfo
 from .p2pk import WalletP2PK
 from .secrets import WalletSecrets
 from .wallet_deprecated import LedgerAPIDeprecated
@@ -130,7 +131,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
     keysets: Dict[str, WalletKeyset]  # holds keysets
     mint_keyset_ids: List[str]  # holds active keyset ids of the mint
     unit: Unit
-    mint_info: GetInfoResponse  # holds info about mint
+    mint_info: MintInfo  # holds info about mint
     tor: TorProxy
     db: Database
     httpx: httpx.AsyncClient
@@ -269,9 +270,10 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         logger.debug(f"Mint keysets: {self.mint_keyset_ids}")
         return self.mint_keyset_ids
 
-    async def _load_mint_info(self) -> GetInfoResponse:
+    async def _load_mint_info(self) -> MintInfo:
         """Loads the mint info from the mint."""
-        self.mint_info = await self._get_info()
+        mint_info_resp = await self._get_info()
+        self.mint_info = MintInfo(**mint_info_resp.dict())
         logger.debug(f"Mint info: {self.mint_info}")
         return self.mint_info
 
@@ -997,6 +999,8 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         """
         Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
         """
+        if amount and not self.mint_info.supports_mpp("bolt11", self.unit):
+            raise Exception("Mint does not support MPP, cannot specify amount.")
         melt_quote = await self.melt_quote(invoice, amount)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."

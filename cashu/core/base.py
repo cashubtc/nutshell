@@ -344,6 +344,12 @@ class GetInfoResponse(BaseModel):
     nuts: Optional[Dict[int, Any]] = None
 
 
+class Nut15MppSupport(BaseModel):
+    method: str
+    unit: str
+    mpp: bool
+
+
 class GetInfoResponse_deprecated(BaseModel):
     name: Optional[str] = None
     pubkey: Optional[str] = None

@@ -375,7 +375,7 @@ class LndRestWallet(LightningBackend):
     ) -> PaymentQuoteResponse:
         # get amount from melt_quote or from bolt11
         amount = (
-            Amount(Unit(melt_quote.unit), melt_quote.amount)
+            Amount(Unit[melt_quote.unit], melt_quote.amount)
             if melt_quote.amount
             else None
         )
