@@ -13,7 +13,7 @@ class MintInfo(BaseModel):
     description_long: Optional[str]
     contact: Optional[List[List[str]]]
     motd: Optional[str]
-    nuts: Dict[int, Any]
+    nuts: Optional[Dict[int, Any]]
 
     def __str__(self):
         return f"{self.name} ({self.description})"
@@ -24,6 +24,8 @@ class MintInfo(BaseModel):
         return nut in self.nuts
 
     def supports_mpp(self, method: str, unit: Unit) -> bool:
+        if not self.nuts:
+            return False
         nut_15 = self.nuts.get(15)
         if not nut_15 or not self.supports_nut(15):
             return False
