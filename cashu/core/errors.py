@@ -63,7 +63,9 @@ class KeysetNotFoundError(KeysetError):
     detail = "keyset not found"
     code = 12001
 
-    def __init__(self):
+    def __init__(self, keyset_id: Optional[str] = None):
+        if keyset_id:
+            self.detail = f"{self.detail}: {keyset_id}"
         super().__init__(self.detail, code=self.code)
 
 

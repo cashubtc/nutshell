@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.15.1"
+VERSION = "0.15.3"
 
 
 def find_env_file():
@@ -58,14 +58,6 @@ class MintSettings(CashuSettings):
 
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
-    mint_duplicate_keysets: bool = Field(
-        default=True,
-        title="Duplicate keysets",
-        description=(
-            "Whether to duplicate keysets for backwards compatibility before v1 API"
-            " (Nutshell 0.15.0)."
-        ),
-    )
 
 
 class MintBackends(MintSettings):
@@ -125,6 +117,7 @@ class FakeWalletSettings(MintSettings):
     fakewallet_brr: bool = Field(default=True)
     fakewallet_delay_payment: bool = Field(default=False)
     fakewallet_stochastic_invoice: bool = Field(default=False)
+    fakewallet_payment_state: Optional[bool] = Field(default=None)
     mint_cache_secrets: bool = Field(default=True)
 
 
@@ -133,7 +126,6 @@ class MintInformation(CashuSettings):
     mint_info_description: str = Field(default=None)
     mint_info_description_long: str = Field(default=None)
     mint_info_contact: List[List[str]] = Field(default=[["", ""]])
-    mint_info_nuts: List[str] = Field(default=["NUT-07", "NUT-08", "NUT-09"])
     mint_info_motd: str = Field(default=None)
 
 

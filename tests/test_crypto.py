@@ -1,3 +1,4 @@
+from cashu.core.base import Proof
 from cashu.core.crypto.b_dhke import (
     alice_verify_dleq,
     carol_verify_dleq,
@@ -284,6 +285,10 @@ def test_dleq_carol_verify_from_bob():
     )
     A = a.pubkey
     assert A
+    assert (
+        A.serialize().hex()
+        == "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+    )
     secret_msg = "test_message"
     r = PrivateKey(
         privkey=bytes.fromhex(
@@ -295,9 +300,40 @@ def test_dleq_carol_verify_from_bob():
     C_, e, s = step2_bob(B_, a)
     assert alice_verify_dleq(B_, C_, e, s, A)
     C = step3_alice(C_, r, A)
-
     # carol does not know B_ and C_, but she receives C and r from Alice
     assert carol_verify_dleq(secret_msg=secret_msg, C=C, r=r, e=e, s=s, A=A)
+
+
+def test_dleq_carol_on_proof():
+    A = PublicKey(
+        bytes.fromhex(
+            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+        ),
+        raw=True,
+    )
+    proof = Proof.parse_obj(
+        {
+            "amount": 1,
+            "id": "00882760bfa2eb41",
+            "secret": "daf4dd00a2b68a0858a80450f52c8a7d2ccf87d375e43e216e0c571f089f63e9",
+            "C": "024369d2d22a80ecf78f3937da9d5f30c1b9f74f0c32684d583cca0fa6a61cdcfc",
+            "dleq": {
+                "e": "b31e58ac6527f34975ffab13e70a48b6d2b0d35abc4b03f0151f09ee1a9763d4",
+                "s": "8fbae004c59e754d71df67e392b6ae4e29293113ddc2ec86592a0431d16306d8",
+                "r": "a6d13fcd7a18442e6076f5e1e7c887ad5de40a019824bdfa9fe740d302e8d861",
+            },
+        }
+    )
+    assert proof.dleq
+
+    assert carol_verify_dleq(
+        secret_msg=proof.secret,
+        r=PrivateKey(bytes.fromhex(proof.dleq.r), raw=True),
+        C=PublicKey(bytes.fromhex(proof.C), raw=True),
+        e=PrivateKey(bytes.fromhex(proof.dleq.e), raw=True),
+        s=PrivateKey(bytes.fromhex(proof.dleq.s), raw=True),
+        A=A,
+    )
 
 
 # TESTS FOR DEPRECATED HASH TO CURVE

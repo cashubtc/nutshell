@@ -90,13 +90,6 @@ async def test_api_keysets(ledger: Ledger):
                 "unit": "sat",
                 "active": True,
             },
-            # for backwards compatibility of the new keyset ID format,
-            # we also return the same keyset with the old base64 ID
-            {
-                "id": "eGnEWtdJ0PIM",
-                "unit": "sat",
-                "active": True,
-            },
         ]
     }
     assert response.json() == expected
@@ -132,17 +125,17 @@ async def test_api_keyset_keys(ledger: Ledger):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
-    response = httpx.get(f"{BASE_URL}/v1/keys/eGnEWtdJ0PIM")
+    response = httpx.get(f"{BASE_URL}/v1/keys/009a1f293253e41e")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     expected = {
         "keysets": [
             {
-                "id": "eGnEWtdJ0PIM",
+                "id": "009a1f293253e41e",
                 "unit": "sat",
                 "keys": {
                     str(k): v.serialize().hex()
-                    for k, v in ledger.keysets["eGnEWtdJ0PIM"].public_keys.items()  # type: ignore
+                    for k, v in ledger.keysets["009a1f293253e41e"].public_keys.items()  # type: ignore
                 },
             }
         ]

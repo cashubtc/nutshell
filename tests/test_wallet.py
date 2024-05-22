@@ -82,10 +82,7 @@ async def test_get_keys(wallet1: Wallet):
     keyset = keysets[0]
     assert keyset.id is not None
     # assert keyset.id_deprecated == "eGnEWtdJ0PIM"
-    if settings.debug_mint_only_deprecated:
-        assert keyset.id == "eGnEWtdJ0PIM"
-    else:
-        assert keyset.id == "009a1f293253e41e"
+    assert keyset.id == "009a1f293253e41e"
     assert isinstance(keyset.id, str)
     assert len(keyset.id) > 0
 
@@ -355,7 +352,7 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
     doublespend = await wallet1.mint(64, id=invoice.id)
     await assert_err(
         wallet1.split(wallet1.proofs + doublespend, 20),
-        "Mint Error: Failed to set proofs pending.",
+        "Mint Error: duplicate proofs.",
     )
     assert wallet1.balance == 64
     assert wallet1.available_balance == 64
@@ -441,14 +438,10 @@ async def test_token_state(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_load_mint_keys_specific_keyset(wallet1: Wallet):
     await wallet1._load_mint_keys()
-    if settings.debug_mint_only_deprecated:
-        assert list(wallet1.keysets.keys()) == ["eGnEWtdJ0PIM"]
-    else:
-        assert list(wallet1.keysets.keys()) == ["009a1f293253e41e", "eGnEWtdJ0PIM"]
+    assert list(wallet1.keysets.keys()) == ["009a1f293253e41e"]
     await wallet1._load_mint_keys(keyset_id=wallet1.keyset_id)
     await wallet1._load_mint_keys(keyset_id="009a1f293253e41e")
     # expect deprecated keyset id to be present
-    await wallet1._load_mint_keys(keyset_id="eGnEWtdJ0PIM")
     await assert_err(
         wallet1._load_mint_keys(keyset_id="nonexistent"),
         KeysetNotFoundError(),

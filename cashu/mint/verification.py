@@ -143,7 +143,7 @@ class LedgerVerification(
         async with self.db.connect() as conn:
             for output in outputs:
                 promise = await self.crud.get_promise(
-                    B_=output.B_, db=self.db, conn=conn
+                    b_=output.B_, db=self.db, conn=conn
                 )
                 result.append(False if promise is None else True)
         return result

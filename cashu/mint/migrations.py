@@ -1,4 +1,7 @@
-from ..core.base import Proof
+import copy
+
+from ..core.base import MintKeyset, Proof
+from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
 from ..core.db import Connection, Database, table_with_schema, timestamp_now
 from ..core.settings import settings
 
@@ -20,10 +23,10 @@ async def m001_initial(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'promises')} (
                     amount {db.big_int} NOT NULL,
-                    B_b TEXT NOT NULL,
-                    C_b TEXT NOT NULL,
+                    b_b TEXT NOT NULL,
+                    c_b TEXT NOT NULL,
 
-                    UNIQUE (B_b)
+                    UNIQUE (b_b)
 
                 );
             """
@@ -33,7 +36,7 @@ async def m001_initial(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_used')} (
                     amount {db.big_int} NOT NULL,
-                    C TEXT NOT NULL,
+                    c TEXT NOT NULL,
                     secret TEXT NOT NULL,
 
                     UNIQUE (secret)
@@ -129,7 +132,7 @@ async def m003_mint_keysets(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'mint_pubkeys')} (
                     id TEXT NOT NULL,
-                    amount INTEGER NOT NULL,
+                    amount {db.big_int} NOT NULL,
                     pubkey TEXT NOT NULL,
 
                     UNIQUE (id, pubkey)
@@ -157,8 +160,8 @@ async def m005_pending_proofs_table(db: Database) -> None:
         await conn.execute(
             f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_pending')} (
-                    amount INTEGER NOT NULL,
-                    C TEXT NOT NULL,
+                    amount {db.big_int} NOT NULL,
+                    c TEXT NOT NULL,
                     secret TEXT NOT NULL,
 
                     UNIQUE (secret)
@@ -283,7 +286,7 @@ async def m011_add_quote_tables(db: Database):
                     request TEXT NOT NULL,
                     checking_id TEXT NOT NULL,
                     unit TEXT NOT NULL,
-                    amount INTEGER NOT NULL,
+                    amount {db.big_int} NOT NULL,
                     paid BOOL NOT NULL,
                     issued BOOL NOT NULL,
                     created_time TIMESTAMP,
@@ -303,12 +306,12 @@ async def m011_add_quote_tables(db: Database):
                     request TEXT NOT NULL,
                     checking_id TEXT NOT NULL,
                     unit TEXT NOT NULL,
-                    amount INTEGER NOT NULL,
-                    fee_reserve INTEGER,
+                    amount {db.big_int} NOT NULL,
+                    fee_reserve {db.big_int},
                     paid BOOL NOT NULL,
                     created_time TIMESTAMP,
                     paid_time TIMESTAMP,
-                    fee_paid INTEGER,
+                    fee_paid {db.big_int},
                     proof TEXT,
 
                     UNIQUE (quote)
@@ -440,11 +443,11 @@ async def m014_proofs_add_Y_column(db: Database):
         await drop_balance_views(db, conn)
 
         await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN Y TEXT"
+            f"ALTER TABLE {table_with_schema(db, 'proofs_used')} ADD COLUMN y TEXT"
         )
         for proof in proofs_used:
             await conn.execute(
-                f"UPDATE {table_with_schema(db, 'proofs_used')} SET Y = '{proof.Y}'"
+                f"UPDATE {table_with_schema(db, 'proofs_used')} SET y = '{proof.Y}'"
                 f" WHERE secret = '{proof.secret}'"
             )
         # Copy proofs_used to proofs_used_old and create a new table proofs_used
@@ -461,11 +464,11 @@ async def m014_proofs_add_Y_column(db: Database):
         await conn.execute(
             f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_used')} (
-                    amount INTEGER NOT NULL,
-                    C TEXT NOT NULL,
+                    amount {db.big_int} NOT NULL,
+                    c TEXT NOT NULL,
                     secret TEXT NOT NULL,
                     id TEXT,
-                    Y TEXT,
+                    y TEXT,
                     created TIMESTAMP,
                     witness TEXT,
 
@@ -475,19 +478,19 @@ async def m014_proofs_add_Y_column(db: Database):
             """
         )
         await conn.execute(
-            f"INSERT INTO {table_with_schema(db, 'proofs_used')} (amount, C, "
-            "secret, id, Y, created, witness) SELECT amount, C, secret, id, Y,"
+            f"INSERT INTO {table_with_schema(db, 'proofs_used')} (amount, c, "
+            "secret, id, y, created, witness) SELECT amount, c, secret, id, y,"
             f" created, witness FROM {table_with_schema(db, 'proofs_used_old')}"
         )
         await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_used_old')}")
 
-        # add column Y to proofs_pending
+        # add column y to proofs_pending
         await conn.execute(
-            f"ALTER TABLE {table_with_schema(db, 'proofs_pending')} ADD COLUMN Y TEXT"
+            f"ALTER TABLE {table_with_schema(db, 'proofs_pending')} ADD COLUMN y TEXT"
         )
         for proof in proofs_pending:
             await conn.execute(
-                f"UPDATE {table_with_schema(db, 'proofs_pending')} SET Y = '{proof.Y}'"
+                f"UPDATE {table_with_schema(db, 'proofs_pending')} SET y = '{proof.Y}'"
                 f" WHERE secret = '{proof.secret}'"
             )
 
@@ -507,10 +510,10 @@ async def m014_proofs_add_Y_column(db: Database):
         await conn.execute(
             f"""
                 CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_pending')} (
-                    amount INTEGER NOT NULL,
-                    C TEXT NOT NULL,
+                    amount {db.big_int} NOT NULL,
+                    c TEXT NOT NULL,
                     secret TEXT NOT NULL,
-                    Y TEXT,
+                    y TEXT,
                     id TEXT,
                     created TIMESTAMP,
 
@@ -520,8 +523,8 @@ async def m014_proofs_add_Y_column(db: Database):
             """
         )
         await conn.execute(
-            f"INSERT INTO {table_with_schema(db, 'proofs_pending')} (amount, C, "
-            "secret, Y, id, created) SELECT amount, C, secret, Y, id, created"
+            f"INSERT INTO {table_with_schema(db, 'proofs_pending')} (amount, c, "
+            "secret, y, id, created) SELECT amount, c, secret, y, id, created"
             f" FROM {table_with_schema(db, 'proofs_pending_old')}"
         )
 
@@ -531,13 +534,19 @@ async def m014_proofs_add_Y_column(db: Database):
         await create_balance_views(db, conn)
 
 
-async def m015_add_index_Y_to_proofs_used(db: Database):
+async def m015_add_index_Y_to_proofs_used_and_pending(db: Database):
     # create index on proofs_used table for Y
     async with db.connect() as conn:
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS"
             " proofs_used_Y_idx ON"
             f" {table_with_schema(db, 'proofs_used')} (Y)"
+        )
+
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS"
+            " proofs_pending_Y_idx ON"
+            f" {table_with_schema(db, 'proofs_pending')} (Y)"
         )
 
 
@@ -570,12 +579,12 @@ async def m016_recompute_Y_with_new_h2c(db: Database):
                 f"('{y}', '{secret}')" for y, secret in proofs_used_data
             )
             await conn.execute(
-                f"INSERT INTO tmp_proofs_used (Y, secret) VALUES {values_placeholder}",
+                f"INSERT INTO tmp_proofs_used (y, secret) VALUES {values_placeholder}",
             )
             await conn.execute(
                 f"""
                 UPDATE {table_with_schema(db, 'proofs_used')}
-                SET Y = tmp_proofs_used.Y
+                SET y = tmp_proofs_used.y
                 FROM tmp_proofs_used
                 WHERE {table_with_schema(db, 'proofs_used')}.secret = tmp_proofs_used.secret
                 """
@@ -590,12 +599,12 @@ async def m016_recompute_Y_with_new_h2c(db: Database):
                 f"('{y}', '{secret}')" for y, secret in proofs_pending_data
             )
             await conn.execute(
-                f"INSERT INTO tmp_proofs_used (Y, secret) VALUES {values_placeholder}",
+                f"INSERT INTO tmp_proofs_used (y, secret) VALUES {values_placeholder}",
             )
             await conn.execute(
                 f"""
                 UPDATE {table_with_schema(db, 'proofs_pending')}
-                SET Y = tmp_proofs_pending.Y
+                SET y = tmp_proofs_pending.y
                 FROM tmp_proofs_pending
                 WHERE {table_with_schema(db, 'proofs_pending')}.secret = tmp_proofs_pending.secret
                 """
@@ -606,3 +615,151 @@ async def m016_recompute_Y_with_new_h2c(db: Database):
             await conn.execute("DROP TABLE tmp_proofs_used")
         if len(proofs_pending_data):
             await conn.execute("DROP TABLE tmp_proofs_pending")
+
+
+async def m017_foreign_keys_proof_tables(db: Database):
+    """
+    Create a foreign key relationship between the keyset id in the proof tables and the keyset table.
+
+    Create a foreign key relationship between the keyset id in the promises table and the keyset table.
+
+    Create a foreign key relationship between the quote id in the melt_quotes
+    and the proofs_used and proofs_pending tables.
+
+    NOTE: We do not use ALTER TABLE directly to add the new column with a foreign key relation because SQLIte does not support it.
+    """
+
+    async with db.connect() as conn:
+        # drop the balance views first
+        await drop_balance_views(db, conn)
+
+        # add foreign key constraints to proofs_used table
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_used_new')} (
+                    amount {db.big_int} NOT NULL,
+                    id TEXT,
+                    c TEXT NOT NULL,
+                    secret TEXT NOT NULL,
+                    y TEXT,
+                    witness TEXT,
+                    created TIMESTAMP,
+                    melt_quote TEXT,
+
+                    FOREIGN KEY (melt_quote) REFERENCES {table_with_schema(db, 'melt_quotes')}(quote),
+
+                    UNIQUE (y)
+                );
+            """
+        )
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'proofs_used_new')} (amount, id, c, secret, y, witness, created) SELECT amount, id, c, secret, y, witness, created FROM {table_with_schema(db, 'proofs_used')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_used')}")
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'proofs_used_new')} RENAME TO {table_with_schema(db, 'proofs_used')}"
+        )
+
+        # add foreign key constraints to proofs_pending table
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'proofs_pending_new')} (
+                    amount {db.big_int} NOT NULL,
+                    id TEXT,
+                    c TEXT NOT NULL,
+                    secret TEXT NOT NULL,
+                    y TEXT,
+                    witness TEXT,
+                    created TIMESTAMP,
+                    melt_quote TEXT,
+
+                    FOREIGN KEY (melt_quote) REFERENCES {table_with_schema(db, 'melt_quotes')}(quote),
+
+                    UNIQUE (y)
+                );
+            """
+        )
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'proofs_pending_new')} (amount, id, c, secret, y, created) SELECT amount, id, c, secret, y, created FROM {table_with_schema(db, 'proofs_pending')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'proofs_pending')}")
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'proofs_pending_new')} RENAME TO {table_with_schema(db, 'proofs_pending')}"
+        )
+
+        # add foreign key constraints to promises table
+        await conn.execute(
+            f"""
+                    CREATE TABLE IF NOT EXISTS {table_with_schema(db, 'promises_new')} (
+                        amount {db.big_int} NOT NULL,
+                        id TEXT,
+                        b_ TEXT NOT NULL,
+                        c_ TEXT NOT NULL,
+                        dleq_e TEXT,
+                        dleq_s TEXT,
+                        created TIMESTAMP,
+                        mint_quote TEXT,
+                        swap_id TEXT,
+
+                        FOREIGN KEY (mint_quote) REFERENCES {table_with_schema(db, 'mint_quotes')}(quote),
+
+                        UNIQUE (b_)
+                    );
+                """
+        )
+
+        await conn.execute(
+            f"INSERT INTO {table_with_schema(db, 'promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created) SELECT amount, id, b_b, c_b, e, s, created FROM {table_with_schema(db, 'promises')}"
+        )
+        await conn.execute(f"DROP TABLE {table_with_schema(db, 'promises')}")
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'promises_new')} RENAME TO {table_with_schema(db, 'promises')}"
+        )
+
+        # recreate the balance views
+        await create_balance_views(db, conn)
+
+    # recreate indices
+    await m015_add_index_Y_to_proofs_used_and_pending(db)
+
+
+async def m018_duplicate_deprecated_keyset_ids(db: Database):
+    async with db.connect() as conn:
+        rows = await conn.fetchall(  # type: ignore
+            f"""
+                SELECT * from {table_with_schema(db, 'keysets')}
+                """,
+        )
+        keysets = [MintKeyset(**row) for row in rows]
+        duplicated_keysets: list[MintKeyset] = []
+        for keyset in keysets:
+            keyset_copy = copy.copy(keyset)
+            if not keyset_copy.public_keys:
+                raise Exception(f"keyset {keyset_copy.id} has no public keys")
+            if keyset.version_tuple < (0, 15):
+                keyset_copy.id = derive_keyset_id(keyset_copy.public_keys)
+            else:
+                keyset_copy.id = derive_keyset_id_deprecated(keyset_copy.public_keys)
+            duplicated_keysets.append(keyset_copy)
+
+        for keyset in duplicated_keysets:
+            await conn.execute(
+                f"""
+                INSERT INTO {table_with_schema(db, 'keysets')}
+                (id, derivation_path, valid_from, valid_to, first_seen, active, version, seed, unit, encrypted_seed, seed_encryption_method)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    keyset.id,
+                    keyset.derivation_path,
+                    keyset.valid_from,
+                    keyset.valid_to,
+                    keyset.first_seen,
+                    keyset.active,
+                    keyset.version,
+                    keyset.seed,
+                    keyset.unit.name,
+                    keyset.encrypted_seed,
+                    keyset.seed_encryption_method,
+                ),
+            )

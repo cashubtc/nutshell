@@ -16,6 +16,11 @@ from ..mint import migrations
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
 
+# kill the program if python runs in non-__debug__ mode
+# which could lead to asserts not being executed for optimized code
+if not __debug__:
+    raise Exception("Nutshell cannot run in non-debug mode.")
+
 logger.debug("Enviroment Settings:")
 for key, value in settings.dict().items():
     if key in [
@@ -23,6 +28,7 @@ for key, value in settings.dict().items():
         "mint_seed_decryption_key",
         "nostr_private_key",
         "mint_lnbits_key",
+        "mint_blink_key",
         "mint_strike_key",
         "mint_lnd_rest_macaroon",
         "mint_lnd_rest_admin_macaroon",
@@ -79,29 +85,6 @@ async def rotate_keys(n_seconds=60):
 
 async def start_mint_init():
     await migrate_databases(ledger.db, migrations)
-    if settings.mint_cache_secrets:
-        await ledger.load_used_proofs()
-    await ledger.init_keysets()
-
-    for derivation_path in settings.mint_derivation_path_list:
-        await ledger.activate_keyset(derivation_path=derivation_path)
-
-    for method in ledger.backends:
-        for unit in ledger.backends[method]:
-            logger.info(
-                f"Using {ledger.backends[method][unit].__class__.__name__} backend for"
-                f" method: '{method.name}' and unit: '{unit.name}'"
-            )
-            status = await ledger.backends[method][unit].status()
-            if status.error_message:
-                logger.warning(
-                    "The backend for"
-                    f" {ledger.backends[method][unit].__class__.__name__} isn't"
-                    f" working properly: '{status.error_message}'",
-                    RuntimeWarning,
-                )
-            logger.info(f"Backend balance: {status.balance} {unit.name}")
-
-    logger.info(f"Data dir: {settings.cashu_dir}")
+    await ledger.startup_ledger()
     logger.info("Mint started.")
     # asyncio.create_task(rotate_keys())

@@ -13,7 +13,7 @@ entry_points = {"console_scripts": ["cashu = cashu.wallet.cli.cli:cli"]}
 
 setuptools.setup(
     name="cashu",
-    version="0.15.1",
+    version="0.15.3",
     description="Ecash wallet and mint",
     long_description=long_description,
     long_description_content_type="text/markdown",

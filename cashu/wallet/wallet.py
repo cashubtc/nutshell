@@ -444,14 +444,14 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def mint_quote(self, amount) -> Invoice:
+    async def mint_quote(self, amount) -> PostMintQuoteResponse:
         """Requests a mint quote from the server and returns a payment request.
 
         Args:
             amount (int): Amount of tokens to mint
 
         Returns:
-            Invoice: Lightning invoice
+            PostMintQuoteResponse: Mint Quote Response
 
         Raises:
             Exception: If the mint request fails
@@ -469,16 +469,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         return_dict = resp.json()
-        mint_response = PostMintQuoteResponse.parse_obj(return_dict)
-        decoded_invoice = bolt11.decode(mint_response.request)
-        return Invoice(
-            amount=amount,
-            bolt11=mint_response.request,
-            payment_hash=decoded_invoice.payment_hash,
-            id=mint_response.quote,
-            out=False,
-            time_created=int(time.time()),
-        )
+        return PostMintQuoteResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -820,6 +811,91 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         for keyset in keysets:
             self.keysets[keyset.id] = keyset
 
+    async def request_mint(self, amount: int) -> Invoice:
+        """Request a Lightning invoice for minting tokens.
+
+        Args:
+            amount (int): Amount for Lightning invoice in satoshis
+
+        Returns:
+            PostMintQuoteResponse: Mint Quote Response
+        """
+        mint_quote_response = await super().mint_quote(amount)
+        decoded_invoice = bolt11.decode(mint_quote_response.request)
+        invoice = Invoice(
+            amount=amount,
+            bolt11=mint_quote_response.request,
+            payment_hash=decoded_invoice.payment_hash,
+            id=mint_quote_response.quote,
+            out=False,
+            time_created=int(time.time()),
+        )
+        await store_lightning_invoice(db=self.db, invoice=invoice)
+        return invoice
+
+    async def mint(
+        self,
+        amount: int,
+        id: str,
+        split: Optional[List[int]] = None,
+    ) -> List[Proof]:
+        """Mint tokens of a specific amount after an invoice has been paid.
+
+        Args:
+            amount (int): Total amount of tokens to be minted
+            id (str): Id for looking up the paid Lightning invoice.
+            split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
+
+        Raises:
+            Exception: Raises exception if `amounts` does not sum to `amount` or has unsupported value.
+            Exception: Raises exception if no proofs have been provided
+
+        Returns:
+            List[Proof]: Newly minted proofs.
+        """
+        # specific split
+        if split:
+            logger.trace(f"Mint with split: {split}")
+            assert sum(split) == amount, "split must sum to amount"
+            allowed_amounts = [2**i for i in range(settings.max_order)]
+            for a in split:
+                if a not in allowed_amounts:
+                    raise Exception(
+                        f"Can only mint amounts with 2^n up to {2**settings.max_order}."
+                    )
+
+        # if no split was specified, we use the canonical split
+        amounts = split or amount_split(amount)
+
+        # quirk: we skip bumping the secret counter in the database since we are
+        # not sure if the minting will succeed. If it succeeds, we will bump it
+        # in the next step.
+        secrets, rs, derivation_paths = await self.generate_n_secrets(
+            len(amounts), skip_bump=True
+        )
+        await self._check_used_secrets(secrets)
+        outputs, rs = self._construct_outputs(amounts, secrets, rs)
+
+        # will raise exception if mint is unsuccessful
+        promises = await super().mint(outputs, id)
+
+        promises_keyset_id = promises[0].id
+        await bump_secret_derivation(
+            db=self.db, keyset_id=promises_keyset_id, by=len(amounts)
+        )
+        proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
+
+        if id:
+            await update_lightning_invoice(
+                db=self.db, id=id, paid=True, time_paid=int(time.time())
+            )
+            # store the mint_id in proofs
+            async with self.db.connect() as conn:
+                for p in proofs:
+                    p.mint_id = id
+                    await update_proof(p, mint_id=id, conn=conn)
+        return proofs
+
     async def redeem(
         self,
         proofs: List[Proof],
@@ -915,82 +991,6 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         send_proofs = new_proofs[len(frst_outputs) :]
         return keep_proofs, send_proofs
 
-    async def request_mint(self, amount: int) -> Invoice:
-        """Request a Lightning invoice for minting tokens.
-
-        Args:
-            amount (int): Amount for Lightning invoice in satoshis
-
-        Returns:
-            Invoice: Lightning invoice
-        """
-        invoice = await super().mint_quote(amount)
-        await store_lightning_invoice(db=self.db, invoice=invoice)
-        return invoice
-
-    async def mint(
-        self,
-        amount: int,
-        id: str,
-        split: Optional[List[int]] = None,
-    ) -> List[Proof]:
-        """Mint tokens of a specific amount after an invoice has been paid.
-
-        Args:
-            amount (int): Total amount of tokens to be minted
-            id (str): Id for looking up the paid Lightning invoice.
-            split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
-
-        Raises:
-            Exception: Raises exception if `amounts` does not sum to `amount` or has unsupported value.
-            Exception: Raises exception if no proofs have been provided
-
-        Returns:
-            List[Proof]: Newly minted proofs.
-        """
-        # specific split
-        if split:
-            logger.trace(f"Mint with split: {split}")
-            assert sum(split) == amount, "split must sum to amount"
-            allowed_amounts = [2**i for i in range(settings.max_order)]
-            for a in split:
-                if a not in allowed_amounts:
-                    raise Exception(
-                        f"Can only mint amounts with 2^n up to {2**settings.max_order}."
-                    )
-
-        # if no split was specified, we use the canonical split
-        amounts = split or amount_split(amount)
-
-        # quirk: we skip bumping the secret counter in the database since we are
-        # not sure if the minting will succeed. If it succeeds, we will bump it
-        # in the next step.
-        secrets, rs, derivation_paths = await self.generate_n_secrets(
-            len(amounts), skip_bump=True
-        )
-        await self._check_used_secrets(secrets)
-        outputs, rs = self._construct_outputs(amounts, secrets, rs)
-
-        # will raise exception if mint is unsuccessful
-        promises = await super().mint(outputs, id)
-
-        promises_keyset_id = promises[0].id
-        await bump_secret_derivation(
-            db=self.db, keyset_id=promises_keyset_id, by=len(amounts)
-        )
-        proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
-
-        if id:
-            await update_lightning_invoice(
-                db=self.db, id=id, paid=True, time_paid=int(time.time())
-            )
-            # store the mint_id in proofs
-            async with self.db.connect() as conn:
-                for p in proofs:
-                    p.mint_id = id
-                    await update_proof(p, mint_id=id, conn=conn)
-        return proofs
-
     async def request_melt(
         self, invoice: str, amount: Optional[int] = None
     ) -> PostMeltQuoteResponse:
@@ -1030,7 +1030,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
             n_change_outputs * [1], change_secrets, change_rs
         )
 
-        # store the melt_id in proofs
+        # store the melt_id in proofs db
         async with self.db.connect() as conn:
             for p in proofs:
                 p.melt_id = quote_id
@@ -1504,7 +1504,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
         Args:
             proofs (List[Proof]): Which proofs to delete
-            check_spendable (bool, optional): Asks the mint to check whether proofs are already spent before deleting them. Defaults to True.
+            check_spendable (bool, optional): Asks the mint to check whether proofs are already spent before deleting them. Defaults to False.
 
         Returns:
             List[Proof]: List of proofs that are still spendable.
@@ -1622,28 +1622,25 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 balances_return[key]["unit"] = unit.name
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
 
-    async def restore_wallet_from_mnemonic(
-        self, mnemonic: Optional[str], to: int = 2, batch: int = 25
+    async def restore_tokens_for_keyset(
+        self, keyset_id: str, to: int = 2, batch: int = 25
     ) -> None:
         """
-        Restores the wallet from a mnemonic.
+        Restores tokens for a given keyset_id.
 
         Args:
-            mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.
+            keyset_id (str): The keyset_id to restore tokens for.
             to (int, optional): The number of consecutive empty responses to stop restoring. Defaults to 2.
             batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
         """
-        await self._init_private_key(mnemonic)
-        await self.load_mint()
-        print("Restoring tokens...")
         stop_counter = 0
         # we get the current secret counter and restore from there on
         spendable_proofs = []
         counter_before = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=0
+            db=self.db, keyset_id=keyset_id, by=0
         )
         if counter_before != 0:
-            print("This wallet has already been used. Restoring from it's last state.")
+            print("Keyset has already been used. Restoring from it's last state.")
         i = counter_before
         n_last_restored_proofs = 0
         while stop_counter < to:
@@ -1664,15 +1661,33 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         logger.debug(f"Reverting secret counter by {revert_counter_by}")
         before = await bump_secret_derivation(
             db=self.db,
-            keyset_id=self.keyset_id,
+            keyset_id=keyset_id,
             by=-revert_counter_by,
         )
         logger.debug(
             f"Secret counter reverted from {before} to {before - revert_counter_by}"
         )
         if n_last_restored_proofs == 0:
-            print("No tokens restored.")
+            print("No tokens restored for keyset.")
             return
+
+    async def restore_wallet_from_mnemonic(
+        self, mnemonic: Optional[str], to: int = 2, batch: int = 25
+    ) -> None:
+        """
+        Restores the wallet from a mnemonic.
+
+        Args:
+            mnemonic (Optional[str]): The mnemonic to restore the wallet from. If None, the mnemonic is loaded from the db.
+            to (int, optional): The number of consecutive empty responses to stop restoring. Defaults to 2.
+            batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
+        """
+        await self._init_private_key(mnemonic)
+        await self.load_mint()
+        print("Restoring tokens...")
+        keyset_ids = self.mint_keyset_ids
+        for keyset_id in keyset_ids:
+            await self.restore_tokens_for_keyset(keyset_id, to, batch)
 
     async def restore_promises_from_to(
         self, from_counter: int, to_counter: int
