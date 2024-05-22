@@ -566,6 +566,12 @@ class PostRestoreRequest(BaseModel):
     )
 
 
+class PostRestoreRequest_Deprecated(BaseModel):
+    outputs: List[BlindedMessage_Deprecated] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
+
+
 class PostRestoreResponse(BaseModel):
     outputs: List[BlindedMessage] = []
     signatures: List[BlindedSignature] = []

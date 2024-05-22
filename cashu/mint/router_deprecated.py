@@ -20,7 +20,7 @@ from ..core.base import (
     PostMintQuoteRequest,
     PostMintRequest_deprecated,
     PostMintResponse_deprecated,
-    PostRestoreRequest,
+    PostRestoreRequest_Deprecated,
     PostRestoreResponse,
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
@@ -372,7 +372,15 @@ async def check_spendable_deprecated(
     ),
     deprecated=True,
 )
-async def restore(payload: PostRestoreRequest) -> PostRestoreResponse:
+async def restore(payload: PostRestoreRequest_Deprecated) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
-    outputs, promises = await ledger.restore(payload.outputs)
+    if payload.outputs:
+        outputs: list[BlindedMessage] = [
+            BlindedMessage(id=ledger.keyset.id, **o.dict(exclude={"id"}))
+            for o in payload.outputs
+        ]
+    else:
+        outputs = []
+
+    outputs, promises = await ledger.restore(outputs)
     return PostRestoreResponse(outputs=outputs, signatures=promises)
