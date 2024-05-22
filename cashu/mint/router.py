@@ -274,7 +274,7 @@ async def mint(
     response_description="Melt tokens for a payment on a supported payment method.",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-async def get_melt_quote(
+async def melt_quote(
     request: Request, payload: PostMeltQuoteRequest
 ) -> PostMeltQuoteResponse:
     """
@@ -293,7 +293,7 @@ async def get_melt_quote(
     response_description="Get an existing melt quote to check its status.",
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-async def melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
+async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
     """
     Get melt quote state.
     """
