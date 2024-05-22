@@ -65,7 +65,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         self,
         db: Database,
         seed: str,
-        backends: Mapping[Method, Mapping[Unit, LightningBackend]],
+        backends: Optional[Mapping[Method, Mapping[Unit, LightningBackend]]] = None,
         seed_decryption_key: Optional[str] = None,
         derivation_path="",
         crud=LedgerCrudSqlite(),
@@ -88,7 +88,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         self.db = db
         self.crud = crud
-        self.backends = backends
+
+        if backends:
+            self.backends = backends
+
         self.pubkey = derive_pubkey(self.seed)
         self.spent_proofs: Dict[str, Proof] = {}
 

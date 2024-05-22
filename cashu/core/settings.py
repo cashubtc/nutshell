@@ -59,6 +59,8 @@ class MintSettings(CashuSettings):
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
 
+    auth_database: str = Field(default="data/auth")
+
 
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated

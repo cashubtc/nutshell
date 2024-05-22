@@ -10,6 +10,7 @@ from starlette.requests import Request
 from ..core.errors import CashuError
 from ..core.logging import configure_logger
 from ..core.settings import settings
+from .auth.router import auth_router
 from .router import router
 from .router_deprecated import router_deprecated
 from .startup import start_mint_init
@@ -98,6 +99,8 @@ if settings.debug_mint_only_deprecated:
 else:
     app.include_router(router=router, tags=["Mint"])
     app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
+
+app.include_router(auth_router, tags=["Auth"])
 
 
 @app.on_event("startup")

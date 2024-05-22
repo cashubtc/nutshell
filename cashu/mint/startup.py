@@ -66,6 +66,15 @@ ledger = Ledger(
     crud=LedgerCrudSqlite(),
 )
 
+# start auth ledger
+
+auth_ledger = Ledger(
+    db=Database("auth", settings.auth_database),
+    seed="auth seed here",
+    derivation_path="m/0",
+    crud=LedgerCrudSqlite(),
+)
+
 
 async def rotate_keys(n_seconds=60):
     """Rotate keyset epoch every n_seconds.
@@ -86,5 +95,7 @@ async def rotate_keys(n_seconds=60):
 async def start_mint_init():
     await migrate_databases(ledger.db, migrations)
     await ledger.startup_ledger()
+    await migrate_databases(auth_ledger.db, migrations)
+    await auth_ledger.startup_ledger()
     logger.info("Mint started.")
     # asyncio.create_task(rotate_keys())
