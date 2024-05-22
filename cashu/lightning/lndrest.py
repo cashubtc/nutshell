@@ -29,7 +29,7 @@ from .macaroon import load_macaroon
 class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
-    supports_mpp = settings.mint_lnd_enable_mpp_experimental
+    supports_mpp = settings.mint_lnd_enable_mpp
     supported_units = set([Unit.sat, Unit.msat])
     unit = Unit.sat
 
@@ -74,7 +74,7 @@ class LndRestWallet(LightningBackend):
             base_url=self.endpoint, headers=self.auth, verify=self.cert
         )
         if self.supports_mpp:
-            logger.info("LNDRestWallet enabling MPP experimental feature")
+            logger.info("LNDRestWallet enabling MPP feature")
 
     async def status(self) -> StatusResponse:
         try:

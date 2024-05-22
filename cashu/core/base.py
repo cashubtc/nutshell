@@ -161,13 +161,35 @@ class Proof(BaseModel):
         return HTLCWitness.from_witness(self.witness).preimage
 
 
+class Proofs(BaseModel):
+    # NOTE: not used in Pydantic validation
+    __root__: List[Proof]
+
+
 class BlindedMessage(BaseModel):
     """
     Blinded message or blinded secret or "output" which is to be signed by the mint
     """
 
     amount: int
-    id: str
+    id: str  # Keyset id
+    B_: str  # Hex-encoded blinded message
+    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
+
+    @property
+    def p2pksigs(self) -> List[str]:
+        assert self.witness, "Witness missing in output"
+        return P2PKWitness.from_witness(self.witness).signatures
+
+
+class BlindedMessage_Deprecated(BaseModel):
+    """
+    Deprecated: BlindedMessage for v0 protocol (deprecated api routes) have no id field.
+
+    Blinded message or blinded secret or "output" which is to be signed by the mint
+    """
+
+    amount: int
     B_: str  # Hex-encoded blinded message
     witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
 
@@ -187,14 +209,10 @@ class BlindedSignature(BaseModel):
     C_: str  # Hex-encoded signature
     dleq: Optional[DLEQ] = None  # DLEQ proof
 
-    @classmethod
-    def from_row(cls, row: Row):
-        return cls(
-            id=row["id"],
-            amount=row["amount"],
-            C_=row["c_"],
-            dleq=DLEQ(e=row["dleq_e"], s=row["dleq_s"]),
-        )
+
+class BlindedMessages(BaseModel):
+    # NOTE: not used in Pydantic validation
+    __root__: List[BlindedMessage] = []
 
 
 # ------- LIGHTNING INVOICE -------
@@ -304,7 +322,6 @@ class MintMeltMethodSetting(BaseModel):
     unit: str
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
-    mpp: Optional[bool] = None
 
 
 class GetInfoResponse(BaseModel):
@@ -315,7 +332,7 @@ class GetInfoResponse(BaseModel):
     description_long: Optional[str] = None
     contact: Optional[List[List[str]]] = None
     motd: Optional[str] = None
-    nuts: Optional[Dict[int, Dict[str, Any]]] = None
+    nuts: Optional[Dict[int, Any]] = None
 
 
 class GetInfoResponse_deprecated(BaseModel):
@@ -328,19 +345,6 @@ class GetInfoResponse_deprecated(BaseModel):
     nuts: Optional[List[str]] = None
     motd: Optional[str] = None
     parameter: Optional[dict] = None
-
-
-class BlindedMessage_Deprecated(BaseModel):
-    # Same as BlindedMessage, but without the id field
-    amount: int
-    B_: str  # Hex-encoded blinded message
-    id: Optional[str] = None
-    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
-
-    @property
-    def p2pksigs(self) -> List[str]:
-        assert self.witness, "Witness missing in output"
-        return P2PKWitness.from_witness(self.witness).signatures
 
 
 # ------- API: KEYS -------
@@ -658,6 +662,7 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=True,
+        use_deprecated_id=False,  # BACKWARDS COMPATIBILITY < 0.15.0
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
@@ -672,10 +677,19 @@ class WalletKeyset:
         else:
             self.id = id
 
+        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
+        if use_deprecated_id:
+            logger.warning(
+                "Using deprecated keyset id derivation for backwards compatibility <"
+                " 0.15.0"
+            )
+            self.id = derive_keyset_id_deprecated(self.public_keys)
+        # END BACKWARDS COMPATIBILITY < 0.15.0
+
         self.unit = Unit[unit]
 
         logger.trace(f"Derived keyset id {self.id} from public keys.")
-        if id and id != self.id:
+        if id and id != self.id and use_deprecated_id:
             logger.warning(
                 f"WARNING: Keyset id {self.id} does not match the given id {id}."
                 " Overwriting."
@@ -729,6 +743,8 @@ class MintKeyset:
     valid_to: Optional[str] = None
     first_seen: Optional[str] = None
     version: Optional[str] = None
+
+    duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
     def __init__(
         self,
@@ -810,12 +826,6 @@ class MintKeyset:
         assert self.seed, "seed not set"
         assert self.derivation_path, "derivation path not set"
 
-        # we compute the keyset id from the public keys only if it is not
-        # loaded from the database. This is to allow for backwards compatibility
-        # with old keysets with new id's and vice versa. This code can be removed
-        # if there are only new keysets in the mint (> 0.15.0)
-        id_in_db = self.id
-
         if self.version_tuple < (0, 12):
             # WARNING: Broken key derivation for backwards compatibility with < 0.12
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
@@ -826,8 +836,7 @@ class MintKeyset:
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
-            # load from db or derive
-            self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
             self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
             logger.trace(
@@ -835,13 +844,11 @@ class MintKeyset:
                 " compatibility < 0.15)"
             )
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            # load from db or derive
-            self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         else:
             self.private_keys = derive_keys(self.seed, self.derivation_path)
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            # load from db or derive
-            self.id = id_in_db or derive_keyset_id(self.public_keys)  # type: ignore
+            self.id = derive_keyset_id(self.public_keys)  # type: ignore
 
 
 # ------- TOKEN -------
