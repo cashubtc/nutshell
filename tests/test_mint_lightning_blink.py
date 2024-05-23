@@ -2,7 +2,8 @@ import pytest
 import respx
 from httpx import Response
 
-from cashu.core.base import Amount, MeltQuote, PostMeltQuoteRequest, Unit
+from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.blink import MINIMUM_FEE_MSAT, BlinkWallet  # type: ignore
 
