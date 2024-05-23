@@ -237,16 +237,14 @@ async def send_command(
         default=None,
         description="Mint URL to send from (None for default mint)",
     ),
-    nosplit: bool = Query(
-        default=False, description="Do not split tokens before sending."
-    ),
+    offline: bool = Query(default=False, description="Force offline send."),
 ):
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
     if not nostr:
         balance, token = await send(
-            wallet, amount=amount, lock=lock, legacy=False, split=not nosplit
+            wallet, amount=amount, lock=lock, legacy=False, offline=offline
         )
         return SendResponse(balance=balance, token=token)
     else:
