@@ -10,7 +10,6 @@ from ..core.base import (
     BlindedMessage,
     BlindedMessage_Deprecated,
     BlindedSignature,
-    Invoice,
     Proof,
     WalletKeyset,
 )
@@ -26,6 +25,7 @@ from ..core.models import (
     KeysetsResponse_deprecated,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
+    PostMintQuoteResponse,
     PostMintRequest_deprecated,
     PostMintResponse_deprecated,
     PostRestoreResponse,
@@ -228,7 +228,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
-    async def request_mint_deprecated(self, amount) -> Invoice:
+    async def request_mint_deprecated(self, amount) -> PostMintQuoteResponse:
         """Requests a mint from the server and returns Lightning invoice.
 
         Args:
@@ -246,12 +246,11 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         return_dict = resp.json()
         mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
         decoded_invoice = bolt11.decode(mint_response.pr)
-        return Invoice(
-            amount=amount,
-            bolt11=mint_response.pr,
-            id=mint_response.hash,
-            payment_hash=decoded_invoice.payment_hash,
-            out=False,
+        return PostMintQuoteResponse(
+            quote=mint_response.hash,
+            request=mint_response.pr,
+            paid=False,
+            expiry=decoded_invoice.date + (decoded_invoice.expiry or 0),
         )
 
     @async_set_httpx_client
@@ -301,7 +300,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
-    async def pay_lightning_deprecated(
+    async def melt_deprecated(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
     ):
         """

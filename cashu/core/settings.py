@@ -52,7 +52,7 @@ class MintSettings(CashuSettings):
     mint_private_key: str = Field(default=None)
     mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
-    mint_derivation_path_list: List[str] = Field(default=[""])
+    mint_derivation_path_list: List[str] = Field(default=[])
     mint_listen_host: str = Field(default="127.0.0.1")
     mint_listen_port: int = Field(default=3338)
 
@@ -93,6 +93,7 @@ class MintLimits(MintSettings):
     )
     mint_max_request_length: int = Field(
         default=1000,
+        gt=0,
         title="Maximum request length",
         description="Maximum length of REST API request arrays.",
     )
@@ -104,16 +105,21 @@ class MintLimits(MintSettings):
     )
     mint_max_peg_in: int = Field(
         default=None,
+        gt=0,
         title="Maximum peg-in",
         description="Maximum amount for a mint operation.",
     )
     mint_max_peg_out: int = Field(
         default=None,
+        gt=0,
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
     mint_max_balance: int = Field(
-        default=None, title="Maximum mint balance", description="Maximum mint balance."
+        default=None,
+        gt=0,
+        title="Maximum mint balance",
+        description="Maximum mint balance.",
     )
 
 
@@ -177,6 +183,7 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_enable_mpp: bool = Field(default=False)
 
 
 class CoreLightningRestFundingSource(MintSettings):

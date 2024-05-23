@@ -31,7 +31,13 @@ class GetInfoResponse(BaseModel):
     description_long: Optional[str] = None
     contact: Optional[List[List[str]]] = None
     motd: Optional[str] = None
-    nuts: Optional[Dict[int, Dict[str, Any]]] = None
+    nuts: Optional[Dict[int, Any]] = None
+
+
+class Nut15MppSupport(BaseModel):
+    method: str
+    unit: str
+    mpp: bool
 
 
 class GetInfoResponse_deprecated(BaseModel):
@@ -237,6 +243,12 @@ class CheckFeesResponse_deprecated(BaseModel):
 
 class PostRestoreRequest(BaseModel):
     outputs: List[BlindedMessage] = Field(
+        ..., max_items=settings.mint_max_request_length
+    )
+
+
+class PostRestoreRequest_Deprecated(BaseModel):
+    outputs: List[BlindedMessage_Deprecated] = Field(
         ..., max_items=settings.mint_max_request_length
     )
 

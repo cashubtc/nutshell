@@ -175,13 +175,18 @@ class Proof(BaseModel):
         return HTLCWitness.from_witness(self.witness).preimage
 
 
+class Proofs(BaseModel):
+    # NOTE: not used in Pydantic validation
+    __root__: List[Proof]
+
+
 class BlindedMessage(BaseModel):
     """
     Blinded message or blinded secret or "output" which is to be signed by the mint
     """
 
     amount: int
-    id: str
+    id: str  # Keyset id
     B_: str  # Hex-encoded blinded message
     witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
 
@@ -192,10 +197,14 @@ class BlindedMessage(BaseModel):
 
 
 class BlindedMessage_Deprecated(BaseModel):
-    # Same as BlindedMessage, but without the id field
+    """
+    Deprecated: BlindedMessage for v0 protocol (deprecated api routes) have no id field.
+
+    Blinded message or blinded secret or "output" which is to be signed by the mint
+    """
+
     amount: int
     B_: str  # Hex-encoded blinded message
-    id: Optional[str] = None
     witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
 
     @property
@@ -491,6 +500,8 @@ class MintKeyset:
     version: Optional[str] = None
     input_fee_ppm: Optional[int] = None
 
+    duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
+
     def __init__(
         self,
         *,
@@ -573,12 +584,6 @@ class MintKeyset:
         assert self.seed, "seed not set"
         assert self.derivation_path, "derivation path not set"
 
-        # we compute the keyset id from the public keys only if it is not
-        # loaded from the database. This is to allow for backwards compatibility
-        # with old keysets with new id's and vice versa. This code can be removed
-        # if there are only new keysets in the mint (> 0.15.0)
-        id_in_db = self.id
-
         if self.version_tuple < (0, 12):
             # WARNING: Broken key derivation for backwards compatibility with < 0.12
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
@@ -589,8 +594,7 @@ class MintKeyset:
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
-            # load from db or derive
-            self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
             self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
             logger.trace(
@@ -598,13 +602,11 @@ class MintKeyset:
                 " compatibility < 0.15)"
             )
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            # load from db or derive
-            self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+            self.id = derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         else:
             self.private_keys = derive_keys(self.seed, self.derivation_path)
             self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
-            # load from db or derive
-            self.id = id_in_db or derive_keyset_id(self.public_keys)  # type: ignore
+            self.id = derive_keyset_id(self.public_keys)  # type: ignore
 
 
 # ------- TOKEN -------

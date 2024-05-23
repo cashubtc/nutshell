@@ -67,6 +67,7 @@ from ..wallet.crud import (
 )
 from . import migrations
 from .htlc import WalletHTLC
+from .mint_info import MintInfo
 from .p2pk import WalletP2PK
 from .proofs import WalletProofs
 from .secrets import WalletSecrets
@@ -128,7 +129,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
     keysets: Dict[str, WalletKeyset]  # holds keysets
     mint_keyset_ids: List[str]  # holds active keyset ids of the mint
     unit: Unit
-    mint_info: GetInfoResponse  # holds info about mint
+    mint_info: MintInfo  # holds info about mint
     tor: TorProxy
     db: Database
     httpx: httpx.AsyncClient
@@ -267,9 +268,10 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         logger.debug(f"Mint keysets: {self.mint_keyset_ids}")
         return self.mint_keyset_ids
 
-    async def _load_mint_info(self) -> GetInfoResponse:
+    async def _load_mint_info(self) -> MintInfo:
         """Loads the mint info from the mint."""
-        self.mint_info = await self._get_info()
+        mint_info_resp = await self._get_info()
+        self.mint_info = MintInfo(**mint_info_resp.dict())
         logger.debug(f"Mint info: {self.mint_info}")
         return self.mint_info
 
@@ -442,14 +444,14 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def mint_quote(self, amount) -> Invoice:
+    async def mint_quote(self, amount) -> PostMintQuoteResponse:
         """Requests a mint quote from the server and returns a payment request.
 
         Args:
             amount (int): Amount of tokens to mint
 
         Returns:
-            Invoice: Lightning invoice
+            PostMintQuoteResponse: Mint Quote Response
 
         Raises:
             Exception: If the mint request fails
@@ -467,16 +469,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         return_dict = resp.json()
-        mint_response = PostMintQuoteResponse.parse_obj(return_dict)
-        decoded_invoice = bolt11.decode(mint_response.request)
-        return Invoice(
-            amount=amount,
-            bolt11=mint_response.request,
-            payment_hash=decoded_invoice.payment_hash,
-            id=mint_response.quote,
-            out=False,
-            time_created=int(time.time()),
-        )
+        return PostMintQuoteResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -525,11 +518,15 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def melt_quote(self, payment_request: str) -> PostMeltQuoteResponse:
+    async def melt_quote(
+        self, payment_request: str, amount: Optional[int] = None
+    ) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
-        payload = PostMeltQuoteRequest(unit=self.unit.name, request=payment_request)
+        payload = PostMeltQuoteRequest(
+            unit=self.unit.name, request=payment_request, amount=amount
+        )
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote/bolt11"),
             json=payload.dict(),
@@ -543,7 +540,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             quote_id = "deprecated_" + str(uuid.uuid4())
             return PostMeltQuoteResponse(
                 quote=quote_id,
-                amount=invoice_obj.amount_msat // 1000,
+                amount=amount or invoice_obj.amount_msat // 1000,
                 fee_reserve=ret.fee or 0,
                 paid=False,
                 expiry=invoice_obj.expiry,
@@ -589,7 +586,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         if resp.status_code == 404:
             invoice = await get_lightning_invoice(id=quote, db=self.db)
             assert invoice, f"no invoice found for id {quote}"
-            ret: PostMeltResponse_deprecated = await self.pay_lightning_deprecated(
+            ret: PostMeltResponse_deprecated = await self.melt_deprecated(
                 proofs=proofs, outputs=outputs, invoice=invoice.bolt11
             )
             return PostMeltResponse(
@@ -823,9 +820,18 @@ class Wallet(
             amount (int): Amount for Lightning invoice in satoshis
 
         Returns:
-            Invoice: Lightning invoice
+            PostMintQuoteResponse: Mint Quote Response
         """
-        invoice = await super().mint_quote(amount)
+        mint_quote_response = await super().mint_quote(amount)
+        decoded_invoice = bolt11.decode(mint_quote_response.request)
+        invoice = Invoice(
+            amount=amount,
+            bolt11=mint_quote_response.request,
+            payment_hash=decoded_invoice.payment_hash,
+            id=mint_quote_response.quote,
+            out=False,
+            time_created=int(time.time()),
+        )
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
 
@@ -1054,7 +1060,21 @@ class Wallet(
         send_proofs = new_proofs[len(keep_outputs) :]
         return keep_proofs, send_proofs
 
-    async def pay_lightning(
+    async def request_melt(
+        self, invoice: str, amount: Optional[int] = None
+    ) -> PostMeltQuoteResponse:
+        """
+        Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
+        """
+        if amount and not self.mint_info.supports_mpp("bolt11", self.unit):
+            raise Exception("Mint does not support MPP, cannot specify amount.")
+        melt_quote = await self.melt_quote(invoice, amount)
+        logger.debug(
+            f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
+        )
+        return melt_quote
+
+    async def melt(
         self, proofs: List[Proof], invoice: str, fee_reserve_sat: int, quote_id: str
     ) -> PostMeltResponse:
         """Pays a lightning invoice and returns the status of the payment.

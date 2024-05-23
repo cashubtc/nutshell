@@ -177,16 +177,23 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 
 @cli.command("pay", help="Pay Lightning invoice.")
 @click.argument("invoice", type=str)
+@click.argument(
+    "amount",
+    type=int,
+    required=False,
+)
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
 @click.pass_context
 @coro
-async def pay(ctx: Context, invoice: str, yes: bool):
+async def pay(
+    ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False
+):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
-    quote = await wallet.get_pay_amount_with_fees(invoice)
+    quote = await wallet.request_melt(invoice, amount)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
     if not yes:
@@ -209,7 +216,7 @@ async def pay(ctx: Context, invoice: str, yes: bool):
         return
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     try:
-        melt_response = await wallet.pay_lightning(
+        melt_response = await wallet.melt(
             send_proofs, invoice, quote.fee_reserve, quote.quote
         )
     except Exception as e:
@@ -334,14 +341,14 @@ async def swap(ctx: Context):
     invoice = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
-    quote = await outgoing_wallet.get_pay_amount_with_fees(invoice.bolt11)
+    quote = await outgoing_wallet.request_melt(invoice.bolt11)
     total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(
+    await outgoing_wallet.melt(
         send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
     )
 

@@ -65,6 +65,7 @@ jobs:
           MINT_LND_REST_ENDPOINT: https://localhost:8081/
           MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
           MINT_LND_REST_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          MINT_LND_ENABLE_MPP: true
           #   LND_GRPC_ENDPOINT: localhost
           #   LND_GRPC_PORT: 10009
           #   LND_GRPC_CERT: ./regtest/data/lnd-3/tls.cert
