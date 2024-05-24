@@ -902,12 +902,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
-                    # BEGIN backwards compatibility mints pre `m007_proofs_and_promises_store_id`
-                    # add keyset id to promise if not present only if the current keyset
-                    # is the only one ever used
-                    if not promise.id and len(self.keysets) == 1:
-                        promise.id = self.keyset.id
-                    # END backwards compatibility
                     signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")

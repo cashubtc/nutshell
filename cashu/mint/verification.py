@@ -194,17 +194,13 @@ class LedgerVerification(
 
     def _verify_proof_bdhke(self, proof: Proof) -> bool:
         """Verifies that the proof of promise was issued by this ledger."""
-        # if no keyset id is given in proof, assume the current one
-        if not proof.id:
-            private_key_amount = self.keyset.private_keys[proof.amount]
-        else:
-            assert proof.id in self.keysets, f"keyset {proof.id} unknown"
-            logger.trace(
-                f"Validating proof {proof.secret} with keyset"
-                f" {self.keysets[proof.id].id}."
-            )
-            # use the appropriate active keyset for this proof.id
-            private_key_amount = self.keysets[proof.id].private_keys[proof.amount]
+        assert proof.id in self.keysets, f"keyset {proof.id} unknown"
+        logger.trace(
+            f"Validating proof {proof.secret} with keyset"
+            f" {self.keysets[proof.id].id}."
+        )
+        # use the appropriate active keyset for this proof.id
+        private_key_amount = self.keysets[proof.id].private_keys[proof.amount]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
         valid = b_dhke.verify(private_key_amount, C, proof.secret)
@@ -260,7 +256,7 @@ class LedgerVerification(
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         if not len(set([self.keysets[p.id].unit for p in proofs])) == 1:
             raise TransactionUnitError("inputs have different units.")
-        fee = math.ceil(sum([self.keysets[p.id].input_fee_ppk for p in proofs]))
+        fee = math.ceil(sum([self.keysets[p.id].input_fee_ppk for p in proofs]) / 1000)
         return fee
 
     def _verify_equation_balanced(

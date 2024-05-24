@@ -476,6 +476,7 @@ class WalletKeyset:
             valid_to=row["valid_to"],
             first_seen=row["first_seen"],
             active=row["active"],
+            input_fee_ppk=row["input_fee_ppk"],
         )
 
 

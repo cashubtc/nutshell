@@ -199,8 +199,6 @@ async def get_keysets(
 ) -> List[WalletKeyset]:
     clauses = []
     values: List[Any] = []
-    clauses.append("active = ?")
-    values.append(True)
     if id:
         clauses.append("id = ?")
         values.append(id)
