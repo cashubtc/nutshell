@@ -11,4 +11,6 @@ ENV PATH="/root/.local/bin:$PATH"
 WORKDIR /app
 COPY . .
 RUN poetry config virtualenvs.create false
-RUN poetry install --no-dev --no-root
+RUN poetry install --no-dev --no-root --extras pgsql
+EXPOSE 3338
+CMD ["poetry","run","mint", "--host", "0.0.0.0"]
