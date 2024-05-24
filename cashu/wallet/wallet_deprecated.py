@@ -202,7 +202,6 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         return keyset
 
     @async_set_httpx_client
-    @async_ensure_mint_loaded_deprecated
     async def _get_keysets_deprecated(self, url: str) -> List[KeysetsResponseKeyset]:
         """API that gets a list of all active keysets of the mint.
 
