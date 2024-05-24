@@ -692,12 +692,7 @@ class Wallet(
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
 
-    def __init__(
-        self,
-        url: str,
-        db: str,
-        name: str = "no_name",
-    ):
+    def __init__(self, url: str, db: str, name: str = "no_name", unit: str = "sat"):
         """A Cashu wallet.
 
         Args:
@@ -708,7 +703,7 @@ class Wallet(
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
         self.name = name
-        self.unit = Unit[settings.wallet_unit]
+        self.unit = Unit[unit]
 
         super().__init__(url=url, db=self.db)
         logger.debug("Wallet initialized")
@@ -723,6 +718,7 @@ class Wallet(
         db: str,
         name: str = "no_name",
         skip_db_read: bool = False,
+        unit: str = "sat",
     ):
         """Initializes a wallet with a database and initializes the private key.
 
@@ -738,7 +734,7 @@ class Wallet(
             Wallet: Initialized wallet.
         """
         logger.trace(f"Initializing wallet with database: {db}")
-        self = cls(url=url, db=db, name=name)
+        self = cls(url=url, db=db, name=name, unit=unit)
         await self._migrate_database()
         if not skip_db_read:
             logger.trace("Mint init: loading private key and keysets from db.")

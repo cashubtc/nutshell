@@ -138,7 +138,8 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 
     ctx.ensure_object(dict)
     ctx.obj["HOST"] = host or settings.mint_url
-    ctx.obj["UNIT"] = unit
+    ctx.obj["UNIT"] = unit or settings.wallet_unit
+    unit = ctx.obj["UNIT"]
     ctx.obj["WALLET_NAME"] = walletname
     settings.wallet_name = walletname
 
@@ -147,16 +148,18 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
     # otherwise it will create a mnemonic and store it in the database
     if ctx.invoked_subcommand == "restore":
         wallet = await Wallet.with_db(
-            ctx.obj["HOST"], db_path, name=walletname, skip_db_read=True
+            ctx.obj["HOST"], db_path, name=walletname, skip_db_read=True, unit=unit
         )
     else:
         # # we need to run the migrations before we load the wallet for the first time
         # # otherwise the wallet will not be able to generate a new private key and store it
         wallet = await Wallet.with_db(
-            ctx.obj["HOST"], db_path, name=walletname, skip_db_read=True
+            ctx.obj["HOST"], db_path, name=walletname, skip_db_read=True, unit=unit
         )
         # now with the migrations done, we can load the wallet and generate a new mnemonic if needed
-        wallet = await Wallet.with_db(ctx.obj["HOST"], db_path, name=walletname)
+        wallet = await Wallet.with_db(
+            ctx.obj["HOST"], db_path, name=walletname, unit=unit
+        )
 
     assert wallet, "Wallet not found."
     ctx.obj["WALLET"] = wallet
@@ -514,7 +517,9 @@ async def receive_cli(
         # ask the user if they want to trust the new mints
         for mint_url in set([t.mint for t in tokenObj.token if t.mint]):
             mint_wallet = Wallet(
-                mint_url, os.path.join(settings.cashu_dir, wallet.name)
+                mint_url,
+                os.path.join(settings.cashu_dir, wallet.name),
+                unit=tokenObj.unit or wallet.unit.name,
             )
             await verify_mint(mint_wallet, mint_url)
         receive_wallet = await receive(wallet, tokenObj)

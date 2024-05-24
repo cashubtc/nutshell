@@ -669,11 +669,14 @@ class TokenV3(BaseModel):
 
     token: List[TokenV3Token] = []
     memo: Optional[str] = None
+    unit: Optional[str] = None
 
     def to_dict(self, include_dleq=False):
         return_dict = dict(token=[t.to_dict(include_dleq) for t in self.token])
         if self.memo:
             return_dict.update(dict(memo=self.memo))  # type: ignore
+        if self.unit:
+            return_dict.update(dict(unit=self.unit))  # type: ignore
         return return_dict
 
     def get_proofs(self):

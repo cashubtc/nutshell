@@ -70,7 +70,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         Args:
             proofs (List[Proof]): List of proofs to get the keyset id's of
         """
-        keysets: List[str] = [proof.id for proof in proofs if proof.id]
+        keysets: List[str] = [proof.id for proof in proofs]
         return keysets
 
     async def _get_keyset_urls(self, keysets: List[str]) -> Dict[str, List[str]]:
@@ -92,7 +92,9 @@ class WalletProofs(SupportsDb, SupportsKeysets):
                 )
         return mint_urls
 
-    async def _make_token(self, proofs: List[Proof], include_mints=True) -> TokenV3:
+    async def _make_token(
+        self, proofs: List[Proof], include_mints=True, include_unit=True
+    ) -> TokenV3:
         """
         Takes list of proofs and produces a TokenV3 by looking up
         the mint URLs by the keyset id from the database.
@@ -105,6 +107,8 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             TokenV3: TokenV3 object
         """
         token = TokenV3()
+        if include_unit:
+            token.unit = self.unit.name
 
         if include_mints:
             # we create a map from mint url to keyset id and then group

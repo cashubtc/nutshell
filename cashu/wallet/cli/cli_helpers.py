@@ -24,11 +24,11 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
         force_select (bool, optional): Force the user to select a unit. Defaults to False.
     """
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs(reload=True)
+    await wallet.load_proofs(reload=False)
     # show balances per unit
     unit_balances = wallet.balance_per_unit()
-    if ctx.obj["UNIT"] in [u.name for u in unit_balances] and not force_select:
-        wallet.unit = Unit[ctx.obj["UNIT"]]
+    if wallet.unit in [unit_balances.keys()] and not force_select:
+        return wallet
     elif len(unit_balances) > 1 and not ctx.obj["UNIT"]:
         print(f"You have balances in {len(unit_balances)} units:")
         print("")
@@ -68,7 +68,7 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
     """
     # we load a dummy wallet so we can check the balance per mint
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs(reload=True)
+    await wallet.load_proofs(reload=False)
     mint_balances = await wallet.balance_per_minturl()
 
     if ctx.obj["HOST"] not in mint_balances and not force_select:
@@ -102,6 +102,7 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
         mint_url,
         os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
         name=wallet.name,
+        unit=wallet.unit.name,
     )
     await mint_wallet.load_proofs(reload=True)
 
