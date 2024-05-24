@@ -959,6 +959,28 @@ class Wallet(
 
         return amounts
 
+    async def mint_quote(self, amount: int) -> Invoice:
+        """Request a Lightning invoice for minting tokens.
+
+        Args:
+            amount (int): Amount for Lightning invoice in satoshis
+
+        Returns:
+            Invoice: Lightning invoice for minting tokens
+        """
+        mint_quote_response = await super().mint_quote(amount, self.unit)
+        decoded_invoice = bolt11.decode(mint_quote_response.request)
+        invoice = Invoice(
+            amount=amount,
+            bolt11=mint_quote_response.request,
+            payment_hash=decoded_invoice.payment_hash,
+            id=mint_quote_response.quote,
+            out=False,
+            time_created=int(time.time()),
+        )
+        await store_lightning_invoice(db=self.db, invoice=invoice)
+        return invoice
+
     async def mint(
         self,
         amount: int,
@@ -1164,7 +1186,7 @@ class Wallet(
         send_proofs = new_proofs[len(keep_outputs) :]
         return keep_proofs, send_proofs
 
-    async def request_melt(
+    async def melt_quote(
         self, invoice: str, amount: Optional[int] = None
     ) -> PostMeltQuoteResponse:
         """
@@ -1172,7 +1194,7 @@ class Wallet(
         """
         if amount and not self.mint_info.supports_mpp("bolt11", self.unit):
             raise Exception("Mint does not support MPP, cannot specify amount.")
-        melt_quote = await self.melt_quote(invoice, self.unit, amount)
+        melt_quote = await super().melt_quote(invoice, self.unit, amount)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
         )
@@ -1461,17 +1483,6 @@ class Wallet(
         return [p for p in proofs if p not in invalidated_proofs]
 
     # ---------- TRANSACTION HELPERS ----------
-
-    async def get_pay_amount_with_fees(self, invoice: str):
-        """
-        Decodes the amount from a Lightning invoice and returns the
-        total amount (amount+fees) to be paid.
-        """
-        melt_quote = await self.melt_quote(invoice, self.unit)
-        logger.debug(
-            f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
-        )
-        return melt_quote
 
     async def select_to_send(
         self,

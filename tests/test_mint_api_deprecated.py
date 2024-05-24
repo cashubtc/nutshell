@@ -159,7 +159,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 
     invoice_payment_request = invoice.bolt11
 
-    quote = await wallet.melt_quote(invoice_payment_request, unit=wallet.unit)
+    quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 64
     assert quote.fee_reserve == 0
 
@@ -199,7 +199,7 @@ async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
 
     invoice_payment_request = invoice.bolt11
 
-    quote = await wallet.melt_quote(invoice_payment_request, unit=wallet.unit)
+    quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 64
     assert quote.fee_reserve == 0
 
@@ -240,7 +240,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     invoice_dict = get_real_invoice(62)
     invoice_payment_request = invoice_dict["payment_request"]
 
-    quote = await wallet.melt_quote(invoice_payment_request, unit=wallet.unit)
+    quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 62
     assert quote.fee_reserve == 2
 

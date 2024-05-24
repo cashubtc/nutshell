@@ -73,7 +73,7 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     invoice_dict = get_real_invoice(64)
     invoice_payment_request = invoice_dict["payment_request"]
 
-    mint_quote = await wallet1.melt_quote(invoice_payment_request, unit=wallet1.unit)
+    mint_quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = mint_quote.amount + mint_quote.fee_reserve
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
     melt_quote = await ledger.melt_quote(

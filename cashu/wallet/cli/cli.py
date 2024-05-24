@@ -196,7 +196,7 @@ async def pay(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
-    quote = await wallet.request_melt(invoice, amount)
+    quote = await wallet.melt_quote(invoice, amount)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
     if not yes:
@@ -344,7 +344,7 @@ async def swap(ctx: Context):
     invoice = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
-    quote = await outgoing_wallet.request_melt(invoice.bolt11)
+    quote = await outgoing_wallet.melt_quote(invoice.bolt11)
     total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")

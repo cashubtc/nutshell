@@ -283,7 +283,7 @@ async def test_melt(wallet1: Wallet):
         invoice_payment_hash = str(invoice.payment_hash)
         invoice_payment_request = invoice.bolt11
 
-    quote = await wallet1.request_melt(invoice_payment_request)
+    quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
 
     if is_regtest:

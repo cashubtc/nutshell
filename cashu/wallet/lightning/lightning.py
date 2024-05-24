@@ -55,7 +55,7 @@ class LightningWallet(Wallet):
         Returns:
             bool: True if successful
         """
-        quote = await self.request_melt(pr)
+        quote = await self.melt_quote(pr)
         total_amount = quote.amount + quote.fee_reserve
         assert total_amount > 0, "amount is not positive"
         if self.available_balance < total_amount:
