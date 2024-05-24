@@ -69,7 +69,7 @@ class KeysetsResponseKeyset(BaseModel):
     id: str
     unit: str
     active: bool
-    input_fee_ppm: Optional[int] = None
+    input_fee_ppk: Optional[int] = None
 
 
 class KeysetsResponse(BaseModel):

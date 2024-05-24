@@ -12,6 +12,7 @@ from httpx import Response
 from loguru import logger
 
 from ..core.base import (
+    Amount,
     BlindedMessage,
     BlindedSignature,
     DLEQWallet,
@@ -25,12 +26,14 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
+from ..core.errors import KeysetNotFoundError
 from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.models import (
     CheckFeesResponse_deprecated,
     GetInfoResponse,
     KeysetsResponse,
+    KeysetsResponseKeyset,
     KeysResponse,
     PostCheckStateRequest,
     PostCheckStateResponse,
@@ -62,6 +65,7 @@ from ..wallet.crud import (
     store_keyset,
     store_lightning_invoice,
     store_proof,
+    update_keyset,
     update_lightning_invoice,
     update_proof,
 )
@@ -118,26 +122,20 @@ def async_ensure_mint_loaded(func):
 
     async def wrapper(self, *args, **kwargs):
         if not self.keysets:
-            await self._load_mint()
+            await self.load_mint()
         return await func(self, *args, **kwargs)
 
     return wrapper
 
 
 class LedgerAPI(LedgerAPIDeprecated, object):
-    keyset_id: str  # holds current keyset id
-    keysets: Dict[str, WalletKeyset]  # holds keysets
-    mint_keyset_ids: List[str]  # holds active keyset ids of the mint
-    unit: Unit
-    mint_info: MintInfo  # holds info about mint
     tor: TorProxy
-    db: Database
+    db: Database  # we need the db for melt_deprecated
     httpx: httpx.AsyncClient
 
     def __init__(self, url: str, db: Database):
         self.url = url
         self.db = db
-        self.keysets = {}
 
     @async_set_httpx_client
     async def _init_s(self):
@@ -171,137 +169,111 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # raise for status if no error
         resp.raise_for_status()
 
-    async def _load_mint_keys(self, keyset_id: Optional[str] = None) -> None:
-        """Loads keys from mint and stores them in the database.
+    # async def activate_keyset(self, keyset_id: Optional[str] = None) -> None:
+    #     """Loads keys from mint and stores them in the database.
 
-        Args:
-            keyset_id (str, optional): keyset id to load. If given, requests keys for this keyset
-            from the mint. If not given, requests current keyset of the mint. Defaults to "".
+    #     Args:
+    #         keyset_id (str, optional): keyset id to load. If given, requests keys for this keyset
+    #         from the mint. If not given, requests current keyset of the mint. Defaults to "".
 
-        Raises:
-            AssertionError: if mint URL is not set
-            AssertionError: if no keys are received from the mint
-        """
-        logger.trace(f"Loading mint keys: {keyset_id}")
-        assert len(
-            self.url
-        ), "Ledger not initialized correctly: mint URL not specified yet. "
+    #     Raises:
+    #         AssertionError: if mint URL is not set
+    #         AssertionError: if no keys are received from the mint
+    #     """
+    #     logger.trace(f"Loading mint keys: {keyset_id}")
+    #     assert len(
+    #         self.url
+    #     ), "Ledger not initialized correctly: mint URL not specified yet. "
 
-        keyset: WalletKeyset
+    #     keyset: WalletKeyset
 
-        # if we want to load a specific keyset
-        if keyset_id:
-            # check if this keyset is in db
-            logger.trace(f"Loading keyset {keyset_id} from database.")
-            keysets = await get_keysets(keyset_id, db=self.db)
-            if keysets:
-                logger.debug(f"Found keyset {keyset_id} in database.")
-                # select as current keyset
-                keyset = keysets[0]
-            else:
-                logger.trace(
-                    f"Could not find keyset {keyset_id} in database. Loading keyset"
-                    " from mint."
-                )
-                keyset = await self._get_keys_of_keyset(keyset_id)
-                if keyset.id == keyset_id:
-                    # NOTE: Derived keyset *could* have a different id than the one
-                    # requested because of the duplicate keysets for < 0.15.0 that's
-                    # why we make an explicit check here to not overwrite an existing
-                    # keyset with the incoming one.
-                    logger.debug(
-                        f"Storing new mint keyset: {keyset.id} ({keyset.unit.name})"
-                    )
-                    await store_keyset(keyset=keyset, db=self.db)
-                keysets = [keyset]
-        else:
-            # else we load all active keysets of the mint and choose
-            # an appropriate one as the current keyset
-            keysets = await self._get_keys()
-            assert len(keysets), Exception("did not receive any keys")
-            # check if we have all keysets in db
-            for keyset in keysets:
-                keysets_in_db = await get_keysets(keyset.id, db=self.db)
-                if not keysets_in_db:
-                    logger.debug(
-                        "Storing new current mint keyset:"
-                        f" {keyset.id} ({keyset.unit.name})"
-                    )
-                    await store_keyset(keyset=keyset, db=self.db)
+    #     # if we want to load a specific keyset
+    #     if keyset_id:
+    #         # check if this keyset is in db
+    #         logger.trace(f"Loading keyset {keyset_id} from database.")
+    #         keysets = await get_keysets(keyset_id, db=self.db)
+    #         if keysets:
+    #             logger.debug(f"Found keyset {keyset_id} in database.")
+    #             # select as current keyset
+    #             keyset = keysets[0]
+    #         else:
+    #             logger.trace(
+    #                 f"Could not find keyset {keyset_id} in database. Loading keyset"
+    #                 " from mint."
+    #             )
+    #             keyset = await self._get_keyset(keyset_id)
+    #             if keyset.id == keyset_id:
+    #                 # NOTE: Derived keyset *could* have a different id than the one
+    #                 # requested because of the duplicate keysets for < 0.15.0 that's
+    #                 # why we make an explicit check here to not overwrite an existing
+    #                 # keyset with the incoming one.
+    #                 logger.debug(
+    #                     f"Storing new mint keyset: {keyset.id} ({keyset.unit.name})"
+    #                 )
+    #                 await store_keyset(keyset=keyset, db=self.db)
+    #             keysets = [keyset]
+    #     else:
+    #         # else we load all active keysets of the mint and choose
+    #         # an appropriate one as the current keyset
+    #         keysets = await self._get_keys()
+    #         assert len(keysets), Exception("did not receive any keys")
+    #         # check if we have all keysets in db
+    #         for keyset in keysets:
+    #             keysets_in_db = await get_keysets(keyset.id, db=self.db)
+    #             if not keysets_in_db:
+    #                 logger.debug(
+    #                     "Storing new current mint keyset:"
+    #                     f" {keyset.id} ({keyset.unit.name})"
+    #                 )
+    #                 await store_keyset(keyset=keyset, db=self.db)
 
-            # select a keyset that matches the wallet unit
-            wallet_unit_keysets = [k for k in keysets if k.unit == self.unit]
-            assert len(wallet_unit_keysets) > 0, f"no keyset for unit {self.unit.name}."
-            keyset = [k for k in keysets if k.unit == self.unit][0]
+    #         # select a keyset that matches the wallet unit
+    #         wallet_unit_keysets = [k for k in keysets if k.unit == self.unit]
+    #         assert len(wallet_unit_keysets) > 0, f"no keyset for unit {self.unit.name}."
+    #         keyset = [k for k in keysets if k.unit == self.unit][0]
 
-        # load all keysets we have into memory
-        for k in keysets:
-            self.keysets[k.id] = k
+    #     # load all keysets we have into memory
+    #     for k in keysets:
+    #         self.keysets[k.id] = k
 
-        # make sure we have selected a current keyset
-        assert keyset
-        assert keyset.id
-        assert len(keyset.public_keys) > 0, "no public keys in keyset"
-        # set current keyset id
-        self.keyset_id = keyset.id
-        logger.debug(f"Current mint keyset: {self.keyset_id}")
+    #     # make sure we have selected a current keyset
+    #     assert keyset
+    #     assert keyset.id
+    #     assert len(keyset.public_keys) > 0, "no public keys in keyset"
+    #     # set current keyset id
+    #     self.keyset_id = keyset.id
+    #     logger.debug(f"Current mint keyset: {self.keyset_id}")
 
-    async def _load_mint_keysets(self) -> List[str]:
-        """Loads the keyset IDs of the mint.
+    # async def load_mint_keysets(self) -> List[str]:
+    #     """Loads the keyset IDs of the mint.
 
-        Returns:
-            List[str]: list of keyset IDs of the mint
+    #     Returns:
+    #         List[str]: list of keyset IDs of the mint
 
-        Raises:
-            AssertionError: if no keysets are received from the mint
-        """
-        logger.trace("Loading mint keysets.")
-        mint_keysets = []
-        try:
-            mint_keysets = await self._get_keyset_ids()
-        except Exception:
-            assert self.keysets[
-                self.keyset_id
-            ].id, "could not get keysets from mint, and do not have keys"
-            pass
-        self.mint_keyset_ids = mint_keysets or [self.keysets[self.keyset_id].id]
-        logger.debug(f"Mint keysets: {self.mint_keyset_ids}")
-        return self.mint_keyset_ids
+    #     Raises:
+    #         AssertionError: if no keysets are received from the mint
+    #     """
+    #     logger.trace("Loading mint keysets.")
+    #     mint_keysets = []
+    #     try:
+    #         mint_keysets = await self._get_keysets()
+    #     except Exception:
+    #         assert self.keysets[
+    #             self.keyset_id
+    #         ].id, "could not get keysets from mint, and do not have keys"
+    #         pass
+    #     self.mint_keyset_ids = [k.id for k in mint_keysets] or [
+    #         self.keysets[self.keyset_id].id
+    #     ]
+    #     logger.debug(f"Mint keysets: {self.mint_keyset_ids}")
+    #     return self.mint_keyset_ids
 
-    async def _load_mint_info(self) -> MintInfo:
-        """Loads the mint info from the mint."""
-        mint_info_resp = await self._get_info()
-        self.mint_info = MintInfo(**mint_info_resp.dict())
-        logger.debug(f"Mint info: {self.mint_info}")
-        return self.mint_info
-
-    async def _load_mint(self, keyset_id: str = "") -> None:
-        """
-        Loads the public keys of the mint. Either gets the keys for the specified
-        `keyset_id` or gets the keys of the active keyset from the mint.
-        Gets the active keyset ids of the mint and stores in `self.mint_keyset_ids`.
-        """
-        logger.trace("Loading mint.")
-        await self._load_mint_keys(keyset_id)
-        await self._load_mint_keysets()
-        try:
-            await self._load_mint_info()
-        except Exception as e:
-            logger.debug(f"Could not load mint info: {e}")
-            pass
-
-        if keyset_id:
-            assert (
-                keyset_id in self.mint_keyset_ids
-            ), f"keyset {keyset_id} not active on mint"
-
-    async def _check_used_secrets(self, secrets):
-        """Checks if any of the secrets have already been used"""
-        logger.trace("Checking secrets.")
-        for s in secrets:
-            if await secret_used(s, db=self.db):
-                raise Exception(f"secret already used: {s}")
-        logger.trace("Secret check complete.")
+    # async def load_mint_info(self) -> MintInfo:
+    #     """Loads the mint info from the mint."""
+    #     mint_info_resp = await self._get_info()
+    #     self.mint_info = MintInfo(**mint_info_resp.dict())
+    #     logger.debug(f"Mint info: {self.mint_info}")
+    #     return self.mint_info
 
     """
     ENDPOINTS
@@ -352,7 +324,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         return ret
 
     @async_set_httpx_client
-    async def _get_keys_of_keyset(self, keyset_id: str) -> WalletKeyset:
+    async def _get_keyset(self, keyset_id: str) -> WalletKeyset:
         """API that gets the keys of a specific keyset from the mint.
 
 
@@ -372,7 +344,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
-            ret = await self._get_keys_of_keyset_deprecated(self.url, keyset_id)
+            ret = await self._get_keyset_deprecated(self.url, keyset_id)
             return ret
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
@@ -380,20 +352,21 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         keys_dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
+        this_keyset = keys.keysets[0]
         keyset_keys = {
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
-            for amt, val in keys.keysets[0].keys.items()
+            for amt, val in this_keyset.keys.items()
         }
         keyset = WalletKeyset(
             id=keyset_id,
-            unit=keys.keysets[0].unit,
+            unit=this_keyset.unit,
             public_keys=keyset_keys,
             mint_url=self.url,
         )
         return keyset
 
     @async_set_httpx_client
-    async def _get_keyset_ids(self) -> List[str]:
+    async def _get_keysets(self) -> List[KeysetsResponseKeyset]:
         """API that gets a list of all active keysets of the mint.
 
         Returns:
@@ -408,15 +381,16 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
-            ret = await self._get_keyset_ids_deprecated(self.url)
+            ret = await self._get_keysets_deprecated(self.url)
             return ret
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
 
         keysets_dict = resp.json()
-        keysets = KeysetsResponse.parse_obj(keysets_dict)
-        assert len(keysets.keysets), Exception("did not receive any keysets")
-        return [k.id for k in keysets.keysets]
+        keysets = KeysetsResponse.parse_obj(keysets_dict).keysets
+        if not keysets:
+            raise Exception("did not receive any keysets")
+        return keysets
 
     @async_set_httpx_client
     async def _get_info(self) -> GetInfoResponse:
@@ -444,7 +418,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    async def mint_quote(self, amount) -> PostMintQuoteResponse:
+    async def mint_quote(self, amount: int, unit: Unit) -> PostMintQuoteResponse:
         """Requests a mint quote from the server and returns a payment request.
 
         Args:
@@ -457,7 +431,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: GET /v1/mint/bolt11")
-        payload = PostMintQuoteRequest(unit=self.unit.name, amount=amount)
+        payload = PostMintQuoteRequest(unit=unit.name, amount=amount)
         resp = await self.httpx.post(
             join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
         )
@@ -519,13 +493,13 @@ class LedgerAPI(LedgerAPIDeprecated, object):
     @async_set_httpx_client
     @async_ensure_mint_loaded
     async def melt_quote(
-        self, payment_request: str, amount: Optional[int] = None
+        self, payment_request: str, unit: Unit, amount: Optional[int] = None
     ) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
         payload = PostMeltQuoteRequest(
-            unit=self.unit.name, request=payment_request, amount=amount
+            unit=unit.name, request=payment_request, amount=amount
         )
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote/bolt11"),
@@ -707,9 +681,14 @@ class Wallet(
 ):
     """Minimal wallet wrapper."""
 
+    keyset_id: str  # holds current keyset id
+    keysets: Dict[str, WalletKeyset]  # holds keysets
+    # mint_keyset_ids: List[str]  # holds active keyset ids of the mint
+    unit: Unit
+    mint_info: MintInfo  # holds info about mint
     mnemonic: str  # holds mnemonic of the wallet
     seed: bytes  # holds private key of the wallet generated from the mnemonic
-    # db: Database
+    db: Database
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
 
@@ -765,7 +744,11 @@ class Wallet(
             logger.trace("Mint init: loading private key and keysets from db.")
             await self._init_private_key()
             keysets_list = await get_keysets(mint_url=url, db=self.db)
-            self.keysets = {k.id: k for k in keysets_list}
+            keysets_active_unit = [k for k in keysets_list if k.unit == self.unit]
+            self.keysets = {k.id: k for k in keysets_active_unit}
+            logger.debug(
+                f"Loaded keysets: {' '.join([k.id + f' {k.unit}' for k in keysets_active_unit])}"
+            )
 
         return self
 
@@ -778,40 +761,141 @@ class Wallet(
 
     # ---------- API ----------
 
-    async def load_mint(self, keyset_id: str = ""):
-        """Load a mint's keys with a given keyset_id if specified or else
-        loads the active keyset of the mint into self.keys.
-        Also loads all keyset ids into self.mint_keyset_ids.
+    async def load_mint_info(self) -> MintInfo:
+        """Loads the mint info from the mint."""
+        mint_info_resp = await self._get_info()
+        self.mint_info = MintInfo(**mint_info_resp.dict())
+        logger.debug(f"Mint info: {self.mint_info}")
+        return self.mint_info
 
-        Args:
-            keyset_id (str, optional): _description_. Defaults to "".
+    async def load_mint_keysets(self):
+        """Loads all keyset of the mint and makes sure we have them all in the database.
+
+        Then loads all keysets from the database for the active mint and active unit into self.keysets.
         """
-        await super()._load_mint(keyset_id)
+        logger.trace("Loading mint keysets.")
+        mint_keysets_resp = await self._get_keysets()
+        mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
 
-    async def load_proofs(
-        self, reload: bool = False, unit: Union[Unit, bool] = True
-    ) -> None:
-        """Load all proofs from the database."""
+        # load all keysets of thisd mint from the db
+        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+
+        # db is empty, get all keys from the mint and store them
+        if not keysets_in_db:
+            all_keysets = await self._get_keys()
+            for keyset in all_keysets:
+                keyset.active = mint_keysets_dict[keyset.id].active
+                keyset.input_fee_ppk = mint_keysets_dict[keyset.id].input_fee_ppk or 0
+                await store_keyset(keyset=keyset, db=self.db)
+
+        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+        keysets_in_db_dict = {k.id: k for k in keysets_in_db}
+
+        # get all new keysets that are not in memory yet and store them in the database
+        for mint_keyset in mint_keysets_dict.values():
+            if mint_keyset.id not in keysets_in_db_dict:
+                logger.debug(
+                    f"Storing new mint keyset: {mint_keyset.id} ({mint_keyset.unit})"
+                )
+                wallet_keyset = await self._get_keyset(mint_keyset.id)
+                wallet_keyset.active = mint_keyset.active
+                wallet_keyset.input_fee_ppk = mint_keyset.input_fee_ppk or 0
+                await store_keyset(keyset=wallet_keyset, db=self.db)
+
+            # if the active attribute has changed, update it in the database
+            if (
+                mint_keyset.id in keysets_in_db_dict
+                and mint_keyset.active != keysets_in_db_dict[mint_keyset.id].active
+            ):
+                await update_keyset(
+                    keyset=keysets_in_db_dict[mint_keyset.id], db=self.db
+                )
+
+        await self.load_keysets_from_db()
+
+    async def activate_keyset(self, keyset_id: Optional[str] = None) -> None:
+        """Activates a keyset by setting self.keyset_id. Either activates a specific keyset
+        of chooses one of the active keysets of the mint with the same unit as the wallet.
+        """
+
+        if keyset_id:
+            if keyset_id not in self.keysets:
+                await self.load_mint_keysets()
+
+            if keyset_id not in self.keysets:
+                raise KeysetNotFoundError(keyset_id)
+
+            if self.keysets[keyset_id].unit != self.unit:
+                raise Exception(
+                    f"Keyset {keyset_id} has unit {self.keysets[keyset_id].unit.name},"
+                    f" but wallet has unit {self.unit.name}."
+                )
+
+            if not self.keysets[keyset_id].active:
+                raise Exception(f"Keyset {keyset_id} is not active.")
+
+            self.keyset_id = keyset_id
+        else:
+            # if no keyset_id is given, choose an active keyset with the same unit as the wallet
+            chosen_keyset = None
+            for keyset in self.keysets.values():
+                if keyset.unit == self.unit and keyset.active:
+                    chosen_keyset = keyset
+                    break
+
+            if not chosen_keyset:
+                raise Exception(f"No active keyset found for unit {self.unit.name}.")
+
+            self.keyset_id = chosen_keyset.id
+
+        logger.debug(f"Activated keyset {self.keyset_id}")
+
+    async def load_mint(self, keyset_id: str = "") -> None:
+        """
+        Loads the public keys of the mint. Either gets the keys for the specified
+        `keyset_id` or gets the keys of the active keyset from the mint.
+        Gets the active keyset ids of the mint and stores in `self.mint_keyset_ids`.
+        """
+        logger.trace("Loading mint.")
+        await self.load_mint_keysets()
+        await self.activate_keyset(keyset_id)
+        try:
+            await self.load_mint_info()
+        except Exception as e:
+            logger.debug(f"Could not load mint info: {e}")
+            pass
+
+    async def load_proofs(self, reload: bool = False) -> None:
+        """Load all proofs of the selected mint and unit (i.e. self.keysets) into memory."""
 
         if self.proofs and not reload:
             logger.debug("Proofs already loaded.")
             return
-        self.proofs = await get_proofs(db=self.db)
-        await self.load_keysets()
-        unit = self.unit if unit is True else unit
-        if unit:
-            self.unit = unit
-            self.proofs = [
-                p
-                for p in self.proofs
-                if p.id in self.keysets and self.keysets[p.id].unit == unit
-            ]
 
-    async def load_keysets(self) -> None:
-        """Load all keysets from the database."""
-        keysets = await get_keysets(db=self.db)
+        self.proofs = []
+        await self.load_keysets_from_db()
+        async with self.db.connect() as conn:
+            for keyset_id in self.keysets:
+                proofs = await get_proofs(db=self.db, id=keyset_id, conn=conn)
+                self.proofs.extend(proofs)
+        logger.trace(
+            f"Proofs loaded for keysets: {' '.join([k.id + f' ({k.unit})' for k in self.keysets.values()])}"
+        )
+
+    async def load_keysets_from_db(self):
+        """Load all keysets of the selected mint and unit from the database into self.keysets."""
+        keysets = await get_keysets(mint_url=self.url, unit=self.unit.name, db=self.db)
         for keyset in keysets:
             self.keysets[keyset.id] = keyset
+        logger.debug(f"Keysets: {[k.id for k in self.keysets.values()]}")
+
+    async def _check_used_secrets(self, secrets):
+        """Checks if any of the secrets have already been used"""
+        logger.trace("Checking secrets.")
+        for s in secrets:
+            if await secret_used(s, db=self.db):
+                raise Exception(f"secret already used: {s}")
+        logger.trace("Secret check complete.")
 
     async def request_mint(self, amount: int) -> Invoice:
         """Request a Lightning invoice for minting tokens.
@@ -822,7 +906,7 @@ class Wallet(
         Returns:
             PostMintQuoteResponse: Mint Quote Response
         """
-        mint_quote_response = await super().mint_quote(amount)
+        mint_quote_response = await super().mint_quote(amount, self.unit)
         decoded_invoice = bolt11.decode(mint_quote_response.request)
         invoice = Invoice(
             amount=amount,
@@ -911,7 +995,7 @@ class Wallet(
                     )
 
         # split based on our wallet state
-        amounts = self.split_wallet_state(amount)
+        amounts = split or self.split_wallet_state(amount)
         # if no split was specified, we use the canonical split
         # amounts = split or amount_split(amount)
 
@@ -959,6 +1043,51 @@ class Wallet(
         self.verify_proofs_dleq(proofs)
         return await self.split(proofs=proofs, amount=0)
 
+    def swap_send_and_keep_output_amounts(
+        self, proofs: List[Proof], amount: int
+    ) -> Tuple[List[int], List[int]]:
+        """This function generates a suitable amount split for the outputs to keep and the outputs to send. It
+        calculates the amount to keep based on the wallet state and the amount to send based on the amount
+        provided.
+
+        Args:
+            proofs (List[Proof]): Proofs to be split.
+            amount (int): Amount to be sent.
+
+        Returns:
+            Tuple[List[int], List[int]]: Two lists of amounts, one for keeping and one for sending.
+        """
+        # create a suitable amount split based on the proofs provided
+        total = sum_proofs(proofs)
+        keep_amt, send_amt = total - amount, amount
+        logger.trace(f"Keep amount: {keep_amt}, send amount: {send_amt}")
+        logger.trace(f"Total input: {sum_proofs(proofs)}")
+        # generate splits for outputs
+        send_output_amounts_without_fee = amount_split(send_amt)
+        # add fees to outputs to send because we're nice
+        # TODO: fees_for_outputs does not include the fees to pay for themselves!
+        fees_for_outputs = amount_split(
+            self.get_fees_for_keyset(
+                send_output_amounts_without_fee, self.keysets[self.keyset_id]
+            )
+        )
+        send_outputs = send_output_amounts_without_fee + fees_for_outputs
+        logger.trace(
+            f"Send {sum(send_output_amounts_without_fee)} plus fees: {sum(fees_for_outputs)}"
+        )
+        # we subtract the fee we add to the output from the amount to keep
+        keep_amt -= sum(fees_for_outputs)
+        logger.trace(f"Keep amount: {keep_amt}")
+
+        # we subtract the fee for the entire transaction from the amount to keep
+        keep_amt -= self.get_fees_for_proofs(proofs)
+        logger.trace(f"Keep amount: {keep_amt}")
+
+        # we determine the amounts to keep based on the wallet state
+        keep_outputs = self.split_wallet_state(keep_amt)
+
+        return keep_outputs, send_outputs
+
     async def split(
         self,
         proofs: List[Proof],
@@ -988,32 +1117,11 @@ class Wallet(
         # potentially add witnesses to unlock provided proofs (if they indicate one)
         proofs = await self.add_witnesses_to_proofs(proofs)
 
-        # create a suitable amount split based on the proofs provided
-        total = sum_proofs(proofs)
-        keep_amt, send_amt = total - amount, amount
-        logger.trace(f"Keep amount: {keep_amt}, send amount: {send_amt}")
-        logger.trace(f"Total input: {sum_proofs(proofs)}")
-        # generate splits for outputs
-        send_output_amounts_without_fee = amount_split(send_amt)
-        # add fees to outputs to send because we're nice
-        # TODO: fees_for_outputs does not include the fees to pay for themselves!
-        fees_for_outputs = amount_split(
-            self.get_fees_for_proofs(send_output_amounts_without_fee)
+        # create a suitable amount lists to keep and send based on the proofs
+        # provided and the state of the wallet
+        keep_outputs, send_outputs = self.swap_send_and_keep_output_amounts(
+            proofs, amount
         )
-        send_outputs = send_output_amounts_without_fee + fees_for_outputs
-        logger.trace(
-            f"Send {sum(send_output_amounts_without_fee)} plus fees: {sum(fees_for_outputs)}"
-        )
-        # we subtract the fee we add to the output from the amount to keep
-        keep_amt -= self.get_fees_for_proofs(send_output_amounts_without_fee)
-        logger.trace(f"Keep amount: {keep_amt}")
-
-        # we subtract the fee for the entire transaction from the amount to keep
-        keep_amt -= self.get_fees_for_proofs(proofs)
-        logger.trace(f"Keep amount: {keep_amt}")
-
-        # we determine the amounts to keep based on the wallet state
-        keep_outputs = self.split_wallet_state(keep_amt)
 
         amounts = keep_outputs + send_outputs
         # generate secrets for new outputs
@@ -1068,7 +1176,7 @@ class Wallet(
         """
         if amount and not self.mint_info.supports_mpp("bolt11", self.unit):
             raise Exception("Mint does not support MPP, cannot specify amount.")
-        melt_quote = await self.melt_quote(invoice, amount)
+        melt_quote = await self.melt_quote(invoice, self.unit, amount)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
         )
@@ -1215,8 +1323,8 @@ class Wallet(
         for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
             if promise.id not in self.keysets:
                 logger.debug(f"Keyset {promise.id} not found in db. Loading from mint.")
-                # we don't have the keyset for this promise, so we load it
-                await self._load_mint_keys(promise.id)
+                # we don't have the keyset for this promise, so we load all keysets from the mint
+                await self.load_mint_keysets()
                 assert promise.id in self.keysets, "Could not load keyset."
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
             C = b_dhke.step3_alice(
@@ -1363,7 +1471,7 @@ class Wallet(
         Decodes the amount from a Lightning invoice and returns the
         total amount (amount+fees) to be paid.
         """
-        melt_quote = await self.melt_quote(invoice)
+        melt_quote = await self.melt_quote(invoice, self.unit)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote.fee_reserve)} as fee reserve."
         )
@@ -1394,14 +1502,14 @@ class Wallet(
 
         # select proofs that are not reserved
         proofs = [p for p in proofs if not p.reserved]
-        # select proofs that are in the active keysets of the mint
-        proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
+        # select proofs that are in the keysets of the mint
+        proofs = [p for p in proofs if p.id in self.keysets]
 
         send_proofs, fees = await self._select_proofs_to_send(proofs, amount, tolerance)
         if not send_proofs and offline:
             raise Exception(
                 "Could not select proofs in offline mode. Available amounts:"
-                f" {[p.amount for p in proofs]}"
+                f" {', '.join([Amount(self.unit, p.amount).str() for p in proofs])}"
             )
 
         if not send_proofs and not offline:
@@ -1422,7 +1530,7 @@ class Wallet(
         set_reserved: bool = False,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
-        Splits proofs such that a certain amount can be sent.
+        Splits proofs such that a desired amount can be sent.
 
         Args:
             proofs (List[Proof]): Proofs to split
@@ -1439,7 +1547,7 @@ class Wallet(
         proofs = [p for p in proofs if not p.reserved]
 
         # select proofs that are in the active keysets of the mint
-        proofs = [p for p in proofs if p.id in self.mint_keyset_ids or not p.id]
+        proofs = [p for p in proofs if p.id in self.keysets]
 
         spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
         logger.debug(
@@ -1571,8 +1679,7 @@ class Wallet(
         await self._init_private_key(mnemonic)
         await self.load_mint()
         print("Restoring tokens...")
-        keyset_ids = self.mint_keyset_ids
-        for keyset_id in keyset_ids:
+        for keyset_id in self.keysets.keys():
             await self.restore_tokens_for_keyset(keyset_id, to, batch)
 
     async def restore_promises_from_to(

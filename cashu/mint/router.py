@@ -182,7 +182,10 @@ async def keysets() -> KeysetsResponse:
     for id, keyset in ledger.keysets.items():
         keysets.append(
             KeysetsResponseKeyset(
-                id=id, unit=keyset.unit.name, active=keyset.active or False
+                id=keyset.id,
+                unit=keyset.unit.name,
+                active=keyset.active,
+                input_fee_ppk=keyset.input_fee_ppk,
             )
         )
     return KeysetsResponse(keysets=keysets)

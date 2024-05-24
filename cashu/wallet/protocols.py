@@ -18,7 +18,6 @@ class SupportsDb(Protocol):
 class SupportsKeysets(Protocol):
     keysets: Dict[str, WalletKeyset]  # holds keysets
     keyset_id: str
-    mint_keyset_ids: list[str]
     unit: Unit
 
 

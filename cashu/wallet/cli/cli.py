@@ -372,8 +372,9 @@ async def swap(ctx: Context):
 @coro
 async def balance(ctx: Context, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs(unit=False)
     unit_balances = wallet.balance_per_unit()
+    await wallet.load_proofs(reload=True)
+
     if len(unit_balances) > 1 and not ctx.obj["UNIT"]:
         print(f"You have balances in {len(unit_balances)} units:")
         print("")
@@ -397,7 +398,6 @@ async def balance(ctx: Context, verbose):
 
     await print_mint_balances(wallet)
 
-    await wallet.load_proofs(reload=True)
     if verbose:
         print(
             f"Balance: {wallet.unit.str(wallet.available_balance)} (pending:"
@@ -865,7 +865,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
         if mint:
             wallet.url = mint_url
             try:
-                mint_info: dict = (await wallet._load_mint_info()).dict()
+                mint_info: dict = (await wallet.load_mint_info()).dict()
                 print("")
                 print("---- Mint information ----")
                 print("")

@@ -1,6 +1,6 @@
 import math
 import uuid
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 from loguru import logger
 
@@ -21,12 +21,18 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
     keysets: Dict[str, WalletKeyset]  # holds keysets
     keyset_id: str
     db: Database
-    mint_keyset_ids: List[str]  # holds active keyset ids of the mint
     unit: Unit
 
-    def get_fees_for_proofs(self, proofs: List[Any]) -> int:
-        """TODO: THIS IS A DUMMY FUNCTION. IMPLEMENT."""
-        return math.ceil(len(proofs) * 0.1)
+    def get_fees_for_keyset(self, amounts: List[int], keyset: WalletKeyset) -> int:
+        fees = max(math.ceil(sum([keyset.input_fee_ppk for a in amounts]) / 1000), 0)
+        return fees
+
+    def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
+        # for each proof, find the keyset with the same id and sum the fees
+        fees = max(
+            math.ceil(sum([self.keysets[p.id].input_fee_ppk for p in proofs]) / 1000), 0
+        )
+        return fees
 
     async def _select_proofs_to_send(
         self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
@@ -58,7 +64,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             logger.debug(f"send_proofs: {[p.amount for p in send_proofs]}")
             logger.debug(f"target_amount: {target_amount}")
             logger.debug(f"p.amount: {p.amount}")
-            if sum_proofs(send_proofs) + p.amount < target_amount + tolerance:
+            if sum_proofs(send_proofs) + p.amount <= target_amount + tolerance:
                 send_proofs.append(p)
                 target_amount = amount_to_send + self.get_fees_for_proofs(send_proofs)
 
@@ -81,7 +87,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
 
         Rules:
         1) Proofs that are not marked as reserved
-        2) Proofs that have a keyset id that is in self.mint_keyset_ids (all active keysets of mint)
+        2) Proofs that have a different keyset than the activated keyset_id of the mint
         3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
         4) If the target amount is not reached, add proofs of the current keyset until it is.
 

@@ -413,7 +413,7 @@ class WalletKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: Union[bool, None] = True
-    input_fee_ppm: Optional[int] = None
+    input_fee_ppk: int = 0
 
     def __init__(
         self,
@@ -425,14 +425,14 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=True,
-        input_fee_ppm=None,
+        input_fee_ppk=0,
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = active
         self.mint_url = mint_url
-        self.input_fee_ppm = input_fee_ppm
+        self.input_fee_ppk = input_fee_ppk
 
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
@@ -443,7 +443,6 @@ class WalletKeyset:
 
         self.unit = Unit[unit]
 
-        logger.trace(f"Derived keyset id {self.id} from public keys.")
         if id and id != self.id:
             logger.warning(
                 f"WARNING: Keyset id {self.id} does not match the given id {id}."
@@ -490,6 +489,7 @@ class MintKeyset:
     active: bool
     unit: Unit
     derivation_path: str
+    input_fee_ppk: int
     seed: Optional[str] = None
     encrypted_seed: Optional[str] = None
     seed_encryption_method: Optional[str] = None
@@ -498,7 +498,6 @@ class MintKeyset:
     valid_to: Optional[str] = None
     first_seen: Optional[str] = None
     version: Optional[str] = None
-    input_fee_ppm: Optional[int] = None
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -515,7 +514,7 @@ class MintKeyset:
         active: Optional[bool] = None,
         unit: Optional[str] = None,
         version: Optional[str] = None,
-        input_fee_ppm: Optional[int] = None,
+        input_fee_ppk: Optional[int] = None,
         id: str = "",
     ):
         self.derivation_path = derivation_path
@@ -537,7 +536,10 @@ class MintKeyset:
         self.first_seen = first_seen
         self.active = bool(active) if active is not None else False
         self.version = version or settings.version
-        self.input_fee_ppm = input_fee_ppm
+        self.input_fee_ppk = input_fee_ppk or 0
+
+        if self.input_fee_ppk < 0:
+            raise Exception("Input fee must be non-negative.")
 
         self.version_tuple = tuple(
             [int(i) for i in self.version.split(".")] if self.version else []

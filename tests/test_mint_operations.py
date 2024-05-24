@@ -73,7 +73,7 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     invoice_dict = get_real_invoice(64)
     invoice_payment_request = invoice_dict["payment_request"]
 
-    mint_quote = await wallet1.melt_quote(invoice_payment_request)
+    mint_quote = await wallet1.melt_quote(invoice_payment_request, unit=wallet1.unit)
     total_amount = mint_quote.amount + mint_quote.fee_reserve
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
     melt_quote = await ledger.melt_quote(
@@ -163,7 +163,7 @@ async def test_split_with_no_outputs(wallet1: Wallet, ledger: Ledger):
     _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10, set_reserved=False)
     await assert_err(
         ledger.split(proofs=send_proofs, outputs=[]),
-        "inputs do not have same amount as outputs.",
+        "no outputs provided",
     )
 
 
@@ -189,7 +189,7 @@ async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledge
 
     await assert_err(
         ledger.split(proofs=send_proofs, outputs=outputs),
-        "inputs do not have same amount as outputs.",
+        "are not balanced",
     )
 
     # make sure we can still spend our tokens
@@ -213,7 +213,7 @@ async def test_split_with_input_more_than_outputs(wallet1: Wallet, ledger: Ledge
 
     await assert_err(
         ledger.split(proofs=inputs, outputs=outputs),
-        "inputs do not have same amount as outputs",
+        "are not balanced",
     )
 
     # make sure we can still spend our tokens
@@ -227,6 +227,9 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     await wallet1.mint(128, split=[64, 64], id=invoice.id)
     inputs1 = wallet1.proofs[:1]
     inputs2 = wallet1.proofs[1:]
+
+    assert inputs1[0].amount == 64
+    assert inputs2[0].amount == 64
 
     output_amounts = [64]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(

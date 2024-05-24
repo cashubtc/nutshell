@@ -89,6 +89,7 @@ async def test_api_keysets(ledger: Ledger):
                 "id": "009a1f293253e41e",
                 "unit": "sat",
                 "active": True,
+                "input_fee_ppk": 0,
             },
         ]
     }
@@ -312,7 +313,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
     invoice_payment_request = invoice.bolt11
 
-    quote = await wallet.melt_quote(invoice_payment_request)
+    quote = await wallet.melt_quote(invoice_payment_request, unit=wallet.unit)
     assert quote.amount == 64
     assert quote.fee_reserve == 0
 
@@ -357,7 +358,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     invoice_dict = get_real_invoice(62)
     invoice_payment_request = invoice_dict["payment_request"]
 
-    quote = await wallet.melt_quote(invoice_payment_request)
+    quote = await wallet.melt_quote(invoice_payment_request, unit=wallet.unit)
     assert quote.amount == 62
     assert quote.fee_reserve == 2
 

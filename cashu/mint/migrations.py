@@ -763,3 +763,13 @@ async def m018_duplicate_deprecated_keyset_ids(db: Database):
                     keyset.seed_encryption_method,
                 ),
             )
+
+
+async def m019_add_fee_to_keysets(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN input_fee_ppk INTEGER"
+        )
+        await conn.execute(
+            f"UPDATE {table_with_schema(db, 'keysets')} SET input_fee_ppk = 0"
+        )

@@ -12,7 +12,7 @@ from ...wallet.wallet import Wallet as Wallet
 
 async def print_balance(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs(reload=True, unit=wallet.unit)
+    await wallet.load_proofs(reload=True)
     print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
 
 
@@ -24,7 +24,7 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
         force_select (bool, optional): Force the user to select a unit. Defaults to False.
     """
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs(reload=True, unit=False)
+    await wallet.load_proofs(reload=True)
     # show balances per unit
     unit_balances = wallet.balance_per_unit()
     if ctx.obj["UNIT"] in [u.name for u in unit_balances] and not force_select:

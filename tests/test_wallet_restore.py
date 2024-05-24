@@ -42,7 +42,7 @@ async def reset_wallet_db(wallet: Wallet):
     await wallet.db.execute("DELETE FROM proofs")
     await wallet.db.execute("DELETE FROM proofs_used")
     await wallet.db.execute("DELETE FROM keysets")
-    await wallet._load_mint()
+    await wallet.load_mint()
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -206,7 +206,7 @@ async def test_restore_wallet_after_split_to_send(wallet3: Wallet):
     wallet3.proofs = []
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 100)
-    assert wallet3.balance == 64 * 2
+    assert wallet3.balance == 96
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
 
@@ -233,7 +233,7 @@ async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: W
     assert wallet3.proofs == []
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 100)
-    assert wallet3.balance == 64 + 2 * 32
+    assert wallet3.balance == 96
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 32
 
@@ -276,7 +276,7 @@ async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
     assert wallet3.proofs == []
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 100)
-    assert wallet3.balance == 64 + 2 * 32 + 32
+    assert wallet3.balance == 128
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
 
@@ -311,7 +311,7 @@ async def test_restore_wallet_after_send_twice(
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 10)
     box.add(wallet3.proofs)
-    assert wallet3.balance == 5
+    assert wallet3.balance == 4
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 2
 
@@ -333,7 +333,7 @@ async def test_restore_wallet_after_send_twice(
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 15)
     box.add(wallet3.proofs)
-    assert wallet3.balance == 7
+    assert wallet3.balance == 6
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 2
 
@@ -370,7 +370,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 20)
     box.add(wallet3.proofs)
-    assert wallet3.balance == 138
+    assert wallet3.balance == 90
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
 
@@ -389,6 +389,6 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     assert wallet3.proofs == []
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 50)
-    assert wallet3.balance == 182
+    assert wallet3.balance == 118
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64

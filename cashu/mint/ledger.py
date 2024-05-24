@@ -218,6 +218,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 seed=seed or self.seed,
                 derivation_path=derivation_path,
                 version=version or settings.version,
+                input_fee_ppk=settings.mint_input_fee_ppk,
             )
             logger.debug(f"Generated new keyset {keyset.id}.")
             if autosave:
@@ -491,6 +492,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
 
+        # we already know from _verify_outputs that all outputs have the same unit
         output_units = set([k.unit for k in [self.keysets[o.id] for o in outputs]])
         if not len(output_units) == 1:
             raise TransactionError("outputs have different units")

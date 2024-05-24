@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from environs import Env  # type: ignore
 from pydantic import BaseSettings, Extra, Field
@@ -58,10 +58,9 @@ class MintSettings(CashuSettings):
 
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
-    mint_swap_fee: Dict[str, Dict[str, int]] = Field(
-        default={"sat": {"fee": 1, "batch": 10}}
-    )
     mint_max_secret_length: int = Field(default=512)
+
+    mint_input_fee_ppk: int = Field(default=0)
 
 
 class MintBackends(MintSettings):

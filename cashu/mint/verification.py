@@ -1,5 +1,5 @@
 import math
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
 
@@ -110,6 +110,8 @@ class LedgerVerification(
     ):
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
+        if not outputs:
+            raise TransactionError("no outputs provided.")
         # Verify all outputs have the same keyset id
         if not all([o.id == outputs[0].id for o in outputs]):
             raise TransactionError("outputs have different keyset ids.")
@@ -255,17 +257,11 @@ class LedgerVerification(
             raise TransactionUnitError("input and output keysets have different units.")
         return units_proofs[0]
 
-    def get_fees_for_proofs(self, proofs: List[Any]) -> int:
-        """TODO: THIS IS A DUMMY FUNCTION. IMPLEMENT."""
+    def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         if not len(set([self.keysets[p.id].unit for p in proofs])) == 1:
             raise TransactionUnitError("inputs have different units.")
-        unit = self.keysets[proofs[0].id].unit
-        if not settings.mint_swap_fee.get(unit.name):
-            return 0
-
-        fee_per_batch = settings.mint_swap_fee[unit.name]["fee"]
-        batch_size = settings.mint_swap_fee[unit.name]["batch"]
-        return math.ceil(len(proofs) * fee_per_batch / batch_size)
+        fee = math.ceil(sum([self.keysets[p.id].input_fee_ppk for p in proofs]))
+        return fee
 
     def _verify_equation_balanced(
         self,
@@ -275,6 +271,11 @@ class LedgerVerification(
         """Verify that Σinputs - Σoutputs = 0.
         Outputs can be BlindedSignature or BlindedMessage.
         """
+        if not proofs:
+            raise TransactionError("no proofs provided.")
+        if not outs:
+            raise TransactionError("no outputs provided.")
+
         _ = self._verify_units_match(proofs, outs)
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
         fees_inputs = self.get_fees_for_proofs(proofs)

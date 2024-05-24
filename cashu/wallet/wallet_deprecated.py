@@ -23,6 +23,7 @@ from ..core.models import (
     GetInfoResponse_deprecated,
     GetMintResponse_deprecated,
     KeysetsResponse_deprecated,
+    KeysetsResponseKeyset,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
     PostMintQuoteResponse,
@@ -80,7 +81,7 @@ def async_ensure_mint_loaded_deprecated(func):
 
     async def wrapper(self, *args, **kwargs):
         if not self.keysets:
-            await self._load_mint()
+            await self.load_mint()
         return await func(self, *args, **kwargs)
 
     return wrapper
@@ -166,9 +167,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         return keyset
 
     @async_set_httpx_client
-    async def _get_keys_of_keyset_deprecated(
-        self, url: str, keyset_id: str
-    ) -> WalletKeyset:
+    async def _get_keyset_deprecated(self, url: str, keyset_id: str) -> WalletKeyset:
         """API that gets the keys of a specific keyset from the mint.
 
 
@@ -204,7 +203,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
-    async def _get_keyset_ids_deprecated(self, url: str) -> List[str]:
+    async def _get_keysets_deprecated(self, url: str) -> List[KeysetsResponseKeyset]:
         """API that gets a list of all active keysets of the mint.
 
         Args:
@@ -224,7 +223,11 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         keysets_dict = resp.json()
         keysets = KeysetsResponse_deprecated.parse_obj(keysets_dict)
         assert len(keysets.keysets), Exception("did not receive any keysets")
-        return keysets.keysets
+        keysets_new = [
+            KeysetsResponseKeyset(id=id, unit="sat", active=True)
+            for id in keysets.keysets
+        ]
+        return keysets_new
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
