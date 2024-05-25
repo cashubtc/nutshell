@@ -285,7 +285,7 @@ class Wallet(
         for keyset in keysets:
             self.keysets[keyset.id] = keyset
         logger.trace(
-            f"Loacded keysets from db: {[(k.id, k.unit, k.input_fee_ppk) for k in self.keysets.values()]}"
+            f"Loaded keysets from db: {[(k.id, k.unit.name, k.input_fee_ppk) for k in self.keysets.values()]}"
         )
 
     async def _check_used_secrets(self, secrets):
@@ -869,6 +869,7 @@ class Wallet(
         self,
         proofs: List[Proof],
         amount: int,
+        *,
         set_reserved: bool = False,
         offline: bool = False,
         tolerance: int = 0,
@@ -890,19 +891,24 @@ class Wallet(
         proofs = self.active_proofs(proofs)
 
         # coin selection for potentially offline sending
-        send_proofs, fees = await self._select_proofs_to_send(proofs, amount, tolerance)
-        if not send_proofs and offline:
-            raise Exception(
-                "Could not select proofs in offline mode. Available amounts:"
-                f" {', '.join([Amount(self.unit, p.amount).str() for p in proofs])}"
-            )
+        send_proofs = await self._select_proofs_to_send(proofs, amount, tolerance)
+        fees = self.get_fees_for_proofs(send_proofs)
 
+        logger.debug(
+            f"select_to_send: selected: {self.unit.str(sum_proofs(send_proofs))} (+ {self.unit.str(fees)} fees) – wanted: {self.unit.str(amount)}"
+        )
         # offline coin selection unsuccessful, we need to swap proofs before we can send
-        if not send_proofs and not offline:
-            # we set the proofs as reserved later
-            _, send_proofs = await self.split_to_send(
-                proofs, amount, set_reserved=False
-            )
+        if not send_proofs or sum_proofs(send_proofs) > amount + tolerance:
+            if not offline:
+                # we set the proofs as reserved later
+                _, send_proofs = await self.split_to_send(
+                    proofs, amount, set_reserved=False
+                )
+            else:
+                raise Exception(
+                    "Could not select proofs in offline mode. Available amounts:"
+                    f" {', '.join([Amount(self.unit, p.amount).str() for p in proofs])}"
+                )
 
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
@@ -912,6 +918,7 @@ class Wallet(
         self,
         proofs: List[Proof],
         amount: int,
+        *,
         secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
     ) -> Tuple[List[Proof], List[Proof]]:
