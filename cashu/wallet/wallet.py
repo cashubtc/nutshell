@@ -874,7 +874,7 @@ class Wallet(
         tolerance: int = 0,
     ) -> Tuple[List[Proof], int]:
         """
-        Selects proofs such that a certain amount can be sent.
+        Selects proofs such that a desired amount can be sent.
 
         Args:
             proofs (List[Proof]): Proofs to split
@@ -886,11 +886,10 @@ class Wallet(
             int: Fees for the transaction
         """
 
-        # select proofs that are not reserved
-        proofs = [p for p in proofs if not p.reserved]
-        # select proofs that are in the keysets of the mint
-        proofs = [p for p in proofs if p.id in self.keysets]
+        # select proofs that are not reserved and are in the active keysets of the mint
+        proofs = self.active_proofs(proofs)
 
+        # coin selection for potentially offline sending
         send_proofs, fees = await self._select_proofs_to_send(proofs, amount, tolerance)
         if not send_proofs and offline:
             raise Exception(
@@ -898,6 +897,7 @@ class Wallet(
                 f" {', '.join([Amount(self.unit, p.amount).str() for p in proofs])}"
             )
 
+        # offline coin selection unsuccessful, we need to swap proofs before we can send
         if not send_proofs and not offline:
             # we set the proofs as reserved later
             _, send_proofs = await self.split_to_send(
@@ -916,7 +916,10 @@ class Wallet(
         set_reserved: bool = False,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
-        Splits proofs such that a desired amount can be sent.
+        Swaps a set of proofs with the mint to get a set that sums up to a desired amount that can be sent. The remaining
+        proofs are returned to be kept. All newly created proofs will be stored in the database but if `set_reserved` is set
+        to True, the proofs to be sent (which sum up to `amount`) will be marked as reserved so they aren't used in other
+        transactions.
 
         Args:
             proofs (List[Proof]): Proofs to split
@@ -929,12 +932,10 @@ class Wallet(
         Returns:
             Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
         """
-        # select proofs that are not reserved
-        proofs = [p for p in proofs if not p.reserved]
+        # select proofs that are not reserved and are in the active keysets of the mint
+        proofs = self.active_proofs(proofs)
 
-        # select proofs that are in the active keysets of the mint
-        proofs = [p for p in proofs if p.id in self.keysets]
-
+        # coin selection for swapping
         spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
         logger.debug(
             f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
@@ -962,6 +963,21 @@ class Wallet(
     def proof_amounts(self):
         """Returns a sorted list of amounts of all proofs"""
         return [p.amount for p in sorted(self.proofs, key=lambda p: p.amount)]
+
+    def active_proofs(self, proofs: List[Proof]):
+        """Returns a list of proofs that
+        - have an id that is in the current `self.keysets` which have the unit in `self.unit`
+        - are not reserved
+        """
+
+        def is_active_proof(p: Proof) -> bool:
+            return (
+                p.id in self.keysets
+                and self.keysets[p.id].unit == self.unit
+                and not p.reserved
+            )
+
+        return [p for p in proofs if is_active_proof(p)]
 
     def balance_per_keyset(self) -> Dict[str, Dict[str, Union[int, str]]]:
         ret: Dict[str, Dict[str, Union[int, str]]] = {

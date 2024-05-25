@@ -94,19 +94,13 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         except Exception as e:
             logger.error(e)
 
-    async def _generate_secret(self) -> str:
+    async def _generate_random_secret(self) -> str:
         """Returns base64 encoded deterministic random string.
 
         NOTE: This method should probably retire after `deterministic_secrets`. We are
         deriving secrets from a counter but don't store the respective blinding factor.
         We won't be able to restore any ecash generated with these secrets.
         """
-        # secret_counter = await bump_secret_derivation(db=self.db, keyset_id=keyset_id)
-        # logger.trace(f"secret_counter: {secret_counter}")
-        # s, _, _ = await self.generate_determinstic_secret(secret_counter, keyset_id)
-        # # return s.decode("utf-8")
-        # return hashlib.sha256(s).hexdigest()
-
         # return random 32 byte hex string
         return hashlib.sha256(os.urandom(32)).hexdigest()
 
@@ -230,7 +224,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         # append predefined secrets (to send) to random secrets (to keep)
         # generate secrets to keep
         secrets = [
-            await self._generate_secret() for s in range(len(keep_outputs))
+            await self._generate_random_secret() for s in range(len(keep_outputs))
         ] + secret_locks
         # TODO: derive derivation paths from secrets
         derivation_paths = ["custom"] * len(secrets)

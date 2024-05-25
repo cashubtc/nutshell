@@ -217,7 +217,7 @@ async def pay(
     if wallet.available_balance < total_amount:
         print(" Error: Balance too low.")
         return
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    send_proofs, fees = await wallet.select_to_send(wallet.proofs, total_amount)
     try:
         melt_response = await wallet.melt(
             send_proofs, invoice, quote.fee_reserve, quote.quote
@@ -348,7 +348,7 @@ async def swap(ctx: Context):
     total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
-    _, send_proofs = await outgoing_wallet.split_to_send(
+    send_proofs, fees = await outgoing_wallet.select_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
     await outgoing_wallet.melt(
@@ -977,7 +977,7 @@ async def selfpay(ctx: Context, all: bool = False):
     mint_balance_dict = await wallet.balance_per_minturl()
     mint_balance = int(mint_balance_dict[wallet.url]["available"])
     # send balance once to mark as reserved
-    await wallet.split_to_send(wallet.proofs, mint_balance, None, set_reserved=True)
+    await wallet.select_to_send(wallet.proofs, mint_balance, set_reserved=True)
     # load all reserved proofs (including the one we just sent)
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if not len(reserved_proofs):

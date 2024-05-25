@@ -1,4 +1,5 @@
 import asyncio
+import math
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -568,14 +569,24 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             if not mint_quote.checking_id:
                 raise TransactionError("mint quote has no checking id")
 
+            internal_fee = Amount(
+                unit,
+                math.ceil(
+                    mint_quote.amount
+                    / 100
+                    * settings.mint_internal_quote_input_fee_reserve_percent
+                ),
+            )
+            amount = Amount(unit, mint_quote.amount)
+
             payment_quote = PaymentQuoteResponse(
                 checking_id=mint_quote.checking_id,
-                amount=Amount(unit, mint_quote.amount),
-                fee=Amount(unit, amount=0),
+                amount=amount,
+                fee=internal_fee,
             )
             logger.info(
                 f"Issuing internal melt quote: {request} ->"
-                f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
+                f" {mint_quote.quote} ({amount.str()} + {internal_fee.str()} fees)"
             )
         else:
             # not internal, get payment quote by backend
@@ -671,11 +682,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         return melt_quote
 
-    async def melt_mint_settle_internally(self, melt_quote: MeltQuote) -> MeltQuote:
+    async def melt_mint_settle_internally(
+        self, melt_quote: MeltQuote, proofs: List[Proof]
+    ) -> MeltQuote:
         """Settles a melt quote internally if there is a mint quote with the same payment request.
+
+        `proofs` are passed to determine the ecash input transaction fees for this melt quote.
 
         Args:
             melt_quote (MeltQuote): Melt quote to settle.
+            proofs (List[Proof]): Proofs provided for paying the Lightning invoice.
 
         Raises:
             Exception: Melt quote already paid.
@@ -691,9 +707,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         )
         if not mint_quote:
             return melt_quote
+
         # we settle the transaction internally
         if melt_quote.paid:
             raise TransactionError("melt quote already paid")
+
+        # verify that the amount of the input proofs is equal to the amount of the quote
+        total_provided = sum_proofs(proofs)
+        total_needed = melt_quote.amount + melt_quote.fee_reserve
+        if not total_provided >= total_needed:
+            raise TransactionError(
+                f"not enough inputs provided for melt. Provided: {total_provided}, needed: {total_needed}"
+            )
 
         # verify amounts from bolt11 invoice
         bolt11_request = melt_quote.request
@@ -719,8 +744,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
         )
 
-        # we handle this transaction internally
-        melt_quote.fee_paid = 0
+        # the internal transaction costs at least the ecash input fee
+        melt_quote.fee_paid = min(
+            self.get_fees_for_proofs(proofs), melt_quote.fee_reserve
+        )
         melt_quote.paid = True
         melt_quote.paid_time = int(time.time())
         await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
@@ -772,7 +799,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
-        total_needed = melt_quote.amount + (melt_quote.fee_reserve or 0)
+        total_needed = melt_quote.amount + melt_quote.fee_reserve
         if not total_provided >= total_needed:
             raise TransactionError(
                 f"not enough inputs provided for melt. Provided: {total_provided}, needed: {total_needed}"
@@ -793,7 +820,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         await self._set_proofs_pending(proofs, quote_id=melt_quote.quote)
         try:
             # settle the transaction internally if there is a mint quote with the same payment request
-            melt_quote = await self.melt_mint_settle_internally(melt_quote)
+            melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
             # quote not paid yet (not internal), pay it with the backend
             if not melt_quote.paid:
                 logger.debug(f"Lightning: pay invoice {melt_quote.request}")
