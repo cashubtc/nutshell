@@ -192,8 +192,8 @@ async def store_keyset(
 
 async def get_keysets(
     id: str = "",
-    mint_url: str = "",
-    unit: str = "",
+    mint_url: Optional[str] = None,
+    unit: Optional[str] = None,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ) -> List[WalletKeyset]:

@@ -858,6 +858,8 @@ async def wallets(ctx):
 @coro
 async def info(ctx: Context, mint: bool, mnemonic: bool):
     wallet: Wallet = ctx.obj["WALLET"]
+    await wallet.load_keysets_from_db(unit=None)
+
     print(f"Version: {settings.version}")
     print(f"Wallet: {ctx.obj['WALLET_NAME']}")
     if settings.debug:
@@ -866,30 +868,38 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
     mint_list = await list_mints(wallet)
     print("Mints:")
     for mint_url in mint_list:
-        print(f"  - {mint_url}")
+        print(f"    - URL: {mint_url}")
+        keysets_strs = [
+            f"ID: {k.id}  unit: {k.unit.name}  active: {str(bool(k.active)) + ' ' if k.active else str(bool(k.active))}  fee (ppk): {k.input_fee_ppk}"
+            for k in wallet.keysets.values()
+        ]
+        if keysets_strs:
+            print("        - Keysets:")
+            for k in keysets_strs:
+                print(f"            - {k}")
         if mint:
             wallet.url = mint_url
             try:
                 mint_info: dict = (await wallet.load_mint_info()).dict()
-                print("")
-                print("---- Mint information ----")
-                print("")
-                print(f"Mint URL: {mint_url}")
                 if mint_info:
-                    print(f"Mint name: {mint_info['name']}")
+                    print(f"        - Mint name: {mint_info['name']}")
                     if mint_info.get("description"):
-                        print(f"Description: {mint_info['description']}")
+                        print(f"        - Description: {mint_info['description']}")
                     if mint_info.get("description_long"):
-                        print(f"Long description: {mint_info['description_long']}")
-                    if mint_info.get("contact"):
-                        print(f"Contact: {mint_info['contact']}")
+                        print(
+                            f"        - Long description: {mint_info['description_long']}"
+                        )
+                    if mint_info.get("contact") and mint_info.get("contact") != [
+                        ["", ""]
+                    ]:
+                        print(f"        - Contact: {mint_info['contact']}")
                     if mint_info.get("version"):
-                        print(f"Version: {mint_info['version']}")
+                        print(f"        - Version: {mint_info['version']}")
                     if mint_info.get("motd"):
-                        print(f"Message of the day: {mint_info['motd']}")
+                        print(f"        - Message of the day: {mint_info['motd']}")
                     if mint_info.get("nuts"):
                         print(
-                            "Supported NUTS:"
+                            "        - Supported NUTS:"
                             f" {', '.join(['NUT-'+str(k) for k in mint_info['nuts'].keys()])}"
                         )
                         print("")
@@ -901,14 +911,16 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
         assert wallet.mnemonic
         print(f"Mnemonic:\n - {wallet.mnemonic}")
     if settings.env_file:
-        print(f"Settings: {settings.env_file}")
+        print("Settings:")
+        print(f"    - File: {settings.env_file}")
     if settings.tor:
         print(f"Tor enabled: {settings.tor}")
     if settings.nostr_private_key:
         try:
             client = NostrClient(private_key=settings.nostr_private_key, connect=False)
-            print(f"Nostr public key: {client.public_key.bech32()}")
-            print(f"Nostr relays: {', '.join(settings.nostr_relays)}")
+            print("Nostr:")
+            print(f"    - Public key: {client.public_key.bech32()}")
+            print(f"    - Relays: {', '.join(settings.nostr_relays)}")
         except Exception:
             print("Nostr: Error. Invalid key.")
     if settings.socks_proxy:

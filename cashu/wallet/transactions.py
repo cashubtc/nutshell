@@ -10,7 +10,7 @@ from ..core.base import (
     WalletKeyset,
 )
 from ..core.db import Database
-from ..core.helpers import sum_proofs
+from ..core.helpers import amount_summary, sum_proofs
 from ..wallet.crud import (
     update_proof,
 )
@@ -82,13 +82,10 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         if sum_proofs(proofs) < amount_to_send:
             logger.trace("_select_proofs_to_send: not enough proofs to pay the amount.")
             return []
-        # amounts_we_have = [
-        #     (amount, len([p for p in proofs if p.amount == amount]))
-        #     for amount in set([p.amount for p in proofs])
-        # ]
-        # logger.trace(
-        #     f"_select_proofs_to_send – amount_to_send: {amount_to_send} – amounts we have: {amounts_we_have}"
-        # )
+        logger.trace(
+            f"_select_proofs_to_send – amount_to_send: {amount_to_send} – amounts we have: {amount_summary(proofs, self.unit)}"
+        )
+
         sorted_proofs = sorted(proofs, key=lambda p: p.amount)
 
         next_bigger = next(
@@ -148,11 +145,9 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         Raises:
             Exception: If the balance is too low to send the amount
         """
-        # amounts_we_have = [
-        #     (amount, len([p for p in proofs if p.amount == amount]))
-        #     for amount in set([p.amount for p in proofs])
-        # ]
-        # logger.debug(f"_select_proofs_to_split - amounts we have: {amounts_we_have}")
+        logger.debug(
+            f"_select_proofs_to_split - amounts we have: {amount_summary(proofs, self.unit)}"
+        )
         send_proofs: List[Proof] = []
 
         # check that enough spendable proofs exist

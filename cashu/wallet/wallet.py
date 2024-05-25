@@ -7,7 +7,6 @@ from bip32 import BIP32
 from loguru import logger
 
 from ..core.base import (
-    Amount,
     BlindedMessage,
     BlindedSignature,
     DLEQWallet,
@@ -21,7 +20,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
-from ..core.helpers import calculate_number_of_blank_outputs, sum_proofs
+from ..core.helpers import amount_summary, calculate_number_of_blank_outputs, sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.models import (
     PostCheckStateResponse,
@@ -279,9 +278,16 @@ class Wallet(
             f"Proofs loaded for keysets: {' '.join([k.id + f' ({k.unit})' for k in self.keysets.values()])}"
         )
 
-    async def load_keysets_from_db(self):
+    async def load_keysets_from_db(
+        self, url: Union[str, None] = "", unit: Union[str, None] = ""
+    ):
         """Load all keysets of the selected mint and unit from the database into self.keysets."""
-        keysets = await get_keysets(mint_url=self.url, unit=self.unit.name, db=self.db)
+        # so that the caller can set unit = None, otherwise use defaults
+        if unit == "":
+            unit = self.unit.name
+        if url == "":
+            url = self.url
+        keysets = await get_keysets(mint_url=url, unit=unit, db=self.db)
         for keyset in keysets:
             self.keysets[keyset.id] = keyset
         logger.trace(
@@ -903,14 +909,9 @@ class Wallet(
                     proofs, amount, set_reserved=False
                 )
             else:
-                amounts_we_have = [
-                    (amount, len([p for p in proofs if p.amount == amount]))
-                    for amount in set([p.amount for p in proofs])
-                ]
-                amounts_we_have.sort(key=lambda x: x[0])
                 raise Exception(
                     "Could not select proofs in offline mode. Available amounts:"
-                    f" {', '.join([f'{Amount(self.unit, a).str()} ({c}x)' for a, c in amounts_we_have])}"
+                    + amount_summary(proofs, self.unit)
                 )
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
