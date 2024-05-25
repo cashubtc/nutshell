@@ -61,7 +61,7 @@ class MintSettings(CashuSettings):
     mint_max_secret_length: int = Field(default=512)
 
     mint_input_fee_ppk: int = Field(default=0)
-    mint_internal_quote_input_fee_reserve_percent: float = Field(default=1.0)
+    mint_internal_quote_input_fee_reserve_percent: float = Field(default=0.0)
 
 
 class MintBackends(MintSettings):
