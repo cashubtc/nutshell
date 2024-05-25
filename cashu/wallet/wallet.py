@@ -886,30 +886,32 @@ class Wallet(
             List[Proof]: Proofs to send
             int: Fees for the transaction
         """
-
         # select proofs that are not reserved and are in the active keysets of the mint
         proofs = self.active_proofs(proofs)
-
         # coin selection for potentially offline sending
-        send_proofs = await self._select_proofs_to_send(proofs, amount, tolerance)
+        send_proofs = await self._select_proofs_to_send(proofs, amount)
         fees = self.get_fees_for_proofs(send_proofs)
-
-        logger.debug(
+        logger.trace(
             f"select_to_send: selected: {self.unit.str(sum_proofs(send_proofs))} (+ {self.unit.str(fees)} fees) – wanted: {self.unit.str(amount)}"
         )
         # offline coin selection unsuccessful, we need to swap proofs before we can send
         if not send_proofs or sum_proofs(send_proofs) > amount + tolerance:
             if not offline:
+                logger.debug("Offline coin selection unsuccessful. Splitting proofs.")
                 # we set the proofs as reserved later
                 _, send_proofs = await self.split_to_send(
                     proofs, amount, set_reserved=False
                 )
             else:
+                amounts_we_have = [
+                    (amount, len([p for p in proofs if p.amount == amount]))
+                    for amount in set([p.amount for p in proofs])
+                ]
+                amounts_we_have.sort(key=lambda x: x[0])
                 raise Exception(
                     "Could not select proofs in offline mode. Available amounts:"
-                    f" {', '.join([Amount(self.unit, p.amount).str() for p in proofs])}"
+                    f" {', '.join([f'{Amount(self.unit, a).str()} ({c}x)' for a, c in amounts_we_have])}"
                 )
-
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
         return send_proofs, fees
@@ -943,15 +945,20 @@ class Wallet(
         proofs = self.active_proofs(proofs)
 
         # coin selection for swapping
-        spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
+        # spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
+        swap_proofs = await self._select_proofs_to_send(proofs, amount)
+        # add proofs from inactive keysets to swap_proofs to get rid of them
+        swap_proofs += [
+            p
+            for p in proofs
+            if not self.keysets[p.id].active and not p.reserved and p not in swap_proofs
+        ]
+
+        fees = self.get_fees_for_proofs(swap_proofs)
         logger.debug(
             f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
         )
-        if secret_lock:
-            logger.debug(f"Spending conditions: {secret_lock}")
-        keep_proofs, send_proofs = await self.split(
-            spendable_proofs, amount, secret_lock
-        )
+        keep_proofs, send_proofs = await self.split(swap_proofs, amount, secret_lock)
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
         return keep_proofs, send_proofs

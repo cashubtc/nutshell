@@ -77,19 +77,19 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         return send_proofs
 
     async def _select_proofs_to_send(
-        self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
+        self, proofs: List[Proof], amount_to_send: int
     ) -> List[Proof]:
         if sum_proofs(proofs) < amount_to_send:
-            logger.info("not enough proofs to pay the amount.")
+            logger.trace("_select_proofs_to_send: not enough proofs to pay the amount.")
             return []
-        amounts_we_have = [
-            (amount, len([p for p in proofs if p.amount == amount]))
-            for amount in set([p.amount for p in proofs])
-        ]
-        logger.debug(
-            f"_select_proofs_to_send – amount_to_send: {amount_to_send} – amounts we have: {amounts_we_have}"
-        )
-        sorted_proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
+        # amounts_we_have = [
+        #     (amount, len([p for p in proofs if p.amount == amount]))
+        #     for amount in set([p.amount for p in proofs])
+        # ]
+        # logger.trace(
+        #     f"_select_proofs_to_send – amount_to_send: {amount_to_send} – amounts we have: {amounts_we_have}"
+        # )
+        sorted_proofs = sorted(proofs, key=lambda p: p.amount)
 
         next_bigger = next(
             (p for p in sorted_proofs if p.amount > amount_to_send), None
@@ -117,7 +117,9 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         if sum_selected_proofs < amount_to_send and next_bigger:
             return [next_bigger]
 
-        logger.debug(f"selected proof amounts: {[p.amount for p in selected_proofs]}")
+        logger.trace(
+            f"_select_proofs_to_send - selected proof amounts: {[p.amount for p in selected_proofs]}"
+        )
         return selected_proofs
 
     async def _select_proofs_to_split(
@@ -146,11 +148,11 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         Raises:
             Exception: If the balance is too low to send the amount
         """
-        amounts_we_have = [
-            (amount, len([p for p in proofs if p.amount == amount]))
-            for amount in set([p.amount for p in proofs])
-        ]
-        logger.debug(f"_select_proofs_to_split - amounts we have: {amounts_we_have}")
+        # amounts_we_have = [
+        #     (amount, len([p for p in proofs if p.amount == amount]))
+        #     for amount in set([p.amount for p in proofs])
+        # ]
+        # logger.debug(f"_select_proofs_to_split - amounts we have: {amounts_we_have}")
         send_proofs: List[Proof] = []
 
         # check that enough spendable proofs exist
@@ -178,7 +180,9 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             proof_to_add = sorted_proofs_of_current_keyset.pop()
             send_proofs.append(proof_to_add)
 
-        logger.trace(f"selected proof amounts: {[p.amount for p in send_proofs]}")
+        logger.trace(
+            f"_select_proofs_to_split – selected proof amounts: {[p.amount for p in send_proofs]}"
+        )
         fees = self.get_fees_for_proofs(send_proofs)
         return send_proofs, fees
 
