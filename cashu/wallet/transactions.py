@@ -79,9 +79,9 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
     async def _select_proofs_to_send(
         self, proofs: List[Proof], amount_to_send: int
     ) -> List[Proof]:
+        # check that enough spendable proofs exist
         if sum_proofs(proofs) < amount_to_send:
-            logger.trace("_select_proofs_to_send: not enough proofs to pay the amount.")
-            return []
+            raise Exception("balance too low.")
         logger.trace(
             f"_select_proofs_to_send – amount_to_send: {amount_to_send} – amounts we have: {amount_summary(proofs, self.unit)}"
         )

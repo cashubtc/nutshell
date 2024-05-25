@@ -177,14 +177,14 @@ async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledge
         wallet1.proofs, 10, set_reserved=False
     )
 
-    all_send_proofs = send_proofs + keep_proofs
+    too_many_proofs = send_proofs + send_proofs
 
-    # generate outputs for all proofs, not only the sent ones
+    # generate more outputs than inputs
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
-        len(all_send_proofs)
+        len(too_many_proofs)
     )
     outputs, rs = wallet1._construct_outputs(
-        [p.amount for p in all_send_proofs], secrets, rs
+        [p.amount for p in too_many_proofs], secrets, rs
     )
 
     await assert_err(

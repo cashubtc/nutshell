@@ -370,7 +370,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 20)
     box.add(wallet3.proofs)
-    assert wallet3.balance == 90
+    assert wallet3.balance == 84
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
 
@@ -389,6 +389,6 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     assert wallet3.proofs == []
     assert wallet3.balance == 0
     await wallet3.restore_promises_from_to(0, 50)
-    assert wallet3.balance == 118
+    assert wallet3.balance == 108
     await wallet3.invalidate(wallet3.proofs, check_spendable=True)
     assert wallet3.balance == 64
