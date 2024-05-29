@@ -955,6 +955,8 @@ class Wallet(
         """
         # select proofs that are not reserved and are in the active keysets of the mint
         proofs = self.active_proofs(proofs)
+        if sum_proofs(proofs) < amount:
+            raise Exception("balance too low.")
 
         # coin selection for swapping
         # spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
