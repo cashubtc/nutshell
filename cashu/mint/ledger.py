@@ -1,5 +1,4 @@
 import asyncio
-import math
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -569,14 +568,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             if not mint_quote.checking_id:
                 raise TransactionError("mint quote has no checking id")
 
-            internal_fee = Amount(
-                unit,
-                math.ceil(
-                    mint_quote.amount
-                    / 100
-                    * settings.mint_internal_quote_input_fee_reserve_percent
-                ),
-            )
+            internal_fee = Amount(unit, 0)  # no internal fees
             amount = Amount(unit, mint_quote.amount)
 
             payment_quote = PaymentQuoteResponse(
@@ -712,14 +704,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         if melt_quote.paid:
             raise TransactionError("melt quote already paid")
 
-        # verify that the amount of the input proofs is equal to the amount of the quote
-        total_provided = sum_proofs(proofs)
-        total_needed = melt_quote.amount + melt_quote.fee_reserve
-        if not total_provided >= total_needed:
-            raise TransactionError(
-                f"not enough inputs provided for melt. Provided: {total_provided}, needed: {total_needed}"
-            )
-
         # verify amounts from bolt11 invoice
         bolt11_request = melt_quote.request
         invoice_obj = bolt11.decode(bolt11_request)
@@ -744,17 +728,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
         )
 
-        # the internal transaction costs at least the ecash input fee
-        melt_quote.fee_paid = min(
-            self.get_fees_for_proofs(proofs), melt_quote.fee_reserve
-        )
+        melt_quote.fee_paid = 0  # no internal fees
         melt_quote.paid = True
         melt_quote.paid_time = int(time.time())
-        await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
 
         mint_quote.paid = True
         mint_quote.paid_time = melt_quote.paid_time
-        await self.crud.update_mint_quote(quote=mint_quote, db=self.db)
+
+        async with self.db.connect() as conn:
+            await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
+            await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)
 
         return melt_quote
 
@@ -799,7 +782,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
-        total_needed = melt_quote.amount + melt_quote.fee_reserve
+        total_needed = (
+            melt_quote.amount
+            + melt_quote.fee_reserve
+            + self.get_fees_for_proofs(proofs)
+        )
         if not total_provided >= total_needed:
             raise TransactionError(
                 f"not enough inputs provided for melt. Provided: {total_provided}, needed: {total_needed}"

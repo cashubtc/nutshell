@@ -1,6 +1,6 @@
 import math
 import uuid
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 from loguru import logger
 
@@ -33,6 +33,9 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             math.ceil(sum([self.keysets[p.id].input_fee_ppk for p in proofs]) / 1000), 0
         )
         return fees
+
+    def get_fees_for_proofs_ppk(self, proofs: List[Proof]) -> int:
+        return sum([self.keysets[p.id].input_fee_ppk for p in proofs])
 
     async def _select_proofs_to_send_(
         self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
@@ -77,13 +80,18 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         return send_proofs
 
     async def _select_proofs_to_send(
-        self, proofs: List[Proof], amount_to_send: int
+        self,
+        proofs: List[Proof],
+        amount_to_send: Union[int, float],
+        *,
+        include_fees: bool = True,
     ) -> List[Proof]:
         # check that enough spendable proofs exist
         if sum_proofs(proofs) < amount_to_send:
-            raise Exception("balance too low.")
+            return []
+
         logger.trace(
-            f"_select_proofs_to_send – amount_to_send: {amount_to_send} – amounts we have: {amount_summary(proofs, self.unit)}"
+            f"_select_proofs_to_send – amount_to_send: {amount_to_send} – amounts we have: {amount_summary(proofs, self.unit)} (sum: {sum_proofs(proofs)})"
         )
 
         sorted_proofs = sorted(proofs, key=lambda p: p.amount)
@@ -96,26 +104,36 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         smaller_proofs = sorted(smaller_proofs, key=lambda p: p.amount, reverse=True)
 
         if not smaller_proofs and next_bigger:
+            logger.trace(
+                "> no proofs smaller than amount_to_send, adding next bigger proof"
+            )
             return [next_bigger]
 
         if not smaller_proofs and not next_bigger:
+            logger.trace("> no proofs to select from")
             return []
 
         remainder = amount_to_send
         selected_proofs = [smaller_proofs[0]]
-        logger.debug(f"adding proof: {smaller_proofs[0].amount}")
-        remainder -= smaller_proofs[0].amount
+        fee_ppk = self.get_fees_for_proofs_ppk(selected_proofs) if include_fees else 0
+        logger.debug(f"adding proof: {smaller_proofs[0].amount} – fee: {fee_ppk} ppk")
+        remainder -= smaller_proofs[0].amount - fee_ppk / 1000
+        logger.debug(f"remainder: {remainder}")
         if remainder > 0:
+            logger.trace(
+                f"> selecting more proofs from {amount_summary(smaller_proofs[1:], self.unit)} sum: {sum_proofs(smaller_proofs[1:])} to reach {remainder}"
+            )
             selected_proofs += await self._select_proofs_to_send(
-                smaller_proofs[1:], remainder
+                smaller_proofs[1:], remainder, include_fees=include_fees
             )
         sum_selected_proofs = sum_proofs(selected_proofs)
 
         if sum_selected_proofs < amount_to_send and next_bigger:
+            logger.trace("> adding next bigger proof")
             return [next_bigger]
 
         logger.trace(
-            f"_select_proofs_to_send - selected proof amounts: {[p.amount for p in selected_proofs]}"
+            f"_select_proofs_to_send - selected proof amounts: {amount_summary(selected_proofs, self.unit)} (sum: {sum_proofs(selected_proofs)})"
         )
         return selected_proofs
 

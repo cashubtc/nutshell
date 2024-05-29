@@ -58,8 +58,8 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3) -> Wallet:
         keyset_ids = mint_wallet._get_proofs_keysets(t.proofs)
         logger.trace(f"Keysets in tokens: {' '.join(set(keyset_ids))}")
         await mint_wallet.load_mint()
-        _, _ = await mint_wallet.redeem(t.proofs)
-        print(f"Received {mint_wallet.unit.str(sum_proofs(t.proofs))}")
+        proofs_to_keep, _ = await mint_wallet.redeem(t.proofs)
+        print(f"Received {mint_wallet.unit.str(sum_proofs(proofs_to_keep))}")
 
     # return the last mint_wallet
     return mint_wallet
@@ -171,6 +171,7 @@ async def send(
     legacy: bool,
     offline: bool = False,
     include_dleq: bool = False,
+    include_fees: bool = False,
 ):
     """
     Prints token to send to stdout.
@@ -201,7 +202,11 @@ async def send(
     await wallet.load_mint()
     # get a proof with specific amount
     send_proofs, fees = await wallet.select_to_send(
-        wallet.proofs, amount, set_reserved=False, offline=offline, tolerance=0
+        wallet.proofs,
+        amount,
+        set_reserved=False,
+        offline=offline,
+        include_fees=include_fees,
     )
 
     token = await wallet.serialize_proofs(

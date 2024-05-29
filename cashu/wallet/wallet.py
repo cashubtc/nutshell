@@ -878,10 +878,15 @@ class Wallet(
         *,
         set_reserved: bool = False,
         offline: bool = False,
-        tolerance: int = 0,
+        include_fees: bool = True,
     ) -> Tuple[List[Proof], int]:
         """
-        Selects proofs such that a desired amount can be sent.
+        Selects proofs such that a desired `amount` can be sent. If the offline coin selection is unsuccessful,
+        and `offline` is set to False (default), we split the available proofs with the mint to get the desired `amount`.
+
+        If `set_reserved` is set to True, the proofs are marked as reserved so they aren't used in other transactions.
+
+        If `include_fees` is set to False, the swap fees are not included in the amount to be selected.
 
         Args:
             proofs (List[Proof]): Proofs to split
@@ -894,14 +899,19 @@ class Wallet(
         """
         # select proofs that are not reserved and are in the active keysets of the mint
         proofs = self.active_proofs(proofs)
+        if sum_proofs(proofs) < amount:
+            raise Exception("balance too low.")
+
         # coin selection for potentially offline sending
-        send_proofs = await self._select_proofs_to_send(proofs, amount)
+        send_proofs = await self._select_proofs_to_send(
+            proofs, amount, include_fees=include_fees
+        )
         fees = self.get_fees_for_proofs(send_proofs)
         logger.trace(
             f"select_to_send: selected: {self.unit.str(sum_proofs(send_proofs))} (+ {self.unit.str(fees)} fees) – wanted: {self.unit.str(amount)}"
         )
         # offline coin selection unsuccessful, we need to swap proofs before we can send
-        if not send_proofs or sum_proofs(send_proofs) > amount + tolerance:
+        if not send_proofs or sum_proofs(send_proofs) > amount + fees:
             if not offline:
                 logger.debug("Offline coin selection unsuccessful. Splitting proofs.")
                 # we set the proofs as reserved later
@@ -924,6 +934,7 @@ class Wallet(
         *,
         secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
+        include_fees: bool = True,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
         Swaps a set of proofs with the mint to get a set that sums up to a desired amount that can be sent. The remaining
@@ -947,7 +958,9 @@ class Wallet(
 
         # coin selection for swapping
         # spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
-        swap_proofs = await self._select_proofs_to_send(proofs, amount)
+        swap_proofs = await self._select_proofs_to_send(
+            proofs, amount, include_fees=True
+        )
         # add proofs from inactive keysets to swap_proofs to get rid of them
         swap_proofs += [
             p

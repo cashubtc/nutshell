@@ -217,7 +217,9 @@ async def pay(
     if wallet.available_balance < total_amount:
         print(" Error: Balance too low.")
         return
-    send_proofs, fees = await wallet.select_to_send(wallet.proofs, total_amount)
+    send_proofs, fees = await wallet.select_to_send(
+        wallet.proofs, total_amount, include_fees=True
+    )
     try:
         melt_response = await wallet.melt(
             send_proofs, invoice, quote.fee_reserve, quote.quote
@@ -457,6 +459,14 @@ async def balance(ctx: Context, verbose):
     help="Force offline send.",
     type=bool,
 )
+@click.option(
+    "--include-fees",
+    "-f",
+    default=False,
+    is_flag=True,
+    help="Include fees for receiving token.",
+    type=bool,
+)
 @click.pass_context
 @coro
 async def send_command(
@@ -470,6 +480,7 @@ async def send_command(
     verbose: bool,
     yes: bool,
     offline: bool,
+    include_fees: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
@@ -481,6 +492,7 @@ async def send_command(
             legacy=legacy,
             offline=offline,
             include_dleq=dleq,
+            include_fees=include_fees,
         )
     else:
         await send_nostr(
@@ -989,7 +1001,9 @@ async def selfpay(ctx: Context, all: bool = False):
     mint_balance_dict = await wallet.balance_per_minturl()
     mint_balance = int(mint_balance_dict[wallet.url]["available"])
     # send balance once to mark as reserved
-    await wallet.select_to_send(wallet.proofs, mint_balance, set_reserved=True)
+    await wallet.select_to_send(
+        wallet.proofs, mint_balance, set_reserved=True, include_fees=False
+    )
     # load all reserved proofs (including the one we just sent)
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if not len(reserved_proofs):
