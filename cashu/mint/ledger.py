@@ -491,19 +491,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.trace("called mint")
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
-
-        # we already know from _verify_outputs that all outputs have the same unit
-        output_units = set([k.unit for k in [self.keysets[o.id] for o in outputs]])
-        if not len(output_units) == 1:
-            raise TransactionError("outputs have different units")
-        output_unit = list(output_units)[0]
+        # we already know from _verify_outputs that all outputs have the same unit because they have the same keyset
+        output_unit = self.keysets[outputs[0].id].unit
 
         self.locks[quote_id] = (
             self.locks.get(quote_id) or asyncio.Lock()
         )  # create a new lock if it doesn't exist
         async with self.locks[quote_id]:
             quote = await self.get_mint_quote(quote_id=quote_id)
-
             if not quote.paid:
                 raise QuoteNotPaidError()
             if quote.issued:
@@ -782,6 +777,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # make sure that the outputs (for fee return) are in the same unit as the quote
         if outputs:
+            # _verify_outputs checks if all outputs have the same unit
             await self._verify_outputs(outputs, skip_amount_check=True)
             outputs_unit = self.keysets[outputs[0].id].unit
             if not melt_quote.unit == outputs_unit.name:
