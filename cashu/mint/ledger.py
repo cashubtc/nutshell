@@ -301,9 +301,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     async def _generate_change_promises(
         self,
-        input_amount: int,
-        output_amount: int,
-        output_fee_paid: int,
+        fee_provided: int,
+        fee_paid: int,
         outputs: Optional[List[BlindedMessage]],
         keyset: Optional[MintKeyset] = None,
     ) -> List[BlindedSignature]:
@@ -329,34 +328,35 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             List[BlindedSignature]: Signatures on the outputs.
         """
         # we make sure that the fee is positive
-        user_fee_paid = input_amount - output_amount
-        overpaid_fee = user_fee_paid - output_fee_paid
+        overpaid_fee = fee_provided - fee_paid
+
+        if overpaid_fee == 0 or outputs is None:
+            return []
+
         logger.debug(
-            f"Lightning fee was: {output_fee_paid}. User paid: {user_fee_paid}. "
+            f"Lightning fee was: {fee_paid}. User provided: {fee_provided}. "
             f"Returning difference: {overpaid_fee}."
         )
 
-        if overpaid_fee > 0 and outputs is not None:
-            return_amounts = amount_split(overpaid_fee)
+        return_amounts = amount_split(overpaid_fee)
 
-            # We return at most as many outputs as were provided or as many as are
-            # required to pay back the overpaid fee.
-            n_return_outputs = min(len(outputs), len(return_amounts))
+        # We return at most as many outputs as were provided or as many as are
+        # required to pay back the overpaid fee.
+        n_return_outputs = min(len(outputs), len(return_amounts))
 
-            # we only need as many outputs as we have change to return
-            outputs = outputs[:n_return_outputs]
-            # we sort the return_amounts in descending order so we only
-            # take the largest values in the next step
-            return_amounts_sorted = sorted(return_amounts, reverse=True)
-            # we need to imprint these amounts into the blanket outputs
-            for i in range(len(outputs)):
-                outputs[i].amount = return_amounts_sorted[i]  # type: ignore
-            if not self._verify_no_duplicate_outputs(outputs):
-                raise TransactionError("duplicate promises.")
-            return_promises = await self._generate_promises(outputs, keyset)
-            return return_promises
-        else:
-            return []
+        # we only need as many outputs as we have change to return
+        outputs = outputs[:n_return_outputs]
+
+        # we sort the return_amounts in descending order so we only
+        # take the largest values in the next step
+        return_amounts_sorted = sorted(return_amounts, reverse=True)
+        # we need to imprint these amounts into the blanket outputs
+        for i in range(len(outputs)):
+            outputs[i].amount = return_amounts_sorted[i]  # type: ignore
+        if not self._verify_no_duplicate_outputs(outputs):
+            raise TransactionError("duplicate promises.")
+        return_promises = await self._generate_promises(outputs, keyset)
+        return return_promises
 
     # ------- TRANSACTIONS -------
 
@@ -593,6 +593,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             if not payment_quote.fee.unit == unit:
                 raise TransactionError("payment quote fee units do not match")
 
+        # verify that the amount of the proofs is not larger than the maximum allowed
+        if (
+            settings.mint_max_peg_out
+            and payment_quote.amount.to(unit).amount > settings.mint_max_peg_out
+        ):
+            raise NotAllowedError(
+                f"Maximum melt amount is {settings.mint_max_peg_out} sat."
+            )
+
         # We assume that the request is a bolt11 invoice, this works since we
         # support only the bol11 method for now.
         invoice_obj = bolt11.decode(melt_quote.request)
@@ -782,14 +791,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
-        total_needed = (
-            melt_quote.amount
-            + melt_quote.fee_reserve
-            + self.get_fees_for_proofs(proofs)
-        )
-        if not total_provided >= total_needed:
+        input_fees = self.get_fees_for_proofs(proofs)
+        total_needed = melt_quote.amount + melt_quote.fee_reserve + input_fees
+        # we need the fees specifically for lightning to return the overpaid fees
+        fee_reserve_provided = total_provided - melt_quote.amount - input_fees
+        if total_provided < total_needed:
             raise TransactionError(
                 f"not enough inputs provided for melt. Provided: {total_provided}, needed: {total_needed}"
+            )
+        if fee_reserve_provided < melt_quote.fee_reserve:
+            raise TransactionError(
+                f"not enough fee reserve provided for melt. Provided fee reserve: {fee_reserve_provided}, needed: {melt_quote.fee_reserve}"
             )
 
         # verify that the amount of the proofs is not larger than the maximum allowed
@@ -840,9 +852,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             return_promises: List[BlindedSignature] = []
             if outputs:
                 return_promises = await self._generate_change_promises(
-                    input_amount=total_provided,
-                    output_amount=melt_quote.amount,
-                    output_fee_paid=melt_quote.fee_paid,
+                    fee_provided=fee_reserve_provided,
+                    fee_paid=melt_quote.fee_paid,
                     outputs=outputs,
                     keyset=self.keysets[outputs[0].id],
                 )
