@@ -166,7 +166,7 @@ async def test_split_not_enough_fees(wallet1: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif_with_fees(is_regtest, reason="only works with FakeWallet")
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(100, ledger, wallet1)
@@ -213,7 +213,7 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")
 async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
-    set_ledger_keyset_fees(100, ledger)
+    set_ledger_keyset_fees(100, ledger, wallet1)
 
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(128)
