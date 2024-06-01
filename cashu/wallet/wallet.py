@@ -197,15 +197,25 @@ class Wallet(
                 await store_keyset(keyset=wallet_keyset, db=self.db)
 
         for mint_keyset in mint_keysets_dict.values():
-            # if the active attribute has changed, update it in the database
-            if (
-                mint_keyset.id in keysets_in_db_dict
-                and mint_keyset.active != keysets_in_db_dict[mint_keyset.id].active
-            ):
-                keysets_in_db_dict[mint_keyset.id].active = mint_keyset.active
-                await update_keyset(
-                    keyset=keysets_in_db_dict[mint_keyset.id], db=self.db
-                )
+            # if the active or the fee attributes have changed, update them in the database
+            if mint_keyset.id in keysets_in_db_dict:
+                changed = False
+                if mint_keyset.active != keysets_in_db_dict[mint_keyset.id].active:
+                    keysets_in_db_dict[mint_keyset.id].active = mint_keyset.active
+                    changed = True
+                if (
+                    mint_keyset.input_fee_ppk
+                    and mint_keyset.input_fee_ppk
+                    != keysets_in_db_dict[mint_keyset.id].input_fee_ppk
+                ):
+                    keysets_in_db_dict[
+                        mint_keyset.id
+                    ].input_fee_ppk = mint_keyset.input_fee_ppk
+                    changed = True
+                if changed:
+                    await update_keyset(
+                        keyset=keysets_in_db_dict[mint_keyset.id], db=self.db
+                    )
 
         await self.load_keysets_from_db()
 
