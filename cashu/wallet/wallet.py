@@ -822,6 +822,18 @@ class Wallet(
 
         return outputs, rs_return
 
+    async def construct_outputs(self, amounts: List[int]) -> List[BlindedMessage]:
+        """Constructs outputs for a list of amounts.
+
+        Args:
+            amounts (List[int]): List of amounts to construct outputs for.
+
+        Returns:
+            List[BlindedMessage]: List of blinded messages that can be sent to the mint.
+        """
+        secrets, rs, _ = await self.generate_n_secrets(len(amounts))
+        return self._construct_outputs(amounts, secrets, rs)[0]
+
     async def _store_proofs(self, proofs):
         try:
             async with self.db.connect() as conn:
