@@ -43,7 +43,7 @@ class FakeWallet(LightningBackend):
         32,
     ).hex()
 
-        supported_units = set([Unit.sat, Unit.msat, Unit.usd, Unit.eur])
+    supported_units = set([Unit.sat, Unit.msat, Unit.usd, Unit.eur])
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
