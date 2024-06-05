@@ -1511,7 +1511,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
                 return [proof]
 
         # start with the proofs with the largest amount and add them until the target amount is reached
-        send_proofs = []
+        send_proofs: List[Proof] = []
         while sum_proofs(send_proofs) < amount_to_send:
             proof_to_add = sorted_proofs_of_current_keyset.pop()
             send_proofs.append(proof_to_add)
@@ -1519,7 +1519,7 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
 
     def _try_find_exact_proofs_subset(
         self, proofs: List[Proof], amount_to_send: int
-    ) -> List[Proof]:
+    ) -> Optional[List[Proof]]:
         """
         Returns a subset of proofs summing exactly to amount_to_send, or None if there is no such subset.
 
