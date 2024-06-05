@@ -237,6 +237,78 @@ async def test_split_to_send(wallet1: Wallet):
     assert wallet1.balance == 64
     assert wallet1.available_balance == 32
 
+    get_spendable = await wallet1._select_proofs_to_send(wallet1.proofs, 5)
+    assert sum_proofs(get_spendable) == 32
+    keep_proofs, spendable_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 5, set_reserved=True
+    )
+    assert sum_proofs(keep_proofs) == 27
+    assert sum_proofs(spendable_proofs) == 5
+    assert [p.amount for p in keep_proofs] == [1, 2, 8, 16]
+    assert wallet1.balance == 64
+    assert wallet1.available_balance == 27
+
+    keep_proofs, spendable_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 9, set_reserved=True
+    )
+    assert wallet1.balance == 64
+    assert wallet1.available_balance == 18
+    assert sum_proofs(keep_proofs) == 0
+    assert sum_proofs(spendable_proofs) == 9
+    assert [p.amount for p in keep_proofs] == []
+    assert [p.amount for p in spendable_proofs] == [1, 8]
+
+    # wallet1 has [2, 16] left, so we will select the 16 to spend 5
+    get_spendable = await wallet1._select_proofs_to_send(wallet1.proofs, 5)
+    assert sum_proofs(get_spendable) == 16
+
+
+@pytest.mark.asyncio
+async def test_split_to_send2(wallet1: Wallet):
+    invoice = await wallet1.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id)
+
+    keep_proofs, spendable_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 9, set_reserved=True
+    )
+    assert sum_proofs(keep_proofs) == 55
+    assert sum_proofs(spendable_proofs) == 9
+    assert [p.amount for p in keep_proofs] == [1, 2, 4, 16, 32]
+    assert [p.amount for p in spendable_proofs] == [1, 8]
+    assert wallet1.balance == 64
+    assert wallet1.available_balance == 55
+
+
+@pytest.mark.asyncio
+async def test_split_to_send3(wallet1: Wallet):
+    invoice = await wallet1.request_mint(66)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(66, id=invoice.id)
+    invoice = await wallet1.request_mint(4)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(4, id=invoice.id)
+    invoice = await wallet1.request_mint(2)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(2, id=invoice.id)
+    invoice = await wallet1.request_mint(2)
+    pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(2, id=invoice.id)
+    assert wallet1.balance == 74
+    assert sorted([p.amount for p in wallet1.proofs]) == [2, 2, 2, 4, 64]
+
+    get_spendable = await wallet1._select_proofs_to_send(wallet1.proofs, 8)
+    assert sorted([p.amount for p in get_spendable]) == [2, 2, 4]
+    keep_proofs, spendable_proofs = await wallet1.split_to_send(
+        wallet1.proofs, 8, set_reserved=True
+    )
+    assert sum_proofs(keep_proofs) == 0
+    assert sum_proofs(spendable_proofs) == 8
+    assert [p.amount for p in keep_proofs] == []
+    assert [p.amount for p in spendable_proofs] == [8]
+    assert wallet1.balance == 74
+    assert wallet1.available_balance == 66
+
 
 @pytest.mark.asyncio
 async def test_split_more_than_balance(wallet1: Wallet):
