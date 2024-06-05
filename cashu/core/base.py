@@ -606,6 +606,7 @@ class Unit(Enum):
     sat = 0
     msat = 1
     usd = 2
+    eur = 4
 
     def str(self, amount: int) -> str:
         if self == Unit.sat:
@@ -614,6 +615,8 @@ class Unit(Enum):
             return f"{amount} msat"
         elif self == Unit.usd:
             return f"${amount/100:.2f} USD"
+        elif self == Unit.eur:
+            return f"${amount/100:.2f} EUR"            
         else:
             raise Exception("Invalid unit")
 
