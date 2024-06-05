@@ -36,6 +36,10 @@ for key, value in settings.dict().items():
         "mint_corelightning_rest_macaroon",
     ]:
         value = "********" if value is not None else None
+
+    if key == "mint_database" and value and value.startswith("postgres://"):
+        value = "postgres://********"
+
     logger.debug(f"{key}: {value}")
 
 wallets_module = importlib.import_module("cashu.lightning")
