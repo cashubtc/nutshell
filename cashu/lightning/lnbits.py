@@ -1,10 +1,12 @@
 # type: ignore
 from typing import Optional
+import math
 
 import httpx
 from bolt11 import (
     decode,
 )
+from loguru import logger
 
 from ..core.base import Amount, MeltQuote, PostMeltQuoteRequest, Unit
 from ..core.helpers import fee_reserve
@@ -186,8 +188,8 @@ class LNbitsWallet(LightningBackend):
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
-    ) -> PaymentQuoteResponse:
-        logger.debug(f"self.unit: {self.unit.name} melt_quote.unit: {melt_quote.unit}")
+    ) -> PaymentQuoteResponse:        
+        assert self.unit.name == melt_quote.unit, "Lnbits self.unit must equal melt_quote.unit."
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
@@ -210,8 +212,10 @@ class LNbitsWallet(LightningBackend):
             )
 
         # usd and eur require rate conversion
-        amount_sat = amount.to(Unit.sat, round="up")
-        fees_sat = fees.to(Unit.sat, round="up")
+        amount_sat = amount.to(Unit.sat, round="up").amount
+        fees_sat = fees.to(Unit.sat, round="up").amount
+        logger.debug(f"lnbits conversion request: {amount_sat} SATS to: {self.unit.name}")
+        r = None  # Initialize r before the try block
         try:
             r = await self.client.post(
                 url=f"{self.endpoint}/api/v1/conversion",
@@ -219,33 +223,27 @@ class LNbitsWallet(LightningBackend):
                 timeout=None,
             )
             r.raise_for_status()
-        except Exception:
-            error_message = r.json()["detail"]["msg"]
-            raise Exception(error_message)
+        except Exception as e:
+            error_message = str(e)
+            logger.error(f"lnbits conversion exception: {error_message}")
+            if r is not None:                
+                error_message = r.json().get("detail", error_message)                
+            return PaymentResponse(error_message=error_message)
+        
         data = r.json()
         logger.debug(f"lnbits conversion response: {data}")
-        amount_cent = int(float(data.get(upper(self.unit.name))) * 100)
-        fees_cent =  int(fees_sat / amount_sat * amount_cent)  
-        logger.debug(f"PaymentQuoteResponse: {amount:amount_cent, checking_id: invoice_obj.payment_hash, fee:fees_cent}")    
+        # Retrieve the amount in dollars and convert to a float
+        amount_fiat = float(data.get(str(self.unit).upper()))
+        # Convert dollars to cents and round up
+        amount_cent = math.ceil(amount_fiat * 100)
+        # Calculate fees in cents based on the ratio of fees_sat to amount_sat and round up
+        fees_cent = math.ceil(fees_sat / amount_sat * amount_cent)
+
+        logger.debug(f"PaymentQuoteResponse: amount={amount_cent}, checking_id={invoice_obj.payment_hash}, fee={fees_cent}")
+
         quote = PaymentQuoteResponse(
             amount=Amount(self.unit, amount=amount_cent),
             checking_id=invoice_obj.payment_hash,
             fee=Amount(self.unit, amount=fees_cent),
         )
-        return quote
-
-    
-    # async def get_payment_quote(
-    #     self, melt_quote: PostMeltQuoteRequest
-    # ) -> PaymentQuoteResponse:
-    #     invoice_obj = decode(melt_quote.request)
-    #     assert invoice_obj.amount_msat, "invoice has no amount."
-    #     amount_msat = int(invoice_obj.amount_msat)
-    #     fees_msat = fee_reserve(amount_msat)
-    #     fees = Amount(unit=Unit.msat, amount=fees_msat)
-    #     amount = Amount(unit=Unit.msat, amount=amount_msat)
-    #     return PaymentQuoteResponse(
-    #         checking_id=invoice_obj.payment_hash,
-    #         fee=fees.to(self.unit, round="up"),
-    #         amount=amount.to(self.unit, round="up"),
-    #     )
+        return quote       

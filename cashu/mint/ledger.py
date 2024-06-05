@@ -553,8 +553,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         if mint_quote:
             if not request == mint_quote.request:
                 raise TransactionError("bolt11 requests do not match")
-            if not mint_quote.unit == melt_quote.unit:
-                raise TransactionError("units do not match")
+            # if not mint_quote.unit == melt_quote.unit:
+            #     raise TransactionError("units do not match")
             if not mint_quote.method == method.name:
                 raise TransactionError("methods do not match")
             if mint_quote.paid:
@@ -562,13 +562,20 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             if mint_quote.issued:
                 raise TransactionError("mint quote already issued")
             if not mint_quote.checking_id:
-                raise TransactionError("mint quote has no checking id")
-
-            payment_quote = PaymentQuoteResponse(
-                checking_id=mint_quote.checking_id,
-                amount=Amount(unit, mint_quote.amount),
-                fee=Amount(unit, amount=0),
-            )
+                raise TransactionError("mint quote has no checking id")            
+            
+            if mint_quote.unit == melt_quote.unit:
+                # return payment quote based on mint quote data
+                payment_quote = PaymentQuoteResponse(
+                    checking_id=mint_quote.checking_id,
+                    amount=Amount(unit, mint_quote.amount),
+                    fee=Amount(unit, amount=0),
+                )
+            else:
+                # if quote requires unit conversion get payment quote by backend
+                payment_quote = await self.backends[method][unit].get_payment_quote(
+                    melt_quote=melt_quote
+                )
             logger.info(
                 f"Issuing internal melt quote: {request} ->"
                 f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
@@ -697,12 +704,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         if not invoice_obj.amount_msat:
             raise TransactionError("invoice has no amount.")
-        if not mint_quote.amount == melt_quote.amount:
-            raise TransactionError("amounts do not match")
+        # if not mint_quote.amount == melt_quote.amount:
+        #     raise TransactionError("amounts do not match")
         if not bolt11_request == mint_quote.request:
             raise TransactionError("bolt11 requests do not match")
-        if not mint_quote.unit == melt_quote.unit:
-            raise TransactionError("units do not match")
+        # if not mint_quote.unit == melt_quote.unit:
+        #     raise TransactionError("units do not match")
         if not mint_quote.method == melt_quote.method:
             raise TransactionError("methods do not match")
         if mint_quote.paid:
