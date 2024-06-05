@@ -29,7 +29,8 @@ from .base import (
 
 
 class FakeWallet(LightningBackend):
-    fake_btc_price = 1e8 / 1337
+    fake_btcusd_price = 1e8 / 1556
+    fake_btceur_price = 1e8 / 1672
     queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
     paid_invoices: Set[str] = set()
@@ -42,7 +43,7 @@ class FakeWallet(LightningBackend):
         32,
     ).hex()
 
-    supported_units = set([Unit.sat, Unit.msat, Unit.usd])
+        supported_units = set([Unit.sat, Unit.msat, Unit.usd, Unit.eur])
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
@@ -87,13 +88,16 @@ class FakeWallet(LightningBackend):
         tags.add(TagChar.payment_hash, payment_hash)
 
         self.payment_secrets[payment_hash] = secret
-
         amount_msat = 0
         if self.unit == Unit.sat:
             amount_msat = MilliSatoshi(amount.to(Unit.msat, round="up").amount)
         elif self.unit == Unit.usd:
             amount_msat = MilliSatoshi(
-                math.ceil(amount.amount / self.fake_btc_price * 1e9)
+                math.ceil(amount.amount / self.fake_btcusd_price * 1e9)
+            )
+        elif self.unit == Unit.eur:
+            amount_msat = MilliSatoshi(
+                math.ceil(amount.amount / self.fake_btceur_price * 1e9)
             )
         else:
             raise NotImplementedError()
@@ -164,9 +168,14 @@ class FakeWallet(LightningBackend):
             fees = Amount(unit=Unit.msat, amount=fees_msat)
             amount = Amount(unit=Unit.msat, amount=amount_msat)
         elif self.unit == Unit.usd:
-            amount_usd = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btc_price)
+            amount_usd = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btcusd_price)
             amount = Amount(unit=Unit.usd, amount=amount_usd)
             fees = Amount(unit=Unit.usd, amount=2)
+        elif self.unit == Unit.eur:
+            amount_eur = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btceur_price)
+            amount = Amount(unit=Unit.eur, amount=amount_eur)
+            fees = Amount(unit=Unit.eur, amount=2)
+
         else:
             raise NotImplementedError()
 
