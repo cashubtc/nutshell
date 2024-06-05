@@ -3,6 +3,7 @@ import copy
 import json
 import time
 import uuid
+from collections import Counter
 from itertools import groupby
 from posixpath import join
 from typing import Dict, List, Optional, Tuple, Union
@@ -1437,7 +1438,12 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         Selects proofs that can be used with the current mint. Implements a simple coin selection algorithm.
 
         The algorithm has two objectives: Get rid of all tokens from old epochs and include additional proofs from
-        the current epoch starting from the proofs with the largest amount.
+        the current epoch if the tokens from old epochs are not enough to cover amount_to_send. When selecting
+        additional proofs from the current epoch:
+        - If we can pay exactly with a subset of the proofs on hand, we do that.
+        - Otherwise, if we have any proofs larger than the required amount, we use the smallest such proof.
+        - Otherwise, we keep adding the largest remaining proof until we have enough.
+        This algorithm is referred to as PESS (prefer exact or smallest single).
 
         Rules:
         1) Proofs that are not marked as reserved
@@ -1473,20 +1479,96 @@ class Wallet(LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets):
         ]
         send_proofs += proofs_old_epochs
 
-        # coinselect based on amount only from the current keyset
-        # start with the proofs with the largest amount and add them until the target amount is reached
-        proofs_current_epoch = [
-            p for p in proofs if p.id == self.keysets[self.keyset_id].id
-        ]
-        sorted_proofs_of_current_keyset = sorted(
-            proofs_current_epoch, key=lambda p: p.amount
-        )
+        # pick additional proofs from the current keyset if they are needed 
+        remaining_amount_to_make_up = amount_to_send - sum_proofs(send_proofs)
+        if remaining_amount_to_make_up > 0:
+            proofs_current_epoch = [
+                p for p in proofs if p.id == self.keysets[self.keyset_id].id
+            ]
+            send_proofs.extend(self._select_proofs_to_send_pess(proofs_current_epoch, remaining_amount_to_make_up))
 
+        logger.trace(f"selected proof amounts: {[p.amount for p in send_proofs]}")
+        return send_proofs
+
+    def _select_proofs_to_send_pess(
+        self, proofs: List[Proof], amount_to_send: int
+    ) -> List[Proof]:
+        """
+        Select proofs which sum to at least amount_to_send, using the PESS algorithm described above.
+        """
+
+        # use an exact subset of the proofs available to make up the amount if possible
+        exact_proofs_subset = self._try_find_exact_proofs_subset(proofs, amount_to_send)
+        if exact_proofs_subset is not None:
+            return exact_proofs_subset
+
+        # if we have any proofs larger than the required amount, use the smallest such proof
+        sorted_proofs_of_current_keyset = sorted(
+            proofs, key=lambda p: p.amount
+        )
+        for proof in sorted_proofs_of_current_keyset:
+            if proof.amount >= amount_to_send:
+                return [proof]
+
+        # start with the proofs with the largest amount and add them until the target amount is reached
+        send_proofs = []
         while sum_proofs(send_proofs) < amount_to_send:
             proof_to_add = sorted_proofs_of_current_keyset.pop()
             send_proofs.append(proof_to_add)
+        return send_proofs
 
-        logger.trace(f"selected proof amounts: {[p.amount for p in send_proofs]}")
+    def _try_find_exact_proofs_subset(
+        self, proofs: List[Proof], amount_to_send: int
+    ) -> List[Proof]:
+        """
+        Returns a subset of proofs summing exactly to amount_to_send, or None if there is no such subset.
+
+        The algorithm used here takes advantage of the fact that proof sizes are powers of two:
+        - We initially naively try to use the proof sizes implied by amount_to_send's binary representation.
+        - If that involved using more proofs of a particular size than we actually have, we try to combine
+          smaller-valued proofs we do have to make up for the missing proofs.
+        """
+
+        # break the available proofs down by size
+        proof_count_by_size = Counter(p.amount for p in proofs)
+        original_proof_count_by_size = proof_count_by_size.copy()
+
+        # naively select proofs matching amount_to_send's binary representation, allowing ourselves to select
+        # proofs of desired sizes even if we don't have enough
+        proof_size = 1
+        while proof_size <= amount_to_send:
+            if (amount_to_send & proof_size) != 0:
+                proof_count_by_size[proof_size] -= 1
+            proof_size <<= 1
+                
+        # If we selected proofs we didn't actually have, try to compensate by substituting smaller-valued
+        # proofs we do have. We work from the largest missing proof sizes downwards.
+        sizes = sorted(proof_count_by_size.keys(), reverse=True)
+        for i, size in enumerate(sizes):
+            while proof_count_by_size[size] < 0:
+                shortfall = size * -proof_count_by_size[size]
+                for substitute_size in sizes[i+1:]:
+                    proofs_to_take = min(shortfall // substitute_size, proof_count_by_size[substitute_size])
+                    proof_count_by_size[substitute_size] -= proofs_to_take
+                    shortfall -= substitute_size * proofs_to_take
+                    if shortfall == 0:
+                        proof_count_by_size[size] = 0
+                        break
+                if shortfall != 0:
+                    return None
+
+        # we found an exact subset of the proofs we have available summing to amount_to_send
+        proof_count_to_send_by_size = original_proof_count_by_size - proof_count_by_size
+        assert sum(size*count for (size, count) in proof_count_to_send_by_size.items()) == amount_to_send
+
+        # so far we just worked with counts of proofs, so pick actual proofs of the required sizes and
+        # quantities
+        send_proofs = []
+        for proof in proofs:
+            if proof_count_to_send_by_size[proof.amount] > 0:
+                send_proofs.append(proof)
+                proof_count_to_send_by_size[proof.amount] -= 1
+        assert sum(p.amount for p in send_proofs) == amount_to_send
         return send_proofs
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool) -> None:
