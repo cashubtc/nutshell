@@ -1,122 +1,57 @@
-import logging
 import sys
 from traceback import print_exception
 
 from fastapi import FastAPI, status
-from fastapi.exception_handlers import (
-    request_validation_exception_handler as _request_validation_exception_handler,
-)
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
-from starlette.middleware import Middleware
-from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 
 from ..core.errors import CashuError
+from ..core.logging import configure_logger
 from ..core.settings import settings
 from .router import router
+from .router_deprecated import router_deprecated
 from .startup import start_mint_init
 
 if settings.debug_profiling:
-    from fastapi_profiler import PyInstrumentProfilerMiddleware
+    pass
 
-# from starlette_context import context
-# from starlette_context.middleware import RawContextMiddleware
+if settings.mint_rate_limit:
+    pass
 
+from .middleware import add_middlewares, request_validation_exception_handler
 
-# class CustomHeaderMiddleware(BaseHTTPMiddleware):
-#     """
-#     Middleware for starlette that can set the context from request headers
-#     """
-
-#     async def dispatch(self, request, call_next):
-#         context["client-version"] = request.headers.get("Client-version")
-#         response = await call_next(request)
-#         return response
+# this errors with the tests but is the appropriate way to handle startup and shutdown
+# until then, we use @app.on_event("startup")
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # startup routines here
+#     await start_mint_init()
+#     yield
+#     # shutdown routines here
 
 
 def create_app(config_object="core.settings") -> FastAPI:
-    def configure_logger() -> None:
-        class Formatter:
-            def __init__(self):
-                self.padding = 0
-                self.minimal_fmt = (
-                    "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> |"
-                    " <level>{level}</level> | <level>{message}</level>\n"
-                )
-                if settings.debug:
-                    self.fmt = (
-                        "<green>{time:YYYY-MM-DD HH:mm:ss.SS}</green> | <level>{level:"
-                        " <4}</level> |"
-                        " <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan>"
-                        " | <level>{message}</level>\n"
-                    )
-                else:
-                    self.fmt = self.minimal_fmt
-
-            def format(self, record):
-                function = "{function}".format(**record)
-                if function == "emit":  # uvicorn logs
-                    return self.minimal_fmt
-                return self.fmt
-
-        class InterceptHandler(logging.Handler):
-            def emit(self, record):
-                try:
-                    level = logger.level(record.levelname).name
-                except ValueError:
-                    level = record.levelno
-                logger.log(level, record.getMessage())
-
-        logger.remove()
-        log_level = settings.log_level
-        if settings.debug and log_level == "INFO":
-            log_level = "DEBUG"
-        formatter = Formatter()
-        logger.add(sys.stderr, level=log_level, format=formatter.format)
-
-        logging.getLogger("uvicorn").handlers = [InterceptHandler()]
-        logging.getLogger("uvicorn.access").handlers = [InterceptHandler()]
-
     configure_logger()
 
-    # middleware = [
-    #     Middleware(
-    #         RawContextMiddleware,
-    #     ),
-    #     Middleware(CustomHeaderMiddleware),
-    # ]
-
-    middleware = [
-        Middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_methods=["*"],
-            allow_headers=["*"],
-            expose_headers=["*"],
-        )
-    ]
-
     app = FastAPI(
-        title="Cashu Python Mint",
-        description="Ecash wallet and mint for Bitcoin",
+        title="Nutshell Cashu Mint",
+        description="Ecash wallet and mint based on the Cashu protocol.",
         version=settings.version,
         license_info={
             "name": "MIT License",
             "url": "https://raw.githubusercontent.com/cashubtc/cashu/main/LICENSE",
         },
-        middleware=middleware,
     )
-
-    if settings.debug_profiling:
-        assert PyInstrumentProfilerMiddleware is not None
-        app.add_middleware(PyInstrumentProfilerMiddleware)
 
     return app
 
 
 app = create_app()
+
+# Add middlewares
+add_middlewares(app)
 
 
 @app.middleware("http")
@@ -135,12 +70,13 @@ async def catch_exceptions(request: Request, call_next):
         except Exception:
             err_message = e.args[0] if e.args else "Unknown error"
 
-        if isinstance(e, CashuError):
+        if isinstance(e, CashuError) or isinstance(e.args[0], CashuError):
             logger.error(f"CashuError: {err_message}")
+            code = e.code if isinstance(e, CashuError) else e.args[0].code
             # return with cors headers
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={"detail": err_message, "code": e.code},
+                content={"detail": err_message, "code": code},
                 headers=CORS_HEADERS,
             )
         logger.error(f"Exception: {err_message}")
@@ -153,28 +89,17 @@ async def catch_exceptions(request: Request, call_next):
         )
 
 
-async def request_validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
-    """
-    This is a wrapper to the default RequestValidationException handler of FastAPI.
-    This function will be called when client input is not valid.
-    """
-    query_params = request.query_params._dict
-    detail = {
-        "errors": exc.errors(),
-        "query_params": query_params,
-    }
-    # log the error
-    logger.error(detail)
-    # pass on
-    return await _request_validation_exception_handler(request, exc)
+# Add exception handlers
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+
+# Add routers
+if settings.debug_mint_only_deprecated:
+    app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
+else:
+    app.include_router(router=router, tags=["Mint"])
+    app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
 
 
 @app.on_event("startup")
 async def startup_mint():
     await start_mint_init()
-
-
-app.include_router(router=router)
-app.add_exception_handler(RequestValidationError, request_validation_exception_handler)

@@ -12,7 +12,7 @@ on:
       os-version:
         default: "ubuntu-latest"
         type: string
-      db-url:
+      mint-database:
         default: ""
         type: string
       backend-wallet-class:
@@ -23,6 +23,20 @@ jobs:
   regtest:
     runs-on: ${{ inputs.os-version }}
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:latest
+        env:
+          POSTGRES_USER: cashu
+          POSTGRES_PASSWORD: cashu
+          POSTGRES_DB: cashu
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v3
 
@@ -38,23 +52,20 @@ jobs:
           chmod -R 777 .
           bash ./start.sh
 
-      - name: Create fake admin
-        if: ${{ inputs.backend-wallet-class == 'LNbitsWallet' }}
-        run: docker exec cashu-lnbits-1 poetry run python tools/create_fake_admin.py
-
       - name: Run Tests
         env:
           WALLET_NAME: test_wallet
           MINT_HOST: localhost
           MINT_PORT: 3337
-          MINT_DATABASE: ${{ inputs.db-url }}
+          MINT_TEST_DATABASE: ${{ inputs.mint-database }}
           TOR: false
-          MINT_LIGHTNING_BACKEND: ${{ inputs.backend-wallet-class }}
+          MINT_BACKEND_BOLT11_SAT: ${{ inputs.backend-wallet-class }}
           MINT_LNBITS_ENDPOINT: http://localhost:5001
           MINT_LNBITS_KEY: d08a3313322a4514af75d488bcc27eee
           MINT_LND_REST_ENDPOINT: https://localhost:8081/
           MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
           MINT_LND_REST_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          MINT_LND_ENABLE_MPP: true
           #   LND_GRPC_ENDPOINT: localhost
           #   LND_GRPC_PORT: 10009
           #   LND_GRPC_CERT: ./regtest/data/lnd-3/tls.cert

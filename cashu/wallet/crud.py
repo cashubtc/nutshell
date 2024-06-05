@@ -67,10 +67,12 @@ async def get_reserved_proofs(
     db: Database,
     conn: Optional[Connection] = None,
 ) -> List[Proof]:
-    rows = await (conn or db).fetchall("""
+    rows = await (conn or db).fetchall(
+        """
         SELECT * from proofs
         WHERE reserved
-        """)
+        """
+    )
     return [Proof.from_dict(dict(r)) for r in rows]
 
 
@@ -167,8 +169,8 @@ async def store_keyset(
     await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
-          (id, mint_url, valid_from, valid_to, first_seen, active, public_keys)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+          (id, mint_url, valid_from, valid_to, first_seen, active, public_keys, unit)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             keyset.id,
@@ -176,18 +178,19 @@ async def store_keyset(
             keyset.valid_from or int(time.time()),
             keyset.valid_to or int(time.time()),
             keyset.first_seen or int(time.time()),
-            True,
+            keyset.active,
             keyset.serialize(),
+            keyset.unit.name,
         ),
     )
 
 
-async def get_keyset(
+async def get_keysets(
     id: str = "",
     mint_url: str = "",
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
-) -> Optional[WalletKeyset]:
+) -> List[WalletKeyset]:
     clauses = []
     values: List[Any] = []
     clauses.append("active = ?")
@@ -202,14 +205,18 @@ async def get_keyset(
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
 
-    row = await (conn or db).fetchone(  # type: ignore
+    row = await (conn or db).fetchall(  # type: ignore
         f"""
         SELECT * from keysets
         {where}
         """,
         tuple(values),
     )
-    return WalletKeyset.from_row(row) if row is not None else None
+    ret = []
+    for r in row:
+        keyset = WalletKeyset.from_row(r)
+        ret.append(keyset)
+    return ret
 
 
 async def store_lightning_invoice(
@@ -274,14 +281,21 @@ async def get_lightning_invoice(
 async def get_lightning_invoices(
     db: Database,
     paid: Optional[bool] = None,
+    pending: Optional[bool] = None,
     conn: Optional[Connection] = None,
 ) -> List[Invoice]:
     clauses: List[Any] = []
     values: List[Any] = []
 
-    if paid is not None:
+    if paid is not None and not pending:
         clauses.append("paid = ?")
         values.append(paid)
+
+    if pending:
+        clauses.append("paid = ?")
+        values.append(False)
+        clauses.append("out = ?")
+        values.append(False)
 
     where = ""
     if clauses:

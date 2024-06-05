@@ -9,7 +9,7 @@ def test_get_output_split():
     assert amount_split(13) == [1, 4, 8]
 
 
-def test_tokenv3_get_amount():
+def test_tokenv3_deserialize_get_attributes():
     token_str = (
         "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIkplaFpMVTZuQ3BSZCIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIjBFN2lDazRkVmxSZjVQRjFnNFpWMnci"
         "LCAiQyI6ICIwM2FiNTgwYWQ5NTc3OGVkNTI5NmY4YmVlNjU1ZGJkN2Q2NDJmNWQzMmRlOGUyNDg0NzdlMGI0ZDZhYTg2M2ZjZDUifSwgeyJpZCI6ICJKZWhaTFU2bkNwUmQiLCAiYW"
@@ -18,16 +18,6 @@ def test_tokenv3_get_amount():
     )
     token = TokenV3.deserialize(token_str)
     assert token.get_amount() == 10
-
-
-def test_tokenv3_get_proofs():
-    token_str = (
-        "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIkplaFpMVTZuQ3BSZCIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIjBFN2lDazRkVmxSZjVQRjFnNFpWMnci"
-        "LCAiQyI6ICIwM2FiNTgwYWQ5NTc3OGVkNTI5NmY4YmVlNjU1ZGJkN2Q2NDJmNWQzMmRlOGUyNDg0NzdlMGI0ZDZhYTg2M2ZjZDUifSwgeyJpZCI6ICJKZWhaTFU2bkNwUmQiLCAiYW"
-        "1vdW50IjogOCwgInNlY3JldCI6ICJzNklwZXh3SGNxcXVLZDZYbW9qTDJnIiwgIkMiOiAiMDIyZDAwNGY5ZWMxNmE1OGFkOTAxNGMyNTliNmQ2MTRlZDM2ODgyOWYwMmMzODc3M2M0"
-        "NzIyMWY0OTYxY2UzZjIzIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0OjMzMzgifV19"
-    )
-    token = TokenV3.deserialize(token_str)
     assert len(token.get_proofs()) == 2
 
 
@@ -115,6 +105,43 @@ def test_tokenv3_deserialize_with_memo():
     token = TokenV3.deserialize(token_str)
     assert token.serialize() == token_str
     assert token.memo == "Test memo"
+
+
+def test_serialize_example_token_nut00():
+    token_dict = {
+        "token": [
+            {
+                "mint": "https://8333.space:3338",
+                "proofs": [
+                    {
+                        "id": "9bb9d58392cd823e",
+                        "amount": 2,
+                        "secret": "EhpennC9qB3iFlW8FZ_pZw",
+                        "C": "02c020067db727d586bc3183aecf97fcb800c3f4cc4759f69c626c9db5d8f5b5d4",
+                    },
+                    {
+                        "id": "9bb9d58392cd823e",
+                        "amount": 8,
+                        "secret": "TmS6Cv0YT5PU_5ATVKnukw",
+                        "C": "02ac910bef28cbe5d7325415d5c263026f15f9b967a079ca9779ab6e5c2db133a7",
+                    },
+                ],
+            }
+        ],
+        "memo": "Thank you.",
+    }
+    tokenObj = TokenV3.parse_obj(token_dict)
+    assert (
+        tokenObj.serialize()
+        == "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjliYjlkNTgzOTJjZDg"
+        "yM2UiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICJFaHBlbm5DOXFCM2lGbFc4Rlpf"
+        "cFp3IiwgIkMiOiAiMDJjMDIwMDY3ZGI3MjdkNTg2YmMzMTgzYWVjZjk3ZmNiODAwY"
+        "zNmNGNjNDc1OWY2OWM2MjZjOWRiNWQ4ZjViNWQ0In0sIHsiaWQiOiAiOWJiOWQ1OD"
+        "M5MmNkODIzZSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogIlRtUzZDdjBZVDVQVV8"
+        "1QVRWS251a3ciLCAiQyI6ICIwMmFjOTEwYmVmMjhjYmU1ZDczMjU0MTVkNWMyNjMw"
+        "MjZmMTVmOWI5NjdhMDc5Y2E5Nzc5YWI2ZTVjMmRiMTMzYTcifV0sICJtaW50IjogI"
+        "mh0dHBzOi8vODMzMy5zcGFjZTozMzM4In1dLCAibWVtbyI6ICJUaGFuayB5b3UuIn0="
+    )
 
 
 def test_calculate_number_of_blank_outputs():

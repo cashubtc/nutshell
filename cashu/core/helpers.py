@@ -39,10 +39,8 @@ def async_unwrap(to_await):
     return async_response[0]
 
 
-def fee_reserve(amount_msat: int, internal=False) -> int:
+def fee_reserve(amount_msat: int) -> int:
     """Function for calculating the Lightning fee reserve"""
-    if internal:
-        return 0
     return max(
         int(settings.lightning_reserve_fee_min),
         int(amount_msat * settings.lightning_fee_percent / 100.0),

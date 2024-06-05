@@ -10,7 +10,7 @@ from ..core.helpers import sum_proofs
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..wallet import migrations
-from ..wallet.crud import get_keyset
+from ..wallet.crud import get_keysets
 from ..wallet.wallet import Wallet
 
 
@@ -35,7 +35,7 @@ async def list_mints(wallet: Wallet):
     return mints
 
 
-async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
+async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3) -> Wallet:
     """
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
@@ -47,15 +47,19 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3):
         mint_wallet = await Wallet.with_db(
             t.mint, os.path.join(settings.cashu_dir, wallet.name)
         )
-        keysets = mint_wallet._get_proofs_keysets(t.proofs)
-        logger.debug(f"Keysets in tokens: {keysets}")
+        keyset_ids = mint_wallet._get_proofs_keysets(t.proofs)
+        logger.trace(f"Keysets in tokens: {keyset_ids}")
         # loop over all keysets
-        for keyset in set(keysets):
-            await mint_wallet.load_mint()
+        for keyset_id in set(keyset_ids):
+            await mint_wallet.load_mint(keyset_id)
+            mint_wallet.unit = mint_wallet.keysets[keyset_id].unit
             # redeem proofs of this keyset
-            redeem_proofs = [p for p in t.proofs if p.id == keyset]
+            redeem_proofs = [p for p in t.proofs if p.id == keyset_id]
             _, _ = await mint_wallet.redeem(redeem_proofs)
-            print(f"Received {sum_proofs(redeem_proofs)} sats")
+            print(f"Received {mint_wallet.unit.str(sum_proofs(redeem_proofs))}")
+
+    # return the last mint_wallet
+    return mint_wallet
 
 
 def serialize_TokenV2_to_TokenV3(tokenv2: TokenV2):
@@ -119,7 +123,7 @@ def deserialize_token_from_string(token: str) -> TokenV3:
 async def receive(
     wallet: Wallet,
     tokenObj: TokenV3,
-):
+) -> Wallet:
     logger.debug(f"receive: {tokenObj}")
     proofs = [p for t in tokenObj.token for p in t.proofs]
 
@@ -127,7 +131,7 @@ async def receive(
 
     if includes_mint_info:
         # redeem tokens with new wallet instances
-        await redeem_TokenV3_multimint(
+        mint_wallet = await redeem_TokenV3_multimint(
             wallet,
             tokenObj,
         )
@@ -138,22 +142,22 @@ async def receive(
         keyset_in_token = proofs[0].id
         assert keyset_in_token
         # we get the keyset from the db
-        mint_keysets = await get_keyset(id=keyset_in_token, db=wallet.db)
-        assert mint_keysets, Exception("we don't know this keyset")
-        assert mint_keysets.mint_url, Exception("we don't know this mint's URL")
+        mint_keysets = await get_keysets(id=keyset_in_token, db=wallet.db)
+        assert mint_keysets, Exception(f"we don't know this keyset: {keyset_in_token}")
+        mint_keyset = mint_keysets[0]
+        assert mint_keyset.mint_url, Exception("we don't know this mint's URL")
         # now we have the URL
         mint_wallet = await Wallet.with_db(
-            mint_keysets.mint_url,
+            mint_keyset.mint_url,
             os.path.join(settings.cashu_dir, wallet.name),
         )
         await mint_wallet.load_mint(keyset_in_token)
         _, _ = await mint_wallet.redeem(proofs)
-        print(f"Received {sum_proofs(proofs)} sats")
+        print(f"Received {mint_wallet.unit.str(sum_proofs(proofs))}")
 
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)
-    wallet.status()
-    return wallet.available_balance
+    return mint_wallet
 
 
 async def send(
@@ -224,5 +228,4 @@ async def send(
         )
         print(token)
 
-    wallet.status()
     return wallet.available_balance, token
