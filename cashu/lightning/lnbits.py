@@ -22,7 +22,7 @@ from .base import (
 class LNbitsWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
-    supported_units = set([Unit.sat])
+    supported_units = set([Unit.sat, Unit.msat, Unit.usd, Unit.eur])
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
@@ -69,13 +69,29 @@ class LNbitsWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
 
-        data = {"out": False, "amount": amount.to(Unit.sat).amount}
+        # lnbits uses sats and fiat denominations as floats
+        amount_lnbits = 0
+        unit_lnbits = amount.unit.name
+        if amount.unit == Unit.sat:
+            amount_lnbits = int(amount.amount)
+        elif amount.unit == Unit.msat:
+            amount_lnbits = int(amount.amount * 1000)
+            unit_lnbits = 'sat'
+        elif amount.unit == Unit.usd:
+            amount_lnbits = float(amount.amount / 100)
+        elif amount.unit == Unit.eur:
+            amount_lnbits = float(amount.amount / 100)
+        else:
+            raise Unsupported(f"Unit {unit} is not supported")
+
+        data = {"out": False, "amount": amount_lnbits, "unit": unit_lnbits}        
         if description_hash:
             data["description_hash"] = description_hash.hex()
         if unhashed_description:
             data["unhashed_description"] = unhashed_description.hex()
 
         data["memo"] = memo or ""
+        logger.debug(f"lnbits POST data: {data}")
         try:
             r = await self.client.post(
                 url=f"{self.endpoint}/api/v1/payments", json=data
@@ -167,17 +183,69 @@ class LNbitsWallet(LightningBackend):
             preimage=data["preimage"],
         )
 
+
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
+        logger.debug(f"self.unit: {self.unit.name} melt_quote.unit: {melt_quote.unit}")
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
+
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
-        return PaymentQuoteResponse(
+
+        if self.unit == Unit.sat:
+            return PaymentQuoteResponse(
+                checking_id=invoice_obj.payment_hash,
+                fee=fees.to(self.unit, round="up"),
+                amount=amount.to(self.unit, round="up"),
+            )
+        elif self.unit == Unit.msat:
+            return PaymentQuoteResponse(
+                checking_id=invoice_obj.payment_hash,
+                fee=fees.amount,
+                amount=amount.amount,
+            )
+
+        # usd and eur require rate conversion
+        amount_sat = amount.to(Unit.sat, round="up")
+        fees_sat = fees.to(Unit.sat, round="up")
+        try:
+            r = await self.client.post(
+                url=f"{self.endpoint}/api/v1/conversion",
+                json={"from_": "sat", "amount": amount_sat,  "to": self.unit.name},
+                timeout=None,
+            )
+            r.raise_for_status()
+        except Exception:
+            error_message = r.json()["detail"]["msg"]
+            raise Exception(error_message)
+        data = r.json()
+        logger.debug(f"lnbits conversion response: {data}")
+        amount_cent = int(float(data.get(upper(self.unit.name))) * 100)
+        fees_cent =  int(fees_sat / amount_sat * amount_cent)  
+        logger.debug(f"PaymentQuoteResponse: {amount:amount_cent, checking_id: invoice_obj.payment_hash, fee:fees_cent}")    
+        quote = PaymentQuoteResponse(
+            amount=Amount(self.unit, amount=amount_cent),
             checking_id=invoice_obj.payment_hash,
-            fee=fees.to(self.unit, round="up"),
-            amount=amount.to(self.unit, round="up"),
+            fee=Amount(self.unit, amount=fees_cent),
         )
+        return quote
+
+    
+    # async def get_payment_quote(
+    #     self, melt_quote: PostMeltQuoteRequest
+    # ) -> PaymentQuoteResponse:
+    #     invoice_obj = decode(melt_quote.request)
+    #     assert invoice_obj.amount_msat, "invoice has no amount."
+    #     amount_msat = int(invoice_obj.amount_msat)
+    #     fees_msat = fee_reserve(amount_msat)
+    #     fees = Amount(unit=Unit.msat, amount=fees_msat)
+    #     amount = Amount(unit=Unit.msat, amount=amount_msat)
+    #     return PaymentQuoteResponse(
+    #         checking_id=invoice_obj.payment_hash,
+    #         fee=fees.to(self.unit, round="up"),
+    #         amount=amount.to(self.unit, round="up"),
+    #     )
