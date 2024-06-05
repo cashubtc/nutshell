@@ -1,13 +1,14 @@
-from typing import List, Literal, Optional, Set, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
 
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
+    Method,
     MintKeyset,
-    MintKeysets,
     Proof,
+    Unit,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
@@ -20,29 +21,33 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.settings import settings
+from ..lightning.base import LightningBackend
 from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
-from .protocols import SupportsDb, SupportsKeysets
+from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
 
-class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
+class LedgerVerification(
+    LedgerSpendingConditions, SupportsKeysets, SupportsDb, SupportsBackends
+):
     """Verification functions for the ledger."""
 
     keyset: MintKeyset
-    keysets: MintKeysets
-    secrets_used: Set[str] = set()
+    keysets: Dict[str, MintKeyset]
+    spent_proofs: Dict[str, Proof]
     crud: LedgerCrud
     db: Database
+    lightning: Dict[Unit, LightningBackend]
 
     async def verify_inputs_and_outputs(
-        self, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
+        self, *, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
     ):
         """Checks all proofs and outputs for validity.
 
         Args:
             proofs (List[Proof]): List of proofs to check.
             outputs (Optional[List[BlindedMessage]], optional): List of outputs to check.
-            Must be provided for /split but not for /melt. Defaults to None.
+            Must be provided for a swap but not for a melt. Defaults to None.
 
         Raises:
             Exception: Scripts did not validate.
@@ -52,8 +57,7 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         """
         # Verify inputs
         # Verify proofs are spendable
-        spendable = await self._check_proofs_spendable(proofs)
-        if not all(spendable):
+        if not len(await self._get_proofs_spent([p.Y for p in proofs])) == 0:
             raise TokenAlreadySpentError()
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
@@ -83,21 +87,47 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         # Verify inputs and outputs together
         if not self._verify_input_output_amounts(proofs, outputs):
             raise TransactionError("input amounts less than output.")
+        # Verify that input keyset units are the same as output keyset unit
+        # We have previously verified that all outputs have the same keyset id in `_verify_outputs`
+        assert outputs[0].id, "output id not set"
+        if not all(
+            [
+                self.keysets[p.id].unit == self.keysets[outputs[0].id].unit
+                for p in proofs
+                if p.id
+            ]
+        ):
+            raise TransactionError("input and output keysets have different units.")
+
         # Verify output spending conditions
         if outputs and not self._verify_output_spending_conditions(proofs, outputs):
             raise TransactionError("validation of output spending conditions failed.")
 
-    async def _verify_outputs(self, outputs: List[BlindedMessage]):
+    async def _verify_outputs(
+        self, outputs: List[BlindedMessage], skip_amount_check=False
+    ):
         """Verify that the outputs are valid."""
+        logger.trace(f"Verifying {len(outputs)} outputs.")
+        # Verify all outputs have the same keyset id
+        if not all([o.id == outputs[0].id for o in outputs]):
+            raise TransactionError("outputs have different keyset ids.")
+        # Verify that the keyset id is known and active
+        if outputs[0].id not in self.keysets:
+            raise TransactionError("keyset id unknown.")
+        if not self.keysets[outputs[0].id].active:
+            raise TransactionError("keyset id inactive.")
         # Verify amounts of outputs
-        if not all([self._verify_amount(o.amount) for o in outputs]):
-            raise TransactionError("invalid amount.")
+        # we skip the amount check for NUT-8 change outputs (which can have amount 0)
+        if not skip_amount_check:
+            if not all([self._verify_amount(o.amount) for o in outputs]):
+                raise TransactionError("invalid amount.")
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate outputs.")
         # verify that outputs have not been signed previously
         if any(await self._check_outputs_issued_before(outputs)):
             raise TransactionError("outputs have already been signed before.")
+        logger.trace(f"Verified {len(outputs)} outputs.")
 
     async def _check_outputs_issued_before(self, outputs: List[BlindedMessage]):
         """Checks whether the provided outputs have previously been signed by the mint
@@ -113,29 +143,40 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         async with self.db.connect() as conn:
             for output in outputs:
                 promise = await self.crud.get_promise(
-                    B_=output.B_, db=self.db, conn=conn
+                    b_=output.B_, db=self.db, conn=conn
                 )
                 result.append(False if promise is None else True)
         return result
 
-    async def _check_proofs_spendable(self, proofs: List[Proof]) -> List[bool]:
-        """Checks whether the proof was already spent."""
-        spendable_states = []
+    async def _get_proofs_pending(self, Ys: List[str]) -> Dict[str, Proof]:
+        """Returns a dictionary of only those proofs that are pending.
+        The key is the Y=h2c(secret) and the value is the proof.
+        """
+        proofs_pending = await self.crud.get_proofs_pending(Ys=Ys, db=self.db)
+        proofs_pending_dict = {p.Y: p for p in proofs_pending}
+        return proofs_pending_dict
+
+    async def _get_proofs_spent(self, Ys: List[str]) -> Dict[str, Proof]:
+        """Returns a dictionary of all proofs that are spent.
+        The key is the Y=h2c(secret) and the value is the proof.
+        """
+        proofs_spent_dict: Dict[str, Proof] = {}
         if settings.mint_cache_secrets:
             # check used secrets in memory
-            for p in proofs:
-                spendable_state = p.secret not in self.secrets_used
-                spendable_states.append(spendable_state)
+            for Y in Ys:
+                spent_proof = self.spent_proofs.get(Y)
+                if spent_proof:
+                    proofs_spent_dict[Y] = spent_proof
         else:
             # check used secrets in database
             async with self.db.connect() as conn:
-                for p in proofs:
-                    spendable_state = (
-                        await self.crud.get_proof_used(db=self.db, proof=p, conn=conn)
-                        is None
+                for Y in Ys:
+                    spent_proof = await self.crud.get_proof_used(
+                        db=self.db, Y=Y, conn=conn
                     )
-                    spendable_states.append(spendable_state)
-        return spendable_states
+                    if spent_proof:
+                        proofs_spent_dict[Y] = spent_proof
+        return proofs_spent_dict
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""
@@ -145,23 +186,27 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
             raise SecretTooLongError()
         return True
 
-    def _verify_proof_bdhke(self, proof: Proof):
+    def _verify_proof_bdhke(self, proof: Proof) -> bool:
         """Verifies that the proof of promise was issued by this ledger."""
         # if no keyset id is given in proof, assume the current one
         if not proof.id:
             private_key_amount = self.keyset.private_keys[proof.amount]
         else:
-            assert proof.id in self.keysets.keysets, f"keyset {proof.id} unknown"
+            assert proof.id in self.keysets, f"keyset {proof.id} unknown"
             logger.trace(
-                f"Validating proof with keyset {self.keysets.keysets[proof.id].id}."
+                f"Validating proof {proof.secret} with keyset"
+                f" {self.keysets[proof.id].id}."
             )
             # use the appropriate active keyset for this proof.id
-            private_key_amount = self.keysets.keysets[proof.id].private_keys[
-                proof.amount
-            ]
+            private_key_amount = self.keysets[proof.id].private_keys[proof.amount]
 
         C = PublicKey(bytes.fromhex(proof.C), raw=True)
-        return b_dhke.verify(private_key_amount, C, proof.secret)
+        valid = b_dhke.verify(private_key_amount, C, proof.secret)
+        if valid:
+            logger.trace("Proof verified.")
+        else:
+            logger.trace(f"Proof verification failed for {proof.secret} – {proof.C}.")
+        return valid
 
     def _verify_input_output_amounts(
         self, inputs: List[Proof], outputs: List[BlindedMessage]
@@ -201,6 +246,22 @@ class LedgerVerification(LedgerSpendingConditions, SupportsKeysets, SupportsDb):
         """
         sum_inputs = sum(self._verify_amount(p.amount) for p in proofs)
         sum_outputs = sum(self._verify_amount(p.amount) for p in outs)
-        assert sum_outputs - sum_inputs == 0, TransactionError(
-            "inputs do not have same amount as outputs."
-        )
+        if not sum_outputs - sum_inputs == 0:
+            raise TransactionError("inputs do not have same amount as outputs.")
+
+    def _verify_and_get_unit_method(
+        self, unit_str: str, method_str: str
+    ) -> Tuple[Unit, Method]:
+        """Verify that the unit is supported by the ledger."""
+        method = Method[method_str]
+        unit = Unit[unit_str]
+
+        if not any([unit == k.unit for k in self.keysets.values()]):
+            raise NotAllowedError(f"unit '{unit.name}' not supported in any keyset.")
+
+        if not self.backends.get(method) or unit not in self.backends[method]:
+            raise NotAllowedError(
+                f"no support for method '{method.name}' with unit '{unit.name}'."
+            )
+
+        return unit, method

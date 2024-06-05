@@ -1,5 +1,7 @@
 from typing import Protocol
 
+import httpx
+
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 
@@ -14,3 +16,11 @@ class SupportsDb(Protocol):
 
 class SupportsKeysets(Protocol):
     keyset_id: str
+
+
+class SupportsHttpxClient(Protocol):
+    httpx: httpx.AsyncClient
+
+
+class SupportsMintURL(Protocol):
+    url: str

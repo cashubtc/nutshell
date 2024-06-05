@@ -2,21 +2,32 @@
 from typing import Optional
 
 import httpx
+from bolt11 import (
+    decode,
+)
 
+from ..core.base import Amount, MeltQuote, PostMeltQuoteRequest, Unit
+from ..core.helpers import fee_reserve
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
+    LightningBackend,
+    PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
-    Wallet,
 )
 
 
-class LNbitsWallet(Wallet):
+class LNbitsWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
-    def __init__(self):
+    supported_units = set([Unit.sat])
+    unit = Unit.sat
+
+    def __init__(self, unit: Unit = Unit.sat, **kwargs):
+        self.assert_unit_supported(unit)
+        self.unit = unit
         self.endpoint = settings.mint_lnbits_endpoint
         self.client = httpx.AsyncClient(
             verify=not settings.debug,
@@ -30,7 +41,7 @@ class LNbitsWallet(Wallet):
         except Exception as exc:
             return StatusResponse(
                 error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
-                balance_msat=0,
+                balance=0,
             )
 
         try:
@@ -38,25 +49,27 @@ class LNbitsWallet(Wallet):
         except Exception:
             return StatusResponse(
                 error_message=(
-                    f"Failed to connect to {self.endpoint}, got: '{r.text[:200]}...'"
+                    f"Received invalid response from {self.endpoint}: {r.text}"
                 ),
-                balance_msat=0,
+                balance=0,
             )
         if "detail" in data:
             return StatusResponse(
-                error_message=f"LNbits error: {data['detail']}", balance_msat=0
+                error_message=f"LNbits error: {data['detail']}", balance=0
             )
 
-        return StatusResponse(error_message=None, balance_msat=data["balance"])
+        return StatusResponse(error_message=None, balance=data["balance"])
 
     async def create_invoice(
         self,
-        amount: int,
+        amount: Amount,
         memo: Optional[str] = None,
         description_hash: Optional[bytes] = None,
         unhashed_description: Optional[bytes] = None,
     ) -> InvoiceResponse:
-        data = {"out": False, "amount": amount}
+        self.assert_unit_supported(amount.unit)
+
+        data = {"out": False, "amount": amount.to(Unit.sat).amount}
         if description_hash:
             data["description_hash"] = description_hash.hex()
         if unhashed_description:
@@ -83,11 +96,13 @@ class LNbitsWallet(Wallet):
             payment_request=payment_request,
         )
 
-    async def pay_invoice(self, bolt11: str, fee_limit_msat: int) -> PaymentResponse:
+    async def pay_invoice(
+        self, quote: MeltQuote, fee_limit_msat: int
+    ) -> PaymentResponse:
         try:
             r = await self.client.post(
                 url=f"{self.endpoint}/api/v1/payments",
-                json={"out": True, "bolt11": bolt11},
+                json={"out": True, "bolt11": quote.request},
                 timeout=None,
             )
             r.raise_for_status()
@@ -107,7 +122,7 @@ class LNbitsWallet(Wallet):
         return PaymentResponse(
             ok=True,
             checking_id=checking_id,
-            fee_msat=payment.fee_msat,
+            fee=payment.fee,
             preimage=payment.preimage,
         )
 
@@ -136,8 +151,33 @@ class LNbitsWallet(Wallet):
         if "paid" not in data and "details" not in data:
             return PaymentStatus(paid=None)
 
+        paid_value = None
+        if data["paid"]:
+            paid_value = True
+        elif not data["paid"] and data["details"]["pending"]:
+            paid_value = None
+        elif not data["paid"] and not data["details"]["pending"]:
+            paid_value = False
+        else:
+            raise ValueError(f"unexpected value for paid: {data['paid']}")
+
         return PaymentStatus(
-            paid=data["paid"],
-            fee_msat=data["details"]["fee"],
+            paid=paid_value,
+            fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
             preimage=data["preimage"],
+        )
+
+    async def get_payment_quote(
+        self, melt_quote: PostMeltQuoteRequest
+    ) -> PaymentQuoteResponse:
+        invoice_obj = decode(melt_quote.request)
+        assert invoice_obj.amount_msat, "invoice has no amount."
+        amount_msat = int(invoice_obj.amount_msat)
+        fees_msat = fee_reserve(amount_msat)
+        fees = Amount(unit=Unit.msat, amount=fees_msat)
+        amount = Amount(unit=Unit.msat, amount=amount_msat)
+        return PaymentQuoteResponse(
+            checking_id=invoice_obj.payment_hash,
+            fee=fees.to(self.unit, round="up"),
+            amount=amount.to(self.unit, round="up"),
         )
