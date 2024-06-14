@@ -1,6 +1,7 @@
 import asyncio
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
+from uu import Error
 
 import bolt11
 from loguru import logger
@@ -574,11 +575,22 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
             )
         else:
-            # not internal, get payment quote by backend
+            # not internal
+            # verify that the backend supports mpp if the quote request has an amount
+            if melt_quote.is_mpp and not self.backends[method][unit].supports_mpp:
+                raise TransactionError("backend does not support mpp")
+            # get payment quote by backend
             payment_quote = await self.backends[method][unit].get_payment_quote(
                 melt_quote=melt_quote
             )
-            assert payment_quote.checking_id, "quote has no checking id"
+            if not payment_quote.checking_id:
+                raise Error("quote has no checking id")
+            # verify that payment quote amount is as expected
+            if (
+                melt_quote.is_mpp
+                and melt_quote.mpp_amount != payment_quote.amount.amount
+            ):
+                raise TransactionError("quote amount not as requested")
             # make sure the backend returned the amount with a correct unit
             if not payment_quote.amount.unit == unit:
                 raise TransactionError("payment quote amount units do not match")
