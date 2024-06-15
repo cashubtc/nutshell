@@ -1,7 +1,6 @@
 import asyncio
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
-from uu import Error
 
 import bolt11
 from loguru import logger
@@ -568,7 +567,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             melt_quote.unit, Method.bolt11.name
         )
         if not payment_quote.checking_id:
-            raise Error("quote has no checking id")
+            raise Exception("quote has no checking id")
         # verify that payment quote amount is as expected
         if melt_quote.is_mpp and melt_quote.mpp_amount != payment_quote.amount.amount:
             raise TransactionError("quote amount not as requested")
