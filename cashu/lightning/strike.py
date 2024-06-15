@@ -4,7 +4,8 @@ from typing import Dict, Optional
 
 import httpx
 
-from ..core.base import Amount, MeltQuote, PostMeltQuoteRequest, Unit
+from ..core.base import Amount, MeltQuote, Unit
+from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,

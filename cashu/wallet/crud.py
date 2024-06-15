@@ -34,6 +34,7 @@ async def store_proof(
 async def get_proofs(
     *,
     db: Database,
+    id: Optional[str] = "",
     melt_id: str = "",
     mint_id: str = "",
     table: str = "proofs",
@@ -42,6 +43,9 @@ async def get_proofs(
     clauses = []
     values: List[Any] = []
 
+    if id:
+        clauses.append("id = ?")
+        values.append(id)
     if melt_id:
         clauses.append("melt_id = ?")
         values.append(melt_id)
@@ -169,8 +173,8 @@ async def store_keyset(
     await (conn or db).execute(  # type: ignore
         """
         INSERT INTO keysets
-          (id, mint_url, valid_from, valid_to, first_seen, active, public_keys, unit)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          (id, mint_url, valid_from, valid_to, first_seen, active, public_keys, unit, input_fee_ppk)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             keyset.id,
@@ -181,26 +185,29 @@ async def store_keyset(
             keyset.active,
             keyset.serialize(),
             keyset.unit.name,
+            keyset.input_fee_ppk,
         ),
     )
 
 
 async def get_keysets(
     id: str = "",
-    mint_url: str = "",
+    mint_url: Optional[str] = None,
+    unit: Optional[str] = None,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ) -> List[WalletKeyset]:
     clauses = []
     values: List[Any] = []
-    clauses.append("active = ?")
-    values.append(True)
     if id:
         clauses.append("id = ?")
         values.append(id)
     if mint_url:
         clauses.append("mint_url = ?")
         values.append(mint_url)
+    if unit:
+        clauses.append("unit = ?")
+        values.append(unit)
     where = ""
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
@@ -217,6 +224,24 @@ async def get_keysets(
         keyset = WalletKeyset.from_row(r)
         ret.append(keyset)
     return ret
+
+
+async def update_keyset(
+    keyset: WalletKeyset,
+    db: Database,
+    conn: Optional[Connection] = None,
+) -> None:
+    await (conn or db).execute(
+        """
+        UPDATE keysets
+        SET active = ?
+        WHERE id = ?
+        """,
+        (
+            keyset.active,
+            keyset.id,
+        ),
+    )
 
 
 async def store_lightning_invoice(

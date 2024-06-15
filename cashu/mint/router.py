@@ -3,7 +3,8 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, Request
 from loguru import logger
 
-from ..core.base import (
+from ..core.errors import KeysetNotFoundError
+from ..core.models import (
     GetInfoResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
@@ -25,7 +26,6 @@ from ..core.base import (
     PostSplitRequest,
     PostSplitResponse,
 )
-from ..core.errors import KeysetNotFoundError
 from ..core.settings import settings
 from ..mint.startup import ledger
 from .limit import limiter
@@ -182,7 +182,10 @@ async def keysets() -> KeysetsResponse:
     for id, keyset in ledger.keysets.items():
         keysets.append(
             KeysetsResponseKeyset(
-                id=id, unit=keyset.unit.name, active=keyset.active or False
+                id=keyset.id,
+                unit=keyset.unit.name,
+                active=keyset.active,
+                input_fee_ppk=keyset.input_fee_ppk,
             )
         )
     return KeysetsResponse(keysets=keysets)

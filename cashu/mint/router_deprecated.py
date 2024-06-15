@@ -3,9 +3,9 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Request
 from loguru import logger
 
-from ..core.base import (
-    BlindedMessage,
-    BlindedSignature,
+from ..core.base import BlindedMessage, BlindedSignature, SpentState
+from ..core.errors import CashuError
+from ..core.models import (
     CheckFeesRequest_deprecated,
     CheckFeesResponse_deprecated,
     CheckSpendableRequest_deprecated,
@@ -25,9 +25,7 @@ from ..core.base import (
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
     PostSplitResponse_Very_Deprecated,
-    SpentState,
 )
-from ..core.errors import CashuError
 from ..core.settings import settings
 from .limit import limiter
 from .startup import ledger

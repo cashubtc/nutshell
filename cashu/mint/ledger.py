@@ -14,9 +14,6 @@ from ..core.base import (
     Method,
     MintKeyset,
     MintQuote,
-    PostMeltQuoteRequest,
-    PostMeltQuoteResponse,
-    PostMintQuoteRequest,
     Proof,
     ProofState,
     SpentState,
@@ -40,6 +37,11 @@ from ..core.errors import (
     TransactionError,
 )
 from ..core.helpers import sum_proofs
+from ..core.models import (
+    PostMeltQuoteRequest,
+    PostMeltQuoteResponse,
+    PostMintQuoteRequest,
+)
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -216,6 +218,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                 seed=seed or self.seed,
                 derivation_path=derivation_path,
                 version=version or settings.version,
+                input_fee_ppk=settings.mint_input_fee_ppk,
             )
             logger.debug(f"Generated new keyset {keyset.id}.")
             if autosave:
@@ -298,9 +301,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
     async def _generate_change_promises(
         self,
-        input_amount: int,
-        output_amount: int,
-        output_fee_paid: int,
+        fee_provided: int,
+        fee_paid: int,
         outputs: Optional[List[BlindedMessage]],
         keyset: Optional[MintKeyset] = None,
     ) -> List[BlindedSignature]:
@@ -326,34 +328,35 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             List[BlindedSignature]: Signatures on the outputs.
         """
         # we make sure that the fee is positive
-        user_fee_paid = input_amount - output_amount
-        overpaid_fee = user_fee_paid - output_fee_paid
+        overpaid_fee = fee_provided - fee_paid
+
+        if overpaid_fee == 0 or outputs is None:
+            return []
+
         logger.debug(
-            f"Lightning fee was: {output_fee_paid}. User paid: {user_fee_paid}. "
+            f"Lightning fee was: {fee_paid}. User provided: {fee_provided}. "
             f"Returning difference: {overpaid_fee}."
         )
 
-        if overpaid_fee > 0 and outputs is not None:
-            return_amounts = amount_split(overpaid_fee)
+        return_amounts = amount_split(overpaid_fee)
 
-            # We return at most as many outputs as were provided or as many as are
-            # required to pay back the overpaid fee.
-            n_return_outputs = min(len(outputs), len(return_amounts))
+        # We return at most as many outputs as were provided or as many as are
+        # required to pay back the overpaid fee.
+        n_return_outputs = min(len(outputs), len(return_amounts))
 
-            # we only need as many outputs as we have change to return
-            outputs = outputs[:n_return_outputs]
-            # we sort the return_amounts in descending order so we only
-            # take the largest values in the next step
-            return_amounts_sorted = sorted(return_amounts, reverse=True)
-            # we need to imprint these amounts into the blanket outputs
-            for i in range(len(outputs)):
-                outputs[i].amount = return_amounts_sorted[i]  # type: ignore
-            if not self._verify_no_duplicate_outputs(outputs):
-                raise TransactionError("duplicate promises.")
-            return_promises = await self._generate_promises(outputs, keyset)
-            return return_promises
-        else:
-            return []
+        # we only need as many outputs as we have change to return
+        outputs = outputs[:n_return_outputs]
+
+        # we sort the return_amounts in descending order so we only
+        # take the largest values in the next step
+        return_amounts_sorted = sorted(return_amounts, reverse=True)
+        # we need to imprint these amounts into the blanket outputs
+        for i in range(len(outputs)):
+            outputs[i].amount = return_amounts_sorted[i]  # type: ignore
+        if not self._verify_no_duplicate_outputs(outputs):
+            raise TransactionError("duplicate promises.")
+        return_promises = await self._generate_promises(outputs, keyset)
+        return return_promises
 
     # ------- TRANSACTIONS -------
 
@@ -488,18 +491,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         logger.trace("called mint")
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
-
-        output_units = set([k.unit for k in [self.keysets[o.id] for o in outputs]])
-        if not len(output_units) == 1:
-            raise TransactionError("outputs have different units")
-        output_unit = list(output_units)[0]
+        # we already know from _verify_outputs that all outputs have the same unit because they have the same keyset
+        output_unit = self.keysets[outputs[0].id].unit
 
         self.locks[quote_id] = (
             self.locks.get(quote_id) or asyncio.Lock()
         )  # create a new lock if it doesn't exist
         async with self.locks[quote_id]:
             quote = await self.get_mint_quote(quote_id=quote_id)
-
             if not quote.paid:
                 raise QuoteNotPaidError()
             if quote.issued:
@@ -564,14 +563,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             if not mint_quote.checking_id:
                 raise TransactionError("mint quote has no checking id")
 
+            internal_fee = Amount(unit, 0)  # no internal fees
+            amount = Amount(unit, mint_quote.amount)
+
             payment_quote = PaymentQuoteResponse(
                 checking_id=mint_quote.checking_id,
-                amount=Amount(unit, mint_quote.amount),
-                fee=Amount(unit, amount=0),
+                amount=amount,
+                fee=internal_fee,
             )
             logger.info(
                 f"Issuing internal melt quote: {request} ->"
-                f" {mint_quote.quote} ({mint_quote.amount} {mint_quote.unit})"
+                f" {mint_quote.quote} ({amount.str()} + {internal_fee.str()} fees)"
             )
         else:
             # not internal, get payment quote by backend
@@ -585,6 +587,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             # fee from the backend must be in the same unit as the amount
             if not payment_quote.fee.unit == unit:
                 raise TransactionError("payment quote fee units do not match")
+
+        # verify that the amount of the proofs is not larger than the maximum allowed
+        if (
+            settings.mint_max_peg_out
+            and payment_quote.amount.to(unit).amount > settings.mint_max_peg_out
+        ):
+            raise NotAllowedError(
+                f"Maximum melt amount is {settings.mint_max_peg_out} sat."
+            )
 
         # We assume that the request is a bolt11 invoice, this works since we
         # support only the bol11 method for now.
@@ -667,11 +678,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         return melt_quote
 
-    async def melt_mint_settle_internally(self, melt_quote: MeltQuote) -> MeltQuote:
+    async def melt_mint_settle_internally(
+        self, melt_quote: MeltQuote, proofs: List[Proof]
+    ) -> MeltQuote:
         """Settles a melt quote internally if there is a mint quote with the same payment request.
+
+        `proofs` are passed to determine the ecash input transaction fees for this melt quote.
 
         Args:
             melt_quote (MeltQuote): Melt quote to settle.
+            proofs (List[Proof]): Proofs provided for paying the Lightning invoice.
 
         Raises:
             Exception: Melt quote already paid.
@@ -687,6 +703,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         )
         if not mint_quote:
             return melt_quote
+
         # we settle the transaction internally
         if melt_quote.paid:
             raise TransactionError("melt quote already paid")
@@ -715,15 +732,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             f" {mint_quote.quote} ({melt_quote.amount} {melt_quote.unit})"
         )
 
-        # we handle this transaction internally
-        melt_quote.fee_paid = 0
+        melt_quote.fee_paid = 0  # no internal fees
         melt_quote.paid = True
         melt_quote.paid_time = int(time.time())
-        await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
 
         mint_quote.paid = True
         mint_quote.paid_time = melt_quote.paid_time
-        await self.crud.update_mint_quote(quote=mint_quote, db=self.db)
+
+        async with self.db.connect() as conn:
+            await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
+            await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)
 
         return melt_quote
 
@@ -759,6 +777,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # make sure that the outputs (for fee return) are in the same unit as the quote
         if outputs:
+            # _verify_outputs checks if all outputs have the same unit
             await self._verify_outputs(outputs, skip_amount_check=True)
             outputs_unit = self.keysets[outputs[0].id].unit
             if not melt_quote.unit == outputs_unit.name:
@@ -768,10 +787,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
-        total_needed = melt_quote.amount + (melt_quote.fee_reserve or 0)
-        if not total_provided >= total_needed:
+        input_fees = self.get_fees_for_proofs(proofs)
+        total_needed = melt_quote.amount + melt_quote.fee_reserve + input_fees
+        # we need the fees specifically for lightning to return the overpaid fees
+        fee_reserve_provided = total_provided - melt_quote.amount - input_fees
+        if total_provided < total_needed:
             raise TransactionError(
                 f"not enough inputs provided for melt. Provided: {total_provided}, needed: {total_needed}"
+            )
+        if fee_reserve_provided < melt_quote.fee_reserve:
+            raise TransactionError(
+                f"not enough fee reserve provided for melt. Provided fee reserve: {fee_reserve_provided}, needed: {melt_quote.fee_reserve}"
             )
 
         # verify that the amount of the proofs is not larger than the maximum allowed
@@ -789,7 +815,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         await self._set_proofs_pending(proofs, quote_id=melt_quote.quote)
         try:
             # settle the transaction internally if there is a mint quote with the same payment request
-            melt_quote = await self.melt_mint_settle_internally(melt_quote)
+            melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
             # quote not paid yet (not internal), pay it with the backend
             if not melt_quote.paid:
                 logger.debug(f"Lightning: pay invoice {melt_quote.request}")
@@ -822,9 +848,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             return_promises: List[BlindedSignature] = []
             if outputs:
                 return_promises = await self._generate_change_promises(
-                    input_amount=total_provided,
-                    output_amount=melt_quote.amount,
-                    output_fee_paid=melt_quote.fee_paid,
+                    fee_provided=fee_reserve_provided,
+                    fee_paid=melt_quote.fee_paid,
                     outputs=outputs,
                     keyset=self.keysets[outputs[0].id],
                 )
@@ -898,12 +923,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
-                    # BEGIN backwards compatibility mints pre `m007_proofs_and_promises_store_id`
-                    # add keyset id to promise if not present only if the current keyset
-                    # is the only one ever used
-                    if not promise.id and len(self.keysets) == 1:
-                        promise.id = self.keyset.id
-                    # END backwards compatibility
                     signatures.append(promise)
                     return_outputs.append(output)
                     logger.trace(f"promise found: {promise}")

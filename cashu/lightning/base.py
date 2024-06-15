@@ -6,9 +6,9 @@ from pydantic import BaseModel
 from ..core.base import (
     Amount,
     MeltQuote,
-    PostMeltQuoteRequest,
     Unit,
 )
+from ..core.models import PostMeltQuoteRequest
 
 
 class StatusResponse(BaseModel):

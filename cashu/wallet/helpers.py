@@ -40,23 +40,26 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3) -> Wallet:
     Helper function to iterate thruogh a token with multiple mints and redeem them from
     these mints one keyset at a time.
     """
+    if not token.unit:
+        # load unit from wallet keyset db
+        keysets = await get_keysets(id=token.token[0].proofs[0].id, db=wallet.db)
+        if keysets:
+            token.unit = keysets[0].unit.name
+
     for t in token.token:
         assert t.mint, Exception(
             "redeem_TokenV3_multimint: multimint redeem without URL"
         )
         mint_wallet = await Wallet.with_db(
-            t.mint, os.path.join(settings.cashu_dir, wallet.name)
+            t.mint,
+            os.path.join(settings.cashu_dir, wallet.name),
+            unit=token.unit or wallet.unit.name,
         )
         keyset_ids = mint_wallet._get_proofs_keysets(t.proofs)
-        logger.trace(f"Keysets in tokens: {keyset_ids}")
-        # loop over all keysets
-        for keyset_id in set(keyset_ids):
-            await mint_wallet.load_mint(keyset_id)
-            mint_wallet.unit = mint_wallet.keysets[keyset_id].unit
-            # redeem proofs of this keyset
-            redeem_proofs = [p for p in t.proofs if p.id == keyset_id]
-            _, _ = await mint_wallet.redeem(redeem_proofs)
-            print(f"Received {mint_wallet.unit.str(sum_proofs(redeem_proofs))}")
+        logger.trace(f"Keysets in tokens: {' '.join(set(keyset_ids))}")
+        await mint_wallet.load_mint()
+        proofs_to_keep, _ = await mint_wallet.redeem(t.proofs)
+        print(f"Received {mint_wallet.unit.str(sum_proofs(proofs_to_keep))}")
 
     # return the last mint_wallet
     return mint_wallet
@@ -137,19 +140,19 @@ async def receive(
         )
     else:
         # this is very legacy code, virtually any token should have mint information
-        # no mint information present, we extract the proofs and use wallet's default mint
-        # first we load the mint URL from the DB
+        # no mint information present, we extract the proofs find the mint and unit from the db
         keyset_in_token = proofs[0].id
         assert keyset_in_token
         # we get the keyset from the db
         mint_keysets = await get_keysets(id=keyset_in_token, db=wallet.db)
         assert mint_keysets, Exception(f"we don't know this keyset: {keyset_in_token}")
-        mint_keyset = mint_keysets[0]
+        mint_keyset = [k for k in mint_keysets if k.id == keyset_in_token][0]
         assert mint_keyset.mint_url, Exception("we don't know this mint's URL")
         # now we have the URL
         mint_wallet = await Wallet.with_db(
             mint_keyset.mint_url,
             os.path.join(settings.cashu_dir, wallet.name),
+            unit=mint_keyset.unit.name or wallet.unit.name,
         )
         await mint_wallet.load_mint(keyset_in_token)
         _, _ = await mint_wallet.redeem(proofs)
@@ -166,8 +169,9 @@ async def send(
     amount: int,
     lock: str,
     legacy: bool,
-    split: bool = True,
+    offline: bool = False,
     include_dleq: bool = False,
+    include_fees: bool = False,
 ):
     """
     Prints token to send to stdout.
@@ -191,24 +195,19 @@ async def send(
                 sig_all=True,
                 n_sigs=1,
             )
+            print(f"Secret lock: {secret_lock}")
 
     await wallet.load_proofs()
-    if split:
-        await wallet.load_mint()
-        _, send_proofs = await wallet.split_to_send(
-            wallet.proofs, amount, secret_lock, set_reserved=True
-        )
-    else:
-        # get a proof with specific amount
-        send_proofs = []
-        for p in wallet.proofs:
-            if not p.reserved and p.amount == amount:
-                send_proofs = [p]
-                break
-        assert send_proofs, Exception(
-            "No proof with this amount found. Available amounts:"
-            f" {set([p.amount for p in wallet.proofs])}"
-        )
+
+    await wallet.load_mint()
+    # get a proof with specific amount
+    send_proofs, fees = await wallet.select_to_send(
+        wallet.proofs,
+        amount,
+        set_reserved=False,
+        offline=offline,
+        include_fees=include_fees,
+    )
 
     token = await wallet.serialize_proofs(
         send_proofs,

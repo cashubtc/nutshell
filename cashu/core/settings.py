@@ -58,6 +58,9 @@ class MintSettings(CashuSettings):
 
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
+    mint_max_secret_length: int = Field(default=512)
+
+    mint_input_fee_ppk: int = Field(default=0)
 
 
 class MintBackends(MintSettings):
@@ -169,6 +172,8 @@ class WalletSettings(CashuSettings):
 
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
     proofs_batch_size: int = Field(default=1000)
+
+    wallet_target_amount_count: int = Field(default=3)
 
 
 class LndRestFundingSource(MintSettings):
