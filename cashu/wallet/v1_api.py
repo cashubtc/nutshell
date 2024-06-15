@@ -30,6 +30,8 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
+    PostMeltRequestOptionMpp,
+    PostMeltRequestOptions,
     PostMeltResponse,
     PostMeltResponse_deprecated,
     PostMintQuoteRequest,
@@ -361,9 +363,17 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
+        # add mpp amount for partial melts
+        melt_options = None
+        if amount:
+            melt_options = PostMeltRequestOptions(
+                mpp=PostMeltRequestOptionMpp(amount=amount)
+            )
+
         payload = PostMeltQuoteRequest(
-            unit=unit.name, request=payment_request, amount=amount
+            unit=unit.name, request=payment_request, options=melt_options
         )
+
         resp = await self.httpx.post(
             join(self.url, "/v1/melt/quote/bolt11"),
             json=payload.dict(),
