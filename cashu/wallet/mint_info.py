@@ -2,7 +2,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-from ..core.base import Nut15MppSupport, Unit
+from ..core.base import Unit
+from ..core.models import Nut15MppSupport
 
 
 class MintInfo(BaseModel):

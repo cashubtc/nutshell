@@ -45,6 +45,7 @@ settings.mint_private_key = "TEST_PRIVATE_KEY"
 settings.mint_seed_decryption_key = ""
 settings.mint_max_balance = 0
 settings.mint_lnd_enable_mpp = True
+settings.mint_input_fee_ppk = 0
 
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
