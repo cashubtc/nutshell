@@ -101,6 +101,8 @@ class LedgerEventClientManager:
             try:
                 logger.debug(f"Request: {req}")
                 resp = await self._handle_request(req)
+                # Send the response
+                await self._send_msg(resp)
             except Exception as e:
                 err = JSONRPCErrorResponse(
                     error=JSONRPCError(
@@ -110,10 +112,7 @@ class LedgerEventClientManager:
                     id=req.id,
                 )
                 await self._send_msg(err)
-                raise e
-
-            # Send the response
-            await self._send_msg(resp)
+                continue
 
     async def _handle_request(self, data: JSONRPCRequest) -> JSONRPCResponse:
         logger.info(f"Received message: {data}")

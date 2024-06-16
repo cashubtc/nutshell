@@ -316,14 +316,14 @@ class Wallet(
                 raise Exception(f"secret already used: {s}")
         logger.trace("Secret check complete.")
 
-    async def request_mint_subscription(
+    async def request_mint_with_callback(
         self, amount: int, callback: Callable
     ) -> Tuple[Invoice, SubscriptionManager]:
         """Request a Lightning invoice for minting tokens.
 
         Args:
             amount (int): Amount for Lightning invoice in satoshis
-            callback (Optional[Callable], optional): Callback function to be called when the invoice is paid. Defaults to None.
+            callback (Callable): Callback function to be called when the invoice is paid.
 
         Returns:
             Invoice: Lightning invoice

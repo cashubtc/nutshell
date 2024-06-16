@@ -316,7 +316,7 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
     if amount and not id:
         mint_supports_websockets = wallet.mint_info.supports_nut(WEBSOCKETS_NUT)
         if mint_supports_websockets:
-            invoice, subscription = await wallet.request_mint_subscription(
+            invoice, subscription = await wallet.request_mint_with_callback(
                 amount, callback=mint_invoice_callback
             )
             invoice_nonlocal, subscription_nonlocal = invoice, subscription
