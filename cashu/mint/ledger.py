@@ -519,6 +519,65 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         del self.locks[quote_id]
         return promises
 
+    def create_internal_melt_quote(
+        self, mint_quote: MintQuote, melt_quote: PostMeltQuoteRequest
+    ) -> PaymentQuoteResponse:
+        unit, method = self._verify_and_get_unit_method(
+            melt_quote.unit, Method.bolt11.name
+        )
+        # NOTE: we normalize the request to lowercase to avoid case sensitivity
+        # This works with Lightning but might not work with other methods
+        request = melt_quote.request.lower()
+
+        if not request == mint_quote.request:
+            raise TransactionError("bolt11 requests do not match")
+        if not mint_quote.unit == melt_quote.unit:
+            raise TransactionError("units do not match")
+        if not mint_quote.method == method.name:
+            raise TransactionError("methods do not match")
+        if mint_quote.paid:
+            raise TransactionError("mint quote already paid")
+        if mint_quote.issued:
+            raise TransactionError("mint quote already issued")
+        if not mint_quote.checking_id:
+            raise TransactionError("mint quote has no checking id")
+        if melt_quote.is_mpp:
+            raise TransactionError("internal payments do not support mpp")
+
+        internal_fee = Amount(unit, 0)  # no internal fees
+        amount = Amount(unit, mint_quote.amount)
+
+        payment_quote = PaymentQuoteResponse(
+            checking_id=mint_quote.checking_id,
+            amount=amount,
+            fee=internal_fee,
+        )
+        logger.info(
+            f"Issuing internal melt quote: {request} ->"
+            f" {mint_quote.quote} ({amount.str()} + {internal_fee.str()} fees)"
+        )
+
+        return payment_quote
+
+    def validate_payment_quote(
+        self, melt_quote: PostMeltQuoteRequest, payment_quote: PaymentQuoteResponse
+    ):
+        # payment quote validation
+        unit, method = self._verify_and_get_unit_method(
+            melt_quote.unit, Method.bolt11.name
+        )
+        if not payment_quote.checking_id:
+            raise Exception("quote has no checking id")
+        # verify that payment quote amount is as expected
+        if melt_quote.is_mpp and melt_quote.mpp_amount != payment_quote.amount.amount:
+            raise TransactionError("quote amount not as requested")
+        # make sure the backend returned the amount with a correct unit
+        if not payment_quote.amount.unit == unit:
+            raise TransactionError("payment quote amount units do not match")
+        # fee from the backend must be in the same unit as the amount
+        if not payment_quote.fee.unit == unit:
+            raise TransactionError("payment quote fee units do not match")
+
     async def melt_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PostMeltQuoteResponse:
@@ -550,43 +609,19 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
             request=request, db=self.db
         )
         if mint_quote:
-            if not request == mint_quote.request:
-                raise TransactionError("bolt11 requests do not match")
-            if not mint_quote.unit == melt_quote.unit:
-                raise TransactionError("units do not match")
-            if not mint_quote.method == method.name:
-                raise TransactionError("methods do not match")
-            if mint_quote.paid:
-                raise TransactionError("mint quote already paid")
-            if mint_quote.issued:
-                raise TransactionError("mint quote already issued")
-            if not mint_quote.checking_id:
-                raise TransactionError("mint quote has no checking id")
+            payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
 
-            internal_fee = Amount(unit, 0)  # no internal fees
-            amount = Amount(unit, mint_quote.amount)
-
-            payment_quote = PaymentQuoteResponse(
-                checking_id=mint_quote.checking_id,
-                amount=amount,
-                fee=internal_fee,
-            )
-            logger.info(
-                f"Issuing internal melt quote: {request} ->"
-                f" {mint_quote.quote} ({amount.str()} + {internal_fee.str()} fees)"
-            )
         else:
-            # not internal, get payment quote by backend
+            # not internal
+            # verify that the backend supports mpp if the quote request has an amount
+            if melt_quote.is_mpp and not self.backends[method][unit].supports_mpp:
+                raise TransactionError("backend does not support mpp")
+            # get payment quote by backend
             payment_quote = await self.backends[method][unit].get_payment_quote(
                 melt_quote=melt_quote
             )
-            assert payment_quote.checking_id, "quote has no checking id"
-            # make sure the backend returned the amount with a correct unit
-            if not payment_quote.amount.unit == unit:
-                raise TransactionError("payment quote amount units do not match")
-            # fee from the backend must be in the same unit as the amount
-            if not payment_quote.fee.unit == unit:
-                raise TransactionError("payment quote fee units do not match")
+
+        self.validate_payment_quote(melt_quote, payment_quote)
 
         # verify that the amount of the proofs is not larger than the maximum allowed
         if (

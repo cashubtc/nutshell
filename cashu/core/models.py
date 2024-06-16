@@ -131,12 +131,34 @@ class PostMintResponse_deprecated(BaseModel):
 # ------- API: MELT QUOTE -------
 
 
+class PostMeltRequestOptionMpp(BaseModel):
+    amount: int = Field(gt=0)  # input amount
+
+
+class PostMeltRequestOptions(BaseModel):
+    mpp: Optional[PostMeltRequestOptionMpp]
+
+
 class PostMeltQuoteRequest(BaseModel):
     unit: str = Field(..., max_length=settings.mint_max_request_length)  # input unit
     request: str = Field(
         ..., max_length=settings.mint_max_request_length
     )  # output payment request
-    amount: Optional[int] = Field(default=None, gt=0)  # input amount
+    options: Optional[PostMeltRequestOptions] = None
+
+    @property
+    def is_mpp(self) -> bool:
+        if self.options and self.options.mpp:
+            return True
+        else:
+            return False
+
+    @property
+    def mpp_amount(self) -> int:
+        if self.is_mpp and self.options and self.options.mpp:
+            return self.options.mpp.amount
+        else:
+            raise Exception("quote request is not mpp.")
 
 
 class PostMeltQuoteResponse(BaseModel):
