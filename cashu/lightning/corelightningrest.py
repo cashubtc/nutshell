@@ -175,7 +175,7 @@ class CoreLightningRestWallet(LightningBackend):
                 error_message=error_message,
             )
 
-        quote_amount_msat = int(Amount(quote.unit, quote.amount).to(Unit.msat))
+        quote_amount_msat = Amount(Unit[quote.unit], quote.amount).to(Unit.msat).amount
         fee_limit_percent = fee_limit_msat / quote_amount_msat * 100
         post_data = {
             "invoice": quote.request,
@@ -343,9 +343,9 @@ class CoreLightningRestWallet(LightningBackend):
         amount_msat = invoice_obj.amount_msat
         if melt_quote.is_mpp:
             amount_msat = Amount(
-                    melt_quote.unit,
+                    Unit[melt_quote.unit],
                     melt_quote.mpp_amount
-                ).to(Unit.msat)
+                ).to(Unit.msat).amount
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)

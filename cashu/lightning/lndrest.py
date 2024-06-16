@@ -8,7 +8,8 @@ import bolt11
 import httpx
 from bolt11 import (
     TagChar,
-    decode,
+    Bolt11Exception,
+    decode
 )
 from loguru import logger
 
@@ -178,8 +179,8 @@ class LndRestWallet(LightningBackend):
 
         # if the amount of the melt quote is different from the request
         # call pay_partial_invoice instead
-        quote_amount_msat = Amount(quote.unit, quote.amount).to(Unit.msat)
-        if invoice.amount_msat != quote_amount_msat:
+        quote_amount_msat = Amount(Unit[quote.unit], quote.amount).to(Unit.msat)
+        if invoice.amount_msat != quote_amount_msat.amount:
             if self.supports_mpp:
                 return await self.pay_partial_invoice(
                     quote, quote_amount_msat.to(Unit.sat), fee_limit_msat
