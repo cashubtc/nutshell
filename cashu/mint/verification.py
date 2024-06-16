@@ -1,4 +1,3 @@
-import math
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
@@ -256,7 +255,7 @@ class LedgerVerification(
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         if not len(set([self.keysets[p.id].unit for p in proofs])) == 1:
             raise TransactionUnitError("inputs have different units.")
-        fee = math.ceil(sum([self.keysets[p.id].input_fee_ppk for p in proofs]) / 1000)
+        fee = (sum([self.keysets[p.id].input_fee_ppk for p in proofs]) + 999) // 1000
         return fee
 
     def _verify_equation_balanced(

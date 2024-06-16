@@ -1,4 +1,3 @@
-import math
 import uuid
 from typing import Dict, List, Tuple, Union
 
@@ -24,13 +23,13 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
     unit: Unit
 
     def get_fees_for_keyset(self, amounts: List[int], keyset: WalletKeyset) -> int:
-        fees = max(math.ceil(sum([keyset.input_fee_ppk for a in amounts]) / 1000), 0)
+        fees = max((sum([keyset.input_fee_ppk for a in amounts]) + 999) // 1000, 0)
         return fees
 
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
         # for each proof, find the keyset with the same id and sum the fees
         fees = max(
-            math.ceil(sum([self.keysets[p.id].input_fee_ppk for p in proofs]) / 1000), 0
+            (sum([self.keysets[p.id].input_fee_ppk for p in proofs]) + 999) // 1000, 0
         )
         return fees
 
