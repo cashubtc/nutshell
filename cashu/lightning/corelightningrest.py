@@ -174,16 +174,33 @@ class CoreLightningRestWallet(LightningBackend):
                 preimage=None,
                 error_message=error_message,
             )
-        fee_limit_percent = fee_limit_msat / invoice.amount_msat * 100
+
+        quote_amount_msat = int(Amount(quote.unit, quote.amount).to(Unit.msat))
+        fee_limit_percent = fee_limit_msat / quote_amount_msat * 100
+        post_data = {
+            "invoice": quote.request,
+            "maxfeepercent": f"{fee_limit_percent:.11}",
+            "exemptfee": 0,  # so fee_limit_percent is applied even on payments
+            # with fee < 5000 millisatoshi (which is default value of exemptfee)
+        }
+
+        # Handle Multi-Mint payout where we must only pay part of the invoice amount
+        if quote_amount_msat != invoice.amount_msat:
+            if self.supports_mpp:
+                post_data["partial_msat"] = quote_amount_msat
+            else:
+                error_message = "mint does not support MPP"
+                return PaymentResponse(
+                    ok=False,
+                    checking_id=None,
+                    fee=None,
+                    preimage=None,
+                    error_message=error_message,
+                )
         r = await self.client.post(
             f"{self.url}/v1/pay",
-            data={
-                "invoice": quote.request,
-                "maxfeepercent": f"{fee_limit_percent:.11}",
-                "exemptfee": 0,  # so fee_limit_percent is applied even on payments
-                # with fee < 5000 millisatoshi (which is default value of exemptfee)
-            },
-            timeout=None,
+            data=post_data,
+            timeout=None
         )
 
         if r.is_error or "error" in r.json():
@@ -322,7 +339,13 @@ class CoreLightningRestWallet(LightningBackend):
     ) -> PaymentQuoteResponse:
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
-        amount_msat = int(invoice_obj.amount_msat)
+        assert invoice_obj.amount_msat > 0, "invoice has 0 amount."
+        amount_msat = invoice_obj.amount_msat
+        if melt_quote.is_mpp:
+            amount_msat = Amount(
+                    melt_quote.unit,
+                    melt_quote.mpp_amount
+                ).to(Unit.msat)
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)

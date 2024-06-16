@@ -154,14 +154,44 @@ class LndRestWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
+        
+        try:
+            invoice = decode(quote.request)
+        except Bolt11Exception as exc:
+            return PaymentResponse(
+                ok=False,
+                checking_id=None,
+                fee=None,
+                preimage=None,
+                error_message=str(exc),
+            )
+        
+        if not invoice.amount_msat or invoice.amount_msat <= 0:
+            error_message = "0 amount invoices are not allowed"
+            return PaymentResponse(
+                ok=False,
+                checking_id=None,
+                fee=None,
+                preimage=None,
+                error_message=error_message,
+            )
+
         # if the amount of the melt quote is different from the request
         # call pay_partial_invoice instead
-        invoice = bolt11.decode(quote.request)
-        if invoice.amount_msat:
-            amount_msat = int(invoice.amount_msat)
-            if amount_msat != quote.amount * 1000 and self.supports_mpp:
+        quote_amount_msat = Amount(quote.unit, quote.amount).to(Unit.msat)
+        if invoice.amount_msat != quote_amount_msat:
+            if self.supports_mpp:
                 return await self.pay_partial_invoice(
-                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
+                    quote, Amount(Unit.sat, quote_amount_msat), fee_limit_msat
+                )
+            else:
+                error_message = "Mint does not support MPP"
+                return PaymentResponse(
+                    ok=False,
+                    checking_id=None,
+                    fee=None,
+                    preimage=None,
+                    error_message=error_message
                 )
 
         # set the fee limit for the payment
