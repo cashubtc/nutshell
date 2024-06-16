@@ -5,6 +5,7 @@ from typing import AsyncGenerator, Dict, Optional
 import httpx
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
@@ -118,7 +119,10 @@ class StrikeUSDWallet(LightningBackend):
             error_message=None,
         )
 
-    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
+    async def get_payment_quote(
+        self, melt_quote: PostMeltQuoteRequest
+    ) -> PaymentQuoteResponse:
+        bolt11 = melt_quote.request
         try:
             r = await self.client.post(
                 url=f"{self.endpoint}/v1/payment-quotes/lightning",

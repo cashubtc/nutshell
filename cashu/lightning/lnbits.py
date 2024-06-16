@@ -8,6 +8,7 @@ from bolt11 import (
 
 from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
+from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
@@ -167,8 +168,10 @@ class LNbitsWallet(LightningBackend):
             preimage=data["preimage"],
         )
 
-    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
-        invoice_obj = decode(bolt11)
+    async def get_payment_quote(
+        self, melt_quote: PostMeltQuoteRequest
+    ) -> PaymentQuoteResponse:
+        invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)

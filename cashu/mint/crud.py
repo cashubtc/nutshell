@@ -629,8 +629,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(  # type: ignore
             f"""
             INSERT INTO {table_with_schema(db, 'keysets')}
-            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 keyset.id,
@@ -644,6 +644,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 True,
                 keyset.version,
                 keyset.unit.name,
+                keyset.input_fee_ppk,
             ),
         )
 

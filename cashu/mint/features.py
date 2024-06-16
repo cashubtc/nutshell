@@ -1,8 +1,8 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 from cashu.mint.protocols import SupportsBackends
 
-from ..core.base import (
+from ..core.models import (
     MintMeltMethodSetting,
 )
 from ..core.nuts import (
@@ -10,6 +10,7 @@ from ..core.nuts import (
     FEE_RETURN_NUT,
     MELT_NUT,
     MINT_NUT,
+    MPP_NUT,
     P2PK_NUT,
     RESTORE_NUT,
     SCRIPT_NUT,
@@ -20,7 +21,7 @@ from ..core.settings import settings
 
 
 class LedgerFeatures(SupportsBackends):
-    def mint_features(self) -> Dict[int, Dict[str, Any]]:
+    def mint_features(self) -> Dict[int, Union[List[Any], Dict[str, Any]]]:
         # determine all method-unit pairs
         method_settings: Dict[int, List[MintMeltMethodSetting]] = {}
         for nut in [MINT_NUT, MELT_NUT]:
@@ -40,7 +41,7 @@ class LedgerFeatures(SupportsBackends):
 
         supported_dict = dict(supported=True)
 
-        mint_features: Dict[int, Dict[str, Any]] = {
+        mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {
             MINT_NUT: dict(
                 methods=method_settings[MINT_NUT],
                 disabled=settings.mint_peg_out_only,
@@ -57,4 +58,21 @@ class LedgerFeatures(SupportsBackends):
             DLEQ_NUT: supported_dict,
             WEBSOCKETS_NUT: supported_dict,
         }
+
+        # signal which method-unit pairs support MPP
+        mpp_features = []
+        for method, unit_dict in self.backends.items():
+            for unit in unit_dict.keys():
+                if unit_dict[unit].supports_mpp:
+                    mpp_features.append(
+                        {
+                            "method": method.name,
+                            "unit": unit.name,
+                            "mpp": True,
+                        }
+                    )
+
+        if mpp_features:
+            mint_features[MPP_NUT] = mpp_features
+
         return mint_features

@@ -1,7 +1,7 @@
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import PostMeltQuoteRequest
+from cashu.core.models import PostMeltQuoteRequest
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1

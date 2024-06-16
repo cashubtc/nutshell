@@ -189,7 +189,7 @@ async def swap(
 
     # pay invoice from outgoing mint
     await outgoing_wallet.load_proofs(reload=True)
-    quote = await outgoing_wallet.get_pay_amount_with_fees(invoice.bolt11)
+    quote = await outgoing_wallet.melt_quote(invoice.bolt11)
     total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
@@ -197,7 +197,7 @@ async def swap(
     _, send_proofs = await outgoing_wallet.split_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
-    await outgoing_wallet.pay_lightning(
+    await outgoing_wallet.melt(
         send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
     )
 
@@ -237,16 +237,14 @@ async def send_command(
         default=None,
         description="Mint URL to send from (None for default mint)",
     ),
-    nosplit: bool = Query(
-        default=False, description="Do not split tokens before sending."
-    ),
+    offline: bool = Query(default=False, description="Force offline send."),
 ):
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
     if not nostr:
         balance, token = await send(
-            wallet, amount=amount, lock=lock, legacy=False, split=not nosplit
+            wallet, amount=amount, lock=lock, legacy=False, offline=offline
         )
         return SendResponse(balance=balance, token=token)
     else:

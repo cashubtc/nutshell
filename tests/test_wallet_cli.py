@@ -410,11 +410,11 @@ def test_send_legacy(mint, cli_prefix):
     assert token_str.startswith("eyJwcm9v"), "output is not as expected"
 
 
-def test_send_without_split(mint, cli_prefix):
+def test_send_offline(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "send", "2", "--nosplit"],
+        [*cli_prefix, "send", "2", "--offline"],
     )
     assert result.exception is None
     print("SEND")
@@ -422,13 +422,13 @@ def test_send_without_split(mint, cli_prefix):
     assert "cashuA" in result.output, "output does not have a token"
 
 
-def test_send_without_split_but_wrong_amount(mint, cli_prefix):
+def test_send_too_much(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "send", "10", "--nosplit"],
+        [*cli_prefix, "send", "100000"],
     )
-    assert "No proof with this amount found" in str(result.exception)
+    assert "balance too low" in str(result.exception)
 
 
 def test_receive_tokenv3(mint, cli_prefix):
