@@ -26,7 +26,7 @@ async def wallet(mint):
 
 @pytest.mark.asyncio
 async def test_wallet_subscription(wallet: Wallet):
-    assert wallet.mint_info.supports(WEBSOCKETS_NUT)
+    assert wallet.mint_info.supports_nut(WEBSOCKETS_NUT)
     triggered = False
     msg_stack: list[JSONRPCNotficationParams] = []
 
@@ -39,7 +39,7 @@ async def test_wallet_subscription(wallet: Wallet):
     invoice, sub = await wallet.request_mint_subscription(128, callback=callback)
     pay_if_regtest(invoice.bolt11)
     wait = settings.fakewallet_delay_incoming_payment or 2
-    await asyncio.sleep(2 * wait)
+    await asyncio.sleep(wait + 2)
     assert triggered
     assert len(msg_stack) == 2
 
