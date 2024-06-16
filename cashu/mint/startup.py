@@ -88,7 +88,10 @@ async def rotate_keys(n_seconds=60):
 
 
 async def start_mint_init():
-    await migrate_databases(ledger.db, migrations)
-    await ledger.startup_ledger()
-    logger.info("Mint started.")
+    try:
+        await migrate_databases(ledger.db, migrations)
+        await ledger.startup_ledger()
+        logger.info("Mint started.")
+    except:
+        logger.error("Exception: Connection to mint backend failed")
     # asyncio.create_task(rotate_keys())
