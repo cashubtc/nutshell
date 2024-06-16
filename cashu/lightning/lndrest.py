@@ -182,7 +182,7 @@ class LndRestWallet(LightningBackend):
         if invoice.amount_msat != quote_amount_msat:
             if self.supports_mpp:
                 return await self.pay_partial_invoice(
-                    quote, Amount(Unit.sat, quote_amount_msat), fee_limit_msat
+                    quote, quote_amount_msat.to(Unit.sat), fee_limit_msat
                 )
             else:
                 error_message = "Mint does not support MPP"
