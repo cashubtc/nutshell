@@ -43,14 +43,14 @@ class LedgerEventClientManager:
                 limit_websocket(self.websocket)
             except Exception as e:
                 logger.error(f"Error: {e}")
-                resp = JSONRPCErrorResponse(
+                err = JSONRPCErrorResponse(
                     error=JSONRPCError(
                         code=JSONRPCErrorCode.SERVER_ERROR,
                         message=f"Error: {e}",
                     ),
                     id=0,
                 )
-                await self._send_msg(resp)
+                await self._send_msg(err)
                 continue
 
             # Parse the JSON data
@@ -58,28 +58,28 @@ class LedgerEventClientManager:
                 data = json.loads(json_data)
             except json.JSONDecodeError as e:
                 logger.error(f"Error decoding JSON: {e}")
-                resp = JSONRPCErrorResponse(
+                err = JSONRPCErrorResponse(
                     error=JSONRPCError(
                         code=JSONRPCErrorCode.PARSE_ERROR,
                         message=f"Error: {e}",
                     ),
                     id=0,
                 )
-                await self._send_msg(resp)
+                await self._send_msg(err)
                 continue
 
             # Parse the JSONRPCRequest
             try:
                 req = JSONRPCRequest.parse_obj(data)
             except Exception as e:
-                resp = JSONRPCErrorResponse(
+                err = JSONRPCErrorResponse(
                     error=JSONRPCError(
                         code=JSONRPCErrorCode.INVALID_REQUEST,
                         message=f"Error: {e}",
                     ),
                     id=0,
                 )
-                await self._send_msg(resp)
+                await self._send_msg(err)
                 logger.warning(f"Error handling websocket message: {e}")
                 continue
 
@@ -87,14 +87,14 @@ class LedgerEventClientManager:
             try:
                 JSONRPCMethods(req.method)
             except ValueError:
-                resp = JSONRPCErrorResponse(
+                err = JSONRPCErrorResponse(
                     error=JSONRPCError(
                         code=JSONRPCErrorCode.METHOD_NOT_FOUND,
                         message=f"Method not found: {req.method}",
                     ),
                     id=req.id,
                 )
-                await self._send_msg(resp)
+                await self._send_msg(err)
                 continue
 
             # Handle the request
@@ -102,13 +102,15 @@ class LedgerEventClientManager:
                 logger.debug(f"Request: {req}")
                 resp = await self._handle_request(req)
             except Exception as e:
-                resp = JSONRPCErrorResponse(
+                err = JSONRPCErrorResponse(
                     error=JSONRPCError(
                         code=JSONRPCErrorCode.INTERNAL_ERROR,
                         message=f"Error: {e}",
                     ),
                     id=req.id,
                 )
+                await self._send_msg(err)
+                raise e
 
             # Send the response
             await self._send_msg(resp)
