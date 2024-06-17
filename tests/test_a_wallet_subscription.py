@@ -3,6 +3,7 @@ import asyncio
 import pytest
 import pytest_asyncio
 
+from cashu.core.base import Method
 from cashu.core.json_rpc.base import JSONRPCNotficationParams
 from cashu.core.nuts import WEBSOCKETS_NUT
 from cashu.core.settings import settings
@@ -29,7 +30,9 @@ async def test_wallet_subscription(wallet: Wallet):
     if not wallet.mint_info.supports_nut(WEBSOCKETS_NUT):
         pytest.skip("No websocket support")
 
-    if not wallet.mint_info.supports_websocket_bolt11_mint_quote():
+    if not wallet.mint_info.supports_websocket_mint_quote(
+        Method["bolt11"], wallet.unit
+    ):
         pytest.skip("No websocket support for bolt11_mint_quote")
 
     triggered = False

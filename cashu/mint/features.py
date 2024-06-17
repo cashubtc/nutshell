@@ -1,8 +1,6 @@
 from typing import Any, Dict, List, Union
 
-from cashu.core.base import Method
-from cashu.mint.protocols import SupportsBackends
-
+from ..core.base import Method
 from ..core.models import (
     MintMeltMethodSetting,
 )
@@ -19,6 +17,7 @@ from ..core.nuts import (
     WEBSOCKETS_NUT,
 )
 from ..core.settings import settings
+from ..mint.protocols import SupportsBackends
 
 
 class LedgerFeatures(SupportsBackends):
