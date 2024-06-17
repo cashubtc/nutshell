@@ -68,6 +68,7 @@ class PaymentStatus(BaseModel):
 
 class LightningBackend(ABC):
     supports_mpp: bool = False
+    supports_incoming_payment_stream: bool = False
     supported_units: set[Unit]
     unit: Unit
 

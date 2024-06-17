@@ -115,7 +115,7 @@ class LedgerEventClientManager:
                 continue
 
     async def _handle_request(self, data: JSONRPCRequest) -> JSONRPCResponse:
-        logger.info(f"Received message: {data}")
+        logger.debug(f"Received websocket message: {data}")
         if data.method == JSONRPCMethods.SUBSCRIBE.value:
             subscribe_params = JSONRPCSubscribeParams.parse_obj(data.params)
             self.add_subscription(
@@ -138,7 +138,6 @@ class LedgerEventClientManager:
             raise ValueError(f"Invalid method: {data.method}")
 
     async def _send_obj(self, data: dict, subId: str):
-        logger.info(f"Sending object: {data}")
         resp = JSONRPCNotification(
             method=JSONRPCMethods.SUBSCRIBE.value,
             params=JSONRPCNotficationParams(subId=subId, payload=data).dict(),
@@ -148,7 +147,7 @@ class LedgerEventClientManager:
     async def _send_msg(
         self, data: Union[JSONRPCResponse, JSONRPCNotification, JSONRPCErrorResponse]
     ):
-        logger.info(f"Sending message: {data}")
+        logger.debug(f"Sending websocket message: {data}")
         await self.websocket.send_text(data.json())
 
     def add_subscription(

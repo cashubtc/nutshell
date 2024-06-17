@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Union
 
+from cashu.core.base import Method
 from cashu.mint.protocols import SupportsBackends
 
 from ..core.models import (
@@ -56,7 +57,6 @@ class LedgerFeatures(SupportsBackends):
             SCRIPT_NUT: supported_dict,
             P2PK_NUT: supported_dict,
             DLEQ_NUT: supported_dict,
-            WEBSOCKETS_NUT: supported_dict,
         }
 
         # signal which method-unit pairs support MPP
@@ -74,5 +74,30 @@ class LedgerFeatures(SupportsBackends):
 
         if mpp_features:
             mint_features[MPP_NUT] = mpp_features
+
+        # specify which websocket features are supported
+        # these two are supported by default
+        websocket_features: List[Dict[str, Union[str, List[str]]]] = []
+        # we check the backend to see if "bolt11_mint_quote" is supported as well
+        for method, unit_dict in self.backends.items():
+            if method == Method["bolt11"]:
+                for unit in unit_dict.keys():
+                    websocket_features.append(
+                        {
+                            "method": method.name,
+                            "unit": unit.name,
+                            "commands": ["bolt11_melt_quote", "proof_state"],
+                        }
+                    )
+                    if unit_dict[unit].supports_incoming_payment_stream:
+                        supported_features: List[str] = list(
+                            websocket_features[-1]["commands"]
+                        )
+                        websocket_features[-1]["commands"] = supported_features + [
+                            "bolt11_mint_quote"
+                        ]
+
+        if websocket_features:
+            mint_features[WEBSOCKETS_NUT] = websocket_features
 
         return mint_features

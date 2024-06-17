@@ -15,11 +15,10 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, MintQuote, TokenV3, Unit
+from ...core.base import Invoice, Method, MintQuote, TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
-from ...core.nuts import WEBSOCKETS_NUT
 from ...core.settings import settings
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
@@ -314,7 +313,9 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
 
     # user requests an invoice
     if amount and not id:
-        mint_supports_websockets = wallet.mint_info.supports_nut(WEBSOCKETS_NUT)
+        mint_supports_websockets = wallet.mint_info.supports_websocket_mint_quote(
+            Method["bolt11"], wallet.unit
+        )
         if mint_supports_websockets:
             invoice, subscription = await wallet.request_mint_with_callback(
                 amount, callback=mint_invoice_callback

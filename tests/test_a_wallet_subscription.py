@@ -26,7 +26,12 @@ async def wallet(mint):
 
 @pytest.mark.asyncio
 async def test_wallet_subscription(wallet: Wallet):
-    assert wallet.mint_info.supports_nut(WEBSOCKETS_NUT)
+    if not wallet.mint_info.supports_nut(WEBSOCKETS_NUT):
+        pytest.skip("No websocket support")
+
+    if not wallet.mint_info.supports_websocket_bolt11_mint_quote():
+        pytest.skip("No websocket support for bolt11_mint_quote")
+
     triggered = False
     msg_stack: list[JSONRPCNotficationParams] = []
 
