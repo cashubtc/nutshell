@@ -128,11 +128,14 @@ class LedgerVerification(
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate outputs.")
         # verify that outputs have not been signed previously
-        if any(await self._check_outputs_issued_before(outputs)):
+        signed_before = await self._check_outputs_issued_before(outputs)
+        if any(signed_before):
             raise TransactionError("outputs have already been signed before.")
         logger.trace(f"Verified {len(outputs)} outputs.")
 
-    async def _check_outputs_issued_before(self, outputs: List[BlindedMessage]):
+    async def _check_outputs_issued_before(
+        self, outputs: List[BlindedMessage]
+    ) -> List[bool]:
         """Checks whether the provided outputs have previously been signed by the mint
         (which would lead to a duplication error later when trying to store these outputs again).
 
