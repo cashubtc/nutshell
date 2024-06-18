@@ -27,7 +27,7 @@ class LedgerEventClientManager:
     subscriptions: dict[
         JSONRPCSubscriptionKinds, dict[str, List[str]]
     ] = {}  # [kind, [filter, List[subId]]]
-    max_subscriptions = 100
+    max_subscriptions = 1000
 
     def __init__(self, websocket: WebSocket):
         self.websocket = websocket
@@ -164,7 +164,6 @@ class LedgerEventClientManager:
                 self.subscriptions[kind][filter] = []
             logger.debug(f"Adding subscription {subId} for filter {filter}")
             self.subscriptions[kind][filter].append(subId)
-            # self.handle_subscription_init(kind, filters, subId)
 
     def remove_subscription(self, subId: str) -> None:
         for kind, sub_filters in self.subscriptions.items():

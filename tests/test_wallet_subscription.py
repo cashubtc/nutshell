@@ -3,7 +3,7 @@ import asyncio
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Method
+from cashu.core.base import Method, ProofState
 from cashu.core.json_rpc.base import JSONRPCNotficationParams
 from cashu.core.nuts import WEBSOCKETS_NUT
 from cashu.core.settings import settings
@@ -26,7 +26,7 @@ async def wallet(mint):
 
 
 @pytest.mark.asyncio
-async def test_wallet_subscription(wallet: Wallet):
+async def test_wallet_subscription_mint(wallet: Wallet):
     if not wallet.mint_info.supports_nut(WEBSOCKETS_NUT):
         pytest.skip("No websocket support")
 
@@ -45,14 +45,62 @@ async def test_wallet_subscription(wallet: Wallet):
         asyncio.run(wallet.mint(int(invoice.amount), id=invoice.id))
 
     invoice, sub = await wallet.request_mint_with_callback(128, callback=callback)
-    pay_if_regtest(invoice.bolt11)
-    wait = settings.fakewallet_delay_incoming_payment or 2
-    await asyncio.sleep(wait + 2)
-    assert triggered
-    assert len(msg_stack) == 2
 
+    # first we expect the issued=False state to arrive
+    await asyncio.sleep(2)
+    assert triggered
+    assert len(msg_stack) == 1
     assert msg_stack[0].payload["paid"] is True
     assert msg_stack[0].payload["issued"] is False
 
+    # this will cause a second message
+    pay_if_regtest(invoice.bolt11)
+    wait = settings.fakewallet_delay_incoming_payment or 2
+    await asyncio.sleep(wait + 2)
+    assert len(msg_stack) == 2
     assert msg_stack[1].payload["paid"] is True
     assert msg_stack[1].payload["issued"] is True
+
+
+@pytest.mark.asyncio
+async def test_wallet_subscription_swap(wallet: Wallet):
+    if not wallet.mint_info.supports_nut(WEBSOCKETS_NUT):
+        pytest.skip("No websocket support")
+
+    invoice = await wallet.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id)
+
+    triggered = False
+    msg_stack: list[JSONRPCNotficationParams] = []
+
+    def callback(msg: JSONRPCNotficationParams):
+        nonlocal triggered, msg_stack
+        triggered = True
+        msg_stack.append(msg)
+
+    n_subscriptions = len(wallet.proofs)
+    state, sub = await wallet.check_proof_state_with_callback(
+        wallet.proofs, callback=callback
+    )
+
+    _ = await wallet.split_to_send(wallet.proofs, 64)
+
+    wait = 1
+    await asyncio.sleep(wait)
+    assert triggered
+
+    # we receive 2 messages for each subscription
+    assert len(msg_stack) == n_subscriptions * 2
+
+    # the first one is the PENDING state
+    pending_stack = msg_stack[:n_subscriptions]
+    for msg in pending_stack:
+        proof_state = ProofState.parse_obj(msg.payload)
+        assert proof_state.state.value == "PENDING"
+
+    # the second one is the SPENT state
+    spent_stack = msg_stack[n_subscriptions:]
+    for msg in spent_stack:
+        proof_state = ProofState.parse_obj(msg.payload)
+        assert proof_state.state.value == "SPENT"

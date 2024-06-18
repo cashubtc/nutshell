@@ -724,6 +724,20 @@ class Wallet(
     async def check_proof_state(self, proofs) -> PostCheckStateResponse:
         return await super().check_proof_state(proofs)
 
+    async def check_proof_state_with_callback(
+        self, proofs: List[Proof], callback: Callable
+    ) -> Tuple[PostCheckStateResponse, SubscriptionManager]:
+        subscriptions = SubscriptionManager(self.url)
+        threading.Thread(
+            target=subscriptions.connect, name="SubscriptionManager", daemon=True
+        ).start()
+        subscriptions.subscribe(
+            kind=JSONRPCSubscriptionKinds.PROOF_STATE,
+            filters=[proof.Y for proof in proofs],
+            callback=callback,
+        )
+        return await self.check_proof_state(proofs), subscriptions
+
     # ---------- TOKEN MECHANICS ----------
 
     # ---------- DLEQ PROOFS ----------
@@ -1109,6 +1123,8 @@ class Wallet(
             if unit:
                 balances_return[key]["unit"] = unit.name
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
+
+    # ---------- RESTORE WALLET ----------
 
     async def restore_tokens_for_keyset(
         self, keyset_id: str, to: int = 2, batch: int = 25
