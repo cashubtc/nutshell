@@ -46,6 +46,8 @@ async def test_wallet_subscription_mint(wallet: Wallet):
 
     invoice, sub = await wallet.request_mint_with_callback(128, callback=callback)
 
+    # TODO: check for pending and paid states according to: https://github.com/cashubtc/nuts/pull/136
+
     # first we expect the issued=False state to arrive
     await asyncio.sleep(2)
     assert triggered
