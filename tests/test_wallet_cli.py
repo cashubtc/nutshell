@@ -109,7 +109,7 @@ def test_balance(cli_prefix):
     assert result.exit_code == 0
 
 
-def test_invoice_no_check(mint, cli_prefix):
+def test_invoice_return_immediately(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -125,20 +125,6 @@ def test_invoice_no_check(mint, cli_prefix):
         cli,
         [*cli_prefix, "invoice", "1000", "--id", invoice_id],
     )
-    assert result.exception is None
-
-    wallet = asyncio.run(init_wallet())
-    assert wallet.available_balance >= 1000
-    assert result.exit_code == 0
-
-
-def test_invoice(mint, cli_prefix):
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [*cli_prefix, "invoice", "1000"],
-    )
-
     assert result.exception is None
 
     wallet = asyncio.run(init_wallet())

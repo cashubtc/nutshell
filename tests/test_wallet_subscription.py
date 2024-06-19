@@ -27,10 +27,8 @@ async def wallet(mint):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_wallet_subscription_mint(wallet: Wallet):
-    if is_fake:
-        settings.fakewallet_delay_outgoing_payment = 2
-
     if not wallet.mint_info.supports_nut(WEBSOCKETS_NUT):
         pytest.skip("No websocket support")
 

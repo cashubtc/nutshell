@@ -34,7 +34,7 @@ settings.wallet_unit = "sat"
 settings.mint_backend_bolt11_sat = settings.mint_backend_bolt11_sat or "FakeWallet"
 settings.fakewallet_brr = True
 settings.fakewallet_delay_outgoing_payment = None
-settings.fakewallet_delay_incoming_payment = 5
+settings.fakewallet_delay_incoming_payment = 1
 settings.fakewallet_stochastic_invoice = False
 assert (
     settings.mint_test_database != settings.mint_database
