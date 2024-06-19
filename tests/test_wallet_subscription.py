@@ -10,6 +10,7 @@ from cashu.core.settings import settings
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
+    is_fake,
     pay_if_regtest,
 )
 
@@ -27,6 +28,9 @@ async def wallet(mint):
 
 @pytest.mark.asyncio
 async def test_wallet_subscription_mint(wallet: Wallet):
+    if is_fake:
+        settings.fakewallet_delay_outgoing_payment = 2
+
     if not wallet.mint_info.supports_nut(WEBSOCKETS_NUT):
         pytest.skip("No websocket support")
 
@@ -45,20 +49,21 @@ async def test_wallet_subscription_mint(wallet: Wallet):
         asyncio.run(wallet.mint(int(invoice.amount), id=invoice.id))
 
     invoice, sub = await wallet.request_mint_with_callback(128, callback=callback)
+    pay_if_regtest(invoice.bolt11)
+    wait = settings.fakewallet_delay_incoming_payment or 2
+    await asyncio.sleep(wait + 2)
 
     # TODO: check for pending and paid states according to: https://github.com/cashubtc/nuts/pull/136
 
     # first we expect the issued=False state to arrive
-    await asyncio.sleep(2)
+
     assert triggered
-    assert len(msg_stack) == 1
+    # assert len(msg_stack) == 1
     assert msg_stack[0].payload["paid"] is True
     assert msg_stack[0].payload["issued"] is False
 
+    # await asyncio.sleep(2)
     # this will cause a second message
-    pay_if_regtest(invoice.bolt11)
-    wait = settings.fakewallet_delay_incoming_payment or 2
-    await asyncio.sleep(wait + 2)
     assert len(msg_stack) == 2
     assert msg_stack[1].payload["paid"] is True
     assert msg_stack[1].payload["issued"] is True
