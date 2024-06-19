@@ -52,8 +52,8 @@ class JSONRPCErrorResponse(BaseModel):
 
 
 class JSONRPCMethods(Enum):
-    SUBSCRIBE = "sub"
-    UNSUBSCRIBE = "unsub"
+    SUBSCRIBE = "subscribe"
+    UNSUBSCRIBE = "unsubscribe"
 
 
 class JSONRPCSubscriptionKinds(Enum):

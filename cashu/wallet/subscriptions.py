@@ -67,6 +67,7 @@ class SubscriptionManager:
                 params=JSONRPCUnsubscribeParams(subId=subId).dict(),
                 id=self.id_counter,
             )
+            logger.trace(f"Unsubscribing: {req.json()}")
             self.websocket.send(req.json())
             self.id_counter += 1
 
@@ -89,6 +90,7 @@ class SubscriptionManager:
             ).dict(),
             id=self.id_counter,
         )
+        logger.trace(f"Subscribing: {req.json()}")
         self.websocket.send(req.json())
         self.id_counter += 1
         self.callback_map[subId] = callback

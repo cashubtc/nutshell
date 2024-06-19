@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import List, Union
 
@@ -19,6 +20,7 @@ from ...core.json_rpc.base import (
     JSONRPCUnsubscribeParams,
     JSONRRPCSubscribeResponse,
 )
+from ...core.settings import settings
 from ..limit import limit_websocket
 
 
@@ -35,8 +37,13 @@ class LedgerEventClientManager:
 
     async def start(self):
         await self.websocket.accept()
+
         while True:
-            json_data = await self.websocket.receive_text()
+            message = await asyncio.wait_for(
+                self.websocket.receive(),
+                timeout=settings.mint_websocket_read_timeout,
+            )
+            message_text = message.get("text")
 
             # Check the rate limit
             try:
@@ -53,9 +60,13 @@ class LedgerEventClientManager:
                 await self._send_msg(err)
                 continue
 
+            # Check if message contains text
+            if not message_text:
+                continue
+
             # Parse the JSON data
             try:
-                data = json.loads(json_data)
+                data = json.loads(message_text)
             except json.JSONDecodeError as e:
                 logger.error(f"Error decoding JSON: {e}")
                 err = JSONRPCErrorResponse(

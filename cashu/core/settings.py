@@ -120,6 +120,12 @@ class MintLimits(MintSettings):
         title="Maximum mint balance",
         description="Maximum mint balance.",
     )
+    mint_websocket_read_timeout: int = Field(
+        default=10 * 60,
+        gt=0,
+        title="Websocket read timeout",
+        description="Timeout for reading from a websocket.",
+    )
 
 
 class FakeWalletSettings(MintSettings):

@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Request, WebSocket
 from loguru import logger
 
@@ -196,13 +198,14 @@ async def websocket_endpoint(websocket: WebSocket):
     client = LedgerEventClientManager(websocket=websocket)
     success = ledger.events.add_client(client)
     if not success:
-        await websocket.close()
+        await asyncio.wait_for(websocket.close(), timeout=1)
         return
     try:
         await client.start()
     except Exception as e:
         logger.debug(f"Exception: {e}")
         ledger.events.remove_client(client)
+        await asyncio.wait_for(websocket.close(), timeout=1)
 
 
 @router.post(
