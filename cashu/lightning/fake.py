@@ -165,14 +165,6 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        # is_created_invoice = any(
-        #     [checking_id == i.payment_hash for i in self.created_invoices]
-        # )
-        # if not is_created_invoice:
-        #     return PaymentStatus(paid=None)
-        # invoice = next(
-        #     i for i in self.created_invoices if i.payment_hash == checking_id
-        # )
         paid = False
         if settings.fakewallet_brr or (
             settings.fakewallet_stochastic_invoice and random.random() > 0.7
@@ -190,12 +182,6 @@ class FakeWallet(LightningBackend):
 
     async def get_payment_status(self, _: str) -> PaymentStatus:
         return PaymentStatus(paid=settings.fakewallet_payment_state)
-
-    # async def get_invoice_quote(self, bolt11: str) -> InvoiceQuoteResponse:
-    #     invoice_obj = decode(bolt11)
-    #     assert invoice_obj.amount_msat, "invoice has no amount."
-    #     amount = invoice_obj.amount_msat
-    #     return InvoiceQuoteResponse(checking_id="", amount=amount)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
