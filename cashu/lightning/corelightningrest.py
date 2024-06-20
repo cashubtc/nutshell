@@ -29,6 +29,7 @@ from .macaroon import load_macaroon
 class CoreLightningRestWallet(LightningBackend):
     supported_units = set([Unit.sat, Unit.msat])
     unit = Unit.sat
+    supports_mpp = settings.mint_corelightning_enable_mpp
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
