@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from loguru import logger
 
-from ..core.base import (
+from ..core.models import (
     PostMeltResponse,
 )
 from .models import (
@@ -45,7 +45,7 @@ async def get_melt_quote(
     Request a quote for melting tokens.
     """
     logger.trace(f"> POST /v1/melt/quote/bolt11: {payload}")
-    quote = await gateway.gateway_melt_quote(payload)  # TODO
+    quote = await gateway.gateway_melt_quote(payload)
     logger.trace(f"< POST /v1/melt/quote/bolt11: {quote}")
     return quote
 

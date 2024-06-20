@@ -6,6 +6,8 @@ from typing import Dict, List, Mapping
 import bolt11
 from loguru import logger
 
+from cashu.core.models import PostMeltQuoteRequest
+
 from ..core.base import (
     Amount,
     HTLCWitness,
@@ -119,7 +121,9 @@ class Gateway(Ledger):
         method = Method.bolt11
 
         # not internal, get payment quote by backend
-        payment_quote = await self.backends[method][unit].get_payment_quote(request)
+        payment_quote = await self.backends[method][unit].get_payment_quote(
+            PostMeltQuoteRequest(unit=unit.name, request=request)
+        )
         if not payment_quote.checking_id:
             raise TransactionError("quote has no checking id")
         # make sure the backend returned the amount with a correct unit
@@ -277,6 +281,12 @@ class Gateway(Ledger):
         pubkey = await wallet.create_p2pk_pubkey()
         # get the backend for the unit
         invoice = bolt11.decode(melt_quote.request)
+        if invoice.amount_msat is None:
+            raise TransactionError("invoice has no amount")
+        # NOTE: this check will only work for sat quotes
+        if invoice.amount_msat // 1000 > melt_quote.amount:
+            raise TransactionError("invoice amount is greater than quote amount")
+
         # check proofs
         self._check_proofs(wallet, proofs)
         # check if signatures of proofs are valid using DLEQ proofs
@@ -294,6 +304,9 @@ class Gateway(Ledger):
 
         # pay the backend
         logger.debug(f"Lightning: pay invoice {melt_quote.request}")
+        # hack: we need to set the amount in the melt_quote to the amount in the invoice
+        # because it includes fees, the backend thinks it's an mpp payment (which it is not)
+        melt_quote.amount = invoice.amount_msat // 1000
         payment = await self.backends[method][unit].pay_invoice(
             melt_quote, melt_quote.fee_reserve * 1000
         )
