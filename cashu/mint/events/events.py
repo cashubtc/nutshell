@@ -1,26 +1,9 @@
-from abc import ABC, abstractmethod
-
 from loguru import logger
-from pydantic import BaseModel
 
-from ...core.json_rpc.base import JSONRPCSubscriptionKinds
+from ...core.base import MeltQuote, MintQuote, ProofState
+from ...core.models import PostMeltQuoteResponse, PostMintQuoteResponse
 from .client_manager import LedgerEventClientManager
-
-
-class LedgerEvent(ABC, BaseModel):
-    """AbstractBaseClass for BaseModels that can be sent to the
-    LedgerEventManager for broadcasting subscription events to clients.
-    """
-
-    @property
-    @abstractmethod
-    def identifier(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def kind(self) -> JSONRPCSubscriptionKinds:
-        pass
+from .ledger_event import LedgerEvent
 
 
 class LedgerEventManager:
@@ -46,7 +29,13 @@ class LedgerEventManager:
         self.clients.remove(client)
 
     def serialize_event(self, event: LedgerEvent) -> dict:
-        return event.dict(exclude_unset=True, exclude_none=True)
+        if isinstance(event, MintQuote):
+            return_dict = PostMintQuoteResponse.parse_obj(event.dict()).dict()
+        elif isinstance(event, MeltQuote):
+            return_dict = PostMeltQuoteResponse.parse_obj(event.dict()).dict()
+        elif isinstance(event, ProofState):
+            return_dict = event.dict(exclude_unset=True, exclude_none=True)
+        return return_dict
 
     async def submit(self, event: LedgerEvent) -> None:
         if not isinstance(event, LedgerEvent):

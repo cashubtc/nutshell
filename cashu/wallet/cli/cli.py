@@ -15,10 +15,11 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, Method, MintQuote, TokenV3, Unit
+from ...core.base import Invoice, Method, TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
+from ...core.models import PostMintQuoteResponse
 from ...core.settings import settings
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
@@ -291,13 +292,12 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
         if paid:
             return
         try:
-            quote = MintQuote.parse_obj(msg.payload)
+            quote = PostMintQuoteResponse.parse_obj(msg.payload)
         except Exception:
             return
         logger.debug(f"Received callback for quote: {quote}")
         if (
             quote.paid
-            and not quote.issued
             and quote.request == invoice.bolt11
             and msg.subId in subscription.callback_map.keys()
         ):
