@@ -63,7 +63,7 @@ async def send_nostr(
     await wallet.load_mint()
     await wallet.load_proofs()
     _, send_proofs = await wallet.split_to_send(
-        wallet.proofs, amount, set_reserved=True
+        wallet.proofs, amount, set_reserved=True, include_fees=False
     )
     token = await wallet.serialize_proofs(send_proofs, include_dleq=include_dleq)
 

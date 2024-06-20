@@ -236,3 +236,10 @@ async def m011_keysets_add_unit(db: Database):
         # add column for storing the unit of a keyset
         await conn.execute("ALTER TABLE keysets ADD COLUMN unit TEXT")
         await conn.execute("UPDATE keysets SET unit = 'sat'")
+
+
+async def m012_add_fee_to_keysets(db: Database):
+    async with db.connect() as conn:
+        # add column for storing the fee of a keyset
+        await conn.execute("ALTER TABLE keysets ADD COLUMN input_fee_ppk INTEGER")
+        await conn.execute("UPDATE keysets SET input_fee_ppk = 0")

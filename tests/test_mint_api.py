@@ -3,14 +3,14 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import (
+from cashu.core.base import SpentState
+from cashu.core.models import (
     GetInfoResponse,
     MintMeltMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostRestoreRequest,
     PostRestoreResponse,
-    SpentState,
 )
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -89,6 +89,7 @@ async def test_api_keysets(ledger: Ledger):
                 "id": "009a1f293253e41e",
                 "unit": "sat",
                 "active": True,
+                "input_fee_ppk": 0,
             },
         ]
     }

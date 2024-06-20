@@ -12,6 +12,7 @@ from bolt11 import (
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
@@ -375,7 +376,10 @@ class BlinkWallet(LightningBackend):
             preimage=preimage,
         )
 
-    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
+    async def get_payment_quote(
+        self, melt_quote: PostMeltQuoteRequest
+    ) -> PaymentQuoteResponse:
+        bolt11 = melt_quote.request
         variables = {
             "input": {
                 "paymentRequest": bolt11,
