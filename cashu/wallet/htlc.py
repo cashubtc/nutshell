@@ -20,10 +20,14 @@ class WalletHTLC(SupportsDb):
         preimage: Optional[str] = None,
         preimage_hash: Optional[str] = None,
         hashlock_pubkey: Optional[str] = None,
+        locktime_absolute: Optional[int] = None,
         locktime_seconds: Optional[int] = None,
         locktime_pubkey: Optional[str] = None,
     ) -> HTLCSecret:
         tags = Tags()
+        if locktime_absolute:
+            tags["locktime"] = str(locktime_absolute)
+
         if locktime_seconds:
             tags["locktime"] = str(
                 int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())

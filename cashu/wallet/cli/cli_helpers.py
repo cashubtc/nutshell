@@ -109,6 +109,38 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
     return mint_wallet
 
 
+def get_gateway(ctx: Context):
+    """
+    Helper function that shows all settings.wallet_gateways and asks the user to select one.
+    """
+    if not settings.wallet_gateways:
+        raise Exception(
+            "No gateways are set. Use the environment variable WALLET_GATEWAYS=[] to add a list of Gateway URLs."
+        )
+    gateway = settings.wallet_gateways[0]
+    if len(settings.wallet_gateways) > 1:
+        print(f"You have {len(settings.wallet_gateways)} gateways:")
+        print("")
+        for i, gw in enumerate(settings.wallet_gateways):
+            print(f"Gateway {i+1}: {gw}")
+        print("")
+        gateway_nr_str = input(
+            f"Select gateway [1-{len(settings.wallet_gateways)}] or "
+            f"press enter for default '{settings.wallet_gateways[0]}': "
+        )
+        if not gateway_nr_str:  # default gateway
+            gateway = settings.wallet_gateways[0]
+        elif gateway_nr_str.isdigit() and int(gateway_nr_str) <= len(
+            settings.wallet_gateways
+        ):  # specific gateway
+            gateway = settings.wallet_gateways[int(gateway_nr_str) - 1]
+        else:
+            raise Exception("invalid input.")
+    print(f"Selected gateway: {gateway}")
+    print("")
+    return gateway
+
+
 async def print_mint_balances(wallet: Wallet, show_mints: bool = False):
     """
     Helper function that prints the balances for each mint URL that we have tokens from.

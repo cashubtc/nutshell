@@ -610,7 +610,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions):
         )
         if mint_quote:
             payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
-
         else:
             # not internal
             # verify that the backend supports mpp if the quote request has an amount

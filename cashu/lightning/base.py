@@ -68,6 +68,7 @@ class PaymentStatus(BaseModel):
 
 class LightningBackend(ABC):
     supports_mpp: bool = False
+    supports_hold_invoices: bool = False
     supported_units: set[Unit]
     unit: Unit
 
@@ -127,6 +128,19 @@ class LightningBackend(ABC):
     # @abstractmethod
     # def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
     #     pass
+
+    @abstractmethod
+    async def create_hold_invoice(
+        self,
+        payment_hash: str,
+        amount: Amount,
+        expiry: int = 3600,
+    ) -> InvoiceResponse:
+        pass
+
+    @abstractmethod
+    async def resolve_hold_invoice(self, preimage: str) -> PaymentResponse:
+        pass
 
 
 class Unsupported(Exception):

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import asyncio
+import hashlib
 import os
 import time
 from datetime import datetime, timezone
@@ -11,6 +12,7 @@ from os import listdir
 from os.path import isdir, join
 from typing import Optional
 
+import bolt11
 import click
 from click import Context
 from loguru import logger
@@ -27,9 +29,11 @@ from ...wallet.crud import (
     get_reserved_proofs,
     get_seed_and_mnemonic,
 )
+from ...wallet.gateway import LOCKTIME_SAFETY, WalletGateway
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
 from ..cli.cli_helpers import (
+    get_gateway,
     get_mint_wallet,
     get_unit_wallet,
     print_balance,
@@ -188,11 +192,26 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
+@click.option(
+    "--gateway",
+    "-g",
+    default=False,
+    is_flag=True,
+    help="Use Lightning gateway.",
+)
 @click.pass_context
 @coro
 async def pay(
-    ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False
+    ctx: Context,
+    invoice: str,
+    amount: Optional[int] = None,
+    yes: bool = False,
+    gateway: bool = False,
 ):
+    if gateway:
+        await pay_gateway(ctx, invoice, yes)
+        return
+
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
@@ -235,6 +254,67 @@ async def pay(
     await print_balance(ctx)
 
 
+# @cli.command("gateway", help="Pay invoice over Lightning gateway.")
+# @click.argument("invoice", type=str)
+# @click.option(
+#     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
+# )
+# @click.pass_context
+# @coro
+async def pay_gateway(ctx: Context, invoice: str, yes: bool):
+    _wallet: Wallet = ctx.obj["WALLET"]
+    await print_balance(ctx)
+    gateway_url = get_gateway(ctx)
+
+    async def mint_wallet(
+        mint_url: Optional[str] = None, raise_connection_error: bool = True
+    ) -> WalletGateway:
+        lightning_wallet = await WalletGateway.with_db(
+            mint_url or settings.mint_url,
+            db=os.path.join(settings.cashu_dir, settings.wallet_name),
+            name=settings.wallet_name,
+        )
+        lightning_wallet.gateway = gateway_url
+        await lightning_wallet.async_init(raise_connection_error=raise_connection_error)
+        return lightning_wallet
+
+    wallet = await mint_wallet()
+    await wallet.load_mint()
+    await wallet.load_proofs()
+
+    bolt11_invoice = bolt11.decode(invoice)
+    assert bolt11_invoice.date
+    assert bolt11_invoice.expiry
+    assert bolt11_invoice.amount_msat
+
+    gateway_quote = await wallet.gateway_melt_quote(invoice)
+    if not yes:
+        fee = gateway_quote.amount - bolt11_invoice.amount_msat // 1000
+        fee_str = ""
+        if fee:
+            fee_str = f"(with {wallet.unit.str(fee)} fees)"
+        message = f"Pay {wallet.unit.str(gateway_quote.amount)} {fee_str} via gateway?"
+        click.confirm(
+            message,
+            abort=True,
+            default=True,
+        )
+    secret = await wallet.create_htlc_lock(
+        preimage_hash=bolt11_invoice.payment_hash,
+        hashlock_pubkey=gateway_quote.pubkey,
+        locktime_absolute=gateway_quote.expiry + LOCKTIME_SAFETY,
+        locktime_pubkey=await wallet.create_p2pk_pubkey(),
+    )
+    _, send_proofs = await wallet.split_to_send(
+        wallet.proofs, gateway_quote.amount, secret_lock=secret, set_reserved=True
+    )
+
+    # _, proofs = await wallet.split_to_send(wallet.proofs, gateway_quote.amount)
+    await wallet.load_proofs()
+    _ = await wallet.gateway_melt(quote=gateway_quote.quote, proofs=send_proofs)
+    await print_balance(ctx)
+
+
 @cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=float)
 @click.option("--id", default="", help="Id of the paid invoice.", type=str)
@@ -253,9 +333,21 @@ async def pay(
     help="Do not check if invoice is paid.",
     type=bool,
 )
+@click.option(
+    "--gateway",
+    "-g",
+    default=False,
+    is_flag=True,
+    help="Use Lightning gateway.",
+)
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bool):
+async def invoice(
+    ctx: Context, amount: float, id: str, split: int, no_check: bool, gateway: bool
+):
+    if gateway:
+        await invoice_gateway(ctx, amount, id, split, no_check)
+        return
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
@@ -321,6 +413,37 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
     print("")
     await print_balance(ctx)
     return
+
+
+async def invoice_gateway(
+    ctx: Context, amount: float, id: str, split: int, no_check: bool
+):
+    _wallet: Wallet = ctx.obj["WALLET"]
+    await print_balance(ctx)
+    gateway_url = get_gateway(ctx)
+
+    async def mint_wallet(
+        mint_url: Optional[str] = None, raise_connection_error: bool = True
+    ) -> WalletGateway:
+        lightning_wallet = await WalletGateway.with_db(
+            mint_url or settings.mint_url,
+            db=os.path.join(settings.cashu_dir, settings.wallet_name),
+            name=settings.wallet_name,
+        )
+        lightning_wallet.gateway = gateway_url
+        await lightning_wallet.async_init(raise_connection_error=raise_connection_error)
+        return lightning_wallet
+
+    wallet = await mint_wallet()
+    await wallet.load_mint()
+    await wallet.load_proofs()
+
+    amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
+    preimage = os.urandom(32)
+    payment_hash = hashlib.sha256(preimage).hexdigest()
+
+    gateway_quote = await wallet.gateway_mint_quote(amount, payment_hash)
+    print(f"Quote: {gateway_quote}")
 
 
 @cli.command("swap", help="Swap funds between mints.")

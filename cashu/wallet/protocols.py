@@ -21,6 +21,10 @@ class SupportsKeysets(Protocol):
     unit: Unit
 
 
+class SupportsUnit(Protocol):
+    unit: Unit
+
+
 class SupportsHttpxClient(Protocol):
     httpx: httpx.AsyncClient
 

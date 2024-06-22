@@ -159,7 +159,7 @@ class LndRestWallet(LightningBackend):
         invoice = bolt11.decode(quote.request)
         if invoice.amount_msat:
             amount_msat = int(invoice.amount_msat)
-            if amount_msat != quote.amount * 1000 and self.supports_mpp:
+            if amount_msat < quote.amount * 1000 and self.supports_mpp:
                 return await self.pay_partial_invoice(
                     quote, Amount(Unit.sat, quote.amount), fee_limit_msat
                 )
@@ -398,4 +398,81 @@ class LndRestWallet(LightningBackend):
             checking_id=invoice_obj.payment_hash,
             fee=fees.to(self.unit, round="up"),
             amount=amount.to(self.unit, round="up"),
+        )
+
+    async def create_hold_invoice(
+        self,
+        payment_hash: str,
+        amount: Amount,
+        expiry: int = 3600,
+    ) -> InvoiceResponse:
+        self.assert_unit_supported(amount.unit)
+        payment_hash_bytes = bytes.fromhex(payment_hash)
+        data: Dict = {
+            "hash": base64.b64encode(payment_hash_bytes).decode(),
+            "value": amount.to(Unit.sat).amount,
+            "expiry": expiry,
+            "private": False,
+        }
+
+        try:
+            r = await self.client.post(url="/v2/invoices/hodl", json=data)
+        except Exception as e:
+            raise Exception(f"Failed to create hold invoice: {e}")
+
+        if r.is_error:
+            error_message = r.text
+            try:
+                error_message = r.json().get("error", error_message)
+            except Exception:
+                pass
+            return InvoiceResponse(
+                ok=False,
+                checking_id=None,
+                payment_request=None,
+                error_message=error_message,
+            )
+
+        data = r.json()
+        payment_request = data["payment_request"]
+        checking_id = payment_hash
+
+        return InvoiceResponse(
+            ok=True,
+            checking_id=checking_id,
+            payment_request=payment_request,
+            error_message=None,
+        )
+
+    async def resolve_hold_invoice(self, preimage: str) -> PaymentResponse:
+        preimage_bytes = bytes.fromhex(preimage)
+        data: Dict = {
+            "preimage": base64.b64encode(preimage_bytes).decode(),
+        }
+
+        try:
+            r = await self.client.post(url="/v2/invoices/settle", json=data)
+        except Exception as e:
+            raise Exception(f"Failed to resolve hold invoice: {e}")
+
+        if r.is_error:
+            error_message = r.text
+            try:
+                error_message = r.json().get("error", error_message)
+            except Exception:
+                pass
+            return PaymentResponse(
+                ok=False,
+                checking_id=None,
+                fee=None,
+                preimage=None,
+                error_message=error_message,
+            )
+
+        return PaymentResponse(
+            ok=True,
+            checking_id=None,
+            fee=None,
+            preimage=preimage,
+            error_message=None,
         )
