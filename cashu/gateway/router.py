@@ -3,6 +3,7 @@ from loguru import logger
 
 from ..core.models import (
     PostMeltResponse,
+    PostMintResponse,
 )
 from .models import (
     GatewayInfo,
@@ -11,6 +12,10 @@ from .models import (
     GatewayMeltRequest,
     GatewayMeltResponse,
     GatewayMint,
+    GatewayMintQuoteRequest,
+    GatewayMintQuoteResponse,
+    GatewayMintRequest,
+    GatewayMintResponse,
 )
 from .startup import gateway
 
@@ -30,6 +35,48 @@ async def get_info(request: Request) -> GatewayInfo:
     info = GatewayInfo(mints=[GatewayMint(mint=url) for url in gateway.wallets.keys()])
     logger.trace("< GET /v1/info")
     return info
+
+
+@router.post(
+    "/v1/mint/quote/bolt11",
+    summary="Request a quote for minting tokens",
+    response_model=GatewayMintQuoteResponse,
+    response_description="Mint tokens for a payment on a supported payment method.",
+)
+async def get_mint_quote(
+    request: Request, payload: GatewayMintQuoteRequest
+) -> GatewayMintQuoteResponse:
+    """
+    Request a quote for minting tokens.
+    """
+    logger.trace(f"> POST /v1/mint/quote/bolt11: {payload}")
+    quote = await gateway.gateway_mint_quote(payload)
+    logger.trace(f"< POST /v1/mint/quote/bolt11: {quote}")
+    return quote
+
+
+@router.post(
+    "/v1/mint/bolt11",
+    name="Mint tokens",
+    summary=(
+        "Mint tokens for a Bitcoin payment that the mint will make for the user in"
+        " exchange"
+    ),
+    response_model=PostMintResponse,
+    response_description=(
+        "The state of the payment, a preimage as proof of payment, and a list of"
+        " promises for change."
+    ),
+)
+async def mint(request: Request, payload: GatewayMintRequest) -> GatewayMintResponse:
+    """
+    Requests tokens to be destroyed and sent out via Lightning.
+    """
+    logger.trace(f"> POST /v1/mint/bolt11: {payload}")
+    # TODO: CHECK IF IT WORKS (WIP COMMIT)
+    mint_response = await gateway.gateway_mint(quote=payload.quote)
+    logger.trace(f"< POST /v1/mint/bolt11: {mint_response}")
+    return mint_response
 
 
 @router.post(

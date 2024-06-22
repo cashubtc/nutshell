@@ -32,6 +32,9 @@ from .models import (
     GatewayMeltQuoteRequest,
     GatewayMeltQuoteResponse,
     GatewayMeltResponse,
+    GatewayMintQuoteRequest,
+    GatewayMintQuoteResponse,
+    GatewayMintResponse,
 )
 
 # This makes sure that we require ecash htlc lock time and
@@ -90,8 +93,117 @@ class Gateway(Ledger):
                         RuntimeWarning,
                     )
                 logger.info(f"Backend balance: {status.balance} {unit.name}")
-
         logger.info(f"Data dir: {settings.cashu_dir}")
+
+    async def gateway_mint_quote(
+        self, mint_quote_request: GatewayMintQuoteRequest
+    ) -> GatewayMintQuoteResponse:
+        if mint_quote_request.mint not in self.wallets.keys():
+            raise TransactionError(
+                f"mint does not match gateway mint: {self.wallets.keys()}"
+            )
+        mint = mint_quote_request.mint
+        # TODO: check if the mint is in the wallet
+        assert mint in self.wallets.keys()
+
+        amount = mint_quote_request.amount
+        unit = Unit[mint_quote_request.unit]
+        pament_hash = mint_quote_request.payment_hash
+
+        payment_quote = await self.backends[Method.bolt11][
+            Unit.sat
+        ].create_hold_invoice(amount=Amount(unit, amount), payment_hash=pament_hash)
+        if (
+            not payment_quote.ok
+            or not payment_quote.checking_id
+            or not payment_quote.payment_request
+        ):
+            raise TransactionError("failed to create hold invoice")
+        invoice = bolt11.decode(pr=payment_quote.payment_request)
+        amount_msat = invoice.amount_msat
+        if amount_msat is None:
+            raise Exception("amount_msat is None")
+
+        return GatewayMintQuoteResponse(
+            quote=payment_quote.checking_id,
+            request=payment_quote.payment_request,
+            paid=False,
+            expiry=invoice.expiry,
+        )
+
+    async def gateway_get_mint_quote(
+        self, quote_id: str, check_quote_with_backend: bool = False
+    ) -> GatewayMintQuoteResponse:
+        mint, mint_quote = await self.gwcrud.get_mint_quote(
+            quote_id=quote_id, db=self.db
+        )
+        if mint not in self.wallets.keys():
+            raise TransactionError("mint not found")
+        if not mint_quote:
+            raise TransactionError("quote not found")
+        if not mint_quote.expiry:
+            raise TransactionError("quote does not have expiry")
+        if check_quote_with_backend and not mint_quote.paid:
+            unit = Unit[mint_quote.unit]
+            if unit not in self.backends[Method.bolt11]:
+                raise Exception("unit not supported by backend")
+            method = Method.bolt11
+            # get the backend for the unit
+            payment_quote = await self.backends[method][unit].get_payment_status(
+                mint_quote.checking_id
+            )
+            if payment_quote.paid:
+                mint_quote.paid = True
+                mint_quote.paid_time = int(time.time())
+                # await self.gwcrud.update_mint_quote(quote=mint_quote, db=self.db)
+
+        return GatewayMintQuoteResponse(
+            quote=mint_quote.quote,
+            request=mint_quote.request,
+            paid=mint_quote.paid,
+            expiry=mint_quote.expiry,
+        )
+
+    async def gateway_mint(
+        self,
+        *,
+        quote: str,
+    ) -> GatewayMintResponse:
+        try:
+            mint, mint_quote = await self.gwcrud.get_mint_quote(
+                quote_id=quote, db=self.db
+            )
+        except ValueError as e:
+            raise TransactionError(str(e))
+        if not mint_quote:
+            raise TransactionError("quote not found")
+        if mint_quote.paid:
+            raise TransactionError("quote is already paid")
+        if not mint_quote.expiry or mint_quote.expiry < int(time.time()):
+            raise TransactionError("quote expired")
+        unit = Unit[mint_quote.unit]
+        if unit not in self.backends[Method.bolt11]:
+            raise Exception("unit not supported by backend")
+        # method = Method.bolt11
+        if mint not in self.wallets:
+            raise TransactionError("mint not found")
+        # wallet = self.wallets[mint]
+
+        # get the backend for the unit
+        invoice = bolt11.decode(mint_quote.request)
+        if invoice.amount_msat is None:
+            raise TransactionError("invoice has no amount")
+        # NOTE: this check will only work for sat quotes
+        if invoice.amount_msat // 1000 > mint_quote.amount:
+            raise TransactionError("invoice amount is greater than quote amount")
+
+        # pay the backend
+        logger.debug(f"Lightning: pay invoice {mint_quote.request}")
+
+        # payment = await self.backends[method][unit].pay_invoice(
+        #     mint_quote, mint_quote.fee_reserve * 1000
+        # )
+        return GatewayMintResponse(inputs=[])
 
     async def gateway_melt_quote(
         self, melt_quote_request: GatewayMeltQuoteRequest

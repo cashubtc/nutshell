@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import asyncio
+import hashlib
 import os
 import time
 from datetime import datetime, timezone
@@ -332,9 +333,21 @@ async def pay_gateway(ctx: Context, invoice: str, yes: bool):
     help="Do not check if invoice is paid.",
     type=bool,
 )
+@click.option(
+    "--gateway",
+    "-g",
+    default=False,
+    is_flag=True,
+    help="Use Lightning gateway.",
+)
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bool):
+async def invoice(
+    ctx: Context, amount: float, id: str, split: int, no_check: bool, gateway: bool
+):
+    if gateway:
+        await invoice_gateway(ctx, amount, id, split, no_check)
+        return
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
@@ -400,6 +413,37 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
     print("")
     await print_balance(ctx)
     return
+
+
+async def invoice_gateway(
+    ctx: Context, amount: float, id: str, split: int, no_check: bool
+):
+    _wallet: Wallet = ctx.obj["WALLET"]
+    await print_balance(ctx)
+    gateway_url = get_gateway(ctx)
+
+    async def mint_wallet(
+        mint_url: Optional[str] = None, raise_connection_error: bool = True
+    ) -> WalletGateway:
+        lightning_wallet = await WalletGateway.with_db(
+            mint_url or settings.mint_url,
+            db=os.path.join(settings.cashu_dir, settings.wallet_name),
+            name=settings.wallet_name,
+        )
+        lightning_wallet.gateway = gateway_url
+        await lightning_wallet.async_init(raise_connection_error=raise_connection_error)
+        return lightning_wallet
+
+    wallet = await mint_wallet()
+    await wallet.load_mint()
+    await wallet.load_proofs()
+
+    amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
+    preimage = os.urandom(32)
+    payment_hash = hashlib.sha256(preimage).hexdigest()
+
+    gateway_quote = await wallet.gateway_mint_quote(amount, payment_hash)
+    print(f"Quote: {gateway_quote}")
 
 
 @cli.command("swap", help="Swap funds between mints.")
