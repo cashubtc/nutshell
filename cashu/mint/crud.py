@@ -173,7 +173,9 @@ class LedgerCrud(ABC):
     async def get_mint_quote(
         self,
         *,
-        quote_id: str,
+        quote_id: Optional[str] = None,
+        checking_id: Optional[str] = None,
+        request: Optional[str] = None,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MintQuote]:
@@ -223,9 +225,10 @@ class LedgerCrud(ABC):
     async def get_melt_quote(
         self,
         *,
-        quote_id: str,
-        db: Database,
+        quote_id: Optional[str] = None,
         checking_id: Optional[str] = None,
+        request: Optional[str] = None,
+        db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MeltQuote]:
         ...
@@ -450,17 +453,36 @@ class LedgerCrudSqlite(LedgerCrud):
     async def get_mint_quote(
         self,
         *,
-        quote_id: str,
+        quote_id: Optional[str] = None,
+        checking_id: Optional[str] = None,
+        request: Optional[str] = None,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MintQuote]:
+        clauses = []
+        values: List[Any] = []
+        if quote_id:
+            clauses.append("quote = ?")
+            values.append(quote_id)
+        if checking_id:
+            clauses.append("checking_id = ?")
+            values.append(checking_id)
+        if request:
+            clauses.append("request = ?")
+            values.append(request)
+        if not any(clauses):
+            raise ValueError("No search criteria")
+
+        where = f"WHERE {' AND '.join(clauses)}"
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'mint_quotes')}
-            WHERE quote = ?
+            {where}
             """,
-            (quote_id,),
+            tuple(values),
         )
+        if row is None:
+            return None
         return MintQuote.from_row(row) if row else None
 
     async def get_mint_quote_by_request(
@@ -546,10 +568,10 @@ class LedgerCrudSqlite(LedgerCrud):
     async def get_melt_quote(
         self,
         *,
-        quote_id: str,
-        db: Database,
+        quote_id: Optional[str] = None,
         checking_id: Optional[str] = None,
         request: Optional[str] = None,
+        db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MeltQuote]:
         clauses = []
@@ -563,9 +585,10 @@ class LedgerCrudSqlite(LedgerCrud):
         if request:
             clauses.append("request = ?")
             values.append(request)
-        where = ""
-        if clauses:
-            where = f"WHERE {' AND '.join(clauses)}"
+        if not any(clauses):
+            raise ValueError("No search criteria")
+        where = f"WHERE {' AND '.join(clauses)}"
+
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'melt_quotes')}

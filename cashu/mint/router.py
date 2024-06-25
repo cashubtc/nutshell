@@ -1,6 +1,6 @@
-from typing import Any, Dict, List
+import asyncio
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, WebSocket
 from loguru import logger
 
 from ..core.errors import KeysetNotFoundError
@@ -10,7 +10,6 @@ from ..core.models import (
     KeysetsResponseKeyset,
     KeysResponse,
     KeysResponseKeyset,
-    MintMeltMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostMeltQuoteRequest,
@@ -28,7 +27,7 @@ from ..core.models import (
 )
 from ..core.settings import settings
 from ..mint.startup import ledger
-from .limit import limiter
+from .limit import limit_websocket, limiter
 
 router: APIRouter = APIRouter()
 
@@ -42,59 +41,7 @@ router: APIRouter = APIRouter()
 )
 async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
-
-    # determine all method-unit pairs
-    method_settings: Dict[int, List[MintMeltMethodSetting]] = {}
-    for nut in [4, 5]:
-        method_settings[nut] = []
-        for method, unit_dict in ledger.backends.items():
-            for unit in unit_dict.keys():
-                setting = MintMeltMethodSetting(method=method.name, unit=unit.name)
-
-                if nut == 4 and settings.mint_max_peg_in:
-                    setting.max_amount = settings.mint_max_peg_in
-                    setting.min_amount = 0
-                elif nut == 5 and settings.mint_max_peg_out:
-                    setting.max_amount = settings.mint_max_peg_out
-                    setting.min_amount = 0
-
-                method_settings[nut].append(setting)
-
-    supported_dict = dict(supported=True)
-
-    supported_dict = dict(supported=True)
-    mint_features: Dict[int, Any] = {
-        4: dict(
-            methods=method_settings[4],
-            disabled=settings.mint_peg_out_only,
-        ),
-        5: dict(
-            methods=method_settings[5],
-            disabled=False,
-        ),
-        7: supported_dict,
-        8: supported_dict,
-        9: supported_dict,
-        10: supported_dict,
-        11: supported_dict,
-        12: supported_dict,
-    }
-
-    # signal which method-unit pairs support MPP
-    for method, unit_dict in ledger.backends.items():
-        for unit in unit_dict.keys():
-            logger.trace(
-                f"method={method.name} unit={unit} supports_mpp={unit_dict[unit].supports_mpp}"
-            )
-            if unit_dict[unit].supports_mpp:
-                mint_features.setdefault(15, []).append(
-                    {
-                        "method": method.name,
-                        "unit": unit.name,
-                        "mpp": True,
-                    }
-                )
-
+    mint_features = ledger.mint_features()
     return GetInfoResponse(
         name=settings.mint_info_name,
         pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
@@ -243,6 +190,26 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     return resp
 
 
+@router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
+async def websocket_endpoint(websocket: WebSocket):
+    limit_websocket(websocket)
+    try:
+        client = ledger.events.add_client(websocket, ledger.db, ledger.crud)
+    except Exception as e:
+        logger.debug(f"Exception: {e}")
+        await asyncio.wait_for(websocket.close(), timeout=1)
+        return
+
+    try:
+        # this will block until the session is closed
+        await client.start()
+    except Exception as e:
+        logger.debug(f"Exception: {e}")
+        ledger.events.remove_client(client)
+    finally:
+        await asyncio.wait_for(websocket.close(), timeout=1)
+
+
 @router.post(
     "/v1/mint/bolt11",
     name="Mint tokens with a Lightning payment",
@@ -385,7 +352,7 @@ async def check_state(
 ) -> PostCheckStateResponse:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /v1/checkstate: {payload}")
-    proof_states = await ledger.check_proofs_state(payload.Ys)
+    proof_states = await ledger.db_read.get_proofs_states(payload.Ys)
     return PostCheckStateResponse(states=proof_states)
 
 

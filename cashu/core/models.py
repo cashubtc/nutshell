@@ -33,6 +33,9 @@ class GetInfoResponse(BaseModel):
     motd: Optional[str] = None
     nuts: Optional[Dict[int, Any]] = None
 
+    def supports(self, nut: int) -> Optional[bool]:
+        return nut in self.nuts if self.nuts else None
+
 
 class Nut15MppSupport(BaseModel):
     method: str

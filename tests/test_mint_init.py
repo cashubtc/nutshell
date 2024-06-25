@@ -171,7 +171,7 @@ async def test_startup_fakewallet_pending_quote_success(ledger: Ledger):
     """Startup routine test. Expects that a pending proofs are removed form the pending db
     after the startup routine determines that the associated melt quote was paid."""
     pending_proof, quote = await create_pending_melts(ledger)
-    states = await ledger.check_proofs_state([pending_proof.Y])
+    states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].state == SpentState.pending
     settings.fakewallet_payment_state = True
     # run startup routinge
@@ -184,7 +184,7 @@ async def test_startup_fakewallet_pending_quote_success(ledger: Ledger):
     assert not melt_quotes
 
     # expect that proofs are spent
-    states = await ledger.check_proofs_state([pending_proof.Y])
+    states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].state == SpentState.spent
 
 
@@ -197,7 +197,7 @@ async def test_startup_fakewallet_pending_quote_failure(ledger: Ledger):
     The failure is simulated by setting the fakewallet_payment_state to False.
     """
     pending_proof, quote = await create_pending_melts(ledger)
-    states = await ledger.check_proofs_state([pending_proof.Y])
+    states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].state == SpentState.pending
     settings.fakewallet_payment_state = False
     # run startup routinge
@@ -210,7 +210,7 @@ async def test_startup_fakewallet_pending_quote_failure(ledger: Ledger):
     assert not melt_quotes
 
     # expect that proofs are unspent
-    states = await ledger.check_proofs_state([pending_proof.Y])
+    states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].state == SpentState.unspent
 
 
@@ -218,7 +218,7 @@ async def test_startup_fakewallet_pending_quote_failure(ledger: Ledger):
 @pytest.mark.skipif(is_regtest, reason="only for fake wallet")
 async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
     pending_proof, quote = await create_pending_melts(ledger)
-    states = await ledger.check_proofs_state([pending_proof.Y])
+    states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].state == SpentState.pending
     settings.fakewallet_payment_state = None
     # run startup routinge
@@ -231,7 +231,7 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
     assert melt_quotes
 
     # expect that proofs are still pending
-    states = await ledger.check_proofs_state([pending_proof.Y])
+    states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].state == SpentState.pending
 
 
@@ -273,7 +273,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     assert melt_quotes
 
     # expect that proofs are still pending
-    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
+    states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.state == SpentState.pending for s in states])
 
     # only now settle the invoice
@@ -307,7 +307,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     )
     await asyncio.sleep(SLEEP_TIME)
     # expect that proofs are pending
-    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
+    states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.state == SpentState.pending for s in states])
 
     settle_invoice(preimage=preimage)
@@ -323,7 +323,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     assert not melt_quotes
 
     # expect that proofs are spent
-    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
+    states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.state == SpentState.spent for s in states])
 
 
@@ -358,7 +358,7 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     await asyncio.sleep(SLEEP_TIME)
 
     # expect that proofs are pending
-    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
+    states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.state == SpentState.pending for s in states])
 
     cancel_invoice(preimage_hash=preimage_hash)
@@ -374,5 +374,5 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     assert not melt_quotes
 
     # expect that proofs are unspent
-    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
+    states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
     assert all([s.state == SpentState.unspent for s in states])

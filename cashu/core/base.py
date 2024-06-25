@@ -7,8 +7,11 @@ from sqlite3 import Row
 from typing import Dict, List, Optional, Union
 
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator
 
+from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
+
+from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
@@ -54,10 +57,26 @@ class SpentState(Enum):
         return self.name
 
 
-class ProofState(BaseModel):
+class ProofState(LedgerEvent):
     Y: str
     state: SpentState
     witness: Optional[str] = None
+
+    @root_validator()
+    def check_witness(cls, values):
+        state, witness = values.get("state"), values.get("witness")
+        if witness is not None and state != SpentState.spent:
+            raise ValueError('Witness can only be set if the spent state is "SPENT"')
+        return values
+
+    @property
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.Y
+
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.PROOF_STATE
 
 
 class HTLCWitness(BaseModel):
@@ -249,7 +268,7 @@ class Invoice(BaseModel):
     time_paid: Union[None, str, int, float] = ""
 
 
-class MeltQuote(BaseModel):
+class MeltQuote(LedgerEvent):
     quote: str
     method: str
     request: str
@@ -290,8 +309,17 @@ class MeltQuote(BaseModel):
             proof=row["proof"],
         )
 
+    @property
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.quote
 
-class MintQuote(BaseModel):
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+
+
+class MintQuote(LedgerEvent):
     quote: str
     method: str
     request: str
@@ -328,6 +356,15 @@ class MintQuote(BaseModel):
             created_time=created_time,
             paid_time=paid_time,
         )
+
+    @property
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.quote
+
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
 
 
 # ------- KEYSETS -------

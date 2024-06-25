@@ -109,23 +109,7 @@ def test_balance(cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
-def test_invoice_automatic_fakewallet(mint, cli_prefix):
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [*cli_prefix, "invoice", "1000"],
-    )
-    assert result.exception is None
-    print("INVOICE")
-    print(result.output)
-    wallet = asyncio.run(init_wallet())
-    assert wallet.available_balance >= 1000
-    assert f"Balance: {wallet.available_balance} sat" in result.output
-    assert result.exit_code == 0
-
-
-def test_invoice(mint, cli_prefix):
+def test_invoice_return_immediately(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,

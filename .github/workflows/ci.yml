@@ -15,7 +15,6 @@ jobs:
         os: [ubuntu-latest]
         python-version: ["3.10"]
         poetry-version: ["1.7.1"]
-        mint-cache-secrets: ["false", "true"]
         mint-only-deprecated: ["false", "true"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         backend-wallet-class: ["FakeWallet"]
@@ -24,7 +23,6 @@ jobs:
       os: ${{ matrix.os }}
       python-version: ${{ matrix.python-version }}
       poetry-version: ${{ matrix.poetry-version }}
-      mint-cache-secrets: ${{ matrix.mint-cache-secrets }}
       mint-only-deprecated: ${{ matrix.mint-only-deprecated }}
       mint-database: ${{ matrix.mint-database }}
   regtest:

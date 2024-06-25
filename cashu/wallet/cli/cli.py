@@ -9,15 +9,17 @@ from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
-from typing import Optional
+from typing import Optional, Union
 
 import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, TokenV3, Unit
+from ...core.base import Invoice, Method, TokenV3, Unit
 from ...core.helpers import sum_proofs
+from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
+from ...core.models import PostMintQuoteResponse
 from ...core.settings import settings
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
@@ -44,6 +46,7 @@ from ..helpers import (
     send,
 )
 from ..nostr import receive_nostr, send_nostr
+from ..subscriptions import SubscriptionManager
 
 
 class NaturalOrderGroup(click.Group):
@@ -272,9 +275,54 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
             f"Requesting split with {n_splits} * {wallet.unit.str(split)} tokens."
         )
 
+    paid = False
+    invoice_nonlocal: Union[None, Invoice] = None
+    subscription_nonlocal: Union[None, SubscriptionManager] = None
+
+    def mint_invoice_callback(msg: JSONRPCNotficationParams):
+        nonlocal \
+            ctx, \
+            wallet, \
+            amount, \
+            optional_split, \
+            paid, \
+            invoice_nonlocal, \
+            subscription_nonlocal
+        logger.trace(f"Received callback: {msg}")
+        if paid:
+            return
+        try:
+            quote = PostMintQuoteResponse.parse_obj(msg.payload)
+        except Exception:
+            return
+        logger.debug(f"Received callback for quote: {quote}")
+        if (
+            quote.paid
+            and quote.request == invoice.bolt11
+            and msg.subId in subscription.callback_map.keys()
+        ):
+            try:
+                asyncio.run(
+                    wallet.mint(int(amount), split=optional_split, id=invoice.id)
+                )
+                # set paid so we won't react to any more callbacks
+                paid = True
+            except Exception as e:
+                print(f"Error during mint: {str(e)}")
+                return
+
     # user requests an invoice
     if amount and not id:
-        invoice = await wallet.request_mint(amount)
+        mint_supports_websockets = wallet.mint_info.supports_websocket_mint_quote(
+            Method["bolt11"], wallet.unit
+        )
+        if mint_supports_websockets and not no_check:
+            invoice, subscription = await wallet.request_mint_with_callback(
+                amount, callback=mint_invoice_callback
+            )
+            invoice_nonlocal, subscription_nonlocal = invoice, subscription
+        else:
+            invoice = await wallet.request_mint(amount)
         if invoice.bolt11:
             print("")
             print(f"Pay invoice to mint {wallet.unit.str(amount)}:")
@@ -287,37 +335,48 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
             )
             if no_check:
                 return
-            check_until = time.time() + 5 * 60  # check for five minutes
             print("")
             print(
                 "Checking invoice ...",
                 end="",
                 flush=True,
             )
-            paid = False
-            while time.time() < check_until and not paid:
-                time.sleep(3)
-                try:
-                    await wallet.mint(amount, split=optional_split, id=invoice.id)
-                    paid = True
-                    print(" Invoice paid.")
-                except Exception as e:
-                    # TODO: user error codes!
-                    if "not paid" in str(e):
-                        print(".", end="", flush=True)
-                        continue
-                    else:
-                        print(f"Error: {str(e)}")
-            if not paid:
-                print("\n")
-                print(
-                    "Invoice is not paid yet, stopping check. Use the command above to"
-                    " recheck after the invoice has been paid."
-                )
+        if mint_supports_websockets:
+            while not paid:
+                await asyncio.sleep(0.1)
 
-    # user paid invoice and want to check it
+        # we still check manually every 10 seconds
+        check_until = time.time() + 5 * 60  # check for five minutes
+        while time.time() < check_until and not paid:
+            await asyncio.sleep(5)
+            try:
+                await wallet.mint(amount, split=optional_split, id=invoice.id)
+                paid = True
+            except Exception as e:
+                # TODO: user error codes!
+                if "not paid" in str(e):
+                    print(".", end="", flush=True)
+                    continue
+                else:
+                    print(f"Error: {str(e)}")
+        if not paid:
+            print("\n")
+            print(
+                "Invoice is not paid yet, stopping check. Use the command above to"
+                " recheck after the invoice has been paid."
+            )
+
+    # user paid invoice before and wants to check the quote id
     elif amount and id:
         await wallet.mint(amount, split=optional_split, id=id)
+
+    # close open subscriptions so we can exit
+    try:
+        subscription.close()
+    except Exception:
+        pass
+    print(" Invoice paid.")
+
     print("")
     await print_balance(ctx)
     return
@@ -434,7 +493,6 @@ async def balance(ctx: Context, verbose):
 )
 @click.option(
     "--legacy",
-    "-l",
     default=False,
     is_flag=True,
     help="Print legacy token without mint information.",

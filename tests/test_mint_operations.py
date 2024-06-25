@@ -372,5 +372,22 @@ async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
 
-    proof_states = await ledger.check_proofs_state(Ys=[p.Y for p in send_proofs])
+    proof_states = await ledger.db_read.get_proofs_states(Ys=[p.Y for p in send_proofs])
     assert all([p.state.value == "UNSPENT" for p in proof_states])
+
+
+# TODO: test keeps running forever, needs to be fixed
+# @pytest.mark.asyncio
+# async def test_websocket_quote_updates(wallet1: Wallet, ledger: Ledger):
+#     invoice = await wallet1.request_mint(64)
+#     ws = websocket.create_connection(
+#         f"ws://localhost:{SERVER_PORT}/v1/quote/{invoice.id}"
+#     )
+#     await asyncio.sleep(0.1)
+#     pay_if_regtest(invoice.bolt11)
+#     await wallet1.mint(64, id=invoice.id)
+#     await asyncio.sleep(0.1)
+#     data = str(ws.recv())
+#     ws.close()
+#     n_lines = len(data.split("\n"))
+#     assert n_lines == 1

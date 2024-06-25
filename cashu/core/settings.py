@@ -120,14 +120,20 @@ class MintLimits(MintSettings):
         title="Maximum mint balance",
         description="Maximum mint balance.",
     )
+    mint_websocket_read_timeout: int = Field(
+        default=10 * 60,
+        gt=0,
+        title="Websocket read timeout",
+        description="Timeout for reading from a websocket.",
+    )
 
 
 class FakeWalletSettings(MintSettings):
     fakewallet_brr: bool = Field(default=True)
-    fakewallet_delay_payment: bool = Field(default=False)
+    fakewallet_delay_outgoing_payment: Optional[int] = Field(default=3)
+    fakewallet_delay_incoming_payment: Optional[int] = Field(default=3)
     fakewallet_stochastic_invoice: bool = Field(default=False)
     fakewallet_payment_state: Optional[bool] = Field(default=None)
-    mint_cache_secrets: bool = Field(default=True)
 
 
 class MintInformation(CashuSettings):
