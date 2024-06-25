@@ -611,8 +611,8 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ?, fee_paid = ?,"
-            " state = ?, paid_time = ?, proof = ? WHERE quote = ?",
+            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ?, state = ?,"
+            " fee_paid = ?, paid_time = ?, proof = ? WHERE quote = ?",
             (
                 quote.paid,
                 quote.state.name,

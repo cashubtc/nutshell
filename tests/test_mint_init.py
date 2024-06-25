@@ -5,7 +5,7 @@ import bolt11
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, Proof, ProofSpentState
+from cashu.core.base import MeltQuote, MeltQuoteState, Proof, ProofSpentState
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
 from cashu.core.settings import settings
@@ -144,6 +144,7 @@ async def create_pending_melts(
         checking_id=check_id,
         unit="sat",
         paid=False,
+        state=MeltQuoteState.unpaid,
         amount=100,
         fee_reserve=1,
     )

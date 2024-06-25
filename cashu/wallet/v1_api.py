@@ -391,7 +391,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 amount=amount or invoice_obj.amount_msat // 1000,
                 fee_reserve=ret.fee or 0,
                 paid=False,
-                state=MeltQuoteState.unpaid,
+                state=MeltQuoteState.unpaid.value,
                 expiry=invoice_obj.expiry,
             )
         # END backwards compatibility < 0.15.0

@@ -161,7 +161,7 @@ async def mint_quote(
         request=quote.request,
         quote=quote.quote,
         paid=quote.paid,
-        state=quote.state,
+        state=quote.state.value,
         expiry=quote.expiry,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
@@ -185,7 +185,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
         quote=mint_quote.quote,
         request=mint_quote.request,
         paid=mint_quote.paid,
-        state=mint_quote.state,
+        state=mint_quote.state.value,
         expiry=mint_quote.expiry,
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
@@ -276,7 +276,7 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
         amount=melt_quote.amount,
         fee_reserve=melt_quote.fee_reserve,
         paid=melt_quote.paid,
-        state=melt_quote.state,
+        state=melt_quote.state.value,
         expiry=melt_quote.expiry,
     )
     logger.trace(f"< GET /v1/melt/quote/bolt11/{quote}")

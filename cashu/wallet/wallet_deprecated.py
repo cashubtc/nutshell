@@ -253,7 +253,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             quote=mint_response.hash,
             request=mint_response.pr,
             paid=False,
-            state=MintQuoteState.unpaid,
+            state=MintQuoteState.unpaid.value,
             expiry=decoded_invoice.date + (decoded_invoice.expiry or 0),
         )
 

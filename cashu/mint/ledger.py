@@ -691,7 +691,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             amount=quote.amount,
             fee_reserve=quote.fee_reserve,
             paid=quote.paid,
-            state=quote.state,
+            state=quote.state.value,
             expiry=quote.expiry,
         )
 
