@@ -58,8 +58,8 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     assert triggered
     # assert len(msg_stack) == 1
 
-    assert msg_stack[1].payload["paid"] is False
-    assert msg_stack[1].payload["issued"] is False
+    assert msg_stack[0].payload["paid"] is False
+    assert msg_stack[0].payload["issued"] is False
 
     assert msg_stack[1].payload["paid"] is True
     assert msg_stack[1].payload["issued"] is False

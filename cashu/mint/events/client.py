@@ -118,7 +118,7 @@ class LedgerEventClientManager:
 
             # Handle the request
             try:
-                logger.debug(f"Request: {req}")
+                logger.debug(f"Request: {req.json()}")
                 resp = await self._handle_request(req)
                 # Send the response
                 await self._send_msg(resp)
@@ -166,7 +166,7 @@ class LedgerEventClientManager:
     async def _send_msg(
         self, data: Union[JSONRPCResponse, JSONRPCNotification, JSONRPCErrorResponse]
     ):
-        logger.debug(f"Sending websocket message: {data}")
+        logger.debug(f"Sending websocket message: {data.json()}")
         await self.websocket.send_text(data.json())
 
     def add_subscription(
