@@ -52,6 +52,8 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     await asyncio.sleep(wait + 2)
 
     # TODO: check for pending and paid states according to: https://github.com/cashubtc/nuts/pull/136
+    # TODO: we have three messages here, but the value "paid" only changes once
+    # the mint sends an update when the quote is pending but the API does not express that yet
 
     # first we expect the issued=False state to arrive
 
@@ -60,7 +62,6 @@ async def test_wallet_subscription_mint(wallet: Wallet):
 
     assert msg_stack[0].payload["paid"] is False
 
-    # TODO: we also send this when the quote is pending but the API does not express that yet
     assert msg_stack[1].payload["paid"] is True
 
     assert msg_stack[2].payload["paid"] is True
