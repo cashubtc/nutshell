@@ -10,6 +10,7 @@ from ..core.base import (
     BlindedMessage,
     BlindedMessage_Deprecated,
     BlindedSignature,
+    MintQuoteState,
     Proof,
     WalletKeyset,
 )
@@ -252,6 +253,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             quote=mint_response.hash,
             request=mint_response.pr,
             paid=False,
+            state=MintQuoteState.unpaid,
             expiry=decoded_invoice.date + (decoded_invoice.expiry or 0),
         )
 

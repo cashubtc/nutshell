@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Request
 from loguru import logger
 
-from ..core.base import BlindedMessage, BlindedSignature, SpentState
+from ..core.base import BlindedMessage, BlindedSignature, ProofSpentState
 from ..core.errors import CashuError
 from ..core.models import (
     CheckFeesRequest_deprecated,
@@ -345,13 +345,13 @@ async def check_spendable_deprecated(
     spendableList: List[bool] = []
     pendingList: List[bool] = []
     for proof_state in proofs_state:
-        if proof_state.state == SpentState.unspent:
+        if proof_state.state == ProofSpentState.unspent:
             spendableList.append(True)
             pendingList.append(False)
-        elif proof_state.state == SpentState.spent:
+        elif proof_state.state == ProofSpentState.spent:
             spendableList.append(False)
             pendingList.append(False)
-        elif proof_state.state == SpentState.pending:
+        elif proof_state.state == ProofSpentState.pending:
             spendableList.append(True)
             pendingList.append(True)
     return CheckSpendableResponse_deprecated(

@@ -296,6 +296,8 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
         except Exception:
             return
         logger.debug(f"Received callback for quote: {quote}")
+        # we need to sleep to give the callback map some time to be populated
+        time.sleep(0.1)
         if (
             quote.paid
             and quote.request == invoice.bolt11
@@ -310,6 +312,9 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
             except Exception as e:
                 print(f"Error during mint: {str(e)}")
                 return
+        else:
+            logger.debug("Quote not paid yet.")
+            return
 
     # user requests an invoice
     if amount and not id:

@@ -6,6 +6,8 @@ from .base import (
     BlindedMessage,
     BlindedMessage_Deprecated,
     BlindedSignature,
+    MeltQuoteState,
+    MintQuoteState,
     Proof,
     ProofState,
 )
@@ -98,7 +100,10 @@ class PostMintQuoteRequest(BaseModel):
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
-    paid: bool  # whether the request has been paid
+    paid: Optional[
+        bool
+    ]  # whether the request has been paid # DEPRECATED as per NUT PR #141
+    state: MintQuoteState  # state of the quote
     expiry: Optional[int]  # expiry of the quote
 
 
@@ -168,7 +173,8 @@ class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
-    paid: bool  # whether the request has been paid
+    paid: bool  # whether the request has been paid # DEPRECATED as per NUT PR #136
+    state: MeltQuoteState  # state of the quote
     expiry: Optional[int]  # expiry of the quote
 
 

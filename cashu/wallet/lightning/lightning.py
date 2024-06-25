@@ -1,6 +1,6 @@
 import bolt11
 
-from ...core.base import Amount, SpentState, Unit
+from ...core.base import Amount, ProofSpentState, Unit
 from ...core.helpers import sum_promises
 from ...core.settings import settings
 from ...lightning.base import (
@@ -131,12 +131,12 @@ class LightningWallet(Wallet):
         if not proofs_states:
             return PaymentStatus(paid=False)  # "states not fount"
 
-        if all([p.state == SpentState.pending for p in proofs_states.states]):
+        if all([p.state == ProofSpentState.pending for p in proofs_states.states]):
             return PaymentStatus(paid=None)  # "pending (with check)"
-        if any([p.state == SpentState.spent for p in proofs_states.states]):
+        if any([p.state == ProofSpentState.spent for p in proofs_states.states]):
             # NOTE: consider adding this check in wallet.py and mark the invoice as paid if all proofs are spent
             return PaymentStatus(paid=True)  # "paid (with check)"
-        if all([p.state == SpentState.unspent for p in proofs_states.states]):
+        if all([p.state == ProofSpentState.unspent for p in proofs_states.states]):
             return PaymentStatus(paid=False)  # "failed (with check)"
         return PaymentStatus(paid=None)  # "undefined state"
 
