@@ -52,6 +52,8 @@ from ..lightning.base import (
 )
 from ..mint.crud import LedgerCrudSqlite
 from .conditions import LedgerSpendingConditions
+from .db.read import DbReadHelper
+from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .tasks import LedgerTasks
@@ -61,11 +63,9 @@ from .verification import LedgerVerification
 class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
-    proofs_pending_lock: asyncio.Lock = (
-        asyncio.Lock()
-    )  # holds locks for proofs_pending database
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
+    db_read: DbReadHelper
 
     def __init__(
         self,
@@ -96,7 +96,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.crud = crud
         self.backends = backends
         self.pubkey = derive_pubkey(self.seed)
-        self.spent_proofs: Dict[str, Proof] = {}
+        self.db_read = DbReadHelper(self.db, self.crud)
+        self.db_write = DbWriteHelper(self.db, self.crud, self.events)
 
     # ------- STARTUP -------
 
@@ -106,8 +107,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         await self.dispatch_listeners()
 
     async def _startup_ledger(self):
-        if settings.mint_cache_secrets:
-            await self.load_used_proofs()
         await self.init_keysets()
 
         for derivation_path in settings.mint_derivation_path_list:
@@ -163,12 +162,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     proofs=pending_proofs, quote_id=quote.quote
                 )
                 # unset pending
-                await self._unset_proofs_pending(pending_proofs)
+                await self.db_write._unset_proofs_pending(pending_proofs)
             elif payment.failed:
                 logger.info(f"Melt quote {quote.quote} state: failed")
 
                 # unset pending
-                await self._unset_proofs_pending(pending_proofs, spent=False)
+                await self.db_write._unset_proofs_pending(pending_proofs, spent=False)
             elif payment.pending:
                 logger.info(f"Melt quote {quote.quote} state: pending")
                 pass
@@ -296,7 +295,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        self.spent_proofs.update({p.Y: p for p in proofs})
         async with get_db_connection(self.db, conn) as conn:
             # store in db
             for p in proofs:
@@ -787,7 +785,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         mint_quote.paid = True
         mint_quote.paid_time = melt_quote.paid_time
 
-        async with self.db.connect() as conn:
+        async with get_db_connection(self.db) as conn:
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
             await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)
 
@@ -863,7 +861,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         await self.verify_inputs_and_outputs(proofs=proofs)
 
         # set proofs to pending to avoid race conditions
-        await self._set_proofs_pending(proofs, quote_id=melt_quote.quote)
+        await self.db_write._set_proofs_pending(proofs, quote_id=melt_quote.quote)
         try:
             # settle the transaction internally if there is a mint quote with the same payment request
             melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
@@ -911,7 +909,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise e
         finally:
             # delete proofs from pending list
-            await self._unset_proofs_pending(proofs)
+            await self.db_write._unset_proofs_pending(proofs)
 
         return melt_quote.proof or "", return_promises
 
@@ -945,7 +943,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
 
-        await self._set_proofs_pending(proofs)
+        await self.db_write._set_proofs_pending(proofs)
         try:
             # Mark proofs as used and prepare new promises
             async with get_db_connection(self.db) as conn:
@@ -958,7 +956,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise e
         finally:
             # delete proofs from pending list
-            await self._unset_proofs_pending(proofs)
+            await self.db_write._unset_proofs_pending(proofs)
 
         logger.trace("split successful")
         return promises
@@ -968,7 +966,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
         signatures: List[BlindedSignature] = []
         return_outputs: List[BlindedMessage] = []
-        async with self.db.connect() as conn:
+        async with get_db_connection(self.db) as conn:
             for output in outputs:
                 logger.trace(f"looking for promise: {output}")
                 promise = await self.crud.get_promise(
@@ -1047,116 +1045,3 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 )
                 signatures.append(signature)
             return signatures
-
-    # ------- PROOFS -------
-
-    async def load_used_proofs(self) -> None:
-        """Load all used proofs from database."""
-        if not settings.mint_cache_secrets:
-            raise Exception("MINT_CACHE_SECRETS must be set to TRUE")
-        logger.debug("Loading used proofs into memory")
-        spent_proofs_list = await self.crud.get_spent_proofs(db=self.db) or []
-        logger.debug(f"Loaded {len(spent_proofs_list)} used proofs")
-        self.spent_proofs = {p.Y: p for p in spent_proofs_list}
-
-    async def check_proofs_state(self, Ys: List[str]) -> List[ProofState]:
-        """Checks if provided proofs are spend or are pending.
-        Used by wallets to check if their proofs have been redeemed by a receiver or they are still in-flight in a transaction.
-
-        Returns two lists that are in the same order as the provided proofs. Wallet must match the list
-        to the proofs they have provided in order to figure out which proof is spendable or pending
-        and which isn't.
-
-        Args:
-            Ys (List[str]): List of Y's of proofs to check
-
-        Returns:
-            List[bool]: List of which proof is still spendable (True if still spendable, else False)
-            List[bool]: List of which proof are pending (True if pending, else False)
-        """
-        states: List[ProofState] = []
-        proofs_spent = await self._get_proofs_spent(Ys)
-        proofs_pending = await self._get_proofs_pending(Ys)
-        for Y in Ys:
-            if Y not in proofs_spent and Y not in proofs_pending:
-                states.append(ProofState(Y=Y, state=SpentState.unspent))
-            elif Y not in proofs_spent and Y in proofs_pending:
-                states.append(ProofState(Y=Y, state=SpentState.pending))
-            else:
-                states.append(
-                    ProofState(
-                        Y=Y,
-                        state=SpentState.spent,
-                        witness=proofs_spent[Y].witness,
-                    )
-                )
-        return states
-
-    async def _set_proofs_pending(
-        self, proofs: List[Proof], quote_id: Optional[str] = None
-    ) -> None:
-        """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
-        the list of pending proofs or removes them. Used as a mutex for proofs.
-
-        Args:
-            proofs (List[Proof]): Proofs to add to pending table.
-            quote_id (Optional[str]): Melt quote ID. If it is not set, we assume the pending tokens to be from a swap.
-
-        Raises:
-            Exception: At least one proof already in pending table.
-        """
-        # first we check whether these proofs are pending already
-        async with self.proofs_pending_lock:
-            async with self.db.connect() as conn:
-                await self._validate_proofs_pending(proofs, conn)
-                try:
-                    for p in proofs:
-                        await self.crud.set_proof_pending(
-                            proof=p, db=self.db, quote_id=quote_id, conn=conn
-                        )
-                        await self.events.submit(
-                            ProofState(Y=p.Y, state=SpentState.pending)
-                        )
-                except Exception as e:
-                    logger.error(f"Failed to set proofs pending: {e}")
-                    raise TransactionError("Failed to set proofs pending.")
-
-    async def _unset_proofs_pending(self, proofs: List[Proof], spent=True) -> None:
-        """Deletes proofs from pending table.
-
-        Args:
-            proofs (List[Proof]): Proofs to delete.
-            spent (bool): Whether the proofs have been spent or not. Defaults to True.
-                This should be False if the proofs were NOT invalidated before calling this function.
-                It is used to emit the unspent state for the proofs (otherwise the spent state is emitted
-                by the _invalidate_proofs function when the proofs are spent).
-        """
-        async with self.proofs_pending_lock:
-            async with self.db.connect() as conn:
-                for p in proofs:
-                    await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
-                    if not spent:
-                        await self.events.submit(
-                            ProofState(Y=p.Y, state=SpentState.unspent)
-                        )
-
-    async def _validate_proofs_pending(
-        self, proofs: List[Proof], conn: Optional[Connection] = None
-    ) -> None:
-        """Checks if any of the provided proofs is in the pending proofs table.
-
-        Args:
-            proofs (List[Proof]): Proofs to check.
-
-        Raises:
-            Exception: At least one of the proofs is in the pending table.
-        """
-        if not (
-            len(
-                await self.crud.get_proofs_pending(
-                    Ys=[p.Y for p in proofs], db=self.db, conn=conn
-                )
-            )
-            == 0
-        ):
-            raise TransactionError("proofs are pending.")

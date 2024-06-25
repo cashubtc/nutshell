@@ -11,7 +11,7 @@ from pydantic import BaseModel, root_validator
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
-from ..mint.events.ledger_event import LedgerEvent
+from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (

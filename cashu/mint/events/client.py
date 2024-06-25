@@ -5,6 +5,8 @@ from typing import List, Union
 from fastapi import WebSocket
 from loguru import logger
 
+from ...core.base import MeltQuote, MintQuote, ProofState
+from ...core.db import Database
 from ...core.json_rpc.base import (
     JSONRPCError,
     JSONRPCErrorCode,
@@ -20,8 +22,12 @@ from ...core.json_rpc.base import (
     JSONRPCUnsubscribeParams,
     JSONRRPCSubscribeResponse,
 )
+from ...core.models import PostMeltQuoteResponse, PostMintQuoteResponse
 from ...core.settings import settings
+from ..crud import LedgerCrud
+from ..db.read import DbReadHelper
 from ..limit import limit_websocket
+from .event_model import LedgerEvent
 
 
 class LedgerEventClientManager:
@@ -30,10 +36,12 @@ class LedgerEventClientManager:
         JSONRPCSubscriptionKinds, dict[str, List[str]]
     ] = {}  # [kind, [filter, List[subId]]]
     max_subscriptions = 1000
+    db_read: DbReadHelper
 
-    def __init__(self, websocket: WebSocket):
+    def __init__(self, websocket: WebSocket, db: Database, crud: LedgerCrud):
         self.websocket = websocket
         self.subscriptions = {}
+        self.db_read = DbReadHelper(db, crud)
 
     async def start(self):
         await self.websocket.accept()
@@ -162,7 +170,10 @@ class LedgerEventClientManager:
         await self.websocket.send_text(data.json())
 
     def add_subscription(
-        self, kind: JSONRPCSubscriptionKinds, filters: List[str], subId: str
+        self,
+        kind: JSONRPCSubscriptionKinds,
+        filters: List[str],
+        subId: str,
     ) -> None:
         if kind not in self.subscriptions:
             self.subscriptions[kind] = {}
@@ -175,6 +186,8 @@ class LedgerEventClientManager:
                 self.subscriptions[kind][filter] = []
             logger.debug(f"Adding subscription {subId} for filter {filter}")
             self.subscriptions[kind][filter].append(subId)
+            # Initialize the subscription
+            asyncio.create_task(self._init_subscription(subId, filter, kind))
 
     def remove_subscription(self, subId: str) -> None:
         for kind, sub_filters in self.subscriptions.items():
@@ -187,3 +200,32 @@ class LedgerEventClientManager:
                         self.subscriptions[kind][filter].remove(sub)
                         return
         raise ValueError(f"Subscription not found: {subId}")
+
+    def serialize_event(self, event: LedgerEvent) -> dict:
+        if isinstance(event, MintQuote):
+            return_dict = PostMintQuoteResponse.parse_obj(event.dict()).dict()
+        elif isinstance(event, MeltQuote):
+            return_dict = PostMeltQuoteResponse.parse_obj(event.dict()).dict()
+        elif isinstance(event, ProofState):
+            return_dict = event.dict(exclude_unset=True, exclude_none=True)
+        return return_dict
+
+    async def _init_subscription(
+        self, subId: str, filter: str, kind: JSONRPCSubscriptionKinds
+    ):
+        if kind == JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE:
+            mint_quote = await self.db_read.crud.get_mint_quote(
+                quote_id=filter, db=self.db_read.db
+            )
+            if mint_quote:
+                await self._send_obj(mint_quote.dict(), subId)
+        elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
+            melt_quote = await self.db_read.crud.get_melt_quote(
+                quote_id=filter, db=self.db_read.db
+            )
+            if melt_quote:
+                await self._send_obj(melt_quote.dict(), subId)
+        elif kind == JSONRPCSubscriptionKinds.PROOF_STATE:
+            proofs = await self.db_read.get_proofs_states(Ys=[filter])
+            if len(proofs):
+                await self._send_obj(proofs[0].dict(), subId)

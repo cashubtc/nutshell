@@ -3,8 +3,6 @@ import asyncio
 from fastapi import APIRouter, Request, WebSocket
 from loguru import logger
 
-from cashu.mint.events.client_manager import LedgerEventClientManager
-
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
     GetInfoResponse,
@@ -195,16 +193,20 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
     limit_websocket(websocket)
-    client = LedgerEventClientManager(websocket=websocket)
-    success = ledger.events.add_client(client)
-    if not success:
+    try:
+        client = ledger.events.add_client(websocket, ledger.db, ledger.crud)
+    except Exception as e:
+        logger.debug(f"Exception: {e}")
         await asyncio.wait_for(websocket.close(), timeout=1)
         return
+
     try:
+        # this will block until the session is closed
         await client.start()
     except Exception as e:
         logger.debug(f"Exception: {e}")
         ledger.events.remove_client(client)
+    finally:
         await asyncio.wait_for(websocket.close(), timeout=1)
 
 
@@ -350,7 +352,7 @@ async def check_state(
 ) -> PostCheckStateResponse:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /v1/checkstate: {payload}")
-    proof_states = await ledger.check_proofs_state(payload.Ys)
+    proof_states = await ledger.db_read.get_proofs_states(payload.Ys)
     return PostCheckStateResponse(states=proof_states)
 
 

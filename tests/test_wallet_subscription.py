@@ -57,14 +57,18 @@ async def test_wallet_subscription_mint(wallet: Wallet):
 
     assert triggered
     # assert len(msg_stack) == 1
-    assert msg_stack[0].payload["paid"] is True
-    assert msg_stack[0].payload["issued"] is False
+
+    assert msg_stack[1].payload["paid"] is False
+    assert msg_stack[1].payload["issued"] is False
+
+    assert msg_stack[1].payload["paid"] is True
+    assert msg_stack[1].payload["issued"] is False
 
     # await asyncio.sleep(2)
     # this will cause a second message
-    assert len(msg_stack) == 2
-    assert msg_stack[1].payload["paid"] is True
-    assert msg_stack[1].payload["issued"] is True
+    assert len(msg_stack) == 3
+    assert msg_stack[2].payload["paid"] is True
+    assert msg_stack[2].payload["issued"] is True
 
 
 @pytest.mark.asyncio
@@ -95,17 +99,24 @@ async def test_wallet_subscription_swap(wallet: Wallet):
     await asyncio.sleep(wait)
     assert triggered
 
-    # we receive 2 messages for each subscription
-    assert len(msg_stack) == n_subscriptions * 2
+    # we receive 3 messages for each subscription:
+    # initial state (UNSPENT), pending state (PENDING), spent state (SPENT)
+    assert len(msg_stack) == n_subscriptions * 3
 
-    # the first one is the PENDING state
+    # the first one is the UNSPENT state
     pending_stack = msg_stack[:n_subscriptions]
     for msg in pending_stack:
         proof_state = ProofState.parse_obj(msg.payload)
+        assert proof_state.state.value == "UNSPENT"
+
+    # the second one is the PENDING state
+    spent_stack = msg_stack[n_subscriptions : n_subscriptions * 2]
+    for msg in spent_stack:
+        proof_state = ProofState.parse_obj(msg.payload)
         assert proof_state.state.value == "PENDING"
 
-    # the second one is the SPENT state
-    spent_stack = msg_stack[n_subscriptions:]
+    # the third one is the SPENT state
+    spent_stack = msg_stack[n_subscriptions * 2 :]
     for msg in spent_stack:
         proof_state = ProofState.parse_obj(msg.payload)
         assert proof_state.state.value == "SPENT"

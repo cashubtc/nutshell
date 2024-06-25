@@ -372,7 +372,7 @@ async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
 
-    proof_states = await ledger.check_proofs_state(Ys=[p.Y for p in send_proofs])
+    proof_states = await ledger.db_read.get_proofs_states(Ys=[p.Y for p in send_proofs])
     assert all([p.state.value == "UNSPENT" for p in proof_states])
 
 

@@ -15,16 +15,13 @@ on:
       os:
         default: "ubuntu-latest"
         type: string
-      mint-cache-secrets:
-        default: "false"
-        type: string
       mint-only-deprecated:
         default: "false"
         type: string
 
 jobs:
   poetry:
-    name: Run (mint-cache-secrets ${{ inputs.mint-cache-secrets }}, mint-only-deprecated ${{ inputs.mint-only-deprecated }}, mint-database ${{ inputs.mint-database }})
+    name: Run (db ${{ inputs.mint-database }}, deprecated api ${{ inputs.mint-only-deprecated }})
     runs-on: ${{ inputs.os }}
     services:
       postgres:
@@ -54,7 +51,6 @@ jobs:
           MINT_HOST: localhost
           MINT_PORT: 3337
           MINT_TEST_DATABASE: ${{ inputs.mint-database }}
-          MINT_CACHE_SECRETS: ${{ inputs.mint-cache-secrets }}
           DEBUG_MINT_ONLY_DEPRECATED: ${{ inputs.mint-only-deprecated }}
           TOR: false
         run: |

@@ -1,9 +1,14 @@
+import asyncio
+
+from fastapi import WebSocket
 from loguru import logger
 
 from ...core.base import MeltQuote, MintQuote, ProofState
+from ...core.db import Database
 from ...core.models import PostMeltQuoteResponse, PostMintQuoteResponse
-from .client_manager import LedgerEventClientManager
-from .ledger_event import LedgerEvent
+from ..crud import LedgerCrud
+from .client import LedgerEventClientManager
+from .event_model import LedgerEvent
 
 
 class LedgerEventManager:
@@ -18,12 +23,15 @@ class LedgerEventManager:
 
     MAX_CLIENTS = 1000
 
-    def add_client(self, client: LedgerEventClientManager) -> bool:
+    def add_client(
+        self, websocket: WebSocket, db: Database, crud: LedgerCrud
+    ) -> LedgerEventClientManager:
+        client = LedgerEventClientManager(websocket, db, crud)
         if len(self.clients) >= self.MAX_CLIENTS:
-            return False
+            raise Exception("too many clients")
         self.clients.append(client)
         logger.debug(f"Added websocket subscription client {client}")
-        return True
+        return client
 
     def remove_client(self, client: LedgerEventClientManager) -> None:
         self.clients.remove(client)
@@ -41,10 +49,13 @@ class LedgerEventManager:
         if not isinstance(event, LedgerEvent):
             raise ValueError(f"Unsupported event object type {type(event)}")
 
+        # check if any clients are subscribed to this event
         for client in self.clients:
             kind_sub = client.subscriptions.get(event.kind, {})
             for sub in kind_sub.get(event.identifier, []):
                 logger.trace(
                     f"Submitting event to sub {sub}: {self.serialize_event(event)}"
                 )
-                await client._send_obj(self.serialize_event(event), subId=sub)
+                asyncio.create_task(
+                    client._send_obj(self.serialize_event(event), subId=sub)
+                )
