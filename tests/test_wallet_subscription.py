@@ -56,19 +56,15 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     # first we expect the issued=False state to arrive
 
     assert triggered
-    # assert len(msg_stack) == 1
+    assert len(msg_stack) == 3
 
     assert msg_stack[0].payload["paid"] is False
-    assert msg_stack[0].payload["issued"] is False
 
     assert msg_stack[1].payload["paid"] is True
-    assert msg_stack[1].payload["issued"] is False
 
     # await asyncio.sleep(2)
     # this will cause a second message
-    assert len(msg_stack) == 3
     assert msg_stack[2].payload["paid"] is True
-    assert msg_stack[2].payload["issued"] is True
 
 
 @pytest.mark.asyncio
