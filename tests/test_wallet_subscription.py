@@ -60,10 +60,9 @@ async def test_wallet_subscription_mint(wallet: Wallet):
 
     assert msg_stack[0].payload["paid"] is False
 
+    # TODO: we also send this when the quote is pending but the API does not express that yet
     assert msg_stack[1].payload["paid"] is True
 
-    # await asyncio.sleep(2)
-    # this will cause a second message
     assert msg_stack[2].payload["paid"] is True
 
 
