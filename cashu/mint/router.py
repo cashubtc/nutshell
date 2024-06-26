@@ -15,7 +15,6 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
-    PostMeltResponse,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
     PostMintRequest,
@@ -290,23 +289,20 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
         "Melt tokens for a Bitcoin payment that the mint will make for the user in"
         " exchange"
     ),
-    response_model=PostMeltResponse,
+    response_model=PostMeltQuoteResponse,
     response_description=(
         "The state of the payment, a preimage as proof of payment, and a list of"
         " promises for change."
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-async def melt(request: Request, payload: PostMeltRequest) -> PostMeltResponse:
+async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
     """
     logger.trace(f"> POST /v1/melt/bolt11: {payload}")
-    preimage, change_promises = await ledger.melt(
+    resp = await ledger.melt(
         proofs=payload.inputs, quote=payload.quote, outputs=payload.outputs
-    )
-    resp = PostMeltResponse(
-        paid=True, payment_preimage=preimage, change=change_promises
     )
     logger.trace(f"< POST /v1/melt/bolt11: {resp}")
     return resp

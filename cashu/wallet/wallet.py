@@ -28,7 +28,6 @@ from ..core.migrations import migrate_databases
 from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
-    PostMeltResponse,
 )
 from ..core.p2pk import Secret
 from ..core.settings import settings
@@ -639,7 +638,7 @@ class Wallet(
 
     async def melt(
         self, proofs: List[Proof], invoice: str, fee_reserve_sat: int, quote_id: str
-    ) -> PostMeltResponse:
+    ) -> PostMeltQuoteResponse:
         """Pays a lightning invoice and returns the status of the payment.
 
         Args:

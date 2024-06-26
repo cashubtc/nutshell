@@ -306,7 +306,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
     @async_ensure_mint_loaded_deprecated
     async def melt_deprecated(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
-    ):
+    ) -> PostMeltResponse_deprecated:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """

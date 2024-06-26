@@ -815,3 +815,13 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
             await conn.execute(
                 f"UPDATE {table_with_schema(db, 'melt_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
             )
+
+
+async def m021_add_change_and_expiry_to_melt_quotes(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'melt_quotes')} ADD COLUMN change TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'melt_quotes')} ADD COLUMN expiry TIMESTAMP"
+        )
