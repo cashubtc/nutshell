@@ -125,7 +125,7 @@ class Proof(BaseModel):
     Y: str = ""  # hash_to_curve(secret)
     C: str = ""  # signature on secret, unblinded by wallet
     dleq: Optional[DLEQWallet] = None  # DLEQ proof
-    witness: Union[None, str] = ""  # witness for spending condition
+    witness: Union[None, str] = None  # witness for spending condition
 
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
