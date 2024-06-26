@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from loguru import logger
 
-from ...core.base import Proof, ProofState, SpentState
+from ...core.base import Proof, ProofSpentState, ProofState
 from ...core.db import Connection, Database, get_db_connection
 from ...core.errors import (
     TransactionError,
@@ -50,7 +50,7 @@ class DbWriteHelper:
                             proof=p, db=self.db, quote_id=quote_id, conn=conn
                         )
                         await self.events.submit(
-                            ProofState(Y=p.Y, state=SpentState.pending)
+                            ProofState(Y=p.Y, state=ProofSpentState.pending)
                         )
                 except Exception as e:
                     logger.error(f"Failed to set proofs pending: {e}")
@@ -72,7 +72,7 @@ class DbWriteHelper:
                     await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
                     if not spent:
                         await self.events.submit(
-                            ProofState(Y=p.Y, state=SpentState.unspent)
+                            ProofState(Y=p.Y, state=ProofSpentState.unspent)
                         )
 
     async def _validate_proofs_pending(
