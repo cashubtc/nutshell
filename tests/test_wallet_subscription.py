@@ -55,10 +55,10 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     assert len(msg_stack) == 3
 
     assert msg_stack[0].payload["paid"] is False
-    assert msg_stack[1].payload["state"] == MintQuoteState.unpaid.value
+    assert msg_stack[0].payload["state"] == MintQuoteState.unpaid.value
 
     assert msg_stack[1].payload["paid"] is True
-    assert msg_stack[2].payload["state"] == MintQuoteState.paid.value
+    assert msg_stack[1].payload["state"] == MintQuoteState.paid.value
 
     assert msg_stack[2].payload["paid"] is True
     assert msg_stack[2].payload["state"] == MintQuoteState.issued.value
