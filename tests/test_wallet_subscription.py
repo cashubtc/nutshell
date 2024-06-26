@@ -3,7 +3,7 @@ import asyncio
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Method, MintQuoteState, ProofState
+from cashu.core.base import Method, MintQuoteState, ProofSpentState, ProofState
 from cashu.core.json_rpc.base import JSONRPCNotficationParams
 from cashu.core.nuts import WEBSOCKETS_NUT
 from cashu.core.settings import settings
@@ -50,12 +50,6 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     pay_if_regtest(invoice.bolt11)
     wait = settings.fakewallet_delay_incoming_payment or 2
     await asyncio.sleep(wait + 2)
-
-    # TODO: check for pending and paid states according to: https://github.com/cashubtc/nuts/pull/136
-    # TODO: we have three messages here, but the value "paid" only changes once
-    # the mint sends an update when the quote is pending but the API does not express that yet
-
-    # first we expect the issued=False state to arrive
 
     assert triggered
     assert len(msg_stack) == 3
@@ -106,16 +100,16 @@ async def test_wallet_subscription_swap(wallet: Wallet):
     pending_stack = msg_stack[:n_subscriptions]
     for msg in pending_stack:
         proof_state = ProofState.parse_obj(msg.payload)
-        assert proof_state.state == ProofState.state.unspent
+        assert proof_state.state == ProofSpentState.unspent
 
     # the second one is the PENDING state
     spent_stack = msg_stack[n_subscriptions : n_subscriptions * 2]
     for msg in spent_stack:
         proof_state = ProofState.parse_obj(msg.payload)
-        assert proof_state.state == ProofState.state.pending
+        assert proof_state.state == ProofSpentState.pending
 
     # the third one is the SPENT state
     spent_stack = msg_stack[n_subscriptions * 2 :]
     for msg in spent_stack:
         proof_state = ProofState.parse_obj(msg.payload)
-        assert proof_state.state == ProofState.state.spent
+        assert proof_state.state == ProofSpentState.spent
