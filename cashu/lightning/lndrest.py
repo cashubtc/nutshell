@@ -49,22 +49,19 @@ class LndRestWallet(LightningBackend):
         )
 
         if not endpoint:
-            raise Exception("cannot initialize lndrest: no endpoint")
+            raise Exception("cannot initialize LndRestWallet: no endpoint")
 
         if not macaroon:
-            raise Exception("cannot initialize lndrest: no macaroon")
+            raise Exception("cannot initialize LndRestWallet: no macaroon")
 
         if not cert:
             logger.warning(
-                "no certificate for lndrest provided, this only works if you have a"
+                "no certificate for LndRestWallet provided, this only works if you have a"
                 " publicly issued certificate"
             )
 
         if not cert_verify:
-            logger.warning(
-                "certificate validation will be disabled for lndrest"
-            )
-
+            logger.warning("certificate validation will be disabled for LndRestWallet")
 
         endpoint = endpoint[:-1] if endpoint.endswith("/") else endpoint
         endpoint = (
@@ -81,7 +78,6 @@ class LndRestWallet(LightningBackend):
         # disable cert verify if choosen
         if not cert_verify:
             self.cert = False
-
 
         self.auth = {"Grpc-Metadata-macaroon": self.macaroon}
         self.client = httpx.AsyncClient(
