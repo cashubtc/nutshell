@@ -6,6 +6,8 @@ from .base import (
     BlindedMessage,
     BlindedMessage_Deprecated,
     BlindedSignature,
+    MeltQuote,
+    MintQuote,
     Proof,
     ProofState,
 )
@@ -104,6 +106,13 @@ class PostMintQuoteResponse(BaseModel):
     state: str  # state of the quote
     expiry: Optional[int]  # expiry of the quote
 
+    @classmethod
+    def from_mint_quote(self, mint_quote: MintQuote) -> "PostMintQuoteResponse":
+        to_dict = mint_quote.dict()
+        # turn state into string
+        to_dict["state"] = mint_quote.state.value
+        return PostMintQuoteResponse.parse_obj(to_dict)
+
 
 # ------- API: MINT -------
 
@@ -174,6 +183,13 @@ class PostMeltQuoteResponse(BaseModel):
     paid: bool  # whether the request has been paid # DEPRECATED as per NUT PR #136
     state: str  # state of the quote
     expiry: Optional[int]  # expiry of the quote
+
+    @classmethod
+    def from_melt_quote(self, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
+        to_dict = melt_quote.dict()
+        # turn state into string
+        to_dict["state"] = melt_quote.state.value
+        return PostMeltQuoteResponse.parse_obj(to_dict)
 
 
 # ------- API: MELT -------
