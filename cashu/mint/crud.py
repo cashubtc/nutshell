@@ -173,7 +173,9 @@ class LedgerCrud(ABC):
     async def get_mint_quote(
         self,
         *,
-        quote_id: str,
+        quote_id: Optional[str] = None,
+        checking_id: Optional[str] = None,
+        request: Optional[str] = None,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MintQuote]:
@@ -223,9 +225,10 @@ class LedgerCrud(ABC):
     async def get_melt_quote(
         self,
         *,
-        quote_id: str,
-        db: Database,
+        quote_id: Optional[str] = None,
         checking_id: Optional[str] = None,
+        request: Optional[str] = None,
+        db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MeltQuote]:
         ...
@@ -430,8 +433,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, issued, paid, created_time, paid_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, checking_id, unit, amount, issued, paid, state, created_time, paid_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
@@ -442,6 +445,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.issued,
                 quote.paid,
+                quote.state.name,
                 timestamp_from_seconds(db, quote.created_time),
                 timestamp_from_seconds(db, quote.paid_time),
             ),
@@ -450,17 +454,36 @@ class LedgerCrudSqlite(LedgerCrud):
     async def get_mint_quote(
         self,
         *,
-        quote_id: str,
+        quote_id: Optional[str] = None,
+        checking_id: Optional[str] = None,
+        request: Optional[str] = None,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MintQuote]:
+        clauses = []
+        values: List[Any] = []
+        if quote_id:
+            clauses.append("quote = ?")
+            values.append(quote_id)
+        if checking_id:
+            clauses.append("checking_id = ?")
+            values.append(checking_id)
+        if request:
+            clauses.append("request = ?")
+            values.append(request)
+        if not any(clauses):
+            raise ValueError("No search criteria")
+
+        where = f"WHERE {' AND '.join(clauses)}"
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'mint_quotes')}
-            WHERE quote = ?
+            {where}
             """,
-            (quote_id,),
+            tuple(values),
         )
+        if row is None:
+            return None
         return MintQuote.from_row(row) if row else None
 
     async def get_mint_quote_by_request(
@@ -488,10 +511,11 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"UPDATE {table_with_schema(db, 'mint_quotes')} SET issued = ?, paid = ?,"
-            " paid_time = ? WHERE quote = ?",
+            " state = ?, paid_time = ? WHERE quote = ?",
             (
                 quote.issued,
                 quote.paid,
+                quote.state.name,
                 timestamp_from_seconds(db, quote.paid_time),
                 quote.quote,
             ),
@@ -524,8 +548,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, state, created_time, paid_time, fee_paid, proof)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
@@ -536,6 +560,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.fee_reserve or 0,
                 quote.paid,
+                quote.state.name,
                 timestamp_from_seconds(db, quote.created_time),
                 timestamp_from_seconds(db, quote.paid_time),
                 quote.fee_paid,
@@ -546,10 +571,10 @@ class LedgerCrudSqlite(LedgerCrud):
     async def get_melt_quote(
         self,
         *,
-        quote_id: str,
-        db: Database,
+        quote_id: Optional[str] = None,
         checking_id: Optional[str] = None,
         request: Optional[str] = None,
+        db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[MeltQuote]:
         clauses = []
@@ -563,9 +588,10 @@ class LedgerCrudSqlite(LedgerCrud):
         if request:
             clauses.append("request = ?")
             values.append(request)
-        where = ""
-        if clauses:
-            where = f"WHERE {' AND '.join(clauses)}"
+        if not any(clauses):
+            raise ValueError("No search criteria")
+        where = f"WHERE {' AND '.join(clauses)}"
+
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {table_with_schema(db, 'melt_quotes')}
@@ -585,10 +611,11 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ?, fee_paid = ?,"
-            " paid_time = ?, proof = ? WHERE quote = ?",
+            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ?, state = ?,"
+            " fee_paid = ?, paid_time = ?, proof = ? WHERE quote = ?",
             (
                 quote.paid,
+                quote.state.name,
                 quote.fee_paid,
                 timestamp_from_seconds(db, quote.paid_time),
                 quote.proof,

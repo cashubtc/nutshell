@@ -3,7 +3,7 @@ import asyncio
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import SpentState
+from cashu.core.base import ProofSpentState
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -62,16 +62,16 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     assert melt_quotes
 
     # expect that proofs are still pending
-    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
-    assert all([s.state == SpentState.pending for s in states])
+    states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
+    assert all([s.state == ProofSpentState.pending for s in states])
 
     # only now settle the invoice
     settle_invoice(preimage=preimage)
     await asyncio.sleep(SLEEP_TIME)
 
     # expect that proofs are now spent
-    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
-    assert all([s.state == SpentState.spent for s in states])
+    states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
+    assert all([s.state == ProofSpentState.spent for s in states])
 
     # expect that no melt quote is pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(

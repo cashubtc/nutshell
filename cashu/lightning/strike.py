@@ -1,6 +1,6 @@
 # type: ignore
 import secrets
-from typing import Dict, Optional
+from typing import AsyncGenerator, Dict, Optional
 
 import httpx
 
@@ -199,3 +199,6 @@ class StrikeUSDWallet(LightningBackend):
             fee_msat=data["details"]["fee"],
             preimage=data["preimage"],
         )
+
+    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+        raise NotImplementedError("paid_invoices_stream not implemented")

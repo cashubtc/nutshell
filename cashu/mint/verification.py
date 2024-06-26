@@ -35,7 +35,6 @@ class LedgerVerification(
 
     keyset: MintKeyset
     keysets: Dict[str, MintKeyset]
-    spent_proofs: Dict[str, Proof]
     crud: LedgerCrud
     db: Database
     lightning: Dict[Unit, LightningBackend]
@@ -128,11 +127,14 @@ class LedgerVerification(
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate outputs.")
         # verify that outputs have not been signed previously
-        if any(await self._check_outputs_issued_before(outputs)):
+        signed_before = await self._check_outputs_issued_before(outputs)
+        if any(signed_before):
             raise TransactionError("outputs have already been signed before.")
         logger.trace(f"Verified {len(outputs)} outputs.")
 
-    async def _check_outputs_issued_before(self, outputs: List[BlindedMessage]):
+    async def _check_outputs_issued_before(
+        self, outputs: List[BlindedMessage]
+    ) -> List[bool]:
         """Checks whether the provided outputs have previously been signed by the mint
         (which would lead to a duplication error later when trying to store these outputs again).
 
@@ -164,21 +166,12 @@ class LedgerVerification(
         The key is the Y=h2c(secret) and the value is the proof.
         """
         proofs_spent_dict: Dict[str, Proof] = {}
-        if settings.mint_cache_secrets:
-            # check used secrets in memory
+        # check used secrets in database
+        async with self.db.connect() as conn:
             for Y in Ys:
-                spent_proof = self.spent_proofs.get(Y)
+                spent_proof = await self.crud.get_proof_used(db=self.db, Y=Y, conn=conn)
                 if spent_proof:
                     proofs_spent_dict[Y] = spent_proof
-        else:
-            # check used secrets in database
-            async with self.db.connect() as conn:
-                for Y in Ys:
-                    spent_proof = await self.crud.get_proof_used(
-                        db=self.db, Y=Y, conn=conn
-                    )
-                    if spent_proof:
-                        proofs_spent_dict[Y] = spent_proof
         return proofs_spent_dict
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:

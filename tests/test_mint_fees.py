@@ -95,7 +95,7 @@ async def test_get_fees_for_proofs(wallet1: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif_with_fees(is_regtest, reason="only works with FakeWallet")
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 async def test_wallet_fee(wallet1: Wallet, ledger: Ledger):
     # THIS TEST IS A FAKE, WE SET THE WALLET FEES MANUALLY IN set_ledger_keyset_fees
     # It would be better to test if the wallet can get the fees from the mint itself

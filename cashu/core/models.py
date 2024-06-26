@@ -6,6 +6,8 @@ from .base import (
     BlindedMessage,
     BlindedMessage_Deprecated,
     BlindedSignature,
+    MeltQuote,
+    MintQuote,
     Proof,
     ProofState,
 )
@@ -32,6 +34,9 @@ class GetInfoResponse(BaseModel):
     contact: Optional[List[List[str]]] = None
     motd: Optional[str] = None
     nuts: Optional[Dict[int, Any]] = None
+
+    def supports(self, nut: int) -> Optional[bool]:
+        return nut in self.nuts if self.nuts else None
 
 
 class Nut15MppSupport(BaseModel):
@@ -95,8 +100,18 @@ class PostMintQuoteRequest(BaseModel):
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
-    paid: bool  # whether the request has been paid
+    paid: Optional[
+        bool
+    ]  # whether the request has been paid # DEPRECATED as per NUT PR #141
+    state: str  # state of the quote
     expiry: Optional[int]  # expiry of the quote
+
+    @classmethod
+    def from_mint_quote(self, mint_quote: MintQuote) -> "PostMintQuoteResponse":
+        to_dict = mint_quote.dict()
+        # turn state into string
+        to_dict["state"] = mint_quote.state.value
+        return PostMintQuoteResponse.parse_obj(to_dict)
 
 
 # ------- API: MINT -------
@@ -165,8 +180,16 @@ class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
-    paid: bool  # whether the request has been paid
+    paid: bool  # whether the request has been paid # DEPRECATED as per NUT PR #136
+    state: str  # state of the quote
     expiry: Optional[int]  # expiry of the quote
+
+    @classmethod
+    def from_melt_quote(self, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
+        to_dict = melt_quote.dict()
+        # turn state into string
+        to_dict["state"] = melt_quote.state.value
+        return PostMeltQuoteResponse.parse_obj(to_dict)
 
 
 # ------- API: MELT -------

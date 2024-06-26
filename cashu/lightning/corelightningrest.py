@@ -30,6 +30,7 @@ class CoreLightningRestWallet(LightningBackend):
     supported_units = set([Unit.sat, Unit.msat])
     unit = Unit.sat
     supports_mpp = settings.mint_corelightning_enable_mpp
+    supports_incoming_payment_stream: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)

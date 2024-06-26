@@ -1,10 +1,13 @@
 import copy
+import threading
 import time
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import bolt11
 from bip32 import BIP32
 from loguru import logger
+
+from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
 from ..core.base import (
     BlindedMessage,
@@ -12,7 +15,7 @@ from ..core.base import (
     DLEQWallet,
     Invoice,
     Proof,
-    SpentState,
+    ProofSpentState,
     Unit,
     WalletKeyset,
 )
@@ -50,6 +53,7 @@ from .mint_info import MintInfo
 from .p2pk import WalletP2PK
 from .proofs import WalletProofs
 from .secrets import WalletSecrets
+from .subscriptions import SubscriptionManager
 from .transactions import WalletTransactions
 from .v1_api import LedgerAPI
 
@@ -312,11 +316,47 @@ class Wallet(
                 raise Exception(f"secret already used: {s}")
         logger.trace("Secret check complete.")
 
+    async def request_mint_with_callback(
+        self, amount: int, callback: Callable
+    ) -> Tuple[Invoice, SubscriptionManager]:
+        """Request a Lightning invoice for minting tokens.
+
+        Args:
+            amount (int): Amount for Lightning invoice in satoshis
+            callback (Callable): Callback function to be called when the invoice is paid.
+
+        Returns:
+            Invoice: Lightning invoice
+        """
+        mint_qoute = await super().mint_quote(amount, self.unit)
+        subscriptions = SubscriptionManager(self.url)
+        threading.Thread(
+            target=subscriptions.connect, name="SubscriptionManager", daemon=True
+        ).start()
+        subscriptions.subscribe(
+            kind=JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,
+            filters=[mint_qoute.quote],
+            callback=callback,
+        )
+        # return the invoice
+        decoded_invoice = bolt11.decode(mint_qoute.request)
+        invoice = Invoice(
+            amount=amount,
+            bolt11=mint_qoute.request,
+            payment_hash=decoded_invoice.payment_hash,
+            id=mint_qoute.quote,
+            out=False,
+            time_created=int(time.time()),
+        )
+        await store_lightning_invoice(db=self.db, invoice=invoice)
+        return invoice, subscriptions
+
     async def request_mint(self, amount: int) -> Invoice:
         """Request a Lightning invoice for minting tokens.
 
         Args:
             amount (int): Amount for Lightning invoice in satoshis
+            callback (Optional[Callable], optional): Callback function to be called when the invoice is paid. Defaults to None.
 
         Returns:
             PostMintQuoteResponse: Mint Quote Response
@@ -684,6 +724,20 @@ class Wallet(
     async def check_proof_state(self, proofs) -> PostCheckStateResponse:
         return await super().check_proof_state(proofs)
 
+    async def check_proof_state_with_callback(
+        self, proofs: List[Proof], callback: Callable
+    ) -> Tuple[PostCheckStateResponse, SubscriptionManager]:
+        subscriptions = SubscriptionManager(self.url)
+        threading.Thread(
+            target=subscriptions.connect, name="SubscriptionManager", daemon=True
+        ).start()
+        subscriptions.subscribe(
+            kind=JSONRPCSubscriptionKinds.PROOF_STATE,
+            filters=[proof.Y for proof in proofs],
+            callback=callback,
+        )
+        return await self.check_proof_state(proofs), subscriptions
+
     # ---------- TOKEN MECHANICS ----------
 
     # ---------- DLEQ PROOFS ----------
@@ -870,7 +924,7 @@ class Wallet(
         if check_spendable:
             proof_states = await self.check_proof_state(proofs)
             for i, state in enumerate(proof_states.states):
-                if state.state == SpentState.spent:
+                if state.state == ProofSpentState.spent:
                     invalidated_proofs.append(proofs[i])
         else:
             invalidated_proofs = proofs
@@ -1069,6 +1123,8 @@ class Wallet(
             if unit:
                 balances_return[key]["unit"] = unit.name
         return dict(sorted(balances_return.items(), key=lambda item: item[0]))  # type: ignore
+
+    # ---------- RESTORE WALLET ----------
 
     async def restore_tokens_for_keyset(
         self, keyset_id: str, to: int = 2, batch: int = 25

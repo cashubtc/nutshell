@@ -773,3 +773,45 @@ async def m019_add_fee_to_keysets(db: Database):
         await conn.execute(
             f"UPDATE {table_with_schema(db, 'keysets')} SET input_fee_ppk = 0"
         )
+
+
+async def m020_add_state_to_mint_and_melt_quotes(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'mint_quotes')} ADD COLUMN state TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'melt_quotes')} ADD COLUMN state TEXT"
+        )
+
+    # get all melt and mint quotes and figure out the state to set using the `paid` column
+    # and the `paid` and `issued` column respectively
+    # mint quotes:
+    async with db.connect() as conn:
+        rows = await conn.fetchall(
+            f"SELECT * FROM {table_with_schema(db, 'mint_quotes')}"
+        )
+        for row in rows:
+            if row["issued"]:
+                state = "issued"
+            elif row["paid"]:
+                state = "paid"
+            else:
+                state = "unpaid"
+            await conn.execute(
+                f"UPDATE {table_with_schema(db, 'mint_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
+            )
+
+    # melt quotes:
+    async with db.connect() as conn:
+        rows = await conn.fetchall(
+            f"SELECT * FROM {table_with_schema(db, 'melt_quotes')}"
+        )
+        for row in rows:
+            if row["paid"]:
+                state = "paid"
+            else:
+                state = "unpaid"
+            await conn.execute(
+                f"UPDATE {table_with_schema(db, 'melt_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
+            )

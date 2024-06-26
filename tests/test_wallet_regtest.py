@@ -4,7 +4,7 @@ import bolt11
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import SpentState
+from cashu.core.base import ProofSpentState
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -57,14 +57,14 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
-    assert all([s.state == SpentState.pending for s in states.states])
+    assert all([s.state == ProofSpentState.pending for s in states.states])
 
     settle_invoice(preimage=preimage)
 
     await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
-    assert all([s.state == SpentState.spent for s in states.states])
+    assert all([s.state == ProofSpentState.spent for s in states.states])
 
 
 @pytest.mark.asyncio
@@ -97,11 +97,11 @@ async def test_regtest_failed_quote(wallet: Wallet, ledger: Ledger):
     await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
-    assert all([s.state == SpentState.pending for s in states.states])
+    assert all([s.state == ProofSpentState.pending for s in states.states])
 
     cancel_invoice(preimage_hash=preimage_hash)
 
     await asyncio.sleep(SLEEP_TIME)
 
     states = await wallet.check_proof_state(send_proofs)
-    assert all([s.state == SpentState.unspent for s in states.states])
+    assert all([s.state == ProofSpentState.unspent for s in states.states])

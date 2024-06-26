@@ -7,8 +7,11 @@ from sqlite3 import Row
 from typing import Dict, List, Optional, Union
 
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator
 
+from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
+
+from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
@@ -45,7 +48,7 @@ class DLEQWallet(BaseModel):
 # ------- PROOFS -------
 
 
-class SpentState(Enum):
+class ProofSpentState(Enum):
     unspent = "UNSPENT"
     spent = "SPENT"
     pending = "PENDING"
@@ -54,10 +57,26 @@ class SpentState(Enum):
         return self.name
 
 
-class ProofState(BaseModel):
+class ProofState(LedgerEvent):
     Y: str
-    state: SpentState
+    state: ProofSpentState
     witness: Optional[str] = None
+
+    @root_validator()
+    def check_witness(cls, values):
+        state, witness = values.get("state"), values.get("witness")
+        if witness is not None and state != ProofSpentState.spent:
+            raise ValueError('Witness can only be set if the spent state is "SPENT"')
+        return values
+
+    @property
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.Y
+
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.PROOF_STATE
 
 
 class HTLCWitness(BaseModel):
@@ -249,7 +268,16 @@ class Invoice(BaseModel):
     time_paid: Union[None, str, int, float] = ""
 
 
-class MeltQuote(BaseModel):
+class MeltQuoteState(Enum):
+    unpaid = "UNPAID"
+    pending = "PENDING"
+    paid = "PAID"
+
+    def __str__(self):
+        return self.name
+
+
+class MeltQuote(LedgerEvent):
     quote: str
     method: str
     request: str
@@ -258,6 +286,7 @@ class MeltQuote(BaseModel):
     amount: int
     fee_reserve: int
     paid: bool
+    state: MeltQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     fee_paid: int = 0
@@ -284,14 +313,45 @@ class MeltQuote(BaseModel):
             amount=row["amount"],
             fee_reserve=row["fee_reserve"],
             paid=row["paid"],
+            state=MeltQuoteState[row["state"]],
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
             proof=row["proof"],
         )
 
+    @property
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.quote
 
-class MintQuote(BaseModel):
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+
+    # method that is invoked when the `state` attribute is changed. to protect the state from being set to anything else if the current state is paid
+    def __setattr__(self, name, value):
+        # an unpaid quote can only be set to pending or paid
+        if name == "state" and self.state == MeltQuoteState.unpaid:
+            if value != MeltQuoteState.pending and value != MeltQuoteState.paid:
+                raise Exception("Cannot change state of an unpaid quote.")
+        # a paid quote can not be changed
+        if name == "state" and self.state == MeltQuoteState.paid:
+            raise Exception("Cannot change state of a paid quote.")
+        super().__setattr__(name, value)
+
+
+class MintQuoteState(Enum):
+    unpaid = "UNPAID"
+    paid = "PAID"
+    pending = "PENDING"
+    issued = "ISSUED"
+
+    def __str__(self):
+        return self.name
+
+
+class MintQuote(LedgerEvent):
     quote: str
     method: str
     request: str
@@ -300,6 +360,7 @@ class MintQuote(BaseModel):
     amount: int
     paid: bool
     issued: bool
+    state: MintQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     expiry: Optional[int] = None
@@ -325,9 +386,37 @@ class MintQuote(BaseModel):
             amount=row["amount"],
             paid=row["paid"],
             issued=row["issued"],
+            state=MintQuoteState[row["state"]],
             created_time=created_time,
             paid_time=paid_time,
         )
+
+    @property
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.quote
+
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+
+    def __setattr__(self, name, value):
+        # un unpaid quote can only be set to paid
+        if name == "state" and self.state == MintQuoteState.unpaid:
+            if value != MintQuoteState.paid:
+                raise Exception("Cannot change state of an unpaid quote.")
+        # a paid quote can only be set to pending or issued
+        if name == "state" and self.state == MintQuoteState.paid:
+            if value != MintQuoteState.pending and value != MintQuoteState.issued:
+                raise Exception(f"Cannot change state of a paid quote to {value}.")
+        # a pending quote can only be set to paid or issued
+        if name == "state" and self.state == MintQuoteState.pending:
+            if value not in [MintQuoteState.paid, MintQuoteState.issued]:
+                raise Exception("Cannot change state of a pending quote.")
+        # an issued quote cannot be changed
+        if name == "state" and self.state == MintQuoteState.issued:
+            raise Exception("Cannot change state of an issued quote.")
+        super().__setattr__(name, value)
 
 
 # ------- KEYSETS -------

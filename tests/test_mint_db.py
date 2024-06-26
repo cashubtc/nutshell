@@ -50,9 +50,7 @@ async def test_mint_quote(wallet1: Wallet, ledger: Ledger):
 async def test_get_mint_quote_by_request(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(128)
     assert invoice is not None
-    quote = await ledger.crud.get_mint_quote_by_request(
-        request=invoice.bolt11, db=ledger.db
-    )
+    quote = await ledger.crud.get_mint_quote(request=invoice.bolt11, db=ledger.db)
     assert quote is not None
     assert quote.quote == invoice.id
     assert quote.amount == 128
