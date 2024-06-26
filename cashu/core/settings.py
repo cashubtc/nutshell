@@ -67,6 +67,7 @@ class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
     mint_backend_bolt11_sat: str = Field(default="")
     mint_backend_bolt11_usd: str = Field(default="")
+    mint_backend_bolt11_eur: str = Field(default="")
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)

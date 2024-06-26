@@ -45,7 +45,7 @@ class FakeWallet(LightningBackend):
         32,
     ).hex()
 
-    supported_units = set([Unit.sat, Unit.msat, Unit.usd])
+    supported_units = set([Unit.sat, Unit.msat, Unit.usd, Unit.eur])
     unit = Unit.sat
 
     supports_incoming_payment_stream: bool = True
@@ -113,7 +113,7 @@ class FakeWallet(LightningBackend):
         amount_msat = 0
         if self.unit == Unit.sat:
             amount_msat = MilliSatoshi(amount.to(Unit.msat, round="up").amount)
-        elif self.unit == Unit.usd:
+        elif self.unit == Unit.usd or self.unit == Unit.eur:
             amount_msat = MilliSatoshi(
                 math.ceil(amount.amount / self.fake_btc_price * 1e9)
             )
@@ -194,10 +194,10 @@ class FakeWallet(LightningBackend):
             fees_msat = fee_reserve(amount_msat)
             fees = Amount(unit=Unit.msat, amount=fees_msat)
             amount = Amount(unit=Unit.msat, amount=amount_msat)
-        elif self.unit == Unit.usd:
+        elif self.unit == Unit.usd or self.unit == Unit.eur:
             amount_usd = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btc_price)
-            amount = Amount(unit=Unit.usd, amount=amount_usd)
-            fees = Amount(unit=Unit.usd, amount=2)
+            amount = Amount(unit=self.unit, amount=amount_usd)
+            fees = Amount(unit=self.unit, amount=2)
         else:
             raise NotImplementedError()
 

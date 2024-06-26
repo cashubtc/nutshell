@@ -262,7 +262,7 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
-    amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
+    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     print(f"Requesting invoice for {wallet.unit.str(amount)}.")
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
@@ -546,7 +546,7 @@ async def send_command(
     include_fees: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
-    amount = int(amount * 100) if wallet.unit == Unit.usd else int(amount)
+    amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
     if not nostr and not nopt:
         await send(
             wallet,

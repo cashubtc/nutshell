@@ -436,6 +436,8 @@ class Unit(Enum):
     sat = 0
     msat = 1
     usd = 2
+    eur = 3
+    btc = 4
 
     def str(self, amount: int) -> str:
         if self == Unit.sat:
@@ -444,6 +446,10 @@ class Unit(Enum):
             return f"{amount} msat"
         elif self == Unit.usd:
             return f"${amount/100:.2f} USD"
+        elif self == Unit.eur:
+            return f"{amount/100:.2f} EUR"
+        elif self == Unit.btc:
+            return f"{amount/1e8:.8f} BTC"
         else:
             raise Exception("Invalid unit")
 
@@ -477,6 +483,33 @@ class Amount:
                 raise Exception(f"Cannot convert {self.unit.name} to {to_unit.name}")
         else:
             return self
+
+    def to_float_string(self) -> str:
+        if self.unit == Unit.usd or self.unit == Unit.eur:
+            return self.cents_to_usd()
+        elif self.unit == Unit.sat:
+            return self.sat_to_btc()
+        else:
+            raise Exception("Amount must be in satoshis or cents")
+
+    @classmethod
+    def from_float(cls, amount: float, unit: Unit) -> "Amount":
+        if unit == Unit.usd or unit == Unit.eur:
+            return cls(unit, int(amount * 100))
+        elif unit == Unit.sat:
+            return cls(unit, int(amount * 1e8))
+        else:
+            raise Exception("Amount must be in satoshis or cents")
+
+    def sat_to_btc(self) -> str:
+        if self.unit != Unit.sat:
+            raise Exception("Amount must be in satoshis")
+        return f"{self.amount/1e8:.8f}"
+
+    def cents_to_usd(self) -> str:
+        if self.unit != Unit.usd and self.unit != Unit.eur:
+            raise Exception("Amount must be in cents")
+        return f"{self.amount/100:.2f}"
 
     def str(self) -> str:
         return self.unit.str(self.amount)
