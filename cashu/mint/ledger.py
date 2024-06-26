@@ -11,12 +11,14 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     MeltQuote,
+    MeltQuoteState,
     Method,
     MintKeyset,
     MintQuote,
+    MintQuoteState,
     Proof,
+    ProofSpentState,
     ProofState,
-    SpentState,
     Unit,
 )
 from ..core.crypto import b_dhke
@@ -153,6 +155,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 logger.info(f"Melt quote {quote.quote} state: paid")
                 quote.paid_time = int(time.time())
                 quote.paid = True
+                quote.state = MeltQuoteState.paid
                 if payment.fee:
                     quote.fee_paid = payment.fee.to(Unit[quote.unit]).amount
                 quote.proof = payment.preimage or ""
@@ -302,7 +305,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     proof=p, db=self.db, quote_id=quote_id, conn=conn
                 )
                 await self.events.submit(
-                    ProofState(Y=p.Y, state=SpentState.spent, witness=p.witness or None)
+                    ProofState(
+                        Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
+                    )
                 )
 
     async def _generate_change_promises(
@@ -429,6 +434,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             amount=quote_request.amount,
             issued=False,
             paid=False,
+            state=MintQuoteState.unpaid,
             created_time=int(time.time()),
             expiry=expiry,
         )
@@ -455,7 +461,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         unit, method = self._verify_and_get_unit_method(quote.unit, quote.method)
 
-        if not quote.paid:
+        if quote.state == MintQuoteState.unpaid:
             if not quote.checking_id:
                 raise CashuError("quote has no checking id")
             logger.trace(f"Lightning: checking invoice {quote.checking_id}")
@@ -465,6 +471,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             if status.paid:
                 logger.trace(f"Setting quote {quote_id} as paid")
                 quote.paid = True
+                quote.state = MintQuoteState.paid
                 quote.paid_time = int(time.time())
                 await self.crud.update_mint_quote(quote=quote, db=self.db)
                 await self.events.submit(quote)
@@ -509,6 +516,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 raise QuoteNotPaidError()
             if quote.issued:
                 raise TransactionError("quote already issued")
+
+            if not quote.state == MintQuoteState.paid:
+                raise QuoteNotPaidError()
+            if quote.state == MintQuoteState.issued:
+                raise TransactionError("quote already issued")
+
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
             if not quote.amount == sum_amount_outputs:
@@ -518,6 +531,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
             logger.trace(f"crud: setting quote {quote_id} as issued")
             quote.issued = True
+            quote.state = MintQuoteState.issued
             await self.crud.update_mint_quote(quote=quote, db=self.db)
 
             promises = await self._generate_promises(outputs)
@@ -549,6 +563,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise TransactionError("mint quote already paid")
         if mint_quote.issued:
             raise TransactionError("mint quote already issued")
+
+        if mint_quote.state == MintQuoteState.issued:
+            raise TransactionError("mint quote already issued")
+        if mint_quote.state != MintQuoteState.unpaid:
+            raise TransactionError("mint quote already paid")
+
         if not mint_quote.checking_id:
             raise TransactionError("mint quote has no checking id")
         if melt_quote.is_mpp:
@@ -658,6 +678,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             unit=unit.name,
             amount=payment_quote.amount.to(unit).amount,
             paid=False,
+            state=MeltQuoteState.unpaid,
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=int(time.time()),
             expiry=expiry,
@@ -670,6 +691,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             amount=quote.amount,
             fee_reserve=quote.fee_reserve,
             paid=quote.paid,
+            state=quote.state.value,
             expiry=quote.expiry,
         )
 
@@ -714,6 +736,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             if status.paid:
                 logger.trace(f"Setting quote {quote_id} as paid")
                 melt_quote.paid = True
+                melt_quote.state = MeltQuoteState.paid
                 if status.fee:
                     melt_quote.fee_paid = status.fee.to(unit).amount
                 if status.preimage:
@@ -753,6 +776,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # we settle the transaction internally
         if melt_quote.paid:
             raise TransactionError("melt quote already paid")
+        if melt_quote.state != MeltQuoteState.unpaid:
+            raise TransactionError("melt quote already paid")
 
         # verify amounts from bolt11 invoice
         bolt11_request = melt_quote.request
@@ -768,10 +793,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise TransactionError("units do not match")
         if not mint_quote.method == melt_quote.method:
             raise TransactionError("methods do not match")
+
         if mint_quote.paid:
             raise TransactionError("mint quote already paid")
         if mint_quote.issued:
             raise TransactionError("mint quote already issued")
+
+        if mint_quote.state != MintQuoteState.unpaid:
+            raise TransactionError("mint quote already paid")
 
         logger.info(
             f"Settling bolt11 payment internally: {melt_quote.quote} ->"
@@ -780,9 +809,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         melt_quote.fee_paid = 0  # no internal fees
         melt_quote.paid = True
+        melt_quote.state = MeltQuoteState.paid
         melt_quote.paid_time = int(time.time())
 
         mint_quote.paid = True
+        mint_quote.state = MintQuoteState.paid
         mint_quote.paid_time = melt_quote.paid_time
 
         async with get_db_connection(self.db) as conn:
@@ -821,7 +852,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             melt_quote.unit, melt_quote.method
         )
 
-        if melt_quote.paid:
+        if melt_quote.state != MeltQuoteState.unpaid:
             raise TransactionError("melt quote already paid")
 
         # make sure that the outputs (for fee return) are in the same unit as the quote
@@ -866,7 +897,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             # settle the transaction internally if there is a mint quote with the same payment request
             melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
             # quote not paid yet (not internal), pay it with the backend
-            if not melt_quote.paid:
+            if not melt_quote.paid and melt_quote.state == MeltQuoteState.unpaid:
                 logger.debug(f"Lightning: pay invoice {melt_quote.request}")
                 payment = await self.backends[method][unit].pay_invoice(
                     melt_quote, melt_quote.fee_reserve * 1000
@@ -887,6 +918,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     melt_quote.proof = payment.preimage
                 # set quote as paid
                 melt_quote.paid = True
+                melt_quote.state = MeltQuoteState.paid
                 melt_quote.paid_time = int(time.time())
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
                 await self.events.submit(melt_quote)

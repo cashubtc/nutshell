@@ -1,6 +1,6 @@
 from typing import Dict, List
 
-from ...core.base import Proof, ProofState, SpentState
+from ...core.base import Proof, ProofSpentState, ProofState
 from ...core.db import Database
 from ..crud import LedgerCrud
 
@@ -54,14 +54,14 @@ class DbReadHelper:
         proofs_pending = await self._get_proofs_pending(Ys)
         for Y in Ys:
             if Y not in proofs_spent and Y not in proofs_pending:
-                states.append(ProofState(Y=Y, state=SpentState.unspent))
+                states.append(ProofState(Y=Y, state=ProofSpentState.unspent))
             elif Y not in proofs_spent and Y in proofs_pending:
-                states.append(ProofState(Y=Y, state=SpentState.pending))
+                states.append(ProofState(Y=Y, state=ProofSpentState.pending))
             else:
                 states.append(
                     ProofState(
                         Y=Y,
-                        state=SpentState.spent,
+                        state=ProofSpentState.spent,
                         witness=proofs_spent[Y].witness,
                     )
                 )

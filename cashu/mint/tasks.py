@@ -3,7 +3,7 @@ from typing import Mapping
 
 from loguru import logger
 
-from ..core.base import Method, Unit
+from ..core.base import Method, MintQuoteState, Unit
 from ..core.db import Database
 from ..lightning.base import LightningBackend
 from ..mint.crud import LedgerCrud
@@ -40,6 +40,7 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
         # set the quote as paid
         if not quote.paid:
             quote.paid = True
+            quote.state = MintQuoteState.paid
             await self.crud.update_mint_quote(quote=quote, db=self.db)
         logger.trace(f"Quote {quote} set as paid and ")
         await self.events.submit(quote)

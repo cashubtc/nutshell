@@ -15,7 +15,7 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, Method, TokenV3, Unit
+from ...core.base import Invoice, Method, MintQuoteState, TokenV3, Unit
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
@@ -296,8 +296,10 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
         except Exception:
             return
         logger.debug(f"Received callback for quote: {quote}")
+        # we need to sleep to give the callback map some time to be populated
+        time.sleep(0.1)
         if (
-            quote.paid
+            (quote.paid or quote.state == MintQuoteState.paid.value)
             and quote.request == invoice.bolt11
             and msg.subId in subscription.callback_map.keys()
         ):
@@ -310,6 +312,9 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
             except Exception as e:
                 print(f"Error during mint: {str(e)}")
                 return
+        else:
+            logger.debug("Quote not paid yet.")
+            return
 
     # user requests an invoice
     if amount and not id:

@@ -11,9 +11,10 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
+    MeltQuoteState,
     Proof,
+    ProofSpentState,
     ProofState,
-    SpentState,
     Unit,
     WalletKeyset,
 )
@@ -390,6 +391,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
                 amount=amount or invoice_obj.amount_msat // 1000,
                 fee_reserve=ret.fee or 0,
                 paid=False,
+                state=MeltQuoteState.unpaid.value,
                 expiry=invoice_obj.expiry,
             )
         # END backwards compatibility < 0.15.0
@@ -509,11 +511,11 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             states: List[ProofState] = []
             for spendable, pending, p in zip(ret.spendable, ret.pending, proofs):
                 if spendable and not pending:
-                    states.append(ProofState(Y=p.Y, state=SpentState.unspent))
+                    states.append(ProofState(Y=p.Y, state=ProofSpentState.unspent))
                 elif spendable and pending:
-                    states.append(ProofState(Y=p.Y, state=SpentState.pending))
+                    states.append(ProofState(Y=p.Y, state=ProofSpentState.pending))
                 else:
-                    states.append(ProofState(Y=p.Y, state=SpentState.spent))
+                    states.append(ProofState(Y=p.Y, state=ProofSpentState.spent))
             ret = PostCheckStateResponse(states=states)
             return ret
         # END backwards compatibility < 0.15.0

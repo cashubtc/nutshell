@@ -433,8 +433,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, issued, paid, created_time, paid_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, checking_id, unit, amount, issued, paid, state, created_time, paid_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
@@ -445,6 +445,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.issued,
                 quote.paid,
+                quote.state.name,
                 timestamp_from_seconds(db, quote.created_time),
                 timestamp_from_seconds(db, quote.paid_time),
             ),
@@ -510,10 +511,11 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"UPDATE {table_with_schema(db, 'mint_quotes')} SET issued = ?, paid = ?,"
-            " paid_time = ? WHERE quote = ?",
+            " state = ?, paid_time = ? WHERE quote = ?",
             (
                 quote.issued,
                 quote.paid,
+                quote.state.name,
                 timestamp_from_seconds(db, quote.paid_time),
                 quote.quote,
             ),
@@ -546,8 +548,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, state, created_time, paid_time, fee_paid, proof)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
@@ -558,6 +560,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.amount,
                 quote.fee_reserve or 0,
                 quote.paid,
+                quote.state.name,
                 timestamp_from_seconds(db, quote.created_time),
                 timestamp_from_seconds(db, quote.paid_time),
                 quote.fee_paid,
@@ -608,10 +611,11 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ?, fee_paid = ?,"
-            " paid_time = ?, proof = ? WHERE quote = ?",
+            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ?, state = ?,"
+            " fee_paid = ?, paid_time = ?, proof = ? WHERE quote = ?",
             (
                 quote.paid,
+                quote.state.name,
                 quote.fee_paid,
                 timestamp_from_seconds(db, quote.paid_time),
                 quote.proof,

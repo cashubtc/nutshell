@@ -47,14 +47,19 @@ class SubscriptionManager:
 
         try:
             msg = JSONRPCNotification.parse_raw(message)
-            params = JSONRPCNotficationParams.parse_obj(msg.params)
             logger.debug(f"Received notification: {msg}")
-            self.callback_map[params.subId](params)
+        except Exception as e:
+            logger.error(f"Error parsing notification: {e}")
             return
-        except Exception:
-            pass
+        try:
+            params = JSONRPCNotficationParams.parse_obj(msg.params)
+            logger.trace(f"Notification params: {params}")
+        except Exception as e:
+            logger.error(f"Error parsing notification params: {e}")
+            return
 
-        logger.error(f"Error parsing message: {message}")
+        self.callback_map[params.subId](params)
+        return
 
     def connect(self):
         self.websocket.run_forever(ping_interval=10, ping_timeout=5)
