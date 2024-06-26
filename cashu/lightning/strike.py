@@ -142,8 +142,7 @@ class StrikeWallet(LightningBackend):
             raise Exception(error_message)
         data = r.json()
 
-        # amount_cent = int(float(data.get("amount").get("amount")) * 100)
-        amount = Amount.from_float(data.get("amount").get("amount"), self.unit)
+        amount = Amount.from_float(float(data.get("amount").get("amount")), self.unit)
         quote = PaymentQuoteResponse(
             amount=amount,
             checking_id=data.get("paymentQuoteId"),
