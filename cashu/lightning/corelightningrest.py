@@ -315,7 +315,7 @@ class CoreLightningRestWallet(LightningBackend):
                         # hack to return payment_hash if the above shouldn't work
                         r = await self.client.post(
                             f"{self.url}/v1/listinvoices",
-                            params={"label": inv["label"]},
+                            data={"label": inv["label"]},
                         )
                         paid_invoce = r.json()
                         logger.trace(f"paid invoice: {paid_invoce}")
