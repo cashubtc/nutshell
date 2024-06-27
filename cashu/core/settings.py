@@ -193,8 +193,8 @@ class LndRestFundingSource(MintSettings):
 
 class CoreLightningRestFundingSource(MintSettings):
     mint_corelightning_rest_url: Optional[str] = Field(default=None)
-    mint_corelightning_rest_macaroon: Optional[str] = Field(default=None)
     mint_corelightning_rest_cert: Optional[str] = Field(default=None)
+    mint_corelightning_rune: Optional[str] = Field(default=None)
     mint_corelightning_enable_mpp: bool = Field(default=False)
 
 
