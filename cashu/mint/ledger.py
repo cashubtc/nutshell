@@ -158,7 +158,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 quote.state = MeltQuoteState.paid
                 if payment.fee:
                     quote.fee_paid = payment.fee.to(Unit[quote.unit]).amount
-                quote.proof = payment.preimage or ""
+                quote.payment_preimage = payment.preimage or ""
                 await self.crud.update_melt_quote(quote=quote, db=self.db)
                 # invalidate proofs
                 await self._invalidate_proofs(
@@ -740,7 +740,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 if status.fee:
                     melt_quote.fee_paid = status.fee.to(unit).amount
                 if status.preimage:
-                    melt_quote.proof = status.preimage
+                    melt_quote.payment_preimage = status.preimage
                 melt_quote.paid_time = int(time.time())
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
                 await self.events.submit(melt_quote)
@@ -831,7 +831,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         proofs: List[Proof],
         quote: str,
         outputs: Optional[List[BlindedMessage]] = None,
-    ) -> Tuple[str, List[BlindedSignature]]:
+    ) -> PostMeltQuoteResponse:
         """Invalidates proofs and pays a Lightning invoice.
 
         Args:
@@ -915,13 +915,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         to_unit=unit, round="up"
                     ).amount
                 if payment.preimage:
-                    melt_quote.proof = payment.preimage
+                    melt_quote.payment_preimage = payment.preimage
                 # set quote as paid
                 melt_quote.paid = True
                 melt_quote.state = MeltQuoteState.paid
                 melt_quote.paid_time = int(time.time())
-                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-                await self.events.submit(melt_quote)
 
             # melt successful, invalidate proofs
             await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
@@ -936,6 +934,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     keyset=self.keysets[outputs[0].id],
                 )
 
+            melt_quote.change = return_promises
+
+            await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+            await self.events.submit(melt_quote)
+
         except Exception as e:
             logger.trace(f"Melt exception: {e}")
             raise e
@@ -943,7 +946,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             # delete proofs from pending list
             await self.db_write._unset_proofs_pending(proofs)
 
-        return melt_quote.proof or "", return_promises
+        return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
     async def split(
         self,

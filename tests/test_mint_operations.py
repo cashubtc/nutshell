@@ -357,11 +357,12 @@ async def test_melt_with_more_inputs_than_invoice(wallet1: Wallet, ledger: Ledge
 
     # make sure we have more inputs than the melt quote needs
     assert sum_proofs(wallet1.proofs) >= melt_quote.amount + melt_quote.fee_reserve
-    payment_proof, return_outputs = await ledger.melt(
+    melt_resp = await ledger.melt(
         proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
     )
     # we get 2 sats back because we overpaid
-    assert sum([o.amount for o in return_outputs]) == 2
+    assert melt_resp.change
+    assert sum([o.amount for o in melt_resp.change]) == 2
 
 
 @pytest.mark.asyncio

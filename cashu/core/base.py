@@ -290,19 +290,27 @@ class MeltQuote(LedgerEvent):
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     fee_paid: int = 0
-    proof: str = ""
+    payment_preimage: str = ""
     expiry: Optional[int] = None
+    change: Optional[List[BlindedSignature]] = None
 
     @classmethod
     def from_row(cls, row: Row):
         try:
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
+            expiry = int(row["expiry"]) if row["expiry"] else None
         except Exception:
             created_time = (
                 int(row["created_time"].timestamp()) if row["created_time"] else None
             )
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
+            expiry = int(row["expiry"].timestamp()) if row["expiry"] else None
+
+        # parse change from row as json
+        change = None
+        if row["change"]:
+            change = json.loads(row["change"])
 
         return cls(
             quote=row["quote"],
@@ -317,7 +325,9 @@ class MeltQuote(LedgerEvent):
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
-            proof=row["proof"],
+            change=change,
+            expiry=expiry,
+            payment_preimage=row["proof"],
         )
 
     @property
