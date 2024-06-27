@@ -299,11 +299,13 @@ class MeltQuote(LedgerEvent):
         try:
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
+            expiry = int(row["expiry"]) if row["expiry"] else None
         except Exception:
             created_time = (
                 int(row["created_time"].timestamp()) if row["created_time"] else None
             )
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
+            expiry = int(row["expiry"].timestamp()) if row["expiry"] else None
 
         # parse change from row as json
         change = None
@@ -324,7 +326,7 @@ class MeltQuote(LedgerEvent):
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
             change=change,
-            expiry=row["expiry"],
+            expiry=expiry,
             payment_preimage=row["proof"],
         )
 
