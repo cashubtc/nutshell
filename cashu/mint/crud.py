@@ -567,7 +567,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.fee_paid,
                 quote.payment_preimage,
                 json.dumps(quote.change) if quote.change else None,
-                quote.expiry,
+                timestamp_from_seconds(db, quote.expiry),
             ),
         )
 
