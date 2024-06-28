@@ -6,11 +6,7 @@ from typing import AsyncGenerator, Dict, Optional
 
 import bolt11
 import httpx
-from bolt11 import (
-    TagChar,
-    Bolt11Exception,
-    decode
-)
+from bolt11 import Bolt11Exception, TagChar, decode
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit

@@ -24,6 +24,7 @@ from .base import (
     Unsupported,
 )
 
+
 class CoreLightningRestWallet(LightningBackend):
     supported_units = set([Unit.sat, Unit.msat])
     unit = Unit.sat
