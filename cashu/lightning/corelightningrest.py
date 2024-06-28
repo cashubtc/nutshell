@@ -293,8 +293,11 @@ class CoreLightningRestWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:
             try:
-                url = f"{self.url}/v1/waitanyinvoice/{self.last_pay_index}"
-                async with self.client.stream("POST", url, timeout=None) as r:
+                url = f"{self.url}/v1/waitanyinvoice"
+                async with self.client.stream("POST", url, data={
+                        "lastpay_index": self.last_pay_index,
+                        "timeout": None}
+                    ) as r:
                     async for line in r.aiter_lines():
                         inv = json.loads(line)
                         if "error" in inv and "message" in inv["error"]:
