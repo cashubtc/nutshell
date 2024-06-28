@@ -8,8 +8,11 @@ from typing import Any, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, root_validator
 
+from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
+
+from ..mint.events.event_model import LedgerEvent
 from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
@@ -44,6 +47,37 @@ class DLEQWallet(BaseModel):
 
 
 # ------- PROOFS -------
+
+
+class ProofSpentState(Enum):
+    unspent = "UNSPENT"
+    spent = "SPENT"
+    pending = "PENDING"
+
+    def __str__(self):
+        return self.name
+
+
+class ProofState(LedgerEvent):
+    Y: str
+    state: ProofSpentState
+    witness: Optional[str] = None
+
+    @root_validator()
+    def check_witness(cls, values):
+        state, witness = values.get("state"), values.get("witness")
+        if witness is not None and state != ProofSpentState.spent:
+            raise ValueError('Witness can only be set if the spent state is "SPENT"')
+        return values
+
+    @property
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.Y
+
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.PROOF_STATE
 
 
 class HTLCWitness(BaseModel):
@@ -86,14 +120,13 @@ class Proof(BaseModel):
     Value token
     """
 
-    # NOTE: None for backwards compatibility for old clients that do not include the keyset id < 0.3
-    id: Union[None, str] = ""
+    id: str = ""
     amount: int = 0
     secret: str = ""  # secret or message to be blinded and signed
     Y: str = ""  # hash_to_curve(secret)
     C: str = ""  # signature on secret, unblinded by wallet
     dleq: Optional[DLEQWallet] = None  # DLEQ proof
-    witness: Union[None, str] = ""  # witness for spending condition
+    witness: Union[None, str] = None  # witness for spending condition
 
     # whether this proof is reserved for sending, used for coin management in the wallet
     reserved: Union[None, bool] = False
@@ -102,12 +135,12 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
-    mint_id: Union[None, str] = (
-        None  # holds the id of the mint operation that created this proof
-    )
-    melt_id: Union[None, str] = (
-        None  # holds the id of the melt operation that destroyed this proof
-    )
+    mint_id: Union[
+        None, str
+    ] = None  # holds the id of the mint operation that created this proof
+    melt_id: Union[
+        None, str
+    ] = None  # holds the id of the melt operation that destroyed this proof
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -173,9 +206,24 @@ class BlindedMessage(BaseModel):
     """
 
     amount: int
-    id: Optional[
-        str
-    ]  # DEPRECATION: Only Optional for backwards compatibility with old clients < 0.15 for deprecated API route.
+    id: str  # Keyset id
+    B_: str  # Hex-encoded blinded message
+    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
+
+    @property
+    def p2pksigs(self) -> List[str]:
+        assert self.witness, "Witness missing in output"
+        return P2PKWitness.from_witness(self.witness).signatures
+
+
+class BlindedMessage_Deprecated(BaseModel):
+    """
+    Deprecated: BlindedMessage for v0 protocol (deprecated api routes) have no id field.
+
+    Blinded message or blinded secret or "output" which is to be signed by the mint
+    """
+
+    amount: int
     B_: str  # Hex-encoded blinded message
     witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
 
@@ -205,11 +253,6 @@ class BlindedSignature(BaseModel):
         )
 
 
-class BlindedMessages(BaseModel):
-    # NOTE: not used in Pydantic validation
-    __root__: List[BlindedMessage] = []
-
-
 # ------- LIGHTNING INVOICE -------
 
 
@@ -226,7 +269,16 @@ class Invoice(BaseModel):
     time_paid: Union[None, str, int, float] = ""
 
 
-class MeltQuote(BaseModel):
+class MeltQuoteState(Enum):
+    unpaid = "UNPAID"
+    pending = "PENDING"
+    paid = "PAID"
+
+    def __str__(self):
+        return self.name
+
+
+class MeltQuote(LedgerEvent):
     quote: str
     method: str
     request: str
@@ -235,22 +287,31 @@ class MeltQuote(BaseModel):
     amount: int
     fee_reserve: int
     paid: bool
+    state: MeltQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     fee_paid: int = 0
-    proof: str = ""
+    payment_preimage: str = ""
     expiry: Optional[int] = None
+    change: Optional[List[BlindedSignature]] = None
 
     @classmethod
     def from_row(cls, row: Row):
         try:
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
+            expiry = int(row["expiry"]) if row["expiry"] else None
         except Exception:
             created_time = (
                 int(row["created_time"].timestamp()) if row["created_time"] else None
             )
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
+            expiry = int(row["expiry"].timestamp()) if row["expiry"] else None
+
+        # parse change from row as json
+        change = None
+        if row["change"]:
+            change = json.loads(row["change"])
 
         return cls(
             quote=row["quote"],
@@ -261,14 +322,47 @@ class MeltQuote(BaseModel):
             amount=row["amount"],
             fee_reserve=row["fee_reserve"],
             paid=row["paid"],
+            state=MeltQuoteState[row["state"]],
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
-            proof=row["proof"],
+            change=change,
+            expiry=expiry,
+            payment_preimage=row["proof"],
         )
 
+    @property
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.quote
 
-class MintQuote(BaseModel):
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
+
+    # method that is invoked when the `state` attribute is changed. to protect the state from being set to anything else if the current state is paid
+    def __setattr__(self, name, value):
+        # an unpaid quote can only be set to pending or paid
+        if name == "state" and self.state == MeltQuoteState.unpaid:
+            if value != MeltQuoteState.pending and value != MeltQuoteState.paid:
+                raise Exception("Cannot change state of an unpaid quote.")
+        # a paid quote can not be changed
+        if name == "state" and self.state == MeltQuoteState.paid:
+            raise Exception("Cannot change state of a paid quote.")
+        super().__setattr__(name, value)
+
+
+class MintQuoteState(Enum):
+    unpaid = "UNPAID"
+    paid = "PAID"
+    pending = "PENDING"
+    issued = "ISSUED"
+
+    def __str__(self):
+        return self.name
+
+
+class MintQuote(LedgerEvent):
     quote: str
     method: str
     request: str
@@ -277,6 +371,7 @@ class MintQuote(BaseModel):
     amount: int
     paid: bool
     issued: bool
+    state: MintQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     expiry: Optional[int] = None
@@ -302,264 +397,37 @@ class MintQuote(BaseModel):
             amount=row["amount"],
             paid=row["paid"],
             issued=row["issued"],
+            state=MintQuoteState[row["state"]],
             created_time=created_time,
             paid_time=paid_time,
         )
 
-
-# ------- API -------
-
-# ------- API: INFO -------
-
-
-class MintMeltMethodSetting(BaseModel):
-    method: str
-    unit: str
-    min_amount: Optional[int] = None
-    max_amount: Optional[int] = None
-
-
-class GetInfoResponse(BaseModel):
-    name: Optional[str] = None
-    pubkey: Optional[str] = None
-    version: Optional[str] = None
-    description: Optional[str] = None
-    description_long: Optional[str] = None
-    contact: Optional[List[List[str]]] = None
-    motd: Optional[str] = None
-    nuts: Optional[Dict[int, Dict[str, Any]]] = None
-
-
-class GetInfoResponse_deprecated(BaseModel):
-    name: Optional[str] = None
-    pubkey: Optional[str] = None
-    version: Optional[str] = None
-    description: Optional[str] = None
-    description_long: Optional[str] = None
-    contact: Optional[List[List[str]]] = None
-    nuts: Optional[List[str]] = None
-    motd: Optional[str] = None
-    parameter: Optional[dict] = None
-
-
-# ------- API: KEYS -------
-
-
-class KeysResponseKeyset(BaseModel):
-    id: str
-    unit: str
-    keys: Dict[int, str]
-
-
-class KeysResponse(BaseModel):
-    keysets: List[KeysResponseKeyset]
-
-
-class KeysetsResponseKeyset(BaseModel):
-    id: str
-    unit: str
-    active: bool
-
-
-class KeysetsResponse(BaseModel):
-    keysets: list[KeysetsResponseKeyset]
-
-
-class KeysResponse_deprecated(BaseModel):
-    __root__: Dict[str, str]
-
-
-class KeysetsResponse_deprecated(BaseModel):
-    keysets: list[str]
-
-
-# ------- API: MINT QUOTE -------
-
-
-class PostMintQuoteRequest(BaseModel):
-    unit: str = Field(..., max_length=settings.mint_max_request_length)  # output unit
-    amount: int = Field(..., gt=0)  # output amount
-
-
-class PostMintQuoteResponse(BaseModel):
-    quote: str  # quote id
-    request: str  # input payment request
-    paid: bool  # whether the request has been paid
-    expiry: Optional[int]  # expiry of the quote
-
-
-# ------- API: MINT -------
-
-
-class PostMintRequest(BaseModel):
-    quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
-    outputs: List[BlindedMessage] = Field(
-        ..., max_items=settings.mint_max_request_length
-    )
-
-
-class PostMintResponse(BaseModel):
-    signatures: List[BlindedSignature] = []
-
-
-class GetMintResponse_deprecated(BaseModel):
-    pr: str
-    hash: str
-
-
-class PostMintRequest_deprecated(BaseModel):
-    outputs: List[BlindedMessage] = Field(
-        ..., max_items=settings.mint_max_request_length
-    )
-
-
-class PostMintResponse_deprecated(BaseModel):
-    promises: List[BlindedSignature] = []
-
-
-# ------- API: MELT QUOTE -------
-
-
-class PostMeltQuoteRequest(BaseModel):
-    unit: str = Field(..., max_length=settings.mint_max_request_length)  # input unit
-    request: str = Field(
-        ..., max_length=settings.mint_max_request_length
-    )  # output payment request
-
-
-class PostMeltQuoteResponse(BaseModel):
-    quote: str  # quote id
-    amount: int  # input amount
-    fee_reserve: int  # input fee reserve
-    paid: bool  # whether the request has been paid
-    expiry: Optional[int]  # expiry of the quote
-
-
-# ------- API: MELT -------
-
-
-class PostMeltRequest(BaseModel):
-    quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
-    inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
-    outputs: Union[List[BlindedMessage], None] = Field(
-        None, max_items=settings.mint_max_request_length
-    )
-
-
-class PostMeltResponse(BaseModel):
-    paid: Union[bool, None]
-    payment_preimage: Union[str, None]
-    change: Union[List[BlindedSignature], None] = None
-
-
-class PostMeltRequest_deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
-    pr: str = Field(..., max_length=settings.mint_max_request_length)
-    outputs: Union[List[BlindedMessage], None] = Field(
-        None, max_items=settings.mint_max_request_length
-    )
-
-
-class PostMeltResponse_deprecated(BaseModel):
-    paid: Union[bool, None]
-    preimage: Union[str, None]
-    change: Union[List[BlindedSignature], None] = None
-
-
-# ------- API: SPLIT -------
-
-
-class PostSplitRequest(BaseModel):
-    inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
-    outputs: List[BlindedMessage] = Field(
-        ..., max_items=settings.mint_max_request_length
-    )
-
-
-class PostSplitResponse(BaseModel):
-    signatures: List[BlindedSignature]
-
-
-# deprecated since 0.13.0
-class PostSplitRequest_Deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
-    amount: Optional[int] = None
-    outputs: List[BlindedMessage] = Field(
-        ..., max_items=settings.mint_max_request_length
-    )
-
-
-class PostSplitResponse_Deprecated(BaseModel):
-    promises: List[BlindedSignature] = []
-
-
-class PostSplitResponse_Very_Deprecated(BaseModel):
-    fst: List[BlindedSignature] = []
-    snd: List[BlindedSignature] = []
-    deprecated: str = "The amount field is deprecated since 0.13.0"
-
-
-# ------- API: CHECK -------
-
-
-class PostCheckStateRequest(BaseModel):
-    Ys: List[str] = Field(..., max_items=settings.mint_max_request_length)
-
-
-class SpentState(Enum):
-    unspent = "UNSPENT"
-    spent = "SPENT"
-    pending = "PENDING"
-
-    def __str__(self):
-        return self.name
-
-
-class ProofState(BaseModel):
-    Y: str
-    state: SpentState
-    witness: Optional[str] = None
-
-
-class PostCheckStateResponse(BaseModel):
-    states: List[ProofState] = []
-
-
-class CheckSpendableRequest_deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
-
-
-class CheckSpendableResponse_deprecated(BaseModel):
-    spendable: List[bool]
-    pending: List[bool]
-
-
-class CheckFeesRequest_deprecated(BaseModel):
-    pr: str = Field(..., max_length=settings.mint_max_request_length)
-
-
-class CheckFeesResponse_deprecated(BaseModel):
-    fee: Union[int, None]
-
-
-# ------- API: RESTORE -------
-
-
-class PostRestoreRequest(BaseModel):
-    outputs: List[BlindedMessage] = Field(
-        ..., max_items=settings.mint_max_request_length
-    )
-
-
-class PostRestoreResponse(BaseModel):
-    outputs: List[BlindedMessage] = []
-    signatures: List[BlindedSignature] = []
-    promises: Optional[List[BlindedSignature]] = []  # deprecated since 0.15.1
-
-    # duplicate value of "signatures" for backwards compatibility with old clients < 0.15.1
-    def __init__(self, **data):
-        super().__init__(**data)
-        self.promises = self.signatures
+    @property
+    def identifier(self) -> str:
+        """Implementation of the abstract method from LedgerEventManager"""
+        return self.quote
+
+    @property
+    def kind(self) -> JSONRPCSubscriptionKinds:
+        return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+
+    def __setattr__(self, name, value):
+        # un unpaid quote can only be set to paid
+        if name == "state" and self.state == MintQuoteState.unpaid:
+            if value != MintQuoteState.paid:
+                raise Exception("Cannot change state of an unpaid quote.")
+        # a paid quote can only be set to pending or issued
+        if name == "state" and self.state == MintQuoteState.paid:
+            if value != MintQuoteState.pending and value != MintQuoteState.issued:
+                raise Exception(f"Cannot change state of a paid quote to {value}.")
+        # a pending quote can only be set to paid or issued
+        if name == "state" and self.state == MintQuoteState.pending:
+            if value not in [MintQuoteState.paid, MintQuoteState.issued]:
+                raise Exception("Cannot change state of a pending quote.")
+        # an issued quote cannot be changed
+        if name == "state" and self.state == MintQuoteState.issued:
+            raise Exception("Cannot change state of an issued quote.")
+        super().__setattr__(name, value)
 
 
 # ------- KEYSETS -------
@@ -579,6 +447,8 @@ class Unit(Enum):
     sat = 0
     msat = 1
     usd = 2
+    eur = 3
+    btc = 4
 
     def str(self, amount: int) -> str:
         if self == Unit.sat:
@@ -587,6 +457,10 @@ class Unit(Enum):
             return f"{amount} msat"
         elif self == Unit.usd:
             return f"${amount/100:.2f} USD"
+        elif self == Unit.eur:
+            return f"{amount/100:.2f} EUR"
+        elif self == Unit.btc:
+            return f"{amount/1e8:.8f} BTC"
         else:
             raise Exception("Invalid unit")
 
@@ -621,6 +495,33 @@ class Amount:
         else:
             return self
 
+    def to_float_string(self) -> str:
+        if self.unit == Unit.usd or self.unit == Unit.eur:
+            return self.cents_to_usd()
+        elif self.unit == Unit.sat:
+            return self.sat_to_btc()
+        else:
+            raise Exception("Amount must be in satoshis or cents")
+
+    @classmethod
+    def from_float(cls, amount: float, unit: Unit) -> "Amount":
+        if unit == Unit.usd or unit == Unit.eur:
+            return cls(unit, int(amount * 100))
+        elif unit == Unit.sat:
+            return cls(unit, int(amount * 1e8))
+        else:
+            raise Exception("Amount must be in satoshis or cents")
+
+    def sat_to_btc(self) -> str:
+        if self.unit != Unit.sat:
+            raise Exception("Amount must be in satoshis")
+        return f"{self.amount/1e8:.8f}"
+
+    def cents_to_usd(self) -> str:
+        if self.unit != Unit.usd and self.unit != Unit.eur:
+            raise Exception("Amount must be in cents")
+        return f"{self.amount/100:.2f}"
+
     def str(self) -> str:
         return self.unit.str(self.amount)
 
@@ -645,6 +546,7 @@ class WalletKeyset:
     valid_to: Union[str, None] = None
     first_seen: Union[str, None] = None
     active: Union[bool, None] = True
+    input_fee_ppk: int = 0
 
     def __init__(
         self,
@@ -656,13 +558,14 @@ class WalletKeyset:
         valid_to=None,
         first_seen=None,
         active=True,
-        use_deprecated_id=False,  # BACKWARDS COMPATIBILITY < 0.15.0
+        input_fee_ppk=0,
     ):
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
         self.active = active
         self.mint_url = mint_url
+        self.input_fee_ppk = input_fee_ppk
 
         self.public_keys = public_keys
         # overwrite id by deriving it from the public keys
@@ -671,19 +574,9 @@ class WalletKeyset:
         else:
             self.id = id
 
-        # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-        if use_deprecated_id:
-            logger.warning(
-                "Using deprecated keyset id derivation for backwards compatibility <"
-                " 0.15.0"
-            )
-            self.id = derive_keyset_id_deprecated(self.public_keys)
-        # END BACKWARDS COMPATIBILITY < 0.15.0
-
         self.unit = Unit[unit]
 
-        logger.trace(f"Derived keyset id {self.id} from public keys.")
-        if id and id != self.id and use_deprecated_id:
+        if id and id != self.id:
             logger.warning(
                 f"WARNING: Keyset id {self.id} does not match the given id {id}."
                 " Overwriting."
@@ -716,6 +609,7 @@ class WalletKeyset:
             valid_to=row["valid_to"],
             first_seen=row["first_seen"],
             active=row["active"],
+            input_fee_ppk=row["input_fee_ppk"],
         )
 
 
@@ -729,6 +623,7 @@ class MintKeyset:
     active: bool
     unit: Unit
     derivation_path: str
+    input_fee_ppk: int
     seed: Optional[str] = None
     encrypted_seed: Optional[str] = None
     seed_encryption_method: Optional[str] = None
@@ -753,6 +648,7 @@ class MintKeyset:
         active: Optional[bool] = None,
         unit: Optional[str] = None,
         version: Optional[str] = None,
+        input_fee_ppk: Optional[int] = None,
         id: str = "",
     ):
         self.derivation_path = derivation_path
@@ -774,6 +670,10 @@ class MintKeyset:
         self.first_seen = first_seen
         self.active = bool(active) if active is not None else False
         self.version = version or settings.version
+        self.input_fee_ppk = input_fee_ppk or 0
+
+        if self.input_fee_ppk < 0:
+            raise Exception("Input fee must be non-negative.")
 
         self.version_tuple = tuple(
             [int(i) for i in self.version.split(".")] if self.version else []
@@ -866,11 +766,14 @@ class TokenV3(BaseModel):
 
     token: List[TokenV3Token] = []
     memo: Optional[str] = None
+    unit: Optional[str] = None
 
     def to_dict(self, include_dleq=False):
         return_dict = dict(token=[t.to_dict(include_dleq) for t in self.token])
         if self.memo:
             return_dict.update(dict(memo=self.memo))  # type: ignore
+        if self.unit:
+            return_dict.update(dict(unit=self.unit))  # type: ignore
         return return_dict
 
     def get_proofs(self):

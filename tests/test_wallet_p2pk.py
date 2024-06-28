@@ -7,7 +7,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof, SpentState
+from cashu.core.base import Proof, ProofSpentState
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import SigFlags
@@ -80,7 +80,7 @@ async def test_p2pk(wallet1: Wallet, wallet2: Wallet):
     await wallet2.redeem(send_proofs)
 
     proof_states = await wallet2.check_proof_state(send_proofs)
-    assert all([p.state == SpentState.spent for p in proof_states.states])
+    assert all([p.state == ProofSpentState.spent for p in proof_states.states])
 
     if not is_deprecated_api_only:
         for state in proof_states.states:

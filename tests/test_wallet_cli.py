@@ -109,23 +109,7 @@ def test_balance(cli_prefix):
     assert result.exit_code == 0
 
 
-@pytest.mark.skipif(not is_fake, reason="only on fakewallet")
-def test_invoice_automatic_fakewallet(mint, cli_prefix):
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [*cli_prefix, "invoice", "1000"],
-    )
-    assert result.exception is None
-    print("INVOICE")
-    print(result.output)
-    wallet = asyncio.run(init_wallet())
-    assert wallet.available_balance >= 1000
-    assert f"Balance: {wallet.available_balance} sat" in result.output
-    assert result.exit_code == 0
-
-
-def test_invoice(mint, cli_prefix):
+def test_invoice_return_immediately(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -175,6 +159,7 @@ def test_invoice_with_split(mint, cli_prefix):
     wallet = asyncio.run(init_wallet())
     assert wallet.proof_amounts.count(1) >= 10
 
+
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_minting(cli_prefix):
     # arrange
@@ -223,6 +208,7 @@ def test_invoices_without_minting(cli_prefix):
     assert get_invoice_from_invoices_command(result.output)["ID"] == invoice.id
     assert get_invoice_from_invoices_command(result.output)["Paid"] == str(invoice.paid)
 
+
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_onlypaid_option(cli_prefix):
     # arrange
@@ -262,6 +248,7 @@ def test_invoices_with_onlypaid_option_without_minting(cli_prefix):
     assert result.exception is None
     assert result.exit_code == 0
     assert "No invoices found." in result.output
+
 
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_onlyunpaid_option(cli_prefix):
@@ -321,6 +308,7 @@ def test_invoices_with_both_onlypaid_and_onlyunpaid_options(cli_prefix):
         "You should only choose one option: either --only-paid or --only-unpaid"
         in result.output
     )
+
 
 @pytest.mark.skipif(not is_fake, reason="only on fakewallet")
 def test_invoices_with_pending_option(cli_prefix):
@@ -422,11 +410,11 @@ def test_send_legacy(mint, cli_prefix):
     assert token_str.startswith("cashuAey"), "output is not as expected"
 
 
-def test_send_without_split(mint, cli_prefix):
+def test_send_offline(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "send", "2", "--nosplit"],
+        [*cli_prefix, "send", "2", "--offline"],
     )
     assert result.exception is None
     print("SEND")
@@ -434,13 +422,13 @@ def test_send_without_split(mint, cli_prefix):
     assert "cashuB" in result.output, "output does not have a token"
 
 
-def test_send_without_split_but_wrong_amount(mint, cli_prefix):
+def test_send_too_much(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "send", "10", "--nosplit"],
+        [*cli_prefix, "send", "100000"],
     )
-    assert "No proof with this amount found" in str(result.exception)
+    assert "balance too low" in str(result.exception)
 
 
 def test_receive_tokenv3(mint, cli_prefix):

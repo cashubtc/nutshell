@@ -8,7 +8,14 @@ from loguru import logger
 
 from ..core.base import (
     BlindedMessage,
+    BlindedMessage_Deprecated,
     BlindedSignature,
+    MintQuoteState,
+    Proof,
+    WalletKeyset,
+)
+from ..core.crypto.secp import PublicKey
+from ..core.models import (
     CheckFeesRequest_deprecated,
     CheckFeesResponse_deprecated,
     CheckSpendableRequest_deprecated,
@@ -16,19 +23,17 @@ from ..core.base import (
     GetInfoResponse,
     GetInfoResponse_deprecated,
     GetMintResponse_deprecated,
-    Invoice,
     KeysetsResponse_deprecated,
+    KeysetsResponseKeyset,
     PostMeltRequest_deprecated,
     PostMeltResponse_deprecated,
+    PostMintQuoteResponse,
     PostMintRequest_deprecated,
     PostMintResponse_deprecated,
     PostRestoreResponse,
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
-    Proof,
-    WalletKeyset,
 )
-from ..core.crypto.secp import PublicKey
 from ..core.settings import settings
 from ..tor.tor import TorProxy
 from .protocols import SupportsHttpxClient, SupportsMintURL
@@ -77,7 +82,7 @@ def async_ensure_mint_loaded_deprecated(func):
 
     async def wrapper(self, *args, **kwargs):
         if not self.keysets:
-            await self._load_mint()
+            await self.load_mint()
         return await func(self, *args, **kwargs)
 
     return wrapper
@@ -159,15 +164,11 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.items()
         }
-        keyset = WalletKeyset(
-            unit="sat", public_keys=keyset_keys, mint_url=url, use_deprecated_id=True
-        )
+        keyset = WalletKeyset(unit="sat", public_keys=keyset_keys, mint_url=url)
         return keyset
 
     @async_set_httpx_client
-    async def _get_keys_of_keyset_deprecated(
-        self, url: str, keyset_id: str
-    ) -> WalletKeyset:
+    async def _get_keyset_deprecated(self, url: str, keyset_id: str) -> WalletKeyset:
         """API that gets the keys of a specific keyset from the mint.
 
 
@@ -198,13 +199,11 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             id=keyset_id,
             public_keys=keyset_keys,
             mint_url=url,
-            use_deprecated_id=True,
         )
         return keyset
 
     @async_set_httpx_client
-    @async_ensure_mint_loaded_deprecated
-    async def _get_keyset_ids_deprecated(self, url: str) -> List[str]:
+    async def _get_keysets_deprecated(self, url: str) -> List[KeysetsResponseKeyset]:
         """API that gets a list of all active keysets of the mint.
 
         Args:
@@ -224,11 +223,15 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         keysets_dict = resp.json()
         keysets = KeysetsResponse_deprecated.parse_obj(keysets_dict)
         assert len(keysets.keysets), Exception("did not receive any keysets")
-        return keysets.keysets
+        keysets_new = [
+            KeysetsResponseKeyset(id=id, unit="sat", active=True)
+            for id in keysets.keysets
+        ]
+        return keysets_new
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
-    async def request_mint_deprecated(self, amount) -> Invoice:
+    async def request_mint_deprecated(self, amount) -> PostMintQuoteResponse:
         """Requests a mint from the server and returns Lightning invoice.
 
         Args:
@@ -246,12 +249,12 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         return_dict = resp.json()
         mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
         decoded_invoice = bolt11.decode(mint_response.pr)
-        return Invoice(
-            amount=amount,
-            bolt11=mint_response.pr,
-            id=mint_response.hash,
-            payment_hash=decoded_invoice.payment_hash,
-            out=False,
+        return PostMintQuoteResponse(
+            quote=mint_response.hash,
+            request=mint_response.pr,
+            paid=False,
+            state=MintQuoteState.unpaid.value,
+            expiry=decoded_invoice.date + (decoded_invoice.expiry or 0),
         )
 
     @async_set_httpx_client
@@ -271,7 +274,8 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         Raises:
             Exception: If the minting fails
         """
-        outputs_payload = PostMintRequest_deprecated(outputs=outputs)
+        outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+        outputs_payload = PostMintRequest_deprecated(outputs=outputs_deprecated)
 
         def _mintrequest_include_fields(outputs: List[BlindedMessage]):
             """strips away fields from the model that aren't necessary for the /mint"""
@@ -300,14 +304,21 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
-    async def pay_lightning_deprecated(
+    async def melt_deprecated(
         self, proofs: List[Proof], invoice: str, outputs: Optional[List[BlindedMessage]]
-    ):
+    ) -> PostMeltResponse_deprecated:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
         logger.warning("Using deprecated API call: POST /melt")
-        payload = PostMeltRequest_deprecated(proofs=proofs, pr=invoice, outputs=outputs)
+        outputs_deprecated = (
+            [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+            if outputs
+            else None
+        )
+        payload = PostMeltRequest_deprecated(
+            proofs=proofs, pr=invoice, outputs=outputs_deprecated
+        )
 
         def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
@@ -336,7 +347,10 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
         logger.warning("Using deprecated API call: Calling split. POST /split")
-        split_payload = PostSplitRequest_Deprecated(proofs=proofs, outputs=outputs)
+        outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+        split_payload = PostSplitRequest_Deprecated(
+            proofs=proofs, outputs=outputs_deprecated
+        )
 
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
@@ -403,7 +417,8 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         Asks the mint to restore promises corresponding to outputs.
         """
         logger.warning("Using deprecated API call: POST /restore")
-        payload = PostMintRequest_deprecated(outputs=outputs)
+        outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+        payload = PostMintRequest_deprecated(outputs=outputs_deprecated)
         resp = await self.httpx.post(join(self.url, "/restore"), json=payload.dict())
         self.raise_on_error(resp)
         response_dict = resp.json()

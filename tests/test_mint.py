@@ -2,9 +2,10 @@ from typing import List
 
 import pytest
 
-from cashu.core.base import BlindedMessage, PostMintQuoteRequest, Proof
+from cashu.core.base import BlindedMessage, Proof
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.helpers import calculate_number_of_blank_outputs
+from cashu.core.models import PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest
@@ -55,17 +56,6 @@ async def test_privatekeys(ledger: Ledger):
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets)
     assert len(list(ledger.keysets.keys()))
-    assert ledger.keyset.id == "009a1f293253e41e"
-
-
-@pytest.mark.asyncio
-async def test_keysets_backwards_compatibility_pre_v0_15(ledger: Ledger):
-    """Backwards compatibility test for keysets pre v0.15.0
-    We expect two instances of the same keyset but with different IDs.
-    First one is the new hex ID, second one is the old base64 ID.
-    """
-    assert len(ledger.keysets) == 2
-    assert list(ledger.keysets.keys()) == ["009a1f293253e41e", "eGnEWtdJ0PIM"]
     assert ledger.keyset.id == "009a1f293253e41e"
 
 
@@ -137,61 +127,12 @@ async def test_generate_promises(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_generate_promises_deprecated_keyset_id(ledger: Ledger):
-    blinded_messages_mock = [
-        BlindedMessage(
-            amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="eGnEWtdJ0PIM",
-        )
-    ]
-    promises = await ledger._generate_promises(blinded_messages_mock)
-    assert (
-        promises[0].C_
-        == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
-    )
-    assert promises[0].amount == 8
-    assert promises[0].id == "eGnEWtdJ0PIM"
-
-    # DLEQ proof present
-    assert promises[0].dleq
-    assert promises[0].dleq.s
-    assert promises[0].dleq.e
-
-
-@pytest.mark.asyncio
-async def test_generate_promises_keyset_backwards_compatibility_pre_v0_15(
-    ledger: Ledger,
-):
-    """Backwards compatibility test for keysets pre v0.15.0
-    We want to generate promises using the old keyset ID.
-    We expect the promise to have the old base64 ID.
-    """
-    blinded_messages_mock = [
-        BlindedMessage(
-            amount=8,
-            B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="eGnEWtdJ0PIM",
-        )
-    ]
-    promises = await ledger._generate_promises(
-        blinded_messages_mock, keyset=ledger.keysets["eGnEWtdJ0PIM"]
-    )
-    assert (
-        promises[0].C_
-        == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
-    )
-    assert promises[0].amount == 8
-    assert promises[0].id == "eGnEWtdJ0PIM"
-
-
-@pytest.mark.asyncio
 async def test_generate_change_promises(ledger: Ledger):
     # Example slightly adapted from NUT-08 because we want to ensure the dynamic change
     # token amount works: `n_blank_outputs != n_returned_promises != 4`.
-    invoice_amount = 100_000
+    # invoice_amount = 100_000
     fee_reserve = 2_000
-    total_provided = invoice_amount + fee_reserve
+    # total_provided = invoice_amount + fee_reserve
     actual_fee = 100
 
     expected_returned_promises = 7  # Amounts = [4, 8, 32, 64, 256, 512, 1024]
@@ -209,7 +150,7 @@ async def test_generate_change_promises(ledger: Ledger):
     ]
 
     promises = await ledger._generate_change_promises(
-        total_provided, invoice_amount, actual_fee, outputs
+        fee_provided=fee_reserve, fee_paid=actual_fee, outputs=outputs
     )
 
     assert len(promises) == expected_returned_promises
@@ -220,9 +161,9 @@ async def test_generate_change_promises(ledger: Ledger):
 async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
     # Check if mint handles a legacy wallet implementation (always sends 4 blank
     # outputs) as well.
-    invoice_amount = 100_000
+    # invoice_amount = 100_000
     fee_reserve = 2_000
-    total_provided = invoice_amount + fee_reserve
+    # total_provided = invoice_amount + fee_reserve
     actual_fee = 100
 
     expected_returned_promises = 4  # Amounts = [64, 256, 512, 1024]
@@ -239,9 +180,7 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
         for b, _ in blinded_msgs
     ]
 
-    promises = await ledger._generate_change_promises(
-        total_provided, invoice_amount, actual_fee, outputs
-    )
+    promises = await ledger._generate_change_promises(fee_reserve, actual_fee, outputs)
 
     assert len(promises) == expected_returned_promises
     assert sum([promise.amount for promise in promises]) == expected_returned_fees
@@ -249,14 +188,14 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_generate_change_promises_returns_empty_if_no_outputs(ledger: Ledger):
-    invoice_amount = 100_000
+    # invoice_amount = 100_000
     fee_reserve = 1_000
-    total_provided = invoice_amount + fee_reserve
+    # total_provided = invoice_amount + fee_reserve
     actual_fee_msat = 100_000
     outputs = None
 
     promises = await ledger._generate_change_promises(
-        total_provided, invoice_amount, actual_fee_msat, outputs
+        fee_reserve, actual_fee_msat, outputs
     )
     assert len(promises) == 0
 

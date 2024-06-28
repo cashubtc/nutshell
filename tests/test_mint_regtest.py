@@ -3,7 +3,7 @@ import asyncio
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import SpentState
+from cashu.core.base import ProofSpentState
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -41,12 +41,12 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     invoice_payment_request = str(invoice_dict["payment_request"])
 
     # wallet pays the invoice
-    quote = await wallet.get_pay_amount_with_fees(invoice_payment_request)
+    quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
     asyncio.create_task(ledger.melt(proofs=send_proofs, quote=quote.quote))
     # asyncio.create_task(
-    #     wallet.pay_lightning(
+    #     wallet.melt(
     #         proofs=send_proofs,
     #         invoice=invoice_payment_request,
     #         fee_reserve_sat=quote.fee_reserve,
@@ -62,16 +62,16 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     assert melt_quotes
 
     # expect that proofs are still pending
-    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
-    assert all([s.state == SpentState.pending for s in states])
+    states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
+    assert all([s.state == ProofSpentState.pending for s in states])
 
     # only now settle the invoice
     settle_invoice(preimage=preimage)
     await asyncio.sleep(SLEEP_TIME)
 
     # expect that proofs are now spent
-    states = await ledger.check_proofs_state([p.Y for p in send_proofs])
-    assert all([s.state == SpentState.spent for s in states])
+    states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
+    assert all([s.state == ProofSpentState.spent for s in states])
 
     # expect that no melt quote is pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(

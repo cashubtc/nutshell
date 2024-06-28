@@ -37,7 +37,7 @@ async def reset_wallet_db(wallet: LightningWallet):
     await wallet.db.execute("DELETE FROM proofs")
     await wallet.db.execute("DELETE FROM proofs_used")
     await wallet.db.execute("DELETE FROM keysets")
-    await wallet._load_mint()
+    await wallet.load_mint()
 
 
 @pytest_asyncio.fixture(scope="function")

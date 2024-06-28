@@ -1,4 +1,7 @@
-from ..core.base import Proof
+import copy
+
+from ..core.base import MintKeyset, Proof
+from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
 from ..core.db import Connection, Database, table_with_schema, timestamp_now
 from ..core.settings import settings
 
@@ -699,7 +702,7 @@ async def m017_foreign_keys_proof_tables(db: Database):
                         swap_id TEXT,
 
                         FOREIGN KEY (mint_quote) REFERENCES {table_with_schema(db, 'mint_quotes')}(quote),
-                        
+
                         UNIQUE (b_)
                     );
                 """
@@ -718,3 +721,107 @@ async def m017_foreign_keys_proof_tables(db: Database):
 
     # recreate indices
     await m015_add_index_Y_to_proofs_used_and_pending(db)
+
+
+async def m018_duplicate_deprecated_keyset_ids(db: Database):
+    async with db.connect() as conn:
+        rows = await conn.fetchall(  # type: ignore
+            f"""
+                SELECT * from {table_with_schema(db, 'keysets')}
+                """,
+        )
+        keysets = [MintKeyset(**row) for row in rows]
+        duplicated_keysets: list[MintKeyset] = []
+        for keyset in keysets:
+            keyset_copy = copy.copy(keyset)
+            if not keyset_copy.public_keys:
+                raise Exception(f"keyset {keyset_copy.id} has no public keys")
+            if keyset.version_tuple < (0, 15):
+                keyset_copy.id = derive_keyset_id(keyset_copy.public_keys)
+            else:
+                keyset_copy.id = derive_keyset_id_deprecated(keyset_copy.public_keys)
+            duplicated_keysets.append(keyset_copy)
+
+        for keyset in duplicated_keysets:
+            await conn.execute(
+                f"""
+                INSERT INTO {table_with_schema(db, 'keysets')}
+                (id, derivation_path, valid_from, valid_to, first_seen, active, version, seed, unit, encrypted_seed, seed_encryption_method)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    keyset.id,
+                    keyset.derivation_path,
+                    keyset.valid_from,
+                    keyset.valid_to,
+                    keyset.first_seen,
+                    keyset.active,
+                    keyset.version,
+                    keyset.seed,
+                    keyset.unit.name,
+                    keyset.encrypted_seed,
+                    keyset.seed_encryption_method,
+                ),
+            )
+
+
+async def m019_add_fee_to_keysets(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'keysets')} ADD COLUMN input_fee_ppk INTEGER"
+        )
+        await conn.execute(
+            f"UPDATE {table_with_schema(db, 'keysets')} SET input_fee_ppk = 0"
+        )
+
+
+async def m020_add_state_to_mint_and_melt_quotes(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'mint_quotes')} ADD COLUMN state TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'melt_quotes')} ADD COLUMN state TEXT"
+        )
+
+    # get all melt and mint quotes and figure out the state to set using the `paid` column
+    # and the `paid` and `issued` column respectively
+    # mint quotes:
+    async with db.connect() as conn:
+        rows = await conn.fetchall(
+            f"SELECT * FROM {table_with_schema(db, 'mint_quotes')}"
+        )
+        for row in rows:
+            if row["issued"]:
+                state = "issued"
+            elif row["paid"]:
+                state = "paid"
+            else:
+                state = "unpaid"
+            await conn.execute(
+                f"UPDATE {table_with_schema(db, 'mint_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
+            )
+
+    # melt quotes:
+    async with db.connect() as conn:
+        rows = await conn.fetchall(
+            f"SELECT * FROM {table_with_schema(db, 'melt_quotes')}"
+        )
+        for row in rows:
+            if row["paid"]:
+                state = "paid"
+            else:
+                state = "unpaid"
+            await conn.execute(
+                f"UPDATE {table_with_schema(db, 'melt_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
+            )
+
+
+async def m021_add_change_and_expiry_to_melt_quotes(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'melt_quotes')} ADD COLUMN change TEXT"
+        )
+        await conn.execute(
+            f"ALTER TABLE {table_with_schema(db, 'melt_quotes')} ADD COLUMN expiry TIMESTAMP"
+        )

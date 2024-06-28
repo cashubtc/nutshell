@@ -3,8 +3,9 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Request
 from loguru import logger
 
-from ..core.base import (
-    BlindedSignature,
+from ..core.base import BlindedMessage, BlindedSignature, ProofSpentState
+from ..core.errors import CashuError
+from ..core.models import (
     CheckFeesRequest_deprecated,
     CheckFeesResponse_deprecated,
     CheckSpendableRequest_deprecated,
@@ -19,14 +20,12 @@ from ..core.base import (
     PostMintQuoteRequest,
     PostMintRequest_deprecated,
     PostMintResponse_deprecated,
-    PostRestoreRequest,
+    PostRestoreRequest_Deprecated,
     PostRestoreResponse,
     PostSplitRequest_Deprecated,
     PostSplitResponse_Deprecated,
     PostSplitResponse_Very_Deprecated,
-    SpentState,
 )
-from ..core.errors import CashuError
 from ..core.settings import settings
 from .limit import limiter
 from .startup import ledger
@@ -51,7 +50,7 @@ async def info() -> GetInfoResponse_deprecated:
         description=settings.mint_info_description,
         description_long=settings.mint_info_description_long,
         contact=settings.mint_info_contact,
-        nuts=settings.mint_info_nuts,
+        nuts=["NUT-07", "NUT-08", "NUT-09"],
         motd=settings.mint_info_motd,
         parameter={
             "max_peg_in": settings.mint_max_peg_in,
@@ -177,10 +176,10 @@ async def mint_deprecated(
 
     # BEGIN BACKWARDS COMPATIBILITY < 0.15
     # Mint expects "id" in outputs to know which keyset to use to sign them.
-    for output in payload.outputs:
-        if not output.id:
-            # use the deprecated version of the current keyset
-            output.id = ledger.keyset.duplicate_keyset_id
+    outputs: list[BlindedMessage] = [
+        BlindedMessage(id=ledger.keyset.id, **o.dict(exclude={"id"}))
+        for o in payload.outputs
+    ]
     # END BACKWARDS COMPATIBILITY < 0.15
 
     # BEGIN: backwards compatibility < 0.12 where we used to lookup payments with payment_hash
@@ -189,7 +188,7 @@ async def mint_deprecated(
     assert hash, "hash must be set."
     # END: backwards compatibility < 0.12
 
-    promises = await ledger.mint(outputs=payload.outputs, quote_id=hash)
+    promises = await ledger.mint(outputs=outputs, quote_id=hash)
     blinded_signatures = PostMintResponse_deprecated(promises=promises)
 
     logger.trace(f"< POST /mint: {blinded_signatures}")
@@ -221,18 +220,21 @@ async def melt_deprecated(
     logger.trace(f"> POST /melt: {payload}")
     # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
     if payload.outputs:
-        for output in payload.outputs:
-            if not output.id:
-                output.id = ledger.keyset.id
+        outputs: list[BlindedMessage] = [
+            BlindedMessage(id=ledger.keyset.id, **o.dict(exclude={"id"}))
+            for o in payload.outputs
+        ]
+    else:
+        outputs = []
     # END BACKWARDS COMPATIBILITY < 0.14
     quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=payload.pr, unit="sat")
     )
-    preimage, change_promises = await ledger.melt(
-        proofs=payload.proofs, quote=quote.quote, outputs=payload.outputs
+    melt_resp = await ledger.melt(
+        proofs=payload.proofs, quote=quote.quote, outputs=outputs
     )
     resp = PostMeltResponse_deprecated(
-        paid=True, preimage=preimage, change=change_promises
+        paid=True, preimage=melt_resp.payment_preimage, change=melt_resp.change
     )
     logger.trace(f"< POST /melt: {resp}")
     return resp
@@ -290,12 +292,12 @@ async def split_deprecated(
     logger.trace(f"> POST /split: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
     # BEGIN BACKWARDS COMPATIBILITY < 0.14: add "id" to outputs
-    if payload.outputs:
-        for output in payload.outputs:
-            if not output.id:
-                output.id = ledger.keyset.id
+    outputs: list[BlindedMessage] = [
+        BlindedMessage(id=ledger.keyset.id, **o.dict(exclude={"id"}))
+        for o in payload.outputs
+    ]
     # END BACKWARDS COMPATIBILITY < 0.14
-    promises = await ledger.split(proofs=payload.proofs, outputs=payload.outputs)
+    promises = await ledger.split(proofs=payload.proofs, outputs=outputs)
 
     if payload.amount:
         # BEGIN backwards compatibility < 0.13
@@ -339,17 +341,17 @@ async def check_spendable_deprecated(
 ) -> CheckSpendableResponse_deprecated:
     """Check whether a secret has been spent already or not."""
     logger.trace(f"> POST /check: {payload}")
-    proofs_state = await ledger.check_proofs_state([p.Y for p in payload.proofs])
+    proofs_state = await ledger.db_read.get_proofs_states([p.Y for p in payload.proofs])
     spendableList: List[bool] = []
     pendingList: List[bool] = []
     for proof_state in proofs_state:
-        if proof_state.state == SpentState.unspent:
+        if proof_state.state == ProofSpentState.unspent:
             spendableList.append(True)
             pendingList.append(False)
-        elif proof_state.state == SpentState.spent:
+        elif proof_state.state == ProofSpentState.spent:
             spendableList.append(False)
             pendingList.append(False)
-        elif proof_state.state == SpentState.pending:
+        elif proof_state.state == ProofSpentState.pending:
             spendableList.append(True)
             pendingList.append(True)
     return CheckSpendableResponse_deprecated(
@@ -368,7 +370,15 @@ async def check_spendable_deprecated(
     ),
     deprecated=True,
 )
-async def restore(payload: PostRestoreRequest) -> PostRestoreResponse:
+async def restore(payload: PostRestoreRequest_Deprecated) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
-    outputs, promises = await ledger.restore(payload.outputs)
+    if payload.outputs:
+        outputs: list[BlindedMessage] = [
+            BlindedMessage(id=ledger.keyset.id, **o.dict(exclude={"id"}))
+            for o in payload.outputs
+        ]
+    else:
+        outputs = []
+
+    outputs, promises = await ledger.restore(outputs)
     return PostRestoreResponse(outputs=outputs, signatures=promises)

@@ -2,7 +2,8 @@ import pytest
 import respx
 from httpx import Response
 
-from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Unit
+from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.blink import MINIMUM_FEE_MSAT, BlinkWallet  # type: ignore
 
@@ -98,6 +99,7 @@ async def test_blink_pay_invoice():
         amount=100,
         fee_reserve=12,
         paid=False,
+        state=MeltQuoteState.unpaid,
     )
     payment = await blink.pay_invoice(quote, 1000)
     assert payment.ok
@@ -130,6 +132,7 @@ async def test_blink_pay_invoice_failure():
         amount=100,
         fee_reserve=12,
         paid=False,
+        state=MeltQuoteState.unpaid,
     )
     payment = await blink.pay_invoice(quote, 1000)
     assert not payment.ok
@@ -192,7 +195,10 @@ async def test_blink_get_payment_quote():
     # response says 1 sat fees but invoice (1000 sat) * 0.5% is 5 sat so we expect 5 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 1}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
-    quote = await blink.get_payment_quote(payment_request)
+    melt_quote_request = PostMeltQuoteRequest(
+        unit=Unit.sat.name, request=payment_request
+    )
+    quote = await blink.get_payment_quote(melt_quote_request)
     assert quote.checking_id == payment_request
     assert quote.amount == Amount(Unit.sat, 1000)  # sat
     assert quote.fee == Amount(Unit.sat, 5)  # sat
@@ -200,7 +206,10 @@ async def test_blink_get_payment_quote():
     # response says 10 sat fees but invoice (1000 sat) * 0.5% is 5 sat so we expect 10 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 10}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
-    quote = await blink.get_payment_quote(payment_request)
+    melt_quote_request = PostMeltQuoteRequest(
+        unit=Unit.sat.name, request=payment_request
+    )
+    quote = await blink.get_payment_quote(melt_quote_request)
     assert quote.checking_id == payment_request
     assert quote.amount == Amount(Unit.sat, 1000)  # sat
     assert quote.fee == Amount(Unit.sat, 10)  # sat
@@ -208,7 +217,10 @@ async def test_blink_get_payment_quote():
     # response says 10 sat fees but invoice (4973 sat) * 0.5% is 24.865 sat so we expect 25 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 10}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
-    quote = await blink.get_payment_quote(payment_request_4973)
+    melt_quote_request_4973 = PostMeltQuoteRequest(
+        unit=Unit.sat.name, request=payment_request_4973
+    )
+    quote = await blink.get_payment_quote(melt_quote_request_4973)
     assert quote.checking_id == payment_request_4973
     assert quote.amount == Amount(Unit.sat, 4973)  # sat
     assert quote.fee == Amount(Unit.sat, 25)  # sat
@@ -216,7 +228,10 @@ async def test_blink_get_payment_quote():
     # response says 0 sat fees but invoice (1 sat) * 0.5% is 0.005 sat so we expect MINIMUM_FEE_MSAT/1000 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 0}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
-    quote = await blink.get_payment_quote(payment_request_1)
+    melt_quote_request_1 = PostMeltQuoteRequest(
+        unit=Unit.sat.name, request=payment_request_1
+    )
+    quote = await blink.get_payment_quote(melt_quote_request_1)
     assert quote.checking_id == payment_request_1
     assert quote.amount == Amount(Unit.sat, 1)  # sat
     assert quote.fee == Amount(Unit.sat, MINIMUM_FEE_MSAT // 1000)  # msat
@@ -228,7 +243,10 @@ async def test_blink_get_payment_quote_backend_error():
     # response says error but invoice (1000 sat) * 0.5% is 5 sat so we expect 10 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"errors": [{"message": "error"}]}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
-    quote = await blink.get_payment_quote(payment_request)
+    melt_quote_request = PostMeltQuoteRequest(
+        unit=Unit.sat.name, request=payment_request
+    )
+    quote = await blink.get_payment_quote(melt_quote_request)
     assert quote.checking_id == payment_request
     assert quote.amount == Amount(Unit.sat, 1000)  # sat
     assert quote.fee == Amount(Unit.sat, 5)  # sat

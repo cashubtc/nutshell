@@ -33,7 +33,8 @@ settings.tor = False
 settings.wallet_unit = "sat"
 settings.mint_backend_bolt11_sat = settings.mint_backend_bolt11_sat or "FakeWallet"
 settings.fakewallet_brr = True
-settings.fakewallet_delay_payment = False
+settings.fakewallet_delay_outgoing_payment = 0
+settings.fakewallet_delay_incoming_payment = 1
 settings.fakewallet_stochastic_invoice = False
 assert (
     settings.mint_test_database != settings.mint_database
@@ -44,6 +45,9 @@ settings.mint_derivation_path_list = []
 settings.mint_private_key = "TEST_PRIVATE_KEY"
 settings.mint_seed_decryption_key = ""
 settings.mint_max_balance = 0
+settings.mint_transaction_rate_limit_per_minute = 60
+settings.mint_lnd_enable_mpp = True
+settings.mint_input_fee_ppk = 0
 
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
@@ -73,28 +77,25 @@ class UvicornServer(multiprocessing.Process):
         self.server.run()
 
 
-# # This fixture is used for tests that require API access to the mint
-@pytest.fixture(autouse=True, scope="session")
-def mint():
-    config = uvicorn.Config(
-        "cashu.mint.app:app",
-        port=settings.mint_listen_port,
-        host=settings.mint_listen_host,
-    )
-
-    server = UvicornServer(config=config)
-    server.start()
-    time.sleep(1)
-    yield server
-    server.stop()
-
-
 # This fixture is used for all other tests
 @pytest_asyncio.fixture(scope="function")
 async def ledger():
-    async def start_mint_init(ledger: Ledger):
+    async def start_mint_init(ledger: Ledger) -> Ledger:
         await migrate_databases(ledger.db, migrations_mint)
+        # add a new keyset (with a new ID) which will be duplicated with a keyset with an
+        # old ID by mint migration m018_duplicate_deprecated_keyset_ids
+        # await ledger.activate_keyset(derivation_path=settings.mint_derivation_path, version="0.15.0")
+        # await migrations_mint.m018_duplicate_deprecated_keyset_ids(ledger.db)
+
+        ledger = Ledger(
+            db=Database("mint", settings.mint_database),
+            seed=settings.mint_private_key,
+            derivation_path=settings.mint_derivation_path,
+            backends=backends,
+            crud=LedgerCrudSqlite(),
+        )
         await ledger.startup_ledger()
+        return ledger
 
     if not settings.mint_database.startswith("postgres"):
         # clear sqlite database
@@ -120,6 +121,22 @@ async def ledger():
         backends=backends,
         crud=LedgerCrudSqlite(),
     )
-    await start_mint_init(ledger)
+    ledger = await start_mint_init(ledger)
     yield ledger
     print("teardown")
+
+
+# # This fixture is used for tests that require API access to the mint
+@pytest.fixture(autouse=True, scope="session")
+def mint():
+    config = uvicorn.Config(
+        "cashu.mint.app:app",
+        port=settings.mint_listen_port,
+        host=settings.mint_listen_host,
+    )
+
+    server = UvicornServer(config=config)
+    server.start()
+    time.sleep(1)
+    yield server
+    server.stop()
