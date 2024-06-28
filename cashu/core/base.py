@@ -832,35 +832,63 @@ class TokenV4Proof(BaseModel):
     Value token
     """
 
-    i: Optional[bytes] = b""
-    a: int = 0
-    s: str = ""  # secret
-    c: bytes = b""  # signature
+    a: int
+    s: str  # secret
+    c: bytes  # signature
     d: Optional[TokenV4DLEQ] = None  # DLEQ proof
-    witness: Optional[str] = ""  # witness
+    w: Optional[str] = None  # witness
+
+    @classmethod
+    def from_proof(cls, proof: Proof, include_dleq=False):
+        return cls(
+            a=proof.amount,
+            s=proof.secret,
+            c=bytes.fromhex(proof.C),
+            d=(
+                TokenV4DLEQ(
+                    e=bytes.fromhex(proof.dleq.e),
+                    s=bytes.fromhex(proof.dleq.s),
+                    r=bytes.fromhex(proof.dleq.r),
+                )
+                if proof.dleq
+                else None
+            ),
+            w=proof.witness,
+        )
 
 
 class TokenV4Token(BaseModel):
-    # mint url
-    m: Optional[str] = None
+    # keyset ID
+    i: bytes
     # proofs
     p: List[TokenV4Proof]
 
 
 class TokenV4(BaseModel):
+    # mint URL
+    m: str
     # tokens
-    t: List[TokenV4Token] = []
+    t: List[TokenV4Token]
     # memo
-    m: Optional[str] = None
+    d: Optional[str] = None
 
-    def from_tokenv3(self, tokenv3: TokenV3):
-        for token in tokenv3.token:
-            self.t.append(
+    @classmethod
+    def from_tokenv3(cls, tokenv3: TokenV3):
+        print("asd")
+        if not len(tokenv3.get_mints()) == 1:
+            raise Exception("TokenV3 must contain proofs from only one mint.")
+
+        proofs = tokenv3.get_proofs()
+        proofs_by_id: Dict[str, List[Proof]] = {}
+        for proof in proofs:
+            proofs_by_id.setdefault(proof.id, []).append(proof)
+
+        for keyset_id, proofs in proofs_by_id.items():
+            cls.t.append(
                 TokenV4Token(
-                    m=token.mint,
+                    i=bytes.fromhex(keyset_id),
                     p=[
                         TokenV4Proof(
-                            i=bytes.fromhex(p.id) if p.id else None,
                             a=p.amount,
                             s=p.secret,
                             c=bytes.fromhex(p.C),
@@ -873,18 +901,24 @@ class TokenV4(BaseModel):
                                 if p.dleq
                                 else None
                             ),
-                            witness=p.witness,
+                            w=p.witness,
                         )
-                        for p in token.proofs
+                        for p in proofs
                     ],
                 )
             )
-        return self
+
+        # set memo
+        cls.d = tokenv3.memo
+        # set mint
+        cls.m = tokenv3.get_mints()[0]
+        print(cls)
+        return cls.parse_obj(cls)
 
     def to_dict(self, include_dleq=False):
         return_dict: Dict[str, Any] = dict(t=[t.dict() for t in self.t])
         return_dict = return_dict.copy()
-        # strip dleq if present and not requested
+        # strip dleq if needed
         if not include_dleq:
             for token in return_dict["t"]:
                 for proof in token["p"]:
@@ -893,11 +927,13 @@ class TokenV4(BaseModel):
         # strip witness if not present
         for token in return_dict["t"]:
             for proof in token["p"]:
-                if not proof.get("witness"):
-                    del proof["witness"]
+                if not proof.get("w"):
+                    del proof["w"]
         # optional memo
-        if self.m:
-            return_dict.update(dict(m=self.m))
+        if self.d:
+            return_dict.update(dict(d=self.d))
+        # mint
+        return_dict.update(dict(m=self.m))
         return return_dict
 
     def serialize(self, include_dleq=False) -> str:
@@ -933,10 +969,10 @@ class TokenV4(BaseModel):
         for token in self.t:
             tokenv3.token.append(
                 TokenV3Token(
-                    mint=token.m,
+                    mint=self.m,
                     proofs=[
                         Proof(
-                            id=p.i.hex() if p.i else None,
+                            id=token.i.hex(),
                             amount=p.a,
                             secret=p.s,
                             C=p.c.hex(),
@@ -949,7 +985,7 @@ class TokenV4(BaseModel):
                                 if p.d
                                 else None
                             ),
-                            witness=p.witness,
+                            witness=p.w,
                         )
                         for p in token.p
                     ],

@@ -84,36 +84,11 @@ async def receive(
     wallet: Wallet,
     tokenObj: TokenV3,
 ) -> Wallet:
-    logger.debug(f"receive: {tokenObj}")
-    proofs = [p for t in tokenObj.token for p in t.proofs]
-
-    includes_mint_info: bool = any([t.mint for t in tokenObj.token])
-
-    if includes_mint_info:
-        # redeem tokens with new wallet instances
-        mint_wallet = await redeem_TokenV3_multimint(
-            wallet,
-            tokenObj,
-        )
-    else:
-        # this is very legacy code, virtually any token should have mint information
-        # no mint information present, we extract the proofs find the mint and unit from the db
-        keyset_in_token = proofs[0].id
-        assert keyset_in_token
-        # we get the keyset from the db
-        mint_keysets = await get_keysets(id=keyset_in_token, db=wallet.db)
-        assert mint_keysets, Exception(f"we don't know this keyset: {keyset_in_token}")
-        mint_keyset = [k for k in mint_keysets if k.id == keyset_in_token][0]
-        assert mint_keyset.mint_url, Exception("we don't know this mint's URL")
-        # now we have the URL
-        mint_wallet = await Wallet.with_db(
-            mint_keyset.mint_url,
-            os.path.join(settings.cashu_dir, wallet.name),
-            unit=mint_keyset.unit.name or wallet.unit.name,
-        )
-        await mint_wallet.load_mint(keyset_in_token)
-        _, _ = await mint_wallet.redeem(proofs)
-        print(f"Received {mint_wallet.unit.str(sum_proofs(proofs))}")
+    # redeem tokens with new wallet instances
+    mint_wallet = await redeem_TokenV3_multimint(
+        wallet,
+        tokenObj,
+    )
 
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)

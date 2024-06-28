@@ -8,6 +8,8 @@ from ..core.base import (
     TokenV3,
     TokenV3Token,
     TokenV4,
+    TokenV4Proof,
+    TokenV4Token,
     Unit,
     WalletKeyset,
 )
@@ -90,7 +92,12 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         return mint_urls
 
     async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, include_dleq=False, legacy=False
+        self,
+        proofs: List[Proof],
+        include_mints=True,
+        include_dleq=False,
+        legacy=False,
+        memo: Optional[str] = None,
     ) -> str:
         """Produces sharable token with proofs and mint information.
 
@@ -103,14 +110,16 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             str: Serialized Cashu token
         """
 
-        tokenv3 = await self._make_tokenv3(proofs, include_mints)
+        tokenv3 = await self._make_tokenv3(proofs, include_mints, memo)
         if legacy:
             return tokenv3.serialize(include_dleq)
         else:
-            tokenv4 = await self._make_token(tokenv3, include_dleq)
+            tokenv4 = await self._make_token(proofs, include_dleq, memo)
             return tokenv4.serialize(include_dleq)
 
-    async def _make_tokenv3(self, proofs: List[Proof], include_mints=True) -> TokenV3:
+    async def _make_tokenv3(
+        self, proofs: List[Proof], include_mints=True, memo: Optional[str] = None
+    ) -> TokenV3:
         """
         Takes list of proofs and produces a TokenV3 by looking up
         the mint URLs by the keyset id from the database.
@@ -140,17 +149,54 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         else:
             token_proofs = TokenV3Token(proofs=proofs)
             token.token.append(token_proofs)
+
+        if memo:
+            token.memo = memo
         return token
 
-    async def _make_token(self, token: TokenV3, include_dleq=False) -> TokenV4:
+    async def _make_tokenv4(
+        self, proofs: List[Proof], include_dleq=False, memo: Optional[str] = None
+    ) -> TokenV4:
         """
-        Takes a TokenV3 and returns a TokenV4
+        Takes a list of proofs and returns a TokenV4
 
         Args:
-            token (TokenV3): TokenV3 object to be serialized
+            proofs (List[Proof]): List of proofs to be serialized
 
         Returns:
-            bytes: Serialized token
+            TokenV4: TokenV4 object
         """
 
-        return TokenV4().from_tokenv3(token)
+        # get all keysets from proofs
+        keysets = self._get_proofs_keysets(proofs)
+        # get all mint URLs for all unique keysets from db
+        mint_urls = await self._get_keyset_urls(keysets)
+        if len(mint_urls) > 1:
+            raise ValueError("TokenV4 can only contain proofs from a single mint URL")
+        mint_url = list(mint_urls.keys())[0]
+
+        tokens: List[TokenV4Token] = []
+        for keyset in keysets:
+            proofs_keyset = [p for p in proofs if p.id == keyset]
+            tokenv4_proofs = []
+            for proof in proofs_keyset:
+                tokenv4_proofs.append(TokenV4Proof.from_proof(proof, include_dleq))
+            tokenv4_token = TokenV4Token(i=bytes.fromhex(keyset), p=tokenv4_proofs)
+            tokens.append(tokenv4_token)
+
+        return TokenV4(m=mint_url, t=tokens, d=memo)
+
+    async def _make_token(
+        self, proofs: List[Proof], include_dleq=False, memo: Optional[str] = None
+    ) -> TokenV4:
+        """
+        Takes a list of proofs and returns a TokenV4
+
+        Args:
+            proofs (List[Proof]): List of proofs to be serialized
+
+        Returns:
+            TokenV4: TokenV4 object
+        """
+
+        return await self._make_tokenv4(proofs, include_dleq, memo)
