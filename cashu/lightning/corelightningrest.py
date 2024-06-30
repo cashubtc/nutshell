@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import random
 from typing import AsyncGenerator, Dict, Optional
 
@@ -34,9 +35,16 @@ class CoreLightningRestWallet(LightningBackend):
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
         self.unit = unit
-        rune = settings.mint_corelightning_rune
-        assert rune, "missing cln-rest rune"
+        rune_settings = settings.mint_corelightning_rune
+        if rune_settings:
+            if os.path.exists(rune_settings):
+                with open(rune_settings, "r") as f:
+                    rune = f.read()
+                rune = rune.strip()
+            else:
+                rune = rune_settings
 
+        assert rune, "missing clnrest rune"
         self.rune = rune
 
         url = settings.mint_corelightning_rest_url
@@ -197,11 +205,7 @@ class CoreLightningRestWallet(LightningBackend):
                     preimage=None,
                     error_message=error_message,
                 )
-        r = await self.client.post(
-            f"{self.url}/v1/pay",
-            data=post_data,
-            timeout=None
-        )
+        r = await self.client.post(f"{self.url}/v1/pay", data=post_data, timeout=None)
 
         if r.is_error or "error" in r.json():
             try:
@@ -295,10 +299,11 @@ class CoreLightningRestWallet(LightningBackend):
         while True:
             try:
                 url = f"{self.url}/v1/waitanyinvoice"
-                async with self.client.stream("POST", url, data={
-                        "lastpay_index": self.last_pay_index,
-                        "timeout": None}
-                    ) as r:
+                async with self.client.stream(
+                    "POST",
+                    url,
+                    data={"lastpay_index": self.last_pay_index, "timeout": None},
+                ) as r:
                     async for line in r.aiter_lines():
                         inv = json.loads(line)
                         if "error" in inv and "message" in inv["error"]:
@@ -345,10 +350,11 @@ class CoreLightningRestWallet(LightningBackend):
         assert invoice_obj.amount_msat > 0, "invoice has 0 amount."
         amount_msat = invoice_obj.amount_msat
         if melt_quote.is_mpp:
-            amount_msat = Amount(
-                    Unit[melt_quote.unit],
-                    melt_quote.mpp_amount
-                ).to(Unit.msat).amount
+            amount_msat = (
+                Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
+                .to(Unit.msat)
+                .amount
+            )
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
