@@ -51,14 +51,14 @@ class Compat:
             return ""
         return "<nothing>"
 
-    def table_with_schema(self, table: str):
-        return f"{self.references_schema if self.schema else ''}{table}"
-
     @property
     def big_int(self) -> str:
         if self.type in {POSTGRES}:
             return "BIGINT"
         return "INT"
+
+    def table_with_schema(self, table: str):
+        return f"{self.references_schema if self.schema else ''}{table}"
 
 
 class Connection(Compat):
