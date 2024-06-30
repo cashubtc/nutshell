@@ -74,6 +74,7 @@ jobs:
           MINT_CORELIGHTNING_REST_URL: https://localhost:3010
           MINT_CORELIGHTNING_REST_RUNE: ./regtest/data/clightning-2/rune
           MINT_CORELIGHTNING_REST_CERT: ./regtest/data/clightning-2/regtest/ca.pem
+          MINT_CORELIGHTNING_ENABLE_MPP: true
         run: |
           sudo chmod -R 777 .
           make test
