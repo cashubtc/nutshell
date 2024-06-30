@@ -12,7 +12,6 @@ from ..core.base import (
 from ..core.db import (
     Connection,
     Database,
-    table_with_schema,
 )
 
 
@@ -264,7 +263,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {table_with_schema(db, 'promises')}
+            INSERT INTO {db.table_with_schema('promises')}
             (amount, b_, c_, dleq_e, dleq_s, id, created)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
@@ -288,7 +287,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Optional[BlindedSignature]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {table_with_schema(db, 'promises')}
+            SELECT * from {db.table_with_schema('promises')}
             WHERE b_ = ?
             """,
             (str(b_),),
@@ -303,7 +302,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[Proof]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {table_with_schema(db, 'proofs_used')}
+            SELECT * from {db.table_with_schema('proofs_used')}
             """
         )
         return [Proof(**r) for r in rows] if rows else []
@@ -319,7 +318,7 @@ class LedgerCrudSqlite(LedgerCrud):
         # we add the proof and secret to the used list
         await (conn or db).execute(
             f"""
-            INSERT INTO {table_with_schema(db, 'proofs_used')}
+            INSERT INTO {db.table_with_schema('proofs_used')}
             (amount, c, secret, y, id, witness, created, melt_quote)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -343,7 +342,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[MeltQuote]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {table_with_schema(db, 'melt_quotes')} WHERE quote in (SELECT DISTINCT melt_quote FROM {table_with_schema(db, 'proofs_pending')})
+            SELECT * from {db.table_with_schema('melt_quotes')} WHERE quote in (SELECT DISTINCT melt_quote FROM {db.table_with_schema('proofs_pending')})
             """
         )
         return [MeltQuote.from_row(r) for r in rows]
@@ -357,7 +356,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[Proof]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {table_with_schema(db, 'proofs_pending')}
+            SELECT * from {db.table_with_schema('proofs_pending')}
             WHERE melt_quote = ?
             """,
             (quote_id,),
@@ -373,7 +372,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[Proof]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {table_with_schema(db, 'proofs_pending')}
+            SELECT * from {db.table_with_schema('proofs_pending')}
             WHERE y IN ({','.join(['?']*len(Ys))})
             """,
             tuple(Ys),
@@ -391,7 +390,7 @@ class LedgerCrudSqlite(LedgerCrud):
         # we add the proof and secret to the used list
         await (conn or db).execute(
             f"""
-            INSERT INTO {table_with_schema(db, 'proofs_pending')}
+            INSERT INTO {db.table_with_schema('proofs_pending')}
             (amount, c, secret, y, id, witness, created, melt_quote)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -416,7 +415,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            DELETE FROM {table_with_schema(db, 'proofs_pending')}
+            DELETE FROM {db.table_with_schema('proofs_pending')}
             WHERE secret = ?
             """,
             (proof.secret,),
@@ -431,7 +430,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {table_with_schema(db, 'mint_quotes')}
+            INSERT INTO {db.table_with_schema('mint_quotes')}
             (quote, method, request, checking_id, unit, amount, issued, paid, state, created_time, paid_time)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -476,7 +475,7 @@ class LedgerCrudSqlite(LedgerCrud):
         where = f"WHERE {' AND '.join(clauses)}"
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {table_with_schema(db, 'mint_quotes')}
+            SELECT * from {db.table_with_schema('mint_quotes')}
             {where}
             """,
             tuple(values),
@@ -494,7 +493,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Optional[MintQuote]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {table_with_schema(db, 'mint_quotes')}
+            SELECT * from {db.table_with_schema('mint_quotes')}
             WHERE request = ?
             """,
             (request,),
@@ -509,7 +508,7 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'mint_quotes')} SET issued = ?, paid = ?,"
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET issued = ?, paid = ?,"
             " state = ?, paid_time = ? WHERE quote = ?",
             (
                 quote.issued,
@@ -529,7 +528,7 @@ class LedgerCrudSqlite(LedgerCrud):
     #     conn: Optional[Connection] = None,
     # ) -> None:
     #     await (conn or db).execute(
-    #         f"UPDATE {table_with_schema(db, 'mint_quotes')} SET paid = ? WHERE"
+    #         f"UPDATE {db.table_with_schema('mint_quotes')} SET paid = ? WHERE"
     #         " quote = ?",
     #         (
     #             paid,
@@ -546,7 +545,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {table_with_schema(db, 'melt_quotes')}
+            INSERT INTO {db.table_with_schema('melt_quotes')}
             (quote, method, request, checking_id, unit, amount, fee_reserve, paid, state, created_time, paid_time, fee_paid, proof, change, expiry)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -595,7 +594,7 @@ class LedgerCrudSqlite(LedgerCrud):
 
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {table_with_schema(db, 'melt_quotes')}
+            SELECT * from {db.table_with_schema('melt_quotes')}
             {where}
             """,
             tuple(values),
@@ -612,7 +611,7 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ?, state = ?,"
+            f"UPDATE {db.table_with_schema('melt_quotes')} SET paid = ?, state = ?,"
             " fee_paid = ?, paid_time = ?, proof = ?, change = ? WHERE quote = ?",
             (
                 quote.paid,
@@ -634,7 +633,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(  # type: ignore
             f"""
-            INSERT INTO {table_with_schema(db, 'keysets')}
+            INSERT INTO {db.table_with_schema('keysets')}
             (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -661,7 +660,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> int:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {table_with_schema(db, 'balance')}
+            SELECT * from {db.table_with_schema('balance')}
             """
         )
         assert row, "Balance not found"
@@ -701,7 +700,7 @@ class LedgerCrudSqlite(LedgerCrud):
 
         rows = await (conn or db).fetchall(  # type: ignore
             f"""
-            SELECT * from {table_with_schema(db, 'keysets')}
+            SELECT * from {db.table_with_schema('keysets')}
             {where}
             """,
             tuple(values),
@@ -717,7 +716,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Optional[Proof]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {table_with_schema(db, 'proofs_used')}
+            SELECT * from {db.table_with_schema('proofs_used')}
             WHERE y = ?
             """,
             (Y,),

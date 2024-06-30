@@ -51,6 +51,9 @@ class Compat:
             return ""
         return "<nothing>"
 
+    def table_with_schema(self, table: str):
+        return f"{self.references_schema if self.schema else ''}{table}"
+
     @property
     def big_int(self) -> str:
         if self.type in {POSTGRES}:
@@ -208,9 +211,9 @@ class Database(Compat):
 
     def lock_table(self, table: str) -> str:
         if self.type == POSTGRES:
-            return f"LOCK TABLE {self.references_schema}{table} IN EXCLUSIVE MODE;"
+            return f"LOCK TABLE {self.table_with_schema(table)} IN EXCLUSIVE MODE;"
         elif self.type == COCKROACH:
-            return f"LOCK TABLE {self.references_schema}{table};"
+            return f"LOCK TABLE {table};"
         elif self.type == SQLITE:
             return "BEGIN EXCLUSIVE TRANSACTION;"
         return "<nothing>"
@@ -234,7 +237,3 @@ class Database(Compat):
         if timestamp is None:
             raise Exception("Timestamp is None")
         return timestamp
-
-
-def table_with_schema(db: Union[Database, Connection], table: str):
-    return f"{db.references_schema if db.schema else ''}{table}"
