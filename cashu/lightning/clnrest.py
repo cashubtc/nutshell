@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import random
 from typing import AsyncGenerator, Dict, Optional
 
@@ -23,39 +24,45 @@ from .base import (
     StatusResponse,
     Unsupported,
 )
-from .macaroon import load_macaroon
 
 
-class CoreLightningRestWallet(LightningBackend):
+class CLNRestWallet(LightningBackend):
     supported_units = set([Unit.sat, Unit.msat])
     unit = Unit.sat
+    supports_mpp = False  # settings.mint_clnrest_enable_mpp
     supports_incoming_payment_stream: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
         self.unit = unit
-        macaroon = settings.mint_corelightning_rest_macaroon
-        assert macaroon, "missing cln-rest macaroon"
+        rune_settings = settings.mint_clnrest_rune
+        if not rune_settings:
+            raise Exception("missing rune for clnrest")
+        # load from file or use as is
+        if os.path.exists(rune_settings):
+            with open(rune_settings, "r") as f:
+                rune = f.read()
+            rune = rune.strip()
+        else:
+            rune = rune_settings
+        self.rune = rune
 
-        self.macaroon = load_macaroon(macaroon)
-
-        url = settings.mint_corelightning_rest_url
+        url = settings.mint_clnrest_url
         if not url:
-            raise Exception("missing url for corelightning-rest")
-        if not macaroon:
-            raise Exception("missing macaroon for corelightning-rest")
+            raise Exception("missing url for clnrest")
+        if not rune:
+            raise Exception("missing rune for clnrest")
 
         self.url = url[:-1] if url.endswith("/") else url
         self.url = (
             f"https://{self.url}" if not self.url.startswith("http") else self.url
         )
         self.auth = {
-            "macaroon": self.macaroon,
-            "encodingtype": "hex",
+            "rune": self.rune,
             "accept": "application/json",
         }
 
-        self.cert = settings.mint_corelightning_rest_cert or False
+        self.cert = settings.mint_clnrest_cert or False
         self.client = httpx.AsyncClient(
             base_url=self.url, verify=self.cert, headers=self.auth
         )
@@ -74,12 +81,12 @@ class CoreLightningRestWallet(LightningBackend):
             logger.warning(f"Error closing wallet connection: {e}")
 
     async def status(self) -> StatusResponse:
-        r = await self.client.get("/v1/listFunds", timeout=5)
+        r = await self.client.post("/v1/listfunds", timeout=5)
         r.raise_for_status()
-        if r.is_error or "error" in r.json():
+        if r.is_error or "message" in r.json():
             try:
                 data = r.json()
-                error_message = data["error"]
+                error_message = data["message"]
             except Exception:
                 error_message = r.text
             return StatusResponse(
@@ -106,13 +113,13 @@ class CoreLightningRestWallet(LightningBackend):
         self.assert_unit_supported(amount.unit)
         label = f"lbl{random.random()}"
         data: Dict = {
-            "amount": amount.to(Unit.msat, round="up").amount,
+            "amount_msat": amount.to(Unit.msat, round="up").amount,
             "description": memo,
             "label": label,
         }
         if description_hash and not unhashed_description:
             raise Unsupported(
-                "'description_hash' unsupported by CoreLightningRest, "
+                "'description_hash' unsupported by CLNRestWallet, "
                 "provide 'unhashed_description'"
             )
 
@@ -126,14 +133,14 @@ class CoreLightningRestWallet(LightningBackend):
             data["preimage"] = kwargs["preimage"]
 
         r = await self.client.post(
-            "/v1/invoice/genInvoice",
+            "/v1/invoice",
             data=data,
         )
 
-        if r.is_error or "error" in r.json():
+        if r.is_error or "message" in r.json():
             try:
                 data = r.json()
-                error_message = data["error"]
+                error_message = data["message"]
             except Exception:
                 error_message = r.text
 
@@ -177,22 +184,35 @@ class CoreLightningRestWallet(LightningBackend):
                 preimage=None,
                 error_message=error_message,
             )
-        fee_limit_percent = fee_limit_msat / invoice.amount_msat * 100
-        r = await self.client.post(
-            "/v1/pay",
-            data={
-                "invoice": quote.request,
-                "maxfeepercent": f"{fee_limit_percent:.11}",
-                "exemptfee": 0,  # so fee_limit_percent is applied even on payments
-                # with fee < 5000 millisatoshi (which is default value of exemptfee)
-            },
-            timeout=None,
-        )
 
-        if r.is_error or "error" in r.json():
+        quote_amount_msat = Amount(Unit[quote.unit], quote.amount).to(Unit.msat).amount
+        fee_limit_percent = fee_limit_msat / quote_amount_msat * 100
+        post_data = {
+            "bolt11": quote.request,
+            "maxfeepercent": f"{fee_limit_percent:.11}",
+            "exemptfee": 0,  # so fee_limit_percent is applied even on payments
+            # with fee < 5000 millisatoshi (which is default value of exemptfee)
+        }
+
+        # Handle Multi-Mint payout where we must only pay part of the invoice amount
+        if quote_amount_msat != invoice.amount_msat:
+            if self.supports_mpp:
+                post_data["partial_msat"] = quote_amount_msat
+            else:
+                error_message = "mint does not support MPP"
+                return PaymentResponse(
+                    ok=False,
+                    checking_id=None,
+                    fee=None,
+                    preimage=None,
+                    error_message=error_message,
+                )
+        r = await self.client.post("/v1/pay", data=post_data, timeout=None)
+
+        if r.is_error or "message" in r.json():
             try:
                 data = r.json()
-                error_message = data["error"]
+                error_message = str(data["message"])
             except Exception:
                 error_message = r.text
             return PaymentResponse(
@@ -227,15 +247,15 @@ class CoreLightningRestWallet(LightningBackend):
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        r = await self.client.get(
-            "/v1/invoice/listInvoices",
-            params={"payment_hash": checking_id},
+        r = await self.client.post(
+            "/v1/listinvoices",
+            data={"payment_hash": checking_id},
         )
         try:
             r.raise_for_status()
             data = r.json()
 
-            if r.is_error or "error" in data or data.get("invoices") is None:
+            if r.is_error or "message" in data or data.get("invoices") is None:
                 raise Exception("error in cln response")
             return PaymentStatus(paid=self.statuses.get(data["invoices"][0]["status"]))
         except Exception as e:
@@ -243,9 +263,9 @@ class CoreLightningRestWallet(LightningBackend):
             return PaymentStatus(paid=None)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        r = await self.client.get(
-            "/v1/pay/listPays",
-            params={"payment_hash": checking_id},
+        r = await self.client.post(
+            "/v1/listpays",
+            data={"payment_hash": checking_id},
         )
         try:
             r.raise_for_status()
@@ -256,9 +276,9 @@ class CoreLightningRestWallet(LightningBackend):
                 logger.error(f"payment not found: {data.get('pays')}")
                 raise Exception("payment not found")
 
-            if r.is_error or "error" in data:
-                message = data.get("error") or data
-                raise Exception(f"error in corelightning-rest response: {message}")
+            if r.is_error or "message" in data:
+                message = data.get("message") or data
+                raise Exception(f"error in clnrest response: {message}")
 
             pay = data["pays"][0]
 
@@ -279,51 +299,44 @@ class CoreLightningRestWallet(LightningBackend):
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         # call listinvoices to determine the last pay_index
-        r = await self.client.get("/v1/invoice/listInvoices")
+        r = await self.client.post("/v1/listinvoices")
         r.raise_for_status()
         data = r.json()
-        if r.is_error or "error" in data:
+        if r.is_error or "message" in data:
             raise Exception("error in cln response")
         self.last_pay_index = data["invoices"][-1]["pay_index"]
-
         while True:
             try:
-                url = f"/v1/invoice/waitAnyInvoice/{self.last_pay_index}"
-                async with self.client.stream("GET", url, timeout=None) as r:
+                url = "/v1/waitanyinvoice"
+                async with self.client.stream(
+                    "POST",
+                    url,
+                    data={
+                        "lastpay_index": self.last_pay_index,
+                    },
+                    timeout=None,
+                ) as r:
                     async for line in r.aiter_lines():
                         inv = json.loads(line)
-                        if "error" in inv and "message" in inv["error"]:
+                        if "code" in inv and "message" in inv:
                             logger.error("Error in paid_invoices_stream:", inv)
-                            raise Exception(inv["error"]["message"])
+                            raise Exception(inv["message"])
                         try:
                             paid = inv["status"] == "paid"
                             self.last_pay_index = inv["pay_index"]
                             if not paid:
                                 continue
-                        except Exception:
+                        except Exception as e:
+                            logger.error(f"Error in paid_invoices_stream: {e}")
                             continue
                         logger.trace(f"paid invoice: {inv}")
-                        # NOTE: use payment_hash when corelightning-rest returns it
-                        # when using waitAnyInvoice
-                        # payment_hash = inv["payment_hash"]
-                        # yield payment_hash
-                        # hack to return payment_hash if the above shouldn't work
-                        r = await self.client.get(
-                            "/v1/invoice/listInvoices",
-                            params={"label": inv["label"]},
-                        )
-                        paid_invoce = r.json()
-                        logger.trace(f"paid invoice: {paid_invoce}")
-                        assert self.statuses[
-                            paid_invoce["invoices"][0]["status"]
-                        ], "streamed invoice not paid"
-                        assert "invoices" in paid_invoce, "no invoices in response"
-                        assert len(paid_invoce["invoices"]), "no invoices in response"
-                        yield paid_invoce["invoices"][0]["payment_hash"]
+                        payment_hash = inv.get("payment_hash")
+                        if payment_hash:
+                            yield payment_hash
 
             except Exception as exc:
                 logger.debug(
-                    f"lost connection to corelightning-rest invoices stream: '{exc}', "
+                    f"lost connection to clnrest invoices stream: '{exc}', "
                     "reconnecting..."
                 )
                 await asyncio.sleep(0.02)
@@ -333,7 +346,14 @@ class CoreLightningRestWallet(LightningBackend):
     ) -> PaymentQuoteResponse:
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
-        amount_msat = int(invoice_obj.amount_msat)
+        assert invoice_obj.amount_msat > 0, "invoice has 0 amount."
+        amount_msat = invoice_obj.amount_msat
+        if melt_quote.is_mpp:
+            amount_msat = (
+                Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
+                .to(Unit.msat)
+                .amount
+            )
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
