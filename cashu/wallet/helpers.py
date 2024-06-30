@@ -78,8 +78,8 @@ def deserialize_token_from_string(token: str) -> TokenV4:
     # deserialize token
 
     if token.startswith("cashuA"):
-        tokenObj = TokenV3.deserialize(token)
-        return TokenV4.from_tokenv3(tokenObj)
+        tokenV3Obj = TokenV3.deserialize(token)
+        return TokenV4.from_tokenv3(tokenV3Obj)
     if token.startswith("cashuB"):
         tokenObj = TokenV4.deserialize(token)
         return tokenObj

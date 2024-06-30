@@ -129,8 +129,8 @@ async def receive_nostr(
                 # call the receive method
                 tokenObj: TokenV4 = deserialize_token_from_string(w)
                 print(
-                    f"Receiving {tokenObj.get_amount()} sat on mint"
-                    f" {tokenObj.get_mints()[0]} from nostr user {event.public_key} at"
+                    f"Receiving {tokenObj.amount} sat on mint"
+                    f" {tokenObj.mint} from nostr user {event.public_key} at"
                     f" {date_str}"
                 )
                 asyncio.run(
