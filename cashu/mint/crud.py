@@ -1,3 +1,4 @@
+import json
 from abc import ABC, abstractmethod
 from typing import Any, List, Optional
 
@@ -548,8 +549,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {table_with_schema(db, 'melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, state, created_time, paid_time, fee_paid, proof)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, state, created_time, paid_time, fee_paid, proof, change, expiry)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 quote.quote,
@@ -564,7 +565,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 timestamp_from_seconds(db, quote.created_time),
                 timestamp_from_seconds(db, quote.paid_time),
                 quote.fee_paid,
-                quote.proof,
+                quote.payment_preimage,
+                json.dumps(quote.change) if quote.change else None,
+                timestamp_from_seconds(db, quote.expiry),
             ),
         )
 
@@ -612,13 +615,14 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"UPDATE {table_with_schema(db, 'melt_quotes')} SET paid = ?, state = ?,"
-            " fee_paid = ?, paid_time = ?, proof = ? WHERE quote = ?",
+            " fee_paid = ?, paid_time = ?, proof = ?, change = ? WHERE quote = ?",
             (
                 quote.paid,
                 quote.state.name,
                 quote.fee_paid,
                 timestamp_from_seconds(db, quote.paid_time),
-                quote.proof,
+                quote.payment_preimage,
+                json.dumps([s.dict() for s in quote.change]) if quote.change else None,
                 quote.quote,
             ),
         )

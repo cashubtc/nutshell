@@ -67,6 +67,7 @@ class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
     mint_backend_bolt11_sat: str = Field(default="")
     mint_backend_bolt11_usd: str = Field(default="")
+    mint_backend_bolt11_eur: str = Field(default="")
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
@@ -185,6 +186,7 @@ class WalletSettings(CashuSettings):
 class LndRestFundingSource(MintSettings):
     mint_lnd_rest_endpoint: Optional[str] = Field(default=None)
     mint_lnd_rest_cert: Optional[str] = Field(default=None)
+    mint_lnd_rest_cert_verify: bool = Field(default=True)
     mint_lnd_rest_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)

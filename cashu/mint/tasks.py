@@ -26,8 +26,15 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                 asyncio.create_task(self.invoice_listener(backend))
 
     async def invoice_listener(self, backend: LightningBackend) -> None:
-        async for checking_id in backend.paid_invoices_stream():
-            await self.invoice_callback_dispatcher(checking_id)
+        if backend.supports_incoming_payment_stream:
+            while True:
+                try:
+                    async for checking_id in backend.paid_invoices_stream():
+                        await self.invoice_callback_dispatcher(checking_id)
+                except Exception as e:
+                    logger.error(f"Error in invoice listener: {e}")
+                    logger.info("Restarting invoice listener...")
+                    await asyncio.sleep(1)
 
     async def invoice_callback_dispatcher(self, checking_id: str) -> None:
         logger.debug(f"Invoice callback dispatcher: {checking_id}")

@@ -33,7 +33,6 @@ from ..core.models import (
     PostMeltRequest,
     PostMeltRequestOptionMpp,
     PostMeltRequestOptions,
-    PostMeltResponse,
     PostMeltResponse_deprecated,
     PostMintQuoteRequest,
     PostMintQuoteResponse,
@@ -406,7 +405,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         quote: str,
         proofs: List[Proof],
         outputs: Optional[List[BlindedMessage]],
-    ) -> PostMeltResponse:
+    ) -> PostMeltQuoteResponse:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
         """
@@ -438,13 +437,24 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             ret: PostMeltResponse_deprecated = await self.melt_deprecated(
                 proofs=proofs, outputs=outputs, invoice=invoice.bolt11
             )
-            return PostMeltResponse(
-                paid=ret.paid, payment_preimage=ret.preimage, change=ret.change
+            return PostMeltQuoteResponse(
+                quote=quote,
+                amount=0,
+                fee_reserve=0,
+                paid=ret.paid or False,
+                state=(
+                    MeltQuoteState.paid.value
+                    if ret.paid
+                    else MeltQuoteState.unpaid.value
+                ),
+                payment_preimage=ret.preimage,
+                change=ret.change,
+                expiry=None,
             )
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         return_dict = resp.json()
-        return PostMeltResponse.parse_obj(return_dict)
+        return PostMeltQuoteResponse.parse_obj(return_dict)
 
     @async_set_httpx_client
     @async_ensure_mint_loaded

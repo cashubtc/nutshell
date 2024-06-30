@@ -1,5 +1,3 @@
-import base64
-import json
 from itertools import groupby
 from typing import Dict, List, Optional
 
@@ -7,10 +5,11 @@ from loguru import logger
 
 from ..core.base import (
     Proof,
-    TokenV2,
-    TokenV2Mint,
     TokenV3,
     TokenV3Token,
+    TokenV4,
+    TokenV4Proof,
+    TokenV4Token,
     Unit,
     WalletKeyset,
 )
@@ -64,7 +63,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
                 ret[unit].append(proof)
         return ret
 
-    def _get_proofs_keysets(self, proofs: List[Proof]) -> List[str]:
+    def _get_proofs_keyset_ids(self, proofs: List[Proof]) -> List[str]:
         """Extracts all keyset ids from a list of proofs.
 
         Args:
@@ -92,8 +91,31 @@ class WalletProofs(SupportsDb, SupportsKeysets):
                 )
         return mint_urls
 
-    async def _make_token(
-        self, proofs: List[Proof], include_mints=True, include_unit=True
+    async def serialize_proofs(
+        self,
+        proofs: List[Proof],
+        include_dleq=False,
+        legacy=False,
+        memo: Optional[str] = None,
+    ) -> str:
+        """Produces sharable token with proofs and mint information.
+
+        Args:
+            proofs (List[Proof]): List of proofs to be included in the token
+            legacy (bool, optional): Whether to produce a legacy V3 token. Defaults to False.
+        Returns:
+            str: Serialized Cashu token
+        """
+
+        if legacy:
+            tokenv3 = await self._make_tokenv3(proofs, memo)
+            return tokenv3.serialize(include_dleq)
+        else:
+            tokenv4 = await self._make_token(proofs, include_dleq, memo)
+            return tokenv4.serialize(include_dleq)
+
+    async def _make_tokenv3(
+        self, proofs: List[Proof], memo: Optional[str] = None
     ) -> TokenV3:
         """
         Takes list of proofs and produces a TokenV3 by looking up
@@ -101,108 +123,81 @@ class WalletProofs(SupportsDb, SupportsKeysets):
 
         Args:
             proofs (List[Proof]): List of proofs to be included in the token
-            include_mints (bool, optional): Whether to include the mint URLs in the token. Defaults to True.
-
+            memo (Optional[str], optional): Memo to be included in the token. Defaults to None.
         Returns:
             TokenV3: TokenV3 object
         """
         token = TokenV3()
-        if include_unit:
-            token.unit = self.unit.name
 
-        if include_mints:
-            # we create a map from mint url to keyset id and then group
-            # all proofs with their mint url to build a tokenv3
+        # we create a map from mint url to keyset id and then group
+        # all proofs with their mint url to build a tokenv3
 
-            # extract all keysets from proofs
-            keysets = self._get_proofs_keysets(proofs)
-            # get all mint URLs for all unique keysets from db
-            mint_urls = await self._get_keyset_urls(keysets)
+        # extract all keysets from proofs
+        keysets = self._get_proofs_keyset_ids(proofs)
+        # get all mint URLs for all unique keysets from db
+        mint_urls = await self._get_keyset_urls(keysets)
 
-            # append all url-grouped proofs to token
-            for url, ids in mint_urls.items():
-                mint_proofs = [p for p in proofs if p.id in ids]
-                token.token.append(TokenV3Token(mint=url, proofs=mint_proofs))
-        else:
-            token_proofs = TokenV3Token(proofs=proofs)
-            token.token.append(token_proofs)
+        # append all url-grouped proofs to token
+        for url, ids in mint_urls.items():
+            mint_proofs = [p for p in proofs if p.id in ids]
+            token.token.append(TokenV3Token(mint=url, proofs=mint_proofs))
+
+        if memo:
+            token.memo = memo
         return token
 
-    async def serialize_proofs(
-        self, proofs: List[Proof], include_mints=True, include_dleq=False, legacy=False
-    ) -> str:
-        """Produces sharable token with proofs and mint information.
+    async def _make_tokenv4(
+        self, proofs: List[Proof], include_dleq=False, memo: Optional[str] = None
+    ) -> TokenV4:
+        """
+        Takes a list of proofs and returns a TokenV4
 
         Args:
-            proofs (List[Proof]): List of proofs to be included in the token
-            include_mints (bool, optional): Whether to include the mint URLs in the token. Defaults to True.
-            legacy (bool, optional): Whether to produce a legacy V2 token. Defaults to False.
+            proofs (List[Proof]): List of proofs to be serialized
 
         Returns:
-            str: Serialized Cashu token
+            TokenV4: TokenV4 object
         """
 
-        if legacy:
-            # V2 tokens
-            token_v2 = await self._make_token_v2(proofs, include_mints)
-            return await self._serialize_token_base64_tokenv2(token_v2)
+        # get all keysets from proofs
+        keyset_ids = set(self._get_proofs_keyset_ids(proofs))
+        keysets = [self.keysets[i] for i in keyset_ids]
+        # we make sure that all proofs are from keysets of the same mint
+        if len(set([k.mint_url for k in keysets])) > 1:
+            raise ValueError("TokenV4 can only contain proofs from a single mint URL")
+        mint_url = keysets[0].mint_url
+        if not mint_url:
+            raise ValueError("No mint URL found for keyset")
 
-            # # deprecated code for V1 tokens
-            # proofs_serialized = [p.to_dict() for p in proofs]
-            # return base64.urlsafe_b64encode(
-            #     json.dumps(proofs_serialized).encode()
-            # ).decode()
+        # we make sure that all keysets have the same unit
+        if len(set([k.unit for k in keysets])) > 1:
+            raise ValueError(
+                "TokenV4 can only contain proofs from keysets with the same unit"
+            )
+        unit_str = keysets[0].unit.name
 
-        # V3 tokens
-        token = await self._make_token(proofs, include_mints)
-        return token.serialize(include_dleq)
+        tokens: List[TokenV4Token] = []
+        for keyset_id in keyset_ids:
+            proofs_keyset = [p for p in proofs if p.id == keyset_id]
+            tokenv4_proofs = []
+            for proof in proofs_keyset:
+                tokenv4_proofs.append(TokenV4Proof.from_proof(proof, include_dleq))
+            tokenv4_token = TokenV4Token(i=bytes.fromhex(keyset_id), p=tokenv4_proofs)
+            tokens.append(tokenv4_token)
 
-    async def _make_token_v2(self, proofs: List[Proof], include_mints=True) -> TokenV2:
+        return TokenV4(m=mint_url, u=unit_str, t=tokens, d=memo)
+
+    async def _make_token(
+        self, proofs: List[Proof], include_dleq=False, memo: Optional[str] = None
+    ) -> TokenV4:
         """
-        Takes list of proofs and produces a TokenV2 by looking up
-        the keyset id and mint URLs from the database.
-        """
-        # build token
-        token = TokenV2(proofs=proofs)
-
-        # add mint information to the token, if requested
-        if include_mints:
-            # dummy object to hold information about the mint
-            mints: Dict[str, TokenV2Mint] = {}
-            # dummy object to hold all keyset id's we need to fetch from the db later
-            keysets: List[str] = [proof.id for proof in proofs if proof.id]
-            # iterate through unique keyset ids
-            for id in set(keysets):
-                # load the keyset from the db
-                keysets_db = await get_keysets(id=id, db=self.db)
-                keyset_db = keysets_db[0] if keysets_db else None
-                if keyset_db and keyset_db.mint_url and keyset_db.id:
-                    # we group all mints according to URL
-                    if keyset_db.mint_url not in mints:
-                        mints[keyset_db.mint_url] = TokenV2Mint(
-                            url=keyset_db.mint_url,
-                            ids=[keyset_db.id],
-                        )
-                    else:
-                        # if a mint URL has multiple keysets, append to the already existing list
-                        mints[keyset_db.mint_url].ids.append(keyset_db.id)
-            if len(mints) > 0:
-                # add mints grouped by url to the token
-                token.mints = list(mints.values())
-        return token
-
-    async def _serialize_token_base64_tokenv2(self, token: TokenV2) -> str:
-        """
-        Takes a TokenV2 and serializes it in urlsafe_base64.
+        Takes a list of proofs and returns a TokenV4
 
         Args:
-            token (TokenV2): TokenV2 object to be serialized
+            proofs (List[Proof]): List of proofs to be serialized
 
         Returns:
-            str: Serialized token
+            TokenV4: TokenV4 object
         """
-        # encode the token as a base64 string
-        token_base64 = base64.urlsafe_b64encode(
-            json.dumps(token.to_dict()).encode()
-        ).decode()
-        return token_base64
+
+        return await self._make_tokenv4(proofs, include_dleq, memo)

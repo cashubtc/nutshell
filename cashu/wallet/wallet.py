@@ -28,7 +28,6 @@ from ..core.migrations import migrate_databases
 from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
-    PostMeltResponse,
 )
 from ..core.p2pk import Secret
 from ..core.settings import settings
@@ -589,6 +588,11 @@ class Wallet(
         )
 
         amounts = keep_outputs + send_outputs
+
+        if not amounts:
+            logger.warning("Swap has no outputs")
+            return [], []
+
         # generate secrets for new outputs
         if secret_lock is None:
             secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
@@ -639,7 +643,7 @@ class Wallet(
 
     async def melt(
         self, proofs: List[Proof], invoice: str, fee_reserve_sat: int, quote_id: str
-    ) -> PostMeltResponse:
+    ) -> PostMeltQuoteResponse:
         """Pays a lightning invoice and returns the status of the payment.
 
         Args:

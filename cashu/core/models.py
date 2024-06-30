@@ -183,6 +183,8 @@ class PostMeltQuoteResponse(BaseModel):
     paid: bool  # whether the request has been paid # DEPRECATED as per NUT PR #136
     state: str  # state of the quote
     expiry: Optional[int]  # expiry of the quote
+    payment_preimage: Optional[str] = None  # payment preimage
+    change: Union[List[BlindedSignature], None] = None
 
     @classmethod
     def from_melt_quote(self, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
@@ -203,9 +205,9 @@ class PostMeltRequest(BaseModel):
     )
 
 
-class PostMeltResponse(BaseModel):
+class PostMeltResponse_deprecated(BaseModel):
     paid: Union[bool, None]
-    payment_preimage: Union[str, None]
+    preimage: Union[str, None]
     change: Union[List[BlindedSignature], None] = None
 
 
@@ -215,12 +217,6 @@ class PostMeltRequest_deprecated(BaseModel):
     outputs: Union[List[BlindedMessage_Deprecated], None] = Field(
         None, max_items=settings.mint_max_request_length
     )
-
-
-class PostMeltResponse_deprecated(BaseModel):
-    paid: Union[bool, None]
-    preimage: Union[str, None]
-    change: Union[List[BlindedSignature], None] = None
 
 
 # ------- API: SPLIT -------
