@@ -54,7 +54,7 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
     async def pay_mpp(amount: int, proofs: List[Proof], delay: float = 0.0):
         await asyncio.sleep(delay)
         # wallet pays 32 sat of the invoice
-        quote = await wallet.melt_quote(invoice_payment_request, amount=32)
+        quote = await wallet.melt_quote(invoice_payment_request, amount=amount)
         assert quote.amount == amount
         await wallet.melt(
             proofs,

@@ -83,10 +83,10 @@ class CoreLightningRestWallet(LightningBackend):
     async def status(self) -> StatusResponse:
         r = await self.client.post("/v1/listfunds", timeout=5)
         r.raise_for_status()
-        if r.is_error or "error" in r.json():
+        if r.is_error or "message" in r.json():
             try:
                 data = r.json()
-                error_message = data["error"]
+                error_message = data["message"]
             except Exception:
                 error_message = r.text
             return StatusResponse(
@@ -137,10 +137,10 @@ class CoreLightningRestWallet(LightningBackend):
             data=data,
         )
 
-        if r.is_error or "error" in r.json():
+        if r.is_error or "message" in r.json():
             try:
                 data = r.json()
-                error_message = data["error"]
+                error_message = data["message"]
             except Exception:
                 error_message = r.text
 
@@ -209,10 +209,10 @@ class CoreLightningRestWallet(LightningBackend):
                 )
         r = await self.client.post("/v1/pay", data=post_data, timeout=None)
 
-        if r.is_error or "error" in r.json():
+        if r.is_error or "message" in r.json():
             try:
                 data = r.json()
-                error_message = str(data["error"])
+                error_message = str(data["message"])
             except Exception:
                 error_message = r.text
             return PaymentResponse(
@@ -255,7 +255,7 @@ class CoreLightningRestWallet(LightningBackend):
             r.raise_for_status()
             data = r.json()
 
-            if r.is_error or "error" in data or data.get("invoices") is None:
+            if r.is_error or "message" in data or data.get("invoices") is None:
                 raise Exception("error in cln response")
             return PaymentStatus(paid=self.statuses.get(data["invoices"][0]["status"]))
         except Exception as e:
@@ -276,8 +276,8 @@ class CoreLightningRestWallet(LightningBackend):
                 logger.error(f"payment not found: {data.get('pays')}")
                 raise Exception("payment not found")
 
-            if r.is_error or "error" in data:
-                message = data.get("error") or data
+            if r.is_error or "message" in data:
+                message = data.get("message") or data
                 raise Exception(f"error in corelightning-rest response: {message}")
 
             pay = data["pays"][0]
@@ -302,7 +302,7 @@ class CoreLightningRestWallet(LightningBackend):
         r = await self.client.post("/v1/listinvoices")
         r.raise_for_status()
         data = r.json()
-        if r.is_error or "error" in data:
+        if r.is_error or "message" in data:
             raise Exception("error in cln response")
         self.last_pay_index = data["invoices"][-1]["pay_index"]
         while True:

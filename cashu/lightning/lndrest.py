@@ -6,7 +6,10 @@ from typing import AsyncGenerator, Dict, Optional
 
 import bolt11
 import httpx
-from bolt11 import Bolt11Exception, TagChar, decode
+from bolt11 import (
+    TagChar,
+    decode,
+)
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
@@ -37,6 +40,7 @@ class LndRestWallet(LightningBackend):
         self.unit = unit
         endpoint = settings.mint_lnd_rest_endpoint
         cert = settings.mint_lnd_rest_cert
+        cert_verify = settings.mint_lnd_rest_cert_verify
 
         macaroon = (
             settings.mint_lnd_rest_macaroon
@@ -45,16 +49,19 @@ class LndRestWallet(LightningBackend):
         )
 
         if not endpoint:
-            raise Exception("cannot initialize lndrest: no endpoint")
+            raise Exception("cannot initialize LndRestWallet: no endpoint")
 
         if not macaroon:
-            raise Exception("cannot initialize lndrest: no macaroon")
+            raise Exception("cannot initialize LndRestWallet: no macaroon")
 
         if not cert:
             logger.warning(
-                "no certificate for lndrest provided, this only works if you have a"
+                "no certificate for LndRestWallet provided, this only works if you have a"
                 " publicly issued certificate"
             )
+
+        if not cert_verify:
+            logger.warning("certificate validation will be disabled for LndRestWallet")
 
         endpoint = endpoint[:-1] if endpoint.endswith("/") else endpoint
         endpoint = (
@@ -67,6 +74,10 @@ class LndRestWallet(LightningBackend):
         # and it will still check for validity of certificate and fail if its not valid
         # even on startup
         self.cert = cert or True
+
+        # disable cert verify if choosen
+        if not cert_verify:
+            self.cert = False
 
         self.auth = {"Grpc-Metadata-macaroon": self.macaroon}
         self.client = httpx.AsyncClient(
@@ -152,44 +163,14 @@ class LndRestWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        
-        try:
-            invoice = decode(quote.request)
-        except Bolt11Exception as exc:
-            return PaymentResponse(
-                ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
-                error_message=str(exc),
-            )
-        
-        if not invoice.amount_msat or invoice.amount_msat <= 0:
-            error_message = "0 amount invoices are not allowed"
-            return PaymentResponse(
-                ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
-                error_message=error_message,
-            )
-
         # if the amount of the melt quote is different from the request
         # call pay_partial_invoice instead
-        quote_amount_msat = Amount(Unit[quote.unit], quote.amount).to(Unit.msat)
-        if invoice.amount_msat != quote_amount_msat.amount:
-            if self.supports_mpp:
+        invoice = bolt11.decode(quote.request)
+        if invoice.amount_msat:
+            amount_msat = int(invoice.amount_msat)
+            if amount_msat != quote.amount * 1000 and self.supports_mpp:
                 return await self.pay_partial_invoice(
-                    quote, quote_amount_msat.to(Unit.sat), fee_limit_msat
-                )
-            else:
-                error_message = "Mint does not support MPP"
-                return PaymentResponse(
-                    ok=False,
-                    checking_id=None,
-                    fee=None,
-                    preimage=None,
-                    error_message=error_message
+                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
                 )
 
         # set the fee limit for the payment
