@@ -72,8 +72,8 @@ jobs:
           #   LND_GRPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
           #   CORELIGHTNING_RPC: ./regtest/data/clightning-1/regtest/lightning-rpc
           MINT_CORELIGHTNING_REST_URL: https://localhost:3001
-          MINT_CORELIGHTNING_REST_MACAROON: ./regtest/data/clightning-2-rest/access.macaroon
-          MINT_CORELIGHTNING_REST_CERT: ./regtest/data/clightning-2-rest/certificate.pem
+          MINT_CORELIGHTNING_REST_RUNE: ./regtest/data/clightning-2/rune
+          MINT_CORELIGHTNING_REST_CERT: ./regtest/data/clightning-2/regtest/ca.pem
         run: |
           sudo chmod -R 777 .
           make test

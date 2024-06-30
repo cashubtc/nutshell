@@ -43,8 +43,8 @@ class CoreLightningRestWallet(LightningBackend):
                 rune = rune.strip()
             else:
                 rune = rune_settings
-
-        assert rune, "missing clnrest rune"
+        else:
+            raise Exception("missing rune for clnrest")
         self.rune = rune
 
         url = settings.mint_corelightning_rest_url
