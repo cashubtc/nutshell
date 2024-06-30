@@ -70,10 +70,15 @@ jobs:
           #   LND_GRPC_PORT: 10009
           #   LND_GRPC_CERT: ./regtest/data/lnd-3/tls.cert
           #   LND_GRPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
-          #   CORELIGHTNING_RPC: ./regtest/data/clightning-1/regtest/lightning-rpc
+          # CoreLightningRestWallet
           MINT_CORELIGHTNING_REST_URL: https://localhost:3001
           MINT_CORELIGHTNING_REST_MACAROON: ./regtest/data/clightning-2-rest/access.macaroon
           MINT_CORELIGHTNING_REST_CERT: ./regtest/data/clightning-2-rest/certificate.pem
+          # CLNRestWallet
+          MINT_CLNREST_URL: https://localhost:3010
+          MINT_CLNREST_RUNE: ./regtest/data/clightning-2/rune
+          MINT_CLNREST_CERT: ./regtest/data/clightning-2/regtest/ca.pem
+          MINT_CLNENABLE_MPP: false
         run: |
           sudo chmod -R 777 .
           make test

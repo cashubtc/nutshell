@@ -38,8 +38,7 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
 
     async def invoice_callback_dispatcher(self, checking_id: str) -> None:
         logger.debug(f"Invoice callback dispatcher: {checking_id}")
-        # TODO: Explicitly check for the quote payment state before setting it as paid
-        # db read, quote.paid = True, db write should be refactored and moved to ledger.py
+        # TODO: db read, quote.paid = True, db write should be refactored and moved to ledger.py
         quote = await self.crud.get_mint_quote(checking_id=checking_id, db=self.db)
         if not quote:
             logger.error(f"Quote not found for {checking_id}")
