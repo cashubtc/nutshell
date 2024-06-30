@@ -148,33 +148,32 @@ class Database(Compat):
         self.lock = asyncio.Lock()
 
     @asynccontextmanager
-    async def connect(self):
-        await self.lock.acquire()
-        try:
-            async with self.engine.connect() as conn:  # type: ignore
-                async with conn.begin() as txn:
-                    wconn = Connection(conn, txn, self.type, self.name, self.schema)
+    async def connect(self, lock_table: Optional[str] = None):
+        async with self.engine.connect() as conn:  # type: ignore
+            async with conn.begin() as txn:
+                wconn = Connection(conn, txn, self.type, self.name, self.schema)
 
-                    if self.schema:
-                        if self.type in {POSTGRES, COCKROACH}:
-                            await wconn.execute(
-                                f"CREATE SCHEMA IF NOT EXISTS {self.schema}"
-                            )
-                        elif self.type == SQLITE:
-                            await wconn.execute(
-                                f"ATTACH '{self.path}' AS {self.schema}"
-                            )
+                if self.schema:
+                    if self.type in {POSTGRES, COCKROACH}:
+                        await wconn.execute(
+                            f"CREATE SCHEMA IF NOT EXISTS {self.schema}"
+                        )
+                    elif self.type == SQLITE:
+                        await wconn.execute(f"ATTACH '{self.path}' AS {self.schema}")
+                if lock_table:
+                    await wconn.execute(self.lock_table(lock_table))
 
-                    yield wconn
-        finally:
-            self.lock.release()
+                yield wconn
 
     @asynccontextmanager
-    async def get_connection(self, conn: Optional[Connection] = None):
+    async def get_connection(
+        self, conn: Optional[Connection] = None, lock_table: Optional[str] = None
+    ):
         """Either yield the existing database connection (passthrough) or create a new one.
 
         Args:
             conn (Optional[Connection], optional): Connection object. Defaults to None.
+            lock_table (Optional[str], optional): Table to lock. Defaults to None.
 
         Yields:
             Connection: Connection object.
@@ -184,7 +183,7 @@ class Database(Compat):
             yield conn
         else:
             # Create and yield a new connection
-            async with self.connect() as new_conn:
+            async with self.connect(lock_table) as new_conn:
                 yield new_conn
 
     async def fetchall(self, query: str, values: tuple = ()) -> list:
@@ -239,26 +238,3 @@ class Database(Compat):
 
 def table_with_schema(db: Union[Database, Connection], table: str):
     return f"{db.references_schema if db.schema else ''}{table}"
-
-
-@asynccontextmanager
-async def get_connection(db: Database, conn: Optional[Connection] = None):
-    """Either yield the existing database connection or create a new one.
-
-    Note: This should be implemented as Database.get_connection(self, conn) but
-    since we want to use it in LNbits, we can't change the Database class their.
-
-    Args:
-        db (Database): Database object.
-        conn (Optional[Connection], optional): Connection object. Defaults to None.
-
-    Yields:
-        Connection: Connection object.
-    """
-    if conn is not None:
-        # Yield the existing connection
-        yield conn
-    else:
-        # Create and yield a new connection
-        async with db.connect() as new_conn:
-            yield new_conn
