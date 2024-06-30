@@ -298,44 +298,41 @@ class CoreLightningRestWallet(LightningBackend):
             return PaymentStatus(paid=None)
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+        # call listinvoices to determine the last pay_index
+        r = await self.client.post("/v1/listinvoices")
+        r.raise_for_status()
+        data = r.json()
+        if r.is_error or "error" in data:
+            raise Exception("error in cln response")
+        self.last_pay_index = data["invoices"][-1]["pay_index"]
         while True:
             try:
                 url = "/v1/waitanyinvoice"
                 async with self.client.stream(
                     "POST",
                     url,
-                    data={"lastpay_index": self.last_pay_index, "timeout": None},
+                    data={
+                        "lastpay_index": self.last_pay_index,
+                    },
+                    timeout=None,
                 ) as r:
                     async for line in r.aiter_lines():
                         inv = json.loads(line)
-                        if "error" in inv and "message" in inv["error"]:
+                        if "code" in inv and "message" in inv:
                             logger.error("Error in paid_invoices_stream:", inv)
-                            raise Exception(inv["error"]["message"])
+                            raise Exception(inv["message"])
                         try:
                             paid = inv["status"] == "paid"
                             self.last_pay_index = inv["pay_index"]
                             if not paid:
                                 continue
-                        except Exception:
+                        except Exception as e:
+                            logger.error(f"Error in paid_invoices_stream: {e}")
                             continue
                         logger.trace(f"paid invoice: {inv}")
-                        # NOTE: use payment_hash when corelightning-rest returns it
-                        # when using waitAnyInvoice
-                        # payment_hash = inv["payment_hash"]
-                        # yield payment_hash
-                        # hack to return payment_hash if the above shouldn't work
-                        r = await self.client.post(
-                            "/v1/listinvoices",
-                            data={"label": inv["label"]},
-                        )
-                        paid_invoce = r.json()
-                        logger.trace(f"paid invoice: {paid_invoce}")
-                        assert self.statuses[
-                            paid_invoce["invoices"][0]["status"]
-                        ], "streamed invoice not paid"
-                        assert "invoices" in paid_invoce, "no invoices in response"
-                        assert len(paid_invoce["invoices"]), "no invoices in response"
-                        yield paid_invoce["invoices"][0]["payment_hash"]
+                        payment_hash = inv.get("payment_hash")
+                        if payment_hash:
+                            yield payment_hash
 
             except Exception as exc:
                 logger.debug(
