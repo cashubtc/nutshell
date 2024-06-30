@@ -35,16 +35,16 @@ class CoreLightningRestWallet(LightningBackend):
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
         self.unit = unit
-        rune_settings = settings.mint_corelightning_rune
-        if rune_settings:
-            if os.path.exists(rune_settings):
-                with open(rune_settings, "r") as f:
-                    rune = f.read()
-                rune = rune.strip()
-            else:
-                rune = rune_settings
-        else:
+        rune_settings = settings.mint_corelightning_rest_rune
+        if not rune_settings:
             raise Exception("missing rune for clnrest")
+        # load from file or use as is
+        if os.path.exists(rune_settings):
+            with open(rune_settings, "r") as f:
+                rune = f.read()
+            rune = rune.strip()
+        else:
+            rune = rune_settings
         self.rune = rune
 
         url = settings.mint_corelightning_rest_url
