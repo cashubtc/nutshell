@@ -588,6 +588,11 @@ class Wallet(
         )
 
         amounts = keep_outputs + send_outputs
+
+        if not amounts:
+            logger.warning("Swap has no outputs")
+            return [], []
+
         # generate secrets for new outputs
         if secret_lock is None:
             secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))

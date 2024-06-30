@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from ...core.base import TokenV3
+from ...core.base import TokenV3, TokenV4
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...lightning.base import (
@@ -261,7 +261,7 @@ async def receive_command(
     wallet = await mint_wallet()
     initial_balance = wallet.available_balance
     if token:
-        tokenObj: TokenV3 = deserialize_token_from_string(token)
+        tokenObj: TokenV4 = deserialize_token_from_string(token)
         await verify_mints(wallet, tokenObj)
         await receive(wallet, tokenObj)
     elif nostr:
@@ -352,7 +352,7 @@ async def pending(
             grouped_proofs = list(value)
             token = await wallet.serialize_proofs(grouped_proofs)
             tokenObj = deserialize_token_from_string(token)
-            mint = [t.mint for t in tokenObj.token if t.mint][0]
+            mint = tokenObj.mint
             reserved_date = datetime.utcfromtimestamp(
                 int(grouped_proofs[0].time_reserved)  # type: ignore
             ).strftime("%Y-%m-%d %H:%M:%S")

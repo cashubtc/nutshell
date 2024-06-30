@@ -15,7 +15,7 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, Method, MintQuoteState, TokenV3, Unit
+from ...core.base import Invoice, Method, MintQuoteState, TokenV3, TokenV4, Unit
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
@@ -479,11 +479,17 @@ async def balance(ctx: Context, verbose):
 
 @cli.command("send", help="Send tokens.")
 @click.argument("amount", type=float)
-@click.argument("nostr", type=str, required=False)
+@click.option(
+    "--memo",
+    "-m",
+    default=None,
+    help="Memo for the token.",
+    type=str,
+)
 @click.option(
     "--nostr",
     "-n",
-    "nopt",
+    default=None,
     help="Send to nostr pubkey.",
     type=str,
 )
@@ -498,9 +504,10 @@ async def balance(ctx: Context, verbose):
 )
 @click.option(
     "--legacy",
+    "-l",
     default=False,
     is_flag=True,
-    help="Print legacy token without mint information.",
+    help="Print legacy TokenV3 format.",
     type=bool,
 )
 @click.option(
@@ -535,8 +542,8 @@ async def balance(ctx: Context, verbose):
 async def send_command(
     ctx,
     amount: int,
+    memo: str,
     nostr: str,
-    nopt: str,
     lock: str,
     dleq: bool,
     legacy: bool,
@@ -547,7 +554,7 @@ async def send_command(
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
-    if not nostr and not nopt:
+    if not nostr:
         await send(
             wallet,
             amount=amount,
@@ -556,11 +563,10 @@ async def send_command(
             offline=offline,
             include_dleq=dleq,
             include_fees=include_fees,
+            memo=memo,
         )
     else:
-        await send_nostr(
-            wallet, amount=amount, pubkey=nostr or nopt, verbose=verbose, yes=yes
-        )
+        await send_nostr(wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes)
     await print_balance(ctx)
 
 
@@ -587,19 +593,18 @@ async def receive_cli(
     wallet: Wallet = ctx.obj["WALLET"]
 
     if token:
-        tokenObj = deserialize_token_from_string(token)
-        # verify that we trust all mints in these tokens
-        # ask the user if they want to trust the new mints
-        for mint_url in set([t.mint for t in tokenObj.token if t.mint]):
-            mint_wallet = Wallet(
-                mint_url,
-                os.path.join(settings.cashu_dir, wallet.name),
-                unit=tokenObj.unit or wallet.unit.name,
-            )
-            await verify_mint(mint_wallet, mint_url)
-        receive_wallet = await receive(wallet, tokenObj)
+        token_obj = deserialize_token_from_string(token)
+        # verify that we trust the mint in this tokens
+        # ask the user if they want to trust the new mint
+        mint_url = token_obj.mint
+        mint_wallet = Wallet(
+            mint_url,
+            os.path.join(settings.cashu_dir, wallet.name),
+            unit=token_obj.unit,
+        )
+        await verify_mint(mint_wallet, mint_url)
+        receive_wallet = await receive(wallet, token_obj)
         ctx.obj["WALLET"] = receive_wallet
-
     elif nostr:
         await receive_nostr(wallet)
         # exit on keypress
@@ -612,15 +617,17 @@ async def receive_cli(
             for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
                 proofs = list(value)
                 token = await wallet.serialize_proofs(proofs)
-                tokenObj = TokenV3.deserialize(token)
-                # verify that we trust all mints in these tokens
-                # ask the user if they want to trust the new mints
-                for mint_url in set([t.mint for t in tokenObj.token if t.mint]):
-                    mint_wallet = Wallet(
-                        mint_url, os.path.join(settings.cashu_dir, wallet.name)
-                    )
-                    await verify_mint(mint_wallet, mint_url)
-                receive_wallet = await receive(wallet, tokenObj)
+                token_obj = TokenV4.deserialize(token)
+                # verify that we trust the mint of this token
+                # ask the user if they want to trust the mint
+                mint_url = token_obj.mint
+                mint_wallet = Wallet(
+                    mint_url,
+                    os.path.join(settings.cashu_dir, wallet.name),
+                    unit=token_obj.unit,
+                )
+                await verify_mint(mint_wallet, mint_url)
+                receive_wallet = await receive(wallet, token_obj)
                 ctx.obj["WALLET"] = receive_wallet
     else:
         print("Error: enter token or use either flag --nostr or --all.")
@@ -665,8 +672,8 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         proofs = [proof for proof in reserved_proofs if proof["send_id"] == delete]
     else:
         # check only the specified ones
-        tokenObj = TokenV3.deserialize(token)
-        proofs = tokenObj.get_proofs()
+        token_obj = TokenV3.deserialize(token)
+        proofs = token_obj.get_proofs()
 
     if delete:
         await wallet.invalidate(proofs)
@@ -721,8 +728,8 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             grouped_proofs = list(value)
             # TODO: we can't return DLEQ because we don't store it
             token = await wallet.serialize_proofs(grouped_proofs, include_dleq=False)
-            tokenObj = deserialize_token_from_string(token)
-            mint = [t.mint for t in tokenObj.token][0]
+            token_obj = deserialize_token_from_string(token)
+            mint = token_obj.mint
             # token_hidden_secret = await wallet.serialize_proofs(grouped_proofs)
             assert grouped_proofs[0].time_reserved
             reserved_date = datetime.fromtimestamp(
@@ -740,7 +747,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                     grouped_proofs,
                     legacy=True,
                 )
-                print(f"{token_legacy}\n")
+                print(f"Legacy token: {token_legacy}\n")
             print("--------------------------\n")
         print("To remove all spent tokens use: cashu burn -a")
 
@@ -1077,5 +1084,5 @@ async def selfpay(ctx: Context, all: bool = False):
     print(f"Selfpay token for mint {wallet.url}:")
     print("")
     print(token)
-    tokenObj = TokenV3.deserialize(token)
-    await receive(wallet, tokenObj)
+    token_obj = TokenV4.deserialize(token)
+    await receive(wallet, token_obj)

@@ -4,8 +4,9 @@ import math
 from dataclasses import dataclass
 from enum import Enum
 from sqlite3 import Row
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
+import cbor2
 from loguru import logger
 from pydantic import BaseModel, root_validator
 
@@ -747,43 +748,6 @@ class MintKeyset:
 # ------- TOKEN -------
 
 
-class TokenV1(BaseModel):
-    """
-    A (legacy) Cashu token that includes proofs. This can only be received if the receiver knows the mint associated with the
-    keyset ids of the proofs.
-    """
-
-    # NOTE: not used in Pydantic validation
-    __root__: List[Proof]
-
-
-class TokenV2Mint(BaseModel):
-    """
-    Object that describes how to reach the mints associated with the proofs in a TokenV2 object.
-    """
-
-    url: str  # mint URL
-    ids: List[str]  # List of keyset id's that are from this mint
-
-
-class TokenV2(BaseModel):
-    """
-    A Cashu token that includes proofs and their respective mints. Can include proofs from multiple different mints and keysets.
-    """
-
-    proofs: List[Proof]
-    mints: Optional[List[TokenV2Mint]] = None
-
-    def to_dict(self):
-        if self.mints:
-            return dict(
-                proofs=[p.to_dict() for p in self.proofs],
-                mints=[m.dict() for m in self.mints],
-            )
-        else:
-            return dict(proofs=[p.to_dict() for p in self.proofs])
-
-
 class TokenV3Token(BaseModel):
     mint: Optional[str] = None
     proofs: List[Proof]
@@ -804,14 +768,6 @@ class TokenV3(BaseModel):
     memo: Optional[str] = None
     unit: Optional[str] = None
 
-    def to_dict(self, include_dleq=False):
-        return_dict = dict(token=[t.to_dict(include_dleq) for t in self.token])
-        if self.memo:
-            return_dict.update(dict(memo=self.memo))  # type: ignore
-        if self.unit:
-            return_dict.update(dict(unit=self.unit))  # type: ignore
-        return return_dict
-
     def get_proofs(self):
         return [proof for token in self.token for proof in token.proofs]
 
@@ -823,6 +779,14 @@ class TokenV3(BaseModel):
 
     def get_mints(self):
         return list(set([t.mint for t in self.token if t.mint]))
+
+    def serialize_to_dict(self, include_dleq=False):
+        return_dict = dict(token=[t.to_dict(include_dleq) for t in self.token])
+        if self.memo:
+            return_dict.update(dict(memo=self.memo))  # type: ignore
+        if self.unit:
+            return_dict.update(dict(unit=self.unit))  # type: ignore
+        return return_dict
 
     @classmethod
     def deserialize(cls, tokenv3_serialized: str) -> "TokenV3":
@@ -848,6 +812,230 @@ class TokenV3(BaseModel):
         tokenv3_serialized = prefix
         # encode the token as a base64 string
         tokenv3_serialized += base64.urlsafe_b64encode(
-            json.dumps(self.to_dict(include_dleq)).encode()
+            json.dumps(self.serialize_to_dict(include_dleq)).encode()
         ).decode()
         return tokenv3_serialized
+
+
+class TokenV4DLEQ(BaseModel):
+    """
+    Discrete Log Equality (DLEQ) Proof
+    """
+
+    e: bytes
+    s: bytes
+    r: bytes
+
+
+class TokenV4Proof(BaseModel):
+    """
+    Value token
+    """
+
+    a: int
+    s: str  # secret
+    c: bytes  # signature
+    d: Optional[TokenV4DLEQ] = None  # DLEQ proof
+    w: Optional[str] = None  # witness
+
+    @classmethod
+    def from_proof(cls, proof: Proof, include_dleq=False):
+        return cls(
+            a=proof.amount,
+            s=proof.secret,
+            c=bytes.fromhex(proof.C),
+            d=(
+                TokenV4DLEQ(
+                    e=bytes.fromhex(proof.dleq.e),
+                    s=bytes.fromhex(proof.dleq.s),
+                    r=bytes.fromhex(proof.dleq.r),
+                )
+                if proof.dleq
+                else None
+            ),
+            w=proof.witness,
+        )
+
+
+class TokenV4Token(BaseModel):
+    # keyset ID
+    i: bytes
+    # proofs
+    p: List[TokenV4Proof]
+
+
+class TokenV4(BaseModel):
+    # mint URL
+    m: str
+    # unit
+    u: str
+    # tokens
+    t: List[TokenV4Token]
+    # memo
+    d: Optional[str] = None
+
+    @property
+    def mint(self) -> str:
+        return self.m
+
+    @property
+    def memo(self) -> Optional[str]:
+        return self.d
+
+    @property
+    def unit(self) -> str:
+        return self.u
+
+    @property
+    def amounts(self) -> List[int]:
+        return [p.a for token in self.t for p in token.p]
+
+    @property
+    def amount(self) -> int:
+        return sum(self.amounts)
+
+    @property
+    def proofs(self) -> List[Proof]:
+        return [
+            Proof(
+                id=token.i.hex(),
+                amount=p.a,
+                secret=p.s,
+                C=p.c.hex(),
+                dleq=(
+                    DLEQWallet(
+                        e=p.d.e.hex(),
+                        s=p.d.s.hex(),
+                        r=p.d.r.hex(),
+                    )
+                    if p.d
+                    else None
+                ),
+                witness=p.w,
+            )
+            for token in self.t
+            for p in token.p
+        ]
+
+    @classmethod
+    def from_tokenv3(cls, tokenv3: TokenV3):
+        if not len(tokenv3.get_mints()) == 1:
+            raise Exception("TokenV3 must contain proofs from only one mint.")
+
+        proofs = tokenv3.get_proofs()
+        proofs_by_id: Dict[str, List[Proof]] = {}
+        for proof in proofs:
+            proofs_by_id.setdefault(proof.id, []).append(proof)
+
+        cls.t = []
+        for keyset_id, proofs in proofs_by_id.items():
+            cls.t.append(
+                TokenV4Token(
+                    i=bytes.fromhex(keyset_id),
+                    p=[
+                        TokenV4Proof(
+                            a=p.amount,
+                            s=p.secret,
+                            c=bytes.fromhex(p.C),
+                            d=(
+                                TokenV4DLEQ(
+                                    e=bytes.fromhex(p.dleq.e),
+                                    s=bytes.fromhex(p.dleq.s),
+                                    r=bytes.fromhex(p.dleq.r),
+                                )
+                                if p.dleq
+                                else None
+                            ),
+                            w=p.witness,
+                        )
+                        for p in proofs
+                    ],
+                )
+            )
+
+        # set memo
+        cls.d = tokenv3.memo
+        # set mint
+        cls.m = tokenv3.get_mints()[0]
+        # set unit
+        cls.u = tokenv3.unit or "sat"
+        return cls(t=cls.t, d=cls.d, m=cls.m, u=cls.u)
+
+    def serialize_to_dict(self, include_dleq=False):
+        return_dict: Dict[str, Any] = dict(t=[t.dict() for t in self.t])
+        # strip dleq if needed
+        if not include_dleq:
+            for token in return_dict["t"]:
+                for proof in token["p"]:
+                    if "d" in proof:
+                        del proof["d"]
+        # strip witness if not present
+        for token in return_dict["t"]:
+            for proof in token["p"]:
+                if not proof.get("w"):
+                    del proof["w"]
+        # optional memo
+        if self.d:
+            return_dict.update(dict(d=self.d))
+        # mint
+        return_dict.update(dict(m=self.m))
+        # unit
+        return_dict.update(dict(u=self.u))
+        return return_dict
+
+    def serialize(self, include_dleq=False) -> str:
+        """
+        Takes a TokenV4 and serializes it as "cashuB<cbor_urlsafe_base64>.
+        """
+        prefix = "cashuB"
+        tokenv4_serialized = prefix
+        # encode the token as a base64 string
+        tokenv4_serialized += base64.urlsafe_b64encode(
+            cbor2.dumps(self.serialize_to_dict(include_dleq))
+        ).decode()
+        return tokenv4_serialized
+
+    @classmethod
+    def deserialize(cls, tokenv4_serialized: str) -> "TokenV4":
+        """
+        Ingesta a serialized "cashuB<cbor_urlsafe_base64>" token and returns a TokenV4.
+        """
+        prefix = "cashuB"
+        assert tokenv4_serialized.startswith(prefix), Exception(
+            f"Token prefix not valid. Expected {prefix}."
+        )
+        token_base64 = tokenv4_serialized[len(prefix) :]
+        # if base64 string is not a multiple of 4, pad it with "="
+        token_base64 += "=" * (4 - len(token_base64) % 4)
+
+        token = cbor2.loads(base64.urlsafe_b64decode(token_base64))
+        return cls.parse_obj(token)
+
+    def to_tokenv3(self) -> TokenV3:
+        tokenv3 = TokenV3()
+        for token in self.t:
+            tokenv3.token.append(
+                TokenV3Token(
+                    mint=self.m,
+                    proofs=[
+                        Proof(
+                            id=token.i.hex(),
+                            amount=p.a,
+                            secret=p.s,
+                            C=p.c.hex(),
+                            dleq=(
+                                DLEQWallet(
+                                    e=p.d.e.hex(),
+                                    s=p.d.s.hex(),
+                                    r=p.d.r.hex(),
+                                )
+                                if p.d
+                                else None
+                            ),
+                            witness=p.w,
+                        )
+                        for p in token.p
+                    ],
+                )
+            )
+        return tokenv3
