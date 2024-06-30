@@ -1,6 +1,4 @@
 import asyncio
-import base64
-import json
 from typing import Tuple
 
 import pytest
@@ -444,46 +442,6 @@ def test_receive_tokenv3(mint, cli_prefix):
     )
     assert result.exception is None
     print("RECEIVE")
-    print(result.output)
-
-
-def test_receive_tokenv3_no_mint(mint, cli_prefix):
-    # this test works only if the previous test succeeds because we simulate the case
-    # where the mint URL is not in the token therefore, we need to know the mint keyset
-    # already and have the mint URL in the db
-    runner = CliRunner()
-    token_dict = {
-        "token": [
-            {
-                "proofs": [
-                    {
-                        "id": "009a1f293253e41e",
-                        "amount": 2,
-                        "secret": "ea3420987e1ecd71de58e4ff00e8a94d1f1f9333dad98e923e3083d21bf314e2",
-                        "C": "0204eb99cf27105b4de4029478376d6f71e9e3d5af1cc28a652c028d1bcd6537cc",
-                    },
-                    {
-                        "id": "009a1f293253e41e",
-                        "amount": 8,
-                        "secret": "3447975db92f43b269290e05b91805df7aa733f622e55d885a2cab78e02d4a72",
-                        "C": "0286c78750d414bc067178cbac0f3551093cea47d213ebf356899c972448ee6255",
-                    },
-                ]
-            }
-        ]
-    }
-    token = "cashuA" + base64.b64encode(json.dumps(token_dict).encode()).decode()
-    print("RECEIVE")
-    print(token)
-    result = runner.invoke(
-        cli,
-        [
-            *cli_prefix,
-            "receive",
-            token,
-        ],
-    )
-    assert result.exception is None
     print(result.output)
 
 

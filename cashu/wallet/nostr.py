@@ -6,7 +6,7 @@ import click
 from httpx import ConnectError
 from loguru import logger
 
-from ..core.base import TokenV3
+from ..core.base import TokenV4
 from ..core.settings import settings
 from ..nostr.client.client import NostrClient
 from ..nostr.event import Event
@@ -127,7 +127,7 @@ async def receive_nostr(
         for w in words:
             try:
                 # call the receive method
-                tokenObj: TokenV3 = deserialize_token_from_string(w)
+                tokenObj: TokenV4 = deserialize_token_from_string(w)
                 print(
                     f"Receiving {tokenObj.get_amount()} sat on mint"
                     f" {tokenObj.get_mints()[0]} from nostr user {event.public_key} at"

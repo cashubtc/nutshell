@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 from loguru import logger
 
@@ -53,7 +54,7 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3) -> Wallet:
             os.path.join(settings.cashu_dir, wallet.name),
             unit=token.unit or wallet.unit.name,
         )
-        keyset_ids = mint_wallet._get_proofs_keysets(t.proofs)
+        keyset_ids = mint_wallet._get_proofs_keyset_ids(t.proofs)
         logger.trace(f"Keysets in tokens: {' '.join(set(keyset_ids))}")
         await mint_wallet.load_mint()
         proofs_to_keep, _ = await mint_wallet.redeem(t.proofs)
@@ -63,18 +64,24 @@ async def redeem_TokenV3_multimint(wallet: Wallet, token: TokenV3) -> Wallet:
     return mint_wallet
 
 
-def deserialize_token_from_string(token: str) -> TokenV3:
+async def redeem_TokenV4(wallet: Wallet, token: TokenV4) -> Wallet:
+    """
+    Redeem a token with a single mint.
+    """
+    await wallet.load_mint()
+    proofs_to_keep, _ = await wallet.redeem(token.proofs)
+    print(f"Received {wallet.unit.str(sum_proofs(proofs_to_keep))}")
+    return wallet
+
+
+def deserialize_token_from_string(token: str) -> TokenV4:
     # deserialize token
 
     if token.startswith("cashuA"):
         tokenObj = TokenV3.deserialize(token)
-        assert len(tokenObj.token), Exception("no proofs in token")
-        assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
-        return tokenObj
+        return TokenV4.from_tokenv3(tokenObj)
     if token.startswith("cashuB"):
-        tokenObj = TokenV4.deserialize(token).to_tokenv3()
-        assert len(tokenObj.token), Exception("no proofs in token")
-        assert len(tokenObj.token[0].proofs), Exception("no proofs in token")
+        tokenObj = TokenV4.deserialize(token)
         return tokenObj
 
     raise Exception("Invalid token")
@@ -82,10 +89,10 @@ def deserialize_token_from_string(token: str) -> TokenV3:
 
 async def receive(
     wallet: Wallet,
-    tokenObj: TokenV3,
+    tokenObj: TokenV4,
 ) -> Wallet:
     # redeem tokens with new wallet instances
-    mint_wallet = await redeem_TokenV3_multimint(
+    mint_wallet = await redeem_TokenV4(
         wallet,
         tokenObj,
     )
@@ -104,6 +111,7 @@ async def send(
     offline: bool = False,
     include_dleq: bool = False,
     include_fees: bool = False,
+    memo: Optional[str] = None,
 ):
     """
     Prints token to send to stdout.
@@ -142,10 +150,7 @@ async def send(
     )
 
     token = await wallet.serialize_proofs(
-        send_proofs,
-        include_mints=True,
-        include_dleq=include_dleq,
-        legacy=legacy,
+        send_proofs, include_dleq=include_dleq, legacy=legacy, memo=memo
     )
     print(token)
     await wallet.set_reserved(send_proofs, reserved=True)
