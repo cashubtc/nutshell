@@ -28,7 +28,7 @@ from ..core.crypto.keys import (
     random_hash,
 )
 from ..core.crypto.secp import PrivateKey, PublicKey
-from ..core.db import Connection, Database, get_db_connection
+from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
     KeysetError,
@@ -298,7 +298,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        async with get_db_connection(self.db, conn) as conn:
+        async with self.db.get_connection(conn) as conn:
             # store in db
             for p in proofs:
                 await self.crud.invalidate_proof(
@@ -816,7 +816,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         mint_quote.state = MintQuoteState.paid
         mint_quote.paid_time = melt_quote.paid_time
 
-        async with get_db_connection(self.db) as conn:
+        async with self.db.get_connection() as conn:
             await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
             await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)
 
@@ -981,7 +981,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         await self.db_write._set_proofs_pending(proofs)
         try:
             # Mark proofs as used and prepare new promises
-            async with get_db_connection(self.db) as conn:
+            async with self.db.get_connection() as conn:
                 # we do this in a single db transaction
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
                 promises = await self._generate_promises(outputs, keyset, conn)
@@ -1001,7 +1001,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:
         signatures: List[BlindedSignature] = []
         return_outputs: List[BlindedMessage] = []
-        async with get_db_connection(self.db) as conn:
+        async with self.db.get_connection() as conn:
             for output in outputs:
                 logger.trace(f"looking for promise: {output}")
                 promise = await self.crud.get_promise(
@@ -1057,7 +1057,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         keyset = keyset or self.keyset
 
         signatures = []
-        async with get_db_connection(self.db, conn) as conn:
+        async with self.db.get_connection(conn) as conn:
             for promise in promises:
                 keyset_id, B_, amount, C_, e, s = promise
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")

@@ -1,10 +1,9 @@
-import asyncio
 from typing import List, Optional
 
 from loguru import logger
 
-from ...core.base import Proof, ProofSpentState, ProofState
-from ...core.db import Connection, Database, get_db_connection
+from ...core.base import MeltQuote, MeltQuoteState, Proof, ProofSpentState, ProofState
+from ...core.db import Connection, Database
 from ...core.errors import (
     TransactionError,
 )
@@ -16,9 +15,6 @@ class DbWriteHelper:
     db: Database
     crud: LedgerCrud
     events: LedgerEventManager
-    proofs_pending_lock: asyncio.Lock = (
-        asyncio.Lock()
-    )  # holds locks for proofs_pending database
 
     def __init__(
         self, db: Database, crud: LedgerCrud, events: LedgerEventManager
@@ -41,20 +37,19 @@ class DbWriteHelper:
             Exception: At least one proof already in pending table.
         """
         # first we check whether these proofs are pending already
-        async with self.proofs_pending_lock:
-            async with get_db_connection(self.db) as conn:
-                await self._validate_proofs_pending(proofs, conn)
-                try:
-                    for p in proofs:
-                        await self.crud.set_proof_pending(
-                            proof=p, db=self.db, quote_id=quote_id, conn=conn
-                        )
-                        await self.events.submit(
-                            ProofState(Y=p.Y, state=ProofSpentState.pending)
-                        )
-                except Exception as e:
-                    logger.error(f"Failed to set proofs pending: {e}")
-                    raise TransactionError("Failed to set proofs pending.")
+        async with self.db.get_connection() as conn:
+            await self._validate_proofs_pending(proofs, conn)
+            try:
+                for p in proofs:
+                    await self.crud.set_proof_pending(
+                        proof=p, db=self.db, quote_id=quote_id, conn=conn
+                    )
+                    await self.events.submit(
+                        ProofState(Y=p.Y, state=ProofSpentState.pending)
+                    )
+            except Exception as e:
+                logger.error(f"Failed to set proofs pending: {e}")
+                raise TransactionError("Failed to set proofs pending.")
 
     async def _unset_proofs_pending(self, proofs: List[Proof], spent=True) -> None:
         """Deletes proofs from pending table.
@@ -66,14 +61,13 @@ class DbWriteHelper:
                 It is used to emit the unspent state for the proofs (otherwise the spent state is emitted
                 by the _invalidate_proofs function when the proofs are spent).
         """
-        async with self.proofs_pending_lock:
-            async with get_db_connection(self.db) as conn:
-                for p in proofs:
-                    await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
-                    if not spent:
-                        await self.events.submit(
-                            ProofState(Y=p.Y, state=ProofSpentState.unspent)
-                        )
+        async with self.db.get_connection() as conn:
+            for p in proofs:
+                await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+                if not spent:
+                    await self.events.submit(
+                        ProofState(Y=p.Y, state=ProofSpentState.unspent)
+                    )
 
     async def _validate_proofs_pending(
         self, proofs: List[Proof], conn: Optional[Connection] = None
@@ -95,3 +89,26 @@ class DbWriteHelper:
             == 0
         ):
             raise TransactionError("proofs are pending.")
+
+    async def _set_melt_quote_pending(self, quote: MeltQuote) -> MeltQuote:
+        """Sets the melt quote as pending.
+
+        Args:
+            quote (MeltQuote): Melt quote to set as pending.
+        """
+        quote_copy = quote.copy()
+        async with self.db.get_connection() as conn:
+            # get melt quote from db and check if it is already pending
+            quote_db = await self.crud.get_melt_quote(
+                checking_id=quote.checking_id, db=self.db, conn=conn
+            )
+            if not quote_db:
+                raise TransactionError("Melt quote not found.")
+            if quote_db.state == MeltQuoteState.pending:
+                raise TransactionError("Melt quote already pending.")
+            # set the quote as pending
+            quote_copy.state = MeltQuoteState.pending
+            await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
+            await self.events.submit(quote_copy)
+
+        return quote_copy

@@ -2,7 +2,7 @@ import copy
 
 from ..core.base import MintKeyset, Proof
 from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
-from ..core.db import Connection, Database, table_with_schema, timestamp_now
+from ..core.db import Connection, Database, table_with_schema
 from ..core.settings import settings
 
 
@@ -255,7 +255,7 @@ async def m011_add_quote_tables(db: Database):
             )
             await conn.execute(
                 f"UPDATE {table_with_schema(db, table)} SET created ="
-                f" '{timestamp_now(db)}'"
+                f" '{db.timestamp_now_str()}'"
             )
 
         # add column "witness" to table proofs_used
@@ -324,7 +324,7 @@ async def m011_add_quote_tables(db: Database):
             f"INSERT INTO {table_with_schema(db, 'mint_quotes')} (quote, method,"
             " request, checking_id, unit, amount, paid, issued, created_time,"
             " paid_time) SELECT id, 'bolt11', bolt11, COALESCE(payment_hash, 'None'),"
-            f" 'sat', amount, False, issued, COALESCE(created, '{timestamp_now(db)}'),"
+            f" 'sat', amount, False, issued, COALESCE(created, '{db.timestamp_now_str()}'),"
             f" NULL FROM {table_with_schema(db, 'invoices')} "
         )
 

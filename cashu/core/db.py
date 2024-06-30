@@ -169,6 +169,24 @@ class Database(Compat):
         finally:
             self.lock.release()
 
+    @asynccontextmanager
+    async def get_connection(self, conn: Optional[Connection] = None):
+        """Either yield the existing database connection (passthrough) or create a new one.
+
+        Args:
+            conn (Optional[Connection], optional): Connection object. Defaults to None.
+
+        Yields:
+            Connection: Connection object.
+        """
+        if conn is not None:
+            # Yield the existing connection
+            yield conn
+        else:
+            # Create and yield a new connection
+            async with self.connect() as new_conn:
+                yield new_conn
+
     async def fetchall(self, query: str, values: tuple = ()) -> list:
         async with self.connect() as conn:
             result = await conn.execute(query, values)
@@ -189,47 +207,45 @@ class Database(Compat):
     async def reuse_conn(self, conn: Connection):
         yield conn
 
+    def lock_table(self, table: str) -> str:
+        if self.type == POSTGRES:
+            return f"LOCK TABLE {self.references_schema}{table} IN EXCLUSIVE MODE;"
+        elif self.type == COCKROACH:
+            return f"LOCK TABLE {self.references_schema}{table};"
+        elif self.type == SQLITE:
+            return "BEGIN EXCLUSIVE TRANSACTION;"
+        return "<nothing>"
 
-# public functions for LNbits to use (we don't want to change the Database or Compat classes above)
+    def timestamp_from_seconds(
+        self, seconds: Union[int, float, None]
+    ) -> Union[str, None]:
+        if seconds is None:
+            return None
+        seconds = int(seconds)
+        if self.type in {POSTGRES, COCKROACH}:
+            return datetime.datetime.fromtimestamp(seconds).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        elif self.type == SQLITE:
+            return str(seconds)
+        return None
+
+    def timestamp_now_str(self) -> str:
+        timestamp = self.timestamp_from_seconds(time.time())
+        if timestamp is None:
+            raise Exception("Timestamp is None")
+        return timestamp
+
+
 def table_with_schema(db: Union[Database, Connection], table: str):
     return f"{db.references_schema if db.schema else ''}{table}"
 
 
-def lock_table(db: Database, table: str) -> str:
-    if db.type == POSTGRES:
-        return f"LOCK TABLE {table_with_schema(db, table)} IN EXCLUSIVE MODE;"
-    elif db.type == COCKROACH:
-        return f"LOCK TABLE {table};"
-    elif db.type == SQLITE:
-        return "BEGIN EXCLUSIVE TRANSACTION;"
-    return "<nothing>"
-
-
-def timestamp_from_seconds(
-    db: Database, seconds: Union[int, float, None]
-) -> Union[str, None]:
-    if seconds is None:
-        return None
-    seconds = int(seconds)
-    if db.type in {POSTGRES, COCKROACH}:
-        return datetime.datetime.fromtimestamp(seconds).strftime("%Y-%m-%d %H:%M:%S")
-    elif db.type == SQLITE:
-        return str(seconds)
-    return None
-
-
-def timestamp_now(db: Database) -> str:
-    timestamp = timestamp_from_seconds(db, time.time())
-    if timestamp is None:
-        raise Exception("Timestamp is None")
-    return timestamp
-
-
 @asynccontextmanager
-async def get_db_connection(db: Database, conn: Optional[Connection] = None):
+async def get_connection(db: Database, conn: Optional[Connection] = None):
     """Either yield the existing database connection or create a new one.
 
-    Note: This should be implemented as Database.get_db_connection(self, conn) but
+    Note: This should be implemented as Database.get_connection(self, conn) but
     since we want to use it in LNbits, we can't change the Database class their.
 
     Args:

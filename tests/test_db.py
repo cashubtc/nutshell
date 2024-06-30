@@ -5,7 +5,7 @@ import time
 import pytest
 
 from cashu.core import db
-from cashu.core.db import Connection, timestamp_now
+from cashu.core.db import Connection
 from cashu.core.migrations import backup_database
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -27,7 +27,7 @@ async def test_backup_db_migration(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_timestamp_now(ledger: Ledger):
-    ts = timestamp_now(ledger.db)
+    ts = ledger.db.timestamp_now_str()
     if ledger.db.type == db.SQLITE:
         assert isinstance(ts, str)
         assert int(ts) <= time.time()

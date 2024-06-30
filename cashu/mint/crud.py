@@ -13,8 +13,6 @@ from ..core.db import (
     Connection,
     Database,
     table_with_schema,
-    timestamp_from_seconds,
-    timestamp_now,
 )
 
 
@@ -277,7 +275,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 e,
                 s,
                 id,
-                timestamp_now(db),
+                db.timestamp_now_str(),
             ),
         )
 
@@ -332,7 +330,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 proof.Y,
                 proof.id,
                 proof.witness,
-                timestamp_now(db),
+                db.timestamp_now_str(),
                 quote_id,
             ),
         )
@@ -404,7 +402,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 proof.Y,
                 proof.id,
                 proof.witness,
-                timestamp_now(db),
+                db.timestamp_now_str(),
                 quote_id,
             ),
         )
@@ -447,8 +445,8 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.issued,
                 quote.paid,
                 quote.state.name,
-                timestamp_from_seconds(db, quote.created_time),
-                timestamp_from_seconds(db, quote.paid_time),
+                db.timestamp_from_seconds(quote.created_time),
+                db.timestamp_from_seconds(quote.paid_time),
             ),
         )
 
@@ -517,7 +515,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.issued,
                 quote.paid,
                 quote.state.name,
-                timestamp_from_seconds(db, quote.paid_time),
+                db.timestamp_from_seconds(quote.paid_time),
                 quote.quote,
             ),
         )
@@ -562,12 +560,12 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.fee_reserve or 0,
                 quote.paid,
                 quote.state.name,
-                timestamp_from_seconds(db, quote.created_time),
-                timestamp_from_seconds(db, quote.paid_time),
+                db.timestamp_from_seconds(quote.created_time),
+                db.timestamp_from_seconds(quote.paid_time),
                 quote.fee_paid,
                 quote.payment_preimage,
                 json.dumps(quote.change) if quote.change else None,
-                timestamp_from_seconds(db, quote.expiry),
+                db.timestamp_from_seconds(quote.expiry),
             ),
         )
 
@@ -620,7 +618,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 quote.paid,
                 quote.state.name,
                 quote.fee_paid,
-                timestamp_from_seconds(db, quote.paid_time),
+                db.timestamp_from_seconds(quote.paid_time),
                 quote.payment_preimage,
                 json.dumps([s.dict() for s in quote.change]) if quote.change else None,
                 quote.quote,
@@ -646,9 +644,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 keyset.encrypted_seed,
                 keyset.seed_encryption_method,
                 keyset.derivation_path,
-                keyset.valid_from or timestamp_now(db),
-                keyset.valid_to or timestamp_now(db),
-                keyset.first_seen or timestamp_now(db),
+                keyset.valid_from or db.timestamp_now_str(),
+                keyset.valid_to or db.timestamp_now_str(),
+                keyset.first_seen or db.timestamp_now_str(),
                 True,
                 keyset.version,
                 keyset.unit.name,
