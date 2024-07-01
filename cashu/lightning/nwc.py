@@ -1,4 +1,4 @@
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from bolt11 import decode
 from loguru import logger
@@ -25,20 +25,20 @@ from .base import (
 
 
 class NWCWallet(LightningBackend):
-    supported_units = [Unit.sat]
+
+    supported_units = {Unit.sat}
 
     def __init__(self, unit: Unit, **kwargs):
         logger.debug(f"Initializing NWCWallet with unit: {unit}")
         self.assert_unit_supported(unit)
         self.unit = unit
-        self.supported_units = [Unit.sat, Unit.usd, Unit.msat]
         self.client = NWCClient(nostrWalletConnectUrl=settings.mint_nwc_url)
 
     async def status(self) -> StatusResponse:
         try:
             res = await self.client.get_balance()
             balance_msat = res.balance
-            return StatusResponse(balance=balance_msat // 1000)
+            return StatusResponse(balance=balance_msat // 1000, error_message=None)
         except Nip47Error as exc:
             return StatusResponse(
                 error_message=str(exc),
@@ -53,8 +53,9 @@ class NWCWallet(LightningBackend):
     async def create_invoice(
         self,
         amount: Amount,
-        memo: str | None = None,
-        description_hash: bytes | None = None,
+        memo: Optional[str] = None,
+        description_hash: Optional[bytes] = None,
+        unhashed_description: Optional[str] = None,
     ) -> InvoiceResponse:
         try:
             res = await self.client.create_invoice(
@@ -69,21 +70,11 @@ class NWCWallet(LightningBackend):
         except Nip47Error as exc:
             return InvoiceResponse(
                 error_message=str(exc),
-                checking_id="",
-                bolt11="",
-                amount=0,
-                expires_at=0,
-                created_at=0,
                 ok=False,
             )
         except Exception as exc:
             return InvoiceResponse(
                 error_message=f"Failed to create invoice due to: {exc}",
-                checking_id="",
-                bolt11="",
-                amount=0,
-                expires_at=0,
-                created_at=0,
                 ok=False,
             )
 
