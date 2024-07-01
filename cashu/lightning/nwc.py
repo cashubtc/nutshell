@@ -158,5 +158,5 @@ class NWCWallet(LightningBackend):
             amount=amount.to(self.unit, round="up"),
         )
 
-    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+    def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         raise NotImplementedError("paid_invoices_stream not implemented")
