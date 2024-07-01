@@ -164,6 +164,8 @@ class Database(Compat):
                     elif self.type == SQLITE:
                         await wconn.execute(f"ATTACH '{self.path}' AS {self.schema}")
                 if lock_table:
+                    # if table is locked already, we will wait here
+
                     await wconn.execute(self.lock_table(lock_table))
 
                 yield wconn
@@ -211,7 +213,9 @@ class Database(Compat):
 
     def lock_table(self, table: str) -> str:
         if self.type == POSTGRES:
-            return f"LOCK TABLE {self.table_with_schema(table)} IN EXCLUSIVE MODE;"
+            return (
+                f"LOCK TABLE {self.table_with_schema(table)} IN EXCLUSIVE MODE NOWAIT;"
+            )
         elif self.type == COCKROACH:
             return f"LOCK TABLE {table};"
         elif self.type == SQLITE:
