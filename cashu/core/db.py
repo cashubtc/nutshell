@@ -151,7 +151,9 @@ class Database(Compat):
         self.lock = asyncio.Lock()
 
     @asynccontextmanager
-    async def connect(self, lock_table: Optional[str] = None):
+    async def connect(
+        self, lock_table: Optional[str] = None, lock_timeout: Optional[float] = None
+    ):
         async with self.engine.connect() as conn:  # type: ignore
             async with conn.begin() as txn:
                 wconn = Connection(conn, txn, self.type, self.name, self.schema)
@@ -164,11 +166,32 @@ class Database(Compat):
                     elif self.type == SQLITE:
                         await wconn.execute(f"ATTACH '{self.path}' AS {self.schema}")
                 if lock_table:
-                    # if table is locked already, we will wait here
-
-                    await wconn.execute(self.lock_table(lock_table))
+                    await self.acquire_lock(wconn, lock_table, lock_timeout)
 
                 yield wconn
+
+    async def acquire_lock(
+        self, wconn: Connection, lock_table: str, lock_timeout: Optional[float] = None
+    ):
+        timeout = lock_timeout or 5  # default to 5 second
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                await wconn.execute(self.lock_table(lock_table))
+                return
+            except Exception as e:
+                if (
+                    (
+                        self.type == POSTGRES
+                        and "could not obtain lock on relation" in str(e)
+                    )
+                    or (self.type == COCKROACH and "already locked" in str(e))
+                    or (self.type == SQLITE and "database is locked" in str(e))
+                ):
+                    logger.trace(f"Table {lock_table} is already locked: {e}")
+                    continue
+                await asyncio.sleep(0.1)
+        raise Exception("failed to acquire database lock")
 
     @asynccontextmanager
     async def get_connection(

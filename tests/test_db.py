@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import os
 import time
+from typing import List
 
 import pytest
 import pytest_asyncio
@@ -25,6 +26,18 @@ async def assert_err(f, msg):
             raise Exception(f"Expected error: {msg}, got: {exc.args[0]}")
         return
     raise Exception(f"Expected error: {msg}, got no error")
+
+
+async def assert_err_multiple(f, msgs: List[str]):
+    """Compute f() and expect an error message 'msg'."""
+    try:
+        await f
+    except Exception as exc:
+        for msg in msgs:
+            if msg in str(exc.args[0]):
+                return
+        raise Exception(f"Expected error: {msgs}, got: {exc.args[0]}")
+    raise Exception(f"Expected error: {msgs}, got no error")
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -103,18 +116,12 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
-    async with ledger.db.connect(lock_table="proofs_pending") as conn:
+    async with ledger.db.connect(lock_table="proofs_pending", lock_timeout=1) as conn:
         assert isinstance(conn, Connection)
-        if ledger.db.type == db.POSTGRES:
-            await assert_err(
-                ledger.db_write._set_proofs_pending(wallet.proofs),
-                "could not obtain lock",
-            )
-        elif ledger.db.type == db.SQLITE:
-            await assert_err(
-                ledger.db_write._set_proofs_pending(wallet.proofs),
-                "database is locked",
-            )
+        await assert_err(
+            ledger.db_write._set_proofs_pending(wallet.proofs),
+            "failed to acquire database lock",
+        )
 
 
 @pytest.mark.asyncio
@@ -125,22 +132,39 @@ async def test_db_set_proofs_pending_race_condition(wallet: Wallet, ledger: Ledg
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
-    if ledger.db.type == db.POSTGRES:
-        await assert_err(
-            asyncio.gather(
-                ledger.db_write._set_proofs_pending(wallet.proofs),
-                ledger.db_write._set_proofs_pending(wallet.proofs),
-            ),
-            "could not obtain lock",
-        )
-    elif ledger.db.type == db.SQLITE:
-        await assert_err(
-            asyncio.gather(
-                ledger.db_write._set_proofs_pending(wallet.proofs),
-                ledger.db_write._set_proofs_pending(wallet.proofs),
-            ),
+    await assert_err_multiple(
+        asyncio.gather(
+            ledger.db_write._set_proofs_pending(wallet.proofs),
+            ledger.db_write._set_proofs_pending(wallet.proofs),
+        ),
+        [
+            "failed to acquire database lock",
             "proofs are pending",
-        )
+        ],  # depending on how fast the database is, it can be either
+    )
+
+
+@pytest.mark.asyncio
+async def test_db_set_proofs_pending_delayed_no_race_condition(
+    wallet: Wallet, ledger: Ledger
+):
+    # fill wallet
+    invoice = await wallet.request_mint(64)
+    pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id)
+    assert wallet.balance == 64
+
+    async def delayed_set_proofs_pending():
+        await asyncio.sleep(0.5)
+        await ledger.db_write._set_proofs_pending(wallet.proofs)
+
+    await assert_err(
+        asyncio.gather(
+            ledger.db_write._set_proofs_pending(wallet.proofs),
+            delayed_set_proofs_pending(),
+        ),
+        "proofs are pending",
+    )
 
 
 @pytest.mark.asyncio
