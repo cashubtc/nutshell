@@ -1,8 +1,16 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from loguru import logger
 
-from ...core.base import MeltQuote, MeltQuoteState, Proof, ProofSpentState, ProofState
+from ...core.base import (
+    MeltQuote,
+    MeltQuoteState,
+    MintQuote,
+    MintQuoteState,
+    Proof,
+    ProofSpentState,
+    ProofState,
+)
 from ...core.db import Connection, Database
 from ...core.errors import (
     TransactionError,
@@ -41,6 +49,7 @@ class DbWriteHelper:
             await self._validate_proofs_pending(proofs, conn)
             try:
                 for p in proofs:
+                    logger.trace(f"crud: setting proof {p.Y} as PENDING")
                     await self.crud.set_proof_pending(
                         proof=p, db=self.db, quote_id=quote_id, conn=conn
                     )
@@ -63,6 +72,7 @@ class DbWriteHelper:
         """
         async with self.db.get_connection() as conn:
             for p in proofs:
+                logger.trace(f"crud: unsetting proof {p.Y} as PENDING")
                 await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
 
         if not spent:
@@ -88,6 +98,64 @@ class DbWriteHelper:
         if not (len(pending_proofs) == 0):
             raise TransactionError("proofs are pending.")
 
+    async def _set_mint_quote_pending(self, quote_id: str) -> MintQuote:
+        """Sets the mint quote as pending.
+
+        Args:
+            quote (MintQuote): Mint quote to set as pending.
+        """
+        quote: Union[MintQuote, None] = None
+        async with self.db.get_connection(
+            lock_table="mint_quotes", lock_select_statement=f"quote='{quote_id}'"
+        ) as conn:
+            # get mint quote from db and check if it is already pending
+            quote = await self.crud.get_mint_quote(
+                quote_id=quote_id, db=self.db, conn=conn
+            )
+            if not quote:
+                raise TransactionError("Mint quote not found.")
+            if quote.state == MintQuoteState.pending:
+                raise TransactionError("Mint quote already pending.")
+            # set the quote as pending
+            quote.state = MintQuoteState.pending
+            logger.trace(f"crud: setting quote {quote_id} as PENDING")
+            await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
+        if quote is None:
+            raise TransactionError("Mint quote not found.")
+        await self.events.submit(quote)
+        return quote
+
+    async def _unset_mint_quote_pending(
+        self, quote_id: str, state: MintQuoteState
+    ) -> MintQuote:
+        """Unsets the mint quote as pending.
+
+        Args:
+            quote (MintQuote): Mint quote to unset as pending.
+            state (MintQuoteState): New state of the mint quote.
+        """
+        quote: Union[MintQuote, None] = None
+        async with self.db.get_connection(lock_table="mint_quotes") as conn:
+            # get mint quote from db and check if it is pending
+            quote = await self.crud.get_mint_quote(
+                quote_id=quote_id, db=self.db, conn=conn
+            )
+            if not quote:
+                raise TransactionError("Mint quote not found.")
+            if quote.state != MintQuoteState.pending:
+                raise TransactionError(
+                    f"Mint quote not pending: {quote.state.value}. Cannot set as {state.value}."
+                )
+            # set the quote as pending
+            quote.state = state
+            logger.trace(f"crud: setting quote {quote_id} as {state.value}")
+            await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
+        if quote is None:
+            raise TransactionError("Mint quote not found.")
+
+        await self.events.submit(quote)
+        return quote
+
     async def _set_melt_quote_pending(self, quote: MeltQuote) -> MeltQuote:
         """Sets the melt quote as pending.
 
@@ -95,7 +163,10 @@ class DbWriteHelper:
             quote (MeltQuote): Melt quote to set as pending.
         """
         quote_copy = quote.copy()
-        async with self.db.get_connection(lock_table="melt_quotes") as conn:
+        async with self.db.get_connection(
+            lock_table="melt_quotes",
+            lock_select_statement=f"checking_id='{quote.checking_id}'",
+        ) as conn:
             # get melt quote from db and check if it is already pending
             quote_db = await self.crud.get_melt_quote(
                 checking_id=quote.checking_id, db=self.db, conn=conn

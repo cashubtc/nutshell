@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import Optional, Union
@@ -152,11 +153,19 @@ class Database(Compat):
 
     @asynccontextmanager
     async def connect(
-        self, lock_table: Optional[str] = None, lock_timeout: Optional[float] = None
+        self,
+        lock_table: Optional[str] = None,
+        lock_select_statement: Optional[str] = None,
+        lock_timeout: Optional[float] = None,
     ):
         async with self.engine.connect() as conn:  # type: ignore
             async with conn.begin() as txn:
                 wconn = Connection(conn, txn, self.type, self.name, self.schema)
+
+                if lock_table:
+                    await self.acquire_lock(
+                        wconn, lock_table, lock_select_statement, lock_timeout
+                    )
 
                 if self.schema:
                     if self.type in {POSTGRES, COCKROACH}:
@@ -165,19 +174,35 @@ class Database(Compat):
                         )
                     elif self.type == SQLITE:
                         await wconn.execute(f"ATTACH '{self.path}' AS {self.schema}")
-                if lock_table:
-                    await self.acquire_lock(wconn, lock_table, lock_timeout)
-
                 yield wconn
 
     async def acquire_lock(
-        self, wconn: Connection, lock_table: str, lock_timeout: Optional[float] = None
+        self,
+        wconn: Connection,
+        lock_table: str,
+        lock_select_statement: Optional[str] = None,
+        lock_timeout: Optional[float] = None,
     ):
+        """Acquire a lock on a table or a row in a table.
+
+        Args:
+            wconn (Connection): Connection object.
+            lock_table (str): Table to lock.
+            lock_select_statement (Optional[str], optional):
+            lock_timeout (Optional[float], optional):
+
+        Raises:
+            Exception: _description_
+        """
         timeout = lock_timeout or 5  # default to 5 second
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                await wconn.execute(self.lock_table(lock_table))
+                logger.trace(
+                    f"Acquiring lock on {lock_table} with statement {self.lock_table(lock_table, lock_select_statement)}"
+                )
+                await wconn.execute(self.lock_table(lock_table, lock_select_statement))
+                logger.trace(f"Success: Acquired lock on {lock_table}")
                 return
             except Exception as e:
                 if (
@@ -189,19 +214,26 @@ class Database(Compat):
                     or (self.type == SQLITE and "database is locked" in str(e))
                 ):
                     logger.trace(f"Table {lock_table} is already locked: {e}")
-                    continue
+                else:
+                    logger.trace(f"Failed to acquire lock on {lock_table}: {e}")
                 await asyncio.sleep(0.1)
         raise Exception("failed to acquire database lock")
 
     @asynccontextmanager
     async def get_connection(
-        self, conn: Optional[Connection] = None, lock_table: Optional[str] = None
+        self,
+        conn: Optional[Connection] = None,
+        lock_table: Optional[str] = None,
+        lock_select_statement: Optional[str] = None,
+        lock_timeout: Optional[float] = None,
     ):
         """Either yield the existing database connection (passthrough) or create a new one.
 
         Args:
             conn (Optional[Connection], optional): Connection object. Defaults to None.
             lock_table (Optional[str], optional): Table to lock. Defaults to None.
+            lock_select_statement (Optional[str], optional): Lock select statement. Defaults to None.
+            lock_timeout (Optional[float], optional): Lock timeout. Defaults to None.
 
         Yields:
             Connection: Connection object.
@@ -210,8 +242,13 @@ class Database(Compat):
             # Yield the existing connection
             yield conn
         else:
-            # Create and yield a new connection
-            async with self.connect(lock_table) as new_conn:
+            if lock_select_statement:
+                assert (
+                    len(re.findall(r"^[^=]+='[^']+'$", lock_select_statement)) == 1
+                ), "lock_select_statement must have exactly one {column}='{value}' pattern."
+            async with self.connect(
+                lock_table, lock_select_statement, lock_timeout
+            ) as new_conn:
                 yield new_conn
 
     async def fetchall(self, query: str, values: tuple = ()) -> list:
@@ -234,7 +271,16 @@ class Database(Compat):
     async def reuse_conn(self, conn: Connection):
         yield conn
 
-    def lock_table(self, table: str) -> str:
+    def lock_table(
+        self,
+        table: str,
+        lock_select_statement: Optional[str] = None,
+    ) -> str:
+        # with postgres, we can lock a row with a SELECT statement with FOR UPDATE NOWAIT
+        if lock_select_statement:
+            if self.type == POSTGRES:
+                return f"SELECT 1 FROM {self.table_with_schema(table)} WHERE {lock_select_statement} FOR UPDATE NOWAIT;"
+
         if self.type == POSTGRES:
             return (
                 f"LOCK TABLE {self.table_with_schema(table)} IN EXCLUSIVE MODE NOWAIT;"

@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 
+from cashu.core.base import MeltQuoteState, MintQuoteState
 from cashu.core.helpers import sum_proofs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.mint.ledger import Ledger
@@ -48,17 +49,21 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
     assert not melt_quote.paid
+    assert melt_quote.state == MeltQuoteState.unpaid.value
+
     assert melt_quote.amount == 64
     assert melt_quote.fee_reserve == 0
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 64)
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid
 
 
 @pytest.mark.asyncio
@@ -74,6 +79,9 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     invoice_payment_request = invoice_dict["payment_request"]
 
     mint_quote = await wallet1.melt_quote(invoice_payment_request)
+    assert not mint_quote.paid, "mint quote should not be paid"
+    assert mint_quote.state == MeltQuoteState.unpaid.value
+
     total_amount = mint_quote.amount + mint_quote.fee_reserve
     keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
     melt_quote = await ledger.melt_quote(
@@ -82,12 +90,14 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     assert not melt_quote.paid, "melt quote should not be paid"
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid
 
 
 @pytest.mark.asyncio
@@ -98,6 +108,7 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
     mint_quote = await ledger.get_mint_quote(invoice.id)
 
     assert mint_quote.paid, "mint quote should be paid"
+    assert mint_quote.state == MintQuoteState.paid
 
     output_amounts = [128]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
@@ -111,14 +122,21 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
         "outputs have already been signed before.",
     )
 
+    mint_quote_after_payment = await ledger.get_mint_quote(invoice.id)
+    assert mint_quote_after_payment.paid, "mint quote should be paid"
+    assert mint_quote_after_payment.state == MintQuoteState.issued
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")
 async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=128, unit="sat"))
+    assert not quote.paid, "mint quote should not be paid"
+    assert quote.state == MintQuoteState.unpaid
 
     mint_quote = await ledger.get_mint_quote(quote.quote)
     assert not mint_quote.paid, "mint quote already paid"
+    assert mint_quote.state == MintQuoteState.unpaid
 
     await assert_err(
         wallet1.mint(128, id=quote.quote),
@@ -129,6 +147,7 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
 
     mint_quote = await ledger.get_mint_quote(quote.quote)
     assert mint_quote.paid, "mint quote should be paid"
+    assert mint_quote.state == MintQuoteState.paid
 
     output_amounts = [128]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
@@ -136,6 +155,10 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     await ledger.mint(outputs=outputs, quote_id=quote.quote)
+
+    mint_quote_after_payment = await ledger.get_mint_quote(quote.quote)
+    assert mint_quote_after_payment.paid, "mint quote should be paid"
+    assert mint_quote_after_payment.state == MintQuoteState.issued
 
 
 @pytest.mark.asyncio

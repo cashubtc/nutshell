@@ -301,6 +301,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         async with self.db.get_connection(conn) as conn:
             # store in db
             for p in proofs:
+                logger.trace(f"Invalidating proof {p.Y}")
                 await self.crud.invalidate_proof(
                     proof=p, db=self.db, quote_id=quote_id, conn=conn
                 )
@@ -501,46 +502,37 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         Returns:
             List[BlindedSignature]: Signatures on the outputs.
         """
-        logger.trace("called mint")
+
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
         # we already know from _verify_outputs that all outputs have the same unit because they have the same keyset
         output_unit = self.keysets[outputs[0].id].unit
 
-        self.locks[quote_id] = (
-            self.locks.get(quote_id) or asyncio.Lock()
-        )  # create a new lock if it doesn't exist
-        async with self.locks[quote_id]:
-            quote = await self.get_mint_quote(quote_id=quote_id)
-            if not quote.paid:
-                raise QuoteNotPaidError()
-            if quote.issued:
-                raise TransactionError("quote already issued")
-
-            if not quote.state == MintQuoteState.paid:
-                raise QuoteNotPaidError()
+        quote = await self.get_mint_quote(quote_id)
+        previous_state = quote.state
+        await self.db_write._set_mint_quote_pending(quote_id=quote_id)
+        try:
             if quote.state == MintQuoteState.issued:
                 raise TransactionError("quote already issued")
-
+            if not quote.state == MintQuoteState.paid:
+                raise QuoteNotPaidError()
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
             if not quote.amount == sum_amount_outputs:
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry > int(time.time()):
                 raise TransactionError("quote expired")
-
-            logger.trace(f"crud: setting quote {quote_id} as issued")
-            quote.issued = True
-            quote.state = MintQuoteState.issued
-            await self.crud.update_mint_quote(quote=quote, db=self.db)
-
             promises = await self._generate_promises(outputs)
-            logger.trace("generated promises")
+        except Exception as e:
+            await self.db_write._unset_mint_quote_pending(
+                quote_id=quote_id, state=previous_state
+            )
+            raise e
 
-            # submit the quote update to the event manager
-            await self.events.submit(quote)
+        await self.db_write._unset_mint_quote_pending(
+            quote_id=quote_id, state=MintQuoteState.issued
+        )
 
-        del self.locks[quote_id]
         return promises
 
     def create_internal_melt_quote(
@@ -971,21 +963,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         """
         logger.trace("split called")
         # explicitly check that amount of inputs is equal to amount of outputs
-        # note: we check this again in verify_inputs_and_outputs but only if any
-        # outputs are provided at all. To make sure of that before calling
-        # verify_inputs_and_outputs, we check it here.
         self._verify_equation_balanced(proofs, outputs)
         # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
 
         await self.db_write._set_proofs_pending(proofs)
         try:
-            # Mark proofs as used and prepare new promises
-            async with self.db.get_connection() as conn:
-                # we do this in a single db transaction
+            async with self.db.get_connection(lock_table="proofs_pending") as conn:
+                # await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs, conn=conn)
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
                 promises = await self._generate_promises(outputs, keyset, conn)
-
         except Exception as e:
             logger.trace(f"split failed: {e}")
             raise e
