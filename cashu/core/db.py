@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import Optional, Union
@@ -56,6 +57,9 @@ class Compat:
         if self.type in {POSTGRES}:
             return "BIGINT"
         return "INT"
+
+    def table_with_schema(self, table: str):
+        return f"{self.references_schema if self.schema else ''}{table}"
 
 
 class Connection(Compat):
@@ -148,26 +152,104 @@ class Database(Compat):
         self.lock = asyncio.Lock()
 
     @asynccontextmanager
-    async def connect(self):
-        await self.lock.acquire()
-        try:
-            async with self.engine.connect() as conn:  # type: ignore
-                async with conn.begin() as txn:
-                    wconn = Connection(conn, txn, self.type, self.name, self.schema)
+    async def connect(
+        self,
+        lock_table: Optional[str] = None,
+        lock_select_statement: Optional[str] = None,
+        lock_timeout: Optional[float] = None,
+    ):
+        async with self.engine.connect() as conn:  # type: ignore
+            async with conn.begin() as txn:
+                wconn = Connection(conn, txn, self.type, self.name, self.schema)
 
-                    if self.schema:
-                        if self.type in {POSTGRES, COCKROACH}:
-                            await wconn.execute(
-                                f"CREATE SCHEMA IF NOT EXISTS {self.schema}"
-                            )
-                        elif self.type == SQLITE:
-                            await wconn.execute(
-                                f"ATTACH '{self.path}' AS {self.schema}"
-                            )
+                if lock_table:
+                    await self.acquire_lock(
+                        wconn, lock_table, lock_select_statement, lock_timeout
+                    )
 
-                    yield wconn
-        finally:
-            self.lock.release()
+                if self.schema:
+                    if self.type in {POSTGRES, COCKROACH}:
+                        await wconn.execute(
+                            f"CREATE SCHEMA IF NOT EXISTS {self.schema}"
+                        )
+                    elif self.type == SQLITE:
+                        await wconn.execute(f"ATTACH '{self.path}' AS {self.schema}")
+                yield wconn
+
+    async def acquire_lock(
+        self,
+        wconn: Connection,
+        lock_table: str,
+        lock_select_statement: Optional[str] = None,
+        lock_timeout: Optional[float] = None,
+    ):
+        """Acquire a lock on a table or a row in a table.
+
+        Args:
+            wconn (Connection): Connection object.
+            lock_table (str): Table to lock.
+            lock_select_statement (Optional[str], optional):
+            lock_timeout (Optional[float], optional):
+
+        Raises:
+            Exception: _description_
+        """
+        timeout = lock_timeout or 5  # default to 5 second
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                logger.trace(
+                    f"Acquiring lock on {lock_table} with statement {self.lock_table(lock_table, lock_select_statement)}"
+                )
+                await wconn.execute(self.lock_table(lock_table, lock_select_statement))
+                logger.trace(f"Success: Acquired lock on {lock_table}")
+                return
+            except Exception as e:
+                if (
+                    (
+                        self.type == POSTGRES
+                        and "could not obtain lock on relation" in str(e)
+                    )
+                    or (self.type == COCKROACH and "already locked" in str(e))
+                    or (self.type == SQLITE and "database is locked" in str(e))
+                ):
+                    logger.trace(f"Table {lock_table} is already locked: {e}")
+                else:
+                    logger.trace(f"Failed to acquire lock on {lock_table}: {e}")
+                await asyncio.sleep(0.1)
+        raise Exception("failed to acquire database lock")
+
+    @asynccontextmanager
+    async def get_connection(
+        self,
+        conn: Optional[Connection] = None,
+        lock_table: Optional[str] = None,
+        lock_select_statement: Optional[str] = None,
+        lock_timeout: Optional[float] = None,
+    ):
+        """Either yield the existing database connection (passthrough) or create a new one.
+
+        Args:
+            conn (Optional[Connection], optional): Connection object. Defaults to None.
+            lock_table (Optional[str], optional): Table to lock. Defaults to None.
+            lock_select_statement (Optional[str], optional): Lock select statement. Defaults to None.
+            lock_timeout (Optional[float], optional): Lock timeout. Defaults to None.
+
+        Yields:
+            Connection: Connection object.
+        """
+        if conn is not None:
+            # Yield the existing connection
+            yield conn
+        else:
+            if lock_select_statement:
+                assert (
+                    len(re.findall(r"^[^=]+='[^']+'$", lock_select_statement)) == 1
+                ), "lock_select_statement must have exactly one {column}='{value}' pattern."
+            async with self.connect(
+                lock_table, lock_select_statement, lock_timeout
+            ) as new_conn:
+                yield new_conn
 
     async def fetchall(self, query: str, values: tuple = ()) -> list:
         async with self.connect() as conn:
@@ -189,60 +271,42 @@ class Database(Compat):
     async def reuse_conn(self, conn: Connection):
         yield conn
 
+    def lock_table(
+        self,
+        table: str,
+        lock_select_statement: Optional[str] = None,
+    ) -> str:
+        # with postgres, we can lock a row with a SELECT statement with FOR UPDATE NOWAIT
+        if lock_select_statement:
+            if self.type == POSTGRES:
+                return f"SELECT 1 FROM {self.table_with_schema(table)} WHERE {lock_select_statement} FOR UPDATE NOWAIT;"
 
-# public functions for LNbits to use (we don't want to change the Database or Compat classes above)
-def table_with_schema(db: Union[Database, Connection], table: str):
-    return f"{db.references_schema if db.schema else ''}{table}"
+        if self.type == POSTGRES:
+            return (
+                f"LOCK TABLE {self.table_with_schema(table)} IN EXCLUSIVE MODE NOWAIT;"
+            )
+        elif self.type == COCKROACH:
+            return f"LOCK TABLE {table};"
+        elif self.type == SQLITE:
+            return "BEGIN EXCLUSIVE TRANSACTION;"
+        return "<nothing>"
 
-
-def lock_table(db: Database, table: str) -> str:
-    if db.type == POSTGRES:
-        return f"LOCK TABLE {table_with_schema(db, table)} IN EXCLUSIVE MODE;"
-    elif db.type == COCKROACH:
-        return f"LOCK TABLE {table};"
-    elif db.type == SQLITE:
-        return "BEGIN EXCLUSIVE TRANSACTION;"
-    return "<nothing>"
-
-
-def timestamp_from_seconds(
-    db: Database, seconds: Union[int, float, None]
-) -> Union[str, None]:
-    if seconds is None:
+    def timestamp_from_seconds(
+        self, seconds: Union[int, float, None]
+    ) -> Union[str, None]:
+        if seconds is None:
+            return None
+        seconds = int(seconds)
+        if self.type in {POSTGRES, COCKROACH}:
+            return datetime.datetime.fromtimestamp(seconds).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+        elif self.type == SQLITE:
+            return str(seconds)
         return None
-    seconds = int(seconds)
-    if db.type in {POSTGRES, COCKROACH}:
-        return datetime.datetime.fromtimestamp(seconds).strftime("%Y-%m-%d %H:%M:%S")
-    elif db.type == SQLITE:
-        return str(seconds)
-    return None
 
-
-def timestamp_now(db: Database) -> str:
-    timestamp = timestamp_from_seconds(db, time.time())
-    if timestamp is None:
-        raise Exception("Timestamp is None")
-    return timestamp
-
-
-@asynccontextmanager
-async def get_db_connection(db: Database, conn: Optional[Connection] = None):
-    """Either yield the existing database connection or create a new one.
-
-    Note: This should be implemented as Database.get_db_connection(self, conn) but
-    since we want to use it in LNbits, we can't change the Database class their.
-
-    Args:
-        db (Database): Database object.
-        conn (Optional[Connection], optional): Connection object. Defaults to None.
-
-    Yields:
-        Connection: Connection object.
-    """
-    if conn is not None:
-        # Yield the existing connection
-        yield conn
-    else:
-        # Create and yield a new connection
-        async with db.connect() as new_conn:
-            yield new_conn
+    def timestamp_now_str(self) -> str:
+        timestamp = self.timestamp_from_seconds(time.time())
+        if timestamp is None:
+            raise Exception("Timestamp is None")
+        return timestamp

@@ -40,6 +40,18 @@ async def assert_err(f, msg: Union[str, CashuError]):
     raise Exception(f"Expected error: {msg}, got no error")
 
 
+async def assert_err_multiple(f, msgs: List[str]):
+    """Compute f() and expect an error message 'msg'."""
+    try:
+        await f
+    except Exception as exc:
+        for msg in msgs:
+            if msg in str(exc.args[0]):
+                return
+        raise Exception(f"Expected error: {msgs}, got: {exc.args[0]}")
+    raise Exception(f"Expected error: {msgs}, got no error")
+
+
 def assert_amt(proofs: List[Proof], expected: int):
     """Assert amounts the proofs contain."""
     assert sum([p.amount for p in proofs]) == expected
@@ -379,12 +391,12 @@ async def test_split_race_condition(wallet1: Wallet):
     # run two splits in parallel
     import asyncio
 
-    await assert_err(
+    await assert_err_multiple(
         asyncio.gather(
             wallet1.split(wallet1.proofs, 20),
             wallet1.split(wallet1.proofs, 20),
         ),
-        "proofs are pending.",
+        ["proofs are pending."],
     )
 
 

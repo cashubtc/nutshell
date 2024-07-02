@@ -12,7 +12,7 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
-from ..core.db import Database
+from ..core.db import Connection, Database
 from ..core.errors import (
     NoSecretInProofsError,
     NotAllowedError,
@@ -40,7 +40,11 @@ class LedgerVerification(
     lightning: Dict[Unit, LightningBackend]
 
     async def verify_inputs_and_outputs(
-        self, *, proofs: List[Proof], outputs: Optional[List[BlindedMessage]] = None
+        self,
+        *,
+        proofs: List[Proof],
+        outputs: Optional[List[BlindedMessage]] = None,
+        conn: Optional[Connection] = None,
     ):
         """Checks all proofs and outputs for validity.
 
@@ -48,6 +52,7 @@ class LedgerVerification(
             proofs (List[Proof]): List of proofs to check.
             outputs (Optional[List[BlindedMessage]], optional): List of outputs to check.
                 Must be provided for a swap but not for a melt. Defaults to None.
+            conn (Optional[Connection], optional): Database connection. Defaults to None.
 
         Raises:
             Exception: Scripts did not validate.
@@ -57,7 +62,7 @@ class LedgerVerification(
         """
         # Verify inputs
         # Verify proofs are spendable
-        if not len(await self._get_proofs_spent([p.Y for p in proofs])) == 0:
+        if not len(await self._get_proofs_spent([p.Y for p in proofs], conn)) == 0:
             raise TokenAlreadySpentError()
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
@@ -83,7 +88,7 @@ class LedgerVerification(
         self._verify_equation_balanced(proofs, outputs)
 
         # Verify outputs
-        await self._verify_outputs(outputs)
+        await self._verify_outputs(outputs, conn=conn)
 
         # Verify inputs and outputs together
         if not self._verify_input_output_amounts(proofs, outputs):
@@ -104,7 +109,10 @@ class LedgerVerification(
             raise TransactionError("validation of output spending conditions failed.")
 
     async def _verify_outputs(
-        self, outputs: List[BlindedMessage], skip_amount_check=False
+        self,
+        outputs: List[BlindedMessage],
+        skip_amount_check=False,
+        conn: Optional[Connection] = None,
     ):
         """Verify that the outputs are valid."""
         logger.trace(f"Verifying {len(outputs)} outputs.")
@@ -127,13 +135,15 @@ class LedgerVerification(
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate outputs.")
         # verify that outputs have not been signed previously
-        signed_before = await self._check_outputs_issued_before(outputs)
+        signed_before = await self._check_outputs_issued_before(outputs, conn)
         if any(signed_before):
             raise TransactionError("outputs have already been signed before.")
         logger.trace(f"Verified {len(outputs)} outputs.")
 
     async def _check_outputs_issued_before(
-        self, outputs: List[BlindedMessage]
+        self,
+        outputs: List[BlindedMessage],
+        conn: Optional[Connection] = None,
     ) -> List[bool]:
         """Checks whether the provided outputs have previously been signed by the mint
         (which would lead to a duplication error later when trying to store these outputs again).
@@ -145,7 +155,7 @@ class LedgerVerification(
             result (List[bool]): Whether outputs are already present in the database.
         """
         result = []
-        async with self.db.connect() as conn:
+        async with self.db.get_connection(conn) as conn:
             for output in outputs:
                 promise = await self.crud.get_promise(
                     b_=output.B_, db=self.db, conn=conn
@@ -153,21 +163,15 @@ class LedgerVerification(
                 result.append(False if promise is None else True)
         return result
 
-    async def _get_proofs_pending(self, Ys: List[str]) -> Dict[str, Proof]:
-        """Returns a dictionary of only those proofs that are pending.
-        The key is the Y=h2c(secret) and the value is the proof.
-        """
-        proofs_pending = await self.crud.get_proofs_pending(Ys=Ys, db=self.db)
-        proofs_pending_dict = {p.Y: p for p in proofs_pending}
-        return proofs_pending_dict
-
-    async def _get_proofs_spent(self, Ys: List[str]) -> Dict[str, Proof]:
+    async def _get_proofs_spent(
+        self, Ys: List[str], conn: Optional[Connection] = None
+    ) -> Dict[str, Proof]:
         """Returns a dictionary of all proofs that are spent.
         The key is the Y=h2c(secret) and the value is the proof.
         """
         proofs_spent_dict: Dict[str, Proof] = {}
         # check used secrets in database
-        async with self.db.connect() as conn:
+        async with self.db.get_connection(conn=conn) as conn:
             for Y in Ys:
                 spent_proof = await self.crud.get_proof_used(db=self.db, Y=Y, conn=conn)
                 if spent_proof:

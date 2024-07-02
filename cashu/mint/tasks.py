@@ -39,14 +39,22 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
     async def invoice_callback_dispatcher(self, checking_id: str) -> None:
         logger.debug(f"Invoice callback dispatcher: {checking_id}")
         # TODO: db read, quote.paid = True, db write should be refactored and moved to ledger.py
-        quote = await self.crud.get_mint_quote(checking_id=checking_id, db=self.db)
-        if not quote:
-            logger.error(f"Quote not found for {checking_id}")
-            return
-        # set the quote as paid
-        if not quote.paid:
-            quote.paid = True
-            quote.state = MintQuoteState.paid
-            await self.crud.update_mint_quote(quote=quote, db=self.db)
-        logger.trace(f"Quote {quote} set as paid and ")
-        await self.events.submit(quote)
+
+        async with self.db.get_connection(lock_table="mint_quotes") as conn:
+            quote = await self.crud.get_mint_quote(
+                checking_id=checking_id, db=self.db, conn=conn
+            )
+            if not quote:
+                logger.error(f"Quote not found for {checking_id}")
+                return
+            # set the quote as paid
+            if quote.state == MintQuoteState.unpaid:
+                quote.paid = True
+                quote.state = MintQuoteState.paid
+                await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
+            else:
+                return
+            logger.trace(
+                f"Callback dispatcher: quote {quote} set as {quote.state.value}"
+            )
+            await self.events.submit(quote)

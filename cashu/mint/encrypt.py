@@ -8,7 +8,7 @@ except ImportError:
 import asyncio
 from functools import wraps
 
-from cashu.core.db import Database, table_with_schema
+from cashu.core.db import Database
 from cashu.core.migrations import migrate_databases
 from cashu.core.settings import settings
 from cashu.mint import migrations
@@ -95,7 +95,7 @@ async def migrate(no_dry_run):
     # get all keysets
     async with ledger.db.connect() as conn:
         rows = await conn.fetchall(
-            f"SELECT * FROM {table_with_schema(ledger.db, 'keysets')} WHERE seed IS NOT"
+            f"SELECT * FROM {ledger.db.table_with_schema('keysets')} WHERE seed IS NOT"
             " NULL"
         )
     click.echo(f"Found {len(rows)} keysets in database.")
@@ -138,7 +138,7 @@ async def migrate(no_dry_run):
             for keyset_dict in keysets_migrate:
                 click.echo(f"Updating keyset {keyset_dict['id']}")
                 await conn.execute(
-                    f"UPDATE {table_with_schema(ledger.db, 'keysets')} SET seed='',"
+                    f"UPDATE {ledger.db.table_with_schema('keysets')} SET seed='',"
                     " encrypted_seed = ?, seed_encryption_method = ? WHERE id = ?",
                     (
                         keyset_dict["encrypted_seed"],
