@@ -7,9 +7,8 @@ from typing import Optional, Union
 
 import psycopg2
 from loguru import logger
-from sqlalchemy import create_engine
-from sqlalchemy_aio.base import AsyncConnection
-from sqlalchemy_aio.strategy import ASYNCIO_STRATEGY  # type: ignore
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 POSTGRES = "POSTGRES"
 COCKROACH = "COCKROACH"
@@ -74,19 +73,17 @@ class Connection(Compat):
         if self.type in {POSTGRES, COCKROACH}:
             query = query.replace("%", "%%")
             query = query.replace("?", "%s")
-        return query
+        return text(query)
 
-    async def fetchall(self, query: str, values: tuple = ()) -> list:
+    async def fetchall(self, query: str, values: dict = {}) -> list:
         result = await self.conn.execute(self.rewrite_query(query), values)
-        return await result.fetchall()
+        return result.all()
 
-    async def fetchone(self, query: str, values: tuple = ()):
+    async def fetchone(self, query: str, values: dict = {}):
         result = await self.conn.execute(self.rewrite_query(query), values)
-        row = await result.fetchone()
-        await result.close()
-        return row
+        return result.fetchone()
 
-    async def execute(self, query: str, values: tuple = ()):
+    async def execute(self, query: str, values: dict = {}):
         return await self.conn.execute(self.rewrite_query(query), values)
 
 
@@ -103,6 +100,14 @@ class Database(Compat):
                 self.type = COCKROACH
             else:
                 self.type = POSTGRES
+                database_uri = database_uri.replace(
+                    "postgres://", "postgresql+asyncpg://"
+                )
+                database_uri = database_uri.replace(
+                    "postgresql://", "postgresql+asyncpg://"
+                )
+                # Disble prepared statement cache: https://docs.sqlalchemy.org/en/14/dialects/postgresql.html#prepared-statement-cache
+                database_uri += "?prepared_statement_cache_size=0"
 
             import psycopg2  # type: ignore
 
@@ -139,7 +144,7 @@ class Database(Compat):
                 logger.info(f"Creating database directory: {self.db_location}")
                 os.makedirs(self.db_location)
             self.path = os.path.join(self.db_location, f"{self.name}.sqlite3")
-            database_uri = f"sqlite:///{self.path}?check_same_thread=false"
+            database_uri = f"sqlite+aiosqlite:///{self.path}?check_same_thread=false"
             self.type = SQLITE
 
         self.schema = self.name
@@ -148,7 +153,7 @@ class Database(Compat):
         else:
             self.schema = None
 
-        self.engine = create_engine(database_uri, strategy=ASYNCIO_STRATEGY)
+        self.engine = create_async_engine(database_uri)
 
     @asynccontextmanager
     async def get_connection(
@@ -195,6 +200,7 @@ class Database(Compat):
         try:
             logger.trace("Connecting to database")
             async with self.engine.connect() as conn:  # type: ignore
+                assert type(conn) == AsyncConnection
                 logger.trace("Connected to database. Starting transaction")
                 async with conn.begin() as txn:
                     logger.trace("Transaction started")
@@ -215,11 +221,6 @@ class Database(Compat):
         except Exception as e:
             logger.trace(f"Error in database connection: {e}")
             error = Exception(f"failed to acquire database lock on {lock_table}: {e}")
-        finally:
-            if conn and not conn.closed:
-                await conn.close()
-            if wconn and not wconn.conn.closed:
-                await wconn.conn.close()
             # await asyncio.sleep(0.1)
 
         logger.trace("Connection timeout. Raising error?")
@@ -270,19 +271,17 @@ class Database(Compat):
 
             raise e
 
-    async def fetchall(self, query: str, values: tuple = ()) -> list:
+    async def fetchall(self, query: str, values: dict = {}) -> list:
         async with self.connect() as conn:
             result = await conn.execute(query, values)
-            return await result.fetchall()
+            return result.all()
 
-    async def fetchone(self, query: str, values: tuple = ()):
+    async def fetchone(self, query: str, values: dict = {}):
         async with self.connect() as conn:
             result = await conn.execute(query, values)
-            row = await result.fetchone()
-            await result.close()
-            return row
+            return result.fetchone()
 
-    async def execute(self, query: str, values: tuple = ()):
+    async def execute(self, query: str, values: dict = {}):
         async with self.connect() as conn:
             return await conn.execute(query, values)
 
@@ -329,3 +328,12 @@ class Database(Compat):
         if timestamp is None:
             raise Exception("Timestamp is None")
         return timestamp
+
+    def to_timestamp(self, timestamp_str: str) -> Union[str, datetime.datetime]:
+        if not timestamp_str:
+            timestamp_str = self.timestamp_now_str()
+        if self.type in {POSTGRES, COCKROACH}:
+            return datetime.datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+        elif self.type == SQLITE:
+            return timestamp_str
+        return "<nothing>"

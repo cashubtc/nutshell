@@ -47,10 +47,10 @@ async def migrate_databases(db: Database, migrations_module):
     async def set_migration_version(conn, db_name, version):
         await conn.execute(
             f"""
-            INSERT INTO {db.table_with_schema('dbversions')} (db, version) VALUES (?, ?)
-            ON CONFLICT (db) DO UPDATE SET version = ?
+            INSERT INTO {db.table_with_schema('dbversions')} (db, version) VALUES (:db, :version)
+            ON CONFLICT (db) DO UPDATE SET version = :version
             """,
-            (db_name, version, version),
+            {"db": db_name, "version": version},
         )
 
     async def run_migration(db, migrations_module):
@@ -100,9 +100,10 @@ async def migrate_databases(db: Database, migrations_module):
         if not exists:
             await migrations_module.m000_create_migrations_table(conn)
 
-        rows = await (
-            await conn.execute(f"SELECT * FROM {db.table_with_schema('dbversions')}")
-        ).fetchall()
+        result = await conn.execute(
+            f"SELECT * FROM {db.table_with_schema('dbversions')}"
+        )
+        rows = result.all()
         current_versions = {row["db"]: row["version"] for row in rows}
         matcher = re.compile(r"^m(\d\d\d)_")
     await run_migration(db, migrations_module)

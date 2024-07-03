@@ -166,12 +166,12 @@ async def m007_nostr(db: Database):
             """
             INSERT INTO nostr
                 (type, last)
-            VALUES (?, ?)
+            VALUES (:type, :last)
             """,
-            (
-                "dm",
-                None,
-            ),
+            {
+                "type": "db",
+                "last": None,
+            },
         )
 
 

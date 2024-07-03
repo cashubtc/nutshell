@@ -515,7 +515,7 @@ async def m014_proofs_add_Y_column(db: Database):
                     secret TEXT NOT NULL,
                     y TEXT,
                     id TEXT,
-                    created TIMESTAMP,
+                    created TIMESTAMP DEFAULT {db.timestamp_now},
 
                     UNIQUE (Y)
 
@@ -558,7 +558,7 @@ async def m016_recompute_Y_with_new_h2c(db: Database):
         )
         # Proof() will compute Y from secret upon initialization
         proofs_used = [Proof(**r) for r in rows]
-
+    async with db.connect() as conn:
         rows = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('proofs_pending')}"
         )
@@ -747,21 +747,21 @@ async def m018_duplicate_deprecated_keyset_ids(db: Database):
                 f"""
                 INSERT INTO {db.table_with_schema('keysets')}
                 (id, derivation_path, valid_from, valid_to, first_seen, active, version, seed, unit, encrypted_seed, seed_encryption_method)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (:id, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :seed, :unit, :encrypted_seed, :seed_encryption_method)
                 """,
-                (
-                    keyset.id,
-                    keyset.derivation_path,
-                    keyset.valid_from,
-                    keyset.valid_to,
-                    keyset.first_seen,
-                    keyset.active,
-                    keyset.version,
-                    keyset.seed,
-                    keyset.unit.name,
-                    keyset.encrypted_seed,
-                    keyset.seed_encryption_method,
-                ),
+                {
+                    "id": keyset.id,
+                    "derivation_path": keyset.derivation_path,
+                    "valid_from": keyset.valid_from,
+                    "valid_to": keyset.valid_to,
+                    "first_seen": keyset.first_seen,
+                    "active": keyset.active,
+                    "version": keyset.version,
+                    "seed": keyset.seed,
+                    "unit": keyset.unit.name,
+                    "encrypted_seed": keyset.encrypted_seed,
+                    "seed_encryption_method": keyset.seed_encryption_method,
+                },
             )
 
 

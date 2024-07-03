@@ -63,7 +63,7 @@ async def test_db_tables(ledger: Ledger):
                 "SELECT table_name FROM information_schema.tables WHERE table_schema ="
                 " 'public';"
             )
-        tables = [t[0] for t in await tables_res.fetchall()]
+        tables = [t[0] for t in tables_res.all()]
         tables_expected = [
             "dbversions",
             "keysets",
