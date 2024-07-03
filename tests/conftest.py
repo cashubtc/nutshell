@@ -124,7 +124,6 @@ async def ledger():
     )
     ledger = await start_mint_init(ledger)
     yield ledger
-    await ledger.db.engine.dispose()
     print("teardown")
 
 
