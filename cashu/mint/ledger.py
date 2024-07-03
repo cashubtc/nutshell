@@ -509,13 +509,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         output_unit = self.keysets[outputs[0].id].unit
 
         quote = await self.get_mint_quote(quote_id)
+        if quote.state == MintQuoteState.pending:
+            raise TransactionError("Mint quote already pending.")
+        if quote.state == MintQuoteState.issued:
+            raise TransactionError("Mint quote already issued.")
+        if not quote.state == MintQuoteState.paid:
+            raise QuoteNotPaidError()
         previous_state = quote.state
         await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
-            if quote.state == MintQuoteState.issued:
-                raise TransactionError("quote already issued")
-            if not quote.state == MintQuoteState.paid:
-                raise QuoteNotPaidError()
             if not quote.unit == output_unit.name:
                 raise TransactionError("quote unit does not match output unit")
             if not quote.amount == sum_amount_outputs:
@@ -964,11 +966,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         logger.trace("split called")
         # explicitly check that amount of inputs is equal to amount of outputs
         self._verify_equation_balanced(proofs, outputs)
-        # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
 
         await self.db_write._set_proofs_pending(proofs)
         try:
+            # verify spending inputs, outputs, and spending conditions
+            await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
                 # await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs, conn=conn)
                 await self._invalidate_proofs(proofs=proofs, conn=conn)

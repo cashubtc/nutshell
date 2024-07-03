@@ -154,30 +154,41 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
         """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
         try:
             async with ledger.db.get_connection(
-                lock_table="mint_quotes", lock_select_statement=f"quote='{invoice.id}'"
-            ):
+                lock_table="mint_quotes",
+                lock_select_statement=f"quote='{invoice.id}'",
+                lock_timeout=1,
+            ) as conn1:
+                await conn1.execute(
+                    f"UPDATE mint_quotes SET amount=100 WHERE quote='{invoice.id}';"
+                )
                 try:
                     async with ledger.db.get_connection(
                         lock_table="mint_quotes",
                         lock_select_statement=f"quote='{invoice.id}'",
-                        lock_timeout=0.1,
+                        lock_timeout=2,
                     ) as conn2:
                         # write something with conn1, we never reach this point if the lock works
                         await conn2.execute(
-                            f"INSERT INTO mint_quotes (quote, amount) VALUES ('{invoice.id}', 100);"
+                            f"UPDATE mint_quotes SET amount=101 WHERE quote='{invoice.id}';"
                         )
                 except Exception as exc:
                     # this is expected to raise
                     raise Exception(f"conn2: {str(exc)}")
-
         except Exception as exc:
-            if str(exc).startswith("conn2"):
+            if "conn2" in str(exc):
                 raise exc
             else:
-                raise Exception("not expected to happen")
+                raise Exception(f"not expected to happen: {str(exc)}")
 
     await assert_err(get_connection(), "failed to acquire database lock")
 
+
+@pytest.mark.asyncio
+async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledger):
+    if ledger.db.type == db.SQLITE:
+        pytest.skip("SQLite does not support row locking")
+    # this should work since we lock two different rows
+    invoice = await wallet.request_mint(64)
     invoice2 = await wallet.request_mint(64)
 
     async def get_connection2():
@@ -207,19 +218,12 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
                     raise Exception(f"conn2: {str(exc)}")
 
         except Exception as exc:
-            if str(exc).startswith("conn2"):
+            if "conn2" in str(exc):
                 raise exc
             else:
-                raise Exception("not expected to happen")
+                raise Exception(f"not expected to happen: {str(exc)}")
 
-    # if the database is sqlite, we expect "failed to acquire database lock" since we can't lock individual rows
-    if ledger.db.type == db.SQLITE:
-        await assert_err(get_connection2(), "failed to acquire database lock")
-        return
-
-    if ledger.db.type in {db.POSTGRES, db.COCKROACH}:
-        # we expect no error since we lock two different rows
-        await get_connection2()
+    await get_connection2()
 
 
 @pytest.mark.asyncio

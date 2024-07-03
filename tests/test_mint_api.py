@@ -1,3 +1,5 @@
+import asyncio
+
 import bolt11
 import httpx
 import pytest
@@ -50,6 +52,7 @@ async def test_info(ledger: Ledger):
     setting = MintMeltMethodSetting.parse_obj(info.nuts[4]["methods"][0])
     assert setting.method == "bolt11"
     assert setting.unit == "sat"
+    await asyncio.sleep(10)
 
 
 @pytest.mark.asyncio
@@ -439,6 +442,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
         },
         timeout=None,
     )
+    response.raise_for_status()
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("payment_preimage") is not None

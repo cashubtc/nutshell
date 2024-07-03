@@ -1,4 +1,3 @@
-import asyncio
 import datetime
 import os
 import re
@@ -6,6 +5,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional, Union
 
+import psycopg2
 from loguru import logger
 from sqlalchemy import create_engine
 from sqlalchemy_aio.base import AsyncConnection
@@ -139,7 +139,7 @@ class Database(Compat):
                 logger.info(f"Creating database directory: {self.db_location}")
                 os.makedirs(self.db_location)
             self.path = os.path.join(self.db_location, f"{self.name}.sqlite3")
-            database_uri = f"sqlite:///{self.path}"
+            database_uri = f"sqlite:///{self.path}?check_same_thread=false"
             self.type = SQLITE
 
         self.schema = self.name
@@ -149,75 +149,6 @@ class Database(Compat):
             self.schema = None
 
         self.engine = create_engine(database_uri, strategy=ASYNCIO_STRATEGY)
-        self.lock = asyncio.Lock()
-
-    @asynccontextmanager
-    async def connect(
-        self,
-        lock_table: Optional[str] = None,
-        lock_select_statement: Optional[str] = None,
-        lock_timeout: Optional[float] = None,
-    ):
-        async with self.engine.connect() as conn:  # type: ignore
-            async with conn.begin() as txn:
-                wconn = Connection(conn, txn, self.type, self.name, self.schema)
-
-                if lock_table:
-                    await self.acquire_lock(
-                        wconn, lock_table, lock_select_statement, lock_timeout
-                    )
-
-                if self.schema:
-                    if self.type in {POSTGRES, COCKROACH}:
-                        await wconn.execute(
-                            f"CREATE SCHEMA IF NOT EXISTS {self.schema}"
-                        )
-                    elif self.type == SQLITE:
-                        await wconn.execute(f"ATTACH '{self.path}' AS {self.schema}")
-                yield wconn
-
-    async def acquire_lock(
-        self,
-        wconn: Connection,
-        lock_table: str,
-        lock_select_statement: Optional[str] = None,
-        lock_timeout: Optional[float] = None,
-    ):
-        """Acquire a lock on a table or a row in a table.
-
-        Args:
-            wconn (Connection): Connection object.
-            lock_table (str): Table to lock.
-            lock_select_statement (Optional[str], optional):
-            lock_timeout (Optional[float], optional):
-
-        Raises:
-            Exception: _description_
-        """
-        timeout = lock_timeout or 5  # default to 5 second
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                logger.trace(
-                    f"Acquiring lock on {lock_table} with statement {self.lock_table(lock_table, lock_select_statement)}"
-                )
-                await wconn.execute(self.lock_table(lock_table, lock_select_statement))
-                logger.trace(f"Success: Acquired lock on {lock_table}")
-                return
-            except Exception as e:
-                if (
-                    (
-                        self.type == POSTGRES
-                        and "could not obtain lock on relation" in str(e)
-                    )
-                    or (self.type == COCKROACH and "already locked" in str(e))
-                    or (self.type == SQLITE and "database is locked" in str(e))
-                ):
-                    logger.trace(f"Table {lock_table} is already locked: {e}")
-                else:
-                    logger.trace(f"Failed to acquire lock on {lock_table}: {e}")
-                await asyncio.sleep(0.1)
-        raise Exception("failed to acquire database lock")
 
     @asynccontextmanager
     async def get_connection(
@@ -240,16 +171,104 @@ class Database(Compat):
         """
         if conn is not None:
             # Yield the existing connection
+            logger.trace("Reusing existing connection")
             yield conn
         else:
-            if lock_select_statement:
-                assert (
-                    len(re.findall(r"^[^=]+='[^']+'$", lock_select_statement)) == 1
-                ), "lock_select_statement must have exactly one {column}='{value}' pattern."
+            logger.trace("get_connection: Creating new connection")
             async with self.connect(
                 lock_table, lock_select_statement, lock_timeout
             ) as new_conn:
                 yield new_conn
+
+    @asynccontextmanager
+    async def connect(
+        self,
+        lock_table: Optional[str] = None,
+        lock_select_statement: Optional[str] = None,
+        lock_timeout: Optional[float] = None,
+    ):
+        # timeout = 0.1  # lock_timeout or 5  # default to 5 seconds
+        # start_time = time.time()
+        conn = None
+        error = None
+        # while time.time() - start_time < timeout:
+        try:
+            logger.trace("Connecting to database")
+            async with self.engine.connect() as conn:  # type: ignore
+                logger.trace("Connected to database. Starting transaction")
+                async with conn.begin() as txn:
+                    logger.trace("Transaction started")
+                    wconn = Connection(conn, txn, self.type, self.name, self.schema)
+                    if lock_table:
+                        logger.trace("Acquiring lock")
+                        await self.acquire_lock(
+                            wconn, lock_table, lock_select_statement
+                        )
+                        logger.trace("Lock acquired")
+                    logger.trace("Yielding connection")
+                    yield wconn
+                    logger.trace("Connection yielded. Committing transaction")
+                    return
+        except psycopg2.errors.LockNotAvailable as e:
+            logger.trace(f"Table {lock_table} is already locked: {e}")
+            # await asyncio.sleep(0.1)
+        except Exception as e:
+            logger.trace(f"Error in database connection: {e}")
+            error = Exception(f"failed to acquire database lock on {lock_table}: {e}")
+        finally:
+            if conn and not conn.closed:
+                await conn.close()
+            if wconn and not wconn.conn.closed:
+                await wconn.conn.close()
+            # await asyncio.sleep(0.1)
+
+        logger.trace("Connection timeout. Raising error?")
+        if error:
+            logger.trace(f"Failed to connect to database: {str(error)}")
+            raise error
+
+    async def acquire_lock(
+        self,
+        wconn: Connection,
+        lock_table: str,
+        lock_select_statement: Optional[str] = None,
+    ):
+        """Acquire a lock on a table or a row in a table.
+
+        Args:
+            wconn (Connection): Connection object.
+            lock_table (str): Table to lock.
+            lock_select_statement (Optional[str], optional):
+            lock_timeout (Optional[float], optional):
+
+        Raises:
+            Exception: _description_
+        """
+        if lock_select_statement:
+            assert (
+                len(re.findall(r"^[^=]+='[^']+'$", lock_select_statement)) == 1
+            ), "lock_select_statement must have exactly one {column}='{value}' pattern."
+        try:
+            logger.trace(
+                f"Acquiring lock on {lock_table} with statement {self.lock_table(lock_table, lock_select_statement)}"
+            )
+            await wconn.execute(self.lock_table(lock_table, lock_select_statement))
+            logger.trace(f"Success: Acquired lock on {lock_table}")
+            return
+        except Exception as e:
+            if (
+                (
+                    self.type == POSTGRES
+                    and "could not obtain lock on relation" in str(e)
+                )
+                or (self.type == COCKROACH and "already locked" in str(e))
+                or (self.type == SQLITE and "database is locked" in str(e))
+            ):
+                logger.trace(f"Table {lock_table} is already locked: {e}")
+            else:
+                logger.trace(f"Failed to acquire lock on {lock_table}: {e}")
+
+            raise e
 
     async def fetchall(self, query: str, values: tuple = ()) -> list:
         async with self.connect() as conn:

@@ -86,13 +86,13 @@ async def test_mint_quote_state_transitions(wallet1: Wallet, ledger: Ledger):
     # set pending
     await assert_err(
         set_state(quote, MintQuoteState.pending),
-        "Cannot change state of an unpaid quote.",
+        "Cannot change state of an unpaid mint quote",
     )
 
     # set unpaid
     await assert_err(
         set_state(quote, MintQuoteState.unpaid),
-        "Cannot change state of an unpaid quote.",
+        "Cannot change state of an unpaid mint quote",
     )
 
     # set paid
@@ -101,7 +101,7 @@ async def test_mint_quote_state_transitions(wallet1: Wallet, ledger: Ledger):
     # set unpaid
     await assert_err(
         set_state(quote, MintQuoteState.unpaid),
-        "Cannot change state of a paid quote to unpaid.",
+        "Cannot change state of a paid mint quote to unpaid.",
     )
 
     # set pending
@@ -119,7 +119,7 @@ async def test_mint_quote_state_transitions(wallet1: Wallet, ledger: Ledger):
     # set pending again
     await assert_err(
         set_state(quote, MintQuoteState.pending),
-        "Cannot change state of an issued quote.",
+        "Cannot change state of an issued mint quote.",
     )
 
 
@@ -208,7 +208,7 @@ async def test_melt_quote_state_transitions(wallet1: Wallet, ledger: Ledger):
 
     await assert_err(
         set_state(quote, MeltQuoteState.pending),
-        "Cannot change state of a paid quote.",
+        "Cannot change state of a paid melt quote.",
     )
 
 

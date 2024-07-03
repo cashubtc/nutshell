@@ -1,3 +1,4 @@
+import random
 from typing import List, Optional, Union
 
 from loguru import logger
@@ -45,18 +46,25 @@ class DbWriteHelper:
             Exception: At least one proof already in pending table.
         """
         # first we check whether these proofs are pending already
-        async with self.db.get_connection(lock_table="proofs_pending") as conn:
-            await self._validate_proofs_pending(proofs, conn)
-            try:
+        random_id = random.randint(0, 1000000)
+        try:
+            logger.debug("trying to set proofs pending")
+            logger.trace(f"get_connection: random_id: {random_id}")
+            async with self.db.get_connection(
+                lock_table="proofs_pending", lock_timeout=60
+            ) as conn:
+                logger.trace(f"get_connection: got connection {random_id}")
+                await self._validate_proofs_pending(proofs, conn)
                 for p in proofs:
                     logger.trace(f"crud: setting proof {p.Y} as PENDING")
                     await self.crud.set_proof_pending(
                         proof=p, db=self.db, quote_id=quote_id, conn=conn
                     )
-            except Exception as e:
-                logger.error(f"Failed to set proofs pending: {e}")
-                raise TransactionError("Failed to set proofs pending.")
-
+                    logger.trace(f"crud: set proof {p.Y} as PENDING")
+        except Exception as e:
+            logger.error(f"Failed to set proofs pending: {e}")
+            raise TransactionError(f"Failed to set proofs pending: {str(e)}")
+        logger.trace("_set_proofs_pending released lock")
         for p in proofs:
             await self.events.submit(ProofState(Y=p.Y, state=ProofSpentState.pending))
 
@@ -72,7 +80,7 @@ class DbWriteHelper:
         """
         async with self.db.get_connection() as conn:
             for p in proofs:
-                logger.trace(f"crud: unsetting proof {p.Y} as PENDING")
+                logger.trace(f"crud: un-setting proof {p.Y} as PENDING")
                 await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
 
         if not spent:
@@ -92,6 +100,7 @@ class DbWriteHelper:
         Raises:
             Exception: At least one of the proofs is in the pending table.
         """
+        logger.trace("crud: validating proofs pending")
         pending_proofs = await self.crud.get_proofs_pending(
             Ys=[p.Y for p in proofs], db=self.db, conn=conn
         )
