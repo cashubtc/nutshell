@@ -310,9 +310,10 @@ class Wallet(
     async def _check_used_secrets(self, secrets):
         """Checks if any of the secrets have already been used"""
         logger.trace("Checking secrets.")
-        for s in secrets:
-            if await secret_used(s, db=self.db):
-                raise Exception(f"secret already used: {s}")
+        async with self.db.get_connection() as conn:
+            for s in secrets:
+                if await secret_used(s, db=self.db, conn=conn):
+                    raise Exception(f"secret already used: {s}")
         logger.trace("Secret check complete.")
 
     async def request_mint_with_callback(

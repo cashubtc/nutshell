@@ -1,7 +1,6 @@
 import asyncio
 import importlib
 import multiprocessing
-import os
 import shutil
 import time
 from pathlib import Path
@@ -98,17 +97,35 @@ async def ledger():
         await ledger.startup_ledger()
         return ledger
 
-    if not settings.mint_database.startswith("postgres"):
-        # clear sqlite database
-        db_file = os.path.join(settings.mint_database, "mint.sqlite3")
-        if os.path.exists(db_file):
-            os.remove(db_file)
-    else:
-        # clear postgres database
+    # drop all tables
+    # drop all data in tables (but keep tables) - this is faster
+    async def clear_database():
         db = Database("mint", settings.mint_database)
         async with db.connect() as conn:
-            await conn.execute("DROP SCHEMA public CASCADE;")
-            await conn.execute("CREATE SCHEMA public;")
+            await conn.execute("TRUNCATE TABLE promises;")
+            await conn.execute("TRUNCATE TABLE proofs_used;")
+            await conn.execute("TRUNCATE TABLE proofs_pending;")
+            await conn.execute("TRUNCATE TABLE mint_quotes;")
+            await conn.execute("TRUNCATE TABLE melt_quotes;")
+            await conn.execute("TRUNCATE TABLE keysets;")
+
+    try:
+        await clear_database()
+    except Exception:
+        pass
+
+    # if not settings.mint_database.startswith("postgres"):
+    #     # clear sqlite database
+    #     db_file = os.path.join(settings.mint_database, "mint.sqlite3")
+    #     if os.path.exists(db_file):
+    #         os.remove(db_file)
+    # else:
+    #     # clear postgres database
+    #     db = Database("mint", settings.mint_database)
+    #     async with db.connect() as conn:
+    #         # drop all tables
+    #         await conn.execute("DROP SCHEMA public CASCADE;")
+    #         await conn.execute("CREATE SCHEMA public;")
 
     wallets_module = importlib.import_module("cashu.lightning")
     lightning_backend = getattr(wallets_module, settings.mint_backend_bolt11_sat)()

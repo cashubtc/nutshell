@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import os
 import re
@@ -192,41 +193,46 @@ class Database(Compat):
         lock_select_statement: Optional[str] = None,
         lock_timeout: Optional[float] = None,
     ):
-        # timeout = 0.1  # lock_timeout or 5  # default to 5 seconds
-        # start_time = time.time()
+        timeout = lock_timeout or 1  # default to 5 seconds
+        start_time = time.time()
         conn = None
-        error = None
-        # while time.time() - start_time < timeout:
-        try:
-            logger.trace("Connecting to database")
-            async with self.engine.connect() as conn:  # type: ignore
-                assert type(conn) == AsyncConnection
-                logger.trace("Connected to database. Starting transaction")
-                async with conn.begin() as txn:
-                    logger.trace("Transaction started")
-                    wconn = Connection(conn, txn, self.type, self.name, self.schema)
+        while time.time() - start_time < timeout:
+            try:
+                logger.trace("Connecting to database")
+                async with self.engine.begin() as conn:  # type: ignore
+                    assert type(conn) == AsyncConnection
+                    logger.trace("Connected to database. Starting transaction")
+                    wconn = Connection(conn, None, self.type, self.name, self.schema)
                     if lock_table:
                         logger.trace("Acquiring lock")
                         await self.acquire_lock(
                             wconn, lock_table, lock_select_statement
                         )
                         logger.trace("Lock acquired")
-                    logger.trace("Yielding connection")
+                    logger.trace(f"> Yielding connection. Lock: {lock_table}")
                     yield wconn
-                    logger.trace("Connection yielded. Committing transaction")
+                    logger.trace(f"< Connection yielded. Unlock: {lock_table}")
                     return
-        except psycopg2.errors.LockNotAvailable as e:
-            logger.trace(f"Table {lock_table} is already locked: {e}")
-            # await asyncio.sleep(0.1)
-        except Exception as e:
-            logger.trace(f"Error in database connection: {e}")
-            error = Exception(f"failed to acquire database lock on {lock_table}: {e}")
-            # await asyncio.sleep(0.1)
+            except psycopg2.errors.LockNotAvailable as e:
+                # we don't raise exceptions related to locks
+                logger.trace(f"Table {lock_table} is already locked: {e}")
+                await asyncio.sleep(0.05)
+            # OperationalError
+            except Exception as e:
+                if "database is locked" in str(e) or "could not obtain lock" in str(e):
+                    # we don't raise exceptions related to locks
+                    await asyncio.sleep(0.05)
+                else:
+                    # we raise all other exceptions
+                    raise e
 
-        logger.trace("Connection timeout. Raising error?")
-        if error:
-            logger.trace(f"Failed to connect to database: {str(error)}")
-            raise error
+            # raise Exception("Could not connect to database")
+        raise Exception("failed to acquire database lock")
+
+        # logger.trace("Connection timeout. Raising error?")
+        # if error:
+        #     logger.trace(f"Failed to connect to database: {str(error)}")
+        #     raise error
 
     async def acquire_lock(
         self,
