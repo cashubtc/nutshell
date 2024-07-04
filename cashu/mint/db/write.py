@@ -51,7 +51,8 @@ class DbWriteHelper:
             logger.debug("trying to set proofs pending")
             logger.trace(f"get_connection: random_id: {random_id}")
             async with self.db.get_connection(
-                lock_table="proofs_pending", lock_timeout=60
+                lock_table="proofs_pending",
+                lock_timeout=1,
             ) as conn:
                 logger.trace(f"get_connection: got connection {random_id}")
                 await self._validate_proofs_pending(proofs, conn)

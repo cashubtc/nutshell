@@ -152,6 +152,7 @@ def mint():
         "cashu.mint.app:app",
         port=settings.mint_listen_port,
         host=settings.mint_listen_host,
+        log_level="trace",
     )
 
     server = UvicornServer(config=config)

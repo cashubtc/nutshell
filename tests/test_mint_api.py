@@ -1,5 +1,3 @@
-import asyncio
-
 import bolt11
 import httpx
 import pytest
@@ -52,7 +50,6 @@ async def test_info(ledger: Ledger):
     setting = MintMeltMethodSetting.parse_obj(info.nuts[4]["methods"][0])
     assert setting.method == "bolt11"
     assert setting.unit == "sat"
-    await asyncio.sleep(10)
 
 
 @pytest.mark.asyncio
@@ -165,7 +162,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
     inputs_payload = [p.to_dict() for p in wallet.proofs]
     outputs_payload = [o.dict() for o in outputs]
     payload = {"inputs": inputs_payload, "outputs": outputs_payload}
-    response = httpx.post(f"{BASE_URL}/v1/swap", json=payload)
+    response = httpx.post(f"{BASE_URL}/v1/swap", json=payload, timeout=None)
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert len(result["signatures"]) == 2

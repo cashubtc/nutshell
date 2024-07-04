@@ -156,7 +156,7 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
             async with ledger.db.get_connection(
                 lock_table="mint_quotes",
                 lock_select_statement=f"quote='{invoice.id}'",
-                lock_timeout=1,
+                lock_timeout=0.1,
             ) as conn1:
                 await conn1.execute(
                     f"UPDATE mint_quotes SET amount=100 WHERE quote='{invoice.id}';"
@@ -165,7 +165,7 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
                     async with ledger.db.get_connection(
                         lock_table="mint_quotes",
                         lock_select_statement=f"quote='{invoice.id}'",
-                        lock_timeout=2,
+                        lock_timeout=0.1,
                     ) as conn2:
                         # write something with conn1, we never reach this point if the lock works
                         await conn2.execute(
@@ -195,7 +195,9 @@ async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledg
         """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
         try:
             async with ledger.db.get_connection(
-                lock_table="mint_quotes", lock_select_statement=f"quote='{invoice.id}'"
+                lock_table="mint_quotes",
+                lock_select_statement=f"quote='{invoice.id}'",
+                lock_timeout=0.1,
             ):
                 try:
                     async with ledger.db.get_connection(
@@ -235,7 +237,7 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
-    async with ledger.db.connect(lock_table="proofs_pending", lock_timeout=1) as conn:
+    async with ledger.db.connect(lock_table="proofs_pending", lock_timeout=0.1) as conn:
         assert isinstance(conn, Connection)
         await assert_err(
             ledger.db_write._set_proofs_pending(wallet.proofs),
@@ -274,7 +276,7 @@ async def test_db_set_proofs_pending_delayed_no_race_condition(
     assert wallet.balance == 64
 
     async def delayed_set_proofs_pending():
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.1)
         await ledger.db_write._set_proofs_pending(wallet.proofs)
 
     await assert_err(

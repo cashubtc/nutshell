@@ -193,7 +193,7 @@ class Database(Compat):
         lock_select_statement: Optional[str] = None,
         lock_timeout: Optional[float] = None,
     ):
-        timeout = lock_timeout or 1  # default to 5 seconds
+        timeout = lock_timeout or 5  # default to 5 seconds
         start_time = time.time()
         conn = None
         while time.time() - start_time < timeout:
@@ -216,12 +216,13 @@ class Database(Compat):
             except psycopg2.errors.LockNotAvailable as e:
                 # we don't raise exceptions related to locks
                 logger.trace(f"Table {lock_table} is already locked: {e}")
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.1)
             # OperationalError
             except Exception as e:
+                # check error strings for SQLite and PostgreSQL
                 if "database is locked" in str(e) or "could not obtain lock" in str(e):
                     # we don't raise exceptions related to locks
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.1)
                 else:
                     # we raise all other exceptions
                     raise e
