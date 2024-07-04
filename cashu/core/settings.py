@@ -46,6 +46,7 @@ class EnvSettings(CashuSettings):
     debug_profiling: bool = Field(default=False)
     debug_mint_only_deprecated: bool = Field(default=False)
     db_backup_path: Optional[str] = Field(default=None)
+    db_connection_pool: bool = Field(default=True)
 
 
 class MintSettings(CashuSettings):

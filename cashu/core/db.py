@@ -10,6 +10,9 @@ import psycopg2
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.pool import NullPool
+
+from cashu.core.settings import settings
 
 POSTGRES = "POSTGRES"
 COCKROACH = "COCKROACH"
@@ -154,7 +157,16 @@ class Database(Compat):
         else:
             self.schema = None
 
-        self.engine = create_async_engine(database_uri)
+        kwargs = {}
+        # pool = QueuePool if self.type in {POSTGRES, COCKROACH} else NullPool
+        # kwargs: Dict = {"poolclass": pool}
+        # if self.type in {POSTGRES, COCKROACH}:
+        #     kwargs["pool_size"] = 2
+        #     kwargs["max_overflow"] = 1
+        if not settings.db_connection_pool:
+            kwargs["poolclass"] = NullPool
+
+        self.engine = create_async_engine(database_uri, **kwargs)
 
     @asynccontextmanager
     async def get_connection(
@@ -226,14 +238,7 @@ class Database(Compat):
                 else:
                     # we raise all other exceptions
                     raise e
-
-            # raise Exception("Could not connect to database")
         raise Exception("failed to acquire database lock")
-
-        # logger.trace("Connection timeout. Raising error?")
-        # if error:
-        #     logger.trace(f"Failed to connect to database: {str(error)}")
-        #     raise error
 
     async def acquire_lock(
         self,
