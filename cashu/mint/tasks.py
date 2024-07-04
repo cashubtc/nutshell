@@ -38,11 +38,10 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
 
     async def invoice_callback_dispatcher(self, checking_id: str) -> None:
         logger.debug(f"Invoice callback dispatcher: {checking_id}")
-        # TODO: db read, quote.paid = True, db write should be refactored and moved to ledger.py
         async with self.db.get_connection(
-            lock_table="mint_quotes",
-            lock_select_statement=f"checking_id='{checking_id}'",
-            lock_timeout=1,
+            # lock_table="mint_quotes",
+            # lock_select_statement=f"checking_id='{checking_id}'",
+            # lock_timeout=1,
         ) as conn:
             quote = await self.crud.get_mint_quote(
                 checking_id=checking_id, db=self.db, conn=conn
@@ -62,7 +61,5 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                 logger.trace(
                     f"Quote {quote.quote} with {MintQuoteState.unpaid} set as {quote.state.value}"
                 )
-            else:
-                return
 
-            await self.events.submit(quote)
+        await self.events.submit(quote)
