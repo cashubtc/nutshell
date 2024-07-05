@@ -148,7 +148,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 
 @pytest.mark.asyncio
 async def test_melt_internal(ledger: Ledger, wallet: Wallet):
-    # internal invoice
+    # fill wallet
     invoice = await wallet.request_mint(64)
     pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
@@ -196,9 +196,7 @@ async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
 
     # create invoice to melt to
     invoice = await wallet.request_mint(64)
-
     invoice_payment_request = invoice.bolt11
-
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 64
     assert quote.fee_reserve == 0
