@@ -30,7 +30,7 @@ async def wallet1(ledger: Ledger):
 @pytest.mark.skipif(is_github_actions, reason="GITHUB_ACTIONS")
 async def test_mint_proofs_pending(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     proofs = wallet1.proofs.copy()
 
@@ -221,7 +221,7 @@ async def test_mint_quote_set_pending(wallet1: Wallet, ledger: Ledger):
     assert quote.state == MintQuoteState.unpaid
 
     # pay_if_regtest pays on regtest, get_mint_quote pays on FakeWallet
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     _ = await ledger.get_mint_quote(invoice.id)
 
     quote = await ledger.crud.get_mint_quote(quote_id=invoice.id, db=ledger.db)

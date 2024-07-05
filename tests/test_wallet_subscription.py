@@ -47,7 +47,7 @@ async def test_wallet_subscription_mint(wallet: Wallet):
         asyncio.run(wallet.mint(int(invoice.amount), id=invoice.id))
 
     invoice, sub = await wallet.request_mint_with_callback(128, callback=callback)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     wait = settings.fakewallet_delay_incoming_payment or 2
     await asyncio.sleep(wait + 2)
 
@@ -73,7 +73,7 @@ async def test_wallet_subscription_swap(wallet: Wallet):
         pytest.skip("No websocket support")
 
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
 
     triggered = False
@@ -91,7 +91,7 @@ async def test_wallet_subscription_swap(wallet: Wallet):
 
     _ = await wallet.split_to_send(wallet.proofs, 64)
 
-    wait = 1
+    wait = 2
     await asyncio.sleep(wait)
     assert triggered
 

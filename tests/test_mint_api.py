@@ -153,7 +153,7 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
 )
 async def test_split(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
@@ -208,7 +208,7 @@ async def test_mint_quote(ledger: Ledger):
     assert result["expiry"] == expiry
 
     # pay the invoice
-    pay_if_regtest(result["request"])
+    await pay_if_regtest(result["request"])
 
     # get mint quote again from api
     response = httpx.get(
@@ -234,7 +234,7 @@ async def test_mint_quote(ledger: Ledger):
 )
 async def test_mint(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     quote_id = invoice.id
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
@@ -352,7 +352,7 @@ async def test_melt_quote_external(ledger: Ledger, wallet: Wallet):
 async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -411,7 +411,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 async def test_melt_external(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -487,7 +487,7 @@ async def test_api_check_state(ledger: Ledger):
 )
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
     secret_counter = await bump_secret_derivation(

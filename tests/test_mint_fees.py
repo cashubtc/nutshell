@@ -49,7 +49,7 @@ def set_ledger_keyset_fees(
 @pytest.mark.asyncio
 async def test_get_fees_for_proofs(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, split=[1] * 64, id=invoice.id)
 
     # two proofs
@@ -115,7 +115,7 @@ async def test_split_with_fees(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(100, ledger)
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
     send_proofs, _ = await wallet1.select_to_send(wallet1.proofs, 10)
@@ -133,7 +133,7 @@ async def test_split_with_high_fees(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(1234, ledger)
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
     send_proofs, _ = await wallet1.select_to_send(wallet1.proofs, 10)
@@ -151,7 +151,7 @@ async def test_split_not_enough_fees(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(100, ledger)
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
     send_proofs, _ = await wallet1.select_to_send(wallet1.proofs, 10)
@@ -173,7 +173,7 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
 
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(128)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(128, id=invoice.id)
     assert wallet1.balance == 128
 
@@ -218,7 +218,7 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
 
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(128)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(128, id=invoice.id)
     assert wallet1.balance == 128
 

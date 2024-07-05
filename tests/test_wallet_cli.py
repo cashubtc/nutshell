@@ -117,7 +117,7 @@ def test_invoice_return_immediately(mint, cli_prefix):
     assert result.exception is None
 
     invoice, invoice_id = get_bolt11_and_invoice_id_from_invoice_command(result.output)
-    pay_if_regtest(invoice)
+    asyncio.run(pay_if_regtest(invoice))
 
     result = runner.invoke(
         cli,
@@ -146,7 +146,7 @@ def test_invoice_with_split(mint, cli_prefix):
     assert result.exception is None
 
     invoice, invoice_id = get_bolt11_and_invoice_id_from_invoice_command(result.output)
-    pay_if_regtest(invoice)
+    asyncio.run(pay_if_regtest(invoice))
     result = runner.invoke(
         cli,
         [*cli_prefix, "invoice", "10", "-s", "1", "--id", invoice_id],
@@ -164,7 +164,7 @@ def test_invoices_with_minting(cli_prefix):
     wallet1 = asyncio.run(init_wallet())
     asyncio.run(reset_invoices(wallet=wallet1))
     invoice = asyncio.run(wallet1.request_mint(64))
-    pay_if_regtest(invoice.bolt11)
+    asyncio.run(pay_if_regtest(invoice.bolt11))
     # act
     runner = CliRunner()
     result = runner.invoke(

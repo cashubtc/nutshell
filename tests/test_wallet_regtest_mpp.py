@@ -38,12 +38,12 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
 
     # top up wallet twice so we have enough for two payments
     topup_invoice = await wallet.request_mint(128)
-    pay_if_regtest(topup_invoice.bolt11)
+    await pay_if_regtest(topup_invoice.bolt11)
     proofs1 = await wallet.mint(128, id=topup_invoice.id)
     assert wallet.balance == 128
 
     topup_invoice = await wallet.request_mint(128)
-    pay_if_regtest(topup_invoice.bolt11)
+    await pay_if_regtest(topup_invoice.bolt11)
     proofs2 = await wallet.mint(128, id=topup_invoice.id)
     assert wallet.balance == 256
 
@@ -82,17 +82,17 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
 
     # top up wallet twice so we have enough for three payments
     topup_invoice = await wallet.request_mint(128)
-    pay_if_regtest(topup_invoice.bolt11)
+    await pay_if_regtest(topup_invoice.bolt11)
     proofs1 = await wallet.mint(128, id=topup_invoice.id)
     assert wallet.balance == 128
 
     topup_invoice = await wallet.request_mint(128)
-    pay_if_regtest(topup_invoice.bolt11)
+    await pay_if_regtest(topup_invoice.bolt11)
     proofs2 = await wallet.mint(128, id=topup_invoice.id)
     assert wallet.balance == 256
 
     topup_invoice = await wallet.request_mint(128)
-    pay_if_regtest(topup_invoice.bolt11)
+    await pay_if_regtest(topup_invoice.bolt11)
     proofs3 = await wallet.mint(128, id=topup_invoice.id)
     assert wallet.balance == 384
 

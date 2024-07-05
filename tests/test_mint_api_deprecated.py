@@ -67,7 +67,7 @@ async def test_api_keyset_keys(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_split(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(20000, 20001)
@@ -88,7 +88,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
 @pytest.mark.asyncio
 async def test_split_deprecated_with_amount(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(80000, 80001)
@@ -124,7 +124,7 @@ async def test_api_mint_validation(ledger):
 @pytest.mark.asyncio
 async def test_mint(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     quote_id = invoice.id
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
@@ -150,7 +150,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # fill wallet
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -190,7 +190,7 @@ async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
     # Clients without NUT-08 will not send change outputs
     # internal invoice
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -229,7 +229,7 @@ async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
 async def test_melt_external(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -323,7 +323,7 @@ async def test_api_check_state(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
     secret_counter = await bump_secret_derivation(

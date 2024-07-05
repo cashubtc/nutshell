@@ -232,7 +232,7 @@ async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledg
 async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
     # fill wallet
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
 
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
@@ -249,7 +249,7 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
 async def test_db_set_proofs_pending_race_condition(wallet: Wallet, ledger: Ledger):
     # fill wallet
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -271,7 +271,7 @@ async def test_db_set_proofs_pending_delayed_no_race_condition(
 ):
     # fill wallet
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -294,7 +294,7 @@ async def test_db_set_proofs_pending_no_race_condition_different_proofs(
 ):
     # fill wallet
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id, split=[32, 32])
     assert wallet.balance == 64
     assert len(wallet.proofs) == 2

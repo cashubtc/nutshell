@@ -167,7 +167,7 @@ async def test_request_mint(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_mint(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     expected_proof_amounts = wallet1.split_wallet_state(64)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 64
@@ -191,7 +191,7 @@ async def test_mint_amounts(wallet1: Wallet):
     """Mint predefined amounts"""
     amts = [1, 1, 1, 2, 2, 4, 16]
     invoice = await wallet1.request_mint(sum(amts))
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(amount=sum(amts), split=amts, id=invoice.id)
     assert wallet1.balance == 27
     assert wallet1.proof_amounts == amts
@@ -223,7 +223,7 @@ async def test_mint_amounts_wrong_order(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_split(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 64
     # the outputs we keep that we expect after the split
@@ -243,7 +243,7 @@ async def test_split(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_split_to_send(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 64
 
@@ -265,7 +265,7 @@ async def test_split_to_send(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_split_more_than_balance(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     await assert_err(
         wallet1.split(wallet1.proofs, 128),
@@ -279,7 +279,7 @@ async def test_split_more_than_balance(wallet1: Wallet):
 async def test_melt(wallet1: Wallet):
     # mint twice so we have enough to pay the second invoice back
     topup_invoice = await wallet1.request_mint(128)
-    pay_if_regtest(topup_invoice.bolt11)
+    await pay_if_regtest(topup_invoice.bolt11)
     await wallet1.mint(128, id=topup_invoice.id)
     assert wallet1.balance == 128
 
@@ -345,7 +345,7 @@ async def test_melt(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_split_to_send_more_than_balance(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     await assert_err(
         wallet1.split_to_send(wallet1.proofs, 128, set_reserved=True),
@@ -358,7 +358,7 @@ async def test_split_to_send_more_than_balance(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_double_spend(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     doublespend = await wallet1.mint(64, id=invoice.id)
     await wallet1.split(wallet1.proofs, 20)
     await assert_err(
@@ -372,7 +372,7 @@ async def test_double_spend(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_duplicate_proofs_double_spent(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     doublespend = await wallet1.mint(64, id=invoice.id)
     await assert_err(
         wallet1.split(wallet1.proofs + doublespend, 20),
@@ -386,7 +386,7 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
 @pytest.mark.skipif(is_github_actions, reason="GITHUB_ACTIONS")
 async def test_split_race_condition(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     # run two splits in parallel
     import asyncio
@@ -403,7 +403,7 @@ async def test_split_race_condition(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     _, spendable_proofs = await wallet1.split_to_send(
         wallet1.proofs, 32, set_reserved=True
@@ -422,7 +422,7 @@ async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
 async def test_invalidate_all_proofs(wallet1: Wallet):
     """Try to invalidate proofs that have not been spent yet. Should not work!"""
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     await wallet1.invalidate(wallet1.proofs)
     assert wallet1.balance == 0
@@ -432,7 +432,7 @@ async def test_invalidate_all_proofs(wallet1: Wallet):
 async def test_invalidate_unspent_proofs_with_checking(wallet1: Wallet):
     """Try to invalidate proofs that have not been spent yet but force no check."""
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     await wallet1.invalidate(wallet1.proofs, check_spendable=True)
     assert wallet1.balance == 64
@@ -441,7 +441,7 @@ async def test_invalidate_unspent_proofs_with_checking(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_split_invalid_amount(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     await assert_err(
         wallet1.split(wallet1.proofs, -1),
@@ -452,7 +452,7 @@ async def test_split_invalid_amount(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_token_state(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 64
     resp = await wallet1.check_proof_state(wallet1.proofs)
