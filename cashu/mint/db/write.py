@@ -126,6 +126,8 @@ class DbWriteHelper:
                 raise TransactionError("Mint quote not found.")
             if quote.state == MintQuoteState.pending:
                 raise TransactionError("Mint quote already pending.")
+            if not quote.state == MintQuoteState.paid:
+                raise TransactionError("Mint quote is not paid yet.")
             # set the quote as pending
             quote.state = MintQuoteState.pending
             logger.trace(f"crud: setting quote {quote_id} as PENDING")
