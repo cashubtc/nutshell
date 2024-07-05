@@ -164,7 +164,7 @@ def test_invoices_with_minting(cli_prefix):
     wallet1 = asyncio.run(init_wallet())
     asyncio.run(reset_invoices(wallet=wallet1))
     invoice = asyncio.run(wallet1.request_mint(64))
-
+    pay_if_regtest(invoice.bolt11)
     # act
     runner = CliRunner()
     result = runner.invoke(
