@@ -193,4 +193,4 @@ def pay_if_regtest(bolt11: str):
         pay_real_invoice(bolt11)
     if is_fake:
         time.sleep(settings.fakewallet_delay_incoming_payment or 0)
-        time.sleep(0.5)
+        time.sleep(0.1)

@@ -561,7 +561,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if mint_quote.state == MintQuoteState.issued:
             raise TransactionError("mint quote already issued")
         if mint_quote.state != MintQuoteState.unpaid:
-            raise TransactionError("mint quote already paid")
+            raise TransactionError("mint quote is not unpaid")
 
         if not mint_quote.checking_id:
             raise TransactionError("mint quote has no checking id")
@@ -794,7 +794,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise TransactionError("mint quote already issued")
 
         if mint_quote.state != MintQuoteState.unpaid:
-            raise TransactionError("mint quote already paid")
+            raise TransactionError("mint quote is not unpaid")
 
         logger.info(
             f"Settling bolt11 payment internally: {melt_quote.quote} ->"

@@ -38,6 +38,7 @@ async def wallet1(ledger: Ledger):
 async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(128)
+    pay_if_regtest(invoice.bolt11)
     await wallet1.mint(128, id=invoice.id)
     pay_if_regtest(invoice.bolt11)
     assert wallet1.balance == 128
