@@ -220,7 +220,7 @@ class Database(Compat):
         while time.time() - start_time < timeout:
             trial += 1
             try:
-                logger.trace("Connecting to database (trial: {trial})")
+                logger.trace("Connecting to database trial: {trial} ({random_int})")
                 async with self.engine.begin() as conn:  # type: ignore
                     assert isinstance(conn, AsyncConnection)
                     logger.trace("Connected to database. Starting transaction")
@@ -230,11 +230,11 @@ class Database(Compat):
                             wconn, lock_table, lock_select_statement
                         )
                     logger.trace(
-                        f"> Yielding connection. Lock: {lock_table} - {random_int} - {trial}"
+                        f"> Yielding connection. Lock: {lock_table} - trial {trial} ({random_int})"
                     )
                     yield wconn
                     logger.trace(
-                        f"< Connection yielded. Unlock: {lock_table} - {random_int} - {trial}"
+                        f"< Connection yielded. Unlock: {lock_table} - trial {trial} ({random_int})"
                     )
                     return
             except psycopg2.errors.LockNotAvailable as e:
@@ -245,7 +245,9 @@ class Database(Compat):
                     await _handle_lock_retry(retry_delay, timeout, start_time)
                 else:
                     raise e
-        raise Exception("failed to acquire database lock")
+        raise Exception(
+            f"failed to acquire database lock on {lock_table} after {timeout}s and {trial} trials ({random_int})"
+        )
 
     async def acquire_lock(
         self,
