@@ -37,6 +37,7 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                     await asyncio.sleep(1)
 
     async def invoice_callback_dispatcher(self, checking_id: str) -> None:
+        return
         logger.debug(f"Invoice callback dispatcher: {checking_id}")
         async with self.db.get_connection(
             lock_table="mint_quotes",
