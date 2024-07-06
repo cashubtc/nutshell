@@ -147,7 +147,7 @@ async def ledger():
 
 
 # # This fixture is used for tests that require API access to the mint
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True, scope="module")
 def mint():
     config = uvicorn.Config(
         "cashu.mint.app:app",
