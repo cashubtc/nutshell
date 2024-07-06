@@ -10,7 +10,7 @@ import psycopg2
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, QueuePool
 
 from cashu.core.settings import settings
 
@@ -92,6 +92,8 @@ class Connection(Compat):
 
 
 class Database(Compat):
+    _connection: Optional[AsyncConnection] = None
+
     def __init__(self, db_name: str, db_location: str):
         self.name = db_name
         self.db_location = db_location
@@ -158,15 +160,23 @@ class Database(Compat):
             self.schema = None
 
         kwargs = {}
-        # pool = QueuePool if self.type in {POSTGRES, COCKROACH} else NullPool
-        # kwargs: Dict = {"poolclass": pool}
-        # if self.type in {POSTGRES, COCKROACH}:
-        #     kwargs["pool_size"] = 2
-        #     kwargs["max_overflow"] = 1
         if not settings.db_connection_pool:
             kwargs["poolclass"] = NullPool
+        else:
+            kwargs["poolclass"] = QueuePool
+            kwargs["pool_size"] = 10
+            kwargs["max_overflow"] = 20
 
         self.engine = create_async_engine(database_uri, **kwargs)
+
+    async def initialize_connection(self):
+        self._connection = await self.engine.connect()
+
+    @property
+    def connection(self):
+        if self._connection is None:
+            raise Exception("Connection not initialized")
+        return self._connection
 
     @asynccontextmanager
     async def get_connection(
@@ -205,6 +215,19 @@ class Database(Compat):
         lock_select_statement: Optional[str] = None,
         lock_timeout: Optional[float] = None,
     ):
+        connection: Optional[AsyncConnection] = None
+
+        if self._connection is None:
+            await self.initialize_connection()
+            assert self._connection is not None, "Connection not initialized"
+
+        # if connection is in transaction, create a new connection
+        if self._connection.in_transaction():
+            logger.trace("Connection is in transaction. Creating new connection")
+            connection = await self.engine.connect()
+        else:
+            connection = self._connection
+
         async def _handle_lock_retry(retry_delay, timeout, start_time):
             await asyncio.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, timeout - (time.time() - start_time))
@@ -221,10 +244,11 @@ class Database(Compat):
             trial += 1
             try:
                 logger.trace("Connecting to database trial: {trial} ({random_int})")
-                async with self.engine.begin() as conn:  # type: ignore
-                    assert isinstance(conn, AsyncConnection)
+                async with connection.begin() as txn:  # type: ignore
                     logger.trace("Connected to database. Starting transaction")
-                    wconn = Connection(conn, None, self.type, self.name, self.schema)
+                    wconn = Connection(
+                        connection, txn, self.type, self.name, self.schema
+                    )
                     if lock_table:
                         await self.acquire_lock(
                             wconn, lock_table, lock_select_statement

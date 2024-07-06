@@ -469,13 +469,24 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             status: PaymentStatus = await self.backends[method][
                 unit
             ].get_invoice_status(quote.checking_id)
-            if status.paid and quote.state == MintQuoteState.unpaid:
-                logger.trace(f"Setting quote {quote_id} as paid")
-                quote.paid = True
-                quote.state = MintQuoteState.paid
-                quote.paid_time = int(time.time())
-                await self.crud.update_mint_quote(quote=quote, db=self.db)
-                await self.events.submit(quote)
+            if status.paid:
+                # change state to paid in one transaction
+                async with self.db.get_connection() as conn:
+                    quote = await self.crud.get_mint_quote(
+                        quote_id=quote_id, db=self.db, conn=conn
+                    )
+                    if not quote:
+                        raise Exception("quote not found")
+                    if not quote.state == MintQuoteState.unpaid:
+                        return quote
+                    logger.trace(f"Setting quote {quote_id} as paid")
+                    quote.paid = True
+                    quote.state = MintQuoteState.paid
+                    quote.paid_time = int(time.time())
+                    await self.crud.update_mint_quote(
+                        quote=quote, db=self.db, conn=conn
+                    )
+                    await self.events.submit(quote)
 
         return quote
 
