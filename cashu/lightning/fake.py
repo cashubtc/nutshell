@@ -57,6 +57,8 @@ class FakeWallet(LightningBackend):
         return StatusResponse(error_message=None, balance=1337)
 
     async def mark_invoice_paid(self, invoice: Bolt11, delay=True) -> None:
+        if invoice in self.paid_invoices_incoming:
+            return
         if not settings.fakewallet_brr:
             return
         if settings.fakewallet_delay_incoming_payment and delay:
