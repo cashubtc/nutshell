@@ -56,10 +56,10 @@ class FakeWallet(LightningBackend):
     async def status(self) -> StatusResponse:
         return StatusResponse(error_message=None, balance=1337)
 
-    async def mark_invoice_paid(self, invoice: Bolt11) -> None:
+    async def mark_invoice_paid(self, invoice: Bolt11, delay=True) -> None:
         if not settings.fakewallet_brr:
             return
-        if settings.fakewallet_delay_incoming_payment:
+        if settings.fakewallet_delay_incoming_payment and delay:
             await asyncio.sleep(settings.fakewallet_delay_incoming_payment)
         self.paid_invoices_incoming.append(invoice)
         await self.paid_invoices_queue.put(invoice)
@@ -166,7 +166,7 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        await self.mark_invoice_paid(self.create_dummy_bolt11(checking_id))
+        await self.mark_invoice_paid(self.create_dummy_bolt11(checking_id), delay=False)
         paid_chceking_ids = [i.payment_hash for i in self.paid_invoices_incoming]
         if checking_id in paid_chceking_ids:
             paid = True

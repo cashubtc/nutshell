@@ -134,7 +134,6 @@ class DbWriteHelper:
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
         if quote is None:
             raise TransactionError("Mint quote not found.")
-        await self.events.submit(quote)
         return quote
 
     async def _unset_mint_quote_pending(

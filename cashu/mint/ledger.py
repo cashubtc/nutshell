@@ -469,7 +469,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             status: PaymentStatus = await self.backends[method][
                 unit
             ].get_invoice_status(quote.checking_id)
-            if status.paid:
+            if status.paid and quote.state == MintQuoteState.unpaid:
                 logger.trace(f"Setting quote {quote_id} as paid")
                 quote.paid = True
                 quote.state = MintQuoteState.paid
