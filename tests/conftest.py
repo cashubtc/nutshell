@@ -129,6 +129,7 @@ async def ledger():
             # drop all tables
             await conn.execute("DROP SCHEMA public CASCADE;")
             await conn.execute("CREATE SCHEMA public;")
+        await db.engine.dispose()
 
     wallets_module = importlib.import_module("cashu.lightning")
     lightning_backend = getattr(wallets_module, settings.mint_backend_bolt11_sat)()
@@ -145,6 +146,7 @@ async def ledger():
     ledger = await start_mint_init(ledger)
     yield ledger
     print("teardown")
+    await ledger.db.engine.dispose()
 
 
 # # This fixture is used for tests that require API access to the mint

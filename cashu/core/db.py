@@ -11,7 +11,7 @@ from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, QueuePool
 
 from cashu.core.settings import settings
 
@@ -163,6 +163,10 @@ class Database(Compat):
         kwargs = {}
         if not settings.db_connection_pool:
             kwargs["poolclass"] = NullPool
+        else:
+            kwargs["poolclass"] = QueuePool
+            kwargs["pool_size"] = 50
+            kwargs["max_overflow"] = 100
 
         self.engine = create_async_engine(database_uri, **kwargs)
         self.async_session = sessionmaker(
@@ -208,19 +212,6 @@ class Database(Compat):
         lock_select_statement: Optional[str] = None,
         lock_timeout: Optional[float] = None,
     ):
-        # inherited = True
-
-        # if self._connection is None:
-        #     await self.initialize_connection()
-        #     assert self._connection is not None, "Connection not initialized"
-        #     inherited = False
-
-        # if self._connection.in_transaction():
-        #     logger.trace("Connection is in transaction. Creating new session")
-        #     return
-        # else:
-        #     session = self._connection
-
         async def _handle_lock_retry(retry_delay, timeout, start_time) -> float:
             await asyncio.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, timeout - (time.time() - start_time))
@@ -231,7 +222,7 @@ class Database(Compat):
                 logger.trace(f"Lock exception: {e}")
                 return True
 
-        timeout = 10  # lock_timeout or 5  # default to 5 seconds
+        timeout = lock_timeout or 5  # default to 5 seconds
         start_time = time.time()
         retry_delay = 0.1
         random_int = int(time.time() * 1000)
