@@ -9,7 +9,8 @@ from typing import Optional, Union
 import psycopg2
 from loguru import logger
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool
 
 from cashu.core.settings import settings
@@ -66,7 +67,7 @@ class Compat:
 
 
 class Connection(Compat):
-    def __init__(self, conn: AsyncConnection, txn, typ, name, schema):
+    def __init__(self, conn: AsyncSession, txn, typ, name, schema):
         self.conn = conn
         self.txn = txn
         self.type = typ
@@ -92,7 +93,7 @@ class Connection(Compat):
 
 
 class Database(Compat):
-    _connection: Optional[AsyncConnection] = None
+    _connection: Optional[AsyncSession] = None
 
     def __init__(self, db_name: str, db_location: str):
         self.name = db_name
@@ -164,15 +165,11 @@ class Database(Compat):
             kwargs["poolclass"] = NullPool
 
         self.engine = create_async_engine(database_uri, **kwargs)
-
-    async def initialize_connection(self):
-        self._connection = await self.engine.connect()
-
-    @property
-    def connection(self):
-        if self._connection is None:
-            raise Exception("Connection not initialized")
-        return self._connection
+        self.async_session = sessionmaker(
+            self.engine,
+            expire_on_commit=False,
+            class_=AsyncSession,  # type: ignore
+        )
 
     @asynccontextmanager
     async def get_connection(
@@ -211,42 +208,43 @@ class Database(Compat):
         lock_select_statement: Optional[str] = None,
         lock_timeout: Optional[float] = None,
     ):
-        connection: Optional[AsyncConnection] = None
-        inherited = True
+        # inherited = True
 
-        if self._connection is None:
-            await self.initialize_connection()
-            assert self._connection is not None, "Connection not initialized"
-            inherited = False
+        # if self._connection is None:
+        #     await self.initialize_connection()
+        #     assert self._connection is not None, "Connection not initialized"
+        #     inherited = False
 
-        # if connection is in transaction, create a new connection
-        if self._connection.in_transaction():
-            logger.trace("Connection is in transaction. Creating new connection")
-            connection = await self.engine.connect()
-        else:
-            connection = self._connection
+        # if self._connection.in_transaction():
+        #     logger.trace("Connection is in transaction. Creating new session")
+        #     return
+        # else:
+        #     session = self._connection
 
-        async def _handle_lock_retry(retry_delay, timeout, start_time):
+        async def _handle_lock_retry(retry_delay, timeout, start_time) -> float:
             await asyncio.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, timeout - (time.time() - start_time))
+            return retry_delay
 
         def _is_lock_exception(e):
-            return "database is locked" in str(e) or "could not obtain lock" in str(e)
+            if "database is locked" in str(e) or "could not obtain lock" in str(e):
+                logger.trace(f"Lock exception: {e}")
+                return True
 
-        timeout = lock_timeout or 5  # default to 5 seconds
+        timeout = 10  # lock_timeout or 5  # default to 5 seconds
         start_time = time.time()
         retry_delay = 0.1
         random_int = int(time.time() * 1000)
         trial = 0
+
         while time.time() - start_time < timeout:
             trial += 1
+            session: AsyncSession = self.async_session()  # type: ignore
             try:
-                logger.trace("Connecting to database trial: {trial} ({random_int})")
-                async with connection.begin() as txn:  # type: ignore
+                logger.trace(f"Connecting to database trial: {trial} ({random_int})")
+                async with session.begin() as txn:  # type: ignore
                     logger.trace("Connected to database. Starting transaction")
-                    wconn = Connection(
-                        connection, txn, self.type, self.name, self.schema
-                    )
+                    wconn = Connection(session, txn, self.type, self.name, self.schema)
                     if lock_table:
                         await self.acquire_lock(
                             wconn, lock_table, lock_select_statement
@@ -261,17 +259,22 @@ class Database(Compat):
                     return
             except psycopg2.errors.LockNotAvailable as e:
                 logger.trace(f"Table {lock_table} is already locked: {e}")
-                await _handle_lock_retry(retry_delay, timeout, start_time)
+                retry_delay = await _handle_lock_retry(retry_delay, timeout, start_time)
             except Exception as e:
                 if _is_lock_exception(e):
-                    await _handle_lock_retry(retry_delay, timeout, start_time)
+                    retry_delay = await _handle_lock_retry(
+                        retry_delay, timeout, start_time
+                    )
                 else:
+                    logger.error(f"Error in session trial: {trial} ({random_int}): {e}")
                     raise e
             finally:
-                if not inherited:
-                    logger.trace("Closing connection")
-                    await connection.close()
-                    self._connection = None
+                logger.trace(f"Closing session trial: {trial} ({random_int})")
+                await session.close()
+                # if not inherited:
+                #     logger.trace("Closing session")
+                #     await session.close()
+                #     self._connection = None
         raise Exception(
             f"failed to acquire database lock on {lock_table} after {timeout}s and {trial} trials ({random_int})"
         )
