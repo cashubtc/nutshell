@@ -10,7 +10,7 @@ import psycopg2
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import NullPool
 
 from cashu.core.settings import settings
 
@@ -162,10 +162,6 @@ class Database(Compat):
         kwargs = {}
         if not settings.db_connection_pool:
             kwargs["poolclass"] = NullPool
-        else:
-            kwargs["poolclass"] = QueuePool
-            kwargs["pool_size"] = 10
-            kwargs["max_overflow"] = 20
 
         self.engine = create_async_engine(database_uri, **kwargs)
 
@@ -216,10 +212,12 @@ class Database(Compat):
         lock_timeout: Optional[float] = None,
     ):
         connection: Optional[AsyncConnection] = None
+        inherited = True
 
         if self._connection is None:
             await self.initialize_connection()
             assert self._connection is not None, "Connection not initialized"
+            inherited = False
 
         # if connection is in transaction, create a new connection
         if self._connection.in_transaction():
@@ -269,6 +267,11 @@ class Database(Compat):
                     await _handle_lock_retry(retry_delay, timeout, start_time)
                 else:
                     raise e
+            finally:
+                if not inherited:
+                    logger.trace("Closing connection")
+                    await connection.close()
+                    self._connection = None
         raise Exception(
             f"failed to acquire database lock on {lock_table} after {timeout}s and {trial} trials ({random_int})"
         )
