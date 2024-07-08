@@ -174,7 +174,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 await self.db_write._unset_proofs_pending(pending_proofs)
             elif payment.failed:
                 logger.info(f"Melt quote {quote.quote} state: failed")
-
                 # unset pending
                 await self.db_write._unset_proofs_pending(pending_proofs, spent=False)
             elif payment.pending:
@@ -477,7 +476,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             ].get_invoice_status(quote.checking_id)
             if status.paid:
                 # change state to paid in one transaction
-                async with self.db.get_connection() as conn:
+                async with self.db.get_connection(
+                    lock_table="mint_quotes", lock_select_statement=f"quote={quote_id}"
+                ) as conn:
                     quote = await self.crud.get_mint_quote(
                         quote_id=quote_id, db=self.db, conn=conn
                     )
