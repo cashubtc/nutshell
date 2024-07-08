@@ -32,7 +32,7 @@ async def wallet():
 async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     # fill wallet
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 

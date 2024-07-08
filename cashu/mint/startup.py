@@ -98,3 +98,9 @@ async def start_mint_init():
     await ledger.startup_ledger()
     logger.info("Mint started.")
     # asyncio.create_task(rotate_keys())
+
+
+async def shutdown_mint():
+    await ledger.shutdown_ledger()
+    logger.info("Mint shutdown.")
+    logger.remove()

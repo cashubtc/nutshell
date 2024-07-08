@@ -83,8 +83,6 @@ pyenv local 3.10.4
 poetry install
 ```
 
-If you would like to use PostgreSQL as the mint database, use the command `poetry install --extras pgsql`.
-
 #### Poetry: Update Cashu
 To update Cashu to the newest version enter
 ```bash

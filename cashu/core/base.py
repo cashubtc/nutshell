@@ -344,11 +344,13 @@ class MeltQuote(LedgerEvent):
     def __setattr__(self, name, value):
         # an unpaid quote can only be set to pending or paid
         if name == "state" and self.state == MeltQuoteState.unpaid:
-            if value != MeltQuoteState.pending and value != MeltQuoteState.paid:
-                raise Exception("Cannot change state of an unpaid quote.")
+            if value not in [MeltQuoteState.pending, MeltQuoteState.paid]:
+                raise Exception(
+                    f"Cannot change state of an unpaid melt quote to {value}."
+                )
         # a paid quote can not be changed
         if name == "state" and self.state == MeltQuoteState.paid:
-            raise Exception("Cannot change state of a paid quote.")
+            raise Exception("Cannot change state of a paid melt quote.")
         super().__setattr__(name, value)
 
 
@@ -415,18 +417,20 @@ class MintQuote(LedgerEvent):
         # un unpaid quote can only be set to paid
         if name == "state" and self.state == MintQuoteState.unpaid:
             if value != MintQuoteState.paid:
-                raise Exception("Cannot change state of an unpaid quote.")
+                raise Exception(
+                    f"Cannot change state of an unpaid mint quote to {value}."
+                )
         # a paid quote can only be set to pending or issued
         if name == "state" and self.state == MintQuoteState.paid:
             if value != MintQuoteState.pending and value != MintQuoteState.issued:
-                raise Exception(f"Cannot change state of a paid quote to {value}.")
+                raise Exception(f"Cannot change state of a paid mint quote to {value}.")
         # a pending quote can only be set to paid or issued
         if name == "state" and self.state == MintQuoteState.pending:
             if value not in [MintQuoteState.paid, MintQuoteState.issued]:
-                raise Exception("Cannot change state of a pending quote.")
+                raise Exception("Cannot change state of a pending mint quote.")
         # an issued quote cannot be changed
         if name == "state" and self.state == MintQuoteState.issued:
-            raise Exception("Cannot change state of an issued quote.")
+            raise Exception("Cannot change state of an issued mint quote.")
         super().__setattr__(name, value)
 
 

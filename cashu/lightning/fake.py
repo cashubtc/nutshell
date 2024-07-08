@@ -1,7 +1,6 @@
 import asyncio
 import hashlib
 import math
-import random
 from datetime import datetime
 from os import urandom
 from typing import AsyncGenerator, Dict, List, Optional
@@ -57,8 +56,12 @@ class FakeWallet(LightningBackend):
     async def status(self) -> StatusResponse:
         return StatusResponse(error_message=None, balance=1337)
 
-    async def mark_invoice_paid(self, invoice: Bolt11) -> None:
-        if settings.fakewallet_delay_incoming_payment:
+    async def mark_invoice_paid(self, invoice: Bolt11, delay=True) -> None:
+        if invoice in self.paid_invoices_incoming:
+            return
+        if not settings.fakewallet_brr:
+            return
+        if settings.fakewallet_delay_incoming_payment and delay:
             await asyncio.sleep(settings.fakewallet_delay_incoming_payment)
         self.paid_invoices_incoming.append(invoice)
         await self.paid_invoices_queue.put(invoice)
@@ -165,19 +168,13 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        paid = False
-        if settings.fakewallet_brr or (
-            settings.fakewallet_stochastic_invoice and random.random() > 0.7
-        ):
+        await self.mark_invoice_paid(self.create_dummy_bolt11(checking_id), delay=False)
+        paid_chceking_ids = [i.payment_hash for i in self.paid_invoices_incoming]
+        if checking_id in paid_chceking_ids:
             paid = True
+        else:
+            paid = False
 
-        # invoice is paid but not in paid_invoices_incoming yet
-        # so we add it to the paid_invoices_queue
-        # if paid and invoice not in self.paid_invoices_incoming:
-        if paid:
-            await self.paid_invoices_queue.put(
-                self.create_dummy_bolt11(payment_hash=checking_id)
-            )
         return PaymentStatus(paid=paid)
 
     async def get_payment_status(self, _: str) -> PaymentStatus:

@@ -28,13 +28,14 @@ jobs:
   regtest:
     uses: ./.github/workflows/regtest.yml
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10"]
         poetry-version: ["1.7.1"]
         backend-wallet-class:
           ["LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
-        # mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
-        mint-database: ["./test_data/test_mint"]
+        mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
+        # mint-database: ["./test_data/test_mint"]
     with:
       python-version: ${{ matrix.python-version }}
       backend-wallet-class: ${{ matrix.backend-wallet-class }}
