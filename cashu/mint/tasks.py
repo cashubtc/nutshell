@@ -1,5 +1,5 @@
 import asyncio
-from typing import Mapping
+from typing import List, Mapping
 
 from loguru import logger
 
@@ -17,13 +17,15 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
     crud: LedgerCrud
     events: LedgerEventManager
 
-    async def dispatch_listeners(self) -> None:
+    async def dispatch_listeners(self) -> List[asyncio.Task]:
+        tasks = []
         for method, unitbackends in self.backends.items():
             for unit, backend in unitbackends.items():
                 logger.debug(
                     f"Dispatching backend invoice listener for {method} {unit} {backend.__class__.__name__}"
                 )
-                asyncio.create_task(self.invoice_listener(backend))
+                tasks.append(asyncio.create_task(self.invoice_listener(backend)))
+        return tasks
 
     async def invoice_listener(self, backend: LightningBackend) -> None:
         if backend.supports_incoming_payment_stream:

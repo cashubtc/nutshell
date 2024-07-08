@@ -68,6 +68,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
     db_read: DbReadHelper
+    invoice_listener_tasks: List[asyncio.Task] = []
 
     def __init__(
         self,
@@ -106,7 +107,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     async def startup_ledger(self):
         await self._startup_ledger()
         await self._check_pending_proofs_and_melt_quotes()
-        await self.dispatch_listeners()
+        self.invoice_listener_tasks = await self.dispatch_listeners()
 
     async def _startup_ledger(self):
         await self.init_keysets()
@@ -134,6 +135,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
     async def shutdown_ledger(self):
         await self.db.engine.dispose()
+        for task in self.invoice_listener_tasks:
+            task.cancel()
 
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending proofs for their melt state and either invalidates
