@@ -483,3 +483,37 @@ def test_selfpay(cli_prefix):
     assert result.exception is None
     print(result.output)
     assert result.exit_code == 0
+
+
+def test_send_with_lock(mint, cli_prefix):
+    # call "cashu locks" first and get the lock
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "locks"],
+    )
+    assert result.exception is None
+    print("test_send_with_lock", result.output)
+    # iterate through all words and get the word that starts with "P2PK:"
+    lock = None
+    for word in result.output.split(" "):
+        # strip the word
+        word = word.strip()
+        if word.startswith("P2PK:"):
+            lock = word
+            break
+    assert lock is not None, "no lock found"
+    pubkey = lock.split(":")[1]
+
+    # now lock the token
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--lock", lock],
+    )
+    assert result.exception is None
+    print("test_send_with_lock", result.output)
+    token_str = result.output.split("\n")[0]
+    assert "cashuB" in token_str, "output does not have a token"
+    token = TokenV4.deserialize(token_str).to_tokenv3()
+    assert pubkey in token.token[0].proofs[0].secret

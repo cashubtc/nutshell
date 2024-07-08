@@ -135,24 +135,33 @@ async def send(
                 sig_all=True,
                 n_sigs=1,
             )
-            print(f"Secret lock: {secret_lock}")
+            logger.debug(f"Secret lock: {secret_lock}")
 
     await wallet.load_proofs()
 
     await wallet.load_mint()
-    # get a proof with specific amount
-    send_proofs, fees = await wallet.select_to_send(
-        wallet.proofs,
-        amount,
-        set_reserved=False,
-        offline=offline,
-        include_fees=include_fees,
-    )
+    if secret_lock:
+        _, send_proofs = await wallet.split_to_send(
+            wallet.proofs,
+            amount,
+            set_reserved=False,  # we set reserved later
+            secret_lock=secret_lock,
+            include_fees=include_fees,
+        )
+    else:
+        send_proofs, fees = await wallet.select_to_send(
+            wallet.proofs,
+            amount,
+            set_reserved=False,  # we set reserved later
+            offline=offline,
+            include_fees=include_fees,
+        )
 
     token = await wallet.serialize_proofs(
         send_proofs, include_dleq=include_dleq, legacy=legacy, memo=memo
     )
-    print(token)
-    await wallet.set_reserved(send_proofs, reserved=True)
 
+    print(token)
+
+    await wallet.set_reserved(send_proofs, reserved=True)
     return wallet.available_balance, token
