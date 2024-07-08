@@ -61,6 +61,8 @@ class LedgerVerification(
             Exception: BDHKE verification failed.
         """
         # Verify inputs
+        if not proofs:
+            raise TransactionError("no proofs provided.")
         # Verify proofs are spendable
         if not len(await self._get_proofs_spent([p.Y for p in proofs], conn)) == 0:
             raise TokenAlreadySpentError()

@@ -983,16 +983,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
         """
         logger.trace("split called")
-        # explicitly check that amount of inputs is equal to amount of outputs
-        self._verify_equation_balanced(proofs, outputs)
-        await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
-
         await self.db_write._set_proofs_pending(proofs)
         try:
             # verify spending inputs, outputs, and spending conditions
             await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
-                # await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs, conn=conn)
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
                 promises = await self._generate_promises(outputs, keyset, conn)
         except Exception as e:
