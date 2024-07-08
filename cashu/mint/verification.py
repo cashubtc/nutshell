@@ -25,6 +25,8 @@ from ..core.settings import settings
 from ..lightning.base import LightningBackend
 from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
+from .db.read import DbReadHelper
+from .db.write import DbWriteHelper
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
 
@@ -37,6 +39,8 @@ class LedgerVerification(
     keysets: Dict[str, MintKeyset]
     crud: LedgerCrud
     db: Database
+    db_read: DbReadHelper
+    db_write: DbWriteHelper
     lightning: Dict[Unit, LightningBackend]
 
     async def verify_inputs_and_outputs(
@@ -64,7 +68,10 @@ class LedgerVerification(
         if not proofs:
             raise TransactionError("no proofs provided.")
         # Verify proofs are spendable
-        if not len(await self._get_proofs_spent([p.Y for p in proofs], conn)) == 0:
+        if (
+            not len(await self.db_read._get_proofs_spent([p.Y for p in proofs], conn))
+            == 0
+        ):
             raise TokenAlreadySpentError()
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
@@ -156,29 +163,11 @@ class LedgerVerification(
         Returns:
             result (List[bool]): Whether outputs are already present in the database.
         """
-        result = []
         async with self.db.get_connection(conn) as conn:
-            for output in outputs:
-                promise = await self.crud.get_promise(
-                    b_=output.B_, db=self.db, conn=conn
-                )
-                result.append(False if promise is None else True)
-        return result
-
-    async def _get_proofs_spent(
-        self, Ys: List[str], conn: Optional[Connection] = None
-    ) -> Dict[str, Proof]:
-        """Returns a dictionary of all proofs that are spent.
-        The key is the Y=h2c(secret) and the value is the proof.
-        """
-        proofs_spent_dict: Dict[str, Proof] = {}
-        # check used secrets in database
-        async with self.db.get_connection(conn=conn) as conn:
-            for Y in Ys:
-                spent_proof = await self.crud.get_proof_used(db=self.db, Y=Y, conn=conn)
-                if spent_proof:
-                    proofs_spent_dict[Y] = spent_proof
-        return proofs_spent_dict
+            promises = await self.crud.get_promises(
+                b_s=[output.B_ for output in outputs], db=self.db, conn=conn
+            )
+        return [True if promise else False for promise in promises]
 
     def _verify_secret_criteria(self, proof: Proof) -> Literal[True]:
         """Verifies that a secret is present and is not too long (DOS prevention)."""

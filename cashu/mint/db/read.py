@@ -35,10 +35,8 @@ class DbReadHelper:
         proofs_spent_dict: Dict[str, Proof] = {}
         # check used secrets in database
         async with self.db.get_connection(conn) as conn:
-            for Y in Ys:
-                spent_proof = await self.crud.get_proof_used(db=self.db, Y=Y, conn=conn)
-                if spent_proof:
-                    proofs_spent_dict[Y] = spent_proof
+            spent_proofs = await self.crud.get_proofs_used(db=self.db, Ys=Ys, conn=conn)
+        proofs_spent_dict = {p.Y: p for p in spent_proofs}
         return proofs_spent_dict
 
     async def get_proofs_states(

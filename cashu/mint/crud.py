@@ -36,21 +36,13 @@ class LedgerCrud(ABC):
         ...
 
     @abstractmethod
-    async def get_spent_proofs(
+    async def get_proofs_used(
         self,
         *,
+        Ys: List[str],
         db: Database,
         conn: Optional[Connection] = None,
     ) -> List[Proof]:
-        ...
-
-    async def get_proof_used(
-        self,
-        *,
-        Y: str,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> Optional[Proof]:
         ...
 
     @abstractmethod
@@ -155,6 +147,16 @@ class LedgerCrud(ABC):
         b_: str,
         conn: Optional[Connection] = None,
     ) -> Optional[BlindedSignature]:
+        ...
+
+    @abstractmethod
+    async def get_promises(
+        self,
+        *,
+        db: Database,
+        b_s: List[str],
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedSignature]:
         ...
 
     @abstractmethod
@@ -294,18 +296,21 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return BlindedSignature.from_row(row) if row else None
 
-    async def get_spent_proofs(
+    async def get_promises(
         self,
         *,
         db: Database,
+        b_s: List[str],
         conn: Optional[Connection] = None,
-    ) -> List[Proof]:
+    ) -> List[BlindedSignature]:
         rows = await (conn or db).fetchall(
             f"""
-            SELECT * from {db.table_with_schema('proofs_used')}
-            """
+            SELECT * from {db.table_with_schema('promises')}
+            WHERE b_ IN ({','.join([':b_' + str(i) for i in range(len(b_s))])})
+            """,
+            {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
-        return [Proof(**r) for r in rows] if rows else []
+        return [BlindedSignature.from_row(r) for r in rows] if rows else []
 
     async def invalidate_proof(
         self,
@@ -722,18 +727,17 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return [MintKeyset(**row) for row in rows]
 
-    async def get_proof_used(
+    async def get_proofs_used(
         self,
         *,
-        Y: str,
+        Ys: List[str],
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[Proof]:
-        row = await (conn or db).fetchone(
-            f"""
-            SELECT * from {db.table_with_schema('proofs_used')}
-            WHERE y = :y
-            """,
-            {"y": Y},
-        )
-        return Proof(**row) if row else None
+    ) -> List[Proof]:
+        query = f"""
+        SELECT * from {db.table_with_schema('proofs_used')}
+        WHERE y IN ({','.join([':y_' + str(i) for i in range(len(Ys))])})
+        """
+        values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
+        rows = await (conn or db).fetchall(query, values)
+        return [Proof(**r) for r in rows] if rows else []
