@@ -85,11 +85,6 @@ class UvicornServer(multiprocessing.Process):
 async def ledger():
     async def start_mint_init(ledger: Ledger) -> Ledger:
         await migrate_databases(ledger.db, migrations_mint)
-        # add a new keyset (with a new ID) which will be duplicated with a keyset with an
-        # old ID by mint migration m018_duplicate_deprecated_keyset_ids
-        # await ledger.activate_keyset(derivation_path=settings.mint_derivation_path, version="0.15.0")
-        # await migrations_mint.m018_duplicate_deprecated_keyset_ids(ledger.db)
-
         ledger = Ledger(
             db=Database("mint", settings.mint_database),
             seed=settings.mint_private_key,
@@ -99,23 +94,6 @@ async def ledger():
         )
         await ledger.startup_ledger()
         return ledger
-
-    # # drop all tables
-    # # drop all data in tables (but keep tables) - this is faster
-    # async def clear_database():
-    #     db = Database("mint", settings.mint_database)
-    #     async with db.connect() as conn:
-    #         await conn.execute("TRUNCATE TABLE promises;")
-    #         await conn.execute("TRUNCATE TABLE proofs_used;")
-    #         await conn.execute("TRUNCATE TABLE proofs_pending;")
-    #         await conn.execute("TRUNCATE TABLE mint_quotes;")
-    #         await conn.execute("TRUNCATE TABLE melt_quotes;")
-    #         await conn.execute("TRUNCATE TABLE keysets;")
-
-    # try:
-    #     await clear_database()
-    # except Exception:
-    #     pass
 
     if not settings.mint_database.startswith("postgres"):
         # clear sqlite database
@@ -146,7 +124,7 @@ async def ledger():
     ledger = await start_mint_init(ledger)
     yield ledger
     print("teardown")
-    await ledger.db.engine.dispose()
+    await ledger.shutdown_ledger()
 
 
 # # This fixture is used for tests that require API access to the mint
