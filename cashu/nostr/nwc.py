@@ -20,6 +20,7 @@ class Nip47Method(Enum):
     make_invoice = "make_invoice"
     pay_invoice = "pay_invoice"
     lookup_invoice = "lookup_invoice"
+    get_info = "get_info"
 
 
 class Nip47GetInfoResponse(BaseModel):
@@ -29,7 +30,7 @@ class Nip47GetInfoResponse(BaseModel):
     network: str
     block_height: int
     block_hash: str
-    methods: List[Nip47Method]
+    methods: List[str]
 
 
 class Nip47GetBalanceResponse(BaseModel):
@@ -163,6 +164,21 @@ class NWCClient(NostrClient):
         )
         return Nip47GetBalanceResponse(**res)
 
+    async def get_info(self) -> Nip47GetInfoResponse:
+        def result_validator(result: dict) -> bool:
+            valid = all(
+                key in result
+                for key in [
+                    "methods",
+                ]
+            )
+            return valid
+
+        res = await self.execute_nip47_request(
+            Nip47Method.get_info, {}, result_validator
+        )
+        return Nip47GetInfoResponse(**res)
+
     async def create_invoice(
         self, request: Nip47MakeInvoiceRequest
     ) -> Nip47Transaction:
@@ -295,6 +311,7 @@ class NWCClient(NostrClient):
             if future.done():
                 break
             await asyncio.sleep(0.1)
+        return future
 
     async def execute_nip47_request(
         self, method: Nip47Method, params: Any, result_validator

@@ -23,6 +23,14 @@ from .base import (
     StatusResponse,
 )
 
+required_nip47_methods = [
+    "get_info",
+    "get_balance",
+    "make_invoice",
+    "pay_invoice",
+    "lookup_invoice",
+]
+
 
 class NWCWallet(LightningBackend):
 
@@ -36,6 +44,12 @@ class NWCWallet(LightningBackend):
 
     async def status(self) -> StatusResponse:
         try:
+            info = await self.client.get_info()
+            if not all([method in info.methods for method in required_nip47_methods]):
+                return StatusResponse(
+                    error_message=f"NWC does not support all required methods. Supports: {info.methods}",
+                    balance=0,
+                )
             res = await self.client.get_balance()
             balance_msat = res.balance
             return StatusResponse(balance=balance_msat // 1000, error_message=None)
