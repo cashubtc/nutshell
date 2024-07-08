@@ -184,6 +184,66 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_db_set_proofs_pending_race_condition(wallet: Wallet, ledger: Ledger):
+    # fill wallet
+    invoice = await wallet.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id)
+    assert wallet.balance == 64
+
+    await assert_err_multiple(
+        asyncio.gather(
+            ledger.db_write._set_proofs_pending(wallet.proofs),
+            ledger.db_write._set_proofs_pending(wallet.proofs),
+        ),
+        [
+            "failed to acquire database lock",
+            "proofs are pending",
+        ],  # depending on how fast the database is, it can be either
+    )
+
+
+@pytest.mark.asyncio
+async def test_db_set_proofs_pending_delayed_no_race_condition(
+    wallet: Wallet, ledger: Ledger
+):
+    # fill wallet
+    invoice = await wallet.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id)
+    assert wallet.balance == 64
+
+    async def delayed_set_proofs_pending():
+        await asyncio.sleep(0.1)
+        await ledger.db_write._set_proofs_pending(wallet.proofs)
+
+    await assert_err(
+        asyncio.gather(
+            ledger.db_write._set_proofs_pending(wallet.proofs),
+            delayed_set_proofs_pending(),
+        ),
+        "proofs are pending",
+    )
+
+
+@pytest.mark.asyncio
+async def test_db_set_proofs_pending_no_race_condition_different_proofs(
+    wallet: Wallet, ledger: Ledger
+):
+    # fill wallet
+    invoice = await wallet.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    await wallet.mint(64, id=invoice.id, split=[32, 32])
+    assert wallet.balance == 64
+    assert len(wallet.proofs) == 2
+
+    asyncio.gather(
+        ledger.db_write._set_proofs_pending(wallet.proofs[:1]),
+        ledger.db_write._set_proofs_pending(wallet.proofs[1:]),
+    )
+
+
+@pytest.mark.asyncio
 async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledger):
     if ledger.db.type == db.SQLITE:
         pytest.skip("SQLite does not support row locking")
@@ -243,63 +303,3 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
             ledger.db_write._set_proofs_pending(wallet.proofs),
             "failed to acquire database lock",
         )
-
-
-@pytest.mark.asyncio
-async def test_db_set_proofs_pending_race_condition(wallet: Wallet, ledger: Ledger):
-    # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
-    assert wallet.balance == 64
-
-    await assert_err_multiple(
-        asyncio.gather(
-            ledger.db_write._set_proofs_pending(wallet.proofs),
-            ledger.db_write._set_proofs_pending(wallet.proofs),
-        ),
-        [
-            "failed to acquire database lock",
-            "proofs are pending",
-        ],  # depending on how fast the database is, it can be either
-    )
-
-
-@pytest.mark.asyncio
-async def test_db_set_proofs_pending_delayed_no_race_condition(
-    wallet: Wallet, ledger: Ledger
-):
-    # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
-    assert wallet.balance == 64
-
-    async def delayed_set_proofs_pending():
-        await asyncio.sleep(0.1)
-        await ledger.db_write._set_proofs_pending(wallet.proofs)
-
-    await assert_err(
-        asyncio.gather(
-            ledger.db_write._set_proofs_pending(wallet.proofs),
-            delayed_set_proofs_pending(),
-        ),
-        "proofs are pending",
-    )
-
-
-@pytest.mark.asyncio
-async def test_db_set_proofs_pending_no_race_condition_different_proofs(
-    wallet: Wallet, ledger: Ledger
-):
-    # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id, split=[32, 32])
-    assert wallet.balance == 64
-    assert len(wallet.proofs) == 2
-
-    asyncio.gather(
-        ledger.db_write._set_proofs_pending(wallet.proofs[:1]),
-        ledger.db_write._set_proofs_pending(wallet.proofs[1:]),
-    )
