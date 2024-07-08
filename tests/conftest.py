@@ -50,7 +50,7 @@ settings.mint_transaction_rate_limit_per_minute = 60
 settings.mint_lnd_enable_mpp = True
 settings.mint_clnrest_enable_mpp = False
 settings.mint_input_fee_ppk = 0
-settings.db_connection_pool = False
+settings.db_connection_pool = True
 
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)

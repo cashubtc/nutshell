@@ -163,7 +163,7 @@ class Database(Compat):
         kwargs = {}
         if not settings.db_connection_pool:
             kwargs["poolclass"] = NullPool
-        else:
+        elif self.type == POSTGRES:
             kwargs["poolclass"] = QueuePool
             kwargs["pool_size"] = 50
             kwargs["max_overflow"] = 100
