@@ -23,5 +23,5 @@ runs:
         cache: "poetry"
     - name: Install dependencies
       run: |
-        poetry install --extras pgsql
+        poetry install
       shell: bash

@@ -6,7 +6,6 @@ import time
 from contextlib import asynccontextmanager
 from typing import Optional, Union
 
-import psycopg2
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -115,37 +114,6 @@ class Database(Compat):
                 )
                 # Disble prepared statement cache: https://docs.sqlalchemy.org/en/14/dialects/postgresql.html#prepared-statement-cache
                 database_uri += "?prepared_statement_cache_size=0"
-
-            import psycopg2  # type: ignore
-
-            def _parse_timestamp(value, _):
-                f = "%Y-%m-%d %H:%M:%S.%f"
-                if "." not in value:
-                    f = "%Y-%m-%d %H:%M:%S"
-                return time.mktime(datetime.datetime.strptime(value, f).timetuple())
-
-            psycopg2.extensions.register_type(  # type: ignore
-                psycopg2.extensions.new_type(  # type: ignore
-                    psycopg2.extensions.DECIMAL.values,  # type: ignore
-                    "DEC2FLOAT",
-                    lambda value, curs: float(value) if value is not None else None,
-                )
-            )
-            psycopg2.extensions.register_type(  # type: ignore
-                psycopg2.extensions.new_type(  # type: ignore
-                    (1082, 1083, 1266),
-                    "DATE2INT",
-                    lambda value, curs: (
-                        time.mktime(value.timetuple()) if value is not None else None  # type: ignore
-                    ),
-                )
-            )
-
-            # psycopg2.extensions.register_type(
-            #     psycopg2.extensions.new_type(
-            #         (1184, 1114), "TIMESTAMP2INT", _parse_timestamp
-            #     )
-            # )
         else:
             if not os.path.exists(self.db_location):
                 logger.info(f"Creating database directory: {self.db_location}")
@@ -248,9 +216,6 @@ class Database(Compat):
                         f"< Connection yielded. Unlock: {lock_table} - trial {trial} ({random_int})"
                     )
                     return
-            except psycopg2.errors.LockNotAvailable as e:
-                logger.trace(f"Table {lock_table} is already locked: {e}")
-                retry_delay = await _handle_lock_retry(retry_delay, timeout, start_time)
             except Exception as e:
                 if _is_lock_exception(e):
                     retry_delay = await _handle_lock_retry(
