@@ -65,7 +65,6 @@ async def test_check_invoice_internal(wallet: LightningWallet):
     invoice = await wallet.create_invoice(64)
     assert invoice.payment_request
     assert invoice.checking_id
-    await pay_if_regtest(invoice.payment_request)
     status = await wallet.get_invoice_status(invoice.checking_id)
     assert status.paid
 
