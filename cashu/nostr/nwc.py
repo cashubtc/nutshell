@@ -284,11 +284,14 @@ class NWCClient(NostrClient):
                     return future
                 future.set_result(response.get("result"))
                 # close this subscription
-                [
-                    r.close_subscription(sub_id)
-                    for r in self.relay_manager.relays.values()
-                ]
-                return future
+                try:
+                    [
+                        r.close_subscription(sub_id)
+                        for r in self.relay_manager.relays.values()
+                    ]
+                except KeyError:
+                    # if subscription is already closed,
+                    pass
             if future.done():
                 break
             await asyncio.sleep(0.1)
