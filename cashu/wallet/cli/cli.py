@@ -15,7 +15,7 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, Method, MintQuoteState, TokenV3, TokenV4, Unit
+from ...core.base import Invoice, Method, MintQuoteState, TokenV4, Unit
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
@@ -672,8 +672,8 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         proofs = [proof for proof in reserved_proofs if proof["send_id"] == delete]
     else:
         # check only the specified ones
-        token_obj = TokenV3.deserialize(token)
-        proofs = token_obj.get_proofs()
+        tokenObj = deserialize_token_from_string(token)
+        proofs = tokenObj.proofs
 
     if delete:
         await wallet.invalidate(proofs)
@@ -709,6 +709,14 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 @coro
 async def pending(ctx: Context, legacy, number: int, offset: int):
     wallet: Wallet = ctx.obj["WALLET"]
+    wallet = await Wallet.with_db(
+        url=wallet.url,
+        db=wallet.db.db_location,
+        name=wallet.name,
+        skip_db_read=False,
+        unit=wallet.unit.name,
+        load_all_keysets=True,
+    )
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print("--------------------------\n")
@@ -737,7 +745,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
                 f"#{i} Amount:"
-                f" {wallet.unit.str(sum_proofs(grouped_proofs))} Time:"
+                f" {Unit[token_obj.unit].str(sum_proofs(grouped_proofs))} Time:"
                 f" {reserved_date} ID: {key}  Mint: {mint}\n"
             )
             print(f"{token}\n")

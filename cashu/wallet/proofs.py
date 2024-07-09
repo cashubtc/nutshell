@@ -106,6 +106,11 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         Returns:
             str: Serialized Cashu token
         """
+        # DEPRECATED: legacy token for base64 keysets
+        try:
+            _ = [bytes.fromhex(p.id) for p in proofs]
+        except ValueError:
+            legacy = True
 
         if legacy:
             tokenv3 = await self._make_tokenv3(proofs, memo)
@@ -127,13 +132,15 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         Returns:
             TokenV3: TokenV3 object
         """
-        token = TokenV3()
-
-        # we create a map from mint url to keyset id and then group
-        # all proofs with their mint url to build a tokenv3
+        token = TokenV3(memo=memo)
 
         # extract all keysets from proofs
         keysets = self._get_proofs_keyset_ids(proofs)
+        assert (
+            set([k.unit for k in self.keysets.values()]) == 1
+        ), "All keysets must have the same unit"
+        token.unit = self.keysets[keysets[0]].unit.name
+
         # get all mint URLs for all unique keysets from db
         mint_urls = await self._get_keyset_urls(keysets)
 
@@ -142,8 +149,6 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             mint_proofs = [p for p in proofs if p.id in ids]
             token.token.append(TokenV3Token(mint=url, proofs=mint_proofs))
 
-        if memo:
-            token.memo = memo
         return token
 
     async def _make_tokenv4(

@@ -1,6 +1,7 @@
 import base64
 import json
 import math
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from sqlite3 import Row
@@ -752,6 +753,48 @@ class MintKeyset:
 # ------- TOKEN -------
 
 
+class Token(ABC):
+    @property
+    @abstractmethod
+    def proofs(self) -> List[Proof]:
+        ...
+
+    @property
+    @abstractmethod
+    def amount(self) -> int:
+        ...
+
+    @property
+    @abstractmethod
+    def mint(self) -> str:
+        ...
+
+    @property
+    @abstractmethod
+    def keysets(self) -> List[str]:
+        ...
+
+    @property
+    @abstractmethod
+    def memo(self) -> Optional[str]:
+        ...
+
+    @memo.setter
+    @abstractmethod
+    def memo(self, memo: Optional[str]):
+        ...
+
+    @property
+    @abstractmethod
+    def unit(self) -> str:
+        ...
+
+    @unit.setter
+    @abstractmethod
+    def unit(self, unit: str):
+        ...
+
+
 class TokenV3Token(BaseModel):
     mint: Optional[str] = None
     proofs: List[Proof]
@@ -763,25 +806,33 @@ class TokenV3Token(BaseModel):
         return return_dict
 
 
-class TokenV3(BaseModel):
+class TokenV3(BaseModel, Token):
     """
     A Cashu token that includes proofs and their respective mints. Can include proofs from multiple different mints and keysets.
     """
 
     token: List[TokenV3Token] = []
     memo: Optional[str] = None
-    unit: Optional[str] = None
+    unit: str = "sat"
 
-    def get_proofs(self):
+    @property
+    def proofs(self):
         return [proof for token in self.token for proof in token.proofs]
 
-    def get_amount(self):
-        return sum([p.amount for p in self.get_proofs()])
+    @property
+    def amount(self):
+        return sum([p.amount for p in self.proofs])
 
-    def get_keysets(self):
-        return list(set([p.id for p in self.get_proofs()]))
+    @property
+    def keysets(self):
+        return list(set([p.id for p in self.proofs]))
 
-    def get_mints(self):
+    @property
+    def mint(self):
+        return self.mints[0]
+
+    @property
+    def mints(self):
         return list(set([t.mint for t in self.token if t.mint]))
 
     def serialize_to_dict(self, include_dleq=False):
@@ -868,7 +919,7 @@ class TokenV4Token(BaseModel):
     p: List[TokenV4Proof]
 
 
-class TokenV4(BaseModel):
+class TokenV4(BaseModel, Token):
     # mint URL
     m: str
     # unit
@@ -882,13 +933,24 @@ class TokenV4(BaseModel):
     def mint(self) -> str:
         return self.m
 
+    def set_mint(self, mint: str):
+        self.m = mint
+
     @property
     def memo(self) -> Optional[str]:
         return self.d
 
+    @memo.setter
+    def memo(self, memo: Optional[str]):
+        self.d = memo
+
     @property
     def unit(self) -> str:
         return self.u
+
+    @unit.setter
+    def unit(self, unit: str):
+        self.u = unit
 
     @property
     def amounts(self) -> List[int]:
@@ -921,12 +983,16 @@ class TokenV4(BaseModel):
             for p in token.p
         ]
 
+    @property
+    def keysets(self) -> List[str]:
+        return list(set([p.i.hex() for p in self.t]))
+
     @classmethod
     def from_tokenv3(cls, tokenv3: TokenV3):
-        if not len(tokenv3.get_mints()) == 1:
+        if not len(tokenv3.mints) == 1:
             raise Exception("TokenV3 must contain proofs from only one mint.")
 
-        proofs = tokenv3.get_proofs()
+        proofs = tokenv3.proofs
         proofs_by_id: Dict[str, List[Proof]] = {}
         for proof in proofs:
             proofs_by_id.setdefault(proof.id, []).append(proof)
@@ -960,7 +1026,7 @@ class TokenV4(BaseModel):
         # set memo
         cls.d = tokenv3.memo
         # set mint
-        cls.m = tokenv3.get_mints()[0]
+        cls.m = tokenv3.mint
         # set unit
         cls.u = tokenv3.unit or "sat"
         return cls(t=cls.t, d=cls.d, m=cls.m, u=cls.u)

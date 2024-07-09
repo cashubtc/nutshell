@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from ...core.base import TokenV3, TokenV4
+from ...core.base import Token, TokenV3
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...lightning.base import (
@@ -261,7 +261,7 @@ async def receive_command(
     wallet = await mint_wallet()
     initial_balance = wallet.available_balance
     if token:
-        tokenObj: TokenV4 = deserialize_token_from_string(token)
+        tokenObj: Token = deserialize_token_from_string(token)
         await verify_mints(wallet, tokenObj)
         await receive(wallet, tokenObj)
     elif nostr:
@@ -317,7 +317,7 @@ async def burn(
     else:
         # check only the specified ones
         tokenObj = TokenV3.deserialize(token)
-        proofs = tokenObj.get_proofs()
+        proofs = tokenObj.proofs
 
     if delete:
         await wallet.invalidate(proofs)
