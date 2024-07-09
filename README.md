@@ -57,7 +57,7 @@ These steps help you install Python via pyenv and Poetry. If you already have Po
 
 ```bash
 # on ubuntu:
-sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev libsqlite3-dev ncurses-dev libbz2-dev libreadline-dev lzma-dev
+sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev libsqlite3-dev ncurses-dev libbz2-dev libreadline-dev lzma-dev liblzma-dev
 
 # install python using pyenv
 curl https://pyenv.run | bash
