@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel
 
 from .base import (
     BlindedMessage,
@@ -81,8 +81,8 @@ class KeysetsResponse(BaseModel):
     keysets: list[KeysetsResponseKeyset]
 
 
-class KeysResponse_deprecated(BaseModel):
-    __root__: Dict[str, str]
+class KeysResponse_deprecated(RootModel[Dict[str, str]]):
+    pass
 
 
 class KeysetsResponse_deprecated(BaseModel):
@@ -102,16 +102,16 @@ class PostMintQuoteResponse(BaseModel):
     request: str  # input payment request
     paid: Optional[
         bool
-    ]  # whether the request has been paid # DEPRECATED as per NUT PR #141
+    ] = None  # whether the request has been paid # DEPRECATED as per NUT PR #141
     state: str  # state of the quote
-    expiry: Optional[int]  # expiry of the quote
+    expiry: Optional[int] = None  # expiry of the quote
 
     @classmethod
     def from_mint_quote(self, mint_quote: MintQuote) -> "PostMintQuoteResponse":
-        to_dict = mint_quote.dict()
+        to_dict = mint_quote.model_dump()
         # turn state into string
         to_dict["state"] = mint_quote.state.value
-        return PostMintQuoteResponse.parse_obj(to_dict)
+        return PostMintQuoteResponse.model_validate(to_dict)
 
 
 # ------- API: MINT -------
@@ -120,7 +120,7 @@ class PostMintQuoteResponse(BaseModel):
 class PostMintRequest(BaseModel):
     quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
     outputs: List[BlindedMessage] = Field(
-        ..., max_items=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_request_length
     )
 
 
@@ -135,7 +135,7 @@ class GetMintResponse_deprecated(BaseModel):
 
 class PostMintRequest_deprecated(BaseModel):
     outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_items=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_request_length
     )
 
 
@@ -151,7 +151,7 @@ class PostMeltRequestOptionMpp(BaseModel):
 
 
 class PostMeltRequestOptions(BaseModel):
-    mpp: Optional[PostMeltRequestOptionMpp]
+    mpp: Optional[PostMeltRequestOptionMpp] = None
 
 
 class PostMeltQuoteRequest(BaseModel):
@@ -182,16 +182,16 @@ class PostMeltQuoteResponse(BaseModel):
     fee_reserve: int  # input fee reserve
     paid: bool  # whether the request has been paid # DEPRECATED as per NUT PR #136
     state: str  # state of the quote
-    expiry: Optional[int]  # expiry of the quote
+    expiry: Optional[int] = None  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
     change: Union[List[BlindedSignature], None] = None
 
     @classmethod
     def from_melt_quote(self, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
-        to_dict = melt_quote.dict()
+        to_dict = melt_quote.model_dump()
         # turn state into string
         to_dict["state"] = melt_quote.state.value
-        return PostMeltQuoteResponse.parse_obj(to_dict)
+        return PostMeltQuoteResponse.model_validate(to_dict)
 
 
 # ------- API: MELT -------
@@ -199,23 +199,23 @@ class PostMeltQuoteResponse(BaseModel):
 
 class PostMeltRequest(BaseModel):
     quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
-    inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
+    inputs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
     outputs: Union[List[BlindedMessage], None] = Field(
-        None, max_items=settings.mint_max_request_length
+        None, max_length=settings.mint_max_request_length
     )
 
 
 class PostMeltResponse_deprecated(BaseModel):
-    paid: Union[bool, None]
-    preimage: Union[str, None]
+    paid: Union[bool, None] = None
+    preimage: Union[str, None] = None
     change: Union[List[BlindedSignature], None] = None
 
 
 class PostMeltRequest_deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
+    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
     pr: str = Field(..., max_length=settings.mint_max_request_length)
     outputs: Union[List[BlindedMessage_Deprecated], None] = Field(
-        None, max_items=settings.mint_max_request_length
+        None, max_length=settings.mint_max_request_length
     )
 
 
@@ -223,9 +223,9 @@ class PostMeltRequest_deprecated(BaseModel):
 
 
 class PostSplitRequest(BaseModel):
-    inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
+    inputs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
     outputs: List[BlindedMessage] = Field(
-        ..., max_items=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_request_length
     )
 
 
@@ -235,10 +235,10 @@ class PostSplitResponse(BaseModel):
 
 # deprecated since 0.13.0
 class PostSplitRequest_Deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
+    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
     amount: Optional[int] = None
     outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_items=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_request_length
     )
 
 
@@ -256,7 +256,7 @@ class PostSplitResponse_Very_Deprecated(BaseModel):
 
 
 class PostCheckStateRequest(BaseModel):
-    Ys: List[str] = Field(..., max_items=settings.mint_max_request_length)
+    Ys: List[str] = Field(..., max_length=settings.mint_max_request_length)
 
 
 class PostCheckStateResponse(BaseModel):
@@ -264,7 +264,7 @@ class PostCheckStateResponse(BaseModel):
 
 
 class CheckSpendableRequest_deprecated(BaseModel):
-    proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
+    proofs: List[Proof] = Field(..., max_length=settings.mint_max_request_length)
 
 
 class CheckSpendableResponse_deprecated(BaseModel):
@@ -277,7 +277,7 @@ class CheckFeesRequest_deprecated(BaseModel):
 
 
 class CheckFeesResponse_deprecated(BaseModel):
-    fee: Union[int, None]
+    fee: Union[int, None] = None
 
 
 # ------- API: RESTORE -------
@@ -285,13 +285,13 @@ class CheckFeesResponse_deprecated(BaseModel):
 
 class PostRestoreRequest(BaseModel):
     outputs: List[BlindedMessage] = Field(
-        ..., max_items=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_request_length
     )
 
 
 class PostRestoreRequest_Deprecated(BaseModel):
     outputs: List[BlindedMessage_Deprecated] = Field(
-        ..., max_items=settings.mint_max_request_length
+        ..., max_length=settings.mint_max_request_length
     )
 
 

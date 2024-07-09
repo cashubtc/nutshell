@@ -22,7 +22,7 @@ if not __debug__:
     raise Exception("Nutshell cannot run in non-debug mode.")
 
 logger.debug("Enviroment Settings:")
-for key, value in settings.dict().items():
+for key, value in settings.model_dump().items():
     if key in [
         "mint_private_key",
         "mint_seed_decryption_key",

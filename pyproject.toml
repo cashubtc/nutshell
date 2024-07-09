@@ -9,7 +9,7 @@ license = "MIT"
 python = "^3.8.1"
 SQLAlchemy = {version = "1.4.52", extras = ["asyncio"]}
 click = "^8.1.7"
-pydantic = "^1.10.2"
+pydantic = "^2.8.2"
 bech32 = "^1.2.0"
 fastapi = "^0.104.1"
 environs = "^9.5.0"

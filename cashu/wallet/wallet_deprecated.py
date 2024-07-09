@@ -133,7 +133,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         self.raise_on_error(resp)
         data: dict = resp.json()
         mint_info_deprecated: GetInfoResponse_deprecated = (
-            GetInfoResponse_deprecated.parse_obj(data)
+            GetInfoResponse_deprecated.model_validate(data)
         )
         mint_info = GetInfoResponse(
             **mint_info_deprecated.dict(exclude={"parameter", "nuts"})
@@ -221,7 +221,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         )
         self.raise_on_error(resp)
         keysets_dict = resp.json()
-        keysets = KeysetsResponse_deprecated.parse_obj(keysets_dict)
+        keysets = KeysetsResponse_deprecated.model_validate(keysets_dict)
         assert len(keysets.keysets), Exception("did not receive any keysets")
         keysets_new = [
             KeysetsResponseKeyset(id=id, unit="sat", active=True)
@@ -247,7 +247,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         resp = await self.httpx.get(self.url + "/mint", params={"amount": amount})
         self.raise_on_error(resp)
         return_dict = resp.json()
-        mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
+        mint_response = GetMintResponse_deprecated.model_validate(return_dict)
         decoded_invoice = bolt11.decode(mint_response.pr)
         return PostMintQuoteResponse(
             quote=mint_response.hash,
@@ -274,7 +274,9 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         Raises:
             Exception: If the minting fails
         """
-        outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+        outputs_deprecated = [
+            BlindedMessage_Deprecated(**o.model_dump()) for o in outputs
+        ]
         outputs_payload = PostMintRequest_deprecated(outputs=outputs_deprecated)
 
         def _mintrequest_include_fields(outputs: List[BlindedMessage]):
@@ -299,7 +301,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         self.raise_on_error(resp)
         response_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /mint")
-        promises = PostMintResponse_deprecated.parse_obj(response_dict).promises
+        promises = PostMintResponse_deprecated.model_validate(response_dict).promises
         return promises
 
     @async_set_httpx_client
@@ -312,7 +314,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         """
         logger.warning("Using deprecated API call: POST /melt")
         outputs_deprecated = (
-            [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+            [BlindedMessage_Deprecated(**o.model_dump()) for o in outputs]
             if outputs
             else None
         )
@@ -336,7 +338,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         self.raise_on_error(resp)
         return_dict = resp.json()
 
-        return PostMeltResponse_deprecated.parse_obj(return_dict)
+        return PostMeltResponse_deprecated.model_validate(return_dict)
 
     @async_set_httpx_client
     @async_ensure_mint_loaded_deprecated
@@ -347,7 +349,9 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
         logger.warning("Using deprecated API call: Calling split. POST /split")
-        outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+        outputs_deprecated = [
+            BlindedMessage_Deprecated(**o.model_dump()) for o in outputs
+        ]
         split_payload = PostSplitRequest_Deprecated(
             proofs=proofs, outputs=outputs_deprecated
         )
@@ -373,8 +377,8 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         )
         self.raise_on_error(resp)
         promises_dict = resp.json()
-        mint_response = PostSplitResponse_Deprecated.parse_obj(promises_dict)
-        promises = [BlindedSignature(**p.dict()) for p in mint_response.promises]
+        mint_response = PostSplitResponse_Deprecated.model_validate(promises_dict)
+        promises = [BlindedSignature(**p.model_dump()) for p in mint_response.promises]
 
         if len(promises) == 0:
             raise Exception("received no splits.")
@@ -405,7 +409,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         self.raise_on_error(resp)
 
         return_dict = resp.json()
-        states = CheckSpendableResponse_deprecated.parse_obj(return_dict)
+        states = CheckSpendableResponse_deprecated.model_validate(return_dict)
         return states
 
     @async_set_httpx_client
@@ -417,12 +421,16 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         Asks the mint to restore promises corresponding to outputs.
         """
         logger.warning("Using deprecated API call: POST /restore")
-        outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
+        outputs_deprecated = [
+            BlindedMessage_Deprecated(**o.model_dump()) for o in outputs
+        ]
         payload = PostMintRequest_deprecated(outputs=outputs_deprecated)
-        resp = await self.httpx.post(join(self.url, "/restore"), json=payload.dict())
+        resp = await self.httpx.post(
+            join(self.url, "/restore"), json=payload.model_dump()
+        )
         self.raise_on_error(resp)
         response_dict = resp.json()
-        returnObj = PostRestoreResponse.parse_obj(response_dict)
+        returnObj = PostRestoreResponse.model_validate(response_dict)
 
         # BEGIN backwards compatibility < 0.15.1
         # if the mint returns promises, duplicate into signatures
@@ -439,9 +447,9 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         payload = CheckFeesRequest_deprecated(pr=payment_request)
         resp = await self.httpx.post(
             join(self.url, "/checkfees"),
-            json=payload.dict(),
+            json=payload.model_dump(),
         )
         self.raise_on_error(resp)
 
         return_dict = resp.json()
-        return CheckFeesResponse_deprecated.parse_obj(return_dict)
+        return CheckFeesResponse_deprecated.model_validate(return_dict)

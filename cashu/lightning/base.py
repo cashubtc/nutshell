@@ -12,7 +12,7 @@ from ..core.models import PostMeltQuoteRequest
 
 
 class StatusResponse(BaseModel):
-    error_message: Optional[str]
+    error_message: Optional[str] = None
     balance: Union[int, float]
 
 

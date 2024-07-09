@@ -130,7 +130,7 @@ def test_tokenv3_serialize_example_token_nut00():
         ],
         "memo": "Thank you.",
     }
-    tokenObj = TokenV3.parse_obj(token_dict)
+    tokenObj = TokenV3.model_validate(token_dict)
     assert (
         tokenObj.serialize()
         == "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjliYjlkNTgzOTJjZDg"
@@ -192,7 +192,7 @@ def test_tokenv4_serialize_example_single_keyset_nut00():
         "m": "http://localhost:3338",
         "u": "sat",
     }
-    tokenObj = TokenV4.parse_obj(token_dict)
+    tokenObj = TokenV4.model_validate(token_dict)
     assert (
         tokenObj.serialize()
         == "cashuBpGF0gaJhaUgArSaMTR9YJmFwgaNhYQFhc3hAOWE2ZGJiODQ3YmQyMzJiYTc2ZGIwZGYxOTcyMTZiMjlkM2I4Y2MxNDU1M2NkMjc4MjdmYzFjYzk0MmZlZGI0ZWFjWCEDhhhUP_trhpXfStS6vN6So0qWvc2X3O4NfM-Y1HISZ5JhZGlUaGFuayB5b3VhbXVodHRwOi8vbG9jYWxob3N0OjMzMzhhdWNzYXQ="
@@ -237,7 +237,7 @@ def test_tokenv4_serialize_example_token_nut00():
         "m": "http://localhost:3338",
         "u": "sat",
     }
-    tokenObj = TokenV4.parse_obj(token_dict)
+    tokenObj = TokenV4.model_validate(token_dict)
 
     assert (
         tokenObj.serialize()

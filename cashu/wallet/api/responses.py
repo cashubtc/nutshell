@@ -48,7 +48,7 @@ class PendingResponse(BaseModel):
 
 
 class LockResponse(BaseModel):
-    P2PK: Optional[str]
+    P2PK: Optional[str] = None
 
 
 class LocksResponse(BaseModel):
@@ -73,7 +73,7 @@ class InfoResponse(BaseModel):
     debug: bool
     cashu_dir: str
     mint_urls: List[str] = []
-    settings: Optional[str]
+    settings: Optional[str] = None
     tor: bool
     nostr_public_key: Optional[str] = None
     nostr_relays: List[str] = []

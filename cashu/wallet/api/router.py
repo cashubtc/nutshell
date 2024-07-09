@@ -52,8 +52,11 @@ router: APIRouter = APIRouter()
 async def mint_wallet(
     mint_url: Optional[str] = None, raise_connection_error: bool = True
 ) -> LightningWallet:
+    url = mint_url or settings.mint_url
+    if not url:
+        raise Exception("No mint URL provided.")
     lightning_wallet = await LightningWallet.with_db(
-        mint_url or settings.mint_url,
+        url,
         db=os.path.join(settings.cashu_dir, settings.wallet_name),
         name=settings.wallet_name,
     )
@@ -92,7 +95,7 @@ async def pay(
     if mint:
         wallet = await mint_wallet(mint)
     payment_response = await wallet.pay_invoice(bolt11)
-    ret = PaymentResponse(**payment_response.dict())
+    ret = PaymentResponse(**payment_response.model_dump())
     ret.fee = None  # TODO: we can't return an Amount object, overwriting
     return ret
 
@@ -403,7 +406,9 @@ async def wallets():
         pass
     result = {}
     for w in wallets:
-        wallet = Wallet(settings.mint_url, os.path.join(settings.cashu_dir, w), name=w)
+        url = settings.mint_url
+        assert url, "No mint URL provided."
+        wallet = Wallet(url, os.path.join(settings.cashu_dir, w), name=w)
         try:
             await init_wallet(wallet)
             if wallet.proofs and len(wallet.proofs):

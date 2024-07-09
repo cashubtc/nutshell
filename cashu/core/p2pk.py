@@ -20,9 +20,9 @@ class P2PKSecret(Secret):
     @classmethod
     def from_secret(cls, secret: Secret):
         assert SecretKind(secret.kind) == SecretKind.P2PK, "Secret is not a P2PK secret"
-        # NOTE: exclude tags in .dict() because it doesn't deserialize it properly
+        # NOTE: exclude tags in .model_dump() because it doesn't deserialize it properly
         # need to add it back in manually with tags=secret.tags
-        return cls(**secret.dict(exclude={"tags"}), tags=secret.tags)
+        return cls(**secret.model_dump(exclude={"tags"}), tags=secret.tags)
 
     def get_p2pk_pubkey_from_secret(self) -> List[str]:
         """Gets the P2PK pubkey from a Secret depending on the locktime.

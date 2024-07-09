@@ -311,7 +311,7 @@ def test_dleq_carol_on_proof():
         ),
         raw=True,
     )
-    proof = Proof.parse_obj(
+    proof = Proof.model_validate(
         {
             "amount": 1,
             "id": "00882760bfa2eb41",

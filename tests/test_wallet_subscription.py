@@ -99,17 +99,17 @@ async def test_wallet_subscription_swap(wallet: Wallet):
     # the first one is the UNSPENT state
     pending_stack = msg_stack[:n_subscriptions]
     for msg in pending_stack:
-        proof_state = ProofState.parse_obj(msg.payload)
+        proof_state = ProofState.model_validate(msg.payload)
         assert proof_state.state == ProofSpentState.unspent
 
     # the second one is the PENDING state
     spent_stack = msg_stack[n_subscriptions : n_subscriptions * 2]
     for msg in spent_stack:
-        proof_state = ProofState.parse_obj(msg.payload)
+        proof_state = ProofState.model_validate(msg.payload)
         assert proof_state.state == ProofSpentState.pending
 
     # the third one is the SPENT state
     spent_stack = msg_stack[n_subscriptions * 2 :]
     for msg in spent_stack:
-        proof_state = ProofState.parse_obj(msg.payload)
+        proof_state = ProofState.model_validate(msg.payload)
         assert proof_state.state == ProofSpentState.spent

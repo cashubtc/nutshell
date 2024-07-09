@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
@@ -63,12 +63,13 @@ class ProofState(LedgerEvent):
     state: ProofSpentState
     witness: Optional[str] = None
 
-    @root_validator()
-    def check_witness(cls, values):
-        state, witness = values.get("state"), values.get("witness")
-        if witness is not None and state != ProofSpentState.spent:
-            raise ValueError('Witness can only be set if the spent state is "SPENT"')
-        return values
+    # @model_validator(mode="wrap")
+    # @classmethod
+    # def check_witness(cls, values):
+    #     state, witness = values.get("state"), values.get("witness")
+    #     if witness is not None and state != ProofSpentState.spent:
+    #         raise ValueError('Witness can only be set if the spent state is "SPENT"')
+    #     return values
 
     @property
     def identifier(self) -> str:
@@ -132,8 +133,8 @@ class Proof(BaseModel):
     reserved: Union[None, bool] = False
     # unique ID of send attempt, used for grouping pending tokens in the wallet
     send_id: Union[None, str] = ""
-    time_created: Union[None, str] = ""
-    time_reserved: Union[None, str] = ""
+    time_created: Optional[int] = None
+    time_reserved: Optional[int] = None
     derivation_path: Union[None, str] = ""  # derivation path of the proof
     mint_id: Union[
         None, str
@@ -163,7 +164,7 @@ class Proof(BaseModel):
         # optional fields
         if include_dleq:
             assert self.dleq, "DLEQ proof is missing"
-            return_dict["dleq"] = self.dleq.dict()  # type: ignore
+            return_dict["dleq"] = self.dleq.model_dump()  # type: ignore
 
         if self.witness:
             return_dict["witness"] = self.witness
@@ -193,11 +194,6 @@ class Proof(BaseModel):
     def htlcpreimage(self) -> Union[str, None]:
         assert self.witness, "Witness is missing for htlc preimage"
         return HTLCWitness.from_witness(self.witness).preimage
-
-
-class Proofs(BaseModel):
-    # NOTE: not used in Pydantic validation
-    __root__: List[Proof]
 
 
 class BlindedMessage(BaseModel):
@@ -806,7 +802,7 @@ class TokenV3(BaseModel):
         token_base64 += "=" * (4 - len(token_base64) % 4)
 
         token = json.loads(base64.urlsafe_b64decode(token_base64))
-        return cls.parse_obj(token)
+        return cls.model_validate(token)
 
     def serialize(self, include_dleq=False) -> str:
         """
@@ -966,7 +962,7 @@ class TokenV4(BaseModel):
         return cls(t=cls.t, d=cls.d, m=cls.m, u=cls.u)
 
     def serialize_to_dict(self, include_dleq=False):
-        return_dict: Dict[str, Any] = dict(t=[t.dict() for t in self.t])
+        return_dict: Dict[str, Any] = dict(t=[t.model_dump() for t in self.t])
         # strip dleq if needed
         if not include_dleq:
             for token in return_dict["t"]:
@@ -1013,7 +1009,7 @@ class TokenV4(BaseModel):
         token_base64 += "=" * (4 - len(token_base64) % 4)
 
         token = cbor2.loads(base64.urlsafe_b64decode(token_base64))
-        return cls.parse_obj(token)
+        return cls.model_validate(token)
 
     def to_tokenv3(self) -> TokenV3:
         tokenv3 = TokenV3()

@@ -633,7 +633,7 @@ class LedgerCrudSqlite(LedgerCrud):
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 ),
                 "proof": quote.payment_preimage,
-                "change": json.dumps([s.dict() for s in quote.change])
+                "change": json.dumps([s.model_dump() for s in quote.change])
                 if quote.change
                 else None,
                 "quote": quote.quote,

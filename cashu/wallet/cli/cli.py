@@ -292,7 +292,7 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
         if paid:
             return
         try:
-            quote = PostMintQuoteResponse.parse_obj(msg.payload)
+            quote = PostMintQuoteResponse.model_validate(msg.payload)
         except Exception:
             return
         logger.debug(f"Received callback for quote: {quote}")
@@ -962,7 +962,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
         if mint:
             wallet.url = mint_url
             try:
-                mint_info: dict = (await wallet.load_mint_info()).dict()
+                mint_info: dict = (await wallet.load_mint_info()).model_dump()
                 if mint_info:
                     print(f"        - Mint name: {mint_info['name']}")
                     if mint_info.get("description"):

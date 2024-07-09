@@ -52,7 +52,7 @@ class SubscriptionManager:
             logger.error(f"Error parsing notification: {e}")
             return
         try:
-            params = JSONRPCNotficationParams.parse_obj(msg.params)
+            params = JSONRPCNotficationParams.model_validate(msg.params)
             logger.trace(f"Notification params: {params}")
         except Exception as e:
             logger.error(f"Error parsing notification params: {e}")
@@ -69,7 +69,7 @@ class SubscriptionManager:
         for subId in self.callback_map.keys():
             req = JSONRPCRequest(
                 method=JSONRPCMethods.UNSUBSCRIBE.value,
-                params=JSONRPCUnsubscribeParams(subId=subId).dict(),
+                params=JSONRPCUnsubscribeParams(subId=subId).model_dump(),
                 id=self.id_counter,
             )
             logger.trace(f"Unsubscribing: {req.json()}")
@@ -92,7 +92,7 @@ class SubscriptionManager:
             method=JSONRPCMethods.SUBSCRIBE.value,
             params=JSONRPCSubscribeParams(
                 kind=kind, filters=filters, subId=subId
-            ).dict(),
+            ).model_dump(),
             id=self.id_counter,
         )
         logger.trace(f"Subscribing: {req.json()}")

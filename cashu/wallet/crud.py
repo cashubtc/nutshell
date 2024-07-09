@@ -24,7 +24,7 @@ async def store_proof(
             "secret": str(proof.secret),
             "time_created": int(time.time()),
             "derivation_path": proof.derivation_path,
-            "dleq": json.dumps(proof.dleq.dict()) if proof.dleq else "",
+            "dleq": json.dumps(proof.dleq.model_dump()) if proof.dleq else "",
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
         },

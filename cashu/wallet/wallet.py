@@ -161,7 +161,7 @@ class Wallet(
     async def load_mint_info(self) -> MintInfo:
         """Loads the mint info from the mint."""
         mint_info_resp = await self._get_info()
-        self.mint_info = MintInfo(**mint_info_resp.dict())
+        self.mint_info = MintInfo(**mint_info_resp.model_dump())
         logger.debug(f"Mint info: {self.mint_info}")
         return self.mint_info
 

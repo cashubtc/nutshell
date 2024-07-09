@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from environs import Env  # type: ignore
-from pydantic import BaseSettings, Extra, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 env = Env()
 
@@ -24,16 +25,18 @@ def find_env_file():
 
 
 class CashuSettings(BaseSettings):
-    env_file: str = Field(default=None)
+    env_file: Optional[str] = Field(default=None)
     lightning_fee_percent: float = Field(default=1.0)
     lightning_reserve_fee_min: int = Field(default=2000)
     max_order: int = Field(default=64)
 
-    class Config(BaseSettings.Config):
+    # TODO[pydantic]: The `Config` class inherits from another class, please create the `model_config` manually.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
+    class Config:
         env_file = find_env_file()
         env_file_encoding = "utf-8"
         case_sensitive = False
-        extra = Extra.ignore
+        extra = "ignore"
 
         # def __init__(self, env_file=None):
         #     self.env_file = env_file or self.env_file
@@ -50,7 +53,7 @@ class EnvSettings(CashuSettings):
 
 
 class MintSettings(CashuSettings):
-    mint_private_key: str = Field(default=None)
+    mint_private_key: str = Field(default="")
     mint_seed_decryption_key: Optional[str] = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
@@ -70,10 +73,10 @@ class MintBackends(MintSettings):
     mint_backend_bolt11_usd: str = Field(default="")
     mint_backend_bolt11_eur: str = Field(default="")
 
-    mint_lnbits_endpoint: str = Field(default=None)
-    mint_lnbits_key: str = Field(default=None)
-    mint_strike_key: str = Field(default=None)
-    mint_blink_key: str = Field(default=None)
+    mint_lnbits_endpoint: Optional[str] = Field(default=None)
+    mint_lnbits_key: Optional[str] = Field(default=None)
+    mint_strike_key: Optional[str] = Field(default=None)
+    mint_blink_key: Optional[str] = Field(default=None)
 
 
 class MintLimits(MintSettings):
@@ -104,19 +107,19 @@ class MintLimits(MintSettings):
         title="Peg-out only",
         description="Mint allows no mint operations.",
     )
-    mint_max_peg_in: int = Field(
+    mint_max_peg_in: Optional[int] = Field(
         default=None,
         gt=0,
         title="Maximum peg-in",
         description="Maximum amount for a mint operation.",
     )
-    mint_max_peg_out: int = Field(
+    mint_max_peg_out: Optional[int] = Field(
         default=None,
         gt=0,
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
-    mint_max_balance: int = Field(
+    mint_max_balance: Optional[int] = Field(
         default=None,
         gt=0,
         title="Maximum mint balance",
@@ -140,20 +143,20 @@ class FakeWalletSettings(MintSettings):
 
 class MintInformation(CashuSettings):
     mint_info_name: str = Field(default="Cashu mint")
-    mint_info_description: str = Field(default=None)
-    mint_info_description_long: str = Field(default=None)
+    mint_info_description: Optional[str] = Field(default=None)
+    mint_info_description_long: Optional[str] = Field(default=None)
     mint_info_contact: List[List[str]] = Field(default=[["", ""]])
-    mint_info_motd: str = Field(default=None)
+    mint_info_motd: Optional[str] = Field(default=None)
 
 
 class WalletSettings(CashuSettings):
     tor: bool = Field(default=False)
-    socks_host: str = Field(default=None)  # deprecated
-    socks_port: int = Field(default=9050)  # deprecated
-    socks_proxy: str = Field(default=None)
-    http_proxy: str = Field(default=None)
-    mint_url: str = Field(default=None)
-    mint_host: str = Field(default="8333.space")
+    socks_host: Optional[str] = Field(default=None)  # deprecated
+    socks_port: Optional[int] = Field(default=9050)  # deprecated
+    socks_proxy: Optional[str] = Field(default=None)
+    http_proxy: Optional[str] = Field(default=None)
+    mint_url: Optional[str] = Field(default=None)
+    mint_host: str = Field(default="localhost")
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")
     wallet_unit: str = Field(default="sat")

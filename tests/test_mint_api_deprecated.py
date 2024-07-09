@@ -74,7 +74,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
     inputs_payload = [p.to_dict() for p in wallet.proofs]
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
     # strip "id" from outputs_payload, which is not used in the deprecated split endpoint
     for o in outputs_payload:
         o.pop("id")
@@ -95,7 +95,7 @@ async def test_split_deprecated_with_amount(ledger: Ledger, wallet: Wallet):
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     # outputs = wallet._construct_outputs([32, 32], ["a", "b"], ["c", "d"])
     inputs_payload = [p.to_dict() for p in wallet.proofs]
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
     # strip "id" from outputs_payload, which is not used in the deprecated split endpoint
     for o in outputs_payload:
         o.pop("id")
@@ -128,7 +128,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     quote_id = invoice.id
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/mint",
         json={"outputs": outputs_payload},
@@ -168,7 +168,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
 
     response = httpx.post(
         f"{BASE_URL}/melt",
@@ -247,7 +247,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     # outputs for change
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(1)
     outputs, rs = wallet._construct_outputs([2], secrets, rs)
-    outputs_payload = [o.dict() for o in outputs]
+    outputs_payload = [o.model_dump() for o in outputs]
 
     response = httpx.post(
         f"{BASE_URL}/melt",
@@ -310,10 +310,10 @@ async def test_api_check_state(ledger: Ledger):
     payload = CheckSpendableRequest_deprecated(proofs=proofs)
     response = httpx.post(
         f"{BASE_URL}/check",
-        json=payload.dict(),
+        json=payload.model_dump(),
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    states = CheckSpendableResponse_deprecated.parse_obj(response.json())
+    states = CheckSpendableResponse_deprecated.model_validate(response.json())
     assert states.spendable
     assert len(states.spendable) == 2
     assert states.pending
@@ -337,13 +337,13 @@ async def test_api_restore(ledger: Ledger, wallet: Wallet):
     payload = PostRestoreRequest(outputs=outputs)
     response = httpx.post(
         f"{BASE_URL}/restore",
-        json=payload.dict(),
+        json=payload.model_dump(),
     )
     data = response.json()
     assert "promises" in data
     assert "outputs" in data
     assert response.status_code == 200, f"{response.url} {response.status_code}"
-    response = PostRestoreResponse.parse_obj(response.json())
+    response = PostRestoreResponse.model_validate(response.json())
     assert response
     assert response.promises
     assert len(response.promises) == 1
