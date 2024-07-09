@@ -82,7 +82,7 @@ class KeysetsResponse(BaseModel):
 
 
 class KeysResponse_deprecated(RootModel[Dict[str, str]]):
-    pass
+    root: Dict[str, str] = {}
 
 
 class KeysetsResponse_deprecated(BaseModel):

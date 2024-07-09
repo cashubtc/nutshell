@@ -76,7 +76,7 @@ async def keys_deprecated() -> Dict[str, str]:
     logger.trace("> GET /keys")
     keyset = ledger.get_keyset()
     keys = KeysResponse_deprecated.model_validate(keyset)
-    return keys.__root__
+    return keys.root
 
 
 @router_deprecated.get(
@@ -100,7 +100,7 @@ async def keyset_deprecated(idBase64Urlsafe: str) -> Dict[str, str]:
     id = idBase64Urlsafe.replace("-", "+").replace("_", "/")
     keyset = ledger.get_keyset(keyset_id=id)
     keys = KeysResponse_deprecated.model_validate(keyset)
-    return keys.__root__
+    return keys.root
 
 
 @router_deprecated.get(

@@ -155,7 +155,7 @@ class WalletSettings(CashuSettings):
     socks_port: Optional[int] = Field(default=9050)  # deprecated
     socks_proxy: Optional[str] = Field(default=None)
     http_proxy: Optional[str] = Field(default=None)
-    mint_url: Optional[str] = Field(default=None)
+    mint_url: str = Field(default=None)
     mint_host: str = Field(default="localhost")
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")

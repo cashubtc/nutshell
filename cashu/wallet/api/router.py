@@ -52,11 +52,8 @@ router: APIRouter = APIRouter()
 async def mint_wallet(
     mint_url: Optional[str] = None, raise_connection_error: bool = True
 ) -> LightningWallet:
-    url = mint_url or settings.mint_url
-    if not url:
-        raise Exception("No mint URL provided.")
     lightning_wallet = await LightningWallet.with_db(
-        url,
+        mint_url or settings.mint_url,
         db=os.path.join(settings.cashu_dir, settings.wallet_name),
         name=settings.wallet_name,
     )
