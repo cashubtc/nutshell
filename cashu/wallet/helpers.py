@@ -87,7 +87,7 @@ def deserialize_token_from_string(token: str) -> Token:
         try:
             return TokenV4.from_tokenv3(tokenV3Obj)
         except ValueError as e:
-            logger.debug(f"Error converting TokenV3 to TokenV4: {e}")
+            logger.debug(f"Could not convert TokenV3 to TokenV4: {e}")
             return tokenV3Obj
     if token.startswith("cashuB"):
         tokenObj = TokenV4.deserialize(token)

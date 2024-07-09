@@ -720,7 +720,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print("--------------------------\n")
-        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))  # type: ignore
+        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"), reverse=True)  # type: ignore
         if number:
             number += offset
         for i, (key, value) in islice(

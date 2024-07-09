@@ -132,17 +132,21 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         Returns:
             TokenV3: TokenV3 object
         """
-        token = TokenV3(memo=memo)
 
-        # extract all keysets from proofs
-        keysets = self._get_proofs_keyset_ids(proofs)
+        # extract all keysets IDs from proofs
+        keyset_ids = self._get_proofs_keyset_ids(proofs)
+        keysets = {k.id: k for k in self.keysets.values() if k.id in keyset_ids}
         assert (
-            set([k.unit for k in self.keysets.values()]) == 1
+            len(set([k.unit for k in keysets.values()])) == 1
         ), "All keysets must have the same unit"
-        token.unit = self.keysets[keysets[0]].unit.name
+        unit = keysets[list(keysets.keys())[0]].unit
 
+        token = TokenV3()
+        token.memo = memo
+        token.unit = unit.name
+        assert token.memo == memo, f"Memo not set correctly: {token.memo}"
         # get all mint URLs for all unique keysets from db
-        mint_urls = await self._get_keyset_urls(keysets)
+        mint_urls = await self._get_keyset_urls(list(keysets.keys()))
 
         # append all url-grouped proofs to token
         for url, ids in mint_urls.items():

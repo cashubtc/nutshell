@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel, PrivateAttr, root_validator
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
@@ -812,35 +812,53 @@ class TokenV3(BaseModel, Token):
     """
 
     token: List[TokenV3Token] = []
-    memo: Optional[str] = None
-    unit: str = "sat"
+    _memo: Optional[str] = PrivateAttr(None)
+    _unit: str = PrivateAttr("sat")
+
+    class Config:
+        allow_population_by_field_name = True
 
     @property
-    def proofs(self):
+    def proofs(self) -> List[Proof]:
         return [proof for token in self.token for proof in token.proofs]
 
     @property
-    def amount(self):
+    def amount(self) -> int:
         return sum([p.amount for p in self.proofs])
 
     @property
-    def keysets(self):
+    def keysets(self) -> List[str]:
         return list(set([p.id for p in self.proofs]))
 
     @property
-    def mint(self):
+    def mint(self) -> str:
         return self.mints[0]
 
     @property
-    def mints(self):
+    def mints(self) -> List[str]:
         return list(set([t.mint for t in self.token if t.mint]))
+
+    @property
+    def memo(self) -> Optional[str]:
+        return str(self._memo) if self._memo else None
+
+    @memo.setter
+    def memo(self, memo: Optional[str]):
+        self._memo = memo
+
+    @property
+    def unit(self) -> str:
+        return self._unit
+
+    @unit.setter
+    def unit(self, unit: str):
+        self._unit = unit
 
     def serialize_to_dict(self, include_dleq=False):
         return_dict = dict(token=[t.to_dict(include_dleq) for t in self.token])
         if self.memo:
             return_dict.update(dict(memo=self.memo))  # type: ignore
-        if self.unit:
-            return_dict.update(dict(unit=self.unit))  # type: ignore
+        return_dict.update(dict(unit=self.unit))  # type: ignore
         return return_dict
 
     @classmethod
@@ -867,7 +885,9 @@ class TokenV3(BaseModel, Token):
         tokenv3_serialized = prefix
         # encode the token as a base64 string
         tokenv3_serialized += base64.urlsafe_b64encode(
-            json.dumps(self.serialize_to_dict(include_dleq)).encode()
+            json.dumps(
+                self.serialize_to_dict(include_dleq), separators=(",", ":")
+            ).encode()
         ).decode()
         return tokenv3_serialized
 
@@ -1082,7 +1102,7 @@ class TokenV4(BaseModel, Token):
         return cls.parse_obj(token)
 
     def to_tokenv3(self) -> TokenV3:
-        tokenv3 = TokenV3()
+        tokenv3 = TokenV3(_memo=self.d, _unit=self.u)
         for token in self.t:
             tokenv3.token.append(
                 TokenV3Token(
