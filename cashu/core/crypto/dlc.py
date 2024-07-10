@@ -2,6 +2,8 @@ from hashlib import sha256
 from typing import Optional, Tuple
 from secp256k1 import PrivateKey, PublicKey
 
+from typing import List
+
 def sorted_merkle_hash(left: bytes, right: bytes) -> bytes:
     '''Sorts `left` and `right` in non-ascending order and
         computes the hash of their concatenation

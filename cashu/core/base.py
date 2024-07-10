@@ -1047,12 +1047,8 @@ class TokenV4(Token):
         ]
 
     @property
-    def dlc_root(self) -> str:
+    def dlc_root(self) -> Optional[str]:
         return self.r
-
-    @property
-    def keysets(self) -> List[str]:
-        return list(set([p.i.hex() for p in self.t]))
 
     @property
     def keysets(self) -> List[str]:
