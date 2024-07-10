@@ -151,6 +151,9 @@ class Proof(BaseModel):
     def from_dict(cls, proof_dict: dict):
         if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], dict):
             proof_dict["dleq"] = DLEQWallet(**proof_dict["dleq"])
+        elif proof_dict.get("dleq") and isinstance(proof_dict["dleq"], str):
+            # Proofs read from the database have the DLEQ proof as a string
+            proof_dict["dleq"] = DLEQWallet(**json.loads(proof_dict["dleq"]))
         else:
             # overwrite the empty string with None
             proof_dict["dleq"] = None
