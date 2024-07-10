@@ -2,14 +2,14 @@ import base64
 import json
 import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from sqlite3 import Row
 from typing import Any, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
-from pydantic import BaseModel, PrivateAttr, root_validator
+from pydantic import BaseModel, root_validator
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
@@ -149,8 +149,8 @@ class Proof(BaseModel):
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
-        if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], str):
-            proof_dict["dleq"] = DLEQWallet(**json.loads(proof_dict["dleq"]))
+        if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], dict):
+            proof_dict["dleq"] = DLEQWallet(**proof_dict["dleq"])
         else:
             # overwrite the empty string with None
             proof_dict["dleq"] = None
@@ -806,14 +806,15 @@ class TokenV3Token(BaseModel):
         return return_dict
 
 
-class TokenV3(BaseModel, Token):
+@dataclass
+class TokenV3(Token):
     """
     A Cashu token that includes proofs and their respective mints. Can include proofs from multiple different mints and keysets.
     """
 
-    token: List[TokenV3Token] = []
-    _memo: Optional[str] = PrivateAttr(None)
-    _unit: str = PrivateAttr("sat")
+    token: List[TokenV3Token] = field(default_factory=list)
+    _memo: Optional[str] = None
+    _unit: str = "sat"
 
     class Config:
         allow_population_by_field_name = True
@@ -891,6 +892,24 @@ class TokenV3(BaseModel, Token):
         ).decode()
         return tokenv3_serialized
 
+    @classmethod
+    def parse_obj(cls, token_dict: Dict[str, Any]):
+        if not token_dict.get("token"):
+            raise Exception("Token must contain proofs.")
+        token: List[Dict[str, Any]] = token_dict.get("token") or []
+        assert token, "Token must contain proofs."
+        return cls(
+            token=[
+                TokenV3Token(
+                    mint=t.get("mint"),
+                    proofs=[Proof.from_dict(p) for p in t.get("proofs") or []],
+                )
+                for t in token
+            ],
+            _memo=token_dict.get("memo"),
+            _unit=token_dict.get("unit") or "sat",
+        )
+
 
 class TokenV4DLEQ(BaseModel):
     """
@@ -939,7 +958,8 @@ class TokenV4Token(BaseModel):
     p: List[TokenV4Proof]
 
 
-class TokenV4(BaseModel, Token):
+@dataclass
+class TokenV4(Token):
     # mint URL
     m: str
     # unit
@@ -1129,3 +1149,12 @@ class TokenV4(BaseModel, Token):
                 )
             )
         return tokenv3
+
+    @classmethod
+    def parse_obj(cls, token_dict: dict):
+        return cls(
+            m=token_dict["m"],
+            u=token_dict["u"],
+            t=[TokenV4Token(**t) for t in token_dict["t"]],
+            d=token_dict.get("d", None),
+        )

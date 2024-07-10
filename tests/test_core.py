@@ -36,13 +36,7 @@ def test_tokenv3_deserialize_serialize_no_dleq():
 
 
 def test_tokenv3_deserialize_with_memo():
-    token_str = (
-        "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIkplaFpMVTZuQ3BSZCIsICJhbW91bnQiOiAyLCAic2VjcmV0IjogIjBFN2lDazRkVmxSZjV"
-        "QRjFnNFpWMnciLCAiQyI6ICIwM2FiNTgwYWQ5NTc3OGVkNTI5NmY4YmVlNjU1ZGJkN2Q2NDJmNWQzMmRlOGUyNDg0NzdlMGI0ZDZhYTg2M2ZjZDUifSwg"
-        "eyJpZCI6ICJKZWhaTFU2bkNwUmQiLCAiYW1vdW50IjogOCwgInNlY3JldCI6ICJzNklwZXh3SGNxcXVLZDZYbW9qTDJnIiwgIkMiOiAiMDIyZDAwNGY5Z"
-        "WMxNmE1OGFkOTAxNGMyNTliNmQ2MTRlZDM2ODgyOWYwMmMzODc3M2M0NzIyMWY0OTYxY2UzZjIzIn1dLCAibWludCI6ICJodHRwOi8vbG9jYWxob3N0Oj"
-        "MzMzgifV0sICJtZW1vIjogIlRlc3QgbWVtbyJ9"
-    )
+    token_str = "cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjAwYWQyNjhjNGQxZjU4MjYiLCJhbW91bnQiOjgsInNlY3JldCI6IjNlNDlhMGQzNzllMWQ1YTY3MjhiYzUwMjM4YTRjZDFlMjBiY2M5MjM4MjAxMDg0MzcyNjdhNWZkZDM2NWZiMDYiLCJDIjoiMDIyYWQwODg5ZmVkNWE0YWNjODEwYTZhZTk4MTc0YjFlZGM2OTkwMWI0OTdkNTYzYmM5NjEyMjVlYzMwOGVkMTVkIn0seyJpZCI6IjAwYWQyNjhjNGQxZjU4MjYiLCJhbW91bnQiOjIsInNlY3JldCI6ImNmNjhhNTQ3ZWY2ZDVhNGFkZTI0ZGM5MDU5ZTE5ZmJkZDU0NmQ5MGE1OWI0ODE5MzdmN2FjNmRiNWMwZjFkMTUiLCJDIjoiMDMyZWQ5ZGQ3MzExMTg1ODk1NTFiM2E5YjJhNTM5YWZlYTcxOTU3OGZhNTI1ZTVmMmJkY2M4YjNlMzhjNjJkOTRjIn1dLCJtaW50IjoiaHR0cDovL2xvY2FsaG9zdDozMzM4In1dLCJtZW1vIjoiVGVzdCBtZW1vIiwidW5pdCI6InNhdCJ9"
     token = TokenV3.deserialize(token_str)
     assert token.serialize() == token_str
     assert token.memo == "Test memo"
@@ -55,34 +49,37 @@ def test_tokenv3_serialize_example_token_nut00():
                 "mint": "https://8333.space:3338",
                 "proofs": [
                     {
-                        "id": "9bb9d58392cd823e",
                         "amount": 2,
-                        "secret": "EhpennC9qB3iFlW8FZ_pZw",
-                        "C": "02c020067db727d586bc3183aecf97fcb800c3f4cc4759f69c626c9db5d8f5b5d4",
+                        "id": "009a1f293253e41e",
+                        "secret": "407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837",
+                        "C": "02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea",
                     },
                     {
-                        "id": "9bb9d58392cd823e",
                         "amount": 8,
-                        "secret": "TmS6Cv0YT5PU_5ATVKnukw",
-                        "C": "02ac910bef28cbe5d7325415d5c263026f15f9b967a079ca9779ab6e5c2db133a7",
+                        "id": "009a1f293253e41e",
+                        "secret": "fe15109314e61d7756b0f8ee0f23a624acaa3f4e042f61433c728c7057b931be",
+                        "C": "029e8e5050b890a7d6c0968db16bc1d5d5fa040ea1de284f6ec69d61299f671059",
                     },
                 ],
             }
         ],
+        "unit": "sat",
         "memo": "Thank you.",
     }
     tokenObj = TokenV3.parse_obj(token_dict)
+    # NOTE: The serialized token here is different from the example in NUT-00 because the order of keys in the JSON is different in our seiralization
+    encoded_token = "cashuAeyJ0b2tlbiI6W3sicHJvb2ZzIjpbeyJpZCI6IjAwOWExZjI5MzI1M2U0MWUiLCJhbW91bnQiOjIsInNlY3JldCI6IjQwNzkxNWJjMjEyYmU2MWE3N2UzZTZkMmFlYjRjNzI3OTgwYmRhNTFjZDA2YTZhZmMyOWUyODYxNzY4YTc4MzciLCJDIjoiMDJiYzkwOTc5OTdkODFhZmIyY2M3MzQ2YjVlNDM0NWE5MzQ2YmQyYTUwNmViNzk1ODU5OGE3MmYwY2Y4NTE2M2VhIn0seyJpZCI6IjAwOWExZjI5MzI1M2U0MWUiLCJhbW91bnQiOjgsInNlY3JldCI6ImZlMTUxMDkzMTRlNjFkNzc1NmIwZjhlZTBmMjNhNjI0YWNhYTNmNGUwNDJmNjE0MzNjNzI4YzcwNTdiOTMxYmUiLCJDIjoiMDI5ZThlNTA1MGI4OTBhN2Q2YzA5NjhkYjE2YmMxZDVkNWZhMDQwZWExZGUyODRmNmVjNjlkNjEyOTlmNjcxMDU5In1dLCJtaW50IjoiaHR0cHM6Ly84MzMzLnNwYWNlOjMzMzgifV0sIm1lbW8iOiJUaGFuayB5b3UuIiwidW5pdCI6InNhdCJ9"
+    encoded_token_nut00 = "cashuAeyJ0b2tlbiI6W3sibWludCI6Imh0dHBzOi8vODMzMy5zcGFjZTozMzM4IiwicHJvb2ZzIjpbeyJhbW91bnQiOjIsImlkIjoiMDA5YTFmMjkzMjUzZTQxZSIsInNlY3JldCI6IjQwNzkxNWJjMjEyYmU2MWE3N2UzZTZkMmFlYjRjNzI3OTgwYmRhNTFjZDA2YTZhZmMyOWUyODYxNzY4YTc4MzciLCJDIjoiMDJiYzkwOTc5OTdkODFhZmIyY2M3MzQ2YjVlNDM0NWE5MzQ2YmQyYTUwNmViNzk1ODU5OGE3MmYwY2Y4NTE2M2VhIn0seyJhbW91bnQiOjgsImlkIjoiMDA5YTFmMjkzMjUzZTQxZSIsInNlY3JldCI6ImZlMTUxMDkzMTRlNjFkNzc1NmIwZjhlZTBmMjNhNjI0YWNhYTNmNGUwNDJmNjE0MzNjNzI4YzcwNTdiOTMxYmUiLCJDIjoiMDI5ZThlNTA1MGI4OTBhN2Q2YzA5NjhkYjE2YmMxZDVkNWZhMDQwZWExZGUyODRmNmVjNjlkNjEyOTlmNjcxMDU5In1dfV0sInVuaXQiOiJzYXQiLCJtZW1vIjoiVGhhbmsgeW91LiJ9"
     assert (
-        tokenObj.serialize()
-        == "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjliYjlkNTgzOTJjZDg"
-        "yM2UiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICJFaHBlbm5DOXFCM2lGbFc4Rlpf"
-        "cFp3IiwgIkMiOiAiMDJjMDIwMDY3ZGI3MjdkNTg2YmMzMTgzYWVjZjk3ZmNiODAwY"
-        "zNmNGNjNDc1OWY2OWM2MjZjOWRiNWQ4ZjViNWQ0In0sIHsiaWQiOiAiOWJiOWQ1OD"
-        "M5MmNkODIzZSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogIlRtUzZDdjBZVDVQVV8"
-        "1QVRWS251a3ciLCAiQyI6ICIwMmFjOTEwYmVmMjhjYmU1ZDczMjU0MTVkNWMyNjMw"
-        "MjZmMTVmOWI5NjdhMDc5Y2E5Nzc5YWI2ZTVjMmRiMTMzYTcifV0sICJtaW50IjogI"
-        "mh0dHBzOi8vODMzMy5zcGFjZTozMzM4In1dLCAibWVtbyI6ICJUaGFuayB5b3UuIn0="
+        tokenObj.serialize() == encoded_token
+        # NUT-00 example:
+        # == encoded_token_nut00
     )
+
+    # to make sure the serialization is correct, we deserialize the token and compare it with the original token
+    token_1 = TokenV3.deserialize(encoded_token)
+    token_2 = TokenV3.deserialize(encoded_token_nut00)
+    assert token_1.serialize() == token_2.serialize()
 
 
 def test_tokenv4_deserialize_get_attributes():
