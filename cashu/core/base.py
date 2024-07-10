@@ -1,7 +1,8 @@
 import base64
 import json
 import math
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from enum import Enum
 from sqlite3 import Row
 from typing import Any, Dict, List, Optional, Union
@@ -148,7 +149,10 @@ class Proof(BaseModel):
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
-        if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], str):
+        if proof_dict.get("dleq") and isinstance(proof_dict["dleq"], dict):
+            proof_dict["dleq"] = DLEQWallet(**proof_dict["dleq"])
+        elif proof_dict.get("dleq") and isinstance(proof_dict["dleq"], str):
+            # Proofs read from the database have the DLEQ proof as a string
             proof_dict["dleq"] = DLEQWallet(**json.loads(proof_dict["dleq"]))
         else:
             # overwrite the empty string with None
@@ -752,6 +756,48 @@ class MintKeyset:
 # ------- TOKEN -------
 
 
+class Token(ABC):
+    @property
+    @abstractmethod
+    def proofs(self) -> List[Proof]:
+        ...
+
+    @property
+    @abstractmethod
+    def amount(self) -> int:
+        ...
+
+    @property
+    @abstractmethod
+    def mint(self) -> str:
+        ...
+
+    @property
+    @abstractmethod
+    def keysets(self) -> List[str]:
+        ...
+
+    @property
+    @abstractmethod
+    def memo(self) -> Optional[str]:
+        ...
+
+    @memo.setter
+    @abstractmethod
+    def memo(self, memo: Optional[str]):
+        ...
+
+    @property
+    @abstractmethod
+    def unit(self) -> str:
+        ...
+
+    @unit.setter
+    @abstractmethod
+    def unit(self, unit: str):
+        ...
+
+
 class TokenV3Token(BaseModel):
     mint: Optional[str] = None
     proofs: List[Proof]
@@ -763,33 +809,60 @@ class TokenV3Token(BaseModel):
         return return_dict
 
 
-class TokenV3(BaseModel):
+@dataclass
+class TokenV3(Token):
     """
     A Cashu token that includes proofs and their respective mints. Can include proofs from multiple different mints and keysets.
     """
 
-    token: List[TokenV3Token] = []
-    memo: Optional[str] = None
-    unit: Optional[str] = None
+    token: List[TokenV3Token] = field(default_factory=list)
+    _memo: Optional[str] = None
+    _unit: str = "sat"
 
-    def get_proofs(self):
+    class Config:
+        allow_population_by_field_name = True
+
+    @property
+    def proofs(self) -> List[Proof]:
         return [proof for token in self.token for proof in token.proofs]
 
-    def get_amount(self):
-        return sum([p.amount for p in self.get_proofs()])
+    @property
+    def amount(self) -> int:
+        return sum([p.amount for p in self.proofs])
 
-    def get_keysets(self):
-        return list(set([p.id for p in self.get_proofs()]))
+    @property
+    def keysets(self) -> List[str]:
+        return list(set([p.id for p in self.proofs]))
 
-    def get_mints(self):
+    @property
+    def mint(self) -> str:
+        return self.mints[0]
+
+    @property
+    def mints(self) -> List[str]:
         return list(set([t.mint for t in self.token if t.mint]))
+
+    @property
+    def memo(self) -> Optional[str]:
+        return str(self._memo) if self._memo else None
+
+    @memo.setter
+    def memo(self, memo: Optional[str]):
+        self._memo = memo
+
+    @property
+    def unit(self) -> str:
+        return self._unit
+
+    @unit.setter
+    def unit(self, unit: str):
+        self._unit = unit
 
     def serialize_to_dict(self, include_dleq=False):
         return_dict = dict(token=[t.to_dict(include_dleq) for t in self.token])
         if self.memo:
             return_dict.update(dict(memo=self.memo))  # type: ignore
-        if self.unit:
-            return_dict.update(dict(unit=self.unit))  # type: ignore
+        return_dict.update(dict(unit=self.unit))  # type: ignore
         return return_dict
 
     @classmethod
@@ -816,9 +889,29 @@ class TokenV3(BaseModel):
         tokenv3_serialized = prefix
         # encode the token as a base64 string
         tokenv3_serialized += base64.urlsafe_b64encode(
-            json.dumps(self.serialize_to_dict(include_dleq)).encode()
+            json.dumps(
+                self.serialize_to_dict(include_dleq), separators=(",", ":")
+            ).encode()
         ).decode()
         return tokenv3_serialized
+
+    @classmethod
+    def parse_obj(cls, token_dict: Dict[str, Any]):
+        if not token_dict.get("token"):
+            raise Exception("Token must contain proofs.")
+        token: List[Dict[str, Any]] = token_dict.get("token") or []
+        assert token, "Token must contain proofs."
+        return cls(
+            token=[
+                TokenV3Token(
+                    mint=t.get("mint"),
+                    proofs=[Proof.from_dict(p) for p in t.get("proofs") or []],
+                )
+                for t in token
+            ],
+            _memo=token_dict.get("memo"),
+            _unit=token_dict.get("unit") or "sat",
+        )
 
 
 class TokenV4DLEQ(BaseModel):
@@ -868,7 +961,8 @@ class TokenV4Token(BaseModel):
     p: List[TokenV4Proof]
 
 
-class TokenV4(BaseModel):
+@dataclass
+class TokenV4(Token):
     # mint URL
     m: str
     # unit
@@ -882,13 +976,24 @@ class TokenV4(BaseModel):
     def mint(self) -> str:
         return self.m
 
+    def set_mint(self, mint: str):
+        self.m = mint
+
     @property
     def memo(self) -> Optional[str]:
         return self.d
 
+    @memo.setter
+    def memo(self, memo: Optional[str]):
+        self.d = memo
+
     @property
     def unit(self) -> str:
         return self.u
+
+    @unit.setter
+    def unit(self, unit: str):
+        self.u = unit
 
     @property
     def amounts(self) -> List[int]:
@@ -921,12 +1026,16 @@ class TokenV4(BaseModel):
             for p in token.p
         ]
 
+    @property
+    def keysets(self) -> List[str]:
+        return list(set([p.i.hex() for p in self.t]))
+
     @classmethod
     def from_tokenv3(cls, tokenv3: TokenV3):
-        if not len(tokenv3.get_mints()) == 1:
+        if not len(tokenv3.mints) == 1:
             raise Exception("TokenV3 must contain proofs from only one mint.")
 
-        proofs = tokenv3.get_proofs()
+        proofs = tokenv3.proofs
         proofs_by_id: Dict[str, List[Proof]] = {}
         for proof in proofs:
             proofs_by_id.setdefault(proof.id, []).append(proof)
@@ -960,7 +1069,7 @@ class TokenV4(BaseModel):
         # set memo
         cls.d = tokenv3.memo
         # set mint
-        cls.m = tokenv3.get_mints()[0]
+        cls.m = tokenv3.mint
         # set unit
         cls.u = tokenv3.unit or "sat"
         return cls(t=cls.t, d=cls.d, m=cls.m, u=cls.u)
@@ -1016,7 +1125,7 @@ class TokenV4(BaseModel):
         return cls.parse_obj(token)
 
     def to_tokenv3(self) -> TokenV3:
-        tokenv3 = TokenV3()
+        tokenv3 = TokenV3(_memo=self.d, _unit=self.u)
         for token in self.t:
             tokenv3.token.append(
                 TokenV3Token(
@@ -1043,3 +1152,12 @@ class TokenV4(BaseModel):
                 )
             )
         return tokenv3
+
+    @classmethod
+    def parse_obj(cls, token_dict: dict):
+        return cls(
+            m=token_dict["m"],
+            u=token_dict["u"],
+            t=[TokenV4Token(**t) for t in token_dict["t"]],
+            d=token_dict.get("d", None),
+        )
