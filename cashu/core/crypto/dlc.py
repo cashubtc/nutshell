@@ -16,7 +16,7 @@ def sorted_merkle_hash(left: bytes, right: bytes) -> bytes:
 def merkle_root(
     leaf_hashes: List[bytes],
     track_branch: Optional[int] = None
-    ) -> Tuple[bytes, List[bytes]]:
+    ) -> Tuple[bytes, Optional[List[bytes]]]:
     '''Computes the root of a list of merkle proofs
         if `track_branch` is set, returns also the hashes for the branch that leads
         to `leaf_hashes[track_branch]`
@@ -35,6 +35,8 @@ def merkle_root(
             branch_hashes = (left_branch_hashes if
                 track_branch < split else right_branch_hashes)
             hashh = sorted_merkle_hash(left, right)
+            # Needed to pass mypy checks
+            assert branch_hashes is not None, "merkle_root fail: branch_hashes == None"
             branch_hashes.append(right if track_branch < split else left)
             return hashh, branch_hashes
     else:
