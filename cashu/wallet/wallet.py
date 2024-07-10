@@ -120,6 +120,7 @@ class Wallet(
         name: str = "no_name",
         skip_db_read: bool = False,
         unit: str = "sat",
+        load_all_keysets: bool = False,
     ):
         """Initializes a wallet with a database and initializes the private key.
 
@@ -130,6 +131,9 @@ class Wallet(
             skip_db_read (bool, optional): If true, values from db like private key and
                 keysets are not loaded. Useful for running only migrations and returning.
                 Defaults to False.
+            unit (str, optional): Unit of the wallet. Defaults to "sat".
+            load_all_keysets (bool, optional): If true, all keysets are loaded from the database.
+                Defaults to False.
 
         Returns:
             Wallet: Initialized wallet.
@@ -137,16 +141,23 @@ class Wallet(
         logger.trace(f"Initializing wallet with database: {db}")
         self = cls(url=url, db=db, name=name, unit=unit)
         await self._migrate_database()
-        if not skip_db_read:
-            logger.trace("Mint init: loading private key and keysets from db.")
-            await self._init_private_key()
-            keysets_list = await get_keysets(mint_url=url, db=self.db)
+
+        if skip_db_read:
+            return self
+
+        logger.trace("Mint init: loading private key and keysets from db.")
+        await self._init_private_key()
+        keysets_list = await get_keysets(
+            mint_url=url if not load_all_keysets else None, db=self.db
+        )
+        if not load_all_keysets:
             keysets_active_unit = [k for k in keysets_list if k.unit == self.unit]
             self.keysets = {k.id: k for k in keysets_active_unit}
-            logger.debug(
-                f"Loaded keysets: {' '.join([k.id + f' {k.unit}' for k in keysets_active_unit])}"
-            )
-
+        else:
+            self.keysets = {k.id: k for k in keysets_list}
+        logger.debug(
+            f"Loaded keysets: {' '.join([i + f' {k.unit}' for i, k in self.keysets.items()])}"
+        )
         return self
 
     async def _migrate_database(self):
@@ -173,7 +184,6 @@ class Wallet(
         logger.trace("Loading mint keysets.")
         mint_keysets_resp = await self._get_keysets()
         mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
-
         # load all keysets of thisd mint from the db
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
 
@@ -274,7 +284,7 @@ class Wallet(
             logger.debug(f"Could not load mint info: {e}")
             pass
 
-    async def load_proofs(self, reload: bool = False) -> None:
+    async def load_proofs(self, reload: bool = False, all_keysets=False) -> None:
         """Load all proofs of the selected mint and unit (i.e. self.keysets) into memory."""
 
         if self.proofs and not reload:
@@ -284,9 +294,13 @@ class Wallet(
         self.proofs = []
         await self.load_keysets_from_db()
         async with self.db.connect() as conn:
-            for keyset_id in self.keysets:
-                proofs = await get_proofs(db=self.db, id=keyset_id, conn=conn)
+            if all_keysets:
+                proofs = await get_proofs(db=self.db, conn=conn)
                 self.proofs.extend(proofs)
+            else:
+                for keyset_id in self.keysets:
+                    proofs = await get_proofs(db=self.db, id=keyset_id, conn=conn)
+                    self.proofs.extend(proofs)
         logger.trace(
             f"Proofs loaded for keysets: {' '.join([k.id + f' ({k.unit})' for k in self.keysets.values()])}"
         )

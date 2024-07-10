@@ -105,10 +105,8 @@ class PostMintQuoteRequest(BaseModel):
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
-    paid: Optional[
-        bool
-    ]  # whether the request has been paid # DEPRECATED as per NUT PR #141
-    state: str  # state of the quote
+    paid: Optional[bool]  # DEPRECATED as per NUT-04 PR #141
+    state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
 
     @classmethod
@@ -185,8 +183,10 @@ class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
-    paid: bool  # whether the request has been paid # DEPRECATED as per NUT PR #136
-    state: str  # state of the quote
+    paid: Optional[
+        bool
+    ]  # whether the request has been paid # DEPRECATED as per NUT PR #136
+    state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
     change: Union[List[BlindedSignature], None] = None

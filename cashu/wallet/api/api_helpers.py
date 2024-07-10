@@ -1,8 +1,8 @@
-from ...core.base import TokenV4
+from ...core.base import Token
 from ...wallet.crud import get_keysets
 
 
-async def verify_mints(wallet, tokenObj: TokenV4):
+async def verify_mints(wallet, tokenObj: Token):
     # verify mints
     mint = tokenObj.mint
     mint_keysets = await get_keysets(mint_url=mint, db=wallet.db)
