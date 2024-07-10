@@ -13,18 +13,41 @@ def sorted_merkle_hash(left: bytes, right: bytes) -> bytes:
     return sha256(left+right).digest()
 
 
-def merkle_root(leaf_hashes: List[bytes]) -> bytes:
+def merkle_root(
+    leaf_hashes: List[bytes],
+    track_branch: Optional[int] = None
+    ) -> Tuple[bytes, List[bytes]]:
     '''Computes the root of a list of merkle proofs
+        if `track_branch` is set, returns also the hashes for the branch that leads
+        to `leaf_hashes[track_branch]`
     '''
-    if len(leaf_hashes) == 0:
-        return b""
-    elif len(leaf_hashes) == 1:
-        return leaf_hashes[0]
+    if track_branch is not None:
+        if len(leaf_hashes) == 0:
+            return b"", []
+        elif len(leaf_hashes) == 1:
+            return leaf_hashes[0], []
+        else:
+            split = len(leaf_hashes) // 2
+            left, left_branch_hashes = merkle_root(leaf_hashes[:split],
+                track_branch if track_branch < split else None)
+            right, right_branch_hashes = merkle_root(leaf_hashes[split:],
+                track_branch-split if track_branch >= split else None)
+            branch_hashes = (left_branch_hashes if
+                track_branch < split else right_branch_hashes)
+            hashh = sorted_merkle_hash(left, right)
+            branch_hashes.append(right if track_branch < split else left)
+            return hashh, branch_hashes
     else:
-        split = len(leaf_hashes) // 2
-        left = merkle_root(leaf_hashes[:split])
-        right = merkle_root(leaf_hashes[split:])
-        return sorted_merkle_hash(left, right)
+        if len(leaf_hashes) == 0:
+            return b"", None
+        elif len(leaf_hashes) == 1:
+            return leaf_hashes[0], None
+        else:
+            split = len(leaf_hashes) // 2
+            left, _  = merkle_root(leaf_hashes[:split], None)
+            right, _ = merkle_root(leaf_hashes[split:], None)
+            hashh = sorted_merkle_hash(left, right)
+            return hashh, None
 
 def merkle_verify(root: bytes, leaf_hash: bytes, proof: List[bytes]) -> bool:
     '''Verifies that `leaf_hash` belongs to a merkle tree
