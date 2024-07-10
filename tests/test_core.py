@@ -3,6 +3,7 @@ import pytest
 from cashu.core.base import TokenV3, TokenV4, Unit
 from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.split import amount_split
+from cashu.wallet.helpers import deserialize_token_from_string
 
 
 def test_get_output_split():
@@ -211,3 +212,39 @@ def test_calculate_number_of_blank_outputs_fails_for_negative_fee_reserve():
     fee_reserve_sat = -1
     with pytest.raises(AssertionError):
         _ = calculate_number_of_blank_outputs(fee_reserve_sat)
+
+
+def test_parse_token_v3_v4_base64_keyset_id():
+    token_dict = {
+        "token": [
+            {
+                "mint": "https://localhost:3338",
+                "proofs": [
+                    {
+                        "amount": 2,
+                        "id": "009a1f293253e41e",
+                        "secret": "407915bc212be61a77e3e6d2aeb4c727980bda51cd06a6afc29e2861768a7837",
+                        "C": "02bc9097997d81afb2cc7346b5e4345a9346bd2a506eb7958598a72f0cf85163ea",
+                    },
+                ],
+            }
+        ],
+    }
+
+    token_v3 = TokenV3.parse_obj(token_dict)
+    token_v3_serialized = token_v3.serialize()
+
+    # this token can be serialized to V4
+    token = deserialize_token_from_string(token_v3_serialized)
+    assert isinstance(token, TokenV4)
+
+    # Now let's do the same with a base64 token
+    token_dict_base64_keyset = token_dict.copy()
+    token_dict_base64_keyset["token"][0]["proofs"][0]["id"] = "yjzQhxghPdrr"  # type: ignore
+
+    token_v3_base64_keyset = TokenV3.parse_obj(token_dict_base64_keyset)
+    token_v3_base64_keyset_serialized = token_v3_base64_keyset.serialize()
+
+    # this token can not be serialized to V4
+    token = deserialize_token_from_string(token_v3_base64_keyset_serialized)
+    assert isinstance(token, TokenV3)
