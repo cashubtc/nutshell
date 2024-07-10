@@ -11,6 +11,7 @@ from .crypto.secp import PrivateKey
 class SecretKind(Enum):
     P2PK = "P2PK"
     HTLC = "HTLC"
+    SCT = "SCT"
 
 
 class Tags(BaseModel):

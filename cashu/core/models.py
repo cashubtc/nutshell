@@ -10,6 +10,11 @@ from .base import (
     MintQuote,
     Proof,
     ProofState,
+    DlcFundingProof,
+    DiscreteLogContract,
+    DlcSettlement,
+    DlcPayoutForm,
+    DlcPayout
 )
 from .settings import settings
 
@@ -304,3 +309,39 @@ class PostRestoreResponse(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         self.promises = self.signatures
+
+
+# ------- API: DLC REGISTRATION -------
+
+class PostDlcRegistrationRequest(BaseModel):
+    atomic: Optional[bool]
+    registrations: List[DiscreteLogContract]
+
+class PostDlcRegistrationResponse(BaseModel):
+    funded: List[DlcFundingProof] = []
+    errors: Optional[List[DlcFundingProof]] = None
+
+# ------- API: DLC SETTLEMENT -------
+
+class PostDlcSettleRequest(BaseModel):
+    settlements: List[DlcSettlement]
+
+class PostDlcSettleResponse(BaseModel):
+    settled: List[DlcSettlement] = []
+    errors: Optional[List[DlcSettlement]] = None
+
+# ------- API: DLC PAYOUT -------
+class PostDlcPayoutRequest(BaseModel):
+    atomic: Optional[bool]
+    payouts: List[DlcPayoutForm]
+
+class PostDlcPayoutResponse(BaseModel):
+    paid: List[DlcPayout]
+    errors: Optional[List[DlcPayout]]
+
+# ------- API: DLC STATUS -------
+
+class GetDlcStatusResponse(BaseModel):
+    settled: bool
+    funding_amount: Optional[int]
+    debts: Optional[Dict[str, int]]

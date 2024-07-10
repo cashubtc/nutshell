@@ -197,6 +197,7 @@ class LedgerSpendingConditions:
         Verify spending conditions:
          Condition: P2PK - Checks if signature in proof.witness is valid for pubkey in proof.secret
          Condition: HTLC - Checks if preimage in proof.witness is valid for hash in proof.secret
+         Condition: SCT - Spending Condition Tree means this proof is DLC locked: DO NOT SPEND.
         """
 
         try:
@@ -214,6 +215,10 @@ class LedgerSpendingConditions:
         # HTLC
         if SecretKind(secret.kind) == SecretKind.HTLC:
             return self._verify_htlc_spending_conditions(proof, secret)
+        
+        # SCT
+        if SecretKind(secret.kind) == SecretKind.SCT:
+            return False
 
         # no spending condition present
         return True

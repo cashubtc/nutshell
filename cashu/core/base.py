@@ -114,6 +114,14 @@ class P2PKWitness(BaseModel):
     def from_witness(cls, witness: str):
         return cls(**json.loads(witness))
 
+class DLCWitness(BaseModel):
+    leaf_secret: str
+    merkle_proof: List[str]
+
+    @classmethod
+    def from_witness(cls, witness: str):
+        return cls(**json.loads(witness))
+
 
 class Proof(BaseModel):
     """
@@ -188,6 +196,16 @@ class Proof(BaseModel):
     def p2pksigs(self) -> List[str]:
         assert self.witness, "Witness is missing for p2pk signature"
         return P2PKWitness.from_witness(self.witness).signatures
+
+    @property
+    def dlc_leaf_secret(self) -> str:
+        assert self.witness, "Witness is missing for dlc leaf secret"
+        return DLCWitness.from_witness(self.witness).leaf_secret
+
+    @property
+    def dlc_merkle_proof(self) -> List[str]:
+        assert self.witness, "Witness is missing for dlc merkle proof"
+        return DLCWitness.from_witness(self.witness).merkle_proof
 
     @property
     def htlcpreimage(self) -> Union[str, None]:
@@ -877,6 +895,8 @@ class TokenV4(BaseModel):
     t: List[TokenV4Token]
     # memo
     d: Optional[str] = None
+    # dlc root
+    r: Optional[str] = None
 
     @property
     def mint(self) -> str:
@@ -920,6 +940,10 @@ class TokenV4(BaseModel):
             for token in self.t
             for p in token.p
         ]
+    
+    @property
+    def dlc_root(self) -> str:
+        return self.r
 
     @classmethod
     def from_tokenv3(cls, tokenv3: TokenV3):
@@ -1043,3 +1067,56 @@ class TokenV4(BaseModel):
                 )
             )
         return tokenv3
+
+# -------- DLC STUFF --------
+
+class DiscreteLogContract(BaseModel):
+    """
+    A discrete log contract
+    """
+    settled: bool = False
+    dlc_root: str
+    funding_amount: int
+    inputs: List[Proof]          # Need to verify these are indeed SCT proofs
+    debts: Dict[str, int] = {}   # We save who we owe money to here
+
+class DlcBadInputs(BaseModel):
+    index: int
+    detail: str
+
+class DlcFundingProof(BaseModel):
+    """
+    A dlc merkle root with its signature
+    """
+    dlc_root: str
+    signature: Optional[str]
+    bad_inputs: Optional[List[DlcBadInputs]] = None # Used to specify potential errors
+
+class DlcOutcome(BaseModel):
+    """
+    Describes a DLC outcome
+    """
+    k: Optional[str]      # The discrete log revealed by the oracle
+    t: Optional[int]      # The timeout (claim when time is over)
+    P: str                # The payout structure associated with k
+
+class DlcSettlement(BaseModel):
+    """
+    Data used to settle an outcome of a DLC
+    """
+    dlc_root: str
+    outcome: DlcOutcome
+    merkle_proof: List[str]
+    details: Optional[str]
+
+class DlcPayoutForm(BaseModel):
+    dlc_root: str
+    pubkey: str
+    outputs: List[BlindedMessage]
+    witness: P2PKWitness
+
+class DlcPayout(BaseModel):
+    dlc_root: str
+    signatures: Optional[List[BlindedSignature]]
+    details: Optional[str] # error details
+
