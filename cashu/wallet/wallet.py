@@ -184,7 +184,6 @@ class Wallet(
         logger.trace("Loading mint keysets.")
         mint_keysets_resp = await self._get_keysets()
         mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
-
         # load all keysets of thisd mint from the db
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
 
@@ -285,7 +284,7 @@ class Wallet(
             logger.debug(f"Could not load mint info: {e}")
             pass
 
-    async def load_proofs(self, reload: bool = False) -> None:
+    async def load_proofs(self, reload: bool = False, all_keysets=False) -> None:
         """Load all proofs of the selected mint and unit (i.e. self.keysets) into memory."""
 
         if self.proofs and not reload:
@@ -295,9 +294,13 @@ class Wallet(
         self.proofs = []
         await self.load_keysets_from_db()
         async with self.db.connect() as conn:
-            for keyset_id in self.keysets:
-                proofs = await get_proofs(db=self.db, id=keyset_id, conn=conn)
+            if all_keysets:
+                proofs = await get_proofs(db=self.db, conn=conn)
                 self.proofs.extend(proofs)
+            else:
+                for keyset_id in self.keysets:
+                    proofs = await get_proofs(db=self.db, id=keyset_id, conn=conn)
+                    self.proofs.extend(proofs)
         logger.trace(
             f"Proofs loaded for keysets: {' '.join([k.id + f' ({k.unit})' for k in self.keysets.values()])}"
         )

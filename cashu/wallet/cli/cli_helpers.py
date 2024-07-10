@@ -27,9 +27,13 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
     await wallet.load_proofs(reload=False)
     # show balances per unit
     unit_balances = wallet.balance_per_unit()
-    if wallet.unit in [unit_balances.keys()] and not force_select:
-        return wallet
-    elif len(unit_balances) > 1 and not ctx.obj["UNIT"]:
+
+    logger.debug(f"Wallet URL: {wallet.url}")
+    logger.debug(f"Wallet unit: {wallet.unit}")
+    logger.debug(f"mint_balances: {unit_balances}")
+    logger.debug(f"ctx.obj['UNIT']: {ctx.obj['UNIT']}")
+
+    if len(unit_balances) > 1 and not ctx.obj["UNIT"]:
         print(f"You have balances in {len(unit_balances)} units:")
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
@@ -68,14 +72,15 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
     """
     # we load a dummy wallet so we can check the balance per mint
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs(reload=False)
-    mint_balances = await wallet.balance_per_minturl()
-
-    if ctx.obj["HOST"] not in mint_balances and not force_select:
-        mint_url = wallet.url
-    elif len(mint_balances) > 1:
+    await wallet.load_proofs(reload=True, all_keysets=True)
+    mint_balances = await wallet.balance_per_minturl(unit=wallet.unit)
+    logger.debug(f"Wallet URL: {wallet.url}")
+    logger.debug(f"Wallet unit: {wallet.unit}")
+    logger.debug(f"mint_balances: {mint_balances}")
+    logger.debug(f"ctx.obj['HOST']: {ctx.obj['HOST']}")
+    if len(mint_balances) > 1:
         # if we have balances on more than one mint, we ask the user to select one
-        await print_mint_balances(wallet, show_mints=True)
+        await print_mint_balances(wallet, show_mints=True, mint_balances=mint_balances)
 
         url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])
         nr_max = list(mint_balances).index(url_max) + 1
@@ -92,10 +97,10 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
             mint_url = list(mint_balances.keys())[int(mint_nr_str) - 1]
         else:
             raise Exception("invalid input.")
+    elif ctx.obj["HOST"] and ctx.obj["HOST"] not in mint_balances.keys():
+        mint_url = ctx.obj["HOST"]
     elif len(mint_balances) == 1:
         mint_url = list(mint_balances.keys())[0]
-    else:
-        mint_url = wallet.url
 
     # load this mint_url into a wallet
     mint_wallet = await Wallet.with_db(
@@ -109,12 +114,15 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
     return mint_wallet
 
 
-async def print_mint_balances(wallet: Wallet, show_mints: bool = False):
+async def print_mint_balances(
+    wallet: Wallet, show_mints: bool = False, mint_balances=None
+):
     """
     Helper function that prints the balances for each mint URL that we have tokens from.
     """
     # get balances per mint
-    mint_balances = await wallet.balance_per_minturl(unit=wallet.unit)
+    mint_balances = mint_balances or await wallet.balance_per_minturl(unit=wallet.unit)
+    logger.trace(mint_balances)
     # if we have a balance on a non-default mint, we show its URL
     keysets = [k for k, v in wallet.balance_per_keyset().items()]
     for k in keysets:

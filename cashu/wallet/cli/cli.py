@@ -441,6 +441,16 @@ async def swap(ctx: Context):
 @coro
 async def balance(ctx: Context, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
+    if verbose:
+        wallet = await wallet.with_db(
+            url=wallet.url,
+            db=wallet.db.db_location,
+            name=wallet.name,
+            skip_db_read=False,
+            unit=wallet.unit.name,
+            load_all_keysets=True,
+        )
+
     unit_balances = wallet.balance_per_unit()
     await wallet.load_proofs(reload=True)
 
@@ -597,13 +607,13 @@ async def receive_cli(
         # verify that we trust the mint in this tokens
         # ask the user if they want to trust the new mint
         mint_url = token_obj.mint
-        mint_wallet = Wallet(
+        mint_wallet = await Wallet.with_db(
             mint_url,
             os.path.join(settings.cashu_dir, wallet.name),
             unit=token_obj.unit,
         )
         await verify_mint(mint_wallet, mint_url)
-        receive_wallet = await receive(wallet, token_obj)
+        receive_wallet = await receive(mint_wallet, token_obj)
         ctx.obj["WALLET"] = receive_wallet
     elif nostr:
         await receive_nostr(wallet)
