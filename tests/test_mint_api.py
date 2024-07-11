@@ -422,7 +422,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert quote.amount == 62
     assert quote.fee_reserve == 2
 
-    keep, send = await wallet.split_to_send(wallet.proofs, 64)
+    keep, send = await wallet.swap_to_send(wallet.proofs, 64)
     inputs_payload = [p.to_dict() for p in send]
 
     # outputs for change

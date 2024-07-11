@@ -39,8 +39,8 @@ from ..core.models import (
     PostMintRequest,
     PostMintResponse,
     PostRestoreResponse,
-    PostSplitRequest,
-    PostSplitResponse,
+    PostSwapRequest,
+    PostSwapResponse,
 )
 from ..core.settings import settings
 from ..tor.tor import TorProxy
@@ -465,7 +465,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
         logger.debug("Calling split. POST /v1/swap")
-        split_payload = PostSplitRequest(inputs=proofs, outputs=outputs)
+        split_payload = PostSwapRequest(inputs=proofs, outputs=outputs)
 
         # construct payload
         def _splitrequest_include_fields(proofs: List[Proof]):
@@ -494,7 +494,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         promises_dict = resp.json()
-        mint_response = PostSplitResponse.parse_obj(promises_dict)
+        mint_response = PostSwapResponse.parse_obj(promises_dict)
         promises = [BlindedSignature(**p.dict()) for p in mint_response.signatures]
 
         if len(promises) == 0:

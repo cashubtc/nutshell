@@ -241,14 +241,14 @@ async def test_split(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
-async def test_split_to_send(wallet1: Wallet):
+async def test_swap_to_send(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
     await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 64
 
     # this will select 32 sats and them (nothing to keep)
-    keep_proofs, send_proofs = await wallet1.split_to_send(
+    keep_proofs, send_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 32, set_reserved=True
     )
     assert_amt(send_proofs, 32)
@@ -307,7 +307,7 @@ async def test_melt(wallet1: Wallet):
         assert total_amount == 64
         assert quote.fee_reserve == 0
 
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
 
     melt_response = await wallet1.melt(
         proofs=send_proofs,
@@ -343,12 +343,12 @@ async def test_melt(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
-async def test_split_to_send_more_than_balance(wallet1: Wallet):
+async def test_swap_to_send_more_than_balance(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
     await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
     await assert_err(
-        wallet1.split_to_send(wallet1.proofs, 128, set_reserved=True),
+        wallet1.swap_to_send(wallet1.proofs, 128, set_reserved=True),
         "balance too low.",
     )
     assert wallet1.balance == 64
@@ -405,7 +405,7 @@ async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
     invoice = await wallet1.request_mint(64)
     await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
-    _, spendable_proofs = await wallet1.split_to_send(
+    _, spendable_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 32, set_reserved=True
     )
     await wallet2.redeem(spendable_proofs)

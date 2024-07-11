@@ -123,7 +123,7 @@ async def test_split_with_fees(wallet1: Wallet, ledger: Ledger):
     assert fees == 1
     outputs = await wallet1.construct_outputs(amount_split(9))
 
-    promises = await ledger.split(proofs=send_proofs, outputs=outputs)
+    promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
 
@@ -141,7 +141,7 @@ async def test_split_with_high_fees(wallet1: Wallet, ledger: Ledger):
     assert fees == 3
     outputs = await wallet1.construct_outputs(amount_split(7))
 
-    promises = await ledger.split(proofs=send_proofs, outputs=outputs)
+    promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
 
@@ -161,7 +161,7 @@ async def test_split_not_enough_fees(wallet1: Wallet, ledger: Ledger):
     outputs = await wallet1.construct_outputs(amount_split(10))
 
     await assert_err(
-        ledger.split(proofs=send_proofs, outputs=outputs), "are not balanced"
+        ledger.swap(proofs=send_proofs, outputs=outputs), "are not balanced"
     )
 
 

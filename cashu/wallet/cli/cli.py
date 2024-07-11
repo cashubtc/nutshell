@@ -548,6 +548,14 @@ async def balance(ctx: Context, verbose):
     help="Include fees for receiving token.",
     type=bool,
 )
+@click.option(
+    "--force-swap",
+    "-s",
+    default=False,
+    is_flag=True,
+    help="Force swap token.",
+    type=bool,
+)
 @click.pass_context
 @coro
 async def send_command(
@@ -562,6 +570,7 @@ async def send_command(
     yes: bool,
     offline: bool,
     include_fees: bool,
+    force_swap: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
@@ -575,6 +584,7 @@ async def send_command(
             include_dleq=dleq,
             include_fees=include_fees,
             memo=memo,
+            force_swap=force_swap,
         )
     else:
         await send_nostr(wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes)

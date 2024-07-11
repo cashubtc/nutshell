@@ -60,7 +60,7 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
     assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 64)
+    keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 64)
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
@@ -85,7 +85,7 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     assert mint_quote.state == MeltQuoteState.unpaid.value
 
     total_amount = mint_quote.amount + mint_quote.fee_reserve
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
+    keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
@@ -169,13 +169,13 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
     await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
+    keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 10)
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(len(send_proofs))
     outputs, rs = wallet1._construct_outputs(
         [p.amount for p in send_proofs], secrets, rs
     )
 
-    promises = await ledger.split(proofs=send_proofs, outputs=outputs)
+    promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
 
@@ -185,9 +185,9 @@ async def test_split_with_no_outputs(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
     await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
-    _, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10, set_reserved=False)
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 10, set_reserved=False)
     await assert_err(
-        ledger.split(proofs=send_proofs, outputs=[]),
+        ledger.swap(proofs=send_proofs, outputs=[]),
         "no outputs provided",
     )
 
@@ -198,7 +198,7 @@ async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledge
     await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
-    keep_proofs, send_proofs = await wallet1.split_to_send(
+    keep_proofs, send_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 10, set_reserved=False
     )
 
@@ -213,7 +213,7 @@ async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledge
     )
 
     await assert_err(
-        ledger.split(proofs=send_proofs, outputs=outputs),
+        ledger.swap(proofs=send_proofs, outputs=outputs),
         "are not balanced",
     )
 
@@ -237,7 +237,7 @@ async def test_split_with_input_more_than_outputs(wallet1: Wallet, ledger: Ledge
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
     await assert_err(
-        ledger.split(proofs=inputs, outputs=outputs),
+        ledger.swap(proofs=inputs, outputs=outputs),
         "are not balanced",
     )
 
@@ -262,11 +262,11 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.split(proofs=inputs1, outputs=outputs)
+    await ledger.swap(proofs=inputs1, outputs=outputs)
 
     # try to spend other proofs with the same outputs again
     await assert_err(
-        ledger.split(proofs=inputs2, outputs=outputs),
+        ledger.swap(proofs=inputs2, outputs=outputs),
         "outputs have already been signed before.",
     )
 
@@ -277,7 +277,7 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.split(proofs=inputs2, outputs=outputs)
+    await ledger.swap(proofs=inputs2, outputs=outputs)
 
 
 @pytest.mark.asyncio
@@ -396,7 +396,7 @@ async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
     await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
+    keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 10)
 
     proof_states = await ledger.db_read.get_proofs_states(Ys=[p.Y for p in send_proofs])
     assert all([p.state.value == "UNSPENT" for p in proof_states])

@@ -222,19 +222,19 @@ class PostMeltRequest_deprecated(BaseModel):
 # ------- API: SPLIT -------
 
 
-class PostSplitRequest(BaseModel):
+class PostSwapRequest(BaseModel):
     inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     outputs: List[BlindedMessage] = Field(
         ..., max_items=settings.mint_max_request_length
     )
 
 
-class PostSplitResponse(BaseModel):
+class PostSwapResponse(BaseModel):
     signatures: List[BlindedSignature]
 
 
 # deprecated since 0.13.0
-class PostSplitRequest_Deprecated(BaseModel):
+class PostSwapRequest_Deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     amount: Optional[int] = None
     outputs: List[BlindedMessage_Deprecated] = Field(
@@ -242,11 +242,11 @@ class PostSplitRequest_Deprecated(BaseModel):
     )
 
 
-class PostSplitResponse_Deprecated(BaseModel):
+class PostSwapResponse_Deprecated(BaseModel):
     promises: List[BlindedSignature] = []
 
 
-class PostSplitResponse_Very_Deprecated(BaseModel):
+class PostSwapResponse_Very_Deprecated(BaseModel):
     fst: List[BlindedSignature] = []
     snd: List[BlindedSignature] = []
     deprecated: str = "The amount field is deprecated since 0.13.0"
