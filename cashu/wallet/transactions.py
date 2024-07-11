@@ -36,55 +36,63 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
     def get_fees_for_proofs_ppk(self, proofs: List[Proof]) -> int:
         return sum([self.keysets[p.id].input_fee_ppk for p in proofs])
 
-    async def _select_proofs_to_send_(
-        self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
-    ) -> List[Proof]:
-        send_proofs: List[Proof] = []
-        NO_SELECTION: List[Proof] = []
+    # async def _select_proofs_to_send_legacy(
+    #     self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
+    # ) -> List[Proof]:
+    #     send_proofs: List[Proof] = []
+    #     NO_SELECTION: List[Proof] = []
 
-        logger.trace(f"proofs: {[p.amount for p in proofs]}")
-        # sort proofs by amount (descending)
-        sorted_proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
-        # only consider proofs smaller than the amount we want to send (+ tolerance) for coin selection
-        fee_for_single_proof = self.get_fees_for_proofs([sorted_proofs[0]])
-        sorted_proofs = [
-            p
-            for p in sorted_proofs
-            if p.amount <= amount_to_send + tolerance + fee_for_single_proof
-        ]
-        if not sorted_proofs:
-            logger.info(
-                f"no small-enough proofs to send. Have: {[p.amount for p in proofs]}"
-            )
-            return NO_SELECTION
+    #     logger.trace(f"proofs: {[p.amount for p in proofs]}")
+    #     # sort proofs by amount (descending)
+    #     sorted_proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
+    #     # only consider proofs smaller than the amount we want to send (+ tolerance) for coin selection
+    #     fee_for_single_proof = self.get_fees_for_proofs([sorted_proofs[0]])
+    #     sorted_proofs = [
+    #         p
+    #         for p in sorted_proofs
+    #         if p.amount <= amount_to_send + tolerance + fee_for_single_proof
+    #     ]
+    #     if not sorted_proofs:
+    #         logger.info(
+    #             f"no small-enough proofs to send. Have: {[p.amount for p in proofs]}"
+    #         )
+    #         return NO_SELECTION
 
-        target_amount = amount_to_send
+    #     target_amount = amount_to_send
 
-        # compose the target amount from the remaining_proofs
-        logger.debug(f"sorted_proofs: {[p.amount for p in sorted_proofs]}")
-        for p in sorted_proofs:
-            # logger.debug(f"send_proofs: {[p.amount for p in send_proofs]}")
-            # logger.debug(f"target_amount: {target_amount}")
-            # logger.debug(f"p.amount: {p.amount}")
-            if sum_proofs(send_proofs) + p.amount <= target_amount + tolerance:
-                send_proofs.append(p)
-                target_amount = amount_to_send + self.get_fees_for_proofs(send_proofs)
+    #     # compose the target amount from the remaining_proofs
+    #     logger.debug(f"sorted_proofs: {[p.amount for p in sorted_proofs]}")
+    #     for p in sorted_proofs:
+    #         if sum_proofs(send_proofs) + p.amount <= target_amount + tolerance:
+    #             send_proofs.append(p)
+    #             target_amount = amount_to_send + self.get_fees_for_proofs(send_proofs)
 
-        if sum_proofs(send_proofs) < amount_to_send:
-            logger.info("could not select proofs to reach target amount (too little).")
-            return NO_SELECTION
+    #     if sum_proofs(send_proofs) < amount_to_send:
+    #         logger.info("could not select proofs to reach target amount (too little).")
+    #         return NO_SELECTION
 
-        fees = self.get_fees_for_proofs(send_proofs)
-        logger.debug(f"Selected sum of proofs: {sum_proofs(send_proofs)}, fees: {fees}")
-        return send_proofs
+    #     fees = self.get_fees_for_proofs(send_proofs)
+    #     logger.debug(f"Selected sum of proofs: {sum_proofs(send_proofs)}, fees: {fees}")
+    #     return send_proofs
 
     async def _select_proofs_to_send(
         self,
         proofs: List[Proof],
         amount_to_send: Union[int, float],
         *,
-        include_fees: bool = True,
+        include_fees: bool = False,
     ) -> List[Proof]:
+        """Select proofs to send based on the amount to send and the proofs available. Implements a simple coin selection algorithm.
+        Can be used for selecting proofs to send an offline transaction.
+
+        Args:
+            proofs (List[Proof]): List of proofs to select from
+            amount_to_send (Union[int, float]): Amount to select proofs for
+            include_fees (bool, optional): Whether to include fees necessary to redeem the tokens in the selection. Defaults to False.
+
+        Returns:
+            List[Proof]: _description_
+        """
         # check that enough spendable proofs exist
         if sum_proofs(proofs) < amount_to_send:
             return []
@@ -147,9 +155,8 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
 
         Rules:
         1) Proofs that are not marked as reserved
-        2) Proofs that have a different keyset than the activated keyset_id of the mint
-        3) Include all proofs that have an older keyset than the current keyset of the mint (to get rid of old epochs).
-        4) If the target amount is not reached, add proofs of the current keyset until it is.
+        2) Include all proofs from inactive keysets (old epochs) to get rid of them
+        3) If the target amount is not reached, add proofs of the current keyset until it is.
 
         Args:
             proofs (List[Proof]): List of proofs to select from
@@ -171,11 +178,9 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         if sum_proofs(proofs) < amount_to_send:
             raise Exception("balance too low.")
 
-        # add all proofs that have an older keyset than the current keyset of the mint
-        proofs_old_epochs = [
-            p for p in proofs if p.id != self.keysets[self.keyset_id].id
-        ]
-        send_proofs += proofs_old_epochs
+        # add all proofs from inactive keysets
+        proofs_inactive_keysets = [p for p in proofs if not self.keysets[p.id].active]
+        send_proofs += proofs_inactive_keysets
 
         # coinselect based on amount only from the current keyset
         # start with the proofs with the largest amount and add them until the target amount is reached

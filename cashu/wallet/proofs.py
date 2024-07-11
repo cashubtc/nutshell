@@ -148,6 +148,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         try:
             _ = [bytes.fromhex(p.id) for p in proofs]
         except ValueError:
+            logger.debug("Proof with base64 keyset, using legacy token serialization")
             legacy = True
 
         if legacy:

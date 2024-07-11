@@ -194,7 +194,7 @@ async def swap(
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
 
-    _, send_proofs = await outgoing_wallet.split_to_send(
+    _, send_proofs = await outgoing_wallet.swap_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
     await outgoing_wallet.melt(

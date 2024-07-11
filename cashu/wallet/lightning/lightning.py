@@ -61,7 +61,7 @@ class LightningWallet(Wallet):
         if self.available_balance < total_amount:
             print("Error: Balance too low.")
             return PaymentResponse(ok=False)
-        _, send_proofs = await self.split_to_send(self.proofs, total_amount)
+        _, send_proofs = await self.swap_to_send(self.proofs, total_amount)
         try:
             resp = await self.melt(send_proofs, pr, quote.fee_reserve, quote.quote)
             if resp.change:

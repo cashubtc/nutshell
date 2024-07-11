@@ -1049,7 +1049,7 @@ class Wallet(
             if not offline:
                 logger.debug("Offline coin selection unsuccessful. Splitting proofs.")
                 # we set the proofs as reserved later
-                _, send_proofs = await self.split_to_send(
+                _, send_proofs = await self.swap_to_send(
                     proofs, amount, set_reserved=False
                 )
             else:
@@ -1061,7 +1061,7 @@ class Wallet(
             await self.set_reserved(send_proofs, reserved=True)
         return send_proofs, fees
 
-    async def split_to_send(
+    async def swap_to_send(
         self,
         proofs: List[Proof],
         amount: int,

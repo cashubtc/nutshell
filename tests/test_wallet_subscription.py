@@ -86,7 +86,7 @@ async def test_wallet_subscription_swap(wallet: Wallet):
         wallet.proofs, callback=callback
     )
 
-    _ = await wallet.split_to_send(wallet.proofs, 64)
+    _ = await wallet.swap_to_send(wallet.proofs, 64)
 
     wait = 1
     await asyncio.sleep(wait)
