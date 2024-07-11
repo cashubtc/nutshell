@@ -4,7 +4,7 @@ from typing import List
 
 from loguru import logger
 
-from ..core.base import BlindedMessage, HTLCWitness, Proof
+from ..core.base import BlindedMessage, HTLCWitness, Proof, DLCWitness
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
     TransactionError,
@@ -16,6 +16,7 @@ from ..core.p2pk import (
     verify_p2pk_signature,
 )
 from ..core.secret import Secret, SecretKind
+from ..core.crypto.dlc import merkle_verify
 
 
 class LedgerSpendingConditions:
@@ -192,12 +193,54 @@ class LedgerSpendingConditions:
         # no pubkeys were included, anyone can spend
         return True
 
+    def _verify_sct_spending_conditions(self, proof: Proof, secret: Secret) -> bool:
+        """
+        Verify SCT spending conditions for a single input
+        """
+        if proof.witness is None:
+            return False
+
+        witness = DLCWitness.from_witness(proof.witness)
+        assert witness, TransactionError("No or corrupt DLC witness data provided for a secret kind SCT")
+
+        spending_condition = False
+        try:
+            leaf_secret = Secret.deserialize(witness.leaf_secret)
+            logger.trace(f"proof.secret: {proof.secret}")
+            logger.trace(f"secret: {secret}")
+            spending_condition = True
+        except Exception:
+            # leaf secret is not a spending condition (we assume it is a backup secret)
+            pass
+
+        # Merkle Tree verify
+        merkle_root_bytes = bytes.fromhex(secret.data)
+        merkle_proof_bytes = [bytes.fromhex(h) for h in witness.merkle_proof]
+        leaf_secret_bytes = hashlib.sha256(witness.leaf_secret.encode()).digest()
+        valid = merkle_verify(merkle_root_bytes, leaf_secret_bytes, merkle_proof_bytes)
+
+        if not valid:
+            return False
+        
+        if not spending_condition:  # means that it is valid and a normal secret
+            return True
+        
+        # leaf_secret is a secret of another kind: verify that kind
+        # We only ever need the secret and the witness data
+        new_proof = Proof(
+            secret=witness.leaf_secret,
+            witness=witness.witness
+        )
+        return self._verify_input_spending_conditions(new_proof)
+
     def _verify_input_spending_conditions(self, proof: Proof) -> bool:
         """
         Verify spending conditions:
          Condition: P2PK - Checks if signature in proof.witness is valid for pubkey in proof.secret
          Condition: HTLC - Checks if preimage in proof.witness is valid for hash in proof.secret
-         Condition: SCT - Spending Condition Tree means this proof is DLC locked: DO NOT SPEND.
+         Condition: SCT - Checks if leaf_secret in proof.witness is a leaf of the Merkle Tree with
+            root proof.secret.data according to proof.witness.merkle_proof
+         Condition: DLC - NEVER SPEND (can only be registered)
         """
 
         try:
@@ -218,6 +261,10 @@ class LedgerSpendingConditions:
         
         # SCT
         if SecretKind(secret.kind) == SecretKind.SCT:
+            return self._verify_sct_spending_conditions(proof, secret)
+        
+        # DLC
+        if SecretKind(secret.kind) == SecretKind.DLC:
             return False
 
         # no spending condition present

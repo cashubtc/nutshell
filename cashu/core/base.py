@@ -118,6 +118,7 @@ class P2PKWitness(BaseModel):
 class DLCWitness(BaseModel):
     leaf_secret: str
     merkle_proof: List[str]
+    witness: Optional[str] = None
 
     @classmethod
     def from_witness(cls, witness: str):

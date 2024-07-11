@@ -12,6 +12,7 @@ class SecretKind(Enum):
     P2PK = "P2PK"
     HTLC = "HTLC"
     SCT = "SCT"
+    DLC = "DLC"
 
 
 class Tags(BaseModel):

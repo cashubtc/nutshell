@@ -1,6 +1,5 @@
 from hashlib import sha256
 from typing import Optional, Tuple
-from secp256k1 import PrivateKey, PublicKey
 
 from typing import List
 
@@ -18,7 +17,7 @@ def merkle_root(
     track_branch: Optional[int] = None
     ) -> Tuple[bytes, Optional[List[bytes]]]:
     '''Computes the root of a list of merkle proofs
-        if `track_branch` is set, returns also the hashes for the branch that leads
+        if `track_branch` is set, extracts the hashes for the branch that leads
         to `leaf_hashes[track_branch]`
     '''
     if track_branch is not None:

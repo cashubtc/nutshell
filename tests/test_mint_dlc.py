@@ -1,8 +1,6 @@
 import pytest
-import pytest_asyncio
 from hashlib import sha256
 from random import shuffle, randint
-from tests.conftest import SERVER_ENDPOINT
 
 from cashu.core.crypto.dlc import sorted_merkle_hash, merkle_root, merkle_verify
 
@@ -26,11 +24,11 @@ async def test_merkle_root():
 async def test_merkle_verify():
     leafs = [sha256(i.to_bytes(32, 'big')).digest() for i in range(16)]
     root, branch_hashes = merkle_root(leafs, 0)
-    assert merkle_verify(root, leafs[0], branch_hashes), f"merkle_verify test fail"
+    assert merkle_verify(root, leafs[0], branch_hashes), "merkle_verify test fail"
 
     leafs = [sha256(i.to_bytes(32, 'big')).digest() for i in range(53)]
     root, branch_hashes = merkle_root(leafs, 0)
-    assert merkle_verify(root, leafs[0], branch_hashes), f"merkle_verify test fail"
+    assert merkle_verify(root, leafs[0], branch_hashes), "merkle_verify test fail"
 
     leafs = [sha256(i.to_bytes(32, 'big')).digest() for i in range(18)]
     shuffle(leafs)
