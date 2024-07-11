@@ -105,27 +105,28 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         return hashlib.sha256(os.urandom(32)).hexdigest()
 
     async def generate_determinstic_secret(
-        self, counter: int
+        self, counter: int, keyset_id: Optional[str] = None
     ) -> Tuple[bytes, bytes, str]:
         """
         Determinstically generates two secrets (one as the secret message,
         one as the blinding factor).
         """
         assert self.bip32, "BIP32 not initialized yet."
+        keyset_id = keyset_id or self.keyset_id
         # integer keyset id modulo max number of bip32 child keys
         try:
-            keyest_id_int = int.from_bytes(bytes.fromhex(self.keyset_id), "big") % (
+            keyest_id_int = int.from_bytes(bytes.fromhex(keyset_id), "big") % (
                 2**31 - 1
             )
         except ValueError:
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.0 keyset id is not hex
             # calculate an integer keyset id from the base64 encoded keyset id
-            keyest_id_int = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
+            keyest_id_int = int.from_bytes(base64.b64decode(keyset_id), "big") % (
                 2**31 - 1
             )
             # END: BACKWARDS COMPATIBILITY < 0.15.0 keyset id is not hex
 
-        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id_int}")
+        logger.trace(f"keyset id: {keyset_id} becomes {keyest_id_int}")
         token_derivation_path = f"m/129372'/0'/{keyest_id_int}'/{counter}'"
         # for secret
         secret_derivation_path = f"{token_derivation_path}/0"
@@ -177,13 +178,14 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         return secrets, rs, derivation_paths
 
     async def generate_secrets_from_to(
-        self, from_counter: int, to_counter: int
+        self, from_counter: int, to_counter: int, keyset_id: Optional[str] = None
     ) -> Tuple[List[str], List[PrivateKey], List[str]]:
         """Generates secrets and blinding factors from `from_counter` to `to_counter`
 
         Args:
             from_counter (int): Start counter
             to_counter (int): End counter
+            keyset_id (Optional[str], optional): Keyset id. Defaults to None.
 
         Returns:
             Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
@@ -196,7 +198,8 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         ), "from_counter must be smaller than to_counter"
         secret_counters = [c for c in range(from_counter, to_counter + 1)]
         secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
+            await self.generate_determinstic_secret(s, keyset_id)
+            for s in secret_counters
         ]
         # secrets are supplied as str
         secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
