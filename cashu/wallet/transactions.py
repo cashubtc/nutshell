@@ -36,44 +36,44 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
     def get_fees_for_proofs_ppk(self, proofs: List[Proof]) -> int:
         return sum([self.keysets[p.id].input_fee_ppk for p in proofs])
 
-    # async def _select_proofs_to_send_legacy(
-    #     self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
-    # ) -> List[Proof]:
-    #     send_proofs: List[Proof] = []
-    #     NO_SELECTION: List[Proof] = []
+    async def _select_proofs_to_send_legacy(
+        self, proofs: List[Proof], amount_to_send: int, tolerance: int = 0
+    ) -> List[Proof]:
+        send_proofs: List[Proof] = []
+        NO_SELECTION: List[Proof] = []
 
-    #     logger.trace(f"proofs: {[p.amount for p in proofs]}")
-    #     # sort proofs by amount (descending)
-    #     sorted_proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
-    #     # only consider proofs smaller than the amount we want to send (+ tolerance) for coin selection
-    #     fee_for_single_proof = self.get_fees_for_proofs([sorted_proofs[0]])
-    #     sorted_proofs = [
-    #         p
-    #         for p in sorted_proofs
-    #         if p.amount <= amount_to_send + tolerance + fee_for_single_proof
-    #     ]
-    #     if not sorted_proofs:
-    #         logger.info(
-    #             f"no small-enough proofs to send. Have: {[p.amount for p in proofs]}"
-    #         )
-    #         return NO_SELECTION
+        logger.trace(f"proofs: {[p.amount for p in proofs]}")
+        # sort proofs by amount (descending)
+        sorted_proofs = sorted(proofs, key=lambda p: p.amount, reverse=True)
+        # only consider proofs smaller than the amount we want to send (+ tolerance) for coin selection
+        fee_for_single_proof = self.get_fees_for_proofs([sorted_proofs[0]])
+        sorted_proofs = [
+            p
+            for p in sorted_proofs
+            if p.amount <= amount_to_send + tolerance + fee_for_single_proof
+        ]
+        if not sorted_proofs:
+            logger.info(
+                f"no small-enough proofs to send. Have: {[p.amount for p in proofs]}"
+            )
+            return NO_SELECTION
 
-    #     target_amount = amount_to_send
+        target_amount = amount_to_send
 
-    #     # compose the target amount from the remaining_proofs
-    #     logger.debug(f"sorted_proofs: {[p.amount for p in sorted_proofs]}")
-    #     for p in sorted_proofs:
-    #         if sum_proofs(send_proofs) + p.amount <= target_amount + tolerance:
-    #             send_proofs.append(p)
-    #             target_amount = amount_to_send + self.get_fees_for_proofs(send_proofs)
+        # compose the target amount from the remaining_proofs
+        logger.debug(f"sorted_proofs: {[p.amount for p in sorted_proofs]}")
+        for p in sorted_proofs:
+            if sum_proofs(send_proofs) + p.amount <= target_amount + tolerance:
+                send_proofs.append(p)
+                target_amount = amount_to_send + self.get_fees_for_proofs(send_proofs)
 
-    #     if sum_proofs(send_proofs) < amount_to_send:
-    #         logger.info("could not select proofs to reach target amount (too little).")
-    #         return NO_SELECTION
+        if sum_proofs(send_proofs) < amount_to_send:
+            logger.info("could not select proofs to reach target amount (too little).")
+            return NO_SELECTION
 
-    #     fees = self.get_fees_for_proofs(send_proofs)
-    #     logger.debug(f"Selected sum of proofs: {sum_proofs(send_proofs)}, fees: {fees}")
-    #     return send_proofs
+        fees = self.get_fees_for_proofs(send_proofs)
+        logger.debug(f"Selected sum of proofs: {sum_proofs(send_proofs)}, fees: {fees}")
+        return send_proofs
 
     async def _select_proofs_to_send(
         self,
@@ -144,7 +144,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         )
         return selected_proofs
 
-    async def _select_proofs_to_split(
+    async def _select_proofs_to_swap(
         self, proofs: List[Proof], amount_to_send: int
     ) -> Tuple[List[Proof], int]:
         """
@@ -170,7 +170,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             Exception: If the balance is too low to send the amount
         """
         logger.debug(
-            f"_select_proofs_to_split - amounts we have: {amount_summary(proofs, self.unit)}"
+            f"_select_proofs_to_swap - amounts we have: {amount_summary(proofs, self.unit)}"
         )
         send_proofs: List[Proof] = []
 
@@ -198,7 +198,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             send_proofs.append(proof_to_add)
 
         logger.trace(
-            f"_select_proofs_to_split – selected proof amounts: {[p.amount for p in send_proofs]}"
+            f"_select_proofs_to_swap – selected proof amounts: {[p.amount for p in send_proofs]}"
         )
         fees = self.get_fees_for_proofs(send_proofs)
         return send_proofs, fees

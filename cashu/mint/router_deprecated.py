@@ -22,9 +22,9 @@ from ..core.models import (
     PostMintResponse_deprecated,
     PostRestoreRequest_Deprecated,
     PostRestoreResponse,
-    PostSplitRequest_Deprecated,
-    PostSplitResponse_Deprecated,
-    PostSplitResponse_Very_Deprecated,
+    PostSwapRequest_Deprecated,
+    PostSwapResponse_Deprecated,
+    PostSwapResponse_Very_Deprecated,
 )
 from ..core.settings import settings
 from .limit import limiter
@@ -270,7 +270,7 @@ async def check_fees(
     name="Split",
     summary="Split proofs at a specified amount",
     # response_model=Union[
-    #     PostSplitResponse_Very_Deprecated, PostSplitResponse_Deprecated
+    #     PostSwapResponse_Very_Deprecated, PostSwapResponse_Deprecated
     # ],
     response_description=(
         "A list of blinded signatures that can be used to create proofs."
@@ -280,8 +280,8 @@ async def check_fees(
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def split_deprecated(
     request: Request,
-    payload: PostSplitRequest_Deprecated,
-    # ) -> Union[PostSplitResponse_Very_Deprecated, PostSplitResponse_Deprecated]:
+    payload: PostSwapRequest_Deprecated,
+    # ) -> Union[PostSwapResponse_Very_Deprecated, PostSwapResponse_Deprecated]:
 ):
     """
     Requests a set of Proofs to be split into two a new set of BlindedSignatures.
@@ -297,7 +297,7 @@ async def split_deprecated(
         for o in payload.outputs
     ]
     # END BACKWARDS COMPATIBILITY < 0.14
-    promises = await ledger.split(proofs=payload.proofs, outputs=outputs)
+    promises = await ledger.swap(proofs=payload.proofs, outputs=outputs)
 
     if payload.amount:
         # BEGIN backwards compatibility < 0.13
@@ -319,10 +319,10 @@ async def split_deprecated(
             f" {sum([p.amount for p in frst_promises])} sat and send:"
             f" {len(scnd_promises)}: {sum([p.amount for p in scnd_promises])} sat"
         )
-        return PostSplitResponse_Very_Deprecated(fst=frst_promises, snd=scnd_promises)
+        return PostSwapResponse_Very_Deprecated(fst=frst_promises, snd=scnd_promises)
         # END backwards compatibility < 0.13
     else:
-        return PostSplitResponse_Deprecated(promises=promises)
+        return PostSwapResponse_Deprecated(promises=promises)
 
 
 @router_deprecated.post(

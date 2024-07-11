@@ -1093,7 +1093,7 @@ class Wallet(
             raise Exception("balance too low.")
 
         # coin selection for swapping
-        # spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
+        # spendable_proofs, fees = await self._select_proofs_to_swap(proofs, amount)
         swap_proofs = await self._select_proofs_to_send(
             proofs, amount, include_fees=True
         )
