@@ -262,7 +262,7 @@ class Wallet(
                         continue
 
                     logger.warning(
-                        f"Keyset {keyset.id} is base64 and has nex hex counterpart, setting inactive."
+                        f"Keyset {keyset.id} is base64 and has a hex counterpart, setting inactive."
                     )
                     keyset.active = False
                     await update_keyset(keyset=keyset, db=self.db)
