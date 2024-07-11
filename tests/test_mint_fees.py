@@ -229,7 +229,9 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
 
     mint_quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = mint_quote.amount + mint_quote.fee_reserve
-    send_proofs, fee = await wallet1.select_to_send(wallet1.proofs, total_amount)
+    send_proofs, fee = await wallet1.select_to_send(
+        wallet1.proofs, total_amount, include_fees=True
+    )
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
