@@ -175,7 +175,7 @@ async def test_split(wallet1: Wallet, ledger: Ledger):
         [p.amount for p in send_proofs], secrets, rs
     )
 
-    promises = await ledger.split(proofs=send_proofs, outputs=outputs)
+    promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
 
@@ -187,7 +187,7 @@ async def test_split_with_no_outputs(wallet1: Wallet, ledger: Ledger):
     await wallet1.mint(64, id=invoice.id)
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 10, set_reserved=False)
     await assert_err(
-        ledger.split(proofs=send_proofs, outputs=[]),
+        ledger.swap(proofs=send_proofs, outputs=[]),
         "no outputs provided",
     )
 
@@ -213,7 +213,7 @@ async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledge
     )
 
     await assert_err(
-        ledger.split(proofs=send_proofs, outputs=outputs),
+        ledger.swap(proofs=send_proofs, outputs=outputs),
         "are not balanced",
     )
 
@@ -237,7 +237,7 @@ async def test_split_with_input_more_than_outputs(wallet1: Wallet, ledger: Ledge
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
     await assert_err(
-        ledger.split(proofs=inputs, outputs=outputs),
+        ledger.swap(proofs=inputs, outputs=outputs),
         "are not balanced",
     )
 
@@ -262,11 +262,11 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.split(proofs=inputs1, outputs=outputs)
+    await ledger.swap(proofs=inputs1, outputs=outputs)
 
     # try to spend other proofs with the same outputs again
     await assert_err(
-        ledger.split(proofs=inputs2, outputs=outputs),
+        ledger.swap(proofs=inputs2, outputs=outputs),
         "outputs have already been signed before.",
     )
 
@@ -277,7 +277,7 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.split(proofs=inputs2, outputs=outputs)
+    await ledger.swap(proofs=inputs2, outputs=outputs)
 
 
 @pytest.mark.asyncio
