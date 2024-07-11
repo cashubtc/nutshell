@@ -192,7 +192,7 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
 
     # let's first try to melt without enough funds
-    send_proofs, fees = await wallet1.select_to_send(wallet1.proofs, 63)
+    send_proofs, fees = await wallet1.select_to_send(wallet1.proofs, 64)
     # this should fail because we need 64 + 1 sat fees
     assert sum_proofs(send_proofs) == 64
     await assert_err(
@@ -201,7 +201,9 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     )
 
     # the wallet respects the fees for coin selection
-    send_proofs, fees = await wallet1.select_to_send(wallet1.proofs, 64)
+    send_proofs, fees = await wallet1.select_to_send(
+        wallet1.proofs, 64, include_fees=True
+    )
     # includes 1 sat fees
     assert sum_proofs(send_proofs) == 65
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
@@ -227,7 +229,9 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
 
     mint_quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = mint_quote.amount + mint_quote.fee_reserve
-    send_proofs, fee = await wallet1.select_to_send(wallet1.proofs, total_amount)
+    send_proofs, fee = await wallet1.select_to_send(
+        wallet1.proofs, total_amount, include_fees=True
+    )
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )

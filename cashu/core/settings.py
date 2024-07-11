@@ -184,6 +184,14 @@ class WalletSettings(CashuSettings):
     wallet_target_amount_count: int = Field(default=3)
 
 
+class WalletFeatures(CashuSettings):
+    wallet_inactivate_legacy_keysets: bool = Field(
+        default=False,
+        title="Inactivate legacy base64 keysets",
+        description="If you turn on this flag, old bas64 keysets will be ignored and the wallet will ony use new keyset versions.",
+    )
+
+
 class LndRestFundingSource(MintSettings):
     mint_lnd_rest_endpoint: Optional[str] = Field(default=None)
     mint_lnd_rest_cert: Optional[str] = Field(default=None)
@@ -218,6 +226,7 @@ class Settings(
     MintSettings,
     MintInformation,
     WalletSettings,
+    WalletFeatures,
     CashuSettings,
 ):
     version: str = Field(default=VERSION)
