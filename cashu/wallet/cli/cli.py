@@ -625,20 +625,31 @@ async def receive_cli(
         reserved_proofs = await get_reserved_proofs(wallet.db)
         if len(reserved_proofs):
             for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
-                proofs = list(value)
-                token = await wallet.serialize_proofs(proofs)
-                token_obj = TokenV4.deserialize(token)
-                # verify that we trust the mint of this token
-                # ask the user if they want to trust the mint
-                mint_url = token_obj.mint
-                mint_wallet = Wallet(
-                    mint_url,
-                    os.path.join(settings.cashu_dir, wallet.name),
-                    unit=token_obj.unit,
-                )
-                await verify_mint(mint_wallet, mint_url)
-                receive_wallet = await receive(wallet, token_obj)
-                ctx.obj["WALLET"] = receive_wallet
+                mint_url = None
+                token_obj = None
+                try:
+                    proofs = list(value)
+                    token = await wallet.serialize_proofs(proofs)
+                    token_obj = TokenV4.deserialize(token)
+                    # verify that we trust the mint of this token
+                    # ask the user if they want to trust the mint
+                    mint_url = token_obj.mint
+                    mint_wallet = Wallet(
+                        mint_url,
+                        os.path.join(settings.cashu_dir, wallet.name),
+                        unit=token_obj.unit,
+                    )
+                    await verify_mint(mint_wallet, mint_url)
+                    receive_wallet = await receive(wallet, token_obj)
+                    ctx.obj["WALLET"] = receive_wallet
+                except Exception as e:
+                    if mint_url and token_obj:
+                        print(
+                            f"Could not receive {token_obj.amount} from mint {mint_url}: {str(e)}"
+                        )
+                    else:
+                        print(f"Could not receive token: {str(e)}")
+                    continue
     else:
         print("Error: enter token or use either flag --nostr or --all.")
         return

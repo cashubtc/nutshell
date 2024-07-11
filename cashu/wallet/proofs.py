@@ -136,6 +136,8 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         # extract all keysets IDs from proofs
         keyset_ids = self._get_proofs_keyset_ids(proofs)
         keysets = {k.id: k for k in self.keysets.values() if k.id in keyset_ids}
+        if not keysets:
+            raise ValueError("No keysets found for proofs")
         assert (
             len(set([k.unit for k in keysets.values()])) == 1
         ), "All keysets must have the same unit"
