@@ -433,7 +433,7 @@ async def restore(
     if to < 0:
         raise Exception("Counter must be positive")
     await wallet.load_mint()
-    await wallet.restore_promises_from_to(0, to)
+    await wallet.restore_promises_from_to(wallet.keyset_id, 0, to)
     await wallet.invalidate(wallet.proofs, check_spendable=True)
     return RestoreResponse(balance=wallet.available_balance)
 
