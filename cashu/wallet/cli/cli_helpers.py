@@ -1,13 +1,22 @@
+#!/usr/bin/env python
 import os
+from itertools import groupby
+from operator import itemgetter
 
 import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Unit
+from ...core.base import TokenV4, Unit
 from ...core.settings import settings
-from ...wallet.crud import get_keysets
+from ...wallet.crud import (
+    get_keysets,
+    get_reserved_proofs,
+)
 from ...wallet.wallet import Wallet as Wallet
+from ..helpers import (
+    receive,
+)
 
 
 async def print_balance(ctx: Context):
@@ -170,3 +179,38 @@ async def verify_mint(mint_wallet: Wallet, url: str):
         )
     else:
         logger.debug(f"We know mint {url} already")
+
+
+async def receive_all_pending(ctx: Context, wallet: Wallet):
+    reserved_proofs = await get_reserved_proofs(wallet.db)
+    if not len(reserved_proofs):
+        print("No pending proofs to receive.")
+        return
+    for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
+        mint_url = None
+        token_obj = None
+        try:
+            proofs = list(value)
+            mint_url, unit = await wallet._get_proofs_mint_unit(proofs)
+            mint_wallet = await Wallet.with_db(
+                mint_url,
+                os.path.join(settings.cashu_dir, wallet.name),
+                unit=unit.name,
+            )
+            # verify that we trust the mint of this token
+            # ask the user if they want to trust the mint
+            await verify_mint(mint_wallet, mint_url)
+
+            token = await mint_wallet.serialize_proofs(proofs)
+            token_obj = TokenV4.deserialize(token)
+            mint_url = token_obj.mint
+            receive_wallet = await receive(mint_wallet, token_obj)
+            ctx.obj["WALLET"] = receive_wallet
+        except Exception as e:
+            if mint_url and token_obj:
+                print(
+                    f"Could not receive {token_obj.amount} from mint {mint_url}: {str(e)}"
+                )
+            else:
+                print(f"Could not receive token: {str(e)}")
+            continue
