@@ -1,3 +1,4 @@
+import base64
 import copy
 import threading
 import time
@@ -7,6 +8,7 @@ import bolt11
 from bip32 import BIP32
 from loguru import logger
 
+from cashu.core.crypto.keys import derive_keyset_id
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
 from ..core.base import (
@@ -210,10 +212,14 @@ class Wallet(
                 await store_keyset(keyset=wallet_keyset, db=self.db)
 
         for mint_keyset in mint_keysets_dict.values():
-            # if the active or the fee attributes have changed, update them in the database
+            # if the active flag changes from active to inactive
+            # or the fee attributes have changed, update them in the database
             if mint_keyset.id in keysets_in_db_dict:
                 changed = False
-                if mint_keyset.active != keysets_in_db_dict[mint_keyset.id].active:
+                if (
+                    not mint_keyset.active
+                    and mint_keyset.active != keysets_in_db_dict[mint_keyset.id].active
+                ):
                     keysets_in_db_dict[mint_keyset.id].active = mint_keyset.active
                     changed = True
                 if (
@@ -229,6 +235,37 @@ class Wallet(
                     await update_keyset(
                         keyset=keysets_in_db_dict[mint_keyset.id], db=self.db
                     )
+
+        # BEGIN backwards compatibility: phase out keysets with base64 ID by treating them as inactive
+        if settings.wallet_inactivate_legacy_keysets:
+            keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+            for keyset in keysets_in_db:
+                if not keyset.active:
+                    continue
+                # test if the keyset id is a hex string, if not it's base64
+                try:
+                    int(keyset.id, 16)
+                except ValueError:
+                    # verify that it's base64
+                    try:
+                        _ = base64.b64decode(keyset.id)
+                    except ValueError:
+                        logger.error("Unexpected: keyset id is neither hex nor base64.")
+                        continue
+
+                    # verify that we have a hex version of the same keyset by comparing public keys
+                    hex_keyset_id = derive_keyset_id(keys=keyset.public_keys)
+                    if hex_keyset_id not in [k.id for k in keysets_in_db]:
+                        logger.warning(
+                            f"Keyset {keyset.id} is base64 but we don't have a hex version. Ignoring."
+                        )
+                        continue
+
+                    logger.warning(
+                        f"Keyset {keyset.id} is base64 and has nex hex counterpart, setting inactive."
+                    )
+                    keyset.active = False
+                    await update_keyset(keyset=keyset, db=self.db)
 
         await self.load_keysets_from_db()
 
@@ -973,7 +1010,7 @@ class Wallet(
         *,
         set_reserved: bool = False,
         offline: bool = False,
-        include_fees: bool = True,
+        include_fees: bool = False,
     ) -> Tuple[List[Proof], int]:
         """
         Selects proofs such that a desired `amount` can be sent. If the offline coin selection is unsuccessful,
@@ -986,7 +1023,9 @@ class Wallet(
         Args:
             proofs (List[Proof]): Proofs to split
             amount (int): Amount to split to
-            set_reserved (bool, optional): If set, the proofs are marked as reserved.
+            set_reserved (bool, optional): If set, the proofs are marked as reserved. Defaults to False.
+            offline (bool, optional): If set, the coin selection is done offline. Defaults to False.
+            include_fees (bool, optional): If set, the fees are included in the amount to be selected. Defaults to False.
 
         Returns:
             List[Proof]: Proofs to send
@@ -1029,7 +1068,6 @@ class Wallet(
         *,
         secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
-        include_fees: bool = True,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
         Swaps a set of proofs with the mint to get a set that sums up to a desired amount that can be sent. The remaining
