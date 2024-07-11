@@ -36,6 +36,7 @@ from ..cli.cli_helpers import (
     get_unit_wallet,
     print_balance,
     print_mint_balances,
+    receive_all_pending,
     verify_mint,
 )
 from ..helpers import (
@@ -601,7 +602,7 @@ async def receive_cli(
     all: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
-
+    # receive a specific token
     if token:
         token_obj = deserialize_token_from_string(token)
         # verify that we trust the mint in this tokens
@@ -615,30 +616,16 @@ async def receive_cli(
         await verify_mint(mint_wallet, mint_url)
         receive_wallet = await receive(mint_wallet, token_obj)
         ctx.obj["WALLET"] = receive_wallet
+    # receive tokens via nostr
     elif nostr:
         await receive_nostr(wallet)
         # exit on keypress
         input("Enter any text to exit.")
         print("Exiting.")
         os._exit(0)
+    # receive all pending outgoing tokens back to the wallet
     elif all:
-        reserved_proofs = await get_reserved_proofs(wallet.db)
-        if len(reserved_proofs):
-            for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
-                proofs = list(value)
-                token = await wallet.serialize_proofs(proofs)
-                token_obj = TokenV4.deserialize(token)
-                # verify that we trust the mint of this token
-                # ask the user if they want to trust the mint
-                mint_url = token_obj.mint
-                mint_wallet = Wallet(
-                    mint_url,
-                    os.path.join(settings.cashu_dir, wallet.name),
-                    unit=token_obj.unit,
-                )
-                await verify_mint(mint_wallet, mint_url)
-                receive_wallet = await receive(wallet, token_obj)
-                ctx.obj["WALLET"] = receive_wallet
+        await receive_all_pending(ctx, wallet)
     else:
         print("Error: enter token or use either flag --nostr or --all.")
         return
@@ -767,7 +754,9 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                 )
                 print(f"Legacy token: {token_legacy}\n")
             print("--------------------------\n")
-        print("To remove all spent tokens use: cashu burn -a")
+        print("To remove all pending tokens that are already spent use: cashu burn -a")
+        print("To remove a specific pending token use: cashu burn <token>")
+        print("To receive all pending tokens use: cashu receive -a")
 
 
 @cli.command("lock", help="Generate receiving lock.")
