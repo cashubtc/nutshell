@@ -754,7 +754,9 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                 )
                 print(f"Legacy token: {token_legacy}\n")
             print("--------------------------\n")
-        print("To remove all spent tokens use: cashu burn -a")
+        print("To remove all pending tokens that are already spent use: cashu burn -a")
+        print("To remove a specific pending token use: cashu burn <token>")
+        print("To receive all pending tokens use: cashu receive -a")
 
 
 @cli.command("lock", help="Generate receiving lock.")

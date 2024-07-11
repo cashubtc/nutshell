@@ -7,7 +7,7 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import TokenV4, Unit
+from ...core.base import Unit
 from ...core.settings import settings
 from ...wallet.crud import (
     get_keysets,
@@ -15,6 +15,7 @@ from ...wallet.crud import (
 )
 from ...wallet.wallet import Wallet as Wallet
 from ..helpers import (
+    deserialize_token_from_string,
     receive,
 )
 
@@ -193,8 +194,9 @@ async def receive_all_pending(ctx: Context, wallet: Wallet):
             proofs = list(value)
             mint_url, unit = await wallet._get_proofs_mint_unit(proofs)
             mint_wallet = await Wallet.with_db(
-                mint_url,
-                os.path.join(settings.cashu_dir, wallet.name),
+                url=mint_url,
+                db=os.path.join(settings.cashu_dir, wallet.name),
+                name=wallet.name,
                 unit=unit.name,
             )
             # verify that we trust the mint of this token
@@ -202,14 +204,15 @@ async def receive_all_pending(ctx: Context, wallet: Wallet):
             await verify_mint(mint_wallet, mint_url)
 
             token = await mint_wallet.serialize_proofs(proofs)
-            token_obj = TokenV4.deserialize(token)
+            token_obj = deserialize_token_from_string(token)
             mint_url = token_obj.mint
             receive_wallet = await receive(mint_wallet, token_obj)
             ctx.obj["WALLET"] = receive_wallet
         except Exception as e:
             if mint_url and token_obj:
+                unit = Unit[token_obj.unit]
                 print(
-                    f"Could not receive {token_obj.amount} from mint {mint_url}: {str(e)}"
+                    f"Could not receive {unit.str(token_obj.amount)} from mint {mint_url}: {str(e)}"
                 )
             else:
                 print(f"Could not receive token: {str(e)}")
