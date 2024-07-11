@@ -15,7 +15,7 @@ def merkle_root(
     leaf_hashes: List[bytes],
     track_branch: Optional[int] = None
     ) -> Tuple[bytes, Optional[List[bytes]]]:
-    '''Computes the root of a list of merkle proofs
+    '''Computes the root of a list of leaf hashes
         if `track_branch` is set, extracts the hashes for the branch that leads
         to `leaf_hashes[track_branch]`
     '''
