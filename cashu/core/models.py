@@ -6,15 +6,15 @@ from .base import (
     BlindedMessage,
     BlindedMessage_Deprecated,
     BlindedSignature,
+    DiscreteLogContract,
+    DlcFundingProof,
+    DlcPayout,
+    DlcPayoutForm,
+    DlcSettlement,
     MeltQuote,
     MintQuote,
     Proof,
     ProofState,
-    DlcFundingProof,
-    DiscreteLogContract,
-    DlcSettlement,
-    DlcPayoutForm,
-    DlcPayout
 )
 from .settings import settings
 

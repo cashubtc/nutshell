@@ -1,7 +1,6 @@
 from hashlib import sha256
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
-from typing import List
 
 def sorted_merkle_hash(left: bytes, right: bytes) -> bytes:
     '''Sorts `left` and `right` in non-ascending order and

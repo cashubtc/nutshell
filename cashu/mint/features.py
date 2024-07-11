@@ -5,6 +5,7 @@ from ..core.models import (
     MintMeltMethodSetting,
 )
 from ..core.nuts import (
+    DLC_NUT,
     DLEQ_NUT,
     FEE_RETURN_NUT,
     MELT_NUT,
@@ -15,7 +16,6 @@ from ..core.nuts import (
     SCRIPT_NUT,
     STATE_NUT,
     WEBSOCKETS_NUT,
-    DLC_NUT
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends

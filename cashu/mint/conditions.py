@@ -4,7 +4,8 @@ from typing import List
 
 from loguru import logger
 
-from ..core.base import BlindedMessage, HTLCWitness, Proof, DLCWitness
+from ..core.base import BlindedMessage, DLCWitness, HTLCWitness, Proof
+from ..core.crypto.dlc import merkle_verify
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
     TransactionError,
@@ -16,7 +17,6 @@ from ..core.p2pk import (
     verify_p2pk_signature,
 )
 from ..core.secret import Secret, SecretKind
-from ..core.crypto.dlc import merkle_verify
 
 
 class LedgerSpendingConditions:
@@ -205,7 +205,7 @@ class LedgerSpendingConditions:
 
         spending_condition = False
         try:
-            leaf_secret = Secret.deserialize(witness.leaf_secret)
+            _ = Secret.deserialize(witness.leaf_secret)
             logger.trace(f"proof.secret: {proof.secret}")
             logger.trace(f"secret: {secret}")
             spending_condition = True
