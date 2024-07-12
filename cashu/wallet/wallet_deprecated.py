@@ -31,8 +31,8 @@ from ..core.models import (
     PostMintRequest_deprecated,
     PostMintResponse_deprecated,
     PostRestoreResponse,
-    PostSplitRequest_Deprecated,
-    PostSplitResponse_Deprecated,
+    PostSwapRequest_Deprecated,
+    PostSwapResponse_Deprecated,
 )
 from ..core.settings import settings
 from ..tor.tor import TorProxy
@@ -348,7 +348,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         """Consume proofs and create new promises based on amount split."""
         logger.warning("Using deprecated API call: Calling split. POST /split")
         outputs_deprecated = [BlindedMessage_Deprecated(**o.dict()) for o in outputs]
-        split_payload = PostSplitRequest_Deprecated(
+        split_payload = PostSwapRequest_Deprecated(
             proofs=proofs, outputs=outputs_deprecated
         )
 
@@ -373,7 +373,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         )
         self.raise_on_error(resp)
         promises_dict = resp.json()
-        mint_response = PostSplitResponse_Deprecated.parse_obj(promises_dict)
+        mint_response = PostSwapResponse_Deprecated.parse_obj(promises_dict)
         promises = [BlindedSignature(**p.dict()) for p in mint_response.promises]
 
         if len(promises) == 0:

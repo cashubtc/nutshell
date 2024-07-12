@@ -961,18 +961,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
-    async def split(
+    async def swap(
         self,
         *,
         proofs: List[Proof],
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
     ):
-        """Consumes proofs and prepares new promises based on the amount split. Used for splitting tokens
+        """Consumes proofs and prepares new promises based on the amount swap. Used for swapping tokens
         Before sending or for redeeming tokens for new ones that have been received by another wallet.
 
         Args:
-            proofs (List[Proof]): Proofs to be invalidated for the split.
+            proofs (List[Proof]): Proofs to be invalidated for the swap.
             outputs (List[BlindedMessage]): New outputs that should be signed in return.
             keyset (Optional[MintKeyset], optional): Keyset to use. Uses default keyset if not given. Defaults to None.
 
@@ -980,9 +980,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             Exception: Validation of proofs or outputs failed
 
         Returns:
-            Tuple[List[BlindSignature],List[BlindSignature]]: Promises on both sides of the split.
+            List[BlindedSignature]: New promises (signatures) for the outputs.
         """
-        logger.trace("split called")
+        logger.trace("swap called")
         # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
         await self.db_write._set_proofs_pending(proofs)
@@ -991,13 +991,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
                 promises = await self._generate_promises(outputs, keyset, conn)
         except Exception as e:
-            logger.trace(f"split failed: {e}")
+            logger.trace(f"swap failed: {e}")
             raise e
         finally:
             # delete proofs from pending list
             await self.db_write._unset_proofs_pending(proofs)
 
-        logger.trace("split successful")
+        logger.trace("swap successful")
         return promises
 
     async def restore(

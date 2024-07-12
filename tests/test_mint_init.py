@@ -252,7 +252,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     # wallet pays the invoice
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
     asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
@@ -297,7 +297,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     # wallet pays the invoice
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
     asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
@@ -347,7 +347,7 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     # wallet pays the invoice
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
     asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,

@@ -194,7 +194,7 @@ async def swap(
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
 
-    _, send_proofs = await outgoing_wallet.split_to_send(
+    _, send_proofs = await outgoing_wallet.swap_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
     await outgoing_wallet.melt(
@@ -433,7 +433,7 @@ async def restore(
     if to < 0:
         raise Exception("Counter must be positive")
     await wallet.load_mint()
-    await wallet.restore_promises_from_to(0, to)
+    await wallet.restore_promises_from_to(wallet.keyset_id, 0, to)
     await wallet.invalidate(wallet.proofs, check_spendable=True)
     return RestoreResponse(balance=wallet.available_balance)
 

@@ -116,6 +116,7 @@ async def send(
     include_dleq: bool = False,
     include_fees: bool = False,
     memo: Optional[str] = None,
+    force_swap: bool = False,
 ):
     """
     Prints token to send to stdout.
@@ -144,13 +145,12 @@ async def send(
     await wallet.load_proofs()
 
     await wallet.load_mint()
-    if secret_lock:
-        _, send_proofs = await wallet.split_to_send(
+    if secret_lock or force_swap:
+        _, send_proofs = await wallet.swap_to_send(
             wallet.proofs,
             amount,
             set_reserved=False,  # we set reserved later
             secret_lock=secret_lock,
-            include_fees=include_fees,
         )
     else:
         send_proofs, fees = await wallet.select_to_send(

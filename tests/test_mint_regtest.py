@@ -43,7 +43,7 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     # wallet pays the invoice
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
     asyncio.create_task(ledger.melt(proofs=send_proofs, quote=quote.quote))
     # asyncio.create_task(
     #     wallet.melt(
