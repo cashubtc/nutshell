@@ -66,6 +66,10 @@ class StrikeWallet(LightningBackend):
                         float(balance["total"]), self.unit
                     ).amount,
                 )
+        return StatusResponse(
+            error_message=f"Could not find balance for currency {self.currency}",
+            balance=0,
+        )
 
     async def create_invoice(
         self,
