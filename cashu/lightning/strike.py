@@ -16,6 +16,8 @@ from .base import (
     StatusResponse,
 )
 
+USDT = "USDT"
+
 
 class StrikeWallet(LightningBackend):
     """https://docs.strike.me/api/"""
@@ -57,7 +59,7 @@ class StrikeWallet(LightningBackend):
                 ),
                 balance=0,
             )
-        print(data)
+
         for balance in data:
             if balance["currency"] == self.currency:
                 return StatusResponse(
@@ -66,6 +68,19 @@ class StrikeWallet(LightningBackend):
                         float(balance["total"]), self.unit
                     ).amount,
                 )
+
+        # if no the unit is USD but no USD balance was found, we try USDT
+        if self.unit == Unit.usd:
+            for balance in data:
+                if balance["currency"] == USDT:
+                    self.currency = USDT
+                    return StatusResponse(
+                        error_message=None,
+                        balance=Amount.from_float(
+                            float(balance["total"]), self.unit
+                        ).amount,
+                    )
+
         return StatusResponse(
             error_message=f"Could not find balance for currency {self.currency}",
             balance=0,
