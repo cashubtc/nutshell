@@ -57,7 +57,7 @@ class StrikeWallet(LightningBackend):
                 ),
                 balance=0,
             )
-
+        print(data)
         for balance in data:
             if balance["currency"] == self.currency:
                 return StatusResponse(
