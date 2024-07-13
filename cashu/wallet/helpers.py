@@ -137,7 +137,7 @@ async def send(
             secret_lock = await wallet.create_p2pk_lock(
                 lock.split(":")[1],
                 locktime_seconds=settings.locktime_delta_seconds,
-                sig_all=True,
+                sig_all=False,
                 n_sigs=1,
             )
             logger.debug(f"Secret lock: {secret_lock}")
