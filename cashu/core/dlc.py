@@ -1,6 +1,6 @@
 from .secret import Secret
-from ..base import DLCWitness
-from ..core.crypto.secp import PrivateKey
+from .base import DLCWitness
+from .crypto.secp import PrivateKey
 
 class DLCSecret:
     secret: Secret
