@@ -57,3 +57,6 @@ def merkle_verify(root: bytes, leaf_hash: bytes, proof: List[bytes]) -> bool:
     for branch_hash in proof:
         h = sorted_merkle_hash(h, branch_hash)
     return h == root
+
+def list_hash(leaves: List[str]) -> List[bytes]:
+    return [sha256(leaf.encode()).digest() for leaf in leaves]
