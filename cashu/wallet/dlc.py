@@ -1,5 +1,5 @@
-from .secret import Secret
-from .crypto.secp import PrivateKey
+from ..core.secret import Secret
+from ..core.crypto.secp import PrivateKey
 
 from typing import List
 

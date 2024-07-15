@@ -10,7 +10,7 @@ from mnemonic import Mnemonic
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from ..core.secret import Secret, SecretKind, Tags
-from ..core.dlc import DLCSecret
+from .dlc import DLCSecret
 from ..core.crypto.dlc import merkle_root, list_hash
 from ..core.settings import settings
 from ..wallet.crud import (
