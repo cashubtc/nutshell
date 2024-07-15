@@ -21,6 +21,7 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
+from ..core.secret import SecretKind
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
@@ -52,6 +53,7 @@ from . import migrations
 from .htlc import WalletHTLC
 from .mint_info import MintInfo
 from .p2pk import WalletP2PK
+from .dlc import WalletSCT
 from .proofs import WalletProofs
 from .secrets import WalletSecrets
 from .subscriptions import SubscriptionManager
@@ -60,7 +62,7 @@ from .v1_api import LedgerAPI
 
 
 class Wallet(
-    LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets, WalletTransactions, WalletProofs
+    LedgerAPI, WalletP2PK, WalletSCT, WalletHTLC, WalletSecrets, WalletTransactions, WalletProofs
 ):
     """
     Nutshell wallet class.
@@ -606,6 +608,46 @@ class Wallet(
         keep_outputs = self.split_wallet_state(keep_amt)
 
         return keep_outputs, send_outputs
+
+    async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        """Adds witnesses to proofs.
+
+        This method parses the secret of each proof and determines the correct
+        witness type and adds it to the proof if we have it available.
+
+        Note: In order for this method to work, all proofs must have the same secret type.
+        For P2PK, we use an individual signature for each token in proofs.
+
+        Args:
+            proofs (List[Proof]): List of proofs to add witnesses to
+
+        Returns:
+            List[Proof]: List of proofs with witnesses added
+        """
+
+        # iterate through proofs and produce witnesses for each
+
+        # first we check whether all tokens have serialized secrets as their secret
+        try:
+            for p in proofs:
+                Secret.deserialize(p.secret)
+        except Exception:
+            # if not, we do not add witnesses (treat as regular token secret)
+            return proofs
+        logger.debug("Spending conditions detected.")
+        # P2PK signatures
+        if all(
+            [Secret.deserialize(p.secret).kind == SecretKind.P2PK.value for p in proofs]
+        ):
+            logger.debug("P2PK redemption detected.")
+            proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
+        elif all(
+            [Secret.deserialize(p.secret).kind == SecretKind.SCT.value for p in proofs]
+        ):
+            logger.debug("DLC backup redemption detected")
+            proofs = await self.add_sct_witnesses_to_proofs(proofs)
+
+        return proofs
 
     async def split(
         self,

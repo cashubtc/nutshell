@@ -157,37 +157,3 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 p.witness = P2PKWitness(signatures=[s]).json()
         return proofs
 
-    async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        """Adds witnesses to proofs for P2PK redemption.
-
-        This method parses the secret of each proof and determines the correct
-        witness type and adds it to the proof if we have it available.
-
-        Note: In order for this method to work, all proofs must have the same secret type.
-        For P2PK, we use an individual signature for each token in proofs.
-
-        Args:
-            proofs (List[Proof]): List of proofs to add witnesses to
-
-        Returns:
-            List[Proof]: List of proofs with witnesses added
-        """
-
-        # iterate through proofs and produce witnesses for each
-
-        # first we check whether all tokens have serialized secrets as their secret
-        try:
-            for p in proofs:
-                Secret.deserialize(p.secret)
-        except Exception:
-            # if not, we do not add witnesses (treat as regular token secret)
-            return proofs
-        logger.debug("Spending conditions detected.")
-        # P2PK signatures
-        if all(
-            [Secret.deserialize(p.secret).kind == SecretKind.P2PK.value for p in proofs]
-        ):
-            logger.debug("P2PK redemption detected.")
-            proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
-
-        return proofs
