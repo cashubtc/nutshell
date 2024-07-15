@@ -25,13 +25,18 @@ class MintMeltMethodSetting(BaseModel):
     max_amount: Optional[int] = None
 
 
+class MintInfoContact(BaseModel):
+    method: str
+    info: str
+
+
 class GetInfoResponse(BaseModel):
     name: Optional[str] = None
     pubkey: Optional[str] = None
     version: Optional[str] = None
     description: Optional[str] = None
     description_long: Optional[str] = None
-    contact: Optional[List[List[str]]] = None
+    contact: Optional[List[MintInfoContact]] = None
     motd: Optional[str] = None
     nuts: Optional[Dict[int, Any]] = None
 

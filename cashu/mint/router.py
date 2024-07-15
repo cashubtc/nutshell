@@ -10,6 +10,7 @@ from ..core.models import (
     KeysetsResponseKeyset,
     KeysResponse,
     KeysResponseKeyset,
+    MintInfoContact,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostMeltQuoteRequest,
@@ -41,13 +42,16 @@ router: APIRouter = APIRouter()
 async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
     mint_features = ledger.mint_features()
+    contact_info = [
+        MintInfoContact(method=m, info=i) for m, i in settings.mint_info_contact
+    ]
     return GetInfoResponse(
         name=settings.mint_info_name,
         pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
         version=f"Nutshell/{settings.version}",
         description=settings.mint_info_description,
         description_long=settings.mint_info_description_long,
-        contact=settings.mint_info_contact,
+        contact=contact_info,
         nuts=mint_features,
         motd=settings.mint_info_motd,
     )
