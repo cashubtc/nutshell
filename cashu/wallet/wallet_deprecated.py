@@ -136,7 +136,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             GetInfoResponse_deprecated.parse_obj(data)
         )
         mint_info = GetInfoResponse(
-            **mint_info_deprecated.dict(exclude={"parameter", "nuts"})
+            **mint_info_deprecated.dict(exclude={"parameter", "nuts", "contact"})
         )
         return mint_info
 
