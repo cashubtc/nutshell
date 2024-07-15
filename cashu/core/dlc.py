@@ -4,7 +4,7 @@ from .crypto.secp import PrivateKey
 from typing import List
 
 class DLCSecret:
-    secret: Secret
+    secret: str
     blinding_factor: PrivateKey
     derivation_path: str
     all_spending_conditions: List[str]
