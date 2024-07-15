@@ -612,6 +612,7 @@ class Wallet(
         proofs: List[Proof],
         amount: int,
         secret_lock: Optional[Secret] = None,
+        dlc_data: Optional[Tuple[str, int]] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
         """Calls the swap API to split the proofs into two sets of proofs, one for keeping and one for sending.
 
@@ -622,6 +623,7 @@ class Wallet(
         Args:
             proofs (List[Proof]): Proofs to be split.
             amount (int): Amount to be sent.
+            dlc_data (Tuple[str, int]): DLC root hash + funding threshold for the proofs to be locked to
             secret_lock (Optional[Secret], optional): Secret to lock the tokens to be sent. Defaults to None.
 
         Returns:
@@ -651,12 +653,32 @@ class Wallet(
             return [], []
 
         # generate secrets for new outputs
-        if secret_lock is None:
-            secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
-        else:
+        # CODE COMPLEXITY: for now we limit ourselves to DLC proofs with
+        # vanilla backup secrets. In the future, backup secrets could also be P2PK or HTLC 
+        dlc_root = None
+        spending_conditions = None
+        if dlc_data is not None:
+            dlc_root, threshold = dlc_data[0], dlc_data[1]
+            # Verify dlc_root is a hex string
+            try:
+                _ = bytes.fromhex(dlc_root)
+            except ValueError as e:
+                assert False, "CAREFUL: provided dlc root is non-hex!"
+            dlcsecrets = await self.generate_sct_secrets(
+                len(amounts),
+                dlc_root,
+                threshold,
+            )
+            secrets = [dd.secret for dd in dlcsecrets[0]]
+            rs = [dd.blinding_factor for dd in dlcsecrets[0]]
+            derivation_paths = [dd.derivation_path for dd in dlcsecrets[0]]
+            spending_conditions = [dd.all_spending_conditions for dd in dlcsecrets[0]]
+        elif secret_lock is not None:
             secrets, rs, derivation_paths = await self.generate_locked_secrets(
                 send_outputs, keep_outputs, secret_lock
             )
+        else:
+            secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
 
         assert len(secrets) == len(
             amounts
@@ -675,7 +697,12 @@ class Wallet(
 
         # Construct proofs from returned promises (i.e., unblind the signatures)
         new_proofs = await self._construct_proofs(
-            promises, secrets, rs, derivation_paths
+            promises,
+            secrets,
+            rs,
+            derivation_paths,
+            spending_conditions,
+            dlc_root,
         )
 
         await self.invalidate(proofs)
@@ -833,6 +860,8 @@ class Wallet(
         secrets: List[str],
         rs: List[PrivateKey],
         derivation_paths: List[str],
+        spending_conditions: Optional[List[List[str]]] = None,
+        dlc_root: Optional[str] = None,
     ) -> List[Proof]:
         """Constructs proofs from promises, secrets, rs and derivation paths.
 
@@ -850,7 +879,15 @@ class Wallet(
         """
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
-        for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
+        flag = (spending_conditions is not None
+            and len(spending_conditions) == len(secrets)
+        )
+        zipped = zip(promises, secrets, rs, derivation_paths) if not flag else (
+            zip(promises, secrets, rs, derivation_paths, spending_conditions or [])
+        )
+        for z in zipped:
+            promise, secret, r, path = z[:4]
+            spc = z[4] if flag else None
             if promise.id not in self.keysets:
                 logger.debug(f"Keyset {promise.id} not found in db. Loading from mint.")
                 # we don't have the keyset for this promise, so we load all keysets from the mint
@@ -876,6 +913,8 @@ class Wallet(
                 C=C.serialize().hex(),
                 secret=secret,
                 derivation_path=path,
+                all_spending_conditions=spc,
+                dlc_root=dlc_root,
             )
 
             # if the mint returned a dleq proof, we add it to the proof

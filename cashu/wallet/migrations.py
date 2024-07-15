@@ -243,7 +243,14 @@ async def m012_add_fee_to_keysets(db: Database):
         # add column for storing the fee of a keyset
         await conn.execute("ALTER TABLE keysets ADD COLUMN input_fee_ppk INTEGER")
         await conn.execute("UPDATE keysets SET input_fee_ppk = 0")
-
+    
+async def m013_add_dlc_columns(db: Database):
+    async with db.connect() as conn:
+        # add a column for storing the (eventual) spending conditions for a DLC locked secret.
+        await conn.execute("ALTER TABLE proofs ADD COLUMN all_spending_conditions TEXT")
+        await conn.execute("ALTER TABLE proofs ADD COLUMN dlc_root TEXT")
+        await conn.execute("ALTER TABLE proofs_used ADD COLUMN all_spending_conditions TEXT")
+        await conn.execute("ALTER TABLE proofs_used ADD COLUMN dlc_root TEXT")
 
 # # async def m020_add_state_to_mint_and_melt_quotes(db: Database):
 # #     async with db.connect() as conn:

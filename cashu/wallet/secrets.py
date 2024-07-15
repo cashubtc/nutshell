@@ -12,7 +12,6 @@ from ..core.db import Database
 from ..core.secret import Secret, SecretKind, Tags
 from ..core.dlc import DLCSecret
 from ..core.crypto.dlc import merkle_root, list_hash
-from ..core.base import DLCWitness
 from ..core.settings import settings
 from ..wallet.crud import (
     bump_secret_derivation,
@@ -239,102 +238,57 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
     async def generate_sct_secrets(
         self,
-        n_locks: int,
+        n: int,
         dlc_root: str,
         threshold: int,
         skip_bump: bool = False,
-        conditions: Optional[Tuple[List[str], int]] = None,
     ) -> Tuple[List[DLCSecret], int]:
         """
-        Creates a list of DLC locked secrets and witness data.
+        Creates a list of DLC locked secrets and associated metadata.
 
         Args:
-            n_locks (int): number of locks to be created
+            n (int): number of locked secrets to be created
             dlc_root (str): root of the contract the funds will be locked to
             threshold (int): funding threshold. the mint will register this proof
                 only if the contract's funding amount is greater or equal to threshold
-            conditions (optional List[str]): specify custom spending conditions
-                for the secret which override the backup secret
+            skip_bump (int): skip bumping of the secret derivation
 
         Returns:
-            List[DLCSecret]: Secrets and associated spending conditions
-            int: The number of secrets that were generated
+            List[DLCSecret]: Secrets and associated metadata
+            int: The number of secrets that were generated (used to bump derivation)
         """
         n_secrets = 0
-        if (conditions is None or
-            len(conditions[0]) == 0):
-            secrets_and_witnesses = []
-            ss, bf, dpath = await self.generate_n_secrets(3*n_locks, skip_bump=skip_bump)
-            n_secrets += 3*n_locks
-            for i in range(0, 3*n_locks, 3):
-                # Commit to the DLC
-                dlc_commit = Secret(
-                    kind=SecretKind.DLC.value,
-                    nonce=ss[i],
-                    data=dlc_root,
-                    tags=Tags([["threshold", str(threshold)]]),
-                ).serialize()
-                # Commit to the backup secret
-                backup_commit = ss[i+1]
+        secrets_and_metadata = []
+        ss, bf, dpath = await self.generate_n_secrets(3*n, skip_bump=skip_bump)
+        n_secrets += 3*n
+        logger.trace(f"Generating {n} DLC locked secrets, NO custom SCs")
+        logger.trace(f"Locked to {dlc_root}")
+        for i in range(0, 3*n, 3):
+            # Commit to the DLC
+            dlc_commit = Secret(
+                kind=SecretKind.DLC.value,
+                nonce=ss[i],
+                data=dlc_root,
+                tags=Tags([["threshold", str(threshold)]]),
+            ).serialize()
 
-                # Generate DLCWitness and Secret
-                leaf_hashes = list_hash([dlc_commit, backup_commit])
-                root_bytes, merkle_proof_bytes = merkle_root(leaf_hashes, 1)
-                assert merkle_proof_bytes is not None
-                witness = DLCWitness(
-                    leaf_secret=backup_commit,
-                    merkle_proof=[h.hex() for h in merkle_proof_bytes],
-                )
-                secret = Secret(
-                    kind=SecretKind.SCT.value,
-                    nonce=ss[i+2],
-                    data=root_bytes.hex(),
-                    tags=Tags()
-                )
-                secrets_and_witnesses.append(DLCSecret(
-                    secret=secret,
-                    witness=witness,
-                    blinding_factor=bf[i],
-                    derivation_path=dpath[i],
-                ))
-            return (secrets_and_witnesses, n_secrets)
-        else:
-            secrets_and_witnesses = []
-            ss, bf, dpath = await self.generate_n_secrets(2*n_locks, skip_bump=skip_bump)
-            n_secrets += 2*n_locks
-            for i in range(0, 2*n_locks, 2):
-                # Commit to the DLC
-                dlc_commit = Secret(
-                    kind=SecretKind.DLC.value,
-                    nonce=ss[i],
-                    data=dlc_root,
-                    tags=Tags([["threshold", str(threshold)]]),
-                ).serialize()
-                
-                # Generate DLCWitness and Secret
-                leaf_hashes = list_hash([dlc_commit] + conditions[0])
-                index = conditions[1]
-                assert 0 <= index < len(leaf_hashes), f"Out of bounds {index = } for {len(leaf_hashes) = }"
-                # We generate the witness data for the specified index
-                root_bytes, merkle_proof_bytes = merkle_root(
-                    leaf_hashes,
-                    index,
-                )
-                assert merkle_proof_bytes is not None
-                witness = DLCWitness(
-                    leaf_secret=conditions[0][index],
-                    merkle_proof=[h.hex() for h in merkle_proof_bytes],
-                )
-                secret = Secret(
-                    kind=SecretKind.SCT.value,
-                    nonce=ss[i+1],
-                    data=root_bytes.hex(),
-                    tags=Tags()
-                )
-                secrets_and_witnesses.append(DLCSecret(
-                    secret=secret,
-                    witness=witness,
-                    blinding_factor=bf[i],
-                    derivation_path=dpath[i],
-                ))
-            return (secrets_and_witnesses, n_secrets)
+            # Commit to the backup secret
+            backup_commit = ss[i+1]
+
+            # Generate Secret
+            all_spending_conditions = [dlc_commit, backup_commit]
+            leaf_hashes = list_hash(all_spending_conditions)
+            root_bytes, _ = merkle_root(leaf_hashes)
+            secret = Secret(
+                kind=SecretKind.SCT.value,
+                nonce=ss[i+2],
+                data=root_bytes.hex(),
+                tags=Tags()
+            )
+            secrets_and_metadata.append(DLCSecret(
+                secret=secret.serialize(),
+                blinding_factor=bf[i],
+                derivation_path=dpath[i],
+                all_spending_conditions=all_spending_conditions,
+            ))
+        return (secrets_and_metadata, n_secrets)

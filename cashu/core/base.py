@@ -151,6 +151,8 @@ class Proof(BaseModel):
     melt_id: Union[
         None, str
     ] = None  # holds the id of the melt operation that destroyed this proof
+    all_spending_conditions: Optional[List[str]] = None # holds all eventual SCT spending conditions
+    dlc_root: Optional[str] = None # holds the root hash of a DLC contract
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -166,6 +168,14 @@ class Proof(BaseModel):
         else:
             # overwrite the empty string with None
             proof_dict["dleq"] = None
+
+        if (proof_dict.get("all_spending_conditions")
+            and isinstance(proof_dict["all_spending_conditions"], str)):
+            tmp = json.loads(proof_dict["all_spending_conditions"])
+            proof_dict["all_spending_conditions"] = [json.dumps(t) for t in tmp]
+            #assert isinstance(proof_dict["all_spending_conditions"], List[str])
+        else:
+            proof_dict["all_spending_conditions"] = None
         c = cls(**proof_dict)
         return c
 
