@@ -2,6 +2,7 @@ from typing import Dict, List, Optional
 
 from ...core.base import Proof, ProofSpentState, ProofState
 from ...core.db import Connection, Database
+from ...core.errors import TokenAlreadySpentError
 from ..crud import LedgerCrud
 
 
@@ -74,3 +75,11 @@ class DbReadHelper:
                         )
                     )
         return states
+
+    async def _verify_proofs_spendable(self, proofs: List[Proof], conn: Connection):
+        # Verify proofs are spendable
+        if (
+            not len(await self._get_proofs_spent([p.Y for p in proofs], conn))
+            == 0
+        ):
+            raise TokenAlreadySpentError()

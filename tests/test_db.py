@@ -193,8 +193,8 @@ async def test_db_set_proofs_pending_race_condition(wallet: Wallet, ledger: Ledg
 
     await assert_err_multiple(
         asyncio.gather(
-            ledger.db_write._set_proofs_pending(wallet.proofs),
-            ledger.db_write._set_proofs_pending(wallet.proofs),
+            ledger._set_proofs_pending(wallet.proofs),
+            ledger._set_proofs_pending(wallet.proofs),
         ),
         [
             "failed to acquire database lock",
@@ -215,11 +215,11 @@ async def test_db_set_proofs_pending_delayed_no_race_condition(
 
     async def delayed_set_proofs_pending():
         await asyncio.sleep(0.1)
-        await ledger.db_write._set_proofs_pending(wallet.proofs)
+        await ledger._set_proofs_pending(wallet.proofs)
 
     await assert_err(
         asyncio.gather(
-            ledger.db_write._set_proofs_pending(wallet.proofs),
+            ledger._set_proofs_pending(wallet.proofs),
             delayed_set_proofs_pending(),
         ),
         "proofs are pending",
@@ -238,8 +238,8 @@ async def test_db_set_proofs_pending_no_race_condition_different_proofs(
     assert len(wallet.proofs) == 2
 
     asyncio.gather(
-        ledger.db_write._set_proofs_pending(wallet.proofs[:1]),
-        ledger.db_write._set_proofs_pending(wallet.proofs[1:]),
+        ledger._set_proofs_pending(wallet.proofs[:1]),
+        ledger._set_proofs_pending(wallet.proofs[1:]),
     )
 
 
@@ -300,6 +300,6 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
     async with ledger.db.connect(lock_table="proofs_pending", lock_timeout=0.1) as conn:
         assert isinstance(conn, Connection)
         await assert_err(
-            ledger.db_write._set_proofs_pending(wallet.proofs),
+            ledger._set_proofs_pending(wallet.proofs),
             "failed to acquire database lock",
         )
