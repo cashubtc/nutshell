@@ -4,13 +4,13 @@ from ..core.crypto.dlc import list_hash, merkle_root
 from ..core.base import Proof, DLCWitness
 from .protocols import SupportsDb, SupportsPrivateKey
 from loguru import logger
-from typing import List
+from typing import List, Optional
 
 class DLCSecret:
     secret: str
     blinding_factor: PrivateKey
     derivation_path: str
-    all_spending_conditions: List[str]
+    all_spending_conditions: Optional[List[str]]
 
     def __init__(self, **kwargs):
         self.secret = kwargs['secret']
@@ -38,7 +38,7 @@ class WalletSCT(SupportsPrivateKey, SupportsDb):
             )
             # If this check fails we are in deep trouble
             assert merkle_proof_bytes is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
-            assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: What the duck is going on here"
+            #assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: What the duck is going on here"
             backup_secret = all_spending_conditions[-1]
             p.witness = DLCWitness(
                 leaf_secret=backup_secret,

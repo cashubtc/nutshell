@@ -707,7 +707,8 @@ class Wallet(
             except ValueError as e:
                 assert False, "CAREFUL: provided dlc root is non-hex!"
             dlcsecrets = await self.generate_sct_secrets(
-                len(amounts),
+                len(send_outputs),
+                len(keep_outputs),
                 dlc_root,
                 threshold,
             )
@@ -902,7 +903,7 @@ class Wallet(
         secrets: List[str],
         rs: List[PrivateKey],
         derivation_paths: List[str],
-        spending_conditions: Optional[List[List[str]]] = None,
+        spending_conditions: Optional[List[Optional[List[str]]]] = None,
         dlc_root: Optional[str] = None,
     ) -> List[Proof]:
         """Constructs proofs from promises, secrets, rs and derivation paths.
@@ -956,7 +957,7 @@ class Wallet(
                 secret=secret,
                 derivation_path=path,
                 all_spending_conditions=spc,
-                dlc_root=dlc_root,
+                dlc_root=dlc_root if spc is not None else None,
             )
 
             # if the mint returned a dleq proof, we add it to the proof

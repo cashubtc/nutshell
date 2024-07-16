@@ -239,6 +239,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
     async def generate_sct_secrets(
         self,
         n: int,
+        n_keep: int,
         dlc_root: str,
         threshold: int,
         skip_bump: bool = False,
@@ -248,6 +249,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
 
         Args:
             n (int): number of locked secrets to be created
+            n_keep (int): number of vanilla secrets to be created
             dlc_root (str): root of the contract the funds will be locked to
             threshold (int): funding threshold. the mint will register this proof
                 only if the contract's funding amount is greater or equal to threshold
@@ -257,11 +259,19 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             List[DLCSecret]: Secrets and associated metadata
             int: The number of secrets that were generated (used to bump derivation)
         """
-        n_secrets = 0
         secrets_and_metadata = []
+        keep_secrets, keep_rs, keep_dpath = await self.generate_n_secrets(n_keep, skip_bump=skip_bump)
+        for ksc, krs, kdp in zip(keep_secrets, keep_rs, keep_dpath):
+            secrets_and_metadata.append(DLCSecret(
+                secret=ksc,
+                blinding_factor=krs,
+                derivation_path=kdp,
+                all_spending_conditions=None,
+            ))
+        n_secrets = n_keep
         ss, bf, dpath = await self.generate_n_secrets(3*n, skip_bump=skip_bump)
         n_secrets += 3*n
-        logger.trace(f"Generating {n} DLC locked secrets, NO custom SCs")
+        logger.trace(f"Generating {n} DLC locked secrets and {n_keep} vanilla secrets")
         logger.trace(f"Locked to {dlc_root}")
         for i in range(0, 3*n, 3):
             # Commit to the DLC
