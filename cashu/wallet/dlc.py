@@ -38,7 +38,7 @@ class WalletSCT(SupportsPrivateKey, SupportsDb):
             )
             # If this check fails we are in deep trouble
             assert merkle_proof_bytes is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
-            #assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: What the duck is going on here"
+            assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: What the duck is going on here"
             backup_secret = all_spending_conditions[-1]
             p.witness = DLCWitness(
                 leaf_secret=backup_secret,

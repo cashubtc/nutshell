@@ -4,6 +4,7 @@ from cashu.lightning.base import InvoiceResponse, PaymentStatus
 from cashu.wallet.wallet import Wallet
 from cashu.core.secret import Secret, SecretKind
 from cashu.core.errors import CashuError
+from cashu.core.base import DLCWitness, Proof
 from tests.conftest import SERVER_ENDPOINT
 from hashlib import sha256
 from tests.helpers import (
@@ -14,8 +15,8 @@ import pytest
 import pytest_asyncio
 from loguru import logger
 
-from typing import Union
-from cashu.core.crypto.dlc import merkle_root, merkle_verify, sorted_merkle_hash
+from typing import Union, List
+from cashu.core.crypto.dlc import merkle_root, merkle_verify, sorted_merkle_hash, list_hash
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet():
@@ -118,7 +119,7 @@ async def test_partial_swap_for_dlc_locked(wallet: Wallet):
     assert all([Secret.deserialize(p.secret).kind == SecretKind.SCT.value for p in dlc_locked])
 
 @pytest.mark.asyncio
-async def test_cheat1_spend_locked_proofs(wallet: Wallet):
+async def test_wrong_merkle_proof(wallet: Wallet):
     invoice = await wallet.request_mint(64)
     await pay_if_regtest(invoice.bolt11)
     minted = await wallet.mint(64, id=invoice.id)
@@ -126,9 +127,101 @@ async def test_cheat1_spend_locked_proofs(wallet: Wallet):
     threshold = 1000
     _, dlc_locked = await wallet.split(minted, 64, dlc_data=(root_hash, threshold))
     
-    # We pretend we don't know the backup secret, and try to spend the proofs
-    # with the DLC leaf secret instead
+    async def add_sct_witnesses_to_proofs(
+        self,
+        proofs: List[Proof]
+    ) -> List[Proof]:
+        """Add SCT witness data to proofs"""
+        logger.debug(f"Unlocking {len(proofs)} proofs locked to DLC root {proofs[0].dlc_root}")
+        for p in proofs:
+            all_spending_conditions = p.all_spending_conditions
+            assert all_spending_conditions is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
+            leaf_hashes = list_hash(all_spending_conditions)
+            # We are assuming the backup secret is the last (and second) entry
+            merkle_root_bytes, merkle_proof_bytes = merkle_root(
+                leaf_hashes,
+                len(leaf_hashes)-1,
+            )
+            # If this check fails we are in deep trouble
+            assert merkle_proof_bytes is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
+            #assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: What the duck is going on here"
+            backup_secret = all_spending_conditions[-1]
+            p.witness = DLCWitness(
+                leaf_secret=backup_secret,
+                merkle_proof=[m.hex() for m in merkle_proof_bytes]
+            ).json()
+        return proofs
+    # Monkey patching
+    saved = Wallet.add_sct_witnesses_to_proofs
+    Wallet.add_sct_witnesses_to_proofs = add_sct_witnesses_to_proofs
+
     for p in dlc_locked:
         p.all_spending_conditions = [p.all_spending_conditions[0]]
     strerror = "Mint Error: validation of input spending conditions failed. (Code: 11000)"
     await assert_err(wallet.split(dlc_locked, 64), strerror)
+    Wallet.add_sct_witnesses_to_proofs = saved
+
+@pytest.mark.asyncio
+async def test_no_witness_data(wallet: Wallet):
+    invoice = await wallet.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(64, id=invoice.id)
+    root_hash = sha256("TESTING".encode()).hexdigest()
+    threshold = 1000
+    _, dlc_locked = await wallet.split(minted, 64, dlc_data=(root_hash, threshold))
+    
+    async def add_sct_witnesses_to_proofs(
+        self,
+        proofs: List[Proof]
+    ) -> List[Proof]:
+        return proofs
+    # Monkey patching
+    saved = Wallet.add_sct_witnesses_to_proofs
+    Wallet.add_sct_witnesses_to_proofs = add_sct_witnesses_to_proofs
+
+    strerror = "Mint Error: validation of input spending conditions failed. (Code: 11000)"
+    await assert_err(wallet.split(dlc_locked, 64), strerror)
+    Wallet.add_sct_witnesses_to_proofs = saved
+
+@pytest.mark.asyncio
+async def test_cheating1(wallet: Wallet):
+    # We pretend we don't know the backup secret
+    # and try to spend DLC locked proofs with the DLC secret
+    # and its proof of inclusion in the merkle tree
+    invoice = await wallet.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(64, id=invoice.id)
+    root_hash = sha256("TESTING".encode()).hexdigest()
+    threshold = 1000
+    _, dlc_locked = await wallet.split(minted, 64, dlc_data=(root_hash, threshold))
+    
+    async def add_sct_witnesses_to_proofs(
+        self,
+        proofs: List[Proof]
+    ) -> List[Proof]:
+        """Add SCT witness data to proofs"""
+        logger.debug(f"Unlocking {len(proofs)} proofs locked to DLC root {proofs[0].dlc_root}")
+        for p in proofs:
+            all_spending_conditions = p.all_spending_conditions
+            assert all_spending_conditions is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
+            leaf_hashes = list_hash(all_spending_conditions)
+            # We are pretending we don't know the backup secret
+            merkle_root_bytes, merkle_proof_bytes = merkle_root(
+                leaf_hashes,
+                0,
+            )
+            assert merkle_proof_bytes is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
+            assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: What the duck is going on here"
+            dlc_secret = all_spending_conditions[0]
+            p.witness = DLCWitness(
+                leaf_secret=dlc_secret,
+                merkle_proof=[m.hex() for m in merkle_proof_bytes]
+            ).json()
+        return proofs
+    # Monkey patching
+    saved = Wallet.add_sct_witnesses_to_proofs
+    Wallet.add_sct_witnesses_to_proofs = add_sct_witnesses_to_proofs
+
+    strerror = "Mint Error: validation of input spending conditions failed. (Code: 11000)"
+    await assert_err(wallet.split(dlc_locked, 64), strerror)
+    Wallet.add_sct_witnesses_to_proofs = saved
