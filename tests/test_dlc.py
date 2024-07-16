@@ -80,7 +80,7 @@ async def test_merkle_verify():
 @pytest.mark.asyncio
 async def test_swap_for_dlc_locked(wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice)
+    await pay_if_regtest(invoice.bolt11)
     minted = await wallet.mint(64, id=invoice.id)
     root_hash = sha256("TESTING".encode()).hexdigest()
     threshold = 1000
@@ -93,7 +93,7 @@ async def test_swap_for_dlc_locked(wallet: Wallet):
 @pytest.mark.asyncio
 async def test_unlock_dlc_locked(wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice)
+    await pay_if_regtest(invoice.bolt11)
     minted = await wallet.mint(64, id=invoice.id)
     root_hash = sha256("TESTING".encode()).hexdigest()
     threshold = 1000
@@ -107,7 +107,7 @@ async def test_unlock_dlc_locked(wallet: Wallet):
 @pytest.mark.asyncio
 async def test_partial_swap_for_dlc_locked(wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice)
+    await pay_if_regtest(invoice.bolt11)
     minted = await wallet.mint(64, id=invoice.id)
     root_hash = sha256("TESTING".encode()).hexdigest()
     threshold = 1000
@@ -120,7 +120,7 @@ async def test_partial_swap_for_dlc_locked(wallet: Wallet):
 @pytest.mark.asyncio
 async def test_cheat1_spend_locked_proofs(wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice)
+    await pay_if_regtest(invoice.bolt11)
     minted = await wallet.mint(64, id=invoice.id)
     root_hash = sha256("TESTING".encode()).hexdigest()
     threshold = 1000
