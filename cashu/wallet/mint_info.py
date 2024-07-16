@@ -43,9 +43,10 @@ class MintInfo(BaseModel):
         if not self.nuts or not self.supports_nut(WEBSOCKETS_NUT):
             return False
         websocket_settings = self.nuts[WEBSOCKETS_NUT]
-        if not websocket_settings:
+        if not websocket_settings or "supported" not in websocket_settings:
             return False
-        for entry in websocket_settings:
+        websocket_supported = websocket_settings["supported"]
+        for entry in websocket_supported:
             if entry["method"] == method.name and entry["unit"] == unit.name:
                 if "bolt11_mint_quote" in entry["commands"]:
                     return True
