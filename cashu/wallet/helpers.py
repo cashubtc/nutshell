@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 from loguru import logger
 
@@ -117,6 +117,7 @@ async def send(
     include_fees: bool = False,
     memo: Optional[str] = None,
     force_swap: bool = False,
+    dlc_data: Optional[Tuple[str, int]] = None,
 ):
     """
     Prints token to send to stdout.
@@ -145,12 +146,13 @@ async def send(
     await wallet.load_proofs()
 
     await wallet.load_mint()
-    if secret_lock or force_swap:
+    if secret_lock or force_swap or dlc_data:
         _, send_proofs = await wallet.swap_to_send(
             wallet.proofs,
             amount,
             set_reserved=False,  # we set reserved later
             secret_lock=secret_lock,
+            dlc_data=dlc_data,
         )
     else:
         send_proofs, fees = await wallet.select_to_send(
@@ -160,9 +162,14 @@ async def send(
             offline=offline,
             include_fees=include_fees,
         )
-
+    # if we are making a DLC funding token, include DLC witness
+    send_proofs = await wallet._add_sct_witnesses_to_proofs(send_proofs)
     token = await wallet.serialize_proofs(
-        send_proofs, include_dleq=include_dleq, legacy=legacy, memo=memo
+        send_proofs,
+        include_dleq=include_dleq,
+        legacy=legacy,
+        memo=memo,
+        dlc_root=dlc_data[0] if dlc_data else None
     )
 
     print(token)

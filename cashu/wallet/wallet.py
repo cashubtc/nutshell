@@ -609,46 +609,6 @@ class Wallet(
 
         return keep_outputs, send_outputs
 
-    async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        """Adds witnesses to proofs.
-
-        This method parses the secret of each proof and determines the correct
-        witness type and adds it to the proof if we have it available.
-
-        Note: In order for this method to work, all proofs must have the same secret type.
-        For P2PK, we use an individual signature for each token in proofs.
-
-        Args:
-            proofs (List[Proof]): List of proofs to add witnesses to
-
-        Returns:
-            List[Proof]: List of proofs with witnesses added
-        """
-
-        # iterate through proofs and produce witnesses for each
-
-        # first we check whether all tokens have serialized secrets as their secret
-        try:
-            for p in proofs:
-                Secret.deserialize(p.secret)
-        except Exception:
-            # if not, we do not add witnesses (treat as regular token secret)
-            return proofs
-        logger.debug("Spending conditions detected.")
-        # P2PK signatures
-        if all(
-            [Secret.deserialize(p.secret).kind == SecretKind.P2PK.value for p in proofs]
-        ):
-            logger.debug("P2PK redemption detected.")
-            proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
-        elif all(
-            [Secret.deserialize(p.secret).kind == SecretKind.SCT.value for p in proofs]
-        ):
-            logger.debug("DLC backup redemption detected")
-            proofs = await self.add_sct_witnesses_to_proofs(proofs)
-
-        return proofs
-
     async def split(
         self,
         proofs: List[Proof],
@@ -678,7 +638,8 @@ class Wallet(
         proofs = copy.copy(proofs)
 
         # potentially add witnesses to unlock provided proofs (if they indicate one)
-        proofs = await self.add_witnesses_to_proofs(proofs)
+        proofs = await self._add_p2pk_witnesses_to_proofs(proofs)
+        proofs = await self._add_sct_witnesses_to_proofs(proofs, backup=True)
 
         input_fees = self.get_fees_for_proofs(proofs)
         logger.debug(f"Input fees: {input_fees}")
@@ -732,8 +693,8 @@ class Wallet(
         # construct outputs
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
-        # potentially add witnesses to outputs based on what requirement the proofs indicate
-        outputs = await self.add_witnesses_to_outputs(proofs, outputs)
+        # potentially add p2pk witnesses to outputs based on what requirement the proofs indicate
+        outputs = await self._add_p2pk_witnesses_to_outputs(proofs, outputs)
 
         # Call swap API
         promises = await super().split(proofs, outputs)
@@ -1157,6 +1118,7 @@ class Wallet(
         secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
         include_fees: bool = True,
+        dlc_data: Optional[Tuple[str, int]] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
         Swaps a set of proofs with the mint to get a set that sums up to a desired amount that can be sent. The remaining
@@ -1171,6 +1133,8 @@ class Wallet(
             set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
             is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
             displayed to the user to be then sent to someone else. Defaults to False.
+            dlc_data(Tuple[str, int], optional): Specify DLC root hash and funding threshold. If set, the proofs will be locked to
+                the specified DLC root hash
 
         Returns:
             Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
@@ -1196,7 +1160,7 @@ class Wallet(
         logger.debug(
             f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
         )
-        keep_proofs, send_proofs = await self.split(swap_proofs, amount, secret_lock)
+        keep_proofs, send_proofs = await self.split(swap_proofs, amount, secret_lock, dlc_data)
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
         return keep_proofs, send_proofs

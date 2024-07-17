@@ -1132,6 +1132,9 @@ class TokenV4(Token):
         # optional memo
         if self.d:
             return_dict.update(dict(d=self.d))
+        # optional dlc root
+        if self.r:
+            return_dict.update(dict(r=self.r))
         # mint
         return_dict.update(dict(m=self.m))
         # unit
@@ -1202,6 +1205,7 @@ class TokenV4(Token):
             u=token_dict["u"],
             t=[TokenV4Token(**t) for t in token_dict["t"]],
             d=token_dict.get("d", None),
+            r=token_dict.get("r", None),
         )
 
 # -------- DLC STUFF --------

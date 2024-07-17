@@ -4,7 +4,8 @@ from cashu.lightning.base import InvoiceResponse, PaymentStatus
 from cashu.wallet.wallet import Wallet
 from cashu.core.secret import Secret, SecretKind
 from cashu.core.errors import CashuError
-from cashu.core.base import DLCWitness, Proof
+from cashu.core.base import DLCWitness, Proof, TokenV4
+from cashu.wallet.helpers import send
 from tests.conftest import SERVER_ENDPOINT
 from hashlib import sha256
 from tests.helpers import (
@@ -129,7 +130,8 @@ async def test_wrong_merkle_proof(wallet: Wallet):
     
     async def add_sct_witnesses_to_proofs(
         self,
-        proofs: List[Proof]
+        proofs: List[Proof],
+        backup: bool = False
     ) -> List[Proof]:
         """Add SCT witness data to proofs"""
         logger.debug(f"Unlocking {len(proofs)} proofs locked to DLC root {proofs[0].dlc_root}")
@@ -172,7 +174,8 @@ async def test_no_witness_data(wallet: Wallet):
     
     async def add_sct_witnesses_to_proofs(
         self,
-        proofs: List[Proof]
+        proofs: List[Proof],
+        backup: bool = False
     ) -> List[Proof]:
         return proofs
     # Monkey patching
@@ -197,7 +200,8 @@ async def test_cheating1(wallet: Wallet):
     
     async def add_sct_witnesses_to_proofs(
         self,
-        proofs: List[Proof]
+        proofs: List[Proof],
+        backup: bool = False
     ) -> List[Proof]:
         """Add SCT witness data to proofs"""
         logger.debug(f"Unlocking {len(proofs)} proofs locked to DLC root {proofs[0].dlc_root}")
@@ -225,3 +229,20 @@ async def test_cheating1(wallet: Wallet):
     strerror = "Mint Error: validation of input spending conditions failed. (Code: 11000)"
     await assert_err(wallet.split(dlc_locked, 64), strerror)
     Wallet.add_sct_witnesses_to_proofs = saved
+
+@pytest.mark.asyncio
+async def test_send_funding_token(wallet: Wallet):
+    invoice = await wallet.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(64, id=invoice.id)
+    available_before = wallet.available_balance
+    # Send
+    root_hash = sha256("TESTING".encode()).hexdigest()
+    available_now, token = await send(wallet, amount=56, lock=None, legacy=False, dlc_data=(root_hash, 1000))
+    assert available_now < available_before
+    deserialized_token = TokenV4.deserialize(token)
+    assert deserialized_token.dlc_root == root_hash
+    proofs = deserialized_token.proofs
+    assert all([Secret.deserialize(p.secret).kind == SecretKind.SCT.value for p in proofs])
+    witnesses = [DLCWitness.from_witness(p.witness) for p in proofs]
+    assert all([Secret.deserialize(w.leaf_secret).kind == SecretKind.DLC.value for w in witnesses])

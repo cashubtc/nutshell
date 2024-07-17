@@ -10,7 +10,7 @@ from mnemonic import Mnemonic
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from ..core.secret import Secret, SecretKind, Tags
-from .dlc import DLCSecret
+from .dlc import SecretMetadata
 from ..core.crypto.dlc import merkle_root, list_hash
 from ..core.settings import settings
 from ..wallet.crud import (
@@ -243,7 +243,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         dlc_root: str,
         threshold: int,
         skip_bump: bool = False,
-    ) -> Tuple[List[DLCSecret], int]:
+    ) -> Tuple[List[SecretMetadata], int]:
         """
         Creates a list of DLC locked secrets and associated metadata.
 
@@ -256,13 +256,14 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
             skip_bump (int): skip bumping of the secret derivation
 
         Returns:
-            List[DLCSecret]: Secrets and associated metadata
+            List[SecretMetadata]: Secrets and associated metadata
             int: The number of secrets that were generated (used to bump derivation)
         """
         secrets_and_metadata = []
+        # We generate `n_keep` normal secrets for the proofs we want to keep
         keep_secrets, keep_rs, keep_dpath = await self.generate_n_secrets(n_keep, skip_bump=skip_bump)
         for ksc, krs, kdp in zip(keep_secrets, keep_rs, keep_dpath):
-            secrets_and_metadata.append(DLCSecret(
+            secrets_and_metadata.append(SecretMetadata(
                 secret=ksc,
                 blinding_factor=krs,
                 derivation_path=kdp,
@@ -295,7 +296,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
                 data=root_bytes.hex(),
                 tags=Tags()
             )
-            secrets_and_metadata.append(DLCSecret(
+            secrets_and_metadata.append(SecretMetadata(
                 secret=secret.serialize(),
                 blinding_factor=bf[i],
                 derivation_path=dpath[i],
