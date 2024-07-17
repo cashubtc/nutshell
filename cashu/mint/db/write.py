@@ -52,12 +52,14 @@ class DbWriteHelper:
         """
         # first we check whether these proofs are pending already
         try:
-            logger.debug("trying to set proofs pending")
+            logger.trace("_verify_spent_proofs_and_set_pending acquiring lock")
             async with self.db.get_connection(
                 lock_table="proofs_pending",
                 lock_timeout=1,
             ) as conn:
+                logger.trace("checking whether proofs are already spent")
                 await self.db_read._verify_proofs_spendable(proofs, conn)
+                logger.trace("checking whether proofs are already pending")
                 await self._validate_proofs_pending(proofs, conn)
                 for p in proofs:
                     logger.trace(f"crud: setting proof {p.Y} as PENDING")
@@ -65,10 +67,10 @@ class DbWriteHelper:
                         proof=p, db=self.db, quote_id=quote_id, conn=conn
                     )
                     logger.trace(f"crud: set proof {p.Y} as PENDING")
+            logger.trace("_verify_spent_proofs_and_set_pending released lock")
         except Exception as e:
             logger.error(f"Failed to set proofs pending: {e}")
             raise e
-        logger.trace("_verify_spent_proofs_and_set_pending released lock")
         for p in proofs:
             await self.events.submit(ProofState(Y=p.Y, state=ProofSpentState.pending))
 
