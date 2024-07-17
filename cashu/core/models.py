@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, root_validator
 
 from .base import (
     BlindedMessage,
@@ -42,6 +42,21 @@ class GetInfoResponse(BaseModel):
 
     def supports(self, nut: int) -> Optional[bool]:
         return nut in self.nuts if self.nuts else None
+
+    # BEGIN DEPRECATED: NUT-06 contact field change
+    # NUT-06 PR: https://github.com/cashubtc/nuts/pull/117
+    @root_validator(pre=True)
+    def preprocess_deprecated_contact_field(cls, values):
+        if "contact" in values and values["contact"]:
+            if isinstance(values["contact"][0], list):
+                print("IS LOST")
+                values["contact"] = [
+                    MintInfoContact(method=method, info=info)
+                    for method, info in values["contact"]
+                ]
+        return values
+
+    # END DEPRECATED: NUT-06 contact field change
 
 
 class Nut15MppSupport(BaseModel):
