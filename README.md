@@ -38,7 +38,7 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 ## The Cashu protocol
 Different Cashu clients and mints use the same protocol to achieve interoperability. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in developing on your own Cashu project, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts).
 
-## Easy Install
+## Easy Install: Nutshell wallet
 
 The easiest way to use Cashu is to install the package it via pip:
 ```bash
@@ -50,6 +50,18 @@ To update Cashu, use `pip install cashu -U`.
 If you have problems running the command above on Ubuntu, run `sudo apt install -y pip pkg-config` and `pip install wheel`. On macOS, you might have to run `pip install wheel` and `brew install pkg-config`.
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
+
+## Easy Install: Nutshell mint
+
+The easiest way to get a mint running is through Docker.
+
+You can build the image yourself by running the following command. Make sure to adjust the environment variables in `docker-compose.yaml`.
+
+```bash
+docker compose up mint
+```
+
+Alternatively, you can use the pre-built Docker images, see [Running a mint](#docker).
 
 ## Manual install: Poetry
 These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Install Cashu](#poetry-install-cashu).
