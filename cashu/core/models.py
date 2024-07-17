@@ -49,10 +49,10 @@ class GetInfoResponse(BaseModel):
     def preprocess_deprecated_contact_field(cls, values):
         if "contact" in values and values["contact"]:
             if isinstance(values["contact"][0], list):
-                print("IS LOST")
                 values["contact"] = [
                     MintInfoContact(method=method, info=info)
                     for method, info in values["contact"]
+                    if method and info
                 ]
         return values
 
