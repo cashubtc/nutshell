@@ -17,20 +17,60 @@ from ...core.errors import (
 )
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
+from .read import DbReadHelper
 
 
 class DbWriteHelper:
     db: Database
     crud: LedgerCrud
     events: LedgerEventManager
+    db_read: DbReadHelper
 
     def __init__(
-        self, db: Database, crud: LedgerCrud, events: LedgerEventManager
+        self,
+        db: Database,
+        crud: LedgerCrud,
+        events: LedgerEventManager,
+        db_read: DbReadHelper,
     ) -> None:
         self.db = db
         self.crud = crud
         self.events = events
+        self.db_read = db_read
 
+    async def _verify_spent_proofs_and_set_pending(
+        self, proofs: List[Proof], quote_id: Optional[str] = None
+    ) -> None:
+        """
+        Method to check if proofs are already spent. If they are not spent, we check if they are pending.
+        If they are not pending, we set them as pending.
+        Args:
+            proofs (List[Proof]): Proofs to add to pending table.
+            quote_id (Optional[str]): Melt quote ID. If it is not set, we assume the pending tokens to be from a swap.
+        Raises:
+            TransactionError: If any one of the proofs is already spent or pending.
+        """
+        # first we check whether these proofs are pending already
+        try:
+            logger.debug("trying to set proofs pending")
+            async with self.db.get_connection(
+                lock_table="proofs_pending",
+                lock_timeout=1,
+            ) as conn:
+                await self.db_read._verify_proofs_spendable(proofs, conn)
+                await self._validate_proofs_pending(proofs, conn)
+                for p in proofs:
+                    logger.trace(f"crud: setting proof {p.Y} as PENDING")
+                    await self.crud.set_proof_pending(
+                        proof=p, db=self.db, quote_id=quote_id, conn=conn
+                    )
+                    logger.trace(f"crud: set proof {p.Y} as PENDING")
+        except Exception as e:
+            logger.error(f"Failed to set proofs pending: {e}")
+            raise e
+        logger.trace("_verify_spent_proofs_and_set_pending released lock")
+        for p in proofs:
+            await self.events.submit(ProofState(Y=p.Y, state=ProofSpentState.pending))
 
     async def _unset_proofs_pending(self, proofs: List[Proof], spent=True) -> None:
         """Deletes proofs from pending table.

@@ -1,5 +1,4 @@
 import asyncio
-import random
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -101,7 +100,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.backends = backends
         self.pubkey = derive_pubkey(self.seed)
         self.db_read = DbReadHelper(self.db, self.crud)
-        self.db_write = DbWriteHelper(self.db, self.crud, self.events)
+        self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
 
     # ------- STARTUP -------
 
@@ -906,8 +905,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         await self.verify_inputs_and_outputs(proofs=proofs)
 
         # set proofs to pending to avoid race conditions
-        # all DB related checks happen inside this function
-        await self._set_proofs_pending(proofs, quote_id=melt_quote.quote)
+        await self.db_write._verify_spent_proofs_and_set_pending(
+            proofs, quote_id=melt_quote.quote
+        )
         try:
             # settle the transaction internally if there is a mint quote with the same payment request
             melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
@@ -987,7 +987,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         logger.trace("split called")
         # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
-        await self._set_proofs_pending(proofs)
+        await self.db_write._verify_spent_proofs_and_set_pending(proofs)
         try:
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
@@ -1086,41 +1086,3 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 )
                 signatures.append(signature)
             return signatures
-
-    async def _set_proofs_pending(
-        self, proofs: List[Proof], quote_id: Optional[str] = None
-    ) -> None:
-        """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
-        the list of pending proofs or removes them. Used as a mutex for proofs.
-
-        Args:
-            proofs (List[Proof]): Proofs to add to pending table.
-            quote_id (Optional[str]): Melt quote ID. If it is not set, we assume the pending tokens to be from a swap.
-
-        Raises:
-            Exception: At least one proof already in pending table.
-        """
-        # first we check whether these proofs are pending already
-        random_id = random.randint(0, 1000000)
-        try:
-            logger.debug("trying to set proofs pending")
-            logger.trace(f"get_connection: random_id: {random_id}")
-            async with self.db_write.db.get_connection(
-                lock_table="proofs_pending",
-                lock_timeout=1,
-            ) as conn:
-                logger.trace(f"get_connection: got connection {random_id}")
-                await self.db_write._validate_proofs_pending(proofs, conn)
-                await self.db_read._verify_proofs_spendable(proofs, conn)
-                for p in proofs:
-                    logger.trace(f"crud: setting proof {p.Y} as PENDING")
-                    await self.db_write.crud.set_proof_pending(
-                        proof=p, db=self.db, quote_id=quote_id, conn=conn
-                    )
-                    logger.trace(f"crud: set proof {p.Y} as PENDING")
-        except Exception as e:
-            logger.error(f"Failed to set proofs pending: {e}")
-            raise TransactionError(f"Failed to set proofs pending: {str(e)}")
-        logger.trace("_set_proofs_pending released lock")
-        for p in proofs:
-            await self.db_write.events.submit(ProofState(Y=p.Y, state=ProofSpentState.pending))

@@ -76,10 +76,18 @@ class DbReadHelper:
                     )
         return states
 
-    async def _verify_proofs_spendable(self, proofs: List[Proof], conn: Connection):
-        # Verify proofs are spendable
-        if (
-            not len(await self._get_proofs_spent([p.Y for p in proofs], conn))
-            == 0
-        ):
-            raise TokenAlreadySpentError()
+    async def _verify_proofs_spendable(
+        self, proofs: List[Proof], conn: Optional[Connection] = None
+    ):
+        """Checks the database to see if any of the proofs are already spent.
+
+        Args:
+            proofs (List[Proof]): Proofs to verify
+            conn (Optional[Connection]): Database connection to use. Defaults to None.
+
+        Raises:
+            TokenAlreadySpentError: If any of the proofs are already spent
+        """
+        async with self.db.get_connection(conn) as conn:
+            if not len(await self._get_proofs_spent([p.Y for p in proofs], conn)) == 0:
+                raise TokenAlreadySpentError()
