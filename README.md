@@ -53,15 +53,13 @@ You can skip the entire next section about Poetry and jump right to [Using Cashu
 
 ## Easy Install: Nutshell mint
 
-The easiest way to get a mint running is through Docker.
-
-You can build the image yourself by running the following command. Make sure to adjust the environment variables in `docker-compose.yaml`.
+The easiest way to get a mint running is through Docker. You can build the image yourself. Clone this repository and change to its directory. Make sure to adjust the environment variables in `docker-compose.yaml`. Then run the following command.
 
 ```bash
 docker compose up mint
 ```
 
-Alternatively, you can use the pre-built Docker images, see [Running a mint](#docker).
+Alternatively, you can simply use the pre-built Docker images, see [Running a mint](#docker).
 
 ## Manual install: Poetry
 These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Install Cashu](#poetry-install-cashu).
