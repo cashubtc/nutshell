@@ -1,4 +1,3 @@
-import random
 from typing import List, Optional, Union
 
 from loguru import logger
@@ -18,43 +17,49 @@ from ...core.errors import (
 )
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
+from .read import DbReadHelper
 
 
 class DbWriteHelper:
     db: Database
     crud: LedgerCrud
     events: LedgerEventManager
+    db_read: DbReadHelper
 
     def __init__(
-        self, db: Database, crud: LedgerCrud, events: LedgerEventManager
+        self,
+        db: Database,
+        crud: LedgerCrud,
+        events: LedgerEventManager,
+        db_read: DbReadHelper,
     ) -> None:
         self.db = db
         self.crud = crud
         self.events = events
+        self.db_read = db_read
 
-    async def _set_proofs_pending(
+    async def _verify_spent_proofs_and_set_pending(
         self, proofs: List[Proof], quote_id: Optional[str] = None
     ) -> None:
-        """If none of the proofs is in the pending table (_validate_proofs_pending), adds proofs to
-        the list of pending proofs or removes them. Used as a mutex for proofs.
-
+        """
+        Method to check if proofs are already spent. If they are not spent, we check if they are pending.
+        If they are not pending, we set them as pending.
         Args:
             proofs (List[Proof]): Proofs to add to pending table.
             quote_id (Optional[str]): Melt quote ID. If it is not set, we assume the pending tokens to be from a swap.
-
         Raises:
-            Exception: At least one proof already in pending table.
+            TransactionError: If any one of the proofs is already spent or pending.
         """
         # first we check whether these proofs are pending already
-        random_id = random.randint(0, 1000000)
         try:
-            logger.debug("trying to set proofs pending")
-            logger.trace(f"get_connection: random_id: {random_id}")
+            logger.trace("_verify_spent_proofs_and_set_pending acquiring lock")
             async with self.db.get_connection(
                 lock_table="proofs_pending",
                 lock_timeout=1,
             ) as conn:
-                logger.trace(f"get_connection: got connection {random_id}")
+                logger.trace("checking whether proofs are already spent")
+                await self.db_read._verify_proofs_spendable(proofs, conn)
+                logger.trace("checking whether proofs are already pending")
                 await self._validate_proofs_pending(proofs, conn)
                 for p in proofs:
                     logger.trace(f"crud: setting proof {p.Y} as PENDING")
@@ -62,10 +67,10 @@ class DbWriteHelper:
                         proof=p, db=self.db, quote_id=quote_id, conn=conn
                     )
                     logger.trace(f"crud: set proof {p.Y} as PENDING")
+            logger.trace("_verify_spent_proofs_and_set_pending released lock")
         except Exception as e:
             logger.error(f"Failed to set proofs pending: {e}")
-            raise TransactionError(f"Failed to set proofs pending: {str(e)}")
-        logger.trace("_set_proofs_pending released lock")
+            raise e
         for p in proofs:
             await self.events.submit(ProofState(Y=p.Y, state=ProofSpentState.pending))
 

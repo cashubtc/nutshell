@@ -184,7 +184,9 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_db_set_proofs_pending_race_condition(wallet: Wallet, ledger: Ledger):
+async def test_db_verify_spent_proofs_and_set_pending_race_condition(
+    wallet: Wallet, ledger: Ledger
+):
     # fill wallet
     invoice = await wallet.request_mint(64)
     await pay_if_regtest(invoice.bolt11)
@@ -193,8 +195,8 @@ async def test_db_set_proofs_pending_race_condition(wallet: Wallet, ledger: Ledg
 
     await assert_err_multiple(
         asyncio.gather(
-            ledger.db_write._set_proofs_pending(wallet.proofs),
-            ledger.db_write._set_proofs_pending(wallet.proofs),
+            ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
+            ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
         ),
         [
             "failed to acquire database lock",
@@ -204,7 +206,7 @@ async def test_db_set_proofs_pending_race_condition(wallet: Wallet, ledger: Ledg
 
 
 @pytest.mark.asyncio
-async def test_db_set_proofs_pending_delayed_no_race_condition(
+async def test_db_verify_spent_proofs_and_set_pending_delayed_no_race_condition(
     wallet: Wallet, ledger: Ledger
 ):
     # fill wallet
@@ -213,21 +215,21 @@ async def test_db_set_proofs_pending_delayed_no_race_condition(
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
-    async def delayed_set_proofs_pending():
+    async def delayed_verify_spent_proofs_and_set_pending():
         await asyncio.sleep(0.1)
-        await ledger.db_write._set_proofs_pending(wallet.proofs)
+        await ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs)
 
     await assert_err(
         asyncio.gather(
-            ledger.db_write._set_proofs_pending(wallet.proofs),
-            delayed_set_proofs_pending(),
+            ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
+            delayed_verify_spent_proofs_and_set_pending(),
         ),
         "proofs are pending",
     )
 
 
 @pytest.mark.asyncio
-async def test_db_set_proofs_pending_no_race_condition_different_proofs(
+async def test_db_verify_spent_proofs_and_set_pending_no_race_condition_different_proofs(
     wallet: Wallet, ledger: Ledger
 ):
     # fill wallet
@@ -238,8 +240,8 @@ async def test_db_set_proofs_pending_no_race_condition_different_proofs(
     assert len(wallet.proofs) == 2
 
     asyncio.gather(
-        ledger.db_write._set_proofs_pending(wallet.proofs[:1]),
-        ledger.db_write._set_proofs_pending(wallet.proofs[1:]),
+        ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs[:1]),
+        ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs[1:]),
     )
 
 
@@ -300,6 +302,6 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
     async with ledger.db.connect(lock_table="proofs_pending", lock_timeout=0.1) as conn:
         assert isinstance(conn, Connection)
         await assert_err(
-            ledger.db_write._set_proofs_pending(wallet.proofs),
+            ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
             "failed to acquire database lock",
         )
