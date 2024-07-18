@@ -61,21 +61,26 @@ def async_set_httpx_client(func):
         # set proxy
         proxies_dict = {}
         proxy_url: Union[str, None] = None
+        headers_dict = {"Client-version": settings.version}
         if settings.tor and TorProxy().check_platform():
             self.tor = TorProxy(timeout=True)
             self.tor.run_daemon(verbose=True)
             proxy_url = "socks5://localhost:9050"
         elif settings.socks_proxy:
             proxy_url = f"socks5://{settings.socks_proxy}"
+            headers_dict["Host"] = (
+                self.url.replace("https://", "")
+                .replace("http://", "")
+                .replace("/", "")
+                .replace(".", "")
+            )
         elif settings.http_proxy:
             proxy_url = settings.http_proxy
         if proxy_url:
             proxies_dict.update({"all://": proxy_url})
 
-        headers_dict = {"Client-version": settings.version}
-
         self.httpx = httpx.AsyncClient(
-            verify=not settings.debug,
+            verify=False,
             proxies=proxies_dict,  # type: ignore
             headers=headers_dict,
             base_url=self.url,
