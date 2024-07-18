@@ -43,7 +43,9 @@ async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
     mint_features = ledger.mint_features()
     contact_info = [
-        MintInfoContact(method=m, info=i) for m, i in settings.mint_info_contact
+        MintInfoContact(method=m, info=i)
+        for m, i in settings.mint_info_contact
+        if m and i
     ]
     return GetInfoResponse(
         name=settings.mint_info_name,

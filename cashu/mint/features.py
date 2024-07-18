@@ -90,12 +90,14 @@ class LedgerFeatures(SupportsBackends):
 
         # specify which websocket features are supported
         # these two are supported by default
-        websocket_features: List[Dict[str, Union[str, List[str]]]] = []
+        websocket_features: Dict[str, List[Dict[str, Union[str, List[str]]]]] = {
+            "supported": []
+        }
         # we check the backend to see if "bolt11_mint_quote" is supported as well
         for method, unit_dict in self.backends.items():
             if method == Method["bolt11"]:
                 for unit in unit_dict.keys():
-                    websocket_features.append(
+                    websocket_features["supported"].append(
                         {
                             "method": method.name,
                             "unit": unit.name,
@@ -104,11 +106,11 @@ class LedgerFeatures(SupportsBackends):
                     )
                     if unit_dict[unit].supports_incoming_payment_stream:
                         supported_features: List[str] = list(
-                            websocket_features[-1]["commands"]
+                            websocket_features["supported"][-1]["commands"]
                         )
-                        websocket_features[-1]["commands"] = supported_features + [
-                            "bolt11_mint_quote"
-                        ]
+                        websocket_features["supported"][-1]["commands"] = (
+                            supported_features + ["bolt11_mint_quote"]
+                        )
 
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features

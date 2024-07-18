@@ -363,7 +363,7 @@ async def test_double_spend(wallet1: Wallet):
     await wallet1.split(wallet1.proofs, 20)
     await assert_err(
         wallet1.split(doublespend, 20),
-        "Mint Error: Token already spent.",
+        "Token already spent.",
     )
     assert wallet1.balance == 64
     assert wallet1.available_balance == 64

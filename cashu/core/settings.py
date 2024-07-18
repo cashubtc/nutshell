@@ -142,7 +142,7 @@ class MintInformation(CashuSettings):
     mint_info_name: str = Field(default="Cashu mint")
     mint_info_description: str = Field(default=None)
     mint_info_description_long: str = Field(default=None)
-    mint_info_contact: List[List[str]] = Field(default=[["", ""]])
+    mint_info_contact: List[List[str]] = Field(default=[])
     mint_info_motd: str = Field(default=None)
 
 

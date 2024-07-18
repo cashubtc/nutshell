@@ -1,13 +1,13 @@
 # Cashu Nutshell
 
-**Cashu Nutshell is a Chaumian Ecash wallet and mint for Bitcoin Lightning. Cashu Nutshell is the reference implementation in Python.**
+**Nutshell is a Chaumian Ecash wallet and mint for Bitcoin Lightning based on the Cashu protocol.**
 
 <a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a> <a href="https://pepy.tech/project/cashu"> <img alt="Downloads" src="https://pepy.tech/badge/cashu"></a> <a href="https://app.codecov.io/gh/cashubtc/nutshell"><img alt="Coverage" src="https://img.shields.io/codecov/c/gh/cashubtc/nutshell"></a>
 
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
 
-Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding ([protocol specs](https://github.com/cashubtc/nuts)). Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406).
+Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nuts) based on David Wagner's variant of Chaumian blinding called [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406).
 
 <p align="center">
 <a href="#the-cashu-protocol">Cashu protocol</a> ·
@@ -18,21 +18,22 @@ Cashu is an Ecash implementation based on David Wagner's variant of Chaumian bli
 <a href="#running-a-mint">Run a mint</a>
 </p>
 
-### Feature overview of Nutshell
+### Feature overview
 
-- Bitcoin Lightning support
-- Standalone Cashu CLI  wallet and mint server
-- Wallet and mint library to include in Python projects
+- Bitcoin Lightning support (LND, CLN, et al.)
+- Full support for the Cashu protocol [specifications](https://github.com/cashubtc/nuts)
+- Standalone CLI  wallet and mint server
+- Wallet and mint library you can include in other Python projects
 - PostgreSQL and SQLite
 - Wallet with builtin Tor
-- Use multiple mints in one wallet
-- Send and receive tokens on nostr
+- Use multiple mints in a single wallet
 
 ### Advanced features
 - Deterministic wallet with seed phrase backup
-- Programmable ecash with, e.g., Pay-to-Pubkey support
+- Programmable ecash: P2PK and HTLCs
 - Wallet and mint support for keyset rotations
 - DLEQ proofs for offline transactions
+- Send and receive tokens on nostr
 
 ## The Cashu protocol
 Different Cashu clients and mints use the same protocol to achieve interoperability. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in developing on your own Cashu project, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts).
@@ -197,3 +198,8 @@ You can run the tests with
 ```bash
 poetry run pytest tests
 ```
+
+
+# Contributing
+
+Developers are invited to contribute to Nutshell. Please see the [contribution guide](CONTRIBUTING.md).

@@ -100,7 +100,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.backends = backends
         self.pubkey = derive_pubkey(self.seed)
         self.db_read = DbReadHelper(self.db, self.crud)
-        self.db_write = DbWriteHelper(self.db, self.crud, self.events)
+        self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
 
     # ------- STARTUP -------
 
@@ -905,7 +905,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         await self.verify_inputs_and_outputs(proofs=proofs)
 
         # set proofs to pending to avoid race conditions
-        await self.db_write._set_proofs_pending(proofs, quote_id=melt_quote.quote)
+        await self.db_write._verify_spent_proofs_and_set_pending(
+            proofs, quote_id=melt_quote.quote
+        )
         try:
             # settle the transaction internally if there is a mint quote with the same payment request
             melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
@@ -985,7 +987,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         logger.trace("swap called")
         # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
-        await self.db_write._set_proofs_pending(proofs)
+        await self.db_write._verify_spent_proofs_and_set_pending(proofs)
         try:
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
                 await self._invalidate_proofs(proofs=proofs, conn=conn)

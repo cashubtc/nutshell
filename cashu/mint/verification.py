@@ -17,7 +17,6 @@ from ..core.errors import (
     NoSecretInProofsError,
     NotAllowedError,
     SecretTooLongError,
-    TokenAlreadySpentError,
     TransactionError,
     TransactionUnitError,
 )
@@ -67,12 +66,6 @@ class LedgerVerification(
         # Verify inputs
         if not proofs:
             raise TransactionError("no proofs provided.")
-        # Verify proofs are spendable
-        if (
-            not len(await self.db_read._get_proofs_spent([p.Y for p in proofs], conn))
-            == 0
-        ):
-            raise TokenAlreadySpentError()
         # Verify amounts of inputs
         if not all([self._verify_amount(p.amount) for p in proofs]):
             raise TransactionError("invalid amount.")
