@@ -1212,13 +1212,13 @@ class DiscreteLogContract(BaseModel):
     """
     A discrete log contract
     """
-    settled: bool = False
+    settled: Optional[bool] = False
     dlc_root: str
     funding_amount: int
-    inputs: List[Proof]          # Need to verify these are indeed SCT proofs
-    debts: Dict[str, int] = {}   # We save who we owe money to here
+    inputs: Optional[List[Proof]]                # Need to verify these are indeed SCT proofs
+    debts: Optional[Dict[str, int]] = None       # We save who we owe money to here
 
-class DlcBadInputs(BaseModel):
+class DlcBadInput(BaseModel):
     index: int
     detail: str
 
@@ -1227,8 +1227,8 @@ class DlcFundingProof(BaseModel):
     A dlc merkle root with its signature
     """
     dlc_root: str
-    signature: Optional[str]
-    bad_inputs: Optional[List[DlcBadInputs]] = None # Used to specify potential errors
+    signature: Optional[str] = None
+    bad_inputs: Optional[List[DlcBadInput]] = None # Used to specify potential errors
 
 class DlcOutcome(BaseModel):
     """

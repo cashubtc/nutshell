@@ -85,7 +85,11 @@ class WalletSCT(SupportsPrivateKey, SupportsDb):
         return list(filter(lambda p: p.dlc_root == dlc_root, proofs))
     
     async def filter_non_dlc_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        """Returns a list of proofs each having None or empty dlc root
+        """
         return list(filter(lambda p: p.dlc_root is None or p.dlc_root == "", proofs))
 
     async def filter_dlc_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        """Returns a list of proofs each having a non empty dlc root
+        """
         return list(filter(lambda p: p.dlc_root is not None and p.dlc_root != "", proofs))
