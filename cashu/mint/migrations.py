@@ -834,7 +834,7 @@ async def m022_add_dlc_table(db: Database):
                     dlc_root TEXT NOT NULL,
                     settled BOOL NOT NULL DEFAULT FALSE,
                     funding_amount {db.big_int} NOT NULL,
-                    debts MEDIUMTEXT,
+                    debts TEXT,
 
                     UNIQUE (dlc_root),
                     CHECK (funding_amount > 0)
