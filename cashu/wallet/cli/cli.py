@@ -1150,6 +1150,6 @@ async def selfpay(
             await wallet.redeem(dlc_reserved)
         # no specific root, unlock all dlc proofs
         else:
-            dlc_reserved = list(set(reserved_proofs) - set(non_dlc_reserved))
+            dlc_reserved = await wallet.filter_dlc_proofs(reserved_proofs)
             await wallet.redeem(dlc_reserved)
 

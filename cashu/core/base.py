@@ -171,9 +171,7 @@ class Proof(BaseModel):
 
         if (proof_dict.get("all_spending_conditions")
             and isinstance(proof_dict["all_spending_conditions"], str)):
-            tmp = json.loads(proof_dict["all_spending_conditions"])
-            proof_dict["all_spending_conditions"] = [json.dumps(t) for t in tmp]
-            #assert isinstance(proof_dict["all_spending_conditions"], List[str])
+            proof_dict["all_spending_conditions"] = json.loads(proof_dict["all_spending_conditions"])
         else:
             proof_dict["all_spending_conditions"] = None
         c = cls(**proof_dict)

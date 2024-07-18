@@ -61,7 +61,7 @@ class WalletSCT(SupportsPrivateKey, SupportsDb):
         logger.trace(f"Unlocking {len(proofs)} proofs locked to DLC root {proofs[0].dlc_root}")
         for p in proofs:
             all_spending_conditions = p.all_spending_conditions
-            assert all_spending_conditions is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
+            assert all_spending_conditions is not None, "add_sct_witnesses_to_proof: None spending conditions"
             leaf_hashes = list_hash(all_spending_conditions)
             # We are assuming the backup secret is the last (and second) entry
             merkle_root_bytes, merkle_proof_bytes = merkle_root(
@@ -69,13 +69,14 @@ class WalletSCT(SupportsPrivateKey, SupportsDb):
                 len(leaf_hashes)-1 if backup else 0,
             )
             # If this check fails we are in deep trouble
-            assert merkle_proof_bytes is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
-            assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: What the duck is going on here"
+            assert merkle_proof_bytes is not None, "add_sct_witnesses_to_proof: Merkle proof is None"
+            assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: Merkle root not equal to hash in secret.data"
             leaf_secret = all_spending_conditions[-1] if backup else all_spending_conditions[0]
             p.witness = DLCWitness(
                 leaf_secret=leaf_secret,
                 merkle_proof=[m.hex() for m in merkle_proof_bytes]
             ).json()
+            logger.trace(f"Added dlc witness: {p.witness}")
         return proofs
     
     async def filter_proofs_by_dlc_root(self, dlc_root: str, proofs: List[Proof]) -> List[Proof]:
@@ -85,3 +86,6 @@ class WalletSCT(SupportsPrivateKey, SupportsDb):
     
     async def filter_non_dlc_proofs(self, proofs: List[Proof]) -> List[Proof]:
         return list(filter(lambda p: p.dlc_root is None or p.dlc_root == "", proofs))
+
+    async def filter_dlc_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        return list(filter(lambda p: p.dlc_root is not None and p.dlc_root != "", proofs))
