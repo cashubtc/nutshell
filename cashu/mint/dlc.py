@@ -97,7 +97,7 @@ class LedgerDLC(Ledger):
         fees = await self.get_fees(fa_unit)
         amount_provided = sum([p.amount for p in proofs])
         amount_needed = funding_amount + fees['base'] + (funding_amount * fees['ppk'] // 1000)
-        if amount_needed < amount_provided:
+        if amount_provided < amount_needed:
             raise TransactionError("funds provided do not cover the DLC funding amount")
         return amount_provided
 
