@@ -1215,6 +1215,7 @@ class DiscreteLogContract(BaseModel):
     settled: Optional[bool] = False
     dlc_root: str
     funding_amount: int
+    unit: str
     inputs: Optional[List[Proof]]                # Need to verify these are indeed SCT proofs
     debts: Optional[Dict[str, int]] = None       # We save who we owe money to here
 
