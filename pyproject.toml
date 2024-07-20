@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "cashu"
-version = "0.15.3"
+version = "0.16.0"
 description = "Ecash wallet and mint"
 authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.8.1"
-SQLAlchemy = "^1.3.24"
+SQLAlchemy = {version = "1.4.52", extras = ["asyncio"]}
 click = "^8.1.7"
 pydantic = "^1.10.2"
 bech32 = "^1.2.0"
@@ -18,7 +18,6 @@ loguru = "^0.7.0"
 ecdsa = "^0.18.0"
 bitstring = "^3.1.9"
 secp256k1 = "^0.14.0"
-sqlalchemy-aio = "^0.17.0"
 h11 = "^0.14.0"
 cryptography = "^41.0.3"
 websocket-client = "^1.3.3"
@@ -26,7 +25,6 @@ pycryptodomex = "^3.16.0"
 setuptools = "^68.1.2"
 wheel = "^0.41.1"
 importlib-metadata = "^6.8.0"
-psycopg2-binary = { version = "^2.9.7", optional = true }
 httpx = {extras = ["socks"], version = "^0.25.1"}
 bip32 = "^3.4"
 mnemonic = "^0.20"
@@ -35,9 +33,8 @@ pre-commit = "^3.5.0"
 websockets = "^12.0"
 slowapi = "^0.1.9"
 cbor2 = "^5.6.2"
-
-[tool.poetry.extras]
-pgsql = ["psycopg2-binary"]
+asyncpg = "^0.29.0"
+aiosqlite = "^0.20.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest-asyncio = "^0.21.1"

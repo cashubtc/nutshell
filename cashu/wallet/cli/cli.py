@@ -15,7 +15,7 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, Method, MintQuoteState, TokenV3, TokenV4, Unit
+from ...core.base import Invoice, Method, MintQuoteState, TokenV4, Unit
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
@@ -36,6 +36,7 @@ from ..cli.cli_helpers import (
     get_unit_wallet,
     print_balance,
     print_mint_balances,
+    receive_all_pending,
     verify_mint,
 )
 from ..helpers import (
@@ -441,6 +442,16 @@ async def swap(ctx: Context):
 @coro
 async def balance(ctx: Context, verbose):
     wallet: Wallet = ctx.obj["WALLET"]
+    if verbose:
+        wallet = await wallet.with_db(
+            url=wallet.url,
+            db=wallet.db.db_location,
+            name=wallet.name,
+            skip_db_read=False,
+            unit=wallet.unit.name,
+            load_all_keysets=True,
+        )
+
     unit_balances = wallet.balance_per_unit()
     await wallet.load_proofs(reload=True)
 
@@ -537,6 +548,14 @@ async def balance(ctx: Context, verbose):
     help="Include fees for receiving token.",
     type=bool,
 )
+@click.option(
+    "--force-swap",
+    "-s",
+    default=False,
+    is_flag=True,
+    help="Force swap token.",
+    type=bool,
+)
 @click.pass_context
 @coro
 async def send_command(
@@ -551,6 +570,7 @@ async def send_command(
     yes: bool,
     offline: bool,
     include_fees: bool,
+    force_swap: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
@@ -564,6 +584,7 @@ async def send_command(
             include_dleq=dleq,
             include_fees=include_fees,
             memo=memo,
+            force_swap=force_swap,
         )
     else:
         await send_nostr(wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes)
@@ -591,44 +612,30 @@ async def receive_cli(
     all: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
-
+    # receive a specific token
     if token:
         token_obj = deserialize_token_from_string(token)
         # verify that we trust the mint in this tokens
         # ask the user if they want to trust the new mint
         mint_url = token_obj.mint
-        mint_wallet = Wallet(
+        mint_wallet = await Wallet.with_db(
             mint_url,
             os.path.join(settings.cashu_dir, wallet.name),
             unit=token_obj.unit,
         )
         await verify_mint(mint_wallet, mint_url)
-        receive_wallet = await receive(wallet, token_obj)
+        receive_wallet = await receive(mint_wallet, token_obj)
         ctx.obj["WALLET"] = receive_wallet
+    # receive tokens via nostr
     elif nostr:
         await receive_nostr(wallet)
         # exit on keypress
         input("Enter any text to exit.")
         print("Exiting.")
         os._exit(0)
+    # receive all pending outgoing tokens back to the wallet
     elif all:
-        reserved_proofs = await get_reserved_proofs(wallet.db)
-        if len(reserved_proofs):
-            for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
-                proofs = list(value)
-                token = await wallet.serialize_proofs(proofs)
-                token_obj = TokenV4.deserialize(token)
-                # verify that we trust the mint of this token
-                # ask the user if they want to trust the mint
-                mint_url = token_obj.mint
-                mint_wallet = Wallet(
-                    mint_url,
-                    os.path.join(settings.cashu_dir, wallet.name),
-                    unit=token_obj.unit,
-                )
-                await verify_mint(mint_wallet, mint_url)
-                receive_wallet = await receive(wallet, token_obj)
-                ctx.obj["WALLET"] = receive_wallet
+        await receive_all_pending(ctx, wallet)
     else:
         print("Error: enter token or use either flag --nostr or --all.")
         return
@@ -672,8 +679,8 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
         proofs = [proof for proof in reserved_proofs if proof["send_id"] == delete]
     else:
         # check only the specified ones
-        token_obj = TokenV3.deserialize(token)
-        proofs = token_obj.get_proofs()
+        tokenObj = deserialize_token_from_string(token)
+        proofs = tokenObj.proofs
 
     if delete:
         await wallet.invalidate(proofs)
@@ -709,10 +716,18 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
 @coro
 async def pending(ctx: Context, legacy, number: int, offset: int):
     wallet: Wallet = ctx.obj["WALLET"]
+    wallet = await Wallet.with_db(
+        url=wallet.url,
+        db=wallet.db.db_location,
+        name=wallet.name,
+        skip_db_read=False,
+        unit=wallet.unit.name,
+        load_all_keysets=True,
+    )
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if len(reserved_proofs):
         print("--------------------------\n")
-        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"))  # type: ignore
+        sorted_proofs = sorted(reserved_proofs, key=itemgetter("send_id"), reverse=True)  # type: ignore
         if number:
             number += offset
         for i, (key, value) in islice(
@@ -737,7 +752,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(
                 f"#{i} Amount:"
-                f" {wallet.unit.str(sum_proofs(grouped_proofs))} Time:"
+                f" {Unit[token_obj.unit].str(sum_proofs(grouped_proofs))} Time:"
                 f" {reserved_date} ID: {key}  Mint: {mint}\n"
             )
             print(f"{token}\n")
@@ -749,7 +764,9 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
                 )
                 print(f"Legacy token: {token_legacy}\n")
             print("--------------------------\n")
-        print("To remove all spent tokens use: cashu burn -a")
+        print("To remove all pending tokens that are already spent use: cashu burn -a")
+        print("To remove a specific pending token use: cashu burn <token>")
+        print("To receive all pending tokens use: cashu receive -a")
 
 
 @cli.command("lock", help="Generate receiving lock.")

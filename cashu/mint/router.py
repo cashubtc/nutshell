@@ -10,6 +10,7 @@ from ..core.models import (
     KeysetsResponseKeyset,
     KeysResponse,
     KeysResponseKeyset,
+    MintInfoContact,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostMeltQuoteRequest,
@@ -21,8 +22,8 @@ from ..core.models import (
     PostMintResponse,
     PostRestoreRequest,
     PostRestoreResponse,
-    PostSplitRequest,
-    PostSplitResponse,
+    PostSwapRequest,
+    PostSwapResponse,
 )
 from ..core.settings import settings
 from ..mint.startup import ledger
@@ -41,13 +42,18 @@ router: APIRouter = APIRouter()
 async def info() -> GetInfoResponse:
     logger.trace("> GET /v1/info")
     mint_features = ledger.mint_features()
+    contact_info = [
+        MintInfoContact(method=m, info=i)
+        for m, i in settings.mint_info_contact
+        if m and i
+    ]
     return GetInfoResponse(
         name=settings.mint_info_name,
         pubkey=ledger.pubkey.serialize().hex() if ledger.pubkey else None,
         version=f"Nutshell/{settings.version}",
         description=settings.mint_info_description,
         description_long=settings.mint_info_description_long,
-        contact=settings.mint_info_contact,
+        contact=contact_info,
         nuts=mint_features,
         motd=settings.mint_info_motd,
     )
@@ -312,7 +318,7 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     "/v1/swap",
     name="Swap tokens",
     summary="Swap inputs for outputs of the same value",
-    response_model=PostSplitResponse,
+    response_model=PostSwapResponse,
     response_description=(
         "An array of blinded signatures that can be used to create proofs."
     ),
@@ -320,20 +326,20 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def swap(
     request: Request,
-    payload: PostSplitRequest,
-) -> PostSplitResponse:
+    payload: PostSwapRequest,
+) -> PostSwapResponse:
     """
-    Requests a set of Proofs to be split into two a new set of BlindedSignatures.
+    Requests a set of Proofs to be swapped for another set of BlindSignatures.
 
-    This endpoint is used by Alice to split a set of proofs before making a payment to Carol.
-    It is then used by Carol (by setting split=total) to redeem the tokens.
+    This endpoint can be used by Alice to swap a set of proofs before making a payment to Carol.
+    It can then used by Carol to redeem the tokens for new proofs.
     """
     logger.trace(f"> POST /v1/swap: {payload}")
     assert payload.outputs, Exception("no outputs provided.")
 
-    signatures = await ledger.split(proofs=payload.inputs, outputs=payload.outputs)
+    signatures = await ledger.swap(proofs=payload.inputs, outputs=payload.outputs)
 
-    return PostSplitResponse(signatures=signatures)
+    return PostSwapResponse(signatures=signatures)
 
 
 @router.post(

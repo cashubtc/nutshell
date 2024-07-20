@@ -241,7 +241,7 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
 async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Ledger):
     # fill wallet
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -252,7 +252,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     # wallet pays the invoice
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
     asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
@@ -286,7 +286,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
 async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Ledger):
     # fill wallet
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -297,7 +297,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     # wallet pays the invoice
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
     asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,
@@ -334,7 +334,7 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     """Simulate a failure to pay the hodl invoice by canceling it."""
     # fill wallet
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -347,7 +347,7 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     # wallet pays the invoice
     quote = await wallet.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
-    _, send_proofs = await wallet.split_to_send(wallet.proofs, total_amount)
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
     asyncio.create_task(
         wallet.melt(
             proofs=send_proofs,

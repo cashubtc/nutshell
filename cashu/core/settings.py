@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.15.3"
+VERSION = "0.16.0"
 
 
 def find_env_file():
@@ -46,6 +46,7 @@ class EnvSettings(CashuSettings):
     debug_profiling: bool = Field(default=False)
     debug_mint_only_deprecated: bool = Field(default=False)
     db_backup_path: Optional[str] = Field(default=None)
+    db_connection_pool: bool = Field(default=True)
 
 
 class MintSettings(CashuSettings):
@@ -132,8 +133,8 @@ class MintLimits(MintSettings):
 
 class FakeWalletSettings(MintSettings):
     fakewallet_brr: bool = Field(default=True)
-    fakewallet_delay_outgoing_payment: Optional[int] = Field(default=3)
-    fakewallet_delay_incoming_payment: Optional[int] = Field(default=3)
+    fakewallet_delay_outgoing_payment: Optional[float] = Field(default=3.0)
+    fakewallet_delay_incoming_payment: Optional[float] = Field(default=3.0)
     fakewallet_stochastic_invoice: bool = Field(default=False)
     fakewallet_payment_state: Optional[bool] = Field(default=None)
 
@@ -142,7 +143,7 @@ class MintInformation(CashuSettings):
     mint_info_name: str = Field(default="Cashu mint")
     mint_info_description: str = Field(default=None)
     mint_info_description_long: str = Field(default=None)
-    mint_info_contact: List[List[str]] = Field(default=[["", ""]])
+    mint_info_contact: List[List[str]] = Field(default=[])
     mint_info_motd: str = Field(default=None)
 
 
@@ -184,6 +185,14 @@ class WalletSettings(CashuSettings):
     wallet_target_amount_count: int = Field(default=3)
 
 
+class WalletFeatures(CashuSettings):
+    wallet_inactivate_legacy_keysets: bool = Field(
+        default=False,
+        title="Inactivate legacy base64 keysets",
+        description="If you turn on this flag, old bas64 keysets will be ignored and the wallet will ony use new keyset versions.",
+    )
+
+
 class LndRestFundingSource(MintSettings):
     mint_lnd_rest_endpoint: Optional[str] = Field(default=None)
     mint_lnd_rest_cert: Optional[str] = Field(default=None)
@@ -218,6 +227,7 @@ class Settings(
     MintSettings,
     MintInformation,
     WalletSettings,
+    WalletFeatures,
     CashuSettings,
 ):
     version: str = Field(default=VERSION)

@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, root_validator
 
 from .base import (
     BlindedMessage,
@@ -25,18 +25,38 @@ class MintMeltMethodSetting(BaseModel):
     max_amount: Optional[int] = None
 
 
+class MintInfoContact(BaseModel):
+    method: str
+    info: str
+
+
 class GetInfoResponse(BaseModel):
     name: Optional[str] = None
     pubkey: Optional[str] = None
     version: Optional[str] = None
     description: Optional[str] = None
     description_long: Optional[str] = None
-    contact: Optional[List[List[str]]] = None
+    contact: Optional[List[MintInfoContact]] = None
     motd: Optional[str] = None
     nuts: Optional[Dict[int, Any]] = None
 
     def supports(self, nut: int) -> Optional[bool]:
         return nut in self.nuts if self.nuts else None
+
+    # BEGIN DEPRECATED: NUT-06 contact field change
+    # NUT-06 PR: https://github.com/cashubtc/nuts/pull/117
+    @root_validator(pre=True)
+    def preprocess_deprecated_contact_field(cls, values):
+        if "contact" in values and values["contact"]:
+            if isinstance(values["contact"][0], list):
+                values["contact"] = [
+                    MintInfoContact(method=method, info=info)
+                    for method, info in values["contact"]
+                    if method and info
+                ]
+        return values
+
+    # END DEPRECATED: NUT-06 contact field change
 
 
 class Nut15MppSupport(BaseModel):
@@ -100,10 +120,8 @@ class PostMintQuoteRequest(BaseModel):
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
-    paid: Optional[
-        bool
-    ]  # whether the request has been paid # DEPRECATED as per NUT PR #141
-    state: str  # state of the quote
+    paid: Optional[bool]  # DEPRECATED as per NUT-04 PR #141
+    state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
 
     @classmethod
@@ -180,8 +198,10 @@ class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
-    paid: bool  # whether the request has been paid # DEPRECATED as per NUT PR #136
-    state: str  # state of the quote
+    paid: Optional[
+        bool
+    ]  # whether the request has been paid # DEPRECATED as per NUT PR #136
+    state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
     change: Union[List[BlindedSignature], None] = None
@@ -222,19 +242,19 @@ class PostMeltRequest_deprecated(BaseModel):
 # ------- API: SPLIT -------
 
 
-class PostSplitRequest(BaseModel):
+class PostSwapRequest(BaseModel):
     inputs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     outputs: List[BlindedMessage] = Field(
         ..., max_items=settings.mint_max_request_length
     )
 
 
-class PostSplitResponse(BaseModel):
+class PostSwapResponse(BaseModel):
     signatures: List[BlindedSignature]
 
 
 # deprecated since 0.13.0
-class PostSplitRequest_Deprecated(BaseModel):
+class PostSwapRequest_Deprecated(BaseModel):
     proofs: List[Proof] = Field(..., max_items=settings.mint_max_request_length)
     amount: Optional[int] = None
     outputs: List[BlindedMessage_Deprecated] = Field(
@@ -242,11 +262,11 @@ class PostSplitRequest_Deprecated(BaseModel):
     )
 
 
-class PostSplitResponse_Deprecated(BaseModel):
+class PostSwapResponse_Deprecated(BaseModel):
     promises: List[BlindedSignature] = []
 
 
-class PostSplitResponse_Very_Deprecated(BaseModel):
+class PostSwapResponse_Very_Deprecated(BaseModel):
     fst: List[BlindedSignature] = []
     snd: List[BlindedSignature] = []
     deprecated: str = "The amount field is deprecated since 0.13.0"

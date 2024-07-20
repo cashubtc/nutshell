@@ -1,5 +1,5 @@
 from itertools import groupby
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from loguru import logger
 
@@ -91,6 +91,44 @@ class WalletProofs(SupportsDb, SupportsKeysets):
                 )
         return mint_urls
 
+    async def _get_proofs_keysets(self, proofs: List[Proof]) -> Dict[str, WalletKeyset]:
+        keyset_ids = self._get_proofs_keyset_ids(proofs)
+        keysets_dict = {}
+        async with self.db.get_connection() as conn:
+            for keyset_id in keyset_ids:
+                keyset = await get_keysets(id=keyset_id, db=self.db, conn=conn)
+                if len(keyset) == 1:
+                    keysets_dict[keyset_id] = keyset[0]
+        return keysets_dict
+
+    async def _get_proofs_mint_unit(self, proofs: List[Proof]) -> Tuple[str, Unit]:
+        """Helper function that extracts the mint URL and unit from a list of proofs. It raises an exception if the proofs are from multiple mints or units.
+
+        Args:
+            proofs (List[Proof]): List of proofs to extract the mint URL and unit from.
+
+        Raises:
+            Exception: If the proofs are from multiple mints or units.
+            Exception: If the proofs are from an unknown mint or keyset.
+
+        Returns:
+            Tuple[str, Unit]: Mint URL and `Unit` of the proofs
+        """
+        proofs_keysets = await self._get_proofs_keysets(proofs)
+        mint_urls = [k.mint_url for k in proofs_keysets.values()]
+        if not mint_urls:
+            raise Exception("Proofs from unknown mint or keyset.")
+        if len(set(mint_urls)) != 1:
+            raise Exception("Proofs from multiple mints.")
+        mint_url = mint_urls[0]
+        if not mint_url:
+            raise Exception("No mint URL found for keyset")
+        proofs_units = [k.unit for k in proofs_keysets.values()]
+        if len(set(proofs_units)) != 1:
+            raise Exception("Proofs from multiple units.")
+        unit = proofs_units[0]
+        return mint_url, unit
+
     async def serialize_proofs(
         self,
         proofs: List[Proof],
@@ -106,6 +144,12 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         Returns:
             str: Serialized Cashu token
         """
+        # DEPRECATED: legacy token for base64 keysets
+        try:
+            _ = [bytes.fromhex(p.id) for p in proofs]
+        except ValueError:
+            logger.debug("Proof with base64 keyset, using legacy token serialization")
+            legacy = True
 
         if legacy:
             tokenv3 = await self._make_tokenv3(proofs, memo)
@@ -127,23 +171,29 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         Returns:
             TokenV3: TokenV3 object
         """
+
+        # extract all keysets IDs from proofs
+        keyset_ids = self._get_proofs_keyset_ids(proofs)
+        keysets = {k.id: k for k in self.keysets.values() if k.id in keyset_ids}
+        if not keysets:
+            raise ValueError("No keysets found for proofs")
+        assert (
+            len(set([k.unit for k in keysets.values()])) == 1
+        ), "All keysets must have the same unit"
+        unit = keysets[list(keysets.keys())[0]].unit
+
         token = TokenV3()
-
-        # we create a map from mint url to keyset id and then group
-        # all proofs with their mint url to build a tokenv3
-
-        # extract all keysets from proofs
-        keysets = self._get_proofs_keyset_ids(proofs)
+        token.memo = memo
+        token.unit = unit.name
+        assert token.memo == memo, f"Memo not set correctly: {token.memo}"
         # get all mint URLs for all unique keysets from db
-        mint_urls = await self._get_keyset_urls(keysets)
+        mint_urls = await self._get_keyset_urls(list(keysets.keys()))
 
         # append all url-grouped proofs to token
         for url, ids in mint_urls.items():
             mint_proofs = [p for p in proofs if p.id in ids]
             token.token.append(TokenV3Token(mint=url, proofs=mint_proofs))
 
-        if memo:
-            token.memo = memo
         return token
 
     async def _make_tokenv4(
@@ -161,7 +211,10 @@ class WalletProofs(SupportsDb, SupportsKeysets):
 
         # get all keysets from proofs
         keyset_ids = set(self._get_proofs_keyset_ids(proofs))
-        keysets = [self.keysets[i] for i in keyset_ids]
+        try:
+            keysets = [self.keysets[i] for i in keyset_ids]
+        except KeyError:
+            raise ValueError("Keysets of proofs are not loaded in wallet")
         # we make sure that all proofs are from keysets of the same mint
         if len(set([k.mint_url for k in keysets])) > 1:
             raise ValueError("TokenV4 can only contain proofs from a single mint URL")

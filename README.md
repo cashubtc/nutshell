@@ -1,13 +1,13 @@
 # Cashu Nutshell
 
-**Cashu Nutshell is a Chaumian Ecash wallet and mint for Bitcoin Lightning. Cashu Nutshell is the reference implementation in Python.**
+**Nutshell is a Chaumian Ecash wallet and mint for Bitcoin Lightning based on the Cashu protocol.**
 
 <a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a> <a href="https://pepy.tech/project/cashu"> <img alt="Downloads" src="https://pepy.tech/badge/cashu"></a> <a href="https://app.codecov.io/gh/cashubtc/nutshell"><img alt="Coverage" src="https://img.shields.io/codecov/c/gh/cashubtc/nutshell"></a>
 
 
 *Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
 
-Cashu is an Ecash implementation based on David Wagner's variant of Chaumian blinding ([protocol specs](https://github.com/cashubtc/nuts)). Token logic based on [minicash](https://github.com/phyro/minicash) ([description](https://gist.github.com/phyro/935badc682057f418842c72961cf096c)) which implements a [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406).
+Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nuts) based on David Wagner's variant of Chaumian blinding called [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406).
 
 <p align="center">
 <a href="#the-cashu-protocol">Cashu protocol</a> ·
@@ -18,26 +18,27 @@ Cashu is an Ecash implementation based on David Wagner's variant of Chaumian bli
 <a href="#running-a-mint">Run a mint</a>
 </p>
 
-### Feature overview of Nutshell
+### Feature overview
 
-- Bitcoin Lightning support
-- Standalone Cashu CLI  wallet and mint server
-- Wallet and mint library to include in Python projects
+- Bitcoin Lightning support (LND, CLN, et al.)
+- Full support for the Cashu protocol [specifications](https://github.com/cashubtc/nuts)
+- Standalone CLI  wallet and mint server
+- Wallet and mint library you can include in other Python projects
 - PostgreSQL and SQLite
 - Wallet with builtin Tor
-- Use multiple mints in one wallet
-- Send and receive tokens on nostr
+- Use multiple mints in a single wallet
 
 ### Advanced features
 - Deterministic wallet with seed phrase backup
-- Programmable ecash with, e.g., Pay-to-Pubkey support
+- Programmable ecash: P2PK and HTLCs
 - Wallet and mint support for keyset rotations
 - DLEQ proofs for offline transactions
+- Send and receive tokens on nostr
 
 ## The Cashu protocol
 Different Cashu clients and mints use the same protocol to achieve interoperability. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in developing on your own Cashu project, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts).
 
-## Easy Install
+## Easy Install: Nutshell wallet
 
 The easiest way to use Cashu is to install the package it via pip:
 ```bash
@@ -50,6 +51,18 @@ If you have problems running the command above on Ubuntu, run `sudo apt install 
 
 You can skip the entire next section about Poetry and jump right to [Using Cashu](#using-cashu).
 
+## Easy Install: Nutshell mint
+
+The easiest way to get a mint running is through Docker.
+
+You can build the image yourself by running the following command. Make sure to adjust the environment variables in `docker-compose.yaml`.
+
+```bash
+docker compose up mint
+```
+
+Alternatively, you can use the pre-built Docker images, see [Running a mint](#docker).
+
 ## Manual install: Poetry
 These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Install Cashu](#poetry-install-cashu).
 
@@ -57,7 +70,7 @@ These steps help you install Python via pyenv and Poetry. If you already have Po
 
 ```bash
 # on ubuntu:
-sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev libsqlite3-dev ncurses-dev libbz2-dev libreadline-dev lzma-dev
+sudo apt install -y build-essential pkg-config libffi-dev libpq-dev zlib1g-dev libssl-dev python3-dev libsqlite3-dev ncurses-dev libbz2-dev libreadline-dev lzma-dev liblzma-dev
 
 # install python using pyenv
 curl https://pyenv.run | bash
@@ -82,8 +95,6 @@ git checkout <latest_tag>
 pyenv local 3.10.4
 poetry install
 ```
-
-If you would like to use PostgreSQL as the mint database, use the command `poetry install --extras pgsql`.
 
 #### Poetry: Update Cashu
 To update Cashu to the newest version enter
@@ -172,7 +183,7 @@ This command runs the mint on your local computer. Skip this step if you want to
 ## Docker
 
 ```
-docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.15.3 poetry run mint
+docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.16.0 poetry run mint
 ```
 
 ## From this repository
@@ -199,3 +210,8 @@ You can run the tests with
 ```bash
 poetry run pytest tests
 ```
+
+
+# Contributing
+
+Developers are invited to contribute to Nutshell. Please see the [contribution guide](CONTRIBUTING.md).

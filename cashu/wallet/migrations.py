@@ -166,12 +166,12 @@ async def m007_nostr(db: Database):
             """
             INSERT INTO nostr
                 (type, last)
-            VALUES (?, ?)
+            VALUES (:type, :last)
             """,
-            (
-                "dm",
-                None,
-            ),
+            {
+                "type": "db",
+                "last": None,
+            },
         )
 
 
@@ -248,10 +248,10 @@ async def m012_add_fee_to_keysets(db: Database):
 # # async def m020_add_state_to_mint_and_melt_quotes(db: Database):
 # #     async with db.connect() as conn:
 # #         await conn.execute(
-# #             f"ALTER TABLE {table_with_schema(db, 'mint_quotes')} ADD COLUMN state TEXT"
+# #             f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN state TEXT"
 # #         )
 # #         await conn.execute(
-# #             f"ALTER TABLE {table_with_schema(db, 'melt_quotes')} ADD COLUMN state TEXT"
+# #             f"ALTER TABLE {db.table_with_schema('melt_quotes')} ADD COLUMN state TEXT"
 # #         )
 
 # #     # get all melt and mint quotes and figure out the state to set using the `paid` column
@@ -259,7 +259,7 @@ async def m012_add_fee_to_keysets(db: Database):
 # #     # mint quotes:
 # #     async with db.connect() as conn:
 # #         rows = await conn.fetchall(
-# #             f"SELECT * FROM {table_with_schema(db, 'mint_quotes')}"
+# #             f"SELECT * FROM {db.table_with_schema('mint_quotes')}"
 # #         )
 # #         for row in rows:
 # #             if row["issued"]:
@@ -269,13 +269,13 @@ async def m012_add_fee_to_keysets(db: Database):
 # #             else:
 # #                 state = "unpaid"
 # #             await conn.execute(
-# #                 f"UPDATE {table_with_schema(db, 'mint_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
+# #                 f"UPDATE {db.table_with_schema('mint_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
 # #             )
 
 # #     # melt quotes:
 # #     async with db.connect() as conn:
 # #         rows = await conn.fetchall(
-# #             f"SELECT * FROM {table_with_schema(db, 'melt_quotes')}"
+# #             f"SELECT * FROM {db.table_with_schema('melt_quotes')}"
 # #         )
 # #         for row in rows:
 # #             if row["paid"]:
@@ -283,7 +283,7 @@ async def m012_add_fee_to_keysets(db: Database):
 # #             else:
 # #                 state = "unpaid"
 # #             await conn.execute(
-# #                 f"UPDATE {table_with_schema(db, 'melt_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
+# #                 f"UPDATE {db.table_with_schema('melt_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
 # #             )
 # # add the equivalent of the above migration for the wallet here. do not use table_with_schema. use the tables and columns
 # # as they are defined in the wallet db

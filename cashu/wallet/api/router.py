@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from ...core.base import TokenV3, TokenV4
+from ...core.base import Token, TokenV3
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...lightning.base import (
@@ -194,7 +194,7 @@ async def swap(
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
 
-    _, send_proofs = await outgoing_wallet.split_to_send(
+    _, send_proofs = await outgoing_wallet.swap_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
     await outgoing_wallet.melt(
@@ -261,7 +261,7 @@ async def receive_command(
     wallet = await mint_wallet()
     initial_balance = wallet.available_balance
     if token:
-        tokenObj: TokenV4 = deserialize_token_from_string(token)
+        tokenObj: Token = deserialize_token_from_string(token)
         await verify_mints(wallet, tokenObj)
         await receive(wallet, tokenObj)
     elif nostr:
@@ -317,7 +317,7 @@ async def burn(
     else:
         # check only the specified ones
         tokenObj = TokenV3.deserialize(token)
-        proofs = tokenObj.get_proofs()
+        proofs = tokenObj.proofs
 
     if delete:
         await wallet.invalidate(proofs)
@@ -433,7 +433,7 @@ async def restore(
     if to < 0:
         raise Exception("Counter must be positive")
     await wallet.load_mint()
-    await wallet.restore_promises_from_to(0, to)
+    await wallet.restore_promises_from_to(wallet.keyset_id, 0, to)
     await wallet.invalidate(wallet.proofs, check_spendable=True)
     return RestoreResponse(balance=wallet.available_balance)
 

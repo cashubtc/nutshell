@@ -69,7 +69,7 @@ async def test_get_keyset(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_mint(ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
-    pay_if_regtest(quote.request)
+    await pay_if_regtest(quote.request)
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
@@ -89,7 +89,7 @@ async def test_mint(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_mint_invalid_blinded_message(ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
-    pay_if_regtest(quote.request)
+    await pay_if_regtest(quote.request)
     blinded_messages_mock_invalid_key = [
         BlindedMessage(
             amount=8,

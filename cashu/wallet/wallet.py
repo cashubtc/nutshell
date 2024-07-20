@@ -1,3 +1,4 @@
+import base64
 import copy
 import threading
 import time
@@ -7,6 +8,7 @@ import bolt11
 from bip32 import BIP32
 from loguru import logger
 
+from cashu.core.crypto.keys import derive_keyset_id
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
 from ..core.base import (
@@ -83,7 +85,7 @@ class Wallet(
     """
 
     keyset_id: str  # holds current keyset id
-    keysets: Dict[str, WalletKeyset]  # holds keysets
+    keysets: Dict[str, WalletKeyset] = {}  # holds keysets
     # mint_keyset_ids: List[str]  # holds active keyset ids of the mint
     unit: Unit
     mint_info: MintInfo  # holds info about mint
@@ -120,6 +122,7 @@ class Wallet(
         name: str = "no_name",
         skip_db_read: bool = False,
         unit: str = "sat",
+        load_all_keysets: bool = False,
     ):
         """Initializes a wallet with a database and initializes the private key.
 
@@ -130,6 +133,9 @@ class Wallet(
             skip_db_read (bool, optional): If true, values from db like private key and
                 keysets are not loaded. Useful for running only migrations and returning.
                 Defaults to False.
+            unit (str, optional): Unit of the wallet. Defaults to "sat".
+            load_all_keysets (bool, optional): If true, all keysets are loaded from the database.
+                Defaults to False.
 
         Returns:
             Wallet: Initialized wallet.
@@ -137,16 +143,23 @@ class Wallet(
         logger.trace(f"Initializing wallet with database: {db}")
         self = cls(url=url, db=db, name=name, unit=unit)
         await self._migrate_database()
-        if not skip_db_read:
-            logger.trace("Mint init: loading private key and keysets from db.")
-            await self._init_private_key()
-            keysets_list = await get_keysets(mint_url=url, db=self.db)
+
+        if skip_db_read:
+            return self
+
+        logger.trace("Mint init: loading private key and keysets from db.")
+        await self._init_private_key()
+        keysets_list = await get_keysets(
+            mint_url=url if not load_all_keysets else None, db=self.db
+        )
+        if not load_all_keysets:
             keysets_active_unit = [k for k in keysets_list if k.unit == self.unit]
             self.keysets = {k.id: k for k in keysets_active_unit}
-            logger.debug(
-                f"Loaded keysets: {' '.join([k.id + f' {k.unit}' for k in keysets_active_unit])}"
-            )
-
+        else:
+            self.keysets = {k.id: k for k in keysets_list}
+        logger.debug(
+            f"Loaded keysets: {' '.join([i + f' {k.unit}' for i, k in self.keysets.items()])}"
+        )
         return self
 
     async def _migrate_database(self):
@@ -165,7 +178,7 @@ class Wallet(
         logger.debug(f"Mint info: {self.mint_info}")
         return self.mint_info
 
-    async def load_mint_keysets(self):
+    async def load_mint_keysets(self, force_old_keysets=False):
         """Loads all keyset of the mint and makes sure we have them all in the database.
 
         Then loads all keysets from the database for the active mint and active unit into self.keysets.
@@ -173,7 +186,6 @@ class Wallet(
         logger.trace("Loading mint keysets.")
         mint_keysets_resp = await self._get_keysets()
         mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
-
         # load all keysets of thisd mint from the db
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
 
@@ -200,10 +212,14 @@ class Wallet(
                 await store_keyset(keyset=wallet_keyset, db=self.db)
 
         for mint_keyset in mint_keysets_dict.values():
-            # if the active or the fee attributes have changed, update them in the database
+            # if the active flag changes from active to inactive
+            # or the fee attributes have changed, update them in the database
             if mint_keyset.id in keysets_in_db_dict:
                 changed = False
-                if mint_keyset.active != keysets_in_db_dict[mint_keyset.id].active:
+                if (
+                    not mint_keyset.active
+                    and mint_keyset.active != keysets_in_db_dict[mint_keyset.id].active
+                ):
                     keysets_in_db_dict[mint_keyset.id].active = mint_keyset.active
                     changed = True
                 if (
@@ -219,6 +235,37 @@ class Wallet(
                     await update_keyset(
                         keyset=keysets_in_db_dict[mint_keyset.id], db=self.db
                     )
+
+        # BEGIN backwards compatibility: phase out keysets with base64 ID by treating them as inactive
+        if settings.wallet_inactivate_legacy_keysets and not force_old_keysets:
+            keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+            for keyset in keysets_in_db:
+                if not keyset.active:
+                    continue
+                # test if the keyset id is a hex string, if not it's base64
+                try:
+                    int(keyset.id, 16)
+                except ValueError:
+                    # verify that it's base64
+                    try:
+                        _ = base64.b64decode(keyset.id)
+                    except ValueError:
+                        logger.error("Unexpected: keyset id is neither hex nor base64.")
+                        continue
+
+                    # verify that we have a hex version of the same keyset by comparing public keys
+                    hex_keyset_id = derive_keyset_id(keys=keyset.public_keys)
+                    if hex_keyset_id not in [k.id for k in keysets_in_db]:
+                        logger.warning(
+                            f"Keyset {keyset.id} is base64 but we don't have a hex version. Ignoring."
+                        )
+                        continue
+
+                    logger.warning(
+                        f"Keyset {keyset.id} is base64 and has a hex counterpart, setting inactive."
+                    )
+                    keyset.active = False
+                    await update_keyset(keyset=keyset, db=self.db)
 
         await self.load_keysets_from_db()
 
@@ -259,14 +306,19 @@ class Wallet(
 
         logger.debug(f"Activated keyset {self.keyset_id}")
 
-    async def load_mint(self, keyset_id: str = "") -> None:
+    async def load_mint(self, keyset_id: str = "", force_old_keysets=False) -> None:
         """
         Loads the public keys of the mint. Either gets the keys for the specified
         `keyset_id` or gets the keys of the active keyset from the mint.
         Gets the active keyset ids of the mint and stores in `self.mint_keyset_ids`.
+
+        Args:
+            keyset_id (str, optional): Keyset id to load. Defaults to "".
+            force_old_keysets (bool, optional): If true, old deprecated base64 keysets are not ignored. This is necessary for restoring tokens from old base64 keysets.
+                Defaults to False.
         """
         logger.trace("Loading mint.")
-        await self.load_mint_keysets()
+        await self.load_mint_keysets(force_old_keysets)
         await self.activate_keyset(keyset_id)
         try:
             await self.load_mint_info()
@@ -274,7 +326,7 @@ class Wallet(
             logger.debug(f"Could not load mint info: {e}")
             pass
 
-    async def load_proofs(self, reload: bool = False) -> None:
+    async def load_proofs(self, reload: bool = False, all_keysets=False) -> None:
         """Load all proofs of the selected mint and unit (i.e. self.keysets) into memory."""
 
         if self.proofs and not reload:
@@ -284,9 +336,13 @@ class Wallet(
         self.proofs = []
         await self.load_keysets_from_db()
         async with self.db.connect() as conn:
-            for keyset_id in self.keysets:
-                proofs = await get_proofs(db=self.db, id=keyset_id, conn=conn)
+            if all_keysets:
+                proofs = await get_proofs(db=self.db, conn=conn)
                 self.proofs.extend(proofs)
+            else:
+                for keyset_id in self.keysets:
+                    proofs = await get_proofs(db=self.db, id=keyset_id, conn=conn)
+                    self.proofs.extend(proofs)
         logger.trace(
             f"Proofs loaded for keysets: {' '.join([k.id + f' ({k.unit})' for k in self.keysets.values()])}"
         )
@@ -310,9 +366,10 @@ class Wallet(
     async def _check_used_secrets(self, secrets):
         """Checks if any of the secrets have already been used"""
         logger.trace("Checking secrets.")
-        for s in secrets:
-            if await secret_used(s, db=self.db):
-                raise Exception(f"secret already used: {s}")
+        async with self.db.get_connection() as conn:
+            for s in secrets:
+                if await secret_used(s, db=self.db, conn=conn):
+                    raise Exception(f"secret already used: {s}")
         logger.trace("Secret check complete.")
 
     async def request_mint_with_callback(
@@ -850,6 +907,7 @@ class Wallet(
         amounts: List[int],
         secrets: List[str],
         rs: List[PrivateKey] = [],
+        keyset_id: Optional[str] = None,
     ) -> Tuple[List[BlindedMessage], List[PrivateKey]]:
         """Takes a list of amounts and secrets and returns outputs.
         Outputs are blinded messages `outputs` and blinding factors `rs`
@@ -869,8 +927,8 @@ class Wallet(
         assert len(amounts) == len(
             secrets
         ), f"len(amounts)={len(amounts)} not equal to len(secrets)={len(secrets)}"
+        keyset_id = keyset_id or self.keyset_id
         outputs: List[BlindedMessage] = []
-
         rs_ = [None] * len(amounts) if not rs else rs
         rs_return: List[PrivateKey] = []
         for secret, amount, r in zip(secrets, amounts, rs_):
@@ -883,7 +941,7 @@ class Wallet(
 
             rs_return.append(r)
             output = BlindedMessage(
-                amount=amount, B_=B_.serialize().hex(), id=self.keyset_id
+                amount=amount, B_=B_.serialize().hex(), id=keyset_id
             )
             outputs.append(output)
             logger.trace(f"Constructing output: {output}, r: {r.serialize()}")
@@ -958,7 +1016,7 @@ class Wallet(
         *,
         set_reserved: bool = False,
         offline: bool = False,
-        include_fees: bool = True,
+        include_fees: bool = False,
     ) -> Tuple[List[Proof], int]:
         """
         Selects proofs such that a desired `amount` can be sent. If the offline coin selection is unsuccessful,
@@ -971,7 +1029,9 @@ class Wallet(
         Args:
             proofs (List[Proof]): Proofs to split
             amount (int): Amount to split to
-            set_reserved (bool, optional): If set, the proofs are marked as reserved.
+            set_reserved (bool, optional): If set, the proofs are marked as reserved. Defaults to False.
+            offline (bool, optional): If set, the coin selection is done offline. Defaults to False.
+            include_fees (bool, optional): If set, the fees are included in the amount to be selected. Defaults to False.
 
         Returns:
             List[Proof]: Proofs to send
@@ -995,7 +1055,7 @@ class Wallet(
             if not offline:
                 logger.debug("Offline coin selection unsuccessful. Splitting proofs.")
                 # we set the proofs as reserved later
-                _, send_proofs = await self.split_to_send(
+                _, send_proofs = await self.swap_to_send(
                     proofs, amount, set_reserved=False
                 )
             else:
@@ -1007,7 +1067,7 @@ class Wallet(
             await self.set_reserved(send_proofs, reserved=True)
         return send_proofs, fees
 
-    async def split_to_send(
+    async def swap_to_send(
         self,
         proofs: List[Proof],
         amount: int,
@@ -1039,7 +1099,7 @@ class Wallet(
             raise Exception("balance too low.")
 
         # coin selection for swapping
-        # spendable_proofs, fees = await self._select_proofs_to_split(proofs, amount)
+        # spendable_proofs, fees = await self._select_proofs_to_swap(proofs, amount)
         swap_proofs = await self._select_proofs_to_send(
             proofs, amount, include_fees=True
         )
@@ -1141,31 +1201,41 @@ class Wallet(
             to (int, optional): The number of consecutive empty responses to stop restoring. Defaults to 2.
             batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
         """
-        stop_counter = 0
+        empty_batches = 0
         # we get the current secret counter and restore from there on
         spendable_proofs = []
         counter_before = await bump_secret_derivation(
             db=self.db, keyset_id=keyset_id, by=0
         )
         if counter_before != 0:
-            print("Keyset has already been used. Restoring from it's last state.")
+            print("Keyset has already been used. Restoring from its last state.")
         i = counter_before
-        n_last_restored_proofs = 0
-        while stop_counter < to:
-            print(f"Restoring token {i} to {i + batch}...")
-            restored_proofs = await self.restore_promises_from_to(i, i + batch - 1)
+        last_restore_count = 0
+        while empty_batches < to:
+            print(f"Restoring counter {i} to {i + batch} for keyset {keyset_id} ...")
+            (
+                next_restored_output_index,
+                restored_proofs,
+            ) = await self.restore_promises_from_to(keyset_id, i, i + batch - 1)
+            last_restore_count += next_restored_output_index
+            i += batch
             if len(restored_proofs) == 0:
-                stop_counter += 1
+                empty_batches += 1
+                continue
             spendable_proofs = await self.invalidate(
                 restored_proofs, check_spendable=True
             )
             if len(spendable_proofs):
-                n_last_restored_proofs = len(spendable_proofs)
-                print(f"Restored {sum_proofs(restored_proofs)} sat")
-            i += batch
+                print(
+                    f"Restored {sum_proofs(spendable_proofs)} sat for keyset {keyset_id}."
+                )
+            else:
+                logger.debug(
+                    f"None of the {len(restored_proofs)} restored proofs are spendable."
+                )
 
         # restore the secret counter to its previous value for the last round
-        revert_counter_by = batch * to + n_last_restored_proofs
+        revert_counter_by = i - last_restore_count
         logger.debug(f"Reverting secret counter by {revert_counter_by}")
         before = await bump_secret_derivation(
             db=self.db,
@@ -1175,8 +1245,8 @@ class Wallet(
         logger.debug(
             f"Secret counter reverted from {before} to {before - revert_counter_by}"
         )
-        if n_last_restored_proofs == 0:
-            print("No tokens restored for keyset.")
+        if last_restore_count == 0:
+            print(f"No tokens restored for keyset {keyset_id}.")
             return
 
     async def restore_wallet_from_mnemonic(
@@ -1191,14 +1261,14 @@ class Wallet(
             batch (int, optional): The number of proofs to restore in one batch. Defaults to 25.
         """
         await self._init_private_key(mnemonic)
-        await self.load_mint()
+        await self.load_mint(force_old_keysets=False)
         print("Restoring tokens...")
         for keyset_id in self.keysets.keys():
             await self.restore_tokens_for_keyset(keyset_id, to, batch)
 
     async def restore_promises_from_to(
-        self, from_counter: int, to_counter: int
-    ) -> List[Proof]:
+        self, keyset_id: str, from_counter: int, to_counter: int
+    ) -> Tuple[int, List[Proof]]:
         """Restores promises from a given range of counters. This is for restoring a wallet from a mnemonic.
 
         Args:
@@ -1206,18 +1276,20 @@ class Wallet(
             to_counter (int): Counter for the secret derivation to end at
 
         Returns:
-            List[Proof]: List of restored proofs
+            Tuple[int, List[Proof]]: Index of the last restored output and list of restored proofs
         """
         # we regenerate the secrets and rs for the given range
         secrets, rs, derivation_paths = await self.generate_secrets_from_to(
-            from_counter, to_counter
+            from_counter, to_counter, keyset_id=keyset_id
         )
         # we don't know the amount but luckily the mint will tell us so we use a dummy amount here
         amounts_dummy = [1] * len(secrets)
         # we generate outputs from deterministic secrets and rs
-        regenerated_outputs, _ = self._construct_outputs(amounts_dummy, secrets, rs)
+        regenerated_outputs, _ = self._construct_outputs(
+            amounts_dummy, secrets, rs, keyset_id=keyset_id
+        )
         # we ask the mint to reissue the promises
-        proofs = await self.restore_promises(
+        next_restored_output_index, proofs = await self.restore_promises(
             outputs=regenerated_outputs,
             secrets=secrets,
             rs=rs,
@@ -1225,9 +1297,9 @@ class Wallet(
         )
 
         await set_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, counter=to_counter + 1
+            db=self.db, keyset_id=keyset_id, counter=to_counter + 1
         )
-        return proofs
+        return next_restored_output_index, proofs
 
     async def restore_promises(
         self,
@@ -1235,7 +1307,7 @@ class Wallet(
         secrets: List[str],
         rs: List[PrivateKey],
         derivation_paths: List[str],
-    ) -> List[Proof]:
+    ) -> Tuple[int, List[Proof]]:
         """Restores proofs from a list of outputs, secrets, rs and derivation paths.
 
         Args:
@@ -1245,10 +1317,26 @@ class Wallet(
             derivation_paths (List[str]): Derivation paths used for the secrets necessary to unblind the promises
 
         Returns:
-            List[Proof]: List of restored proofs
+            Tuple[int, List[Proof]]: Index of the last restored output and list of restored proofs
         """
         # restored_outputs is there so we can match the promises to the secrets and rs
         restored_outputs, restored_promises = await super().restore_promises(outputs)
+        # determine the index in `outputs` of the last restored output from restored_outputs[-1].B_
+        if not restored_outputs:
+            next_restored_output_index = 0
+        else:
+            next_restored_output_index = (
+                next(
+                    (
+                        idx
+                        for idx, val in enumerate(outputs)
+                        if val.B_ == restored_outputs[-1].B_
+                    ),
+                    0,
+                )
+                + 1
+            )
+        logger.trace(f"Last restored output index: {next_restored_output_index}")
         # now we need to filter out the secrets and rs that had a match
         matching_indices = [
             idx
@@ -1257,9 +1345,12 @@ class Wallet(
         ]
         secrets = [secrets[i] for i in matching_indices]
         rs = [rs[i] for i in matching_indices]
+        logger.debug(
+            f"Restored {len(restored_promises)} promises. Constructing proofs."
+        )
         # now we can construct the proofs with the secrets and rs
         proofs = await self._construct_proofs(
             restored_promises, secrets, rs, derivation_paths
         )
         logger.debug(f"Restored {len(restored_promises)} promises")
-        return proofs
+        return next_restored_output_index, proofs

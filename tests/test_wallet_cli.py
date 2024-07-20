@@ -117,7 +117,7 @@ def test_invoice_return_immediately(mint, cli_prefix):
     assert result.exception is None
 
     invoice, invoice_id = get_bolt11_and_invoice_id_from_invoice_command(result.output)
-    pay_if_regtest(invoice)
+    asyncio.run(pay_if_regtest(invoice))
 
     result = runner.invoke(
         cli,
@@ -146,7 +146,7 @@ def test_invoice_with_split(mint, cli_prefix):
     assert result.exception is None
 
     invoice, invoice_id = get_bolt11_and_invoice_id_from_invoice_command(result.output)
-    pay_if_regtest(invoice)
+    asyncio.run(pay_if_regtest(invoice))
     result = runner.invoke(
         cli,
         [*cli_prefix, "invoice", "10", "-s", "1", "--id", invoice_id],
@@ -164,7 +164,7 @@ def test_invoices_with_minting(cli_prefix):
     wallet1 = asyncio.run(init_wallet())
     asyncio.run(reset_invoices(wallet=wallet1))
     invoice = asyncio.run(wallet1.request_mint(64))
-
+    asyncio.run(pay_if_regtest(invoice.bolt11))
     # act
     runner = CliRunner()
     result = runner.invoke(
@@ -483,3 +483,37 @@ def test_selfpay(cli_prefix):
     assert result.exception is None
     print(result.output)
     assert result.exit_code == 0
+
+
+def test_send_with_lock(mint, cli_prefix):
+    # call "cashu locks" first and get the lock
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "locks"],
+    )
+    assert result.exception is None
+    print("test_send_with_lock", result.output)
+    # iterate through all words and get the word that starts with "P2PK:"
+    lock = None
+    for word in result.output.split(" "):
+        # strip the word
+        word = word.strip()
+        if word.startswith("P2PK:"):
+            lock = word
+            break
+    assert lock is not None, "no lock found"
+    pubkey = lock.split(":")[1]
+
+    # now lock the token
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "10", "--lock", lock],
+    )
+    assert result.exception is None
+    print("test_send_with_lock", result.output)
+    token_str = result.output.split("\n")[0]
+    assert "cashuB" in token_str, "output does not have a token"
+    token = TokenV4.deserialize(token_str).to_tokenv3()
+    assert pubkey in token.token[0].proofs[0].secret
