@@ -88,7 +88,7 @@ async def test_wallet_subscription_swap(wallet: Wallet):
 
     _ = await wallet.swap_to_send(wallet.proofs, 64)
 
-    wait = 2
+    wait = 1
     await asyncio.sleep(wait)
     assert triggered
 
