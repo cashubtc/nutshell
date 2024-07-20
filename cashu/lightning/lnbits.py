@@ -189,33 +189,38 @@ class LNbitsWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         url = f"{self.endpoint}/api/v1/payments/sse"
 
-        while settings.lnbits_running:
-            try:
-                async with httpx.AsyncClient(
-                    timeout=None, headers=self.headers
-                ) as client:
-                    del client.headers[
-                        "accept-encoding"
-                    ]  # we have to disable compression for SSEs
-                    async with client.stream(
-                        "GET", url, content="text/event-stream"
-                    ) as r:
+        try:
+            sse_headers = self.client.headers.copy()
+            sse_headers.update(
+                {
+                    "accept": "text/event-stream",
+                    "cache-control": "no-cache",
+                    "connection": "keep-alive",
+                }
+            )
+            async with self.client.stream(
+                "GET",
+                url,
+                content="text/event-stream",
+                timeout=None,
+                headers=sse_headers,
+            ) as r:
+                sse_trigger = False
+                async for line in r.aiter_lines():
+                    # The data we want to listen to is of this shape:
+                    # event: payment-received
+                    # data: {.., "payment_hash" : "asd"}
+                    if line.startswith("event: payment-received"):
+                        sse_trigger = True
+                        continue
+                    elif sse_trigger and line.startswith("data:"):
+                        data = json.loads(line[len("data:") :])
                         sse_trigger = False
-                        async for line in r.aiter_lines():
-                            # The data we want to listen to is of this shape:
-                            # event: payment-received
-                            # data: {.., "payment_hash" : "asd"}
-                            if line.startswith("event: payment-received"):
-                                sse_trigger = True
-                                continue
-                            elif sse_trigger and line.startswith("data:"):
-                                data = json.loads(line[len("data:") :])
-                                sse_trigger = False
-                                yield data["payment_hash"]
-                            else:
-                                sse_trigger = False
+                        yield data["payment_hash"]
+                    else:
+                        sse_trigger = False
 
-            except (OSError, httpx.ReadError, httpx.ConnectError, httpx.ReadTimeout):
-                pass
+        except (OSError, httpx.ReadError, httpx.ConnectError, httpx.ReadTimeout):
+            pass
 
-            await asyncio.sleep(1)
+        await asyncio.sleep(1)
