@@ -69,7 +69,8 @@ class LndRPCWallet(LightningBackend):
         # combine macaroon and SSL credentials
         combined_creds = grpc.composite_channel_credentials(ssl_creds, auth_creds)
         
-        # connect and create stub (channel and stub are thread-safe and can be used in async?)
+        # connect and create stub
+        # (channel and stub should be thread-safe and should be able to work in async)
         try:
             self.channel = grpc.aio.secure_channel(self.endpoint, combined_creds)
         except (grpc.GrpcError, OSError) as e:
@@ -88,10 +89,10 @@ class LndRPCWallet(LightningBackend):
             return StatusResponse(
                 error_message=f"Error calling Lnd gRPC: {e}", balance=0
             )
-        # NOTE: balance field is deprecated. Change this.
+        # NOTE: `balance` field is deprecated. Change this.
         return StatusResponse(error_message=None, balance=r.balance*1000)
 
-    '''
+    
     async def create_invoice(
         self,
         amount: Amount,
@@ -101,43 +102,29 @@ class LndRPCWallet(LightningBackend):
         **kwargs,
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
-        data: Dict = {
-            "value": amount.to(Unit.sat).amount,
-            "private": True,
-            "memo": memo or "",
-        }
+        data = lnrpc.Invoice(
+            value=amount.to(Unit.sat).amount,
+            private=True,
+            memo=memo or "",
+        )
         if kwargs.get("expiry"):
-            data["expiry"] = kwargs["expiry"]
+            data.expiry = kwargs["expiry"]
         if description_hash:
-            data["description_hash"] = base64.b64encode(description_hash).decode(
-                "ascii"
-            )
+            data.description_hash = description_hash
         elif unhashed_description:
-            data["description_hash"] = base64.b64encode(
-                hashlib.sha256(unhashed_description).digest()
-            ).decode("ascii")
+            data.description_hash = hashlib.sha256(unhashed_description).digest()
 
         try:
-            r = await self.client.post(url="/v1/invoices", json=data)
-        except Exception as e:
-            raise Exception(f"failed to create invoice: {e}")
-
-        if r.is_error:
-            error_message = r.text
-            try:
-                error_message = r.json()["error"]
-            except Exception:
-                pass
+            r = await self.stub.AddInvoice(data)
+        except grpc.GrpcError as e:
+            logger.error(f"failed to create invoice: {e}")
             return InvoiceResponse(
                 ok=False,
-                checking_id=None,
-                payment_request=None,
-                error_message=error_message,
+                error_message=f"failed to create invoice: {e}",
             )
 
-        data = r.json()
-        payment_request = data["payment_request"]
-        payment_hash = base64.b64decode(data["r_hash"]).hex()
+        payment_request = r.payment_request
+        payment_hash = r.r_hash.hex()
         checking_id = payment_hash
 
         return InvoiceResponse(
@@ -146,7 +133,7 @@ class LndRPCWallet(LightningBackend):
             payment_request=payment_request,
             error_message=None,
         )
-
+    '''
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
