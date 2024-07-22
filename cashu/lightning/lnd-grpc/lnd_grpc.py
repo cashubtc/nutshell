@@ -268,17 +268,27 @@ class LndRPCWallet(LightningBackend):
             preimage=preimage,
             error_message=None,
         )
-    '''
+    
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        r = await self.client.get(url=f"/v1/invoice/{checking_id}")
+        try:
+            r = await self.stub.LookupInvoice(
+                lnrpc.PaymentHash(
+                    r_hash=bytes.fromhex(checking_id)
+                )
+            )
+        except grpc.GrpcError as e:
+            error_message = f"LookupInvoice failed: {e}"
+            logger.error(error_message)
+            return PaymentStatus(paid=None)
 
-        if r.is_error or not r.json().get("settled"):
+        # Invoice.settled is deprecated
+        if not r.settled:
             # this must also work when checking_id is not a hex recognizable by lnd
             # it will return an error and no "settled" attribute on the object
             return PaymentStatus(paid=None)
 
         return PaymentStatus(paid=True)
-    
+    '''
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         """
         This routine checks the payment status using routerpc.TrackPaymentV2.
