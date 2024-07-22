@@ -72,6 +72,13 @@ class LndRPCWallet(LightningBackend):
         
         # connect and create stub
         # (channel and stub should be thread-safe and should be able to work in async)
+        channel_options = [
+            ('grpc.keepalive_time_ms', 10000),  # 10 seconds
+            ('grpc.keepalive_timeout_ms', 5000),  # 5 seconds
+            ('grpc.keepalive_permit_without_calls', 1),
+            ('grpc.http2.min_time_between_pings_ms', 10000),  # 10 seconds
+            ('grpc.http2.max_pings_without_data', 0)
+        ]
         try:
             self.channel = grpc.aio.secure_channel(self.endpoint, combined_creds)
         except (grpc.GrpcError, OSError) as e:
