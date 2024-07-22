@@ -80,7 +80,7 @@ class LndRPCWallet(LightningBackend):
             ('grpc.http2.max_pings_without_data', 0)
         ]
         try:
-            self.channel = grpc.aio.secure_channel(self.endpoint, combined_creds)
+            self.channel = grpc.aio.secure_channel(self.endpoint, combined_creds, options=channel_options)
         except (grpc.GrpcError, OSError) as e:
             logger.error(f"Failed to create secure channel: {e}")
             raise Exception(f"Failed to create secure channel: {e}")
