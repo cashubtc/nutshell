@@ -7,6 +7,7 @@ from typing import AsyncGenerator, Dict, Optional
 import bolt11
 import codecs, grpc, os
 import lightning_pb2 as lnrpc, lightning_pb2_grpc as lightningstub
+import router_pb2 as routerrpc, router_pb2_grpc as routerstub
 from bolt11 import (
     TagChar,
     decode,
@@ -78,7 +79,8 @@ class LndRPCWallet(LightningBackend):
             raise Exception(f"Failed to create secure channel: {e}")
         
         self.stub = lightningstub.LightningStub(self.channel)
-        
+        self.router_stub = routerstub.RouterStub(self.channel)
+
         if self.supports_mpp:
             logger.info("LndRPCWallet enabling MPP feature")
 
@@ -133,7 +135,7 @@ class LndRPCWallet(LightningBackend):
             payment_request=payment_request,
             error_message=None,
         )
-    '''
+    
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
@@ -146,31 +148,41 @@ class LndRPCWallet(LightningBackend):
                 return await self.pay_partial_invoice(
                     quote, Amount(Unit.sat, quote.amount), fee_limit_msat
                 )
+            else:
+                e="amount_msat == quote.amount * 1000 or self.supports_mpp is false"
+                return PaymentResponse(
+                    ok=False,
+                    error_message=e,
+                ) 
 
         # set the fee limit for the payment
-        lnrpcFeeLimit = dict()
-        lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
-
-        r = await self.client.post(
-            url="/v1/channels/transactions",
-            json={"payment_request": quote.request, "fee_limit": lnrpcFeeLimit},
-            timeout=None,
+        feelimit = lnrpc.FeeLimit(
+            fixed_msat=fee_limit_msat
         )
 
-        if r.is_error or r.json().get("payment_error"):
-            error_message = r.json().get("payment_error") or r.text
+        try:
+            r = await self.stub.SendPaymentSync(
+                lnrpc.SendRequest(
+                    payment_request=quote.request,
+                    fee_limit=feelimit,
+                )
+            )
+        except grpc.GrpcError as e:
+            error_message = f"SendPaymentSync failed: {e}"
             return PaymentResponse(
                 ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
                 error_message=error_message,
             )
 
-        data = r.json()
-        checking_id = base64.b64decode(data["payment_hash"]).hex()
-        fee_msat = int(data["payment_route"]["total_fees_msat"])
-        preimage = base64.b64decode(data["payment_preimage"]).hex()
+        if r.payment_error and r.payment_error != "":
+            return PaymentResponse(
+                ok=False,
+                error_message=r.payment_error,
+            )
+
+        checking_id = r.payment_hash.hex()
+        fee_msat = r.payment_route.total_fees_msat
+        preimage = r.payment_preimage.hex()
         return PaymentResponse(
             ok=True,
             checking_id=checking_id,
@@ -178,13 +190,14 @@ class LndRPCWallet(LightningBackend):
             preimage=preimage,
             error_message=None,
         )
-
+    
     async def pay_partial_invoice(
         self, quote: MeltQuote, amount: Amount, fee_limit_msat: int
     ) -> PaymentResponse:
         # set the fee limit for the payment
-        lnrpcFeeLimit = dict()
-        lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
+        feelimit = lnrpc.FeeLimit(
+            fixed_msat=fee_limit_msat
+        )
         invoice = bolt11.decode(quote.request)
 
         invoice_amount = invoice.amount_msat
@@ -200,62 +213,54 @@ class LndRPCWallet(LightningBackend):
         payer_addr = str(payer_addr_tag.data)
 
         # get the route
-        r = await self.client.post(
-            url=f"/v1/graph/routes/{pubkey}/{amount.to(Unit.sat).amount}",
-            json={"fee_limit": lnrpcFeeLimit},
-            timeout=None,
-        )
-
-        data = r.json()
-        if r.is_error or data.get("message"):
-            error_message = data.get("message") or r.text
+        try:
+            r = await self.stub.QueryRoutes(
+                pub_key=pubkey,
+                amt=amount.to(Unit.sat).amount,
+                fee_limit=feelimit,
+            )
+        except grpc.GrpcError as e:
+            logger.error(f"QueryRoutes failed: {e}")
             return PaymentResponse(
                 ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
-                error_message=error_message,
+                error_message=str(e),
             )
 
         # We need to set the mpp_record for a partial payment
-        mpp_record = {
-            "mpp_record": {
-                "payment_addr": base64.b64encode(bytes.fromhex(payer_addr)).decode(),
-                "total_amt_msat": total_amount_msat,
-            }
-        }
-
+        mpp_record = lnrpc.MPPRecord(
+            payment_addr=bytes.fromhex(payer_addr),
+            total_amt_msat=total_amount_msat,
+        )
         # add the mpp_record to the last hop
-        rout_nr = 0
-        data["routes"][rout_nr]["hops"][-1].update(mpp_record)
+        route_nr = 0
+        r.routes[route_nr].hops[-1].mpp_record = mpp_record
 
         # send to route
-        r = await self.client.post(
-            url="/v2/router/route/send",
-            json={
-                "payment_hash": base64.b64encode(
-                    bytes.fromhex(invoice.payment_hash)
-                ).decode(),
-                "route": data["routes"][rout_nr],
-            },
-            timeout=None,
-        )
-
-        data = r.json()
-        if r.is_error or data.get("message"):
-            error_message = data.get("message") or r.text
+        try:
+            r = await self.router_stub.SendToRouteV2(
+                routerrpc.SendToRouteRequest(
+                    payment_hash=bytes.fromhex(invoice.payment_hash),
+                    route=r.routes[route_nr],
+                )
+            )
+        except grpc.GrpcError as e:
+            logger.error(f"SendToRouteV2 failed: {e}")
             return PaymentResponse(
                 ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
+                error_message=f"SendToRouteV2 failed: {e}",
+            )
+        if r.status == lnrpc.HTLCAttempt.HTLCStatus.FAILED:
+            error_message = f"Sending to route failed with code {r.failure.code}"
+            logger.error(error_message)
+            return PaymentResponse(
+                ok=False,
                 error_message=error_message,
             )
 
-        ok = data.get("status") == "SUCCEEDED"
+        ok = r.status == lnrpc.HTLCAttempt.HTLCStatus.SUCCEEDED
         checking_id = invoice.payment_hash
-        fee_msat = int(data["route"]["total_fees_msat"])
-        preimage = base64.b64decode(data["preimage"]).hex()
+        fee_msat = r.route.total_fees_msat
+        preimage = r.preimage.hex()
         return PaymentResponse(
             ok=ok,
             checking_id=checking_id,
@@ -263,7 +268,7 @@ class LndRPCWallet(LightningBackend):
             preimage=preimage,
             error_message=None,
         )
-
+    '''
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         r = await self.client.get(url=f"/v1/invoice/{checking_id}")
 
@@ -273,7 +278,7 @@ class LndRPCWallet(LightningBackend):
             return PaymentStatus(paid=None)
 
         return PaymentStatus(paid=True)
-
+    
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         """
         This routine checks the payment status using routerpc.TrackPaymentV2.
