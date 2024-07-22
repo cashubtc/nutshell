@@ -201,6 +201,13 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
     mint_lnd_enable_mpp: bool = Field(default=False)
 
+class LndRPCFundingSource(MintSettings):
+    mint_lnd_rpc_endpoint: Optional[str] = Field(default=None)
+    mint_lnd_tls_cert: Optional[str] = Field(default=None)
+    mint_lnd_rpc_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_rpc_admin_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_rpc_invoice_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_enable_mpp: bool = Field(default=False)
 
 class CLNRestFundingSource(MintSettings):
     mint_clnrest_url: Optional[str] = Field(default=None)
@@ -217,6 +224,7 @@ class CoreLightningRestFundingSource(MintSettings):
 
 class Settings(
     EnvSettings,
+    LndRPCFundingSource,
     LndRestFundingSource,
     CoreLightningRestFundingSource,
     CLNRestFundingSource,
