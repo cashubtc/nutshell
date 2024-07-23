@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# *** LAUNCH THIS FROM THE ROOT OF THE PROJECT ***
+# *** RUN THIS FROM THE ROOT OF THE PROJECT ***
 
 BASE_DIR=./cashu/lightning/lnd_grpc/protos
 echo "base dir: $BASE_DIR"
