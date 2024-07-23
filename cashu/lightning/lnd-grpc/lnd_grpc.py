@@ -1,32 +1,29 @@
-import asyncio
-import base64
+import codecs
 import hashlib
-import json
-from typing import AsyncGenerator, Dict, Optional
+import os
+from typing import Optional
 
 import bolt11
-import codecs, grpc, os
-import lightning_pb2 as lnrpc, lightning_pb2_grpc as lightningstub
-import router_pb2 as routerrpc, router_pb2_grpc as routerstub
+import grpc
+import lightning_pb2 as lnrpc
+import lightning_pb2_grpc as lightningstub
+import router_pb2 as routerrpc
+import router_pb2_grpc as routerstub
 from bolt11 import (
     TagChar,
-    decode,
 )
 from loguru import logger
 
 from cashu.core.base import Amount, MeltQuote, Unit
-from cashu.core.helpers import fee_reserve
-from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import (
     InvoiceResponse,
     LightningBackend,
-    PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
 )
-from cashu.lightning.macaroon import load_macaroon
+
 
 class LndRPCWallet(LightningBackend):
 
@@ -126,10 +123,10 @@ class LndRPCWallet(LightningBackend):
         try:
             r = await self.stub.AddInvoice(data)
         except grpc.GrpcError as e:
-            logger.error(f"failed to create invoice: {e}")
+            logger.error(f"AddInvoice failed: {e}")
             return InvoiceResponse(
                 ok=False,
-                error_message=f"failed to create invoice: {e}",
+                error_message=f"AddInvoice failed: {e}",
             )
 
         payment_request = r.payment_request
@@ -295,65 +292,47 @@ class LndRPCWallet(LightningBackend):
             return PaymentStatus(paid=None)
 
         return PaymentStatus(paid=True)
-    '''
+    
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         """
         This routine checks the payment status using routerpc.TrackPaymentV2.
         """
-        # convert checking_id from hex to base64 and some LND magic
+        # convert checking_id from hex to bytes and some LND magic
         try:
-            checking_id = base64.urlsafe_b64encode(bytes.fromhex(checking_id)).decode(
-                "ascii"
-            )
+            checking_id_bytes = bytes.fromhex(checking_id)
         except ValueError:
+            logger.error(f"Couldn't convert {checking_id = } to bytes")
             return PaymentStatus(paid=None)
 
-        url = f"/v2/router/track/{checking_id}"
-
-        # check payment.status:
+        request = routerrpc.TrackPaymentRequest(payment_hash=checking_id_bytes)
+        # maps statuses to None, False, True:
         # https://api.lightning.community/?python=#paymentpaymentstatus
         statuses = {
-            "UNKNOWN": None,
-            "IN_FLIGHT": None,
-            "SUCCEEDED": True,
-            "FAILED": False,
+            lnrpc.Payment.PaymentStatus.UNKNOWN: None,
+            lnrpc.Payment.PaymentStatus.IN_FLIGHT: None,
+            lnrpc.Payment.PaymentStatus.INITIATED: None,
+            lnrpc.Payment.PaymentStatus.SUCCEEDED: True,
+            lnrpc.Payment.PaymentStatus.FAILED: False,
         }
 
-        async with self.client.stream("GET", url, timeout=None) as r:
-            async for json_line in r.aiter_lines():
-                try:
-                    line = json.loads(json_line)
-
-                    # check for errors
-                    if line.get("error"):
-                        message = (
-                            line["error"]["message"]
-                            if "message" in line["error"]
-                            else line["error"]
-                        )
-                        logger.error(f"LND get_payment_status error: {message}")
-                        return PaymentStatus(paid=None)
-
-                    payment = line.get("result")
-
-                    # payment exists
-                    if payment is not None and payment.get("status"):
-                        return PaymentStatus(
-                            paid=statuses[payment["status"]],
-                            fee=(
-                                Amount(unit=Unit.msat, amount=payment.get("fee_msat"))
-                                if payment.get("fee_msat")
-                                else None
-                            ),
-                            preimage=payment.get("payment_preimage"),
-                        )
-                    else:
-                        return PaymentStatus(paid=None)
-                except Exception:
-                    continue
+        try:
+            async for payment in self.router_stub.TrackPaymentV2(request):
+                if payment is not None and payment.status:
+                    return PaymentStatus(
+                        paid=statuses[payment.status],
+                        fee=(
+                            Amount(unit=Unit.msat, amount=payment.fee_msat)
+                            if payment.fee_msat
+                            else None
+                        ),
+                        preimage=payment.payment_preimage,
+                    )
+        except grpc.GrpcError as e:
+            error_message = f"TrackPaymentV2 failed: {e}"
+            logger.error(error_message)
 
         return PaymentStatus(paid=None)
-
+    '''
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:
             try:
