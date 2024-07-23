@@ -5,13 +5,15 @@ isort:skip_file
 
 import builtins
 import collections.abc
+import sys
+import typing
+
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+
 import cashu.lightning.lnd_grpc.protos.lightning_pb2
-import sys
-import typing
 
 if sys.version_info >= (3, 10):
     import typing as typing_extensions
@@ -810,7 +812,7 @@ class MissionControlConfig(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _ProbabilityModelEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[MissionControlConfig._ProbabilityModel.ValueType], builtins.type):
+    class _ProbabilityModelEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[MissionControlConfig._ProbabilityModel.ValueType], builtins.type):   # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         APRIORI: MissionControlConfig._ProbabilityModel.ValueType  # 0
         BIMODAL: MissionControlConfig._ProbabilityModel.ValueType  # 1
@@ -1123,7 +1125,7 @@ class HtlcEvent(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _EventTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[HtlcEvent._EventType.ValueType], builtins.type):
+    class _EventTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[HtlcEvent._EventType.ValueType], builtins.type):    # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         UNKNOWN: HtlcEvent._EventType.ValueType  # 0
         SEND: HtlcEvent._EventType.ValueType  # 1

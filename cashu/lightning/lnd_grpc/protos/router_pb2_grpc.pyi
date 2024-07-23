@@ -5,11 +5,13 @@ isort:skip_file
 
 import abc
 import collections.abc
+import typing
+
 import grpc
 import grpc.aio
+
 import cashu.lightning.lnd_grpc.protos.lightning_pb2
 import cashu.lightning.lnd_grpc.protos.router_pb2
-import typing
 
 _T = typing.TypeVar("_T")
 

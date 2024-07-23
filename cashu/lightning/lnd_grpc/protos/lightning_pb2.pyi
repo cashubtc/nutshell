@@ -5,12 +5,13 @@ isort:skip_file
 
 import builtins
 import collections.abc
+import sys
+import typing
+
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
-import sys
-import typing
 
 if sys.version_info >= (3, 10):
     import typing as typing_extensions
@@ -2242,7 +2243,7 @@ class ChannelCloseSummary(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _ClosureTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[ChannelCloseSummary._ClosureType.ValueType], builtins.type):
+    class _ClosureTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[ChannelCloseSummary._ClosureType.ValueType], builtins.type):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         COOPERATIVE_CLOSE: ChannelCloseSummary._ClosureType.ValueType  # 0
         LOCAL_FORCE_CLOSE: ChannelCloseSummary._ClosureType.ValueType  # 1
@@ -2433,7 +2434,7 @@ class Peer(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _SyncTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Peer._SyncType.ValueType], builtins.type):
+    class _SyncTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Peer._SyncType.ValueType], builtins.type):   # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         UNKNOWN_SYNC: Peer._SyncType.ValueType  # 0
         """
@@ -2648,7 +2649,7 @@ class PeerEvent(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _EventTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[PeerEvent._EventType.ValueType], builtins.type):
+    class _EventTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[PeerEvent._EventType.ValueType], builtins.type):    # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         PEER_ONLINE: PeerEvent._EventType.ValueType  # 0
         PEER_OFFLINE: PeerEvent._EventType.ValueType  # 1
@@ -4230,7 +4231,7 @@ class PendingChannelsResponse(google.protobuf.message.Message):
             ValueType = typing.NewType("ValueType", builtins.int)
             V: typing_extensions.TypeAlias = ValueType
 
-        class _AnchorStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType], builtins.type):
+        class _AnchorStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType], builtins.type):   # noqa: F821
             DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
             LIMBO: PendingChannelsResponse.ForceClosedChannel._AnchorState.ValueType  # 0
             """The recovered_balance is zero and limbo_balance is non-zero."""
@@ -4355,7 +4356,7 @@ class ChannelEventUpdate(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _UpdateTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[ChannelEventUpdate._UpdateType.ValueType], builtins.type):
+    class _UpdateTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[ChannelEventUpdate._UpdateType.ValueType], builtins.type): # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         OPEN_CHANNEL: ChannelEventUpdate._UpdateType.ValueType  # 0
         CLOSED_CHANNEL: ChannelEventUpdate._UpdateType.ValueType  # 1
@@ -6015,7 +6016,7 @@ class Invoice(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _InvoiceStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Invoice._InvoiceState.ValueType], builtins.type):
+    class _InvoiceStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Invoice._InvoiceState.ValueType], builtins.type):    # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         OPEN: Invoice._InvoiceState.ValueType  # 0
         SETTLED: Invoice._InvoiceState.ValueType  # 1
@@ -6604,7 +6605,7 @@ class Payment(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _PaymentStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Payment._PaymentStatus.ValueType], builtins.type):
+    class _PaymentStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Payment._PaymentStatus.ValueType], builtins.type): # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         UNKNOWN: Payment._PaymentStatus.ValueType  # 0
         """Deprecated. This status will never be returned."""
@@ -6710,7 +6711,7 @@ class HTLCAttempt(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _HTLCStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[HTLCAttempt._HTLCStatus.ValueType], builtins.type):
+    class _HTLCStatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[HTLCAttempt._HTLCStatus.ValueType], builtins.type):    # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         IN_FLIGHT: HTLCAttempt._HTLCStatus.ValueType  # 0
         SUCCEEDED: HTLCAttempt._HTLCStatus.ValueType  # 1
@@ -7890,7 +7891,7 @@ class Failure(google.protobuf.message.Message):
         ValueType = typing.NewType("ValueType", builtins.int)
         V: typing_extensions.TypeAlias = ValueType
 
-    class _FailureCodeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Failure._FailureCode.ValueType], builtins.type):
+    class _FailureCodeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Failure._FailureCode.ValueType], builtins.type):  # noqa: F821
         DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
         RESERVED: Failure._FailureCode.ValueType  # 0
         """
