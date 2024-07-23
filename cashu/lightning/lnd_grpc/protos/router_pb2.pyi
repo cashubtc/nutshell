@@ -5,14 +5,13 @@ isort:skip_file
 
 import builtins
 import collections.abc
-import sys
-import typing
-
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
-import lightning_pb2
+import cashu.lightning.lnd_grpc.protos.lightning_pb2
+import sys
+import typing
 
 if sys.version_info >= (3, 10):
     import typing as typing_extensions
@@ -340,7 +339,7 @@ class SendPaymentRequest(google.protobuf.message.Message):
     being sent.
     """
     @property
-    def route_hints(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[lightning_pb2.RouteHint]:
+    def route_hints(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[cashu.lightning.lnd_grpc.protos.lightning_pb2.RouteHint]:
         """
         Optional route hints to reach the destination through private channels.
         """
@@ -356,7 +355,7 @@ class SendPaymentRequest(google.protobuf.message.Message):
         """
 
     @property
-    def dest_features(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[lightning_pb2.FeatureBit.ValueType]:
+    def dest_features(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[cashu.lightning.lnd_grpc.protos.lightning_pb2.FeatureBit.ValueType]:
         """
         Features assumed to be supported by the final node. All transitive feature
         dependencies must also be set properly. For a given feature bit pair, either
@@ -384,13 +383,13 @@ class SendPaymentRequest(google.protobuf.message.Message):
         fee_limit_sat: builtins.int = ...,
         outgoing_chan_id: builtins.int = ...,
         cltv_limit: builtins.int = ...,
-        route_hints: collections.abc.Iterable[lightning_pb2.RouteHint] | None = ...,
+        route_hints: collections.abc.Iterable[cashu.lightning.lnd_grpc.protos.lightning_pb2.RouteHint] | None = ...,
         dest_custom_records: collections.abc.Mapping[builtins.int, builtins.bytes] | None = ...,
         amt_msat: builtins.int = ...,
         fee_limit_msat: builtins.int = ...,
         last_hop_pubkey: builtins.bytes = ...,
         allow_self_payment: builtins.bool = ...,
-        dest_features: collections.abc.Iterable[lightning_pb2.FeatureBit.ValueType] | None = ...,
+        dest_features: collections.abc.Iterable[cashu.lightning.lnd_grpc.protos.lightning_pb2.FeatureBit.ValueType] | None = ...,
         max_parts: builtins.int = ...,
         no_inflight_updates: builtins.bool = ...,
         outgoing_chan_ids: collections.abc.Iterable[builtins.int] | None = ...,
@@ -515,7 +514,7 @@ class RouteFeeResponse(google.protobuf.message.Message):
     will still need to factor in the final CLTV delta of the last hop into this
     value.
     """
-    failure_reason: lightning_pb2.PaymentFailureReason.ValueType
+    failure_reason: cashu.lightning.lnd_grpc.protos.lightning_pb2.PaymentFailureReason.ValueType
     """
     An indication whether a probing payment succeeded or whether and why it
     failed. FAILURE_REASON_NONE indicates success.
@@ -525,7 +524,7 @@ class RouteFeeResponse(google.protobuf.message.Message):
         *,
         routing_fee_msat: builtins.int = ...,
         time_lock_delay: builtins.int = ...,
-        failure_reason: lightning_pb2.PaymentFailureReason.ValueType = ...,
+        failure_reason: cashu.lightning.lnd_grpc.protos.lightning_pb2.PaymentFailureReason.ValueType = ...,
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["failure_reason", b"failure_reason", "routing_fee_msat", b"routing_fee_msat", "time_lock_delay", b"time_lock_delay"]) -> None: ...
 
@@ -548,14 +547,14 @@ class SendToRouteRequest(google.protobuf.message.Message):
     routes, incorrect payment details, or insufficient funds.
     """
     @property
-    def route(self) -> lightning_pb2.Route:
+    def route(self) -> cashu.lightning.lnd_grpc.protos.lightning_pb2.Route:
         """Route that should be used to attempt to complete the payment."""
 
     def __init__(
         self,
         *,
         payment_hash: builtins.bytes = ...,
-        route: lightning_pb2.Route | None = ...,
+        route: cashu.lightning.lnd_grpc.protos.lightning_pb2.Route | None = ...,
         skip_temp_err: builtins.bool = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["route", b"route"]) -> builtins.bool: ...
@@ -572,14 +571,14 @@ class SendToRouteResponse(google.protobuf.message.Message):
     preimage: builtins.bytes
     """The preimage obtained by making the payment."""
     @property
-    def failure(self) -> lightning_pb2.Failure:
+    def failure(self) -> cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure:
         """The failure message in case the payment failed."""
 
     def __init__(
         self,
         *,
         preimage: builtins.bytes = ...,
-        failure: lightning_pb2.Failure | None = ...,
+        failure: cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["failure", b"failure"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["failure", b"failure", "preimage", b"preimage"]) -> None: ...
@@ -1082,7 +1081,7 @@ class BuildRouteResponse(google.protobuf.message.Message):
 
     ROUTE_FIELD_NUMBER: builtins.int
     @property
-    def route(self) -> lightning_pb2.Route:
+    def route(self) -> cashu.lightning.lnd_grpc.protos.lightning_pb2.Route:
         """
         Fully specified route that can be used to execute the payment.
         """
@@ -1090,7 +1089,7 @@ class BuildRouteResponse(google.protobuf.message.Message):
     def __init__(
         self,
         *,
-        route: lightning_pb2.Route | None = ...,
+        route: cashu.lightning.lnd_grpc.protos.lightning_pb2.Route | None = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["route", b"route"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["route", b"route"]) -> None: ...
@@ -1321,7 +1320,7 @@ class LinkFailEvent(google.protobuf.message.Message):
     WIRE_FAILURE_FIELD_NUMBER: builtins.int
     FAILURE_DETAIL_FIELD_NUMBER: builtins.int
     FAILURE_STRING_FIELD_NUMBER: builtins.int
-    wire_failure: lightning_pb2.Failure.FailureCode.ValueType
+    wire_failure: cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure.FailureCode.ValueType
     """FailureCode is the BOLT error code for the failure."""
     failure_detail: global___FailureDetail.ValueType
     """
@@ -1339,7 +1338,7 @@ class LinkFailEvent(google.protobuf.message.Message):
         self,
         *,
         info: global___HtlcInfo | None = ...,
-        wire_failure: lightning_pb2.Failure.FailureCode.ValueType = ...,
+        wire_failure: cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure.FailureCode.ValueType = ...,
         failure_detail: global___FailureDetail.ValueType = ...,
         failure_string: builtins.str = ...,
     ) -> None: ...
@@ -1362,7 +1361,7 @@ class PaymentStatus(google.protobuf.message.Message):
     The pre-image of the payment when state is SUCCEEDED.
     """
     @property
-    def htlcs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[lightning_pb2.HTLCAttempt]:
+    def htlcs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt]:
         """
         The HTLCs made in attempt to settle the payment [EXPERIMENTAL].
         """
@@ -1372,7 +1371,7 @@ class PaymentStatus(google.protobuf.message.Message):
         *,
         state: global___PaymentState.ValueType = ...,
         preimage: builtins.bytes = ...,
-        htlcs: collections.abc.Iterable[lightning_pb2.HTLCAttempt] | None = ...,
+        htlcs: collections.abc.Iterable[cashu.lightning.lnd_grpc.protos.lightning_pb2.HTLCAttempt] | None = ...,
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["htlcs", b"htlcs", "preimage", b"preimage", "state", b"state"]) -> None: ...
 
@@ -1510,7 +1509,7 @@ class ForwardHtlcInterceptResponse(google.protobuf.message.Message):
     If failure_message is specified, the failure_code field must be set
     to zero.
     """
-    failure_code: lightning_pb2.Failure.FailureCode.ValueType
+    failure_code: cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure.FailureCode.ValueType
     """Return the specified failure code in case the resolve action is Fail. The
     message data fields are populated automatically.
 
@@ -1533,7 +1532,7 @@ class ForwardHtlcInterceptResponse(google.protobuf.message.Message):
         action: global___ResolveHoldForwardAction.ValueType = ...,
         preimage: builtins.bytes = ...,
         failure_message: builtins.bytes = ...,
-        failure_code: lightning_pb2.Failure.FailureCode.ValueType = ...,
+        failure_code: cashu.lightning.lnd_grpc.protos.lightning_pb2.Failure.FailureCode.ValueType = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["incoming_circuit_key", b"incoming_circuit_key"]) -> builtins.bool: ...
     def ClearField(self, field_name: typing.Literal["action", b"action", "failure_code", b"failure_code", "failure_message", b"failure_message", "incoming_circuit_key", b"incoming_circuit_key", "preimage", b"preimage"]) -> None: ...
@@ -1548,11 +1547,11 @@ class UpdateChanStatusRequest(google.protobuf.message.Message):
     ACTION_FIELD_NUMBER: builtins.int
     action: global___ChanStatusAction.ValueType
     @property
-    def chan_point(self) -> lightning_pb2.ChannelPoint: ...
+    def chan_point(self) -> cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint: ...
     def __init__(
         self,
         *,
-        chan_point: lightning_pb2.ChannelPoint | None = ...,
+        chan_point: cashu.lightning.lnd_grpc.protos.lightning_pb2.ChannelPoint | None = ...,
         action: global___ChanStatusAction.ValueType = ...,
     ) -> None: ...
     def HasField(self, field_name: typing.Literal["chan_point", b"chan_point"]) -> builtins.bool: ...

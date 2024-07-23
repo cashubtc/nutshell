@@ -203,7 +203,7 @@ class LndRestFundingSource(MintSettings):
 
 class LndRPCFundingSource(MintSettings):
     mint_lnd_rpc_endpoint: Optional[str] = Field(default=None)
-    mint_lnd_tls_cert: Optional[str] = Field(default=None)
+    mint_lnd_rpc_cert: Optional[str] = Field(default=None)
     mint_lnd_rpc_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rpc_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rpc_invoice_macaroon: Optional[str] = Field(default=None)

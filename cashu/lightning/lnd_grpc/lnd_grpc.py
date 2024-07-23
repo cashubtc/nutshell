@@ -6,10 +6,10 @@ from typing import Optional, AsyncGenerator
 import asyncio
 import bolt11
 import grpc
-import lightning_pb2 as lnrpc
-import lightning_pb2_grpc as lightningstub
-import router_pb2 as routerrpc
-import router_pb2_grpc as routerstub
+import cashu.lightning.lnd_grpc.protos.lightning_pb2 as lnrpc
+import cashu.lightning.lnd_grpc.protos.lightning_pb2_grpc as lightningstub
+import cashu.lightning.lnd_grpc.protos.router_pb2 as routerrpc
+import cashu.lightning.lnd_grpc.protos.router_pb2_grpc as routerstub
 from bolt11 import (
     TagChar,
 )
@@ -41,7 +41,7 @@ class LndRPCWallet(LightningBackend):
         self.assert_unit_supported(unit)
         self.unit = unit
         self.endpoint = settings.mint_lnd_rpc_endpoint
-        cert_path = settings.mint_lnd_tls_cert
+        cert_path = settings.mint_lnd_rpc_cert
 
         macaroon_path = (
             settings.mint_lnd_rpc_macaroon
@@ -89,9 +89,13 @@ class LndRPCWallet(LightningBackend):
         
         self.stub = lightningstub.LightningStub(self.channel)
         self.router_stub = routerstub.RouterStub(self.channel)
+        logger.info("LndRPCWallet successfully enstablished channel and stubs.")
 
         if self.supports_mpp:
             logger.info("LndRPCWallet enabling MPP feature")
+
+    def __del__(self):
+        self.channel.close()
 
     async def status(self) -> StatusResponse:
         try:
