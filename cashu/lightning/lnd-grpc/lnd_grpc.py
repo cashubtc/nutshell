@@ -1,8 +1,9 @@
 import codecs
 import hashlib
 import os
-from typing import Optional
+from typing import Optional, AsyncGenerator
 
+import asyncio
 import bolt11
 import grpc
 import lightning_pb2 as lnrpc
@@ -22,7 +23,11 @@ from cashu.lightning.base import (
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
+    PostMeltQuoteRequest,
+    PaymentQuoteResponse,
 )
+
+from cashu.core.helpers import fee_reserve
 
 
 class LndRPCWallet(LightningBackend):
@@ -332,26 +337,19 @@ class LndRPCWallet(LightningBackend):
             logger.error(error_message)
 
         return PaymentStatus(paid=None)
-    '''
+    
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:
             try:
-                url = "/v1/invoices/subscribe"
-                async with self.client.stream("GET", url, timeout=None) as r:
-                    async for line in r.aiter_lines():
-                        try:
-                            inv = json.loads(line)["result"]
-                            if not inv["settled"]:
-                                continue
-                        except Exception:
-                            continue
-
-                        payment_hash = base64.b64decode(inv["r_hash"]).hex()
-                        yield payment_hash
-            except Exception as exc:
+                #url = "/v1/invoices/subscribe"
+                async for invoice in self.stub.SubscribeInvoices(lnrpc.InvoiceSubscription()):
+                    if invoice.state != lnrpc.Invoice.InvoiceState.SETTLED:
+                        continue
+                    payment_hash = invoice.r_hash.hex()
+                    yield payment_hash
+            except grpc.GrpcError as exc:
                 logger.error(
-                    f"lost connection to lnd invoices stream: '{exc}', retrying in 5"
-                    " seconds"
+                    f"SubscribeInvoices failed (very bad): {exc}. Retrying in 5 sec..."
                 )
                 await asyncio.sleep(5)
 
@@ -365,7 +363,7 @@ class LndRPCWallet(LightningBackend):
             else None
         )
 
-        invoice_obj = decode(melt_quote.request)
+        invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
         if amount:
@@ -383,4 +381,3 @@ class LndRPCWallet(LightningBackend):
             fee=fees.to(self.unit, round="up"),
             amount=amount.to(self.unit, round="up"),
         )
-    '''
