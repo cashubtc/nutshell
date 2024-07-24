@@ -79,7 +79,7 @@ curl https://pyenv.run | bash
 pyenv init
 
 # restart your shell (or source your .rc file), then install python:
-pyenv install 3.12.3
+pyenv install 3.12.4
 
 # install poetry
 curl -sSL https://install.python-poetry.org | python3 -
@@ -92,7 +92,7 @@ source ~/.bashrc
 git clone https://github.com/cashubtc/nutshell.git cashu
 cd cashu
 git checkout <latest_tag>
-pyenv local 3.12.3
+pyenv local 3.12.4
 poetry install
 ```
 
