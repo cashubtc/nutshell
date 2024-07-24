@@ -29,6 +29,15 @@ from cashu.lightning.base import (
     StatusResponse,
 )
 
+# maps statuses to None, False, True:
+# https://api.lightning.community/?python=#paymentpaymentstatus
+STATUSES = {
+    lnrpc.Payment.PaymentStatus.UNKNOWN: None,
+    lnrpc.Payment.PaymentStatus.IN_FLIGHT: None,
+    lnrpc.Payment.PaymentStatus.INITIATED: None,
+    lnrpc.Payment.PaymentStatus.SUCCEEDED: True,
+    lnrpc.Payment.PaymentStatus.FAILED: False,
+}
 
 class LndRPCWallet(LightningBackend):
 
@@ -43,11 +52,7 @@ class LndRPCWallet(LightningBackend):
         self.endpoint = settings.mint_lnd_rpc_endpoint
         cert_path = settings.mint_lnd_rpc_cert
 
-        macaroon_path = (
-            settings.mint_lnd_rpc_macaroon
-            or settings.mint_lnd_rpc_admin_macaroon
-            or settings.mint_lnd_rpc_invoice_macaroon
-        )
+        macaroon_path = settings.mint_lnd_rpc_macaroon
 
         if not self.endpoint:
             raise Exception("cannot initialize LndRPCWallet: no endpoint")
@@ -168,7 +173,7 @@ class LndRPCWallet(LightningBackend):
                 error_message=error_message,
             )
 
-        if r.payment_error and r.payment_error != "":
+        if r.payment_error:
             return PaymentResponse(
                 ok=False,
                 error_message=r.payment_error,
@@ -300,15 +305,6 @@ class LndRPCWallet(LightningBackend):
             return PaymentStatus(paid=None)
 
         request = routerrpc.TrackPaymentRequest(payment_hash=checking_id_bytes)
-        # maps statuses to None, False, True:
-        # https://api.lightning.community/?python=#paymentpaymentstatus
-        statuses = {
-            lnrpc.Payment.PaymentStatus.UNKNOWN: None,
-            lnrpc.Payment.PaymentStatus.IN_FLIGHT: None,
-            lnrpc.Payment.PaymentStatus.INITIATED: None,
-            lnrpc.Payment.PaymentStatus.SUCCEEDED: True,
-            lnrpc.Payment.PaymentStatus.FAILED: False,
-        }
 
         try:
             async with grpc.aio.secure_channel(self.endpoint, self.combined_creds) as channel:
@@ -316,7 +312,7 @@ class LndRPCWallet(LightningBackend):
                 async for payment in router_stub.TrackPaymentV2(request):
                     if payment is not None and payment.status:
                         return PaymentStatus(
-                            paid=statuses[payment.status],
+                            paid=STATUSES[payment.status],
                             fee=(
                                 Amount(unit=Unit.msat, amount=payment.fee_msat)
                                 if payment.fee_msat
@@ -342,9 +338,9 @@ class LndRPCWallet(LightningBackend):
                         yield payment_hash
             except AioRpcError as exc:
                 logger.error(
-                    f"SubscribeInvoices failed: {exc}. Retrying in 5 sec..."
+                    f"SubscribeInvoices failed: {exc}. Retrying in 1 sec..."
                 )
-                await asyncio.sleep(5)
+                await asyncio.sleep(1)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
