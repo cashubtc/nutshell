@@ -43,7 +43,7 @@ pytest = "^7.4.0"
 pre-commit = "^3.3.3"
 fastapi-profiler = "^1.2.0"
 respx = "^0.20.2"
-ruff = "^0.2.1"
+ruff = "^0.2.2"
 mypy = "^1.8.0"
 
 [build-system]
