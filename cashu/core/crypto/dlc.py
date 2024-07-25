@@ -1,5 +1,6 @@
 from hashlib import sha256
 from typing import List, Optional, Tuple
+from secp256k1 import PrivateKey, PublicKey
 
 
 def sorted_merkle_hash(left: bytes, right: bytes) -> bytes:
@@ -60,3 +61,11 @@ def merkle_verify(root: bytes, leaf_hash: bytes, proof: List[bytes]) -> bool:
 
 def list_hash(leaves: List[str]) -> List[bytes]:
     return [sha256(leaf.encode()).digest() for leaf in leaves]
+
+def sign_dlc(dlc_root: str, privkey: PrivateKey) -> bytes:
+    dlc_root_hash = sha256(bytes.fromhex(dlc_root)).digest()
+    return privkey.schnorr_sign(dlc_root_hash, None, raw=True)
+
+def verify_dlc_signature(dlc_root: str, signature: bytes, pubkey: PublicKey) -> bool:
+    dlc_root_hash = sha256(bytes.fromhex(dlc_root)).digest()
+    return pubkey.schnorr_verify(dlc_root_hash, signature, None, raw=True)

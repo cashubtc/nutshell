@@ -1,8 +1,8 @@
 from .ledger import Ledger
 from ..core.models import PostDlcRegistrationRequest, PostDlcRegistrationResponse
-from ..core.base import DlcBadInput, DlcFundingProof, Proof, DLCWitness, Unit
+from ..core.base import DlcBadInput, DlcFundingProof, Proof, DLCWitness, Unit, DiscreteLogContract
 from ..core.secret import Secret, SecretKind
-from ..core.crypto.dlc import merkle_verify
+from ..core.crypto.dlc import merkle_verify, sign_dlc
 from ..core.errors import (
     TransactionError,
     DlcVerificationFail,
@@ -218,7 +218,7 @@ class LedgerDLC(Ledger):
     async def register_dlc(self, request: PostDlcRegistrationRequest):
         logger.trace("register called")
         is_atomic = request.atomic
-        funded: List[DlcFundingProof] = []
+        funded: List[Tuple[DiscreteLogContract, DlcFundingProof]] = []
         errors: List[DlcFundingProof] = []
         for registration in request.registrations:
             try:
@@ -231,9 +231,22 @@ class LedgerDLC(Ledger):
                     registration.inputs
                 )
                 await self._verify_dlc_amount_threshold(amount_provided, registration.inputs)
-                # Some flavour of this function: we need to insert a check inside the db lock
-                # to verify there isn't some other contract with the same dlc root.
-                # await self.db_write._verify_spent_proofs_and_set_pending(registration.inputs)
+                # At this point we can put this dlc into the funded list and create a signature for it
+                # We use the funding proof private key
+                '''
+                signature = sign_dlc(registration.dlc_root, self.funding_proof_private_key)
+                funding_proof = DlcFundingProof(
+                    dlc_root=registration.dlc_root,
+                    signature=signature.hex()
+                )
+                dlc = DiscreteLogContract(
+                    settled=False,
+                    dlc_root=registration.dlc_root,
+                    funding_amount=amount_provided,
+                    unit=registration.unit,
+                )
+                funded.append((dlc, funding_proof))
+                '''
             except (TransactionError, DlcVerificationFail) as e:
                 logger.error(f"registration {registration.dlc_root} failed")
                 # Generic Error
