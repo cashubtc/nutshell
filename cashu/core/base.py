@@ -1226,6 +1226,7 @@ class DlcBadInput(BaseModel):
 class DlcFundingProof(BaseModel):
     """
     A dlc merkle root with its signature
+    or a dlc merkle root with bad inputs.
     """
     dlc_root: str
     signature: Optional[str] = None

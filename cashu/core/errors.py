@@ -1,5 +1,5 @@
-from typing import Optional
-
+from typing import Optional, List
+from .base import DlcBadInput
 
 class CashuError(Exception):
     code: int
@@ -96,3 +96,14 @@ class QuoteNotPaidError(CashuError):
 
     def __init__(self):
         super().__init__(self.detail, code=2001)
+
+
+class DlcVerificationFail(CashuError):
+    detail = "dlc verification fail"
+    code = 30000
+    bad_inputs = None
+
+    def __init__(self, **kwargs):
+        super().__init__(self.detail, self.code)
+        self.bad_inputs = kwargs['bad_inputs']
+    

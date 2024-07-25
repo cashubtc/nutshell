@@ -883,15 +883,17 @@ class Wallet(
         """
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
+        '''
         flag = (spending_conditions is not None
             and len(spending_conditions) == len(secrets)
         )
+        
         zipped = zip(promises, secrets, rs, derivation_paths) if not flag else (
             zip(promises, secrets, rs, derivation_paths, spending_conditions or [])
         )
-        for z in zipped:
-            promise, secret, r, path = z[:4]
-            spc = z[4] if flag else None
+        '''
+        for i, (promise, secret, r, path) in enumerate(zip(promises, secrets, rs, derivation_paths)):
+            spc = spending_conditions[i] if spending_conditions else None
             if promise.id not in self.keysets:
                 logger.debug(f"Keyset {promise.id} not found in db. Loading from mint.")
                 # we don't have the keyset for this promise, so we load all keysets from the mint
