@@ -46,6 +46,15 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         """Select proofs to send based on the amount to send and the proofs available. Implements a simple coin selection algorithm.
         Can be used for selecting proofs to send an offline transaction.
 
+        Rationale:
+        - Put aside the first proof that is bigger than the amount to send
+        - Put aside all proofs that are smaller than the amount to send
+        - If the sum of the selected proofs is smaller than the amount to send, select the next bigger proof and return
+        - Sort the smaller proofs by amount in descending order
+        - Select the biggest proof from the ones remaining
+        - Subtract from the amount to send the amount of the selected proof and the fee for sending it
+        - If the remainder is bigger than 0, call the function recursively with the remaining proofs and the remaining amount to send
+
         Args:
             proofs (List[Proof]): List of proofs to select from
             amount_to_send (Union[int, float]): Amount to select proofs for
