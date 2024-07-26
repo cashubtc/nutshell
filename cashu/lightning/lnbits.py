@@ -123,8 +123,14 @@ class LNbitsWallet(LightningBackend):
         # we do this to get the fee and preimage
         payment: PaymentStatus = await self.get_payment_status(checking_id)
 
+        if not payment.paid:
+            return PaymentResponse(
+                ok=False,
+                error_message="Payment failed.",
+            )
+
         return PaymentResponse(
-            ok=True,
+            ok=payment.paid,
             checking_id=checking_id,
             fee=payment.fee,
             preimage=payment.preimage,
