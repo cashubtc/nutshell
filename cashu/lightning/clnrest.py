@@ -29,7 +29,7 @@ from .base import (
 class CLNRestWallet(LightningBackend):
     supported_units = set([Unit.sat, Unit.msat])
     unit = Unit.sat
-    supports_mpp = False  # settings.mint_clnrest_enable_mpp
+    supports_mpp = settings.mint_clnrest_enable_mpp
     supports_incoming_payment_stream: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
@@ -195,11 +195,14 @@ class CLNRestWallet(LightningBackend):
         }
 
         # Handle Multi-Mint payout where we must only pay part of the invoice amount
+        logger.trace(f"{quote_amount_msat = }, {invoice.amount_msat = }")
         if quote_amount_msat != invoice.amount_msat:
+            logger.trace("Detected Multi-Nut payment")
             if self.supports_mpp:
                 post_data["partial_msat"] = quote_amount_msat
             else:
                 error_message = "mint does not support MPP"
+                logger.error(error_message)
                 return PaymentResponse(
                     ok=False,
                     checking_id=None,
