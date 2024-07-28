@@ -900,6 +900,8 @@ class TokenV3(Token):
                 self.serialize_to_dict(include_dleq), separators=(",", ":")
             ).encode()
         ).decode()
+        # remove padding
+        tokenv3_serialized = tokenv3_serialized.rstrip("=")
         return tokenv3_serialized
 
     @classmethod
@@ -1113,6 +1115,8 @@ class TokenV4(Token):
         tokenv4_serialized += base64.urlsafe_b64encode(
             cbor2.dumps(self.serialize_to_dict(include_dleq))
         ).decode()
+        # remove padding
+        tokenv4_serialized = tokenv4_serialized.rstrip("=")
         return tokenv4_serialized
 
     @classmethod
