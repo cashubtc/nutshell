@@ -20,8 +20,13 @@ from ..core.base import (
     ProofSpentState,
     ProofState,
     Unit,
+    DlcBadInput,
+    DlcFundingProof,
+    DLCWitness,
+    DiscreteLogContract
 )
 from ..core.crypto import b_dhke
+from ..core.crypto.dlc import sign_dlc
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
     derive_pubkey,
@@ -37,12 +42,14 @@ from ..core.errors import (
     NotAllowedError,
     QuoteNotPaidError,
     TransactionError,
+    DlcVerificationFail,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
+    PostDlcRegistrationRequest,
 )
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -1086,3 +1093,53 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 )
                 signatures.append(signature)
             return signatures
+
+    async def register_dlc(self, request: PostDlcRegistrationRequest):
+        logger.trace("register called")
+        is_atomic = request.atomic
+        funded: List[Tuple[DiscreteLogContract, DlcFundingProof]] = []
+        errors: List[DlcFundingProof] = []
+        for registration in request.registrations:
+            try:
+                logger.trace(f"processing registration {registration.dlc_root}")
+                assert registration.inputs is not None # mypy give me a break
+                await self._verify_dlc_inputs(registration.dlc_root, registration.inputs)
+                amount_provided = await self._verify_dlc_amount_fees_coverage(
+                    registration.funding_amount,
+                    registration.unit,
+                    registration.inputs
+                )
+                await self._verify_dlc_amount_threshold(amount_provided, registration.inputs)
+                # At this point we can put this dlc into the funded list and create a signature for it
+                # We use the funding proof private key
+                '''
+                signature = dlc.sign_dlc(registration.dlc_root, self.funding_proof_private_key)
+                funding_proof = DlcFundingProof(
+                    dlc_root=registration.dlc_root,
+                    signature=signature.hex()
+                )
+                dlc = DiscreteLogContract(
+                    settled=False,
+                    dlc_root=registration.dlc_root,
+                    funding_amount=amount_provided,
+                    unit=registration.unit,
+                )
+                funded.append((dlc, funding_proof))
+                '''
+            except (TransactionError, DlcVerificationFail) as e:
+                logger.error(f"registration {registration.dlc_root} failed")
+                # Generic Error
+                if isinstance(e, TransactionError):
+                    errors.append(DlcFundingProof(
+                        dlc_root=registration.dlc_root,
+                        bad_inputs=[DlcBadInput(
+                            index=-1,
+                            detail=e.detail
+                        )]
+                    ))
+                # DLC verification fail
+                else:
+                    errors.append(DlcFundingProof(
+                        dlc_root=registration.dlc_root,
+                        bad_inputs=e.bad_inputs,
+                    ))
