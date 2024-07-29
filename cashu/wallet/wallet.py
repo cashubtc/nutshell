@@ -109,7 +109,7 @@ class Wallet(
         self.proofs: List[Proof] = []
         self.name = name
         self.unit = Unit[unit]
-
+        url = url.rstrip("/")
         super().__init__(url=url, db=self.db)
         logger.debug("Wallet initialized")
         logger.debug(f"Mint URL: {url}")
@@ -268,6 +268,7 @@ class Wallet(
                     )
                     keyset.active = False
                     await update_keyset(keyset=keyset, db=self.db)
+        # END backwards compatibility
 
         await self.load_keysets_from_db()
 
@@ -1147,7 +1148,6 @@ class Wallet(
             raise Exception("balance too low.")
 
         # coin selection for swapping
-        # spendable_proofs, fees = await self._select_proofs_to_swap(proofs, amount)
         swap_proofs = await self._select_proofs_to_send(
             proofs, amount, include_fees=True
         )
