@@ -31,12 +31,18 @@ from cashu.lightning.base import (
 
 # maps statuses to None, False, True:
 # https://api.lightning.community/?python=#paymentpaymentstatus
-STATUSES = {
+PAYMENT_STATUSES = {
     lnrpc.Payment.PaymentStatus.UNKNOWN: None,
     lnrpc.Payment.PaymentStatus.IN_FLIGHT: None,
     lnrpc.Payment.PaymentStatus.INITIATED: None,
     lnrpc.Payment.PaymentStatus.SUCCEEDED: True,
     lnrpc.Payment.PaymentStatus.FAILED: False,
+}
+INVOICE_STATUSES = {
+    lnrpc.Invoice.InvoiceState.OPEN: None,
+    lnrpc.Invoice.InvoiceState.SETTLED: True,
+    lnrpc.Invoice.InvoiceState.CANCELED: None,
+    lnrpc.Invoice.InvoiceState.ACCEPTED: None,
 }
 
 class LndRPCWallet(LightningBackend):
@@ -285,13 +291,7 @@ class LndRPCWallet(LightningBackend):
             logger.error(error_message)
             return PaymentStatus(paid=None)
 
-        # Invoice.settled is deprecated
-        if not r.settled:
-            # this must also work when checking_id is not a hex recognizable by lnd
-            # it will return an error and no "settled" attribute on the object
-            return PaymentStatus(paid=None)
-
-        return PaymentStatus(paid=True)
+        return PaymentStatus(paid=INVOICE_STATUSES[r.state])
     
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         """
@@ -312,7 +312,7 @@ class LndRPCWallet(LightningBackend):
                 async for payment in router_stub.TrackPaymentV2(request):
                     if payment is not None and payment.status:
                         return PaymentStatus(
-                            paid=STATUSES[payment.status],
+                            paid=PAYMENT_STATUSES[payment.status],
                             fee=(
                                 Amount(unit=Unit.msat, amount=payment.fee_msat)
                                 if payment.fee_msat
