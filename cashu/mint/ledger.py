@@ -1113,7 +1113,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 # At this point we can put this dlc into the funded list and create a signature for it
                 # We use the funding proof private key
                 '''
-                signature = dlc.sign_dlc(registration.dlc_root, self.funding_proof_private_key)
+                signature = sign_dlc(
+                        registration.dlc_root,
+                        registration.funding_amount,
+                        registration.unit,
+                        self.funding_proof_private_key
+                    )
                 funding_proof = DlcFundingProof(
                     dlc_root=registration.dlc_root,
                     signature=signature.hex()
