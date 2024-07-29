@@ -295,7 +295,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Raises:
             Exception: If the mint request fails
         """
-        logger.trace("Requesting mint: GET /v1/mint/bolt11")
+        logger.trace("Requesting mint: POST /v1/mint/bolt11")
         payload = PostMintQuoteRequest(unit=unit.name, amount=amount)
         resp = await self.httpx.post(
             join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()

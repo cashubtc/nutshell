@@ -144,6 +144,7 @@ class MintInformation(CashuSettings):
     mint_info_description_long: str = Field(default=None)
     mint_info_contact: List[List[str]] = Field(default=[])
     mint_info_motd: str = Field(default=None)
+    mint_info_icon: str = Field(default=None)
 
 
 class WalletSettings(CashuSettings):
