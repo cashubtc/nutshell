@@ -50,6 +50,7 @@ from ..core.models import (
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
     PostDlcRegistrationRequest,
+    PostDlcRegistrationResponse,
 )
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -1094,9 +1095,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 signatures.append(signature)
             return signatures
 
-    async def register_dlc(self, request: PostDlcRegistrationRequest):
+    async def register_dlc(self, request: PostDlcRegistrationRequest) -> PostDlcRegistrationResponse:
         logger.trace("register called")
-        is_atomic = request.atomic
+        is_atomic = request.atomic or False
         funded: List[Tuple[DiscreteLogContract, DlcFundingProof]] = []
         errors: List[DlcFundingProof] = []
         for registration in request.registrations:
@@ -1114,11 +1115,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 # We use the funding proof private key
                 '''
                 signature = sign_dlc(
-                        registration.dlc_root,
-                        registration.funding_amount,
-                        registration.unit,
-                        self.funding_proof_private_key
-                    )
+                    registration.dlc_root,
+                    registration.funding_amount,
+                    registration.unit,
+                    self.funding_proof_private_key
+                )
                 funding_proof = DlcFundingProof(
                     dlc_root=registration.dlc_root,
                     signature=signature.hex()
@@ -1127,6 +1128,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     settled=False,
                     dlc_root=registration.dlc_root,
                     funding_amount=amount_provided,
+                    inputs=registration.inputs,
                     unit=registration.unit,
                 )
                 funded.append((dlc, funding_proof))
@@ -1148,3 +1150,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         dlc_root=registration.dlc_root,
                         bad_inputs=e.bad_inputs,
                     ))
+        # If `atomic` register and there are errors, abort
+        if is_atomic and len(errors) > 0:
+            return PostDlcRegistrationResponse(errors=errors)
+        # Database dance:
+        funded, db_errors = await self.db_write._verify_proofs_and_dlc_registrations(funded, is_atomic)
+        errors += db_errors
+        if is_atomic and len(errors) > 0:
+            return PostDlcRegistrationResponse(errors=errors)
+        
+        # ALL OK
+        return PostDlcRegistrationResponse(
+            funded=[f[1] for f in funded],
+            errors=errors if len(errors) > 0 else None,
+        )

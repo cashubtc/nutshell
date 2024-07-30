@@ -1,6 +1,7 @@
 import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
+from .base import DiscreteLogContract
 
 from ..core.base import (
     BlindedSignature,
@@ -243,6 +244,23 @@ class LedgerCrud(ABC):
     ) -> None:
         ...
 
+    @abstractmethod
+    async def get_registered_dlc(
+        self,
+        dlc_root: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> DiscreteLogContract:
+        ...
+
+    @abstractmethod
+    async def store_dlc(
+        self,
+        dlc: DiscreteLogContract,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
 class LedgerCrudSqlite(LedgerCrud):
     """Implementation of LedgerCrud for sqlite.
@@ -741,3 +759,37 @@ class LedgerCrudSqlite(LedgerCrud):
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
         return [Proof(**r) for r in rows] if rows else []
+
+    async def get_registered_dlc(
+        self,
+        dlc_root: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[DiscreteLogContract]:
+        query = f"""
+        SELECT * from {db.table_with_schema('dlc')}
+        WHERE dlc_root = :dlc_root
+        """
+        result = await (conn or db).fetchone(query, {"dlc_root": dlc_root})
+        return result
+
+    async def store_dlc(
+        self,
+        dlc: DiscreteLogContract,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        query = f"""
+        INSERT INTO {db.table_with_schema('dlc')}
+        (dlc_root, settled, funding_amount, unit)
+        VALUES (:dlc_root, :settled, :funding_amount, :unit)
+        """
+        await (conn or db).execute(
+            query,
+            {
+                "dlc_root": dlc.dlc_root,
+                "settled": dlc.settled,
+                "funding_amount": dlc.funding_amount,
+                "unit": dlc.unit,
+            },
+        )

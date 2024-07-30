@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 
 from ...core.base import Proof, ProofSpentState, ProofState
 from ...core.db import Connection, Database
-from ...core.errors import TokenAlreadySpentError
+from ...core.errors import TokenAlreadySpentError, DlcAlreadyRegisteredError
 from ..crud import LedgerCrud
 
 
@@ -91,3 +91,10 @@ class DbReadHelper:
         async with self.db.get_connection(conn) as conn:
             if not len(await self._get_proofs_spent([p.Y for p in proofs], conn)) == 0:
                 raise TokenAlreadySpentError()
+
+    async def _verify_dlc_registrable(
+        self, dlc_root: str, conn: Optional[Connection] = None, 
+    ):
+        async with self.db.get_connection(conn) as conn:
+            if await self.crud.get_registered_dlc(dlc_root, self.db, conn) is not None:
+                raise DlcAlreadyRegisteredError()
