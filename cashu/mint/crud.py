@@ -1,7 +1,7 @@
 import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
-from .base import DiscreteLogContract
+from ..core.base import DiscreteLogContract
 
 from ..core.base import (
     BlindedSignature,
@@ -250,7 +250,7 @@ class LedgerCrud(ABC):
         dlc_root: str,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> DiscreteLogContract:
+    ) -> Optional[DiscreteLogContract]:
         ...
 
     @abstractmethod
