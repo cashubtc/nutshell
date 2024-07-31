@@ -334,7 +334,6 @@ class PostRestoreResponse(BaseModel):
 # ------- API: DLC REGISTRATION -------
 
 class PostDlcRegistrationRequest(BaseModel):
-    atomic: Optional[bool]
     registrations: List[DiscreteLogContract]
 
 class PostDlcRegistrationResponse(BaseModel):

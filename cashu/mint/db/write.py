@@ -232,10 +232,22 @@ class DbWriteHelper:
     async def _verify_proofs_and_dlc_registrations(
         self,
         registrations: List[Tuple[DiscreteLogContract, DlcFundingProof]],
-        is_atomic: bool,
     ) -> Tuple[List[Tuple[DiscreteLogContract, DlcFundingProof]], List[DlcFundingProof]]:
-        ok: List[Tuple[DiscreteLogContract, DlcFundingProof]] = []
+        """
+        Method to check if proofs are already spent or registrations already registered. If they are not, we
+        set them as spent and registered respectively
+        Args:
+            registrations (List[Tuple[DiscreteLogContract, DlcFundingProof]]): List of registrations.
+        Returns:
+            List[Tuple[DiscreteLogContract, DlcFundingProof]]: a list of registered DLCs
+            List[DlcFundingProof]: a list of errors
+        """
+        checked: List[Tuple[DiscreteLogContract, DlcFundingProof]] = []
+        registered: List[Tuple[DiscreteLogContract, DlcFundingProof]] = []
         errors: List[DlcFundingProof]= []
+        if len(registrations) == 0:
+            logger.trace("Received 0 registrations")
+            return [], []
         logger.trace("_verify_proofs_and_dlc_registrations acquiring lock")
         async with self.db.get_connection(lock_table="proofs_used") as conn:
             for registration in registrations:
@@ -245,7 +257,7 @@ class DbWriteHelper:
                     assert reg.inputs
                     await self.db_read._verify_proofs_spendable(reg.inputs, conn)
                     await self.db_read._verify_dlc_registrable(reg.dlc_root, conn)
-                    ok.append(registration)
+                    checked.append(registration)
                 except (TokenAlreadySpentError, DlcAlreadyRegisteredError) as e:
                     logger.trace(f"Proofs already spent for registration {reg.dlc_root}")
                     errors.append(DlcFundingProof(
@@ -255,20 +267,28 @@ class DbWriteHelper:
                             detail=e.detail
                         )]
                     ))
-            
-            # Do not continue if errors on atomic
-            if is_atomic and len(errors) > 0:
-                return (ok, errors)
-            
-            for registration in ok:
+
+            for registration in checked:
                 reg = registration[0]
                 assert reg.inputs
-                for p in reg.inputs:
-                    logger.trace(f"Invalidating proof {p.Y}")
-                    await self.crud.invalidate_proof(
-                        proof=p, db=self.db, conn=conn
-                    )
-                logger.trace(f"Registering DLC {reg.dlc_root}")
-                await self.crud.store_dlc(reg, self.db, conn)
+                try:
+                    for p in reg.inputs:
+                        logger.trace(f"Invalidating proof {p.Y}")
+                        await self.crud.invalidate_proof(
+                            proof=p, db=self.db, conn=conn
+                        )
+                    
+                    logger.trace(f"Registering DLC {reg.dlc_root}")
+                    await self.crud.store_dlc(reg, self.db, conn)
+                    registered.append(registration)
+                except Exception as e:
+                    logger.trace(f"Failed to register {reg.dlc_root}: {str(e)}")
+                    errors.append(DlcFundingProof(
+                        dlc_root=reg.dlc_root,
+                        bad_inputs=[DlcBadInput(
+                            index=-1,
+                            detail=str(e)
+                        )]
+                    ))
         logger.trace("_verify_proofs_and_dlc_registrations lock released")
-        return (ok, errors)
+        return (registered, errors)

@@ -65,13 +65,11 @@ def list_hash(leaves: List[str]) -> List[bytes]:
 def sign_dlc(
     dlc_root: str,
     funding_amount: int,
-    fa_unit: str,
     privkey: PrivateKey,
 ) -> bytes:
     message = (
         bytes.fromhex(dlc_root)
         +str(funding_amount).encode("utf-8")
-        +fa_unit.encode("utf-8")
     )
     message_hash = sha256(message).digest()
     return privkey.schnorr_sign(message_hash, None, raw=True)
@@ -79,14 +77,12 @@ def sign_dlc(
 def verify_dlc_signature(
     dlc_root: str,
     funding_amount: int,
-    fa_unit: str,
     signature: bytes,
     pubkey: PublicKey,
 ) -> bool:
     message = (
         bytes.fromhex(dlc_root)
         +str(funding_amount).encode("utf-8")
-        +fa_unit.encode("utf-8")
     )
     message_hash = sha256(message).digest()
     return pubkey.schnorr_verify(message_hash, signature, None, raw=True)

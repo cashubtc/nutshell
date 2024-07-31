@@ -1096,8 +1096,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             return signatures
 
     async def register_dlc(self, request: PostDlcRegistrationRequest) -> PostDlcRegistrationResponse:
+        """Validates and registers DiscreteLogContracts
+            Args:
+               request (PostDlcRegistrationRequest): a request formatted following NUT-DLC spec
+            Returns:
+                PostDlcRegistrationResponse: Indicating the funded and registered DLCs as well as the errors.
+        """
         logger.trace("register called")
-        is_atomic = request.atomic or False
         funded: List[Tuple[DiscreteLogContract, DlcFundingProof]] = []
         errors: List[DlcFundingProof] = []
         for registration in request.registrations:
@@ -1111,15 +1116,22 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     registration.inputs
                 )
                 await self._verify_dlc_amount_threshold(amount_provided, registration.inputs)
+
                 # At this point we can put this dlc into the funded list and create a signature for it
-                # We use the funding proof private key
-                '''
+                # We use the first key from the active keyset of the unit specified in the contract.
+                active_keyset_for_unit = next(
+                    filter(
+                        lambda k: k.active and k.unit == Unit[registration.unit],
+                        self.keysets.values()
+                    )
+                )
+                funding_privkey = next(iter(active_keyset_for_unit.private_keys.values()))
                 signature = sign_dlc(
                     registration.dlc_root,
                     registration.funding_amount,
-                    registration.unit,
-                    self.funding_proof_private_key
+                    funding_privkey,
                 )
+
                 funding_proof = DlcFundingProof(
                     dlc_root=registration.dlc_root,
                     signature=signature.hex()
@@ -1132,7 +1144,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     unit=registration.unit,
                 )
                 funded.append((dlc, funding_proof))
-                '''
             except (TransactionError, DlcVerificationFail) as e:
                 logger.error(f"registration {registration.dlc_root} failed")
                 # Generic Error
@@ -1150,17 +1161,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         dlc_root=registration.dlc_root,
                         bad_inputs=e.bad_inputs,
                     ))
-        # If `atomic` register and there are errors, abort
-        if is_atomic and len(errors) > 0:
-            return PostDlcRegistrationResponse(errors=errors)
-        # Database dance:
-        funded, db_errors = await self.db_write._verify_proofs_and_dlc_registrations(funded, is_atomic)
+        # Database dance
+        registered, db_errors = await self.db_write._verify_proofs_and_dlc_registrations(funded)
         errors += db_errors
-        if is_atomic and len(errors) > 0:
-            return PostDlcRegistrationResponse(errors=errors)
         
-        # ALL OK
+        # Return funded DLCs and errors
         return PostDlcRegistrationResponse(
-            funded=[f[1] for f in funded],
+            funded=[reg[1] for reg in registered],
             errors=errors if len(errors) > 0 else None,
         )

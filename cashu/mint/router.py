@@ -24,6 +24,8 @@ from ..core.models import (
     PostRestoreResponse,
     PostSwapRequest,
     PostSwapResponse,
+    PostDlcRegistrationRequest,
+    PostDlcRegistrationResponse
 )
 from ..core.settings import settings
 from ..mint.startup import ledger
@@ -375,3 +377,18 @@ async def restore(payload: PostRestoreRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, signatures = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, signatures=signatures)
+
+@router.post(
+    "v1/register",
+    name="Register",
+    summary="Register a DLC batch",
+    response_model=PostDlcRegistrationResponse,
+    response_description=(
+        "Two lists describing which DLC were registered and which encountered errors respectively."
+    )
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def register(request: Request, payload: PostDlcRegistrationRequest) -> PostDlcRegistrationResponse:
+    logger.trace(f"> POST /v1/register: {payload}")
+    assert len(payload.registrations) > 0, "No registrations provided"
+    return await ledger.register_dlc(payload)
