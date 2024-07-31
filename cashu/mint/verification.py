@@ -347,8 +347,9 @@ class LedgerVerification(
             the funding_amount
         """
         sct_proofs, _ = await self.filter_sct_proofs(proofs)
-        sct_secrets = [Secret.deserialize(p.secret) for p in sct_proofs]
-        if not all([int(s.tags.get_tag('threshold')) <= funding_amount for s in sct_secrets]):
+        dlc_witnesses = [DLCWitness.from_witness(p.witness or "") for p in sct_proofs]
+        dlc_secrets = [Secret.deserialize(w.leaf_secret) for w in dlc_witnesses]
+        if not all([int(s.tags.get_tag('threshold')) <= funding_amount for s in dlc_secrets]):
             raise TransactionError("Some inputs' funding thresholds were not met")
     
     async def _verify_dlc_inputs(

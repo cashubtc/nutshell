@@ -4,7 +4,9 @@ from cashu.lightning.base import InvoiceResponse, PaymentStatus
 from cashu.wallet.wallet import Wallet
 from cashu.core.secret import Secret, SecretKind
 from cashu.core.errors import CashuError
-from cashu.core.base import DLCWitness, Proof, TokenV4
+from cashu.core.base import DLCWitness, Proof, TokenV4, Unit, DiscreteLogContract
+from cashu.core.models import PostDlcRegistrationRequest, PostDlcRegistrationResponse
+from cashu.mint.ledger import Ledger
 from cashu.wallet.helpers import send
 from tests.conftest import SERVER_ENDPOINT
 from hashlib import sha256
@@ -17,7 +19,15 @@ import pytest_asyncio
 from loguru import logger
 
 from typing import Union, List
-from cashu.core.crypto.dlc import merkle_root, merkle_verify, sorted_merkle_hash, list_hash
+from secp256k1 import PrivateKey
+from cashu.core.crypto.dlc import (
+    merkle_root,
+    merkle_verify,
+    sorted_merkle_hash,
+    list_hash,
+    sign_dlc,
+    verify_dlc_signature,
+)
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet():
@@ -78,6 +88,20 @@ async def test_merkle_verify():
     index = randint(0, len(leafs)-1)
     root, branch_hashes = merkle_root(leafs, index)
     assert merkle_verify(root, leafs[index], branch_hashes), "merkle_verify test fail"
+
+@pytest.mark.asyncio
+async def test_dlc_signatures():
+    dlc_root = sha256("TESTING".encode()).hexdigest()
+    funding_amount = 1000
+    privkey = PrivateKey()
+
+    # sign
+    signature = sign_dlc(dlc_root, funding_amount, privkey)
+    # verify
+    assert(
+        verify_dlc_signature(dlc_root, funding_amount, signature, privkey.pubkey),
+        "Could not verify funding proof signature"
+    )
 
 @pytest.mark.asyncio
 async def test_swap_for_dlc_locked(wallet: Wallet):
@@ -246,3 +270,69 @@ async def test_send_funding_token(wallet: Wallet):
     assert all([Secret.deserialize(p.secret).kind == SecretKind.SCT.value for p in proofs])
     witnesses = [DLCWitness.from_witness(p.witness) for p in proofs]
     assert all([Secret.deserialize(w.leaf_secret).kind == SecretKind.DLC.value for w in witnesses])
+
+@pytest.mark.asyncio
+async def test_registration_vanilla_proofs(wallet: Wallet, ledger: Ledger):
+    invoice = await wallet.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(64, id=invoice.id)
+
+    # Get public key the mint uses to sign
+    keysets = await wallet._get_keys()
+    active_keyset_for_unit = next(filter(lambda k: k.active and k.unit == Unit["sat"], keysets))
+    pubkey = next(iter(active_keyset_for_unit.public_keys.values()))
+
+    dlc_root = sha256("TESTING".encode()).hexdigest()
+    dlc = DiscreteLogContract(
+        funding_amount=64,
+        unit="sat",
+        dlc_root=dlc_root,
+        inputs=minted,
+    )
+
+    request = PostDlcRegistrationRequest(registrations=[dlc])
+    response = await ledger.register_dlc(request)
+    assert len(response.funded) == 1, "Funding proofs len != 1"
+    
+    funding_proof = response.funded[0]
+    assert (
+        verify_dlc_signature(dlc_root, 64, bytes.fromhex(funding_proof.signature), pubkey),
+        "Could not verify funding proof"
+    )
+
+@pytest.mark.asyncio
+async def test_registration_dlc_locked_proofs(wallet: Wallet, ledger: Ledger):
+    invoice = await wallet.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(64, id=invoice.id)
+
+    # Get locked proofs
+    dlc_root = sha256("TESTING".encode()).hexdigest()
+    _, locked = await wallet.split(minted, 64, dlc_data=(dlc_root, 32))
+    assert len(_) == 0
+    
+    # Add witnesses to proofs
+    locked = await wallet.add_sct_witnesses_to_proofs(locked)
+
+    # Get public key the mint uses to sign
+    keysets = await wallet._get_keys()
+    active_keyset_for_unit = next(filter(lambda k: k.active and k.unit == Unit["sat"], keysets))
+    pubkey = next(iter(active_keyset_for_unit.public_keys.values()))
+
+    dlc = DiscreteLogContract(
+        funding_amount=64,
+        unit="sat",
+        dlc_root=dlc_root,
+        inputs=locked,
+    )
+
+    request = PostDlcRegistrationRequest(registrations=[dlc])
+    response = await ledger.register_dlc(request)
+    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"
+    assert len(response.funded) == 1, "Funding proofs len != 1"
+    
+    funding_proof = response.funded[0]
+    assert (
+        verify_dlc_signature(dlc_root, 64, bytes.fromhex(funding_proof.signature), pubkey),
+        "Could not verify funding proof"
+    )
