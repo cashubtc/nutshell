@@ -389,3 +389,28 @@ async def test_fund_same_dlc_twice_same_batch(wallet: Wallet, ledger: Ledger):
     request = PostDlcRegistrationRequest(registrations=[dlc1, dlc2])
     response = await ledger.register_dlc(request)
     assert response.errors and len(response.errors) == 1, f"Funding proofs error: {response.errors[0].bad_inputs}"
+
+@pytest.mark.asyncio
+async def test_get_dlc_status(wallet: Wallet, ledger: Ledger):
+    invoice = await wallet.request_mint(128)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(128, id=invoice.id)
+
+    dlc_root = sha256("TESTING".encode()).hexdigest()
+    dlc1 = DiscreetLogContract(
+        funding_amount=64,
+        unit="sat",
+        dlc_root=dlc_root,
+        inputs=minted,
+    )
+    request = PostDlcRegistrationRequest(registrations=[dlc1])
+    response = await ledger.register_dlc(request)
+    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"
+    response = await ledger.status_dlc(dlc_root)
+    assert (
+        response.debts is None and
+        response.settled == False and
+        response.funding_amount == 128 and
+        response.unit == "sat",
+        f"GetDlcStatusResponse did not respect the format"       
+    )
