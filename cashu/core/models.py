@@ -6,7 +6,7 @@ from .base import (
     BlindedMessage,
     BlindedMessage_Deprecated,
     BlindedSignature,
-    DiscreteLogContract,
+    DiscreetLogContract,
     DlcFundingProof,
     DlcPayout,
     DlcPayoutForm,
@@ -334,7 +334,7 @@ class PostRestoreResponse(BaseModel):
 # ------- API: DLC REGISTRATION -------
 
 class PostDlcRegistrationRequest(BaseModel):
-    registrations: List[DiscreteLogContract]
+    registrations: List[DiscreetLogContract]
 
 class PostDlcRegistrationResponse(BaseModel):
     funded: List[DlcFundingProof] = []
@@ -351,7 +351,6 @@ class PostDlcSettleResponse(BaseModel):
 
 # ------- API: DLC PAYOUT -------
 class PostDlcPayoutRequest(BaseModel):
-    atomic: Optional[bool]
     payouts: List[DlcPayoutForm]
 
 class PostDlcPayoutResponse(BaseModel):
@@ -362,5 +361,6 @@ class PostDlcPayoutResponse(BaseModel):
 
 class GetDlcStatusResponse(BaseModel):
     settled: bool
-    funding_amount: Optional[int]
-    debts: Optional[Dict[str, int]]
+    unit: Optional[str] = None
+    funding_amount: Optional[int] = None
+    debts: Optional[Dict[str, int]] = None

@@ -23,7 +23,7 @@ from ..core.base import (
     DlcBadInput,
     DlcFundingProof,
     DLCWitness,
-    DiscreteLogContract
+    DiscreetLogContract
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.dlc import sign_dlc
@@ -51,6 +51,7 @@ from ..core.models import (
     PostMintQuoteRequest,
     PostDlcRegistrationRequest,
     PostDlcRegistrationResponse,
+    GetDlcStatusResponse,
 )
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -1095,6 +1096,31 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 signatures.append(signature)
             return signatures
 
+    async def status_dlc(self, dlc_root: str) -> GetDlcStatusResponse:
+        """Gets the status of a particular DLC
+
+            Args:
+                dlc_root (str): the root hash of the contract
+            Returns:
+                GetDlcStatusResponse: a response containing the status of the DLC, if it was found.
+            Raises:
+                DlcNotFoundError: no DLC with dlc_root was found
+        """
+        logger.trace("status_dlc called")
+        dlc = await self.db_read._get_registered_dlc(dlc_root)
+        if not dlc.settled:
+            return GetDlcStatusResponse(
+                settled=dlc.settled,
+                funding_amount=dlc.funding_amount,
+                unit=dlc.unit,
+                debts=None
+            )
+        else:
+            return GetDlcStatusResponse(
+                settled=dlc.settled,
+                debts=dlc.debts,
+            )
+
     async def register_dlc(self, request: PostDlcRegistrationRequest) -> PostDlcRegistrationResponse:
         """Validates and registers DiscreteLogContracts
             Args:
@@ -1103,7 +1129,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 PostDlcRegistrationResponse: Indicating the funded and registered DLCs as well as the errors.
         """
         logger.trace("register called")
-        funded: List[Tuple[DiscreteLogContract, DlcFundingProof]] = []
+        funded: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
         errors: List[DlcFundingProof] = []
         for registration in request.registrations:
             try:
@@ -1136,7 +1162,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     dlc_root=registration.dlc_root,
                     signature=signature.hex()
                 )
-                dlc = DiscreteLogContract(
+                dlc = DiscreetLogContract(
                     settled=False,
                     dlc_root=registration.dlc_root,
                     funding_amount=amount_provided,

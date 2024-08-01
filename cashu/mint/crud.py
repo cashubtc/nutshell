@@ -1,7 +1,7 @@
 import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
-from ..core.base import DiscreteLogContract
+from ..core.base import DiscreetLogContract
 
 from ..core.base import (
     BlindedSignature,
@@ -250,13 +250,13 @@ class LedgerCrud(ABC):
         dlc_root: str,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[DiscreteLogContract]:
+    ) -> Optional[DiscreetLogContract]:
         ...
 
     @abstractmethod
     async def store_dlc(
         self,
-        dlc: DiscreteLogContract,
+        dlc: DiscreetLogContract,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None:
@@ -765,17 +765,19 @@ class LedgerCrudSqlite(LedgerCrud):
         dlc_root: str,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Optional[DiscreteLogContract]:
+    ) -> Optional[DiscreetLogContract]:
         query = f"""
         SELECT * from {db.table_with_schema('dlc')}
         WHERE dlc_root = :dlc_root
         """
-        result = await (conn or db).fetchone(query, {"dlc_root": dlc_root})
-        return result
+        row = await (conn or db).fetchone(query, {"dlc_root": dlc_root})
+        if not row:
+            return None
+        return DiscreetLogContract.from_row(row)
 
     async def store_dlc(
         self,
-        dlc: DiscreteLogContract,
+        dlc: DiscreetLogContract,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None:

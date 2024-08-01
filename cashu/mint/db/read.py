@@ -2,7 +2,11 @@ from typing import Dict, List, Optional
 
 from ...core.base import Proof, ProofSpentState, ProofState
 from ...core.db import Connection, Database
-from ...core.errors import TokenAlreadySpentError, DlcAlreadyRegisteredError
+from ...core.errors import (
+    TokenAlreadySpentError,
+    DlcAlreadyRegisteredError,
+    DlcNotFoundError,
+)
 from ..crud import LedgerCrud
 
 
@@ -98,3 +102,11 @@ class DbReadHelper:
         async with self.db.get_connection(conn) as conn:
             if await self.crud.get_registered_dlc(dlc_root, self.db, conn) is not None:
                 raise DlcAlreadyRegisteredError()
+
+    async def _get_registered_dlc(self, dlc_root: str, conn: Optional[Connection] = None):
+        async with self.db.get_connection(conn) as conn:
+            dlc = await self.crud.get_registered_dlc(dlc_root, self.db, conn)
+            if dlc is None:
+                raise DlcNotFoundError()
+            return dlc
+            

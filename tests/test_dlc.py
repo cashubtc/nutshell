@@ -4,7 +4,7 @@ from cashu.lightning.base import InvoiceResponse, PaymentStatus
 from cashu.wallet.wallet import Wallet
 from cashu.core.secret import Secret, SecretKind
 from cashu.core.errors import CashuError
-from cashu.core.base import DLCWitness, Proof, TokenV4, Unit, DiscreteLogContract
+from cashu.core.base import DLCWitness, Proof, TokenV4, Unit, DiscreetLogContract
 from cashu.core.models import PostDlcRegistrationRequest, PostDlcRegistrationResponse
 from cashu.mint.ledger import Ledger
 from cashu.wallet.helpers import send
@@ -283,7 +283,7 @@ async def test_registration_vanilla_proofs(wallet: Wallet, ledger: Ledger):
     pubkey = next(iter(active_keyset_for_unit.public_keys.values()))
 
     dlc_root = sha256("TESTING".encode()).hexdigest()
-    dlc = DiscreteLogContract(
+    dlc = DiscreetLogContract(
         funding_amount=64,
         unit="sat",
         dlc_root=dlc_root,
@@ -319,7 +319,7 @@ async def test_registration_dlc_locked_proofs(wallet: Wallet, ledger: Ledger):
     active_keyset_for_unit = next(filter(lambda k: k.active and k.unit == Unit["sat"], keysets))
     pubkey = next(iter(active_keyset_for_unit.public_keys.values()))
 
-    dlc = DiscreteLogContract(
+    dlc = DiscreetLogContract(
         funding_amount=64,
         unit="sat",
         dlc_root=dlc_root,
@@ -336,3 +336,56 @@ async def test_registration_dlc_locked_proofs(wallet: Wallet, ledger: Ledger):
         verify_dlc_signature(dlc_root, 64, bytes.fromhex(funding_proof.signature), pubkey),
         "Could not verify funding proof"
     )
+
+@pytest.mark.asyncio
+async def test_fund_same_dlc_twice(wallet: Wallet, ledger: Ledger):
+    invoice = await wallet.request_mint(128)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(128, id=invoice.id)
+
+    dlc_root = sha256("TESTING".encode()).hexdigest()
+    proofs2, proofs1 = await wallet.split(minted, 64)
+
+    dlc1 = DiscreetLogContract(
+        funding_amount=64,
+        unit="sat",
+        dlc_root=dlc_root,
+        inputs=proofs1,
+    )
+    dlc2 = DiscreetLogContract(
+        funding_amount=64,
+        unit="sat",
+        dlc_root=dlc_root,
+        inputs=proofs2,
+    )
+    request = PostDlcRegistrationRequest(registrations=[dlc1])
+    response = await ledger.register_dlc(request)
+    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"
+    request = PostDlcRegistrationRequest(registrations=[dlc2])
+    response = await ledger.register_dlc(request)
+    assert response.errors and response.errors[0].bad_inputs[0].detail == "dlc already registered"
+
+@pytest.mark.asyncio
+async def test_fund_same_dlc_twice_same_batch(wallet: Wallet, ledger: Ledger):
+    invoice = await wallet.request_mint(128)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(128, id=invoice.id)
+
+    dlc_root = sha256("TESTING".encode()).hexdigest()
+    proofs2, proofs1 = await wallet.split(minted, 64)
+
+    dlc1 = DiscreetLogContract(
+        funding_amount=64,
+        unit="sat",
+        dlc_root=dlc_root,
+        inputs=proofs1,
+    )
+    dlc2 = DiscreetLogContract(
+        funding_amount=64,
+        unit="sat",
+        dlc_root=dlc_root,
+        inputs=proofs2,
+    )
+    request = PostDlcRegistrationRequest(registrations=[dlc1, dlc2])
+    response = await ledger.register_dlc(request)
+    assert response.errors and len(response.errors) == 1, f"Funding proofs error: {response.errors[0].bad_inputs}"

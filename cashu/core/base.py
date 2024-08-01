@@ -1212,7 +1212,7 @@ class TokenV4(Token):
 
 # -------- DLC STUFF --------
 
-class DiscreteLogContract(BaseModel):
+class DiscreetLogContract(BaseModel):
     """
     A discrete log contract
     """
@@ -1222,6 +1222,16 @@ class DiscreteLogContract(BaseModel):
     unit: str
     inputs: Optional[List[Proof]] = None         # Need to verify these are indeed SCT proofs
     debts: Optional[Dict[str, int]] = None       # We save who we owe money to here
+
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            dlc_root=row["dlc_root"],
+            settled=bool(row["settled"]),
+            funding_amount=int(row["funding_amount"]),
+            unit=row["unit"],
+            debts=row["debts"] or None,
+        )
 
 class DlcBadInput(BaseModel):
     index: int

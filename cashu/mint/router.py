@@ -25,7 +25,8 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
     PostDlcRegistrationRequest,
-    PostDlcRegistrationResponse
+    PostDlcRegistrationResponse,
+    GetDlcStatusResponse,
 )
 from ..core.settings import settings
 from ..mint.startup import ledger
@@ -379,16 +380,30 @@ async def restore(payload: PostRestoreRequest) -> PostRestoreResponse:
     return PostRestoreResponse(outputs=outputs, signatures=signatures)
 
 @router.post(
-    "v1/register",
-    name="Register",
-    summary="Register a DLC batch",
+    "v1/dlc/fund",
+    name="Fund",
+    summary="Register and fund a DLC batch",
     response_model=PostDlcRegistrationResponse,
     response_description=(
         "Two lists describing which DLC were registered and which encountered errors respectively."
     )
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-async def register(request: Request, payload: PostDlcRegistrationRequest) -> PostDlcRegistrationResponse:
-    logger.trace(f"> POST /v1/register: {payload}")
+async def dlc_fund(request: Request, payload: PostDlcRegistrationRequest) -> PostDlcRegistrationResponse:
+    logger.trace(f"> POST /v1/dlc/fund: {payload}")
     assert len(payload.registrations) > 0, "No registrations provided"
     return await ledger.register_dlc(payload)
+
+@router.get(
+    "v1/dlc/status/{dlc_root}",
+    name="",
+    summary="Register a DLC batch",
+    response_model=GetDlcStatusResponse,
+    response_description=(
+        "Two lists describing which DLC were registered and which encountered errors respectively."
+    )
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def dlc_status(request: Request, dlc_root: str) -> GetDlcStatusResponse:
+    logger.trace(f"> GET /v1/dlc/status/{dlc_root}")
+    return await ledger.status_dlc(dlc_root)

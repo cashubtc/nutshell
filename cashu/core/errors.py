@@ -113,4 +113,10 @@ class DlcAlreadyRegisteredError(CashuError):
     
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
-    
+
+class DlcNotFoundError(CashuError):
+    detail = "dlc not found"
+    code = 30002
+
+    def __init__(self, **kwargs):
+        super().__init__(self.detail, self.code)
