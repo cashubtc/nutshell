@@ -1250,17 +1250,17 @@ class DlcOutcome(BaseModel):
     """
     Describes a DLC outcome
     """
-    k: Optional[str]      # The discrete log revealed by the oracle
+    k: Optional[str]      # The blinded attestation secret
     t: Optional[int]      # The timeout (claim when time is over)
-    P: str                # The payout structure associated with k
+    P: str                # The payout structure associated with this outcome
 
 class DlcSettlement(BaseModel):
     """
     Data used to settle an outcome of a DLC
     """
     dlc_root: str
-    outcome: DlcOutcome
-    merkle_proof: List[str]
+    outcome: Optional[DlcOutcome]
+    merkle_proof: Optional[List[str]]
     details: Optional[str]
 
 class DlcPayoutForm(BaseModel):

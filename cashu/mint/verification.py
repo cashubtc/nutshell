@@ -1,5 +1,7 @@
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
+import json
+
 from loguru import logger
 from hashlib import sha256
 
@@ -12,6 +14,7 @@ from ..core.base import (
     Unit,
     DlcBadInput,
     DLCWitness,
+    DlcOutcome,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.dlc import merkle_verify
@@ -25,6 +28,7 @@ from ..core.errors import (
     TransactionError,
     TransactionUnitError,
     DlcVerificationFail,
+    DlcSettlementFail,
 )
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
@@ -475,3 +479,24 @@ class LedgerVerification(
                     detail=exc.detail if exc else "input spending conditions verification failed" 
                 ))
         raise_if_err(errors)
+
+    async def _verify_dlc_payout(self, P: str):
+        try:
+            payout = json.loads(P)
+            if not isinstance(payout, dict):
+                raise DlcSettlementFail(detail="Provided payout structure is not a dictionary")
+            if not all([isinstance(k, str) and isinstance(v, int) for k, v in payout.items()]):
+                raise DlcSettlementFail(detail="Provided payout structure is not a dictionary mapping strings to integers")
+            for v in payout.values():
+                try:
+                    b = bytes.fromhex(v)
+                    if b[0] != b'\x02':
+                        raise DlcSettlementFail(detail="Provided payout structure contains incorrect public keys")
+                except ValueError as e:
+                    raise DlcSettlementFail(detail=str(e))
+        except json.JSONDecodeError as e:
+            raise DlcSettlementFail(detail="cannot decode the provided payout structure")
+
+    async def _verify_dlc_inclusion(self, dlc_root: str, outcome: DlcOutcome, merkle_proof: List[str]):
+        # Verify payout structure
+        await self._verify_dlc_payout(outcome.P)

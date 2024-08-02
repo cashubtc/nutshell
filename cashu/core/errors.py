@@ -120,3 +120,11 @@ class DlcNotFoundError(CashuError):
 
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
+
+class DlcSettlementFail(CashuError):
+    detail = "settlement verification failed: "
+    code = 30003
+
+    def __init__(self, **kwargs):
+        super().__init__(self.detail, self.code)
+        self.detail += kwargs['detail']

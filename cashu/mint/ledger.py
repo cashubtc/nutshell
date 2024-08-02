@@ -23,7 +23,8 @@ from ..core.base import (
     DlcBadInput,
     DlcFundingProof,
     DLCWitness,
-    DiscreetLogContract
+    DiscreetLogContract,
+    DlcSettlement,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.dlc import sign_dlc
@@ -51,6 +52,8 @@ from ..core.models import (
     PostMintQuoteRequest,
     PostDlcRegistrationRequest,
     PostDlcRegistrationResponse,
+    PostDlcSettleRequest,
+    PostDlcSettleResponse,
     GetDlcStatusResponse,
 )
 from ..core.settings import settings
@@ -1148,7 +1151,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 active_keyset_for_unit = next(
                     filter(
                         lambda k: k.active and k.unit == Unit[registration.unit],
-                        self.keysets.values()
+                        self.keysets.values(),
                     )
                 )
                 funding_privkey = next(iter(active_keyset_for_unit.private_keys.values()))
@@ -1157,10 +1160,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     registration.funding_amount,
                     funding_privkey,
                 )
-
                 funding_proof = DlcFundingProof(
                     dlc_root=registration.dlc_root,
-                    signature=signature.hex()
+                    signature=signature.hex(),
                 )
                 dlc = DiscreetLogContract(
                     settled=False,
@@ -1178,7 +1180,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         dlc_root=registration.dlc_root,
                         bad_inputs=[DlcBadInput(
                             index=-1,
-                            detail=e.detail
+                            detail=e.detail,
                         )]
                     ))
                 # DLC verification fail
@@ -1196,3 +1198,36 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             funded=[reg[1] for reg in registered],
             errors=errors if len(errors) > 0 else None,
         )
+        
+    '''
+    # UNFINISHED
+    async def settle_dlc(self, request: PostDlcSettleRequest) -> PostDlcSettleResponse:
+        """Settle DLCs once the oracle reveals the attestation secret or the timeout is over.
+            Args:
+                request (PostDlcSettleRequest): a request formatted following NUT-DLC spec
+            Returns:
+                PostDlcSettleResponse: Indicates which DLCs have been settled and potential errors.
+        """
+        logger.trace("settle called")
+        verified: List[DlcSettlement] = []
+        errors: List[DlcSettlement] = []
+        for settlement in request:
+            try:
+                # Verify inclusion of payout structure and associated attestation in the DLC
+                assert settlement.outcome and settlement.merkle_proof, "outcome or merkle proof not provided"
+                await self.verify_dlc_inclusion(settlement.dlc_root, settlement.outcome, settlement.merkle_proof)
+                verified.append(settlement)
+            except DlcSettlementFail, AssertionError as e:
+                errors.append(DlcSettlement(
+                    dlc_root=settlement.dlc_root,
+                    details=e.details if isinstance(e, DlcSettlementFail) else str(e)
+                ))
+        # Database dance:
+        settled, db_errors = await self.db_write._settle_dlc(verified)
+        errors += db_errors
+
+        return PostDlcSettleResponse(
+            settled=settled,
+            errors=errors if len(errors) > 0 else None,
+        )
+    '''
