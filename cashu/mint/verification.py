@@ -1,5 +1,6 @@
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
+import time
 import json
 
 from loguru import logger
@@ -17,8 +18,8 @@ from ..core.base import (
     DlcOutcome,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.dlc import merkle_verify
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.dlc import merkle_verify, list_hash
+from ..core.crypto.secp import PublicKey, PrivateKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
@@ -489,8 +490,8 @@ class LedgerVerification(
                 raise DlcSettlementFail(detail="Provided payout structure is not a dictionary mapping strings to integers")
             for v in payout.values():
                 try:
-                    b = bytes.fromhex(v)
-                    if b[0] != b'\x02':
+                    tmp = bytes.fromhex(v)
+                    if tmp[0] != b'\x02':
                         raise DlcSettlementFail(detail="Provided payout structure contains incorrect public keys")
                 except ValueError as e:
                     raise DlcSettlementFail(detail=str(e))
@@ -500,3 +501,35 @@ class LedgerVerification(
     async def _verify_dlc_inclusion(self, dlc_root: str, outcome: DlcOutcome, merkle_proof: List[str]):
         # Verify payout structure
         await self._verify_dlc_payout(outcome.P)
+
+        dlc_root_bytes = None
+        merkle_proof_bytes = None
+        P = b_dhke.hash_to_curve(outcome.P.encode("utf-8"))
+        try:
+            dlc_root_bytes = bytes.fromhex(dlc_root)
+            merkle_proof_bytes = list_hash(merkle_proof)
+        except ValueError:
+            raise DlcSettlementFail(detail="either dlc root or merkle proof are not a hex string")
+
+        # Timeout verification 
+        if outcome.t:
+            unix_epoch = int(time.time())
+            if unix_epoch < outcome.t:
+                raise DlcSettlementFail(detail="too early for a timeout settlement")
+            K_t = b_dhke.hash_to_curve(outcome.t.to_bytes(4, "big"))
+            leaf_hash = sha256((K_t+P).serialize()).digest()
+            if not merkle_verify(dlc_root_bytes, leaf_hash, merkle_proof_bytes):
+                raise DlcSettlementFail(detail="could not verify inclusion of timeout + payout structure")
+        # Blinded Attestation Secret verification
+        elif outcome.k:
+            k = None
+            try:
+                k = bytes.fromhex(outcome.k)
+            except ValueError:
+                raise DlcSettlementFail(detail="blinded attestation secret k is not a hex string")
+            K = PrivateKey(k, raw=True).pubkey
+            leaf_hash = sha256((K+P).serialize()).digest()
+            if not merkle_verify(dlc_root_bytes, leaf_hash, merkle_proof_bytes):
+                raise DlcSettlementFail(detail="could not verify inclusion of attestation secret + payout structure")
+        else:
+            raise DlcSettlementFail(detail="no timeout or attestation secret provided")

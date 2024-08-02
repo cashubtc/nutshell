@@ -1215,7 +1215,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             try:
                 # Verify inclusion of payout structure and associated attestation in the DLC
                 assert settlement.outcome and settlement.merkle_proof, "outcome or merkle proof not provided"
-                await self.verify_dlc_inclusion(settlement.dlc_root, settlement.outcome, settlement.merkle_proof)
+                await self._verify_dlc_inclusion(settlement.dlc_root, settlement.outcome, settlement.merkle_proof)
                 verified.append(settlement)
             except DlcSettlementFail, AssertionError as e:
                 errors.append(DlcSettlement(
