@@ -338,6 +338,31 @@ async def test_registration_dlc_locked_proofs(wallet: Wallet, ledger: Ledger):
     )
 
 @pytest.mark.asyncio
+async def test_registration_threshold(wallet: Wallet, ledger: Ledger):
+    invoice = await wallet.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(64, id=invoice.id)
+
+    # Get locked proofs
+    dlc_root = sha256("TESTING".encode()).hexdigest()
+    _, locked = await wallet.split(minted, 64, dlc_data=(dlc_root, 128))
+    assert len(_) == 0
+    
+    # Add witnesses to proofs
+    locked = await wallet.add_sct_witnesses_to_proofs(locked)
+
+    dlc = DiscreetLogContract(
+        funding_amount=64,
+        unit="sat",
+        dlc_root=dlc_root,
+        inputs=locked,
+    )
+
+    request = PostDlcRegistrationRequest(registrations=[dlc])
+    response = await ledger.register_dlc(request)
+    assert response.errors and response.errors[0].bad_inputs[0].detail == "Threshold amount not respected"
+
+@pytest.mark.asyncio
 async def test_fund_same_dlc_twice(wallet: Wallet, ledger: Ledger):
     invoice = await wallet.request_mint(128)
     await pay_if_regtest(invoice.bolt11)
@@ -412,5 +437,5 @@ async def test_get_dlc_status(wallet: Wallet, ledger: Ledger):
         response.settled == False and
         response.funding_amount == 128 and
         response.unit == "sat",
-        f"GetDlcStatusResponse did not respect the format"       
+        f"GetDlcStatusResponse with unexpected fields"       
     )

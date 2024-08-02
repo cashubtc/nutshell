@@ -346,11 +346,27 @@ class LedgerVerification(
         """For every SCT proof verify that secret's threshold is less or equal to
             the funding_amount
         """
+        def raise_if_err(err):
+            if len(err) > 0:
+                logger.error("Failed to verify DLC inputs")
+                raise DlcVerificationFail(bad_inputs=err)
         sct_proofs, _ = await self.filter_sct_proofs(proofs)
         dlc_witnesses = [DLCWitness.from_witness(p.witness or "") for p in sct_proofs]
         dlc_secrets = [Secret.deserialize(w.leaf_secret) for w in dlc_witnesses]
-        if not all([int(s.tags.get_tag('threshold')) <= funding_amount for s in dlc_secrets]):
-            raise TransactionError("Some inputs' funding thresholds were not met")
+        errors = []
+        for i, s in enumerate(dlc_secrets):
+            if s.tags.get_tag('threshold') is not None:
+                threshold = None
+                try:
+                    threshold = int(s.tags.get_tag('threshold'))
+                except Exception:
+                    pass
+                if threshold is not None and funding_amount < threshold:
+                    errors.append(DlcBadInput(
+                        index=i,
+                        detail="Threshold amount not respected"
+                    ))
+        raise_if_err(errors)
     
     async def _verify_dlc_inputs(
         self,
