@@ -6,6 +6,7 @@ import shutil
 import time
 from pathlib import Path
 
+import httpx
 import pytest
 import pytest_asyncio
 import uvicorn
@@ -144,10 +145,9 @@ def mint():
     while tries < 100:
         try:
             httpx.get(settings.mint_url)
-        except:
+        except Exception:
             tries += 1
             time.sleep(0.1)
-
 
     yield server
     server.stop()
