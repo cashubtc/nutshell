@@ -1259,9 +1259,9 @@ class DlcSettlement(BaseModel):
     Data used to settle an outcome of a DLC
     """
     dlc_root: str
-    outcome: Optional[DlcOutcome]
-    merkle_proof: Optional[List[str]]
-    details: Optional[str]
+    outcome: Optional[DlcOutcome] = None
+    merkle_proof: Optional[List[str]] = None
+    details: Optional[str] = None
 
 class DlcPayoutForm(BaseModel):
     dlc_root: str

@@ -44,6 +44,7 @@ from ..core.errors import (
     QuoteNotPaidError,
     TransactionError,
     DlcVerificationFail,
+    DlcSettlementFail,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
@@ -1199,8 +1200,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             errors=errors if len(errors) > 0 else None,
         )
         
-    '''
-    # UNFINISHED
     async def settle_dlc(self, request: PostDlcSettleRequest) -> PostDlcSettleResponse:
         """Settle DLCs once the oracle reveals the attestation secret or the timeout is over.
             Args:
@@ -1211,16 +1210,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         logger.trace("settle called")
         verified: List[DlcSettlement] = []
         errors: List[DlcSettlement] = []
-        for settlement in request:
+        for settlement in request.settlements:
             try:
                 # Verify inclusion of payout structure and associated attestation in the DLC
                 assert settlement.outcome and settlement.merkle_proof, "outcome or merkle proof not provided"
                 await self._verify_dlc_inclusion(settlement.dlc_root, settlement.outcome, settlement.merkle_proof)
                 verified.append(settlement)
-            except DlcSettlementFail, AssertionError as e:
+            except (DlcSettlementFail, AssertionError) as e:
                 errors.append(DlcSettlement(
                     dlc_root=settlement.dlc_root,
-                    details=e.details if isinstance(e, DlcSettlementFail) else str(e)
+                    details=e.detail if isinstance(e, DlcSettlementFail) else str(e)
                 ))
         # Database dance:
         settled, db_errors = await self.db_write._settle_dlc(verified)
@@ -1230,4 +1229,3 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             settled=settled,
             errors=errors if len(errors) > 0 else None,
         )
-    '''

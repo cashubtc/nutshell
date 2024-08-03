@@ -13,12 +13,14 @@ from ...core.base import (
     DiscreetLogContract,
     DlcFundingProof,
     DlcBadInput,
+    DlcSettlement,
 )
 from ...core.db import Connection, Database
 from ...core.errors import (
     TransactionError,
     TokenAlreadySpentError,
     DlcAlreadyRegisteredError,
+    DlcSettlementFail,
 )
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
@@ -292,3 +294,36 @@ class DbWriteHelper:
                     ))
         logger.trace("_verify_proofs_and_dlc_registrations lock released")
         return (registered, errors)
+
+    async def _settle_dlc(
+        self,
+        settlements: List[DlcSettlement]
+    ) -> Tuple[List[DlcSettlement], List[DlcSettlement]]:
+        settled = []
+        errors = []
+        async with self.db.get_connection(lock_table="dlc") as conn:
+            for settlement in settlements:
+                try:
+                    # We verify the dlc_root is in the DB
+                    dlc = await self.crud.get_registered_dlc(settlement.dlc_root, self.db, conn)
+                    if dlc is None:
+                        errors.append(DlcSettlement(
+                            dlc_root=settlement.dlc_root,
+                            details="no DLC with this root hash"
+                        ))
+                        continue
+                    if dlc.settled is True:
+                        errors.append(DlcSettlement(
+                            dlc_root=settlement.dlc_root,
+                            details="DLC already settled"
+                        ))
+                    
+                    assert settlement.outcome
+                    await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, settlement.outcome.P, self.db, conn)
+                    settled.append(settlement)
+                except Exception as e:
+                    errors.append(DlcSettlement(
+                        dlc_root=settlement.dlc_root,
+                        details=f"error with the DB: {str(e)}"
+                    ))
+        return (settled, errors)

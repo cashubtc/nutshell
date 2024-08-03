@@ -832,7 +832,7 @@ async def m022_add_dlc_table(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {db.table_with_schema('dlc')} (
                     dlc_root TEXT NOT NULL,
-                    settled BOOL NOT NULL DEFAULT FALSE,
+                    settled BIT NOT NULL DEFAULT 0,
                     funding_amount {db.big_int} NOT NULL,
                     unit TEXT NOT NULL,
                     debts TEXT,

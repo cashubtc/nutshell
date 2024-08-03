@@ -262,6 +262,16 @@ class LedgerCrud(ABC):
     ) -> None:
         ...
 
+    @abstractmethod
+    async def set_dlc_settled_and_debts(
+        self,
+        dlc_root: str,
+        debts: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
+
 class LedgerCrudSqlite(LedgerCrud):
     """Implementation of LedgerCrud for sqlite.
 
@@ -790,8 +800,28 @@ class LedgerCrudSqlite(LedgerCrud):
             query,
             {
                 "dlc_root": dlc.dlc_root,
-                "settled": dlc.settled,
+                "settled": 0 if dlc.settled is False else 1,
                 "funding_amount": dlc.funding_amount,
                 "unit": dlc.unit,
+            },
+        )
+
+    async def set_dlc_settled_and_debts(
+        self,
+        dlc_root: str,
+        debts: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        query = f"""
+        UPDATE TABLE {db.table_with_schema('dlc')}
+        SET settled = 1, debts = :debts
+        WHERE dlc_root = :dlc_root
+        """
+        await (conn or db).execute(
+            query,
+            {
+                "dlc_root": dlc_root,
+                "debts": debts
             },
         )
