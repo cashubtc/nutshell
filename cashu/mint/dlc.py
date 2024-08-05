@@ -1,7 +1,7 @@
-from ..core.nuts import DLC_NUT
 from typing import Dict
 
 from ..core.errors import TransactionError
+from ..core.nuts import DLC_NUT
 from .features import LedgerFeatures
 
 
@@ -16,5 +16,5 @@ class LedgerDLC(LedgerFeatures):
             fees = fees[fa_unit]
             assert isinstance(fees, dict)
             return fees
-        except Exception as e:
+        except Exception:
             raise TransactionError("could not get fees for the specified funding_amount denomination")

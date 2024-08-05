@@ -1,35 +1,34 @@
+import json
+import time
+from hashlib import sha256
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
-import time
-import json
-
 from loguru import logger
-from hashlib import sha256
 
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
+    DiscreetLogContract,
+    DlcBadInput,
+    DlcOutcome,
     Method,
     MintKeyset,
     Proof,
     Unit,
-    DlcBadInput,
-    SCTWitness,
-    DlcOutcome,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.dlc import merkle_verify, list_hash
-from ..core.crypto.secp import PublicKey, PrivateKey
+from ..core.crypto.dlc import list_hash, merkle_verify
+from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
+    DlcSettlementFail,
+    DlcVerificationFail,
     NoSecretInProofsError,
     NotAllowedError,
     SecretTooLongError,
     TransactionError,
     TransactionUnitError,
-    DlcVerificationFail,
-    DlcSettlementFail,
 )
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
@@ -37,9 +36,10 @@ from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
 from .db.read import DbReadHelper
 from .db.write import DbWriteHelper
-from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 from .dlc import LedgerDLC
-from ..core.secret import Secret, SecretKind
+from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
+
+
 class LedgerVerification(
     LedgerSpendingConditions, LedgerDLC, SupportsKeysets, SupportsDb, SupportsBackends
 ):
@@ -429,7 +429,7 @@ class LedgerVerification(
                         raise DlcSettlementFail(detail="Provided payout structure contains incorrect public keys")
                 except ValueError as e:
                     raise DlcSettlementFail(detail=str(e))
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             raise DlcSettlementFail(detail="cannot decode the provided payout structure")
 
     async def _verify_dlc_inclusion(self, dlc_root: str, outcome: DlcOutcome, merkle_proof: List[str]):

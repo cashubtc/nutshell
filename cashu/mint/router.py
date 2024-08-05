@@ -5,6 +5,7 @@ from loguru import logger
 
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
+    GetDlcStatusResponse,
     GetInfoResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
@@ -13,6 +14,8 @@ from ..core.models import (
     MintInfoContact,
     PostCheckStateRequest,
     PostCheckStateResponse,
+    PostDlcRegistrationRequest,
+    PostDlcRegistrationResponse,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
@@ -24,9 +27,6 @@ from ..core.models import (
     PostRestoreResponse,
     PostSwapRequest,
     PostSwapResponse,
-    PostDlcRegistrationRequest,
-    PostDlcRegistrationResponse,
-    GetDlcStatusResponse,
 )
 from ..core.settings import settings
 from ..mint.startup import ledger

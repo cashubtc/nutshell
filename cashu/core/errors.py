@@ -1,5 +1,5 @@
-from typing import Optional, List
-from .base import DlcBadInput
+from typing import Optional
+
 
 class CashuError(Exception):
     code: int

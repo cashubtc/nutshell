@@ -1,10 +1,13 @@
-from ..core.secret import Secret, SecretKind
-from ..core.crypto.secp import PrivateKey
-from ..core.crypto.dlc import list_hash, merkle_root
-from ..core.base import Proof, SCTWitness
-from .protocols import SupportsDb, SupportsPrivateKey
-from loguru import logger
 from typing import List, Optional
+
+from loguru import logger
+
+from ..core.base import Proof, SCTWitness
+from ..core.crypto.dlc import list_hash, merkle_root
+from ..core.crypto.secp import PrivateKey
+from ..core.secret import Secret, SecretKind
+from .protocols import SupportsDb, SupportsPrivateKey
+
 
 class SecretMetadata:
     secret: str

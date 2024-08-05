@@ -10,6 +10,10 @@ from ..core.base import (
     Amount,
     BlindedMessage,
     BlindedSignature,
+    DiscreetLogContract,
+    DlcBadInput,
+    DlcFundingProof,
+    DlcSettlement,
     MeltQuote,
     MeltQuoteState,
     Method,
@@ -20,15 +24,10 @@ from ..core.base import (
     ProofSpentState,
     ProofState,
     Unit,
-    DlcBadInput,
-    DlcFundingProof,
-    SCTWitness,
-    DiscreetLogContract,
-    DlcSettlement,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.dlc import sign_dlc
 from ..core.crypto.aes import AESCipher
+from ..core.crypto.dlc import sign_dlc
 from ..core.crypto.keys import (
     derive_pubkey,
     random_hash,
@@ -37,25 +36,25 @@ from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
+    DlcSettlementFail,
+    DlcVerificationFail,
     KeysetError,
     KeysetNotFoundError,
     LightningError,
     NotAllowedError,
     QuoteNotPaidError,
     TransactionError,
-    DlcVerificationFail,
-    DlcSettlementFail,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
-    PostMeltQuoteRequest,
-    PostMeltQuoteResponse,
-    PostMintQuoteRequest,
+    GetDlcStatusResponse,
     PostDlcRegistrationRequest,
     PostDlcRegistrationResponse,
     PostDlcSettleRequest,
     PostDlcSettleResponse,
-    GetDlcStatusResponse,
+    PostMeltQuoteRequest,
+    PostMeltQuoteResponse,
+    PostMintQuoteRequest,
 )
 from ..core.settings import settings
 from ..core.split import amount_split

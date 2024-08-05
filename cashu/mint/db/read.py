@@ -3,9 +3,9 @@ from typing import Dict, List, Optional
 from ...core.base import Proof, ProofSpentState, ProofState
 from ...core.db import Connection, Database
 from ...core.errors import (
-    TokenAlreadySpentError,
     DlcAlreadyRegisteredError,
     DlcNotFoundError,
+    TokenAlreadySpentError,
 )
 from ..crud import LedgerCrud
 

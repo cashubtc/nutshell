@@ -1,8 +1,12 @@
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Tuple, Union
 
 from loguru import logger
 
 from ...core.base import (
+    DiscreetLogContract,
+    DlcBadInput,
+    DlcFundingProof,
+    DlcSettlement,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
@@ -10,17 +14,12 @@ from ...core.base import (
     Proof,
     ProofSpentState,
     ProofState,
-    DiscreetLogContract,
-    DlcFundingProof,
-    DlcBadInput,
-    DlcSettlement,
 )
 from ...core.db import Connection, Database
 from ...core.errors import (
-    TransactionError,
-    TokenAlreadySpentError,
     DlcAlreadyRegisteredError,
-    DlcSettlementFail,
+    TokenAlreadySpentError,
+    TransactionError,
 )
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
