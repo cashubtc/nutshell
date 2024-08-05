@@ -22,7 +22,7 @@ from ..core.base import (
     Unit,
     DlcBadInput,
     DlcFundingProof,
-    DLCWitness,
+    SCTWitness,
     DiscreetLogContract,
     DlcSettlement,
 )

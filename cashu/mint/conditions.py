@@ -4,7 +4,7 @@ from typing import List
 
 from loguru import logger
 
-from ..core.base import BlindedMessage, DLCWitness, HTLCWitness, Proof
+from ..core.base import BlindedMessage, SCTWitness, HTLCWitness, Proof
 from ..core.crypto.dlc import merkle_verify
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
@@ -200,7 +200,7 @@ class LedgerSpendingConditions:
         if proof.witness is None:
             return False
 
-        witness = DLCWitness.from_witness(proof.witness)
+        witness = SCTWitness.from_witness(proof.witness)
         assert witness, TransactionError("No or corrupt DLC witness data provided for a secret kind SCT")
 
         spending_condition = False

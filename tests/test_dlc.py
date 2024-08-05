@@ -4,7 +4,7 @@ from cashu.lightning.base import InvoiceResponse, PaymentStatus
 from cashu.wallet.wallet import Wallet
 from cashu.core.secret import Secret, SecretKind
 from cashu.core.errors import CashuError
-from cashu.core.base import DLCWitness, Proof, TokenV4, Unit, DiscreetLogContract
+from cashu.core.base import SCTWitness, Proof, TokenV4, Unit, DiscreetLogContract
 from cashu.core.models import PostDlcRegistrationRequest, PostDlcRegistrationResponse
 from cashu.mint.ledger import Ledger
 from cashu.wallet.helpers import send
@@ -151,7 +151,7 @@ async def test_wrong_merkle_proof(wallet: Wallet):
     root_hash = sha256("TESTING".encode()).hexdigest()
     threshold = 1000
     _, dlc_locked = await wallet.split(minted, 64, dlc_data=(root_hash, threshold))
-    
+
     async def add_sct_witnesses_to_proofs(
         self,
         proofs: List[Proof],
@@ -172,7 +172,7 @@ async def test_wrong_merkle_proof(wallet: Wallet):
             assert merkle_proof_bytes is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
             #assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: What the duck is going on here"
             backup_secret = all_spending_conditions[-1]
-            p.witness = DLCWitness(
+            p.witness = SCTWitness(
                 leaf_secret=backup_secret,
                 merkle_proof=[m.hex() for m in merkle_proof_bytes]
             ).json()
@@ -195,7 +195,7 @@ async def test_no_witness_data(wallet: Wallet):
     root_hash = sha256("TESTING".encode()).hexdigest()
     threshold = 1000
     _, dlc_locked = await wallet.split(minted, 64, dlc_data=(root_hash, threshold))
-    
+
     async def add_sct_witnesses_to_proofs(
         self,
         proofs: List[Proof],
@@ -221,7 +221,7 @@ async def test_cheating1(wallet: Wallet):
     root_hash = sha256("TESTING".encode()).hexdigest()
     threshold = 1000
     _, dlc_locked = await wallet.split(minted, 64, dlc_data=(root_hash, threshold))
-    
+
     async def add_sct_witnesses_to_proofs(
         self,
         proofs: List[Proof],
@@ -241,7 +241,7 @@ async def test_cheating1(wallet: Wallet):
             assert merkle_proof_bytes is not None, "add_sct_witnesses_to_proof: What the duck is going on here"
             assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: What the duck is going on here"
             dlc_secret = all_spending_conditions[0]
-            p.witness = DLCWitness(
+            p.witness = SCTWitness(
                 leaf_secret=dlc_secret,
                 merkle_proof=[m.hex() for m in merkle_proof_bytes]
             ).json()
@@ -268,7 +268,7 @@ async def test_send_funding_token(wallet: Wallet):
     assert deserialized_token.dlc_root == root_hash
     proofs = deserialized_token.proofs
     assert all([Secret.deserialize(p.secret).kind == SecretKind.SCT.value for p in proofs])
-    witnesses = [DLCWitness.from_witness(p.witness) for p in proofs]
+    witnesses = [SCTWitness.from_witness(p.witness) for p in proofs]
     assert all([Secret.deserialize(w.leaf_secret).kind == SecretKind.DLC.value for w in witnesses])
 
 @pytest.mark.asyncio
@@ -293,7 +293,7 @@ async def test_registration_vanilla_proofs(wallet: Wallet, ledger: Ledger):
     request = PostDlcRegistrationRequest(registrations=[dlc])
     response = await ledger.register_dlc(request)
     assert len(response.funded) == 1, "Funding proofs len != 1"
-    
+
     funding_proof = response.funded[0]
     assert (
         verify_dlc_signature(dlc_root, 64, bytes.fromhex(funding_proof.signature), pubkey),
@@ -310,7 +310,7 @@ async def test_registration_dlc_locked_proofs(wallet: Wallet, ledger: Ledger):
     dlc_root = sha256("TESTING".encode()).hexdigest()
     _, locked = await wallet.split(minted, 64, dlc_data=(dlc_root, 32))
     assert len(_) == 0
-    
+
     # Add witnesses to proofs
     locked = await wallet.add_sct_witnesses_to_proofs(locked)
 
@@ -330,7 +330,7 @@ async def test_registration_dlc_locked_proofs(wallet: Wallet, ledger: Ledger):
     response = await ledger.register_dlc(request)
     assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"
     assert len(response.funded) == 1, "Funding proofs len != 1"
-    
+
     funding_proof = response.funded[0]
     assert (
         verify_dlc_signature(dlc_root, 64, bytes.fromhex(funding_proof.signature), pubkey),
@@ -347,7 +347,7 @@ async def test_registration_threshold(wallet: Wallet, ledger: Ledger):
     dlc_root = sha256("TESTING".encode()).hexdigest()
     _, locked = await wallet.split(minted, 64, dlc_data=(dlc_root, 128))
     assert len(_) == 0
-    
+
     # Add witnesses to proofs
     locked = await wallet.add_sct_witnesses_to_proofs(locked)
 
@@ -437,5 +437,5 @@ async def test_get_dlc_status(wallet: Wallet, ledger: Ledger):
         response.settled == False and
         response.funding_amount == 128 and
         response.unit == "sat",
-        f"GetDlcStatusResponse with unexpected fields"       
+        f"GetDlcStatusResponse with unexpected fields"
     )

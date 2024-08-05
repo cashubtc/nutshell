@@ -14,7 +14,7 @@ from ..core.base import (
     Proof,
     Unit,
     DlcBadInput,
-    DLCWitness,
+    SCTWitness,
     DlcOutcome,
 )
 from ..core.crypto import b_dhke
@@ -293,7 +293,7 @@ class LedgerVerification(
         if not p.witness:
             return False
         try:
-            witness = DLCWitness.from_witness(p.witness)
+            witness = SCTWitness.from_witness(p.witness)
             leaf_secret = Secret.deserialize(witness.leaf_secret)
             secret = Secret.deserialize(p.secret)
         except Exception as e:
@@ -356,7 +356,7 @@ class LedgerVerification(
                 logger.error("Failed to verify DLC inputs")
                 raise DlcVerificationFail(bad_inputs=err)
         sct_proofs, _ = await self.filter_sct_proofs(proofs)
-        dlc_witnesses = [DLCWitness.from_witness(p.witness or "") for p in sct_proofs]
+        dlc_witnesses = [SCTWitness.from_witness(p.witness or "") for p in sct_proofs]
         dlc_secrets = [Secret.deserialize(w.leaf_secret) for w in dlc_witnesses]
         errors = []
         for i, s in enumerate(dlc_secrets):

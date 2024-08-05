@@ -1,7 +1,7 @@
 from ..core.secret import Secret, SecretKind
 from ..core.crypto.secp import PrivateKey
 from ..core.crypto.dlc import list_hash, merkle_root
-from ..core.base import Proof, DLCWitness
+from ..core.base import Proof, SCTWitness
 from .protocols import SupportsDb, SupportsPrivateKey
 from loguru import logger
 from typing import List, Optional
@@ -72,7 +72,7 @@ class WalletSCT(SupportsPrivateKey, SupportsDb):
             assert merkle_proof_bytes is not None, "add_sct_witnesses_to_proof: Merkle proof is None"
             assert merkle_root_bytes.hex() == Secret.deserialize(p.secret).data, "add_sct_witnesses_to_proof: Merkle root not equal to hash in secret.data"
             leaf_secret = all_spending_conditions[-1] if backup else all_spending_conditions[0]
-            p.witness = DLCWitness(
+            p.witness = SCTWitness(
                 leaf_secret=leaf_secret,
                 merkle_proof=[m.hex() for m in merkle_proof_bytes]
             ).json()
