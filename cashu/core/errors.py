@@ -110,7 +110,7 @@ class DlcVerificationFail(CashuError):
 class DlcAlreadyRegisteredError(CashuError):
     detail = "dlc already registered"
     code = 30001
-    
+
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
 

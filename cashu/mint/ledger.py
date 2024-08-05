@@ -1193,13 +1193,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # Database dance
         registered, db_errors = await self.db_write._verify_proofs_and_dlc_registrations(funded)
         errors += db_errors
-        
+
         # Return funded DLCs and errors
         return PostDlcRegistrationResponse(
             funded=[reg[1] for reg in registered],
             errors=errors if len(errors) > 0 else None,
         )
-        
+
     async def settle_dlc(self, request: PostDlcSettleRequest) -> PostDlcSettleResponse:
         """Settle DLCs once the oracle reveals the attestation secret or the timeout is over.
             Args:

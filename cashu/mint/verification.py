@@ -288,7 +288,7 @@ class LedgerVerification(
             )
 
         return unit, method
-    
+
     def _verify_dlc_input_spending_conditions(self, dlc_root: str, p: Proof) -> bool:
         if not p.witness:
             return False
@@ -312,7 +312,7 @@ class LedgerVerification(
             return False
 
         return True
-    
+
     async def _verify_dlc_amount_fees_coverage(
         self,
         funding_amount: int,
@@ -322,7 +322,7 @@ class LedgerVerification(
         """
             Verifies the sum of the inputs is enough to cover
             the funding amount + fees
-            
+
             Args:
                 funding_amount (int): funding amount of the contract
                 fa_unit (str): ONE OF ('sat', 'msat', 'eur', 'usd', 'btc'). The unit in which funding_amount
@@ -334,7 +334,7 @@ class LedgerVerification(
 
             Raises:
                 TransactionError
-                     
+
         """
         u = self.keysets[proofs[0].id].unit
         # Verify registration's funding_amount unit is the same as the proofs
@@ -372,7 +372,7 @@ class LedgerVerification(
                         detail="Threshold amount not respected"
                     ))
         raise_if_err(errors)
-    
+
     async def _verify_dlc_inputs(
         self,
         dlc_root: str,
@@ -380,13 +380,13 @@ class LedgerVerification(
     ):
         """
             Verifies all inputs to the DLC
-            
+
             Args:
                 dlc_root (hex str): root of the DLC contract
                 proofs: (List[Proof]): proofs to be verified
 
             Raises:
-                DlcVerificationFail   
+                DlcVerificationFail
         """
         # After we have collected all of the errors
         # We use this to raise a DlcVerificationFail
@@ -394,7 +394,7 @@ class LedgerVerification(
             if len(err) > 0:
                 logger.error("Failed to verify DLC inputs")
                 raise DlcVerificationFail(bad_inputs=err)
-        
+
         # We cannot just raise an exception if one proof fails and call it a day
         # for every proof we need to collect its index and motivation of failure
         # and report them
@@ -441,7 +441,7 @@ class LedgerVerification(
                 errors.append(DlcBadInput(
                     index=i,
                     detail=str(e)
-                ))   
+                ))
         raise_if_err(errors)
 
         # Verify proofs of the same denomination
@@ -466,7 +466,7 @@ class LedgerVerification(
                 errors.append(DlcBadInput(
                     index=i,
                     detail="dlc input spending conditions verification failed"
-                )) 
+                ))
         for i, p in enumerate(non_sct_proofs):
             valid = False
             exc = None
@@ -477,7 +477,7 @@ class LedgerVerification(
             if not valid:
                 errors.append(DlcBadInput(
                     index=i,
-                    detail=exc.detail if exc else "input spending conditions verification failed" 
+                    detail=exc.detail if exc else "input spending conditions verification failed"
                 ))
         raise_if_err(errors)
 
@@ -511,7 +511,7 @@ class LedgerVerification(
         except ValueError:
             raise DlcSettlementFail(detail="either dlc root or merkle proof are not a hex string")
 
-        # Timeout verification 
+        # Timeout verification
         if outcome.t:
             unix_epoch = int(time.time())
             if unix_epoch < outcome.t:

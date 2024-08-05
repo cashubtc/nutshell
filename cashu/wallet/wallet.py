@@ -658,7 +658,7 @@ class Wallet(
 
         # generate secrets for new outputs
         # CODE COMPLEXITY: for now we limit ourselves to DLC proofs with
-        # vanilla backup secrets. In the future, backup secrets could also be P2PK or HTLC 
+        # vanilla backup secrets. In the future, backup secrets could also be P2PK or HTLC
         dlc_root = None
         spending_conditions = None
         if dlc_data is not None:
@@ -888,7 +888,7 @@ class Wallet(
         flag = (spending_conditions is not None
             and len(spending_conditions) == len(secrets)
         )
-        
+
         zipped = zip(promises, secrets, rs, derivation_paths) if not flag else (
             zip(promises, secrets, rs, derivation_paths, spending_conditions or [])
         )

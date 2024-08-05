@@ -141,7 +141,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         ):
             outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
         return outputs
-    
+
     async def _add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
         """Adds witnesses to proofs.
 

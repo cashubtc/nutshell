@@ -279,7 +279,7 @@ class DbWriteHelper:
                         await self.crud.invalidate_proof(
                             proof=p, db=self.db, conn=conn
                         )
-                    
+
                     logger.trace(f"Registering DLC {reg.dlc_root}")
                     await self.crud.store_dlc(reg, self.db, conn)
                     registered.append(registration)
@@ -317,7 +317,7 @@ class DbWriteHelper:
                             dlc_root=settlement.dlc_root,
                             details="DLC already settled"
                         ))
-                    
+
                     assert settlement.outcome
                     await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, settlement.outcome.P, self.db, conn)
                     settled.append(settlement)

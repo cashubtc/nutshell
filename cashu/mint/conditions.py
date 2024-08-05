@@ -221,10 +221,10 @@ class LedgerSpendingConditions:
 
         if not valid:
             return False
-        
+
         if not spending_condition:  # means that it is valid and a normal secret
             return True
-        
+
         # leaf_secret is a secret of another kind: verify that kind
         # We only ever need the secret and the witness data
         new_proof = Proof(
@@ -258,11 +258,11 @@ class LedgerSpendingConditions:
         # HTLC
         if SecretKind(secret.kind) == SecretKind.HTLC:
             return self._verify_htlc_spending_conditions(proof, secret)
-        
+
         # SCT
         if SecretKind(secret.kind) == SecretKind.SCT:
             return self._verify_sct_spending_conditions(proof, secret)
-        
+
         # DLC
         if SecretKind(secret.kind) == SecretKind.DLC:
             return False
