@@ -145,6 +145,7 @@ def mint():
     while tries < 100:
         try:
             httpx.get(settings.mint_url)
+            break
         except Exception:
             tries += 1
             time.sleep(0.1)
