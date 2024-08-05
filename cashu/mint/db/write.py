@@ -1,8 +1,12 @@
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 from loguru import logger
 
 from ...core.base import (
+    DiscreetLogContract,
+    DlcBadInput,
+    DlcFundingProof,
+    DlcSettlement,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
@@ -13,6 +17,8 @@ from ...core.base import (
 )
 from ...core.db import Connection, Database
 from ...core.errors import (
+    DlcAlreadyRegisteredError,
+    TokenAlreadySpentError,
     TransactionError,
 )
 from ..crud import LedgerCrud
@@ -223,3 +229,100 @@ class DbWriteHelper:
 
         await self.events.submit(quote_copy)
         return quote_copy
+
+    async def _verify_proofs_and_dlc_registrations(
+        self,
+        registrations: List[Tuple[DiscreetLogContract, DlcFundingProof]],
+    ) -> Tuple[List[Tuple[DiscreetLogContract, DlcFundingProof]], List[DlcFundingProof]]:
+        """
+        Method to check if proofs are already spent or registrations already registered. If they are not, we
+        set them as spent and registered respectively
+        Args:
+            registrations (List[Tuple[DiscreetLogContract, DlcFundingProof]]): List of registrations.
+        Returns:
+            List[Tuple[DiscreetLogContract, DlcFundingProof]]: a list of registered DLCs
+            List[DlcFundingProof]: a list of errors
+        """
+        checked: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
+        registered: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
+        errors: List[DlcFundingProof]= []
+        if len(registrations) == 0:
+            logger.trace("Received 0 registrations")
+            return [], []
+        logger.trace("_verify_proofs_and_dlc_registrations acquiring lock")
+        async with self.db.get_connection(lock_table="proofs_used") as conn:
+            for registration in registrations:
+                reg = registration[0]
+                logger.trace("checking whether proofs are already spent")
+                try:
+                    assert reg.inputs
+                    await self.db_read._verify_proofs_spendable(reg.inputs, conn)
+                    await self.db_read._verify_dlc_registrable(reg.dlc_root, conn)
+                    checked.append(registration)
+                except (TokenAlreadySpentError, DlcAlreadyRegisteredError) as e:
+                    logger.trace(f"Proofs already spent for registration {reg.dlc_root}")
+                    errors.append(DlcFundingProof(
+                        dlc_root=reg.dlc_root,
+                        bad_inputs=[DlcBadInput(
+                            index=-1,
+                            detail=e.detail
+                        )]
+                    ))
+
+            for registration in checked:
+                reg = registration[0]
+                assert reg.inputs
+                try:
+                    for p in reg.inputs:
+                        logger.trace(f"Invalidating proof {p.Y}")
+                        await self.crud.invalidate_proof(
+                            proof=p, db=self.db, conn=conn
+                        )
+
+                    logger.trace(f"Registering DLC {reg.dlc_root}")
+                    await self.crud.store_dlc(reg, self.db, conn)
+                    registered.append(registration)
+                except Exception as e:
+                    logger.trace(f"Failed to register {reg.dlc_root}: {str(e)}")
+                    errors.append(DlcFundingProof(
+                        dlc_root=reg.dlc_root,
+                        bad_inputs=[DlcBadInput(
+                            index=-1,
+                            detail=str(e)
+                        )]
+                    ))
+        logger.trace("_verify_proofs_and_dlc_registrations lock released")
+        return (registered, errors)
+
+    async def _settle_dlc(
+        self,
+        settlements: List[DlcSettlement]
+    ) -> Tuple[List[DlcSettlement], List[DlcSettlement]]:
+        settled = []
+        errors = []
+        async with self.db.get_connection(lock_table="dlc") as conn:
+            for settlement in settlements:
+                try:
+                    # We verify the dlc_root is in the DB
+                    dlc = await self.crud.get_registered_dlc(settlement.dlc_root, self.db, conn)
+                    if dlc is None:
+                        errors.append(DlcSettlement(
+                            dlc_root=settlement.dlc_root,
+                            details="no DLC with this root hash"
+                        ))
+                        continue
+                    if dlc.settled is True:
+                        errors.append(DlcSettlement(
+                            dlc_root=settlement.dlc_root,
+                            details="DLC already settled"
+                        ))
+
+                    assert settlement.outcome
+                    await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, settlement.outcome.P, self.db, conn)
+                    settled.append(settlement)
+                except Exception as e:
+                    errors.append(DlcSettlement(
+                        dlc_root=settlement.dlc_root,
+                        details=f"error with the DB: {str(e)}"
+                    ))
+        return (settled, errors)

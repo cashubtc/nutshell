@@ -96,3 +96,35 @@ class QuoteNotPaidError(CashuError):
 
     def __init__(self):
         super().__init__(self.detail, code=2001)
+
+
+class DlcVerificationFail(CashuError):
+    detail = "dlc verification fail"
+    code = 30000
+    bad_inputs = None
+
+    def __init__(self, **kwargs):
+        super().__init__(self.detail, self.code)
+        self.bad_inputs = kwargs['bad_inputs']
+
+class DlcAlreadyRegisteredError(CashuError):
+    detail = "dlc already registered"
+    code = 30001
+
+    def __init__(self, **kwargs):
+        super().__init__(self.detail, self.code)
+
+class DlcNotFoundError(CashuError):
+    detail = "dlc not found"
+    code = 30002
+
+    def __init__(self, **kwargs):
+        super().__init__(self.detail, self.code)
+
+class DlcSettlementFail(CashuError):
+    detail = "settlement verification failed: "
+    code = 30003
+
+    def __init__(self, **kwargs):
+        super().__init__(self.detail, self.code)
+        self.detail += kwargs['detail']

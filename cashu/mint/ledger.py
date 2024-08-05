@@ -10,6 +10,10 @@ from ..core.base import (
     Amount,
     BlindedMessage,
     BlindedSignature,
+    DiscreetLogContract,
+    DlcBadInput,
+    DlcFundingProof,
+    DlcSettlement,
     MeltQuote,
     MeltQuoteState,
     Method,
@@ -23,6 +27,7 @@ from ..core.base import (
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
+from ..core.crypto.dlc import sign_dlc
 from ..core.crypto.keys import (
     derive_pubkey,
     random_hash,
@@ -31,6 +36,8 @@ from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
+    DlcSettlementFail,
+    DlcVerificationFail,
     KeysetError,
     KeysetNotFoundError,
     LightningError,
@@ -40,6 +47,11 @@ from ..core.errors import (
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
+    GetDlcStatusResponse,
+    PostDlcRegistrationRequest,
+    PostDlcRegistrationResponse,
+    PostDlcSettleRequest,
+    PostDlcSettleResponse,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
@@ -1086,3 +1098,132 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 )
                 signatures.append(signature)
             return signatures
+
+    async def status_dlc(self, dlc_root: str) -> GetDlcStatusResponse:
+        """Gets the status of a particular DLC
+
+            Args:
+                dlc_root (str): the root hash of the contract
+            Returns:
+                GetDlcStatusResponse: a response containing the status of the DLC, if it was found.
+            Raises:
+                DlcNotFoundError: no DLC with dlc_root was found
+        """
+        logger.trace("status_dlc called")
+        dlc = await self.db_read._get_registered_dlc(dlc_root)
+        if not dlc.settled:
+            return GetDlcStatusResponse(
+                settled=dlc.settled,
+                funding_amount=dlc.funding_amount,
+                unit=dlc.unit,
+                debts=None
+            )
+        else:
+            return GetDlcStatusResponse(
+                settled=dlc.settled,
+                debts=dlc.debts,
+            )
+
+    async def register_dlc(self, request: PostDlcRegistrationRequest) -> PostDlcRegistrationResponse:
+        """Validates and registers DiscreteLogContracts
+            Args:
+               request (PostDlcRegistrationRequest): a request formatted following NUT-DLC spec
+            Returns:
+                PostDlcRegistrationResponse: Indicating the funded and registered DLCs as well as the errors.
+        """
+        logger.trace("register called")
+        funded: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
+        errors: List[DlcFundingProof] = []
+        for registration in request.registrations:
+            try:
+                logger.trace(f"processing registration {registration.dlc_root}")
+                assert registration.inputs is not None # mypy give me a break
+                await self._verify_dlc_inputs(registration)
+                amount_provided = await self._verify_dlc_amount_fees_coverage(
+                    registration.funding_amount,
+                    registration.unit,
+                    registration.inputs
+                )
+
+                # At this point we can put this dlc into the funded list and create a signature for it
+                # We use the first key from the active keyset of the unit specified in the contract.
+                active_keyset_for_unit = next(
+                    filter(
+                        lambda k: k.active and k.unit == Unit[registration.unit],
+                        self.keysets.values(),
+                    )
+                )
+                funding_privkey = next(iter(active_keyset_for_unit.private_keys.values()))
+                signature = sign_dlc(
+                    registration.dlc_root,
+                    registration.funding_amount,
+                    funding_privkey,
+                )
+                funding_proof = DlcFundingProof(
+                    dlc_root=registration.dlc_root,
+                    signature=signature.hex(),
+                )
+                dlc = DiscreetLogContract(
+                    settled=False,
+                    dlc_root=registration.dlc_root,
+                    funding_amount=amount_provided,
+                    inputs=registration.inputs,
+                    unit=registration.unit,
+                )
+                funded.append((dlc, funding_proof))
+            except (TransactionError, DlcVerificationFail) as e:
+                logger.error(f"registration {registration.dlc_root} failed")
+                # Generic Error
+                if isinstance(e, TransactionError):
+                    errors.append(DlcFundingProof(
+                        dlc_root=registration.dlc_root,
+                        bad_inputs=[DlcBadInput(
+                            index=-1,
+                            detail=e.detail,
+                        )]
+                    ))
+                # DLC verification fail
+                else:
+                    errors.append(DlcFundingProof(
+                        dlc_root=registration.dlc_root,
+                        bad_inputs=e.bad_inputs,
+                    ))
+        # Database dance
+        registered, db_errors = await self.db_write._verify_proofs_and_dlc_registrations(funded)
+        errors += db_errors
+
+        # Return funded DLCs and errors
+        return PostDlcRegistrationResponse(
+            funded=[reg[1] for reg in registered],
+            errors=errors if len(errors) > 0 else None,
+        )
+
+    async def settle_dlc(self, request: PostDlcSettleRequest) -> PostDlcSettleResponse:
+        """Settle DLCs once the oracle reveals the attestation secret or the timeout is over.
+            Args:
+                request (PostDlcSettleRequest): a request formatted following NUT-DLC spec
+            Returns:
+                PostDlcSettleResponse: Indicates which DLCs have been settled and potential errors.
+        """
+        logger.trace("settle called")
+        verified: List[DlcSettlement] = []
+        errors: List[DlcSettlement] = []
+        for settlement in request.settlements:
+            try:
+                # Verify inclusion of payout structure and associated attestation in the DLC
+                assert settlement.outcome and settlement.merkle_proof, "outcome or merkle proof not provided"
+                await self._verify_dlc_inclusion(settlement.dlc_root, settlement.outcome, settlement.merkle_proof)
+                verified.append(settlement)
+            except (DlcSettlementFail, AssertionError) as e:
+                errors.append(DlcSettlement(
+                    dlc_root=settlement.dlc_root,
+                    details=e.detail if isinstance(e, DlcSettlementFail) else str(e)
+                ))
+        # Database dance:
+        settled, db_errors = await self.db_write._settle_dlc(verified)
+        errors += db_errors
+
+        return PostDlcSettleResponse(
+            settled=settled,
+            errors=errors if len(errors) > 0 else None,
+        )

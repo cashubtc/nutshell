@@ -113,7 +113,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             o.witness = P2PKWitness(signatures=[s]).json()
         return outputs
 
-    async def add_witnesses_to_outputs(
+    async def _add_p2pk_witnesses_to_outputs(
         self, proofs: List[Proof], outputs: List[BlindedMessage]
     ) -> List[BlindedMessage]:
         """Adds witnesses to outputs if the inputs (proofs) indicate an appropriate signature flag
@@ -142,23 +142,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
         return outputs
 
-    async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        p2pk_signatures = await self.sign_p2pk_proofs(proofs)
-        logger.debug(f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}")
-        logger.debug(f"Proofs: {proofs}")
-        # attach unlock signatures to proofs
-        assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
-        for p, s in zip(proofs, p2pk_signatures):
-            # if there are already signatures, append
-            if p.witness and P2PKWitness.from_witness(p.witness).signatures:
-                signatures = P2PKWitness.from_witness(p.witness).signatures
-                p.witness = P2PKWitness(signatures=signatures + [s]).json()
-            else:
-                p.witness = P2PKWitness(signatures=[s]).json()
-        return proofs
-
-    async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        """Adds witnesses to proofs for P2PK redemption.
+    async def _add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        """Adds witnesses to proofs.
 
         This method parses the secret of each proof and determines the correct
         witness type and adds it to the proof if we have it available.
@@ -191,3 +176,19 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
 
         return proofs
+
+    async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        p2pk_signatures = await self.sign_p2pk_proofs(proofs)
+        logger.debug(f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}")
+        logger.debug(f"Proofs: {proofs}")
+        # attach unlock signatures to proofs
+        assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
+        for p, s in zip(proofs, p2pk_signatures):
+            # if there are already signatures, append
+            if p.witness and P2PKWitness.from_witness(p.witness).signatures:
+                signatures = P2PKWitness.from_witness(p.witness).signatures
+                p.witness = P2PKWitness(signatures=signatures + [s]).json()
+            else:
+                p.witness = P2PKWitness(signatures=[s]).json()
+        return proofs
+

@@ -115,6 +115,15 @@ class P2PKWitness(BaseModel):
     def from_witness(cls, witness: str):
         return cls(**json.loads(witness))
 
+class SCTWitness(BaseModel):
+    leaf_secret: str
+    merkle_proof: List[str]
+    witness: Optional[str] = None
+
+    @classmethod
+    def from_witness(cls, witness: str):
+        return cls(**json.loads(witness))
+
 
 class Proof(BaseModel):
     """
@@ -142,6 +151,8 @@ class Proof(BaseModel):
     melt_id: Union[
         None, str
     ] = None  # holds the id of the melt operation that destroyed this proof
+    all_spending_conditions: Optional[List[str]] = None # holds all eventual SCT spending conditions
+    dlc_root: Optional[str] = None # holds the root hash of a DLC contract
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -157,6 +168,12 @@ class Proof(BaseModel):
         else:
             # overwrite the empty string with None
             proof_dict["dleq"] = None
+
+        if (proof_dict.get("all_spending_conditions")
+            and isinstance(proof_dict["all_spending_conditions"], str)):
+            proof_dict["all_spending_conditions"] = json.loads(proof_dict["all_spending_conditions"])
+        else:
+            proof_dict["all_spending_conditions"] = None
         c = cls(**proof_dict)
         return c
 
@@ -192,6 +209,16 @@ class Proof(BaseModel):
     def p2pksigs(self) -> List[str]:
         assert self.witness, "Witness is missing for p2pk signature"
         return P2PKWitness.from_witness(self.witness).signatures
+
+    @property
+    def dlc_leaf_secret(self) -> str:
+        assert self.witness, "Witness is missing for dlc leaf secret"
+        return SCTWitness.from_witness(self.witness).leaf_secret
+
+    @property
+    def dlc_merkle_proof(self) -> List[str]:
+        assert self.witness, "Witness is missing for dlc merkle proof"
+        return SCTWitness.from_witness(self.witness).merkle_proof
 
     @property
     def htlcpreimage(self) -> Union[str, None]:
@@ -980,6 +1007,8 @@ class TokenV4(Token):
     t: List[TokenV4Token]
     # memo
     d: Optional[str] = None
+    # dlc root
+    r: Optional[str] = None
 
     @property
     def mint(self) -> str:
@@ -1034,6 +1063,10 @@ class TokenV4(Token):
             for token in self.t
             for p in token.p
         ]
+
+    @property
+    def dlc_root(self) -> Optional[str]:
+        return self.r
 
     @property
     def keysets(self) -> List[str]:
@@ -1099,6 +1132,9 @@ class TokenV4(Token):
         # optional memo
         if self.d:
             return_dict.update(dict(d=self.d))
+        # optional dlc root
+        if self.r:
+            return_dict.update(dict(r=self.r))
         # mint
         return_dict.update(dict(m=self.m))
         # unit
@@ -1171,4 +1207,70 @@ class TokenV4(Token):
             u=token_dict["u"],
             t=[TokenV4Token(**t) for t in token_dict["t"]],
             d=token_dict.get("d", None),
+            r=token_dict.get("r", None),
         )
+
+# -------- DLC STUFF --------
+
+class DiscreetLogContract(BaseModel):
+    """
+    A discrete log contract
+    """
+    settled: Optional[bool] = False
+    dlc_root: str
+    funding_amount: int
+    unit: str
+    inputs: Optional[List[Proof]] = None         # Need to verify these are indeed SCT proofs
+    debts: Optional[Dict[str, int]] = None       # We save who we owe money to here
+
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            dlc_root=row["dlc_root"],
+            settled=bool(row["settled"]),
+            funding_amount=int(row["funding_amount"]),
+            unit=row["unit"],
+            debts=row["debts"] or None,
+        )
+
+class DlcBadInput(BaseModel):
+    index: int
+    detail: str
+
+class DlcFundingProof(BaseModel):
+    """
+    A dlc merkle root with its signature
+    or a dlc merkle root with bad inputs.
+    """
+    dlc_root: str
+    signature: Optional[str] = None
+    bad_inputs: Optional[List[DlcBadInput]] = None # Used to specify potential errors
+
+class DlcOutcome(BaseModel):
+    """
+    Describes a DLC outcome
+    """
+    k: Optional[str]      # The blinded attestation secret
+    t: Optional[int]      # The timeout (claim when time is over)
+    P: str                # The payout structure associated with this outcome
+
+class DlcSettlement(BaseModel):
+    """
+    Data used to settle an outcome of a DLC
+    """
+    dlc_root: str
+    outcome: Optional[DlcOutcome] = None
+    merkle_proof: Optional[List[str]] = None
+    details: Optional[str] = None
+
+class DlcPayoutForm(BaseModel):
+    dlc_root: str
+    pubkey: str
+    outputs: List[BlindedMessage]
+    witness: P2PKWitness
+
+class DlcPayout(BaseModel):
+    dlc_root: str
+    signatures: Optional[List[BlindedSignature]]
+    details: Optional[str] # error details
+

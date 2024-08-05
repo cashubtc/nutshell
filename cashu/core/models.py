@@ -6,6 +6,11 @@ from .base import (
     BlindedMessage,
     BlindedMessage_Deprecated,
     BlindedSignature,
+    DiscreetLogContract,
+    DlcFundingProof,
+    DlcPayout,
+    DlcPayoutForm,
+    DlcSettlement,
     MeltQuote,
     MintQuote,
     Proof,
@@ -324,3 +329,38 @@ class PostRestoreResponse(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         self.promises = self.signatures
+
+
+# ------- API: DLC REGISTRATION -------
+
+class PostDlcRegistrationRequest(BaseModel):
+    registrations: List[DiscreetLogContract]
+
+class PostDlcRegistrationResponse(BaseModel):
+    funded: List[DlcFundingProof] = []
+    errors: Optional[List[DlcFundingProof]] = None
+
+# ------- API: DLC SETTLEMENT -------
+
+class PostDlcSettleRequest(BaseModel):
+    settlements: List[DlcSettlement]
+
+class PostDlcSettleResponse(BaseModel):
+    settled: List[DlcSettlement] = []
+    errors: Optional[List[DlcSettlement]] = None
+
+# ------- API: DLC PAYOUT -------
+class PostDlcPayoutRequest(BaseModel):
+    payouts: List[DlcPayoutForm]
+
+class PostDlcPayoutResponse(BaseModel):
+    paid: List[DlcPayout]
+    errors: Optional[List[DlcPayout]]
+
+# ------- API: DLC STATUS -------
+
+class GetDlcStatusResponse(BaseModel):
+    settled: bool
+    unit: Optional[str] = None
+    funding_amount: Optional[int] = None
+    debts: Optional[Dict[str, int]] = None
