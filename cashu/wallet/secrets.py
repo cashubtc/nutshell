@@ -7,17 +7,17 @@ from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
 
+from ..core.crypto.dlc import list_hash, merkle_root
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from ..core.secret import Secret, SecretKind, Tags
-from .dlc import SecretMetadata
-from ..core.crypto.dlc import merkle_root, list_hash
 from ..core.settings import settings
 from ..wallet.crud import (
     bump_secret_derivation,
     get_seed_and_mnemonic,
     store_seed_and_mnemonic,
 )
+from .dlc import SecretMetadata
 from .protocols import SupportsDb, SupportsKeysets
 
 

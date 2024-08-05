@@ -1,5 +1,6 @@
 from hashlib import sha256
 from typing import List, Optional, Tuple
+
 from secp256k1 import PrivateKey, PublicKey
 
 

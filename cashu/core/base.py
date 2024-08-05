@@ -115,7 +115,7 @@ class P2PKWitness(BaseModel):
     def from_witness(cls, witness: str):
         return cls(**json.loads(witness))
 
-class DLCWitness(BaseModel):
+class SCTWitness(BaseModel):
     leaf_secret: str
     merkle_proof: List[str]
     witness: Optional[str] = None
@@ -213,12 +213,12 @@ class Proof(BaseModel):
     @property
     def dlc_leaf_secret(self) -> str:
         assert self.witness, "Witness is missing for dlc leaf secret"
-        return DLCWitness.from_witness(self.witness).leaf_secret
+        return SCTWitness.from_witness(self.witness).leaf_secret
 
     @property
     def dlc_merkle_proof(self) -> List[str]:
         assert self.witness, "Witness is missing for dlc merkle proof"
-        return DLCWitness.from_witness(self.witness).merkle_proof
+        return SCTWitness.from_witness(self.witness).merkle_proof
 
     @property
     def htlcpreimage(self) -> Union[str, None]:

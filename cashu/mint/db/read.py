@@ -3,9 +3,9 @@ from typing import Dict, List, Optional
 from ...core.base import Proof, ProofSpentState, ProofState
 from ...core.db import Connection, Database
 from ...core.errors import (
-    TokenAlreadySpentError,
     DlcAlreadyRegisteredError,
     DlcNotFoundError,
+    TokenAlreadySpentError,
 )
 from ..crud import LedgerCrud
 
@@ -97,7 +97,7 @@ class DbReadHelper:
                 raise TokenAlreadySpentError()
 
     async def _verify_dlc_registrable(
-        self, dlc_root: str, conn: Optional[Connection] = None, 
+        self, dlc_root: str, conn: Optional[Connection] = None,
     ):
         async with self.db.get_connection(conn) as conn:
             if await self.crud.get_registered_dlc(dlc_root, self.db, conn) is not None:
@@ -109,4 +109,3 @@ class DbReadHelper:
             if dlc is None:
                 raise DlcNotFoundError()
             return dlc
-            

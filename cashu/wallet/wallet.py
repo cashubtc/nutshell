@@ -21,7 +21,6 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
-from ..core.secret import SecretKind
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
@@ -50,10 +49,10 @@ from ..wallet.crud import (
     update_proof,
 )
 from . import migrations
+from .dlc import WalletSCT
 from .htlc import WalletHTLC
 from .mint_info import MintInfo
 from .p2pk import WalletP2PK
-from .dlc import WalletSCT
 from .proofs import WalletProofs
 from .secrets import WalletSecrets
 from .subscriptions import SubscriptionManager
@@ -658,7 +657,7 @@ class Wallet(
 
         # generate secrets for new outputs
         # CODE COMPLEXITY: for now we limit ourselves to DLC proofs with
-        # vanilla backup secrets. In the future, backup secrets could also be P2PK or HTLC 
+        # vanilla backup secrets. In the future, backup secrets could also be P2PK or HTLC
         dlc_root = None
         spending_conditions = None
         if dlc_data is not None:
@@ -666,7 +665,7 @@ class Wallet(
             # Verify dlc_root is a hex string
             try:
                 _ = bytes.fromhex(dlc_root)
-            except ValueError as e:
+            except ValueError:
                 assert False, "CAREFUL: provided dlc root is non-hex!"
             dlcsecrets = await self.generate_sct_secrets(
                 len(send_outputs),
@@ -888,7 +887,7 @@ class Wallet(
         flag = (spending_conditions is not None
             and len(spending_conditions) == len(secrets)
         )
-        
+
         zipped = zip(promises, secrets, rs, derivation_paths) if not flag else (
             zip(promises, secrets, rs, derivation_paths, spending_conditions or [])
         )

@@ -10,6 +10,10 @@ from ..core.base import (
     Amount,
     BlindedMessage,
     BlindedSignature,
+    DiscreetLogContract,
+    DlcBadInput,
+    DlcFundingProof,
+    DlcSettlement,
     MeltQuote,
     MeltQuoteState,
     Method,
@@ -20,15 +24,10 @@ from ..core.base import (
     ProofSpentState,
     ProofState,
     Unit,
-    DlcBadInput,
-    DlcFundingProof,
-    DLCWitness,
-    DiscreetLogContract,
-    DlcSettlement,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.dlc import sign_dlc
 from ..core.crypto.aes import AESCipher
+from ..core.crypto.dlc import sign_dlc
 from ..core.crypto.keys import (
     derive_pubkey,
     random_hash,
@@ -37,25 +36,25 @@ from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
+    DlcSettlementFail,
+    DlcVerificationFail,
     KeysetError,
     KeysetNotFoundError,
     LightningError,
     NotAllowedError,
     QuoteNotPaidError,
     TransactionError,
-    DlcVerificationFail,
-    DlcSettlementFail,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
-    PostMeltQuoteRequest,
-    PostMeltQuoteResponse,
-    PostMintQuoteRequest,
+    GetDlcStatusResponse,
     PostDlcRegistrationRequest,
     PostDlcRegistrationResponse,
     PostDlcSettleRequest,
     PostDlcSettleResponse,
-    GetDlcStatusResponse,
+    PostMeltQuoteRequest,
+    PostMeltQuoteResponse,
+    PostMintQuoteRequest,
 )
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -1139,13 +1138,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             try:
                 logger.trace(f"processing registration {registration.dlc_root}")
                 assert registration.inputs is not None # mypy give me a break
-                await self._verify_dlc_inputs(registration.dlc_root, registration.inputs)
+                await self._verify_dlc_inputs(registration)
                 amount_provided = await self._verify_dlc_amount_fees_coverage(
                     registration.funding_amount,
                     registration.unit,
                     registration.inputs
                 )
-                await self._verify_dlc_amount_threshold(amount_provided, registration.inputs)
 
                 # At this point we can put this dlc into the funded list and create a signature for it
                 # We use the first key from the active keyset of the unit specified in the contract.
@@ -1193,13 +1191,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # Database dance
         registered, db_errors = await self.db_write._verify_proofs_and_dlc_registrations(funded)
         errors += db_errors
-        
+
         # Return funded DLCs and errors
         return PostDlcRegistrationResponse(
             funded=[reg[1] for reg in registered],
             errors=errors if len(errors) > 0 else None,
         )
-        
+
     async def settle_dlc(self, request: PostDlcSettleRequest) -> PostDlcSettleResponse:
         """Settle DLCs once the oracle reveals the attestation secret or the timeout is over.
             Args:

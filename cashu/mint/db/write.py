@@ -1,8 +1,12 @@
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Tuple, Union
 
 from loguru import logger
 
 from ...core.base import (
+    DiscreetLogContract,
+    DlcBadInput,
+    DlcFundingProof,
+    DlcSettlement,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
@@ -10,17 +14,12 @@ from ...core.base import (
     Proof,
     ProofSpentState,
     ProofState,
-    DiscreetLogContract,
-    DlcFundingProof,
-    DlcBadInput,
-    DlcSettlement,
 )
 from ...core.db import Connection, Database
 from ...core.errors import (
-    TransactionError,
-    TokenAlreadySpentError,
     DlcAlreadyRegisteredError,
-    DlcSettlementFail,
+    TokenAlreadySpentError,
+    TransactionError,
 )
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
@@ -279,7 +278,7 @@ class DbWriteHelper:
                         await self.crud.invalidate_proof(
                             proof=p, db=self.db, conn=conn
                         )
-                    
+
                     logger.trace(f"Registering DLC {reg.dlc_root}")
                     await self.crud.store_dlc(reg, self.db, conn)
                     registered.append(registration)
@@ -317,7 +316,7 @@ class DbWriteHelper:
                             dlc_root=settlement.dlc_root,
                             details="DLC already settled"
                         ))
-                    
+
                     assert settlement.outcome
                     await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, settlement.outcome.P, self.db, conn)
                     settled.append(settlement)
