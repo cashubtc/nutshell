@@ -1139,13 +1139,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             try:
                 logger.trace(f"processing registration {registration.dlc_root}")
                 assert registration.inputs is not None # mypy give me a break
-                await self._verify_dlc_inputs(registration.dlc_root, registration.inputs)
+                await self._verify_dlc_inputs(registration)
                 amount_provided = await self._verify_dlc_amount_fees_coverage(
                     registration.funding_amount,
                     registration.unit,
                     registration.inputs
                 )
-                await self._verify_dlc_amount_threshold(amount_provided, registration.inputs)
 
                 # At this point we can put this dlc into the funded list and create a signature for it
                 # We use the first key from the active keyset of the unit specified in the contract.

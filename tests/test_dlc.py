@@ -255,7 +255,7 @@ async def test_cheating1(wallet: Wallet):
     Wallet.add_sct_witnesses_to_proofs = add_sct_witnesses_to_proofs
 
     try:
-        strerror = "Mint Error: validation of input spending conditions failed. (Code: 11000)"
+        strerror = "Mint Error: cannot spend secret kind DLC unless funding a DLC (Code: 11000)"
         await assert_err(wallet.split(dlc_locked, 64), strerror)
     finally:
         Wallet.add_sct_witnesses_to_proofs = saved
@@ -366,7 +366,7 @@ async def test_registration_threshold(wallet: Wallet, ledger: Ledger):
 
     request = PostDlcRegistrationRequest(registrations=[dlc])
     response = await ledger.register_dlc(request)
-    assert response.errors and response.errors[0].bad_inputs[0].detail == "Threshold amount not respected"
+    assert response.errors and response.errors[0].bad_inputs[0].detail == "DLC funding_amount does not satisfy DLC secret threshold tag"
 
 @pytest.mark.asyncio
 async def test_fund_same_dlc_twice(wallet: Wallet, ledger: Ledger):

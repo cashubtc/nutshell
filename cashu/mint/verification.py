@@ -289,30 +289,6 @@ class LedgerVerification(
 
         return unit, method
 
-    def _verify_dlc_input_spending_conditions(self, dlc_root: str, p: Proof) -> bool:
-        if not p.witness:
-            return False
-        try:
-            witness = SCTWitness.from_witness(p.witness)
-            leaf_secret = Secret.deserialize(witness.leaf_secret)
-            secret = Secret.deserialize(p.secret)
-        except Exception as e:
-            return False
-        # Verify leaf_secret is of kind DLC
-        if leaf_secret.kind != SecretKind.DLC.value:
-            return False
-        # Verify dlc_root is the one referenced in the secret
-        if leaf_secret.data != dlc_root:
-            return False
-        # Verify inclusion of leaf_secret in the SCT root hash
-        leaf_hash_bytes = sha256(witness.leaf_secret.encode()).digest()
-        merkle_proof_bytes = [bytes.fromhex(m) for m in witness.merkle_proof]
-        sct_root_hash_bytes = bytes.fromhex(secret.data)
-        if not merkle_verify(sct_root_hash_bytes, leaf_hash_bytes, merkle_proof_bytes):
-            return False
-
-        return True
-
     async def _verify_dlc_amount_fees_coverage(
         self,
         funding_amount: int,
@@ -347,42 +323,12 @@ class LedgerVerification(
             raise TransactionError("funds provided do not cover the DLC funding amount")
         return amount_provided
 
-    async def _verify_dlc_amount_threshold(self, funding_amount: int, proofs: List[Proof]):
-        """For every SCT proof verify that secret's threshold is less or equal to
-            the funding_amount
-        """
-        def raise_if_err(err):
-            if len(err) > 0:
-                logger.error("Failed to verify DLC inputs")
-                raise DlcVerificationFail(bad_inputs=err)
-        sct_proofs, _ = await self.filter_sct_proofs(proofs)
-        dlc_witnesses = [SCTWitness.from_witness(p.witness or "") for p in sct_proofs]
-        dlc_secrets = [Secret.deserialize(w.leaf_secret) for w in dlc_witnesses]
-        errors = []
-        for i, s in enumerate(dlc_secrets):
-            if s.tags.get_tag('threshold') is not None:
-                threshold = None
-                try:
-                    threshold = int(s.tags.get_tag('threshold'))
-                except Exception:
-                    pass
-                if threshold is not None and funding_amount < threshold:
-                    errors.append(DlcBadInput(
-                        index=i,
-                        detail="Threshold amount not respected"
-                    ))
-        raise_if_err(errors)
-
-    async def _verify_dlc_inputs(
-        self,
-        dlc_root: str,
-        proofs: List[Proof],
-    ):
+    async def _verify_dlc_inputs(self, dlc: DiscreetLogContract):
         """
             Verifies all inputs to the DLC
 
             Args:
-                dlc_root (hex str): root of the DLC contract
+                dlc (DiscreetLogContract): the DLC to be funded
                 proofs: (List[Proof]): proofs to be verified
 
             Raises:
@@ -400,12 +346,12 @@ class LedgerVerification(
         # and report them
 
         # Verify inputs
-        if not proofs:
+        if not dlc.inputs:
             raise TransactionError("no proofs provided.")
 
         errors = []
         # Verify amounts of inputs
-        for i, p in enumerate(proofs):
+        for i, p in enumerate(dlc.inputs):
             try:
                 self._verify_amount(p.amount)
             except NotAllowedError as e:
@@ -416,7 +362,7 @@ class LedgerVerification(
         raise_if_err(errors)
 
         # Verify secret criteria
-        for i, p in enumerate(proofs):
+        for i, p in enumerate(dlc.inputs):
             try:
                 self._verify_secret_criteria(p)
             except (SecretTooLongError, NoSecretInProofsError) as e:
@@ -427,11 +373,11 @@ class LedgerVerification(
         raise_if_err(errors)
 
         # verify that only unique proofs were used
-        if not self._verify_no_duplicate_proofs(proofs):
+        if not self._verify_no_duplicate_proofs(dlc.inputs):
             raise TransactionError("duplicate proofs.")
 
         # Verify ecash signatures
-        for i, p in enumerate(proofs):
+        for i, p in enumerate(dlc.inputs):
             valid = False
             exc = None
             try:
@@ -446,8 +392,8 @@ class LedgerVerification(
 
         # Verify proofs of the same denomination
         # REASONING: proofs could be usd, eur. We don't want mixed stuff.
-        u = self.keysets[proofs[0].id].unit
-        for i, p in enumerate(proofs):
+        u = self.keysets[dlc.inputs[0].id].unit
+        for i, p in enumerate(dlc.inputs):
             if self.keysets[p.id].unit != u:
                 errors.append(DlcBadInput(
                     index=i,
@@ -455,23 +401,11 @@ class LedgerVerification(
                 ))
         raise_if_err(errors)
 
-        # Split SCT and non-SCT
-        # REASONING: the submitter of the registration does not need to dlc lock their proofs
-        sct_proofs, non_sct_proofs = await self.filter_sct_proofs(proofs)
-        # Verify spending conditions
-        for i, p in enumerate(sct_proofs):
-            # _verify_dlc_input_spending_conditions does not raise any error
-            # it handles all of them and return either true or false. ALWAYS.
-            if not self._verify_dlc_input_spending_conditions(dlc_root, p):
-                errors.append(DlcBadInput(
-                    index=i,
-                    detail="dlc input spending conditions verification failed"
-                ))
-        for i, p in enumerate(non_sct_proofs):
+        for i, p in enumerate(dlc.inputs):
             valid = False
             exc = None
             try:
-                valid = self._verify_input_spending_conditions(p)
+                valid = self._verify_input_spending_conditions(p, funding_dlc=dlc)
             except CashuError as e:
                 exc = e
             if not valid:
