@@ -183,9 +183,11 @@ async def test_wrong_merkle_proof(wallet: Wallet):
 
     for p in dlc_locked:
         p.all_spending_conditions = [p.all_spending_conditions[0]]
-    strerror = "Mint Error: validation of input spending conditions failed. (Code: 11000)"
-    await assert_err(wallet.split(dlc_locked, 64), strerror)
-    Wallet.add_sct_witnesses_to_proofs = saved
+    try:
+        strerror = "Mint Error: SCT secret merkle proof verification failed (Code: 11000)"
+        await assert_err(wallet.split(dlc_locked, 64), strerror)
+    finally:
+        Wallet.add_sct_witnesses_to_proofs = saved
 
 @pytest.mark.asyncio
 async def test_no_witness_data(wallet: Wallet):
@@ -206,9 +208,11 @@ async def test_no_witness_data(wallet: Wallet):
     saved = Wallet.add_sct_witnesses_to_proofs
     Wallet.add_sct_witnesses_to_proofs = add_sct_witnesses_to_proofs
 
-    strerror = "Mint Error: validation of input spending conditions failed. (Code: 11000)"
-    await assert_err(wallet.split(dlc_locked, 64), strerror)
-    Wallet.add_sct_witnesses_to_proofs = saved
+    try:
+        strerror = "Mint Error: missing SCT secret witness (Code: 11000)"
+        await assert_err(wallet.split(dlc_locked, 64), strerror)
+    finally:
+        Wallet.add_sct_witnesses_to_proofs = saved
 
 @pytest.mark.asyncio
 async def test_cheating1(wallet: Wallet):
@@ -250,9 +254,11 @@ async def test_cheating1(wallet: Wallet):
     saved = Wallet.add_sct_witnesses_to_proofs
     Wallet.add_sct_witnesses_to_proofs = add_sct_witnesses_to_proofs
 
-    strerror = "Mint Error: validation of input spending conditions failed. (Code: 11000)"
-    await assert_err(wallet.split(dlc_locked, 64), strerror)
-    Wallet.add_sct_witnesses_to_proofs = saved
+    try:
+        strerror = "Mint Error: validation of input spending conditions failed. (Code: 11000)"
+        await assert_err(wallet.split(dlc_locked, 64), strerror)
+    finally:
+        Wallet.add_sct_witnesses_to_proofs = saved
 
 @pytest.mark.asyncio
 async def test_send_funding_token(wallet: Wallet):

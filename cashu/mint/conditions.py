@@ -198,10 +198,10 @@ class LedgerSpendingConditions:
         Verify SCT spending conditions for a single input
         """
         if proof.witness is None:
-            return False
+            raise TransactionError('missing SCT secret witness')
 
         witness = SCTWitness.from_witness(proof.witness)
-        assert witness, TransactionError("No or corrupt DLC witness data provided for a secret kind SCT")
+        assert witness, TransactionError("invalid witness data provided for secret kind SCT")
 
         spending_condition = False
         try:
@@ -220,7 +220,7 @@ class LedgerSpendingConditions:
         valid = merkle_verify(merkle_root_bytes, leaf_secret_bytes, merkle_proof_bytes)
 
         if not valid:
-            return False
+            raise TransactionError('SCT secret merkle proof verification failed')
 
         if not spending_condition:  # means that it is valid and a normal secret
             return True
