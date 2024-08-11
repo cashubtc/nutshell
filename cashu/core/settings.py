@@ -218,6 +218,12 @@ class CoreLightningRestFundingSource(MintSettings):
     mint_corelightning_rest_macaroon: Optional[str] = Field(default=None)
     mint_corelightning_rest_cert: Optional[str] = Field(default=None)
 
+class LNMarketsRestFundingSource(MintSettings):
+    mint_lnmarkets_rest_url: Optional[str] = Field(default=None)
+    mint_lnmarkets_rest_access_key: Optional[str] = Field(default=None)
+    mint_lnmarkets_rest_passphrase: Optional[str] = Field(default=None)
+    mint_lnmarkets_rest_secret: Optional[str] = Field(default=None)
+
 
 class Settings(
     EnvSettings,
@@ -225,6 +231,7 @@ class Settings(
     LndRestFundingSource,
     CoreLightningRestFundingSource,
     CLNRestFundingSource,
+    LNMarketsRestFundingSource,
     FakeWalletSettings,
     MintLimits,
     MintBackends,
