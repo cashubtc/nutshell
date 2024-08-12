@@ -38,7 +38,7 @@ class LNMarketsWallet(LightningBackend):
     """https://docs.lnmarkets.com/api"""
     supports_mpp = False
     supports_incoming_payment_stream = False
-    supported_units = set([Unit.sat, Unit.usd])
+    supported_units = set([Unit.usd])
 
     def __init__(self, unit: Unit, **kwargs):
         self.assert_unit_supported(unit)
