@@ -217,11 +217,10 @@ class LNMarketsWallet(LightningBackend):
         # payment_preimage = ??
         # no payment preimage by lnmarkets :(
         checking_id = data["id"]
-        payment_fee = int(data["fee"])
         return PaymentResponse(
             ok=True,
             checking_id=checking_id,
-            fee=Amount(unit=Unit.sat, amount=payment_fee),
+            fee=Amount(unit=Unit.usd, amount=quote.fee_reserve),
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
@@ -309,11 +308,14 @@ class LNMarketsWallet(LightningBackend):
             
             data = r.json()
             price = data["bidPrice"] # BTC/USD
-            amount_usd = round((amount.amount / 10**8) * price, 2)
+            price = float(price) / 10**8
+            logger.debug(f"bid price: {price} sat/USD")
+            amount_usd = round(float(amount.to(Unit.sat).amount) * price, 2)
+            logger.debug(f"amount USD: {amount_usd}")
 
             # We request a quote to pay a precise amount of sats from the usd balance, then calculate
             # the usd amount and usd fee reserve
-            data = {"amount": amount.to(Unit.sat), "currency": "btc"}
+            data = {"amount": amount.to(Unit.sat).amount, "currency": "btc"}
             path = "/v2/user/withdraw/susd"
             headers = await self.get_request_headers(Method.POST, path, data)
 
@@ -326,7 +328,7 @@ class LNMarketsWallet(LightningBackend):
 
             # calculate fee based on returned sat `fee_reserve`
             data = r.json()
-            fee_reserve_usd = round((data["fee_reserve"] / 10**8) * price, 2)
+            fee_reserve_usd = round(float(data["fee_reserve"]) * price, 2)
             return PaymentQuoteResponse(
                 checking_id=data["quote_id"],
                 fee=Amount.from_float(fee_reserve_usd, self.unit),
