@@ -1,24 +1,20 @@
-from ..core.settings import settings
-import os
-import re
-import httpx
-import asyncio
-import hmac
 import base64
-import json
-import time
 import hashlib
+import hmac
+import json
+import re
+import time
 from enum import Enum
+from typing import Dict, Optional, Union
 
+import httpx
+from bolt11 import decode
 from loguru import logger
 
-from typing import Dict, Union, Optional, AsyncGenerator
-
-from bolt11 import decode
+from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
-
-from ..core.base import Amount, MeltQuote, Unit
+from ..core.settings import settings
 from .base import (
     InvoiceResponse,
     LightningBackend,
@@ -27,6 +23,7 @@ from .base import (
     PaymentStatus,
     StatusResponse,
 )
+
 
 class Method(Enum):
     POST = 1
@@ -74,7 +71,7 @@ class LNMarketsWallet(LightningBackend):
         )
 
     async def get_request_headers(self, method: Method, path: str, data: dict) -> dict:
-        timestamp = time.time_ns() // 1000000   # timestamp in milliseconds
+        timestamp = time.time_ns() // 10**6   # timestamp in milliseconds
         params = ""
         if method == Method.GET:
             for key, value in data.items():
