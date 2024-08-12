@@ -103,6 +103,7 @@ class LNMarketsWallet(LightningBackend):
             r = await self.client.get(url=f"{self.endpoint}/v2/user", timeout=15, headers=headers)
             r.raise_for_status()
         except Exception as exc:
+            logger.error(f"Failed to connect to {self.endpoint} due to: {exc}")
             return StatusResponse(
                 error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
                 balance=0,
@@ -111,6 +112,7 @@ class LNMarketsWallet(LightningBackend):
         try:
             data: dict = r.json()
         except Exception:
+            logger.error(f"Received invalid response from {self.endpoint}: {r.text}")
             return StatusResponse(
                 error_message=(
                     f"Received invalid response from {self.endpoint}: {r.text}"
@@ -137,6 +139,8 @@ class LNMarketsWallet(LightningBackend):
         data = None
         path = None
         if self.unit == Unit.usd:
+            # The ""signature"" of LNMarkets is the sketchiest thing I have ever seen.
+            # I don't know who came up with that. Anyway, we do this trick to avoid messing it up.
             amount_usd = float(amount.to_float_string())
             amount_usd = int(amount_usd) if float(int(amount_usd)) == amount_usd else amount_usd
             data = {"amount": amount_usd, "currency": "usd"}
@@ -144,6 +148,7 @@ class LNMarketsWallet(LightningBackend):
         else:
             data = {"amount": amount.amount}
             path = "/v2/user/deposit"
+
         logger.debug(f"{data = } {path = }")
         assert data and path
         headers = await self.get_request_headers(Method.POST, path, data)
@@ -165,6 +170,7 @@ class LNMarketsWallet(LightningBackend):
         try:
             data = r.json()
         except Exception:
+            logger.error( f"Received invalid response from {self.endpoint}: {r.text}")
             return InvoiceResponse(
                 ok=False,
                 error_message=(
@@ -187,7 +193,7 @@ class LNMarketsWallet(LightningBackend):
         self.assert_unit_supported(Unit[quote.unit])
 
         data = {"invoice": quote.request}
-        path = "v2/user/withdraw"
+        path = "/v2/user/withdraw"
         if self.unit == Unit.usd:
             data["quote_id"] = quote.checking_id
 
@@ -254,20 +260,23 @@ class LNMarketsWallet(LightningBackend):
                 timeout=None,
             )
             r.raise_for_status()
-        except Exception:
+        except Exception as e:
+            logger.error(f"getting invoice status unsuccessful: {str(e)}")
             return PaymentStatus(paid=None)
 
         try:
             data = r.json()
         except Exception:
+            logger.error(f"getting invoice status unsuccessful: {r.text}")
             return PaymentStatus(paid=None)
         
+        logger.debug(f"payment status: {data}")
         if not data["success"]:
             return PaymentStatus(paid=None)
 
         return PaymentStatus(
             paid=data["success"],
-            fee=Amount(unit=Unit.sat, amount=data["fee"]),
+            fee=Amount(unit=Unit.sat, amount=int(data["fee"])),
         )
 
     async def get_payment_quote(
@@ -280,7 +289,7 @@ class LNMarketsWallet(LightningBackend):
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
-        # SAT
+        # SAT -- unfortunately, there is no way of asking the fee_reserve to lnmarkets beforehand in this case.
         if self.unit == Unit.sat:
             return PaymentQuoteResponse(
                 checking_id=invoice_obj.payment_hash,
