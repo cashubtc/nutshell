@@ -59,11 +59,10 @@ class LNMarketsWallet(LightningBackend):
         if not passphrase:
             raise Exception("No API passphrase provided")
 
-        self.secret = secret #base64.b64decode(secret)
+        self.secret = secret
         self.headers: Dict[str, Union[str, int]] = {
             "LNM-ACCESS-KEY": access_key,
-            "LNM-ACCESS-PASSPHRASE": passphrase,
-            "Content-Type": "application/json"
+            "LNM-ACCESS-PASSPHRASE": passphrase
         }
 
         self.client = httpx.AsyncClient(
@@ -91,6 +90,8 @@ class LNMarketsWallet(LightningBackend):
         headers = self.headers.copy()
         headers["LNM-ACCESS-TIMESTAMP"] = str(timestamp)
         headers["LNM-ACCESS-SIGNATURE"] = signature.decode()
+        if method == Method.POST:
+            headers["Content-Type"] = "application/json"
         logger.debug(f"{headers = }")
         return headers
 
