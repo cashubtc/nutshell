@@ -59,6 +59,17 @@ class LNMarketsWallet(LightningBackend):
         if not passphrase:
             raise Exception("No API passphrase provided")
 
+        # You can specify paths instead
+        if os.path.exists(access_key):
+            with open(access_key, "r") as f:
+                access_key = f.read()
+        if os.path.exists(secret):
+            with open(secret, "r") as f:
+                secret = f.read()
+        if os.path.exists(passphrase):
+            with open(passphrase, "r") as f:
+                passphrase = f.read()
+
         self.secret = secret
         self.headers: Dict[str, Union[str, int]] = {
             "LNM-ACCESS-KEY": access_key,
