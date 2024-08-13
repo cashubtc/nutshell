@@ -149,8 +149,7 @@ class LNMarketsWallet(LightningBackend):
         data = None
         path = None
         if self.unit == Unit.usd:
-            # The ""signature"" of LNMarkets is the sketchiest thing I have ever seen.
-            # I don't know who came up with that. Anyway, we do this trick to avoid messing it up.
+            # We do this trick to avoid messing it up.
             amount_usd = float(amount.to_float_string())
             amount_usd = int(amount_usd) if float(int(amount_usd)) == amount_usd else amount_usd
             data = {"amount": amount_usd, "currency": "usd"}
