@@ -291,6 +291,7 @@ class LNMarketsWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         self.assert_unit_supported(Unit[melt_quote.unit])
+        logger.debug(f"{melt_quote = }")
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
@@ -318,7 +319,7 @@ class LNMarketsWallet(LightningBackend):
             r.raise_for_status()
             
             data = r.json()
-            price = data["bidPrice"] # BTC/USD
+            price = data["lastPrice"] # BTC/USD
             price = float(price) / 10**8
             logger.debug(f"bid price: {price} sat/USD")
             amount_usd = round(float(amount.to(Unit.sat).amount) * price, 2)
