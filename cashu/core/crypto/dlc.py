@@ -70,10 +70,9 @@ def sign_dlc(
 ) -> bytes:
     message = (
         bytes.fromhex(dlc_root)
-        +str(funding_amount).encode("utf-8")
+        +funding_amount.to_bytes(8, "big")
     )
-    message_hash = sha256(message).digest()
-    return privkey.schnorr_sign(message_hash, None, raw=True)
+    return privkey.schnorr_sign(message, None, raw=True)
 
 def verify_dlc_signature(
     dlc_root: str,
@@ -83,7 +82,6 @@ def verify_dlc_signature(
 ) -> bool:
     message = (
         bytes.fromhex(dlc_root)
-        +str(funding_amount).encode("utf-8")
+        +funding_amount.to_bytes(8, "big")
     )
-    message_hash = sha256(message).digest()
-    return pubkey.schnorr_verify(message_hash, signature, None, raw=True)
+    return pubkey.schnorr_verify(message, signature, None, raw=True)
