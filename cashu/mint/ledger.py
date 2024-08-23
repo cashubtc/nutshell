@@ -12,8 +12,10 @@ from ..core.base import (
     BlindedSignature,
     DiscreetLogContract,
     DlcBadInput,
+    DlcFundingError,
     DlcFundingProof,
     DlcSettlement,
+    DlcSettlementError,
     MeltQuote,
     MeltQuoteState,
     Method,
@@ -1133,7 +1135,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         """
         logger.trace("register called")
         funded: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
-        errors: List[DlcFundingProof] = []
+        errors: List[DlcFundingError] = []
         for registration in request.registrations:
             try:
                 logger.trace(f"processing registration {registration.dlc_root}")
@@ -1175,7 +1177,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 logger.error(f"registration {registration.dlc_root} failed")
                 # Generic Error
                 if isinstance(e, TransactionError):
-                    errors.append(DlcFundingProof(
+                    errors.append(DlcFundingError(
                         dlc_root=registration.dlc_root,
                         bad_inputs=[DlcBadInput(
                             index=-1,
@@ -1184,7 +1186,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     ))
                 # DLC verification fail
                 else:
-                    errors.append(DlcFundingProof(
+                    errors.append(DlcFundingError(
                         dlc_root=registration.dlc_root,
                         bad_inputs=e.bad_inputs,
                     ))
@@ -1207,7 +1209,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         """
         logger.trace("settle called")
         verified: List[DlcSettlement] = []
-        errors: List[DlcSettlement] = []
+        errors: List[DlcSettlementError] = []
         for settlement in request.settlements:
             try:
                 # Verify inclusion of payout structure and associated attestation in the DLC
@@ -1215,7 +1217,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 await self._verify_dlc_inclusion(settlement.dlc_root, settlement.outcome, settlement.merkle_proof)
                 verified.append(settlement)
             except (DlcSettlementFail, AssertionError) as e:
-                errors.append(DlcSettlement(
+                errors.append(DlcSettlementError(
                     dlc_root=settlement.dlc_root,
                     details=e.detail if isinstance(e, DlcSettlementFail) else str(e)
                 ))

@@ -5,8 +5,11 @@ from loguru import logger
 from ...core.base import (
     DiscreetLogContract,
     DlcBadInput,
+    DlcFundingError,
     DlcFundingProof,
     DlcSettlement,
+    DlcSettlementAck,
+    DlcSettlementError,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
@@ -233,7 +236,7 @@ class DbWriteHelper:
     async def _verify_proofs_and_dlc_registrations(
         self,
         registrations: List[Tuple[DiscreetLogContract, DlcFundingProof]],
-    ) -> Tuple[List[Tuple[DiscreetLogContract, DlcFundingProof]], List[DlcFundingProof]]:
+    ) -> Tuple[List[Tuple[DiscreetLogContract, DlcFundingProof]], List[DlcFundingError]]:
         """
         Method to check if proofs are already spent or registrations already registered. If they are not, we
         set them as spent and registered respectively
@@ -245,7 +248,7 @@ class DbWriteHelper:
         """
         checked: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
         registered: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
-        errors: List[DlcFundingProof]= []
+        errors: List[DlcFundingError]= []
         if len(registrations) == 0:
             logger.trace("Received 0 registrations")
             return [], []
@@ -261,7 +264,7 @@ class DbWriteHelper:
                     checked.append(registration)
                 except (TokenAlreadySpentError, DlcAlreadyRegisteredError) as e:
                     logger.trace(f"Proofs already spent for registration {reg.dlc_root}")
-                    errors.append(DlcFundingProof(
+                    errors.append(DlcFundingError(
                         dlc_root=reg.dlc_root,
                         bad_inputs=[DlcBadInput(
                             index=-1,
@@ -284,7 +287,7 @@ class DbWriteHelper:
                     registered.append(registration)
                 except Exception as e:
                     logger.trace(f"Failed to register {reg.dlc_root}: {str(e)}")
-                    errors.append(DlcFundingProof(
+                    errors.append(DlcFundingError(
                         dlc_root=reg.dlc_root,
                         bad_inputs=[DlcBadInput(
                             index=-1,
@@ -297,7 +300,7 @@ class DbWriteHelper:
     async def _settle_dlc(
         self,
         settlements: List[DlcSettlement]
-    ) -> Tuple[List[DlcSettlement], List[DlcSettlement]]:
+    ) -> Tuple[List[DlcSettlementAck], List[DlcSettlementError]]:
         settled = []
         errors = []
         async with self.db.get_connection(lock_table="dlc") as conn:
@@ -306,22 +309,22 @@ class DbWriteHelper:
                     # We verify the dlc_root is in the DB
                     dlc = await self.crud.get_registered_dlc(settlement.dlc_root, self.db, conn)
                     if dlc is None:
-                        errors.append(DlcSettlement(
+                        errors.append(DlcSettlementError(
                             dlc_root=settlement.dlc_root,
                             details="no DLC with this root hash"
                         ))
                         continue
                     if dlc.settled is True:
-                        errors.append(DlcSettlement(
+                        errors.append(DlcSettlementError(
                             dlc_root=settlement.dlc_root,
                             details="DLC already settled"
                         ))
 
                     assert settlement.outcome
                     await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, settlement.outcome.P, self.db, conn)
-                    settled.append(settlement)
+                    settled.append(DlcSettlementAck(dlc_root=settlement.dlc_root))
                 except Exception as e:
-                    errors.append(DlcSettlement(
+                    errors.append(DlcSettlementError(
                         dlc_root=settlement.dlc_root,
                         details=f"error with the DB: {str(e)}"
                     ))
