@@ -7,8 +7,8 @@ from .base import (
     BlindedMessage_Deprecated,
     BlindedSignature,
     DiscreetLogContract,
+    DlcFundingAck,
     DlcFundingError,
-    DlcFundingProof,
     DlcPayout,
     DlcPayoutForm,
     DlcSettlement,
@@ -340,7 +340,7 @@ class PostDlcRegistrationRequest(BaseModel):
     registrations: List[DiscreetLogContract]
 
 class PostDlcRegistrationResponse(BaseModel):
-    funded: List[DlcFundingProof] = []
+    funded: List[DlcFundingAck] = []
     errors: Optional[List[DlcFundingError]] = None
 
 # ------- API: DLC SETTLEMENT -------

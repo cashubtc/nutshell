@@ -5,8 +5,8 @@ from loguru import logger
 from ...core.base import (
     DiscreetLogContract,
     DlcBadInput,
+    DlcFundingAck,
     DlcFundingError,
-    DlcFundingProof,
     DlcSettlement,
     DlcSettlementAck,
     DlcSettlementError,
@@ -235,19 +235,19 @@ class DbWriteHelper:
 
     async def _verify_proofs_and_dlc_registrations(
         self,
-        registrations: List[Tuple[DiscreetLogContract, DlcFundingProof]],
-    ) -> Tuple[List[Tuple[DiscreetLogContract, DlcFundingProof]], List[DlcFundingError]]:
+        registrations: List[Tuple[DiscreetLogContract, DlcFundingAck]],
+    ) -> Tuple[List[Tuple[DiscreetLogContract, DlcFundingAck]], List[DlcFundingError]]:
         """
         Method to check if proofs are already spent or registrations already registered. If they are not, we
         set them as spent and registered respectively
         Args:
-            registrations (List[Tuple[DiscreetLogContract, DlcFundingProof]]): List of registrations.
+            registrations (List[Tuple[DiscreetLogContract, DlcFundingAck]]): List of registrations.
         Returns:
-            List[Tuple[DiscreetLogContract, DlcFundingProof]]: a list of registered DLCs
-            List[DlcFundingProof]: a list of errors
+            List[Tuple[DiscreetLogContract, DlcFundingAck]]: a list of registered DLCs
+            List[DlcFundingError]: a list of errors
         """
-        checked: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
-        registered: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
+        checked: List[Tuple[DiscreetLogContract, DlcFundingAck]] = []
+        registered: List[Tuple[DiscreetLogContract, DlcFundingAck]] = []
         errors: List[DlcFundingError]= []
         if len(registrations) == 0:
             logger.trace("Received 0 registrations")

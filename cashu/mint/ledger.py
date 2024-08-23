@@ -12,6 +12,7 @@ from ..core.base import (
     BlindedSignature,
     DiscreetLogContract,
     DlcBadInput,
+    DlcFundingAck,
     DlcFundingError,
     DlcFundingProof,
     DlcSettlement,
@@ -1134,7 +1135,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 PostDlcRegistrationResponse: Indicating the funded and registered DLCs as well as the errors.
         """
         logger.trace("register called")
-        funded: List[Tuple[DiscreetLogContract, DlcFundingProof]] = []
+        funded: List[Tuple[DiscreetLogContract, DlcFundingAck]] = []
         errors: List[DlcFundingError] = []
         for registration in request.registrations:
             try:
@@ -1161,9 +1162,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     registration.funding_amount,
                     funding_privkey,
                 )
-                funding_proof = DlcFundingProof(
+                funding_ack = DlcFundingAck(
                     dlc_root=registration.dlc_root,
-                    signature=signature.hex(),
+                    funding_proof=DlcFundingProof(
+                        keyset=active_keyset_for_unit.id,
+                        signature=signature.hex(),
+                    ),
                 )
                 dlc = DiscreetLogContract(
                     settled=False,
@@ -1172,7 +1176,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     inputs=registration.inputs,
                     unit=registration.unit,
                 )
-                funded.append((dlc, funding_proof))
+                funded.append((dlc, funding_ack))
             except (TransactionError, DlcVerificationFail) as e:
                 logger.error(f"registration {registration.dlc_root} failed")
                 # Generic Error

@@ -1242,8 +1242,12 @@ class DlcFundingProof(BaseModel):
     A dlc merkle root with its signature
     or a dlc merkle root with bad inputs.
     """
-    dlc_root: str
+    keyset: str
     signature: str
+
+class DlcFundingAck(BaseModel):
+    dlc_root: str
+    funding_proof: DlcFundingProof
 
 class DlcFundingError(BaseModel):
     dlc_root: str
