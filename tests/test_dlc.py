@@ -1,5 +1,7 @@
+import json
+import time
 from hashlib import sha256
-from random import randint, shuffle
+from random import getrandbits, randint, shuffle
 from typing import List, Union
 
 import pytest
@@ -7,7 +9,16 @@ import pytest_asyncio
 from loguru import logger
 from secp256k1 import PrivateKey
 
-from cashu.core.base import DiscreetLogContract, Proof, SCTWitness, TokenV4, Unit
+from cashu.core.base import (
+    DiscreetLogContract,
+    DlcOutcome,
+    DlcSettlement,
+    Proof,
+    SCTWitness,
+    TokenV4,
+    Unit,
+)
+from cashu.core.crypto.b_dhke import hash_to_curve
 from cashu.core.crypto.dlc import (
     list_hash,
     merkle_root,
@@ -17,7 +28,10 @@ from cashu.core.crypto.dlc import (
     verify_dlc_signature,
 )
 from cashu.core.errors import CashuError
-from cashu.core.models import PostDlcRegistrationRequest
+from cashu.core.models import (
+    PostDlcRegistrationRequest,
+    PostDlcSettleRequest,
+)
 from cashu.core.secret import Secret, SecretKind
 from cashu.mint.ledger import Ledger
 from cashu.wallet.helpers import send
@@ -437,3 +451,127 @@ async def test_get_dlc_status(wallet: Wallet, ledger: Ledger):
            response.unit == "sat", \
         "GetDlcStatusResponse with unexpected fields"
 
+
+pubkey1 = '0250863ad64a87ae8a2fe83c1af1a8403cb53f53e486d064e5d9c2f5b75098d9fe'
+pubkey2 = '03c6047f9441ed7d6a2626a5b1475a0e4c08ae1f1a8403cb53f53e486d064e5d9c'
+
+payouts = [
+    # pubkey 1 wins
+    {
+        pubkey1: 1,
+        pubkey2: 0
+    },
+    # pubkey 2 wins
+    {
+        pubkey1: 0,
+        pubkey2: 1
+    },
+    # timeout
+    {
+        pubkey1: 1,
+        pubkey2: 1
+    }
+]
+
+'''
+We are not blinding the locking points and attestation secrets, but it's equivalent.
+'''
+@pytest.mark.asyncio
+async def test_settle_dlc(wallet: Wallet, ledger: Ledger):
+    invoice = await wallet.request_mint(128)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(128, id=invoice.id)
+
+    timeout = int(time.time()) + 3600               # TIMEOUT chosen by the parties
+    K_t = hash_to_curve(timeout.to_bytes(8, 'big')) # TIMEOUT locking point
+    secret1 = getrandbits(256).to_bytes(32, 'big')  # ORACLE secret attestation
+    K_1 = PrivateKey(secret1, raw=True).pubkey      # ORACLE locking point
+    secret2 = getrandbits(256).to_bytes(32, 'big')  # ORACLE secret attestation
+    K_2 = PrivateKey(secret2, raw=True).pubkey      # ORACLE locking point
+
+    leaves = [
+        sha256(K_1.serialize(True)+json.dumps(payouts[0]).encode()).digest(),
+        sha256(K_2.serialize(True)+json.dumps(payouts[1]).encode()).digest(),
+        sha256(K_t.serialize(True)+json.dumps(payouts[2]).encode()).digest(),
+    ]
+
+    # We try to settle the second outcome (pubkey2 wins)
+    dlc_root, merkle_proof = merkle_root(leaves, 1)
+    assert merkle_verify(dlc_root, leaves[1], merkle_proof)
+
+    dlc = DiscreetLogContract(
+        funding_amount=127,
+        unit="sat",
+        dlc_root=dlc_root.hex(),
+        inputs=minted,
+    )
+
+    request = PostDlcRegistrationRequest(registrations=[dlc])
+    response = await ledger.register_dlc(request)
+    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"    
+
+    outcome = DlcOutcome(
+        P=json.dumps(payouts[1]),
+        k=secret2.hex()
+    )
+    merkle_proof_hex = [p.hex() for p in merkle_proof]
+    settlement = DlcSettlement(
+        dlc_root=dlc_root.hex(),
+        outcome=outcome,
+        merkle_proof=merkle_proof_hex,
+    )
+    request = PostDlcSettleRequest(settlements=[settlement])
+    response = await ledger.settle_dlc(request)
+
+    assert response.errors is None, f"Response contains errors: {response.errors}"
+    assert len(response.settled) > 0, "Response contains zero settlements."
+
+@pytest.mark.asyncio
+async def test_settle_dlc_timeout(wallet: Wallet, ledger: Ledger):
+    invoice = await wallet.request_mint(128)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(128, id=invoice.id)
+
+    timeout = int(time.time())             # TIMEOUT chosen by the parties
+    K_t = hash_to_curve(timeout.to_bytes(8, 'big')) # TIMEOUT locking point
+    secret1 = getrandbits(256).to_bytes(32, 'big')  # ORACLE secret attestation
+    K_1 = PrivateKey(secret1, raw=True).pubkey      # ORACLE locking point
+    secret2 = getrandbits(256).to_bytes(32, 'big')  # ORACLE secret attestation
+    K_2 = PrivateKey(secret2, raw=True).pubkey      # ORACLE locking point
+
+    leaves = [
+        sha256(K_1.serialize(True)+json.dumps(payouts[0]).encode()).digest(),
+        sha256(K_2.serialize(True)+json.dumps(payouts[1]).encode()).digest(),
+        sha256(K_t.serialize(True)+json.dumps(payouts[2]).encode()).digest(),
+    ]
+
+    # We try the timeout settlement
+    dlc_root, merkle_proof = merkle_root(leaves, 2)
+    assert merkle_verify(dlc_root, leaves[2], merkle_proof)
+
+    dlc = DiscreetLogContract(
+        funding_amount=127,
+        unit="sat",
+        dlc_root=dlc_root.hex(),
+        inputs=minted,
+    )
+
+    request = PostDlcRegistrationRequest(registrations=[dlc])
+    response = await ledger.register_dlc(request)
+    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"    
+
+    outcome = DlcOutcome(
+        P=json.dumps(payouts[2]),
+        t=timeout
+    )
+    merkle_proof_hex = [p.hex() for p in merkle_proof]
+    settlement = DlcSettlement(
+        dlc_root=dlc_root.hex(),
+        outcome=outcome,
+        merkle_proof=merkle_proof_hex,
+    )
+    request = PostDlcSettleRequest(settlements=[settlement])
+    response = await ledger.settle_dlc(request)
+
+    assert response.errors is None, f"Response contains errors: {response.errors}"
+    assert len(response.settled) > 0, "Response contains zero settlements."

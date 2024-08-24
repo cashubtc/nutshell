@@ -17,7 +17,7 @@ from ..core.base import (
     Unit,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.dlc import list_hash, merkle_verify
+from ..core.crypto.dlc import merkle_verify
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -422,13 +422,24 @@ class LedgerVerification(
                 raise DlcSettlementFail(detail="Provided payout structure is not a dictionary")
             if not all([isinstance(k, str) and isinstance(v, int) for k, v in payout.items()]):
                 raise DlcSettlementFail(detail="Provided payout structure is not a dictionary mapping strings to integers")
-            for v in payout.values():
+            for k in payout.keys():
                 try:
-                    tmp = bytes.fromhex(v)
-                    if tmp[0] != b'\x02':
+                    tmp = bytes.fromhex(k)
+                    if tmp[0] != 0x02 and tmp[0] != 0x03:
+                        logger.error(f"Provided incorrect public key: {tmp.hex()}")
                         raise DlcSettlementFail(detail="Provided payout structure contains incorrect public keys")
+                    if len(tmp) != 33:
+                        logger.error(f"Provided incorrect public key: {tmp.hex()}")
+                        raise DlcSettlementFail(detail="Provided payout structure contains incorrect public keys: length != 33")
                 except ValueError as e:
                     raise DlcSettlementFail(detail=str(e))
+            for v in payout.values():
+                try:
+                    weight = int(v)
+                    if weight < 0:
+                        raise DlcSettlementFail(detail="Provided payout structure contains incorrect payout weights")
+                except ValueError:
+                    raise DlcSettlementFail(detail="Provided payout structure contains incorrect payout weights")
         except json.JSONDecodeError:
             raise DlcSettlementFail(detail="cannot decode the provided payout structure")
 
@@ -438,10 +449,11 @@ class LedgerVerification(
 
         dlc_root_bytes = None
         merkle_proof_bytes = None
-        P = b_dhke.hash_to_curve(outcome.P.encode("utf-8"))
+        P = outcome.P.encode("utf-8")
         try:
             dlc_root_bytes = bytes.fromhex(dlc_root)
-            merkle_proof_bytes = list_hash(merkle_proof)
+            merkle_proof_bytes = [bytes.fromhex(p) for p in merkle_proof]
+            logger.debug(f"{merkle_proof = }")
         except ValueError:
             raise DlcSettlementFail(detail="either dlc root or merkle proof are not a hex string")
 
@@ -450,9 +462,10 @@ class LedgerVerification(
             unix_epoch = int(time.time())
             if unix_epoch < outcome.t:
                 raise DlcSettlementFail(detail="too early for a timeout settlement")
-            K_t = b_dhke.hash_to_curve(outcome.t.to_bytes(4, "big"))
-            leaf_hash = sha256((K_t+P).serialize()).digest()
+            K_t = b_dhke.hash_to_curve(outcome.t.to_bytes(8, "big"))
+            leaf_hash = sha256(K_t.serialize(True) + P).digest()
             if not merkle_verify(dlc_root_bytes, leaf_hash, merkle_proof_bytes):
+                logger.error(f"Could not verify timeout attestation and payout structure:\n{leaf_hash.hex() = }\n{dlc_root_bytes.hex()}")
                 raise DlcSettlementFail(detail="could not verify inclusion of timeout + payout structure")
         # Blinded Attestation Secret verification
         elif outcome.k:
@@ -462,8 +475,9 @@ class LedgerVerification(
             except ValueError:
                 raise DlcSettlementFail(detail="blinded attestation secret k is not a hex string")
             K = PrivateKey(k, raw=True).pubkey
-            leaf_hash = sha256((K+P).serialize()).digest()
+            leaf_hash = sha256(K.serialize(True) + P).digest()
             if not merkle_verify(dlc_root_bytes, leaf_hash, merkle_proof_bytes):
+                logger.error(f"Could not verify secret attestation and payout structure:\n{leaf_hash.hex() = }\n{dlc_root_bytes.hex()}")
                 raise DlcSettlementFail(detail="could not verify inclusion of attestation secret + payout structure")
         else:
             raise DlcSettlementFail(detail="no timeout or attestation secret provided")
