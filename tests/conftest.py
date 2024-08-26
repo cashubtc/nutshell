@@ -139,6 +139,6 @@ def mint():
 
     server = UvicornServer(config=config)
     server.start()
-    time.sleep(1)
+    time.sleep(5)
     yield server
     server.stop()
