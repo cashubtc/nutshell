@@ -1242,9 +1242,16 @@ class DlcFundingProof(BaseModel):
     A dlc merkle root with its signature
     or a dlc merkle root with bad inputs.
     """
+    keyset: str
+    signature: str
+
+class DlcFundingAck(BaseModel):
     dlc_root: str
-    signature: Optional[str] = None
-    bad_inputs: Optional[List[DlcBadInput]] = None # Used to specify potential errors
+    funding_proof: DlcFundingProof
+
+class DlcFundingError(BaseModel):
+    dlc_root: str
+    bad_inputs: Optional[List[DlcBadInput]] # Used to specify potential errors
 
 class DlcOutcome(BaseModel):
     """
@@ -1259,9 +1266,21 @@ class DlcSettlement(BaseModel):
     Data used to settle an outcome of a DLC
     """
     dlc_root: str
-    outcome: Optional[DlcOutcome] = None
-    merkle_proof: Optional[List[str]] = None
-    details: Optional[str] = None
+    outcome: DlcOutcome
+    merkle_proof: List[str]
+
+class DlcSettlementAck(BaseModel):
+    """
+    Used by the mint to indicate the success of a DLC's funding, settlement, etc.
+    """
+    dlc_root: str
+
+class DlcSettlementError(BaseModel):
+    """
+    Indicates to the client that a DLC operation (funding, settlement, etc) failed.
+    """
+    dlc_root: str
+    details: str
 
 class DlcPayoutForm(BaseModel):
     dlc_root: str

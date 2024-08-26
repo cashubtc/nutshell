@@ -7,10 +7,13 @@ from .base import (
     BlindedMessage_Deprecated,
     BlindedSignature,
     DiscreetLogContract,
-    DlcFundingProof,
+    DlcFundingAck,
+    DlcFundingError,
     DlcPayout,
     DlcPayoutForm,
     DlcSettlement,
+    DlcSettlementAck,
+    DlcSettlementError,
     MeltQuote,
     MintQuote,
     Proof,
@@ -337,8 +340,8 @@ class PostDlcRegistrationRequest(BaseModel):
     registrations: List[DiscreetLogContract]
 
 class PostDlcRegistrationResponse(BaseModel):
-    funded: List[DlcFundingProof] = []
-    errors: Optional[List[DlcFundingProof]] = None
+    funded: List[DlcFundingAck] = []
+    errors: Optional[List[DlcFundingError]] = None
 
 # ------- API: DLC SETTLEMENT -------
 
@@ -346,8 +349,8 @@ class PostDlcSettleRequest(BaseModel):
     settlements: List[DlcSettlement]
 
 class PostDlcSettleResponse(BaseModel):
-    settled: List[DlcSettlement] = []
-    errors: Optional[List[DlcSettlement]] = None
+    settled: List[DlcSettlementAck] = []
+    errors: Optional[List[DlcSettlementError]] = None
 
 # ------- API: DLC PAYOUT -------
 class PostDlcPayoutRequest(BaseModel):

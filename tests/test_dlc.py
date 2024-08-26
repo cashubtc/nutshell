@@ -310,8 +310,8 @@ async def test_registration_vanilla_proofs(wallet: Wallet, ledger: Ledger):
     response = await ledger.register_dlc(request)
     assert len(response.funded) == 1, "Funding proofs len != 1"
 
-    funding_proof = response.funded[0]
-    assert verify_dlc_signature(dlc_root, 64, bytes.fromhex(funding_proof.signature), pubkey),\
+    ack = response.funded[0]
+    assert verify_dlc_signature(dlc_root, 64, bytes.fromhex(ack.funding_proof.signature), pubkey),\
         "Could not verify funding proof"
 
 @pytest.mark.asyncio
@@ -345,8 +345,8 @@ async def test_registration_dlc_locked_proofs(wallet: Wallet, ledger: Ledger):
     assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"
     assert len(response.funded) == 1, "Funding proofs len != 1"
 
-    funding_proof = response.funded[0]
-    assert verify_dlc_signature(dlc_root, 64, bytes.fromhex(funding_proof.signature), pubkey), \
+    ack = response.funded[0]
+    assert verify_dlc_signature(dlc_root, 64, bytes.fromhex(ack.funding_proof.signature), pubkey), \
         "Could not verify funding proof"
 
 
@@ -508,7 +508,7 @@ async def test_settle_dlc(wallet: Wallet, ledger: Ledger):
 
     request = PostDlcRegistrationRequest(registrations=[dlc])
     response = await ledger.register_dlc(request)
-    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"    
+    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"
 
     outcome = DlcOutcome(
         P=json.dumps(payouts[1]),
@@ -558,7 +558,7 @@ async def test_settle_dlc_timeout(wallet: Wallet, ledger: Ledger):
 
     request = PostDlcRegistrationRequest(registrations=[dlc])
     response = await ledger.register_dlc(request)
-    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"    
+    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"
 
     outcome = DlcOutcome(
         P=json.dumps(payouts[2]),
