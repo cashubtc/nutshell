@@ -814,7 +814,7 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         query = f"""
-        UPDATE TABLE {db.table_with_schema('dlc')}
+        UPDATE {db.table_with_schema('dlc')}
         SET settled = 1, debts = :debts
         WHERE dlc_root = :dlc_root
         """
