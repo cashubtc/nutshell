@@ -13,6 +13,7 @@ from bolt11 import decode
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.errors import CashuError
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -24,7 +25,6 @@ from .base import (
     PaymentStatus,
     StatusResponse,
 )
-from ..core.errors import CashuError
 
 
 class Method(Enum):
