@@ -24,6 +24,7 @@ from .base import (
     PaymentStatus,
     StatusResponse,
 )
+from ..core.errors import CashuError
 
 
 class Method(Enum):
@@ -34,6 +35,15 @@ class Method(Enum):
 
     def __str__(self):
         return self.name
+
+def raise_if_err(r):
+    if r.status_code != 200:
+        if r.status_code >= 400:
+            error_message = r.json()['message']
+        else:
+            error_message = r.text
+        logger.error(error_message)
+        raise CashuError(error_message)
 
 class LNMarketsWallet(LightningBackend):
     """https://docs.lnmarkets.com/api"""
@@ -111,11 +121,10 @@ class LNMarketsWallet(LightningBackend):
         headers = await self.get_request_headers(Method.GET, "/v2/user", {})
         try:
             r = await self.client.get(url=f"{self.endpoint}/v2/user", timeout=15, headers=headers)
-            r.raise_for_status()
-        except Exception as exc:
-            logger.error(f"Failed to connect to {self.endpoint} due to: {exc}")
+            raise_if_err(r)
+        except CashuError as exc:
             return StatusResponse(
-                error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
+                error_message=f"Failed to connect to {self.endpoint} due to: {exc.detail}",
                 balance=0,
             )
 
@@ -128,10 +137,6 @@ class LNMarketsWallet(LightningBackend):
                     f"Received invalid response from {self.endpoint}: {r.text}"
                 ),
                 balance=0,
-            )
-        if "detail" in data:
-            return StatusResponse(
-                error_message=f"LNMarkets error: {data['detail']}", balance=0
             )
 
         if self.unit == Unit.usd:
@@ -167,12 +172,11 @@ class LNMarketsWallet(LightningBackend):
                 json=data,
                 headers=headers,
             )
-            r.raise_for_status()
-        except Exception as e:
-            logger.error("Error while creating invoice: "+str(e))
+            raise_if_err(r)
+        except CashuError as e:
             return InvoiceResponse(
                 ok=False,
-                error_message="Error while creating invoice: "+str(e),
+                error_message=f"Error while creating invoice: {e.detail}",
             )
 
         data = None
@@ -214,10 +218,9 @@ class LNMarketsWallet(LightningBackend):
                 headers=headers,
                 timeout=None,
             )
-            r.raise_for_status()
-        except Exception as e:
-            logger.error(f"LNMarkets withdrawal unsuccessful: {str(e)}")
-            return PaymentResponse(error_message=f"LNMarkets withdrawal unsuccessful: {str(e)}")
+            raise_if_err(r)
+        except CashuError as e:
+            return PaymentResponse(error_message=f"LNMarkets withdrawal unsuccessful: {e.detail}")
 
         try:
             data = r.json()
@@ -243,9 +246,8 @@ class LNMarketsWallet(LightningBackend):
                 headers=headers,
                 timeout=None,
             )
-            r.raise_for_status()
-        except Exception as e:
-            logger.error(f"get invoice status unsuccessful: {str(e)}")
+            raise_if_err(r)
+        except CashuError:
             return PaymentStatus(paid=None)
         
         data = None
@@ -267,9 +269,8 @@ class LNMarketsWallet(LightningBackend):
                 headers=headers,
                 timeout=None,
             )
-            r.raise_for_status()
-        except Exception as e:
-            logger.error(f"getting invoice status unsuccessful: {str(e)}")
+            raise_if_err(r)
+        except CashuError:
             return PaymentStatus(paid=None)
 
         try:
@@ -291,13 +292,13 @@ class LNMarketsWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         self.assert_unit_supported(Unit[melt_quote.unit])
-        logger.debug(f"{melt_quote = }")
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
+
         # SAT -- unfortunately, there is no way of asking the fee_reserve to lnmarkets beforehand in this case.
         if self.unit == Unit.sat:
             return PaymentQuoteResponse(
@@ -311,13 +312,12 @@ class LNMarketsWallet(LightningBackend):
             path = "/v2/futures/ticker"
             headers = await self.get_request_headers(Method.GET, path, {})
 
-            # We let any eventual exception crash the request
             r = await self.client.get(f"{self.endpoint}{path}",
                 headers=headers,
                 timeout=None,
             )
-            r.raise_for_status()
-            
+            raise_if_err(r)
+
             data = r.json()
             price = data["lastPrice"] # BTC/USD
             price = float(price) / 10**8
@@ -336,7 +336,7 @@ class LNMarketsWallet(LightningBackend):
                 headers=headers,
                 timeout=None,
             )
-            r.raise_for_status()
+            raise_if_err(r)
 
             # calculate fee based on returned sat `fee_reserve`
             data = r.json()
