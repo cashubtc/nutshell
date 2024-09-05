@@ -8,6 +8,7 @@ import time
 from enum import Enum
 from typing import Dict, Optional, Union
 
+from math import ceil
 import httpx
 from bolt11 import decode
 from loguru import logger
@@ -38,7 +39,7 @@ class Method(Enum):
 
 def raise_if_err(r):
     if r.status_code != 200:
-        if r.status_code >= 400:
+        if 400 <= r.status_code < 500:
             error_message = r.json()['message']
         else:
             error_message = r.text
@@ -49,7 +50,7 @@ class LNMarketsWallet(LightningBackend):
     """https://docs.lnmarkets.com/api"""
     supports_mpp = False
     supports_incoming_payment_stream = False
-    supported_units = set([Unit.usd])
+    supported_units = set([Unit.usd, Unit.sat])
 
     def __init__(self, unit: Unit, **kwargs):
         self.assert_unit_supported(unit)
@@ -154,7 +155,7 @@ class LNMarketsWallet(LightningBackend):
         data = None
         path = None
         if self.unit == Unit.usd:
-            # We do this trick to avoid messing it up.
+            # We do this trick to avoid messing up the signature.
             amount_usd = float(amount.to_float_string())
             amount_usd = int(amount_usd) if float(int(amount_usd)) == amount_usd else amount_usd
             data = {"amount": amount_usd, "currency": "usd"}
@@ -295,36 +296,19 @@ class LNMarketsWallet(LightningBackend):
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
-        fees_msat = fee_reserve(amount_msat)
-        fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
 
-        # SAT -- unfortunately, there is no way of asking the fee_reserve to lnmarkets beforehand in this case.
+        # SAT: the max fee is reportedly min(100, 0.5% * amount_sat)
         if self.unit == Unit.sat:
+            amount_sat = amount.to(Unit.sat).amount
+            max_fee = min(101, ceil(5e-3 * amount_sat))
             return PaymentQuoteResponse(
                 checking_id=invoice_obj.payment_hash,
-                fee=fees.to(self.unit, round="up"),
+                fee=Amount(self.unit, max_fee),
                 amount=amount.to(self.unit, round="up"),
             )
         # sUSD
         else:
-            # We get the current rate
-            path = "/v2/futures/ticker"
-            headers = await self.get_request_headers(Method.GET, path, {})
-
-            r = await self.client.get(f"{self.endpoint}{path}",
-                headers=headers,
-                timeout=None,
-            )
-            raise_if_err(r)
-
-            data = r.json()
-            price = data["lastPrice"] # BTC/USD
-            price = float(price) / 10**8
-            logger.debug(f"bid price: {price} sat/USD")
-            amount_usd = round(float(amount.to(Unit.sat).amount) * price, 2)
-            logger.debug(f"amount USD: {amount_usd}")
-
             # We request a quote to pay a precise amount of sats from the usd balance, then calculate
             # the usd amount and usd fee reserve
             data = {"amount": amount.to(Unit.sat).amount, "currency": "btc"}
@@ -338,9 +322,9 @@ class LNMarketsWallet(LightningBackend):
             )
             raise_if_err(r)
 
-            # calculate fee based on returned sat `fee_reserve`
             data = r.json()
-            fee_reserve_usd = round(float(data["fee_reserve"]) * price, 2)
+            fee_reserve_usd = float(data["fee_reserve"])
+            amount_usd = float(data["amount"])
             return PaymentQuoteResponse(
                 checking_id=data["quote_id"],
                 fee=Amount.from_float(fee_reserve_usd, self.unit),
