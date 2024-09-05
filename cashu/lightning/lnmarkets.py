@@ -6,16 +6,15 @@ import os
 import re
 import time
 from enum import Enum
+from math import ceil
 from typing import Dict, Optional, Union
 
-from math import ceil
 import httpx
 from bolt11 import decode
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
 from ..core.errors import CashuError
-from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
