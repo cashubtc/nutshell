@@ -73,11 +73,11 @@ class LNMarketsWallet(LightningBackend):
         passphrase = settings.mint_lnmarkets_rest_passphrase
 
         if not access_key:
-            raise Exception("No API access key provided")
+            raise Exception("No LNMarkets API access key provided")
         if not secret:
-            raise Exception("No API secret provided")
+            raise Exception("No LNMarkets API secret provided")
         if not passphrase:
-            raise Exception("No API passphrase provided")
+            raise Exception("No LNMarkets API passphrase provided")
 
         # You can specify paths instead
         if os.path.exists(access_key):
@@ -319,7 +319,7 @@ class LNMarketsWallet(LightningBackend):
         # SAT: the max fee is reportedly min(100, 0.5% * amount_sat)
         if self.unit == Unit.sat:
             amount_sat = amount.to(Unit.sat).amount
-            max_fee = min(SAT_MIN_FEE_SAT, ceil(SAT_MAX_FEE_PERCENT / 100 * amount_sat))
+            max_fee = max(SAT_MIN_FEE_SAT, ceil(SAT_MAX_FEE_PERCENT / 100 * amount_sat))
             return PaymentQuoteResponse(
                 checking_id=invoice_obj.payment_hash,
                 fee=Amount(self.unit, max_fee),
