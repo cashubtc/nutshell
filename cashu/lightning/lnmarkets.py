@@ -241,13 +241,12 @@ class LNMarketsWallet(LightningBackend):
             logger.error(f"payment failed: {r.text}")
             return PaymentResponse(error_message=f"payment failed: {r.text}")
 
-        # payment_preimage = ??
-        # no payment preimage by lnmarkets :(
+        # lnmarkets does not provide a payment_preimage :(
         checking_id = data["id"]
         return PaymentResponse(
             ok=True,
             checking_id=checking_id,
-            fee=Amount(unit=Unit.usd, amount=quote.fee_reserve),
+            fee=Amount(unit=self.unit, amount=quote.fee_reserve),
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
