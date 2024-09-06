@@ -117,13 +117,11 @@ class LNMarketsWallet(LightningBackend):
                 hashlib.sha256,
             ).digest()
         )
-        logger.debug(f"{timestamp}{str(method)}{path}{params}")
         headers = self.headers.copy()
         headers["LNM-ACCESS-TIMESTAMP"] = str(timestamp)
         headers["LNM-ACCESS-SIGNATURE"] = signature.decode()
         if method == Method.POST:
             headers["Content-Type"] = "application/json"
-        logger.debug(f"{headers = }")
         return headers
 
     async def status(self) -> StatusResponse:
@@ -235,17 +233,13 @@ class LNMarketsWallet(LightningBackend):
             )
             raise_if_err(r)
         except CashuError as e:
-            return PaymentResponse(
-                error_message=f"LNMarkets withdrawal unsuccessful: {e.detail}"
-            )
+            return PaymentResponse(error_message=f"payment failed: {e.detail}")
 
         try:
             data = r.json()
         except Exception:
-            logger.error(f"LNMarkets withdrawal unsuccessful: {r.text}")
-            return PaymentResponse(
-                error_message=f"LNMarkets withdrawal unsuccessful: {r.text}"
-            )
+            logger.error(f"payment failed: {r.text}")
+            return PaymentResponse(error_message=f"payment failed: {r.text}")
 
         # payment_preimage = ??
         # no payment preimage by lnmarkets :(
