@@ -243,10 +243,11 @@ class LNMarketsWallet(LightningBackend):
 
         # lnmarkets does not provide a payment_preimage :(
         checking_id = data["id"]
+        fee_paid = int(data["fee"])
         return PaymentResponse(
             ok=True,
             checking_id=checking_id,
-            fee=Amount(unit=self.unit, amount=quote.fee_reserve),
+            fee=Amount(unit=self.unit, amount=fee_paid),
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
