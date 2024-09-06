@@ -26,6 +26,9 @@ from .base import (
     StatusResponse,
 )
 
+SAT_MAX_FEE_PERCENT = 1  # 1% of the amount in satoshis
+SAT_MIN_FEE_SAT = 101  # 101 satoshis
+
 
 class Method(Enum):
     POST = 1
@@ -36,17 +39,20 @@ class Method(Enum):
     def __str__(self):
         return self.name
 
+
 def raise_if_err(r):
     if r.status_code != 200:
         if 400 <= r.status_code < 500:
-            error_message = r.json()['message']
+            error_message = r.json()["message"]
         else:
             error_message = r.text
         logger.error(error_message)
         raise CashuError(error_message)
 
+
 class LNMarketsWallet(LightningBackend):
     """https://docs.lnmarkets.com/api"""
+
     supports_mpp = False
     supports_incoming_payment_stream = False
     supported_units = set([Unit.usd, Unit.sat])
@@ -56,9 +62,12 @@ class LNMarketsWallet(LightningBackend):
         self.unit = unit
         self.endpoint = settings.mint_lnmarkets_rest_url or "https://api.lnmarkets.com"
 
-        if re.match(r"^https?://[a-zA-Z0-9.-]+(?:/[a-zA-Z0-9.-]+)*$", self.endpoint) is None:
+        if (
+            re.match(r"^https?://[a-zA-Z0-9.-]+(?:/[a-zA-Z0-9.-]+)*$", self.endpoint)
+            is None
+        ):
             raise Exception("Invalid API endpoint")
-        
+
         access_key = settings.mint_lnmarkets_rest_access_key
         secret = settings.mint_lnmarkets_rest_secret
         passphrase = settings.mint_lnmarkets_rest_passphrase
@@ -84,15 +93,13 @@ class LNMarketsWallet(LightningBackend):
         self.secret = secret
         self.headers: Dict[str, Union[str, int]] = {
             "LNM-ACCESS-KEY": access_key,
-            "LNM-ACCESS-PASSPHRASE": passphrase
+            "LNM-ACCESS-PASSPHRASE": passphrase,
         }
 
-        self.client = httpx.AsyncClient(
-            verify=not settings.debug
-        )
+        self.client = httpx.AsyncClient(verify=not settings.debug)
 
     async def get_request_headers(self, method: Method, path: str, data: dict) -> dict:
-        timestamp = time.time_ns() // 10**6   # timestamp in milliseconds
+        timestamp = time.time_ns() // 10**6  # timestamp in milliseconds
         params = ""
         if method == Method.GET:
             for key, value in data.items():
@@ -103,11 +110,13 @@ class LNMarketsWallet(LightningBackend):
         else:
             raise Exception("Method not allowed. Something is wrong with the code.")
 
-        signature = base64.b64encode(hmac.new(
-            self.secret.encode(),
-            f"{timestamp}{str(method)}{path}{params}".encode(), # bytes from utf-8 string
-            hashlib.sha256,
-        ).digest())
+        signature = base64.b64encode(
+            hmac.new(
+                self.secret.encode(),
+                f"{timestamp}{str(method)}{path}{params}".encode(),  # bytes from utf-8 string
+                hashlib.sha256,
+            ).digest()
+        )
         logger.debug(f"{timestamp}{str(method)}{path}{params}")
         headers = self.headers.copy()
         headers["LNM-ACCESS-TIMESTAMP"] = str(timestamp)
@@ -120,7 +129,9 @@ class LNMarketsWallet(LightningBackend):
     async def status(self) -> StatusResponse:
         headers = await self.get_request_headers(Method.GET, "/v2/user", {})
         try:
-            r = await self.client.get(url=f"{self.endpoint}/v2/user", timeout=15, headers=headers)
+            r = await self.client.get(
+                url=f"{self.endpoint}/v2/user", timeout=15, headers=headers
+            )
             raise_if_err(r)
         except CashuError as exc:
             return StatusResponse(
@@ -140,9 +151,11 @@ class LNMarketsWallet(LightningBackend):
             )
 
         if self.unit == Unit.usd:
-            return StatusResponse(error_message=None, balance=data["synthetic_usd_balance"])
+            return StatusResponse(
+                error_message=None, balance=data["synthetic_usd_balance"]
+            )
         return StatusResponse(error_message=None, balance=data["balance"])
-    
+
     async def create_invoice(
         self,
         amount: Amount,
@@ -156,7 +169,9 @@ class LNMarketsWallet(LightningBackend):
         if self.unit == Unit.usd:
             # We do this trick to avoid messing up the signature.
             amount_usd = float(amount.to_float_string())
-            amount_usd = int(amount_usd) if float(int(amount_usd)) == amount_usd else amount_usd
+            amount_usd = (
+                int(amount_usd) if float(int(amount_usd)) == amount_usd else amount_usd
+            )
             data = {"amount": amount_usd, "currency": "usd"}
             path = "/v2/user/deposit/susd"
         else:
@@ -183,14 +198,14 @@ class LNMarketsWallet(LightningBackend):
         try:
             data = r.json()
         except Exception:
-            logger.error( f"Received invalid response from {self.endpoint}: {r.text}")
+            logger.error(f"Received invalid response from {self.endpoint}: {r.text}")
             return InvoiceResponse(
                 ok=False,
                 error_message=(
                     f"Received invalid response from {self.endpoint}: {r.text}"
                 ),
             )
-        
+
         checking_id, payment_request = data["depositId"], data["paymentRequest"]
         assert isinstance(checking_id, str) and isinstance(payment_request, str)
 
@@ -199,7 +214,7 @@ class LNMarketsWallet(LightningBackend):
             checking_id=checking_id,
             payment_request=payment_request,
         )
-    
+
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
@@ -220,14 +235,18 @@ class LNMarketsWallet(LightningBackend):
             )
             raise_if_err(r)
         except CashuError as e:
-            return PaymentResponse(error_message=f"LNMarkets withdrawal unsuccessful: {e.detail}")
+            return PaymentResponse(
+                error_message=f"LNMarkets withdrawal unsuccessful: {e.detail}"
+            )
 
         try:
             data = r.json()
         except Exception:
             logger.error(f"LNMarkets withdrawal unsuccessful: {r.text}")
-            return PaymentResponse(error_message=f"LNMarkets withdrawal unsuccessful: {r.text}")
-        
+            return PaymentResponse(
+                error_message=f"LNMarkets withdrawal unsuccessful: {r.text}"
+            )
+
         # payment_preimage = ??
         # no payment preimage by lnmarkets :(
         checking_id = data["id"]
@@ -249,7 +268,7 @@ class LNMarketsWallet(LightningBackend):
             raise_if_err(r)
         except CashuError:
             return PaymentStatus(paid=None)
-        
+
         data = None
         try:
             data = r.json()
@@ -278,7 +297,7 @@ class LNMarketsWallet(LightningBackend):
         except Exception:
             logger.error(f"getting invoice status unsuccessful: {r.text}")
             return PaymentStatus(paid=None)
-        
+
         logger.debug(f"payment status: {data}")
         if not data["success"]:
             return PaymentStatus(paid=None)
@@ -300,21 +319,22 @@ class LNMarketsWallet(LightningBackend):
         # SAT: the max fee is reportedly min(100, 0.5% * amount_sat)
         if self.unit == Unit.sat:
             amount_sat = amount.to(Unit.sat).amount
-            max_fee = min(101, ceil(5e-3 * amount_sat))
+            max_fee = min(SAT_MIN_FEE_SAT, ceil(SAT_MAX_FEE_PERCENT / 100 * amount_sat))
             return PaymentQuoteResponse(
                 checking_id=invoice_obj.payment_hash,
                 fee=Amount(self.unit, max_fee),
                 amount=amount.to(self.unit, round="up"),
             )
         # sUSD
-        else:
+        elif self.unit == Unit.usd:
             # We request a quote to pay a precise amount of sats from the usd balance, then calculate
             # the usd amount and usd fee reserve
             data = {"amount": amount.to(Unit.sat).amount, "currency": "btc"}
             path = "/v2/user/withdraw/susd"
             headers = await self.get_request_headers(Method.POST, path, data)
 
-            r = await self.client.post(f"{self.endpoint}{path}",
+            r = await self.client.post(
+                f"{self.endpoint}{path}",
                 json=data,
                 headers=headers,
                 timeout=None,
@@ -327,8 +347,10 @@ class LNMarketsWallet(LightningBackend):
             return PaymentQuoteResponse(
                 checking_id=data["quote_id"],
                 fee=Amount.from_float(fee_reserve_usd, self.unit),
-                amount=Amount.from_float(amount_usd, self.unit)
+                amount=Amount.from_float(amount_usd, self.unit),
             )
+        else:
+            raise NotImplementedError()
 
     async def paid_invoices_stream(self):
         raise NotImplementedError("paid_invoices_stream not implemented")
