@@ -1,6 +1,7 @@
 import asyncio
 from typing import Tuple
 
+import bolt11
 import pytest
 from click.testing import CliRunner
 
@@ -128,6 +129,29 @@ def test_invoice_return_immediately(mint, cli_prefix):
     wallet = asyncio.run(init_wallet())
     assert wallet.available_balance >= 1000
     assert result.exit_code == 0
+
+
+def test_invoice_with_memo(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "-n", "1000", "-m", "test memo"],
+    )
+    assert result.exception is None
+
+    # find word starting with ln in the output
+    lines = result.output.split("\n")
+    invoice_str = ""
+    for line in lines:
+        for word in line.split(" "):
+            if word.startswith("ln"):
+                invoice_str = word
+                break
+    if not invoice_str:
+        raise Exception("No invoice found in the output")
+    invoice_obj = bolt11.decode(invoice_str)
+    assert invoice_obj.amount_msat == 1000_000
+    assert invoice_obj.description == "test memo"
 
 
 def test_invoice_with_split(mint, cli_prefix):
