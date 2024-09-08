@@ -8,9 +8,6 @@ import bolt11
 from bip32 import BIP32
 from loguru import logger
 
-from cashu.core.crypto.keys import derive_keyset_id
-from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
-
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
@@ -22,10 +19,16 @@ from ..core.base import (
     WalletKeyset,
 )
 from ..core.crypto import b_dhke
+from ..core.crypto.keys import derive_keyset_id
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
-from ..core.helpers import amount_summary, calculate_number_of_blank_outputs, sum_proofs
+from ..core.helpers import (
+    amount_summary,
+    calculate_number_of_blank_outputs,
+    sum_proofs,
+)
+from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.migrations import migrate_databases
 from ..core.models import (
     PostCheckStateResponse,
@@ -34,7 +37,8 @@ from ..core.models import (
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
-from ..wallet.crud import (
+from . import migrations
+from .crud import (
     bump_secret_derivation,
     get_keysets,
     get_proofs,
@@ -48,7 +52,6 @@ from ..wallet.crud import (
     update_lightning_invoice,
     update_proof,
 )
-from . import migrations
 from .htlc import WalletHTLC
 from .mint_info import MintInfo
 from .p2pk import WalletP2PK
@@ -56,6 +59,7 @@ from .proofs import WalletProofs
 from .secrets import WalletSecrets
 from .subscriptions import SubscriptionManager
 from .transactions import WalletTransactions
+from .utils import sanitize_url
 from .v1_api import LedgerAPI
 
 
@@ -107,8 +111,8 @@ class Wallet(
         self.proofs: List[Proof] = []
         self.name = name
         self.unit = Unit[unit]
+        url = sanitize_url(url)
 
-        url = url.rstrip("/")
         super().__init__(url=url, db=self.db)
         logger.debug("Wallet initialized")
         logger.debug(f"Mint URL: {url}")
