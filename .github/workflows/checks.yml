@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       python-version:
-        default: "3.10.4"
+        default: "3.12.4"
         type: string
       poetry-version:
         default: "1.7.1"
@@ -52,3 +52,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: chartboost/ruff-action@v1
+        with:
+          version: 0.2.2
+          args: 'format --check'

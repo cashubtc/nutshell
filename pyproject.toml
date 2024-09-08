@@ -6,7 +6,7 @@ authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
-python = "^3.8.1"
+python = "^3.10"
 SQLAlchemy = {version = "1.4.52", extras = ["asyncio"]}
 click = "^8.1.7"
 pydantic = "^1.10.2"
@@ -48,7 +48,7 @@ pytest = "^7.4.0"
 pre-commit = "^3.3.3"
 fastapi-profiler = "^1.2.0"
 respx = "^0.20.2"
-ruff = "^0.2.1"
+ruff = "^0.2.2"
 mypy = "^1.8.0"
 
 [build-system]

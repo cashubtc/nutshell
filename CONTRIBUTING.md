@@ -10,7 +10,7 @@ We use [Ruff](https://docs.astral.sh/ruff/formatter/) for formatting. To make su
 
 ## Setting up your environment
 
-We use [Poetry](https://python-poetry.org/) as a dependency and environment manager. Currently, Nutshell supports Python `3.10.4` which you can install using `pyenv` (see README.md). To install all dependencies, run `poetry install`. After install, you can activate the shell with `poetry shell`. Now you can execute `cashu --help` to use the wallet or `mint` to run the mint.
+We use [Poetry](https://python-poetry.org/) as a dependency and environment manager. Currently, Nutshell supports Python `3.12.4` which you can install using `pyenv` (see README.md). To install all dependencies, run `poetry install`. After install, you can activate the shell with `poetry shell`. Now you can execute `cashu --help` to use the wallet or `mint` to run the mint.
 
 ### Precommit hook
 To run the formatter and mypy (linter) before you push code, you can install the very useful pre-commit hook which will check your code every time you push with git.
