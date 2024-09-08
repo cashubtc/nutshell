@@ -26,7 +26,7 @@ setuptools = "^68.1.2"
 wheel = "^0.41.1"
 importlib-metadata = "^6.8.0"
 httpx = {extras = ["socks"], version = "^0.25.1"}
-bip32 = "^3.4"
+bip32 = "^4.0"
 mnemonic = "^0.20"
 bolt11 = "^2.0.5"
 pre-commit = "^3.5.0"
