@@ -1,5 +1,6 @@
 from typing import List, Union
 
+import bolt11
 import pytest
 import pytest_asyncio
 
@@ -56,6 +57,15 @@ async def test_create_invoice(wallet: LightningWallet):
     invoice = await wallet.create_invoice(64)
     assert invoice.payment_request
     assert invoice.payment_request.startswith("ln")
+
+
+@pytest.mark.asyncio
+async def test_create_invoice_with_description(wallet: LightningWallet):
+    invoice = await wallet.create_invoice(64, "test description")
+    assert invoice.payment_request
+    assert invoice.payment_request.startswith("ln")
+    invoiceObj = bolt11.decode(invoice.payment_request)
+    assert invoiceObj.description == "test description"
 
 
 @pytest.mark.asyncio

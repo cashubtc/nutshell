@@ -403,6 +403,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             quote_request.unit, Method.bolt11.name
         )
 
+        if (
+            quote_request.description
+            and not self.backends[method][unit].supports_description
+        ):
+            raise NotAllowedError("Backend does not support descriptions.")
+
         if settings.mint_max_balance:
             balance = await self.get_balance()
             if balance + quote_request.amount > settings.mint_max_balance:
@@ -411,7 +417,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
         invoice_response: InvoiceResponse = await self.backends[method][
             unit
-        ].create_invoice(Amount(unit=unit, amount=quote_request.amount))
+        ].create_invoice(
+            amount=Amount(unit=unit, amount=quote_request.amount),
+            memo=quote_request.description,
+        )
         logger.trace(
             f"got invoice {invoice_response.payment_request} with checking id"
             f" {invoice_response.checking_id}"

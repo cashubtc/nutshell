@@ -117,6 +117,7 @@ class KeysetsResponse_deprecated(BaseModel):
 class PostMintQuoteRequest(BaseModel):
     unit: str = Field(..., max_length=settings.mint_max_request_length)  # output unit
     amount: int = Field(..., gt=0)  # output amount
+    description: Optional[str] = None  # invoice description
 
 
 class PostMintQuoteResponse(BaseModel):

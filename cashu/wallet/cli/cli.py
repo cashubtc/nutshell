@@ -241,6 +241,7 @@ async def pay(
 
 @cli.command("invoice", help="Create Lighting invoice.")
 @click.argument("amount", type=float)
+@click.option("memo", "-m", default="", help="Memo for the invoice.", type=str)
 @click.option("--id", default="", help="Id of the paid invoice.", type=str)
 @click.option(
     "--split",
@@ -259,7 +260,14 @@ async def pay(
 )
 @click.pass_context
 @coro
-async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bool):
+async def invoice(
+    ctx: Context,
+    amount: float,
+    memo: str,
+    id: str,
+    split: int,
+    no_check: bool,
+):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
@@ -324,11 +332,11 @@ async def invoice(ctx: Context, amount: float, id: str, split: int, no_check: bo
         )
         if mint_supports_websockets and not no_check:
             invoice, subscription = await wallet.request_mint_with_callback(
-                amount, callback=mint_invoice_callback
+                amount, callback=mint_invoice_callback, memo=memo
             )
             invoice_nonlocal, subscription_nonlocal = invoice, subscription
         else:
-            invoice = await wallet.request_mint(amount)
+            invoice = await wallet.request_mint(amount, memo=memo)
         if invoice.bolt11:
             print("")
             print(f"Pay invoice to mint {wallet.unit.str(amount)}:")
