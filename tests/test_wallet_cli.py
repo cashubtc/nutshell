@@ -9,7 +9,7 @@ from cashu.core.base import TokenV4
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
-from tests.helpers import is_deprecated_api_only, is_fake, pay_if_regtest
+from tests.helpers import is_deprecated_api_only, is_fake, is_regtest, pay_if_regtest
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -105,6 +105,19 @@ def test_balance(cli_prefix):
     print(result.output)
     w = asyncio.run(init_wallet())
     assert f"Balance: {w.available_balance} sat" in result.output
+    assert result.exit_code == 0
+
+
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+def test_invoice(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "1000"],
+    )
+
+    wallet = asyncio.run(init_wallet())
+    assert wallet.available_balance >= 1000
     assert result.exit_code == 0
 
 
