@@ -52,11 +52,18 @@ jobs:
           MINT_TEST_DATABASE: ${{ inputs.mint-database }}
           TOR: false
           MINT_BACKEND_BOLT11_SAT: ${{ inputs.backend-wallet-class }}
+          # LNbits wallet
           MINT_LNBITS_ENDPOINT: http://localhost:5001
           MINT_LNBITS_KEY: d08a3313322a4514af75d488bcc27eee
+          # LndRestWallet
           MINT_LND_REST_ENDPOINT: https://localhost:8081/
           MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
           MINT_LND_REST_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          # LndRPCWallet
+          MINT_LND_RPC_ENDPOINT: localhost:10009
+          MINT_LND_RPC_CERT: ./regtest/data/lnd-3/tls.cert
+          MINT_LND_RPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+
           MINT_LND_ENABLE_MPP: true
           #   LND_GRPC_ENDPOINT: localhost
           #   LND_GRPC_PORT: 10009

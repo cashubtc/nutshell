@@ -996,6 +996,8 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
                         print(f"        - Version: {mint_info['version']}")
                     if mint_info.get("motd"):
                         print(f"        - Message of the day: {mint_info['motd']}")
+                    if mint_info.get("time"):
+                        print(f"        - Server time: {mint_info['time']}")
                     if mint_info.get("nuts"):
                         print(
                             "        - Supported NUTS:"

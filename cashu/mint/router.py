@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from fastapi import APIRouter, Request, WebSocket
 from loguru import logger
@@ -57,6 +58,7 @@ async def info() -> GetInfoResponse:
         nuts=mint_features,
         icon_url=settings.mint_info_icon_url,
         motd=settings.mint_info_motd,
+        time=int(time.time()),
     )
 
 
