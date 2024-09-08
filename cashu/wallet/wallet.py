@@ -107,6 +107,7 @@ class Wallet(
         self.proofs: List[Proof] = []
         self.name = name
         self.unit = Unit[unit]
+
         url = url.rstrip("/")
         super().__init__(url=url, db=self.db)
         logger.debug("Wallet initialized")
