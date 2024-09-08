@@ -38,7 +38,7 @@ class GetInfoResponse(BaseModel):
     description_long: Optional[str] = None
     contact: Optional[List[MintInfoContact]] = None
     motd: Optional[str] = None
-    mint_icon_url: Optional[str] = None
+    icon_url: Optional[str] = None
     nuts: Optional[Dict[int, Any]] = None
 
     def supports(self, nut: int) -> Optional[bool]:
