@@ -144,7 +144,7 @@ class MintInformation(CashuSettings):
     mint_info_description_long: str = Field(default=None)
     mint_info_contact: List[List[str]] = Field(default=[])
     mint_info_motd: str = Field(default=None)
-    mint_info_icon: str = Field(default=None)
+    mint_info_icon_url: str = Field(default=None)
 
 
 class WalletSettings(CashuSettings):
@@ -202,10 +202,12 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
     mint_lnd_enable_mpp: bool = Field(default=False)
 
+
 class LndRPCFundingSource(MintSettings):
     mint_lnd_rpc_endpoint: Optional[str] = Field(default=None)
     mint_lnd_rpc_cert: Optional[str] = Field(default=None)
     mint_lnd_rpc_macaroon: Optional[str] = Field(default=None)
+
 
 class CLNRestFundingSource(MintSettings):
     mint_clnrest_url: Optional[str] = Field(default=None)
