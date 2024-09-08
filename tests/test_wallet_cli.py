@@ -9,7 +9,7 @@ from cashu.core.base import TokenV4
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
-from tests.helpers import is_fake, pay_if_regtest
+from tests.helpers import is_deprecated_api_only, is_fake, pay_if_regtest
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -131,6 +131,7 @@ def test_invoice_return_immediately(mint, cli_prefix):
     assert result.exit_code == 0
 
 
+@pytest.mark.skipif(is_deprecated_api_only, reason="only works with v1 API")
 def test_invoice_with_memo(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
