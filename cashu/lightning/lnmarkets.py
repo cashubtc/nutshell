@@ -112,14 +112,14 @@ class LNMarketsWallet(LightningBackend):
 
         signature = base64.b64encode(
             hmac.new(
-                self.secret.encode(),
-                f"{timestamp}{str(method)}{path}{params}".encode(),  # bytes from utf-8 string
+                self.secret.encode("utf-8"),
+                f"{timestamp}{str(method)}{path}{params}".encode("utf-8"),  # bytes from utf-8 string
                 hashlib.sha256,
             ).digest()
         )
         headers = self.headers.copy()
         headers["LNM-ACCESS-TIMESTAMP"] = str(timestamp)
-        headers["LNM-ACCESS-SIGNATURE"] = signature.decode()
+        headers["LNM-ACCESS-SIGNATURE"] = signature.decode("utf-8")
         if method == Method.POST:
             headers["Content-Type"] = "application/json"
         return headers
