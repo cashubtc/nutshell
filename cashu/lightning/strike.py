@@ -1,6 +1,6 @@
 # type: ignore
 import secrets
-from typing import AsyncGenerator, Dict, Optional
+from typing import AsyncGenerator, Optional
 
 import httpx
 
@@ -23,6 +23,7 @@ class StrikeWallet(LightningBackend):
     """https://docs.strike.me/api/"""
 
     supported_units = [Unit.sat, Unit.usd, Unit.eur]
+    supports_description: bool = False
     currency_map = {Unit.sat: "BTC", Unit.usd: "USD", Unit.eur: "EUR"}
 
     def __init__(self, unit: Unit, **kwargs):
@@ -95,13 +96,6 @@ class StrikeWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
 
-        data: Dict = {"out": False, "amount": amount}
-        if description_hash:
-            data["description_hash"] = description_hash.hex()
-        if unhashed_description:
-            data["unhashed_description"] = unhashed_description.hex()
-
-        data["memo"] = memo or ""
         payload = {
             "correlationId": secrets.token_hex(16),
             "description": "Invoice for order 123",

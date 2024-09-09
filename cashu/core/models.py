@@ -117,6 +117,9 @@ class KeysetsResponse_deprecated(BaseModel):
 class PostMintQuoteRequest(BaseModel):
     unit: str = Field(..., max_length=settings.mint_max_request_length)  # output unit
     amount: int = Field(..., gt=0)  # output amount
+    description: Optional[str] = Field(
+        default=None, max_length=settings.mint_max_request_length
+    )  # invoice description
 
 
 class PostMintQuoteResponse(BaseModel):
@@ -206,7 +209,7 @@ class PostMeltQuoteResponse(BaseModel):
     state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
-    change: Union[List[BlindedSignature], None] = None
+    change: Union[List[BlindedSignature], None] = None  # NUT-08 change
 
     @classmethod
     def from_melt_quote(self, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":

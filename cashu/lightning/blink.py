@@ -47,6 +47,7 @@ class BlinkWallet(LightningBackend):
     payment_statuses = {"SUCCESS": True, "PENDING": None, "FAILURE": False}
 
     supported_units = set([Unit.sat, Unit.msat])
+    supports_description: bool = True
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):

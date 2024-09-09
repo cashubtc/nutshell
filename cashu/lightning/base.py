@@ -70,6 +70,7 @@ class LightningBackend(ABC):
     supports_mpp: bool = False
     supports_incoming_payment_stream: bool = False
     supported_units: set[Unit]
+    supports_description: bool = False
     unit: Unit
 
     def assert_unit_supported(self, unit: Unit):

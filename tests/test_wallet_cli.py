@@ -1,6 +1,7 @@
 import asyncio
 from typing import Tuple
 
+import bolt11
 import pytest
 from click.testing import CliRunner
 
@@ -8,7 +9,7 @@ from cashu.core.base import TokenV4
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
-from tests.helpers import is_fake, pay_if_regtest
+from tests.helpers import is_deprecated_api_only, is_fake, is_regtest, pay_if_regtest
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -107,6 +108,19 @@ def test_balance(cli_prefix):
     assert result.exit_code == 0
 
 
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+def test_invoice(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "1000"],
+    )
+
+    wallet = asyncio.run(init_wallet())
+    assert wallet.available_balance >= 1000
+    assert result.exit_code == 0
+
+
 def test_invoice_return_immediately(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
@@ -128,6 +142,30 @@ def test_invoice_return_immediately(mint, cli_prefix):
     wallet = asyncio.run(init_wallet())
     assert wallet.available_balance >= 1000
     assert result.exit_code == 0
+
+
+@pytest.mark.skipif(is_deprecated_api_only, reason="only works with v1 API")
+def test_invoice_with_memo(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "-n", "1000", "-m", "test memo"],
+    )
+    assert result.exception is None
+
+    # find word starting with ln in the output
+    lines = result.output.split("\n")
+    invoice_str = ""
+    for line in lines:
+        for word in line.split(" "):
+            if word.startswith("ln"):
+                invoice_str = word
+                break
+    if not invoice_str:
+        raise Exception("No invoice found in the output")
+    invoice_obj = bolt11.decode(invoice_str)
+    assert invoice_obj.amount_msat == 1000_000
+    assert invoice_obj.description == "test memo"
 
 
 def test_invoice_with_split(mint, cli_prefix):
