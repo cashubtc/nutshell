@@ -146,7 +146,7 @@ def mint():
         try:
             httpx.get(settings.mint_url)
             break
-        except Exception:
+        except httpx.ConnectError:
             tries += 1
             time.sleep(0.1)
 
