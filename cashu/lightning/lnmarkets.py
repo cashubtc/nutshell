@@ -220,9 +220,29 @@ class LNMarketsWallet(LightningBackend):
 
         data = {"invoice": quote.request}
         path = "/v2/user/withdraw"
+        futures_ticker_path = "/v2/futures/ticker"
+        btc_price = 0.0
+
+        # * If USD, we set the `quote_id` of the request to the checking_id
+        # * If USD, we fetch the ticker price for conversion.
+        #   This is a TEMPORARY measure until we can get the correct return fee
+        #   from LNMarkets
         if self.unit == Unit.usd:
             data["quote_id"] = quote.checking_id
-
+            price_data = None
+            try:
+                r = await self.client.get(
+                    url=f"{self.endpoint}{futures_ticker_path}"
+                )
+                raise_if_err(r)
+                price_data = r.json()
+            except (CashuError, json.JSONDecodeError) as e:
+                if isinstance(e, CashuError):
+                    return PaymentResponse(error_message=f"payment failed: {e.detail}")
+                elif isinstance(e, json.JSONDecodeError):
+                    return PaymentResponse(error_message=f"payment failed: {str(e)}")
+            btc_price = float(price_data["lastPrice"])
+        
         headers = await self.get_request_headers(Method.POST, path, data)
         try:
             r = await self.client.post(
@@ -244,6 +264,11 @@ class LNMarketsWallet(LightningBackend):
         # lnmarkets does not provide a payment_preimage :(
         checking_id = data["id"]
         fee_paid = int(data["fee"])
+        
+        # if USD, we need to convert the returned fee: sat -> cents
+        if self.unit == Unit.usd:
+            fee_paid_usd = fee_paid / 1e8 * btc_price   # sat -> usd
+            fee_paid = ceil(fee_paid_usd * 100)         # usd -> cents
         return PaymentResponse(
             ok=True,
             checking_id=checking_id,
@@ -310,7 +335,7 @@ class LNMarketsWallet(LightningBackend):
         amount_msat = int(invoice_obj.amount_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
 
-        # SAT: the max fee is reportedly min(100, 0.5% * amount_sat)
+        # SAT: the max fee is reportedly max(100, 0.5% * amount_sat)
         if self.unit == Unit.sat:
             amount_sat = amount.to(Unit.sat).amount
             max_fee = max(SAT_MIN_FEE_SAT, ceil(SAT_MAX_FEE_PERCENT / 100 * amount_sat))
