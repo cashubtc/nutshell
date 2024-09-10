@@ -13,6 +13,7 @@ from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
 from ..mint import migrations
+from ..mint.auth.server import AuthLedger
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
 
@@ -78,7 +79,7 @@ ledger = Ledger(
 
 # start auth ledger
 
-auth_ledger = Ledger(
+auth_ledger = AuthLedger(
     db=Database("auth", settings.auth_database),
     seed="auth seed here",
     derivation_path="m/0",
@@ -107,6 +108,7 @@ async def start_auth():
     await migrate_databases(auth_ledger.db, migrations)
     logger.info("Starting auth ledger.")
     await auth_ledger.startup_ledger()
+    logger.info("Auth ledger started.")
 
 
 async def start_mint():
