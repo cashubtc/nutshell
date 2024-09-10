@@ -22,7 +22,8 @@ from cashu.mint.ledger import Ledger
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
 
-settings.debug = False
+settings.debug = True
+settings.log_level = "TRACE"
 settings.cashu_dir = "./test_data/"
 settings.mint_host = "localhost"
 settings.mint_port = SERVER_PORT
@@ -33,7 +34,8 @@ settings.tor = False
 settings.wallet_unit = "sat"
 settings.mint_backend_bolt11_sat = settings.mint_backend_bolt11_sat or "FakeWallet"
 settings.fakewallet_brr = True
-settings.fakewallet_delay_payment = False
+settings.fakewallet_delay_outgoing_payment = 0
+settings.fakewallet_delay_incoming_payment = 1
 settings.fakewallet_stochastic_invoice = False
 assert (
     settings.mint_test_database != settings.mint_database
@@ -44,6 +46,11 @@ settings.mint_derivation_path_list = []
 settings.mint_private_key = "TEST_PRIVATE_KEY"
 settings.mint_seed_decryption_key = ""
 settings.mint_max_balance = 0
+settings.mint_transaction_rate_limit_per_minute = 60
+settings.mint_lnd_enable_mpp = True
+settings.mint_clnrest_enable_mpp = False
+settings.mint_input_fee_ppk = 0
+settings.db_connection_pool = True
 
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
@@ -78,11 +85,6 @@ class UvicornServer(multiprocessing.Process):
 async def ledger():
     async def start_mint_init(ledger: Ledger) -> Ledger:
         await migrate_databases(ledger.db, migrations_mint)
-        # add a new keyset (with a new ID) which will be duplicated with a keyset with an
-        # old ID by mint migration m018_duplicate_deprecated_keyset_ids
-        # await ledger.activate_keyset(derivation_path=settings.mint_derivation_path, version="0.15.0")
-        # await migrations_mint.m018_duplicate_deprecated_keyset_ids(ledger.db)
-
         ledger = Ledger(
             db=Database("mint", settings.mint_database),
             seed=settings.mint_private_key,
@@ -102,8 +104,10 @@ async def ledger():
         # clear postgres database
         db = Database("mint", settings.mint_database)
         async with db.connect() as conn:
+            # drop all tables
             await conn.execute("DROP SCHEMA public CASCADE;")
             await conn.execute("CREATE SCHEMA public;")
+        await db.engine.dispose()
 
     wallets_module = importlib.import_module("cashu.lightning")
     lightning_backend = getattr(wallets_module, settings.mint_backend_bolt11_sat)()
@@ -120,6 +124,7 @@ async def ledger():
     ledger = await start_mint_init(ledger)
     yield ledger
     print("teardown")
+    await ledger.shutdown_ledger()
 
 
 # # This fixture is used for tests that require API access to the mint
@@ -129,6 +134,7 @@ def mint():
         "cashu.mint.app:app",
         port=settings.mint_listen_port,
         host=settings.mint_listen_host,
+        log_level="trace",
     )
 
     server = UvicornServer(config=config)

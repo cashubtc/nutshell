@@ -65,16 +65,16 @@ async def test_send(wallet: Wallet):
 @pytest.mark.asyncio
 async def test_send_without_split(wallet: Wallet):
     with TestClient(app) as client:
-        response = client.post("/send?amount=2&nosplit=true")
+        response = client.post("/send?amount=2&offline=true")
         assert response.status_code == 200
         assert response.json()["balance"]
 
 
 @pytest.mark.skipif(is_regtest, reason="regtest")
 @pytest.mark.asyncio
-async def test_send_without_split_but_wrong_amount(wallet: Wallet):
+async def test_send_too_much(wallet: Wallet):
     with TestClient(app) as client:
-        response = client.post("/send?amount=10&nosplit=true")
+        response = client.post("/send?amount=110000")
         assert response.status_code == 400
 
 

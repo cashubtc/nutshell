@@ -6,7 +6,7 @@ import click
 from httpx import ConnectError
 from loguru import logger
 
-from ..core.base import TokenV3
+from ..core.base import Token
 from ..core.settings import settings
 from ..nostr.client.client import NostrClient
 from ..nostr.event import Event
@@ -62,8 +62,8 @@ async def send_nostr(
         pubkey = await nip5_to_pubkey(wallet, pubkey)
     await wallet.load_mint()
     await wallet.load_proofs()
-    _, send_proofs = await wallet.split_to_send(
-        wallet.proofs, amount, set_reserved=True
+    _, send_proofs = await wallet.swap_to_send(
+        wallet.proofs, amount, set_reserved=True, include_fees=False
     )
     token = await wallet.serialize_proofs(send_proofs, include_dleq=include_dleq)
 
@@ -127,18 +127,13 @@ async def receive_nostr(
         for w in words:
             try:
                 # call the receive method
-                tokenObj: TokenV3 = deserialize_token_from_string(w)
+                tokenObj: Token = deserialize_token_from_string(w)
                 print(
-                    f"Receiving {tokenObj.get_amount()} sat on mint"
-                    f" {tokenObj.get_mints()[0]} from nostr user {event.public_key} at"
+                    f"Receiving {tokenObj.amount} sat on mint"
+                    f" {tokenObj.mint} from nostr user {event.public_key} at"
                     f" {date_str}"
                 )
-                asyncio.run(
-                    receive(
-                        wallet,
-                        tokenObj,
-                    )
-                )
+                asyncio.run(receive(wallet, tokenObj))
                 logger.trace(
                     "Nostr: setting last check timestamp to"
                     f" {event.created_at} ({date_str})"

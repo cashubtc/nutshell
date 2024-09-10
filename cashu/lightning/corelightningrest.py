@@ -12,6 +12,7 @@ from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
+from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
@@ -28,6 +29,8 @@ from .macaroon import load_macaroon
 class CoreLightningRestWallet(LightningBackend):
     supported_units = set([Unit.sat, Unit.msat])
     unit = Unit.sat
+    supports_incoming_payment_stream: bool = True
+    supports_description: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
@@ -54,7 +57,9 @@ class CoreLightningRestWallet(LightningBackend):
         }
 
         self.cert = settings.mint_corelightning_rest_cert or False
-        self.client = httpx.AsyncClient(verify=self.cert, headers=self.auth)
+        self.client = httpx.AsyncClient(
+            base_url=self.url, verify=self.cert, headers=self.auth
+        )
         self.last_pay_index = 0
         self.statuses = {
             "paid": True,
@@ -70,7 +75,7 @@ class CoreLightningRestWallet(LightningBackend):
             logger.warning(f"Error closing wallet connection: {e}")
 
     async def status(self) -> StatusResponse:
-        r = await self.client.get(f"{self.url}/v1/listFunds", timeout=5)
+        r = await self.client.get("/v1/listFunds", timeout=5)
         r.raise_for_status()
         if r.is_error or "error" in r.json():
             try:
@@ -122,7 +127,7 @@ class CoreLightningRestWallet(LightningBackend):
             data["preimage"] = kwargs["preimage"]
 
         r = await self.client.post(
-            f"{self.url}/v1/invoice/genInvoice",
+            "/v1/invoice/genInvoice",
             data=data,
         )
 
@@ -175,7 +180,7 @@ class CoreLightningRestWallet(LightningBackend):
             )
         fee_limit_percent = fee_limit_msat / invoice.amount_msat * 100
         r = await self.client.post(
-            f"{self.url}/v1/pay",
+            "/v1/pay",
             data={
                 "invoice": quote.request,
                 "maxfeepercent": f"{fee_limit_percent:.11}",
@@ -224,7 +229,7 @@ class CoreLightningRestWallet(LightningBackend):
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         r = await self.client.get(
-            f"{self.url}/v1/invoice/listInvoices",
+            "/v1/invoice/listInvoices",
             params={"payment_hash": checking_id},
         )
         try:
@@ -240,7 +245,7 @@ class CoreLightningRestWallet(LightningBackend):
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         r = await self.client.get(
-            f"{self.url}/v1/pay/listPays",
+            "/v1/pay/listPays",
             params={"payment_hash": checking_id},
         )
         try:
@@ -274,9 +279,17 @@ class CoreLightningRestWallet(LightningBackend):
             return PaymentStatus(paid=None)
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+        # call listinvoices to determine the last pay_index
+        r = await self.client.get("/v1/invoice/listInvoices")
+        r.raise_for_status()
+        data = r.json()
+        if r.is_error or "error" in data:
+            raise Exception("error in cln response")
+        self.last_pay_index = data["invoices"][-1]["pay_index"]
+
         while True:
             try:
-                url = f"{self.url}/v1/invoice/waitAnyInvoice/{self.last_pay_index}"
+                url = f"/v1/invoice/waitAnyInvoice/{self.last_pay_index}"
                 async with self.client.stream("GET", url, timeout=None) as r:
                     async for line in r.aiter_lines():
                         inv = json.loads(line)
@@ -297,7 +310,7 @@ class CoreLightningRestWallet(LightningBackend):
                         # yield payment_hash
                         # hack to return payment_hash if the above shouldn't work
                         r = await self.client.get(
-                            f"{self.url}/v1/invoice/listInvoices",
+                            "/v1/invoice/listInvoices",
                             params={"label": inv["label"]},
                         )
                         paid_invoce = r.json()
@@ -316,8 +329,10 @@ class CoreLightningRestWallet(LightningBackend):
                 )
                 await asyncio.sleep(0.02)
 
-    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
-        invoice_obj = decode(bolt11)
+    async def get_payment_quote(
+        self, melt_quote: PostMeltQuoteRequest
+    ) -> PaymentQuoteResponse:
+        invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
         amount_msat = int(invoice_obj.amount_msat)
         fees_msat = fee_reserve(amount_msat)

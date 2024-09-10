@@ -15,32 +15,20 @@ on:
       os:
         default: "ubuntu-latest"
         type: string
-      mint-cache-secrets:
-        default: "false"
-        type: string
       mint-only-deprecated:
         default: "false"
         type: string
 
 jobs:
   poetry:
-    name: Run (mint-cache-secrets ${{ inputs.mint-cache-secrets }}, mint-only-deprecated ${{ inputs.mint-only-deprecated }}, mint-database ${{ inputs.mint-database }})
+    name: Run (db ${{ inputs.mint-database }}, deprecated api ${{ inputs.mint-only-deprecated }})
     runs-on: ${{ inputs.os }}
-    services:
-      postgres:
-        image: postgres:latest
-        env:
-          POSTGRES_USER: cashu
-          POSTGRES_PASSWORD: cashu
-          POSTGRES_DB: cashu
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
+      - name: Start PostgreSQL service
+        if: contains(inputs.mint-database, 'postgres')
+        run: |
+          docker run -d --name postgres -e POSTGRES_USER=cashu -e POSTGRES_PASSWORD=cashu -e POSTGRES_DB=cashu -p 5432:5432 postgres:latest
+          until docker exec postgres pg_isready; do sleep 1; done
       - name: Checkout repository and submodules
         uses: actions/checkout@v2
       - uses: ./.github/actions/prepare
@@ -54,7 +42,6 @@ jobs:
           MINT_HOST: localhost
           MINT_PORT: 3337
           MINT_TEST_DATABASE: ${{ inputs.mint-database }}
-          MINT_CACHE_SECRETS: ${{ inputs.mint-cache-secrets }}
           DEBUG_MINT_ONLY_DEPRECATED: ${{ inputs.mint-only-deprecated }}
           TOR: false
         run: |

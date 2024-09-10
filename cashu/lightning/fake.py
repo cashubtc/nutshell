@@ -1,10 +1,9 @@
 import asyncio
 import hashlib
 import math
-import random
 from datetime import datetime
 from os import urandom
-from typing import AsyncGenerator, Dict, Optional, Set
+from typing import AsyncGenerator, Dict, List, Optional
 
 from bolt11 import (
     Bolt11,
@@ -17,6 +16,7 @@ from bolt11 import (
 
 from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
+from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
@@ -30,9 +30,11 @@ from .base import (
 
 class FakeWallet(LightningBackend):
     fake_btc_price = 1e8 / 1337
-    queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
+    paid_invoices_queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
-    paid_invoices: Set[str] = set()
+    created_invoices: List[Bolt11] = []
+    paid_invoices_outgoing: List[Bolt11] = []
+    paid_invoices_incoming: List[Bolt11] = []
     secret: str = "FAKEWALLET SECRET"
     privkey: str = hashlib.pbkdf2_hmac(
         "sha256",
@@ -42,8 +44,11 @@ class FakeWallet(LightningBackend):
         32,
     ).hex()
 
-    supported_units = set([Unit.sat, Unit.msat, Unit.usd])
+    supported_units = set([Unit.sat, Unit.msat, Unit.usd, Unit.eur])
     unit = Unit.sat
+
+    supports_incoming_payment_stream: bool = True
+    supports_description: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
@@ -51,6 +56,27 @@ class FakeWallet(LightningBackend):
 
     async def status(self) -> StatusResponse:
         return StatusResponse(error_message=None, balance=1337)
+
+    async def mark_invoice_paid(self, invoice: Bolt11, delay=True) -> None:
+        if invoice in self.paid_invoices_incoming:
+            return
+        if not settings.fakewallet_brr:
+            return
+        if settings.fakewallet_delay_incoming_payment and delay:
+            await asyncio.sleep(settings.fakewallet_delay_incoming_payment)
+        self.paid_invoices_incoming.append(invoice)
+        await self.paid_invoices_queue.put(invoice)
+
+    def create_dummy_bolt11(self, payment_hash: str) -> Bolt11:
+        tags = Tags()
+        tags.add(TagChar.payment_hash, payment_hash)
+        tags.add(TagChar.payment_secret, urandom(32).hex())
+        return Bolt11(
+            currency="bc",
+            amount_msat=MilliSatoshi(1337),
+            date=int(datetime.now().timestamp()),
+            tags=tags,
+        )
 
     async def create_invoice(
         self,
@@ -91,7 +117,7 @@ class FakeWallet(LightningBackend):
         amount_msat = 0
         if self.unit == Unit.sat:
             amount_msat = MilliSatoshi(amount.to(Unit.msat, round="up").amount)
-        elif self.unit == Unit.usd:
+        elif self.unit == Unit.usd or self.unit == Unit.eur:
             amount_msat = MilliSatoshi(
                 math.ceil(amount.amount / self.fake_btc_price * 1e9)
             )
@@ -105,7 +131,15 @@ class FakeWallet(LightningBackend):
             tags=tags,
         )
 
+        if bolt11 not in self.created_invoices:
+            self.created_invoices.append(bolt11)
+        else:
+            raise ValueError("Invoice already created")
+
         payment_request = encode(bolt11, self.privkey)
+
+        if settings.fakewallet_brr:
+            asyncio.create_task(self.mark_invoice_paid(bolt11))
 
         return InvoiceResponse(
             ok=True, checking_id=payment_hash, payment_request=payment_request
@@ -114,12 +148,15 @@ class FakeWallet(LightningBackend):
     async def pay_invoice(self, quote: MeltQuote, fee_limit: int) -> PaymentResponse:
         invoice = decode(quote.request)
 
-        if settings.fakewallet_delay_payment:
-            await asyncio.sleep(5)
+        if settings.fakewallet_delay_outgoing_payment:
+            await asyncio.sleep(settings.fakewallet_delay_outgoing_payment)
 
         if invoice.payment_hash in self.payment_secrets or settings.fakewallet_brr:
-            await self.queue.put(invoice)
-            self.paid_invoices.add(invoice.payment_hash)
+            if invoice not in self.paid_invoices_outgoing:
+                self.paid_invoices_outgoing.append(invoice)
+            else:
+                raise ValueError("Invoice already paid")
+
             return PaymentResponse(
                 ok=True,
                 checking_id=invoice.payment_hash,
@@ -132,28 +169,22 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        if settings.fakewallet_stochastic_invoice:
-            paid = random.random() > 0.7
-            return PaymentStatus(paid=paid)
-        paid = checking_id in self.paid_invoices or settings.fakewallet_brr
-        return PaymentStatus(paid=paid or None)
+        await self.mark_invoice_paid(self.create_dummy_bolt11(checking_id), delay=False)
+        paid_chceking_ids = [i.payment_hash for i in self.paid_invoices_incoming]
+        if checking_id in paid_chceking_ids:
+            paid = True
+        else:
+            paid = False
+
+        return PaymentStatus(paid=paid)
 
     async def get_payment_status(self, _: str) -> PaymentStatus:
         return PaymentStatus(paid=settings.fakewallet_payment_state)
 
-    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
-        while True:
-            value: Bolt11 = await self.queue.get()
-            yield value.payment_hash
-
-    # async def get_invoice_quote(self, bolt11: str) -> InvoiceQuoteResponse:
-    #     invoice_obj = decode(bolt11)
-    #     assert invoice_obj.amount_msat, "invoice has no amount."
-    #     amount = invoice_obj.amount_msat
-    #     return InvoiceQuoteResponse(checking_id="", amount=amount)
-
-    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
-        invoice_obj = decode(bolt11)
+    async def get_payment_quote(
+        self, melt_quote: PostMeltQuoteRequest
+    ) -> PaymentQuoteResponse:
+        invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
         if self.unit == Unit.sat:
@@ -161,10 +192,10 @@ class FakeWallet(LightningBackend):
             fees_msat = fee_reserve(amount_msat)
             fees = Amount(unit=Unit.msat, amount=fees_msat)
             amount = Amount(unit=Unit.msat, amount=amount_msat)
-        elif self.unit == Unit.usd:
+        elif self.unit == Unit.usd or self.unit == Unit.eur:
             amount_usd = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btc_price)
-            amount = Amount(unit=Unit.usd, amount=amount_usd)
-            fees = Amount(unit=Unit.usd, amount=2)
+            amount = Amount(unit=self.unit, amount=amount_usd)
+            fees = Amount(unit=self.unit, amount=2)
         else:
             raise NotImplementedError()
 
@@ -173,3 +204,8 @@ class FakeWallet(LightningBackend):
             fee=fees.to(self.unit, round="up"),
             amount=amount.to(self.unit, round="up"),
         )
+
+    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+        while True:
+            value: Bolt11 = await self.paid_invoices_queue.get()
+            yield value.payment_hash

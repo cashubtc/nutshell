@@ -13,6 +13,7 @@ from ..core.settings import settings
 from .auth.router import auth_router
 from .router import router
 from .router_deprecated import router_deprecated
+from .startup import shutdown_mint as shutdown_mint_init
 from .startup import start_mint_init
 
 if settings.debug_profiling:
@@ -106,3 +107,8 @@ app.include_router(auth_router, tags=["Auth"])
 @app.on_event("startup")
 async def startup_mint():
     await start_mint_init()
+
+
+@app.on_event("shutdown")
+async def shutdown_mint():
+    await shutdown_mint_init()

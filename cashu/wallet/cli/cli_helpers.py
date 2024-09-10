@@ -1,4 +1,7 @@
+#!/usr/bin/env python
 import os
+from itertools import groupby
+from operator import itemgetter
 
 import click
 from click import Context
@@ -6,13 +9,20 @@ from loguru import logger
 
 from ...core.base import Unit
 from ...core.settings import settings
-from ...wallet.crud import get_keysets
+from ...wallet.crud import (
+    get_keysets,
+    get_reserved_proofs,
+)
 from ...wallet.wallet import Wallet as Wallet
+from ..helpers import (
+    deserialize_token_from_string,
+    receive,
+)
 
 
 async def print_balance(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs(reload=True, unit=wallet.unit)
+    await wallet.load_proofs(reload=True)
     print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
 
 
@@ -24,12 +34,16 @@ async def get_unit_wallet(ctx: Context, force_select: bool = False):
         force_select (bool, optional): Force the user to select a unit. Defaults to False.
     """
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs(reload=True, unit=False)
+    await wallet.load_proofs(reload=False)
     # show balances per unit
     unit_balances = wallet.balance_per_unit()
-    if ctx.obj["UNIT"] in [u.name for u in unit_balances] and not force_select:
-        wallet.unit = Unit[ctx.obj["UNIT"]]
-    elif len(unit_balances) > 1 and not ctx.obj["UNIT"]:
+
+    logger.debug(f"Wallet URL: {wallet.url}")
+    logger.debug(f"Wallet unit: {wallet.unit}")
+    logger.debug(f"mint_balances: {unit_balances}")
+    logger.debug(f"ctx.obj['UNIT']: {ctx.obj['UNIT']}")
+
+    if len(unit_balances) > 1 and not ctx.obj["UNIT"]:
         print(f"You have balances in {len(unit_balances)} units:")
         print("")
         for i, (k, v) in enumerate(unit_balances.items()):
@@ -68,14 +82,15 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
     """
     # we load a dummy wallet so we can check the balance per mint
     wallet: Wallet = ctx.obj["WALLET"]
-    await wallet.load_proofs(reload=True)
-    mint_balances = await wallet.balance_per_minturl()
-
-    if ctx.obj["HOST"] not in mint_balances and not force_select:
-        mint_url = wallet.url
-    elif len(mint_balances) > 1:
+    await wallet.load_proofs(reload=True, all_keysets=True)
+    mint_balances = await wallet.balance_per_minturl(unit=wallet.unit)
+    logger.debug(f"Wallet URL: {wallet.url}")
+    logger.debug(f"Wallet unit: {wallet.unit}")
+    logger.debug(f"mint_balances: {mint_balances}")
+    logger.debug(f"ctx.obj['HOST']: {ctx.obj['HOST']}")
+    if len(mint_balances) > 1:
         # if we have balances on more than one mint, we ask the user to select one
-        await print_mint_balances(wallet, show_mints=True)
+        await print_mint_balances(wallet, show_mints=True, mint_balances=mint_balances)
 
         url_max = max(mint_balances, key=lambda v: mint_balances[v]["available"])
         nr_max = list(mint_balances).index(url_max) + 1
@@ -92,28 +107,32 @@ async def get_mint_wallet(ctx: Context, force_select: bool = False):
             mint_url = list(mint_balances.keys())[int(mint_nr_str) - 1]
         else:
             raise Exception("invalid input.")
+    elif ctx.obj["HOST"] and ctx.obj["HOST"] not in mint_balances.keys():
+        mint_url = ctx.obj["HOST"]
     elif len(mint_balances) == 1:
         mint_url = list(mint_balances.keys())[0]
-    else:
-        mint_url = wallet.url
 
     # load this mint_url into a wallet
     mint_wallet = await Wallet.with_db(
         mint_url,
         os.path.join(settings.cashu_dir, ctx.obj["WALLET_NAME"]),
         name=wallet.name,
+        unit=wallet.unit.name,
     )
     await mint_wallet.load_proofs(reload=True)
 
     return mint_wallet
 
 
-async def print_mint_balances(wallet: Wallet, show_mints: bool = False):
+async def print_mint_balances(
+    wallet: Wallet, show_mints: bool = False, mint_balances=None
+):
     """
     Helper function that prints the balances for each mint URL that we have tokens from.
     """
     # get balances per mint
-    mint_balances = await wallet.balance_per_minturl(unit=wallet.unit)
+    mint_balances = mint_balances or await wallet.balance_per_minturl(unit=wallet.unit)
+    logger.trace(mint_balances)
     # if we have a balance on a non-default mint, we show its URL
     keysets = [k for k, v in wallet.balance_per_keyset().items()]
     for k in keysets:
@@ -161,3 +180,40 @@ async def verify_mint(mint_wallet: Wallet, url: str):
         )
     else:
         logger.debug(f"We know mint {url} already")
+
+
+async def receive_all_pending(ctx: Context, wallet: Wallet):
+    reserved_proofs = await get_reserved_proofs(wallet.db)
+    if not len(reserved_proofs):
+        print("No pending proofs to receive.")
+        return
+    for key, value in groupby(reserved_proofs, key=itemgetter("send_id")):  # type: ignore
+        mint_url = None
+        token_obj = None
+        try:
+            proofs = list(value)
+            mint_url, unit = await wallet._get_proofs_mint_unit(proofs)
+            mint_wallet = await Wallet.with_db(
+                url=mint_url,
+                db=os.path.join(settings.cashu_dir, wallet.name),
+                name=wallet.name,
+                unit=unit.name,
+            )
+            # verify that we trust the mint of this token
+            # ask the user if they want to trust the mint
+            await verify_mint(mint_wallet, mint_url)
+
+            token = await mint_wallet.serialize_proofs(proofs)
+            token_obj = deserialize_token_from_string(token)
+            mint_url = token_obj.mint
+            receive_wallet = await receive(mint_wallet, token_obj)
+            ctx.obj["WALLET"] = receive_wallet
+        except Exception as e:
+            if mint_url and token_obj:
+                unit = Unit[token_obj.unit]
+                print(
+                    f"Could not receive {unit.str(token_obj.amount)} from mint {mint_url}: {str(e)}"
+                )
+            else:
+                print(f"Could not receive token: {str(e)}")
+            continue

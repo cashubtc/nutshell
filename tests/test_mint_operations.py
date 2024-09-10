@@ -1,8 +1,9 @@
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import PostMeltQuoteRequest, PostMintQuoteRequest
+from cashu.core.base import MeltQuoteState, MintQuoteState
 from cashu.core.helpers import sum_proofs
+from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -37,7 +38,9 @@ async def wallet1(ledger: Ledger):
 async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(128)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(128, id=invoice.id)
+    await pay_if_regtest(invoice.bolt11)
     assert wallet1.balance == 128
 
     # create a mint quote so that we can melt to it internally
@@ -48,17 +51,21 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
     assert not melt_quote.paid
+    assert melt_quote.state == MeltQuoteState.unpaid.value
+
     assert melt_quote.amount == 64
     assert melt_quote.fee_reserve == 0
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 64)
+    keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 64)
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid
 
 
 @pytest.mark.asyncio
@@ -66,38 +73,44 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
 async def test_melt_external(wallet1: Wallet, ledger: Ledger):
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(128)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(128, id=invoice.id)
     assert wallet1.balance == 128
 
     invoice_dict = get_real_invoice(64)
     invoice_payment_request = invoice_dict["payment_request"]
 
-    mint_quote = await wallet1.get_pay_amount_with_fees(invoice_payment_request)
+    mint_quote = await wallet1.melt_quote(invoice_payment_request)
+    assert not mint_quote.paid, "mint quote should not be paid"
+    assert mint_quote.state == MeltQuoteState.unpaid.value
+
     total_amount = mint_quote.amount + mint_quote.fee_reserve
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, total_amount)
+    keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
+    assert melt_quote_pre_payment.state == MeltQuoteState.unpaid
 
     assert not melt_quote.paid, "melt quote should not be paid"
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.paid, "melt quote should be paid"
+    assert melt_quote_post_payment.state == MeltQuoteState.paid
 
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(128)
-
+    await pay_if_regtest(invoice.bolt11)
     mint_quote = await ledger.get_mint_quote(invoice.id)
 
     assert mint_quote.paid, "mint quote should be paid"
+    assert mint_quote.state == MintQuoteState.paid
 
     output_amounts = [128]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
@@ -111,24 +124,32 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
         "outputs have already been signed before.",
     )
 
+    mint_quote_after_payment = await ledger.get_mint_quote(invoice.id)
+    assert mint_quote_after_payment.paid, "mint quote should be paid"
+    assert mint_quote_after_payment.state == MintQuoteState.issued
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")
 async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=128, unit="sat"))
+    assert not quote.paid, "mint quote should not be paid"
+    assert quote.state == MintQuoteState.unpaid
 
     mint_quote = await ledger.get_mint_quote(quote.quote)
     assert not mint_quote.paid, "mint quote already paid"
+    assert mint_quote.state == MintQuoteState.unpaid
 
     await assert_err(
         wallet1.mint(128, id=quote.quote),
         "quote not paid",
     )
 
-    pay_if_regtest(quote.request)
+    await pay_if_regtest(quote.request)
 
     mint_quote = await ledger.get_mint_quote(quote.quote)
     assert mint_quote.paid, "mint quote should be paid"
+    assert mint_quote.state == MintQuoteState.paid
 
     output_amounts = [128]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
@@ -137,47 +158,63 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
     await ledger.mint(outputs=outputs, quote_id=quote.quote)
 
+    mint_quote_after_payment = await ledger.get_mint_quote(quote.quote)
+    assert mint_quote_after_payment.paid, "mint quote should be paid"
+    assert mint_quote_after_payment.state == MintQuoteState.issued
+
 
 @pytest.mark.asyncio
 async def test_split(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
+    keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 10)
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(len(send_proofs))
     outputs, rs = wallet1._construct_outputs(
         [p.amount for p in send_proofs], secrets, rs
     )
 
-    promises = await ledger.split(proofs=send_proofs, outputs=outputs)
+    promises = await ledger.swap(proofs=send_proofs, outputs=outputs)
     assert len(promises) == len(outputs)
     assert [p.amount for p in promises] == [p.amount for p in outputs]
 
 
 @pytest.mark.asyncio
+async def test_split_with_no_outputs(wallet1: Wallet, ledger: Ledger):
+    invoice = await wallet1.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id)
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 10, set_reserved=False)
+    await assert_err(
+        ledger.swap(proofs=send_proofs, outputs=[]),
+        "no outputs provided",
+    )
+
+
+@pytest.mark.asyncio
 async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
-    keep_proofs, send_proofs = await wallet1.split_to_send(
+    keep_proofs, send_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 10, set_reserved=False
     )
 
-    all_send_proofs = send_proofs + keep_proofs
+    too_many_proofs = send_proofs + send_proofs
 
-    # generate outputs for all proofs, not only the sent ones
+    # generate more outputs than inputs
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
-        len(all_send_proofs)
+        len(too_many_proofs)
     )
     outputs, rs = wallet1._construct_outputs(
-        [p.amount for p in all_send_proofs], secrets, rs
+        [p.amount for p in too_many_proofs], secrets, rs
     )
 
     await assert_err(
-        ledger.split(proofs=send_proofs, outputs=outputs),
-        "inputs do not have same amount as outputs.",
+        ledger.swap(proofs=send_proofs, outputs=outputs),
+        "are not balanced",
     )
 
     # make sure we can still spend our tokens
@@ -187,7 +224,7 @@ async def test_split_with_input_less_than_outputs(wallet1: Wallet, ledger: Ledge
 @pytest.mark.asyncio
 async def test_split_with_input_more_than_outputs(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(128)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(128, id=invoice.id)
 
     inputs = wallet1.proofs
@@ -200,8 +237,8 @@ async def test_split_with_input_more_than_outputs(wallet1: Wallet, ledger: Ledge
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
     await assert_err(
-        ledger.split(proofs=inputs, outputs=outputs),
-        "inputs do not have same amount as outputs",
+        ledger.swap(proofs=inputs, outputs=outputs),
+        "are not balanced",
     )
 
     # make sure we can still spend our tokens
@@ -211,10 +248,13 @@ async def test_split_with_input_more_than_outputs(wallet1: Wallet, ledger: Ledge
 @pytest.mark.asyncio
 async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(128)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(128, split=[64, 64], id=invoice.id)
     inputs1 = wallet1.proofs[:1]
     inputs2 = wallet1.proofs[1:]
+
+    assert inputs1[0].amount == 64
+    assert inputs2[0].amount == 64
 
     output_amounts = [64]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
@@ -222,11 +262,11 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.split(proofs=inputs1, outputs=outputs)
+    await ledger.swap(proofs=inputs1, outputs=outputs)
 
     # try to spend other proofs with the same outputs again
     await assert_err(
-        ledger.split(proofs=inputs2, outputs=outputs),
+        ledger.swap(proofs=inputs2, outputs=outputs),
         "outputs have already been signed before.",
     )
 
@@ -237,13 +277,13 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
 
-    await ledger.split(proofs=inputs2, outputs=outputs)
+    await ledger.swap(proofs=inputs2, outputs=outputs)
 
 
 @pytest.mark.asyncio
 async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(128)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     output_amounts = [128]
     secrets, rs, derivation_paths = await wallet1.generate_n_secrets(
         len(output_amounts)
@@ -253,7 +293,7 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
 
     # now try to mint with the same outputs again
     invoice2 = await wallet1.request_mint(128)
-    pay_if_regtest(invoice2.bolt11)
+    await pay_if_regtest(invoice2.bolt11)
 
     await assert_err(
         ledger.mint(outputs=outputs, quote_id=invoice2.id),
@@ -264,7 +304,7 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(130)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(130, id=invoice.id)
 
     output_amounts = [128]
@@ -275,7 +315,7 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
 
     # we use the outputs once for minting
     invoice2 = await wallet1.request_mint(128)
-    pay_if_regtest(invoice2.bolt11)
+    await pay_if_regtest(invoice2.bolt11)
     await ledger.mint(outputs=outputs, quote_id=invoice2.id)
 
     # use the same outputs for melting
@@ -292,7 +332,7 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 async def test_melt_with_less_inputs_than_invoice(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(32)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(32, id=invoice.id)
 
     # outputs for fee return
@@ -321,7 +361,7 @@ async def test_melt_with_less_inputs_than_invoice(wallet1: Wallet, ledger: Ledge
 @pytest.mark.asyncio
 async def test_melt_with_more_inputs_than_invoice(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(130)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(130, split=[64, 64, 2], id=invoice.id)
 
     # outputs for fee return
@@ -342,20 +382,38 @@ async def test_melt_with_more_inputs_than_invoice(wallet1: Wallet, ledger: Ledge
 
     # make sure we have more inputs than the melt quote needs
     assert sum_proofs(wallet1.proofs) >= melt_quote.amount + melt_quote.fee_reserve
-    payment_proof, return_outputs = await ledger.melt(
+    melt_resp = await ledger.melt(
         proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs
     )
     # we get 2 sats back because we overpaid
-    assert sum([o.amount for o in return_outputs]) == 2
+    assert melt_resp.change
+    assert sum([o.amount for o in melt_resp.change]) == 2
 
 
 @pytest.mark.asyncio
 async def test_check_proof_state(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet1.mint(64, id=invoice.id)
 
-    keep_proofs, send_proofs = await wallet1.split_to_send(wallet1.proofs, 10)
+    keep_proofs, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 10)
 
-    proof_states = await ledger.check_proofs_state(Ys=[p.Y for p in send_proofs])
+    proof_states = await ledger.db_read.get_proofs_states(Ys=[p.Y for p in send_proofs])
     assert all([p.state.value == "UNSPENT" for p in proof_states])
+
+
+# TODO: test keeps running forever, needs to be fixed
+# @pytest.mark.asyncio
+# async def test_websocket_quote_updates(wallet1: Wallet, ledger: Ledger):
+#     invoice = await wallet1.request_mint(64)
+#     ws = websocket.create_connection(
+#         f"ws://localhost:{SERVER_PORT}/v1/quote/{invoice.id}"
+#     )
+#     await asyncio.sleep(0.1)
+#     await pay_if_regtest(invoice.bolt11)
+#     await wallet1.mint(64, id=invoice.id)
+#     await asyncio.sleep(0.1)
+#     data = str(ws.recv())
+#     ws.close()
+#     n_lines = len(data.split("\n"))
+#     assert n_lines == 1

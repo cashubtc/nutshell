@@ -4,14 +4,17 @@ import hashlib
 import json
 from typing import AsyncGenerator, Dict, Optional
 
+import bolt11
 import httpx
 from bolt11 import (
+    TagChar,
     decode,
 )
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
+from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
 from .base import (
     InvoiceResponse,
@@ -27,7 +30,10 @@ from .macaroon import load_macaroon
 class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
+    supports_mpp = settings.mint_lnd_enable_mpp
+    supports_incoming_payment_stream = True
     supported_units = set([Unit.sat, Unit.msat])
+    supports_description: bool = True
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
@@ -35,6 +41,7 @@ class LndRestWallet(LightningBackend):
         self.unit = unit
         endpoint = settings.mint_lnd_rest_endpoint
         cert = settings.mint_lnd_rest_cert
+        cert_verify = settings.mint_lnd_rest_cert_verify
 
         macaroon = (
             settings.mint_lnd_rest_macaroon
@@ -43,16 +50,19 @@ class LndRestWallet(LightningBackend):
         )
 
         if not endpoint:
-            raise Exception("cannot initialize lndrest: no endpoint")
+            raise Exception("cannot initialize LndRestWallet: no endpoint")
 
         if not macaroon:
-            raise Exception("cannot initialize lndrest: no macaroon")
+            raise Exception("cannot initialize LndRestWallet: no macaroon")
 
         if not cert:
             logger.warning(
-                "no certificate for lndrest provided, this only works if you have a"
+                "no certificate for LndRestWallet provided, this only works if you have a"
                 " publicly issued certificate"
             )
+
+        if not cert_verify:
+            logger.warning("certificate validation will be disabled for LndRestWallet")
 
         endpoint = endpoint[:-1] if endpoint.endswith("/") else endpoint
         endpoint = (
@@ -66,10 +76,16 @@ class LndRestWallet(LightningBackend):
         # even on startup
         self.cert = cert or True
 
+        # disable cert verify if choosen
+        if not cert_verify:
+            self.cert = False
+
         self.auth = {"Grpc-Metadata-macaroon": self.macaroon}
         self.client = httpx.AsyncClient(
             base_url=self.endpoint, headers=self.auth, verify=self.cert
         )
+        if self.supports_mpp:
+            logger.info("LNDRestWallet enabling MPP feature")
 
     async def status(self) -> StatusResponse:
         try:
@@ -148,6 +164,16 @@ class LndRestWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
+        # if the amount of the melt quote is different from the request
+        # call pay_partial_invoice instead
+        invoice = bolt11.decode(quote.request)
+        if invoice.amount_msat:
+            amount_msat = int(invoice.amount_msat)
+            if amount_msat != quote.amount * 1000 and self.supports_mpp:
+                return await self.pay_partial_invoice(
+                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
+                )
+
         # set the fee limit for the payment
         lnrpcFeeLimit = dict()
         lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
@@ -174,6 +200,91 @@ class LndRestWallet(LightningBackend):
         preimage = base64.b64decode(data["payment_preimage"]).hex()
         return PaymentResponse(
             ok=True,
+            checking_id=checking_id,
+            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
+            preimage=preimage,
+            error_message=None,
+        )
+
+    async def pay_partial_invoice(
+        self, quote: MeltQuote, amount: Amount, fee_limit_msat: int
+    ) -> PaymentResponse:
+        # set the fee limit for the payment
+        lnrpcFeeLimit = dict()
+        lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
+        invoice = bolt11.decode(quote.request)
+
+        invoice_amount = invoice.amount_msat
+        assert invoice_amount, "invoice has no amount."
+        total_amount_msat = int(invoice_amount)
+
+        payee = invoice.tags.get(TagChar.payee)
+        assert payee
+        pubkey = str(payee.data)
+
+        payer_addr_tag = invoice.tags.get(bolt11.TagChar("s"))
+        assert payer_addr_tag
+        payer_addr = str(payer_addr_tag.data)
+
+        # get the route
+        r = await self.client.post(
+            url=f"/v1/graph/routes/{pubkey}/{amount.to(Unit.sat).amount}",
+            json={"fee_limit": lnrpcFeeLimit},
+            timeout=None,
+        )
+
+        data = r.json()
+        if r.is_error or data.get("message"):
+            error_message = data.get("message") or r.text
+            return PaymentResponse(
+                ok=False,
+                checking_id=None,
+                fee=None,
+                preimage=None,
+                error_message=error_message,
+            )
+
+        # We need to set the mpp_record for a partial payment
+        mpp_record = {
+            "mpp_record": {
+                "payment_addr": base64.b64encode(bytes.fromhex(payer_addr)).decode(),
+                "total_amt_msat": total_amount_msat,
+            }
+        }
+
+        # add the mpp_record to the last hop
+        rout_nr = 0
+        data["routes"][rout_nr]["hops"][-1].update(mpp_record)
+
+        # send to route
+        r = await self.client.post(
+            url="/v2/router/route/send",
+            json={
+                "payment_hash": base64.b64encode(
+                    bytes.fromhex(invoice.payment_hash)
+                ).decode(),
+                "route": data["routes"][rout_nr],
+            },
+            timeout=None,
+        )
+
+        data = r.json()
+        if r.is_error or data.get("message"):
+            error_message = data.get("message") or r.text
+            return PaymentResponse(
+                ok=False,
+                checking_id=None,
+                fee=None,
+                preimage=None,
+                error_message=error_message,
+            )
+
+        ok = data.get("status") == "SUCCEEDED"
+        checking_id = invoice.payment_hash
+        fee_msat = int(data["route"]["total_fees_msat"])
+        preimage = base64.b64decode(data["preimage"]).hex()
+        return PaymentResponse(
+            ok=ok,
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
@@ -270,13 +381,29 @@ class LndRestWallet(LightningBackend):
                 )
                 await asyncio.sleep(5)
 
-    async def get_payment_quote(self, bolt11: str) -> PaymentQuoteResponse:
-        invoice_obj = decode(bolt11)
+    async def get_payment_quote(
+        self, melt_quote: PostMeltQuoteRequest
+    ) -> PaymentQuoteResponse:
+        # get amount from melt_quote or from bolt11
+        amount = (
+            Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
+            if melt_quote.is_mpp
+            else None
+        )
+
+        invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
-        amount_msat = int(invoice_obj.amount_msat)
+
+        if amount:
+            amount_msat = amount.to(Unit.msat).amount
+        else:
+            amount_msat = int(invoice_obj.amount_msat)
+
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
+
         amount = Amount(unit=Unit.msat, amount=amount_msat)
+
         return PaymentQuoteResponse(
             checking_id=invoice_obj.payment_hash,
             fee=fees.to(self.unit, round="up"),

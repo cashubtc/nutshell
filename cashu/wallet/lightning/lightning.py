@@ -1,6 +1,8 @@
+from typing import Optional
+
 import bolt11
 
-from ...core.base import Amount, SpentState, Unit
+from ...core.base import Amount, ProofSpentState, Unit
 from ...core.helpers import sum_promises
 from ...core.settings import settings
 from ...lightning.base import (
@@ -33,15 +35,18 @@ class LightningWallet(Wallet):
             pass
         super().__init__(*args, **kwargs)
 
-    async def create_invoice(self, amount: int) -> InvoiceResponse:
+    async def create_invoice(
+        self, amount: int, memo: Optional[str] = None
+    ) -> InvoiceResponse:
         """Create lightning invoice
 
         Args:
             amount (int): amount in satoshis
+            memo (str, optional): invoice memo. Defaults to None.
         Returns:
             str: invoice
         """
-        invoice = await self.request_mint(amount)
+        invoice = await self.request_mint(amount, memo)
         return InvoiceResponse(
             ok=True, payment_request=invoice.bolt11, checking_id=invoice.payment_hash
         )
@@ -55,17 +60,15 @@ class LightningWallet(Wallet):
         Returns:
             bool: True if successful
         """
-        quote = await self.get_pay_amount_with_fees(pr)
+        quote = await self.melt_quote(pr)
         total_amount = quote.amount + quote.fee_reserve
         assert total_amount > 0, "amount is not positive"
         if self.available_balance < total_amount:
             print("Error: Balance too low.")
             return PaymentResponse(ok=False)
-        _, send_proofs = await self.split_to_send(self.proofs, total_amount)
+        _, send_proofs = await self.swap_to_send(self.proofs, total_amount)
         try:
-            resp = await self.pay_lightning(
-                send_proofs, pr, quote.fee_reserve, quote.quote
-            )
+            resp = await self.melt(send_proofs, pr, quote.fee_reserve, quote.quote)
             if resp.change:
                 fees_paid_sat = quote.fee_reserve - sum_promises(resp.change)
             else:
@@ -133,12 +136,12 @@ class LightningWallet(Wallet):
         if not proofs_states:
             return PaymentStatus(paid=False)  # "states not fount"
 
-        if all([p.state == SpentState.pending for p in proofs_states.states]):
+        if all([p.state == ProofSpentState.pending for p in proofs_states.states]):
             return PaymentStatus(paid=None)  # "pending (with check)"
-        if any([p.state == SpentState.spent for p in proofs_states.states]):
+        if any([p.state == ProofSpentState.spent for p in proofs_states.states]):
             # NOTE: consider adding this check in wallet.py and mark the invoice as paid if all proofs are spent
             return PaymentStatus(paid=True)  # "paid (with check)"
-        if all([p.state == SpentState.unspent for p in proofs_states.states]):
+        if all([p.state == ProofSpentState.unspent for p in proofs_states.states]):
             return PaymentStatus(paid=False)  # "failed (with check)"
         return PaymentStatus(paid=None)  # "undefined state"
 

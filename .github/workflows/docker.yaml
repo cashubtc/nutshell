@@ -29,13 +29,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
-      - name: Determine Tag
-        id: get_tag
+      - name: Determine Tags
+        id: get_tags
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "::set-output name=tag::latest"
-          elif [[ "${{ github.event_name }}" == "release" ]]; then
-            echo "::set-output name=tag::${{ github.event.release.tag_name }}"
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "::set-output name=version_tag::${{ github.event.release.tag_name }}"
+            echo "::set-output name=latest_tag::latest"
           fi
 
       - name: Build and push on release
@@ -43,7 +42,9 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name == 'release' && github.event.action == 'released' }}
-          tags: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:${{ steps.get_tag.outputs.tag }}
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:${{ steps.get_tags.outputs.version_tag }}
+            ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:${{ steps.get_tags.outputs.latest_tag }}
           platforms: linux/amd64,linux/arm64
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache

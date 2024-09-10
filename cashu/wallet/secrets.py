@@ -9,6 +9,7 @@ from mnemonic import Mnemonic
 
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
+from ..core.secret import Secret
 from ..core.settings import settings
 from ..wallet.crud import (
     bump_secret_derivation,
@@ -93,44 +94,39 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         except Exception as e:
             logger.error(e)
 
-    async def _generate_secret(self) -> str:
+    async def _generate_random_secret(self) -> str:
         """Returns base64 encoded deterministic random string.
 
         NOTE: This method should probably retire after `deterministic_secrets`. We are
         deriving secrets from a counter but don't store the respective blinding factor.
         We won't be able to restore any ecash generated with these secrets.
         """
-        # secret_counter = await bump_secret_derivation(db=self.db, keyset_id=keyset_id)
-        # logger.trace(f"secret_counter: {secret_counter}")
-        # s, _, _ = await self.generate_determinstic_secret(secret_counter, keyset_id)
-        # # return s.decode("utf-8")
-        # return hashlib.sha256(s).hexdigest()
-
         # return random 32 byte hex string
         return hashlib.sha256(os.urandom(32)).hexdigest()
 
     async def generate_determinstic_secret(
-        self, counter: int
+        self, counter: int, keyset_id: Optional[str] = None
     ) -> Tuple[bytes, bytes, str]:
         """
         Determinstically generates two secrets (one as the secret message,
         one as the blinding factor).
         """
         assert self.bip32, "BIP32 not initialized yet."
+        keyset_id = keyset_id or self.keyset_id
         # integer keyset id modulo max number of bip32 child keys
         try:
-            keyest_id_int = int.from_bytes(bytes.fromhex(self.keyset_id), "big") % (
+            keyest_id_int = int.from_bytes(bytes.fromhex(keyset_id), "big") % (
                 2**31 - 1
             )
         except ValueError:
             # BEGIN: BACKWARDS COMPATIBILITY < 0.15.0 keyset id is not hex
             # calculate an integer keyset id from the base64 encoded keyset id
-            keyest_id_int = int.from_bytes(base64.b64decode(self.keyset_id), "big") % (
+            keyest_id_int = int.from_bytes(base64.b64decode(keyset_id), "big") % (
                 2**31 - 1
             )
             # END: BACKWARDS COMPATIBILITY < 0.15.0 keyset id is not hex
 
-        logger.trace(f"keyset id: {self.keyset_id} becomes {keyest_id_int}")
+        logger.trace(f"keyset id: {keyset_id} becomes {keyest_id_int}")
         token_derivation_path = f"m/129372'/0'/{keyest_id_int}'/{counter}'"
         # for secret
         secret_derivation_path = f"{token_derivation_path}/0"
@@ -182,13 +178,14 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         return secrets, rs, derivation_paths
 
     async def generate_secrets_from_to(
-        self, from_counter: int, to_counter: int
+        self, from_counter: int, to_counter: int, keyset_id: Optional[str] = None
     ) -> Tuple[List[str], List[PrivateKey], List[str]]:
         """Generates secrets and blinding factors from `from_counter` to `to_counter`
 
         Args:
             from_counter (int): Start counter
             to_counter (int): End counter
+            keyset_id (Optional[str], optional): Keyset id. Defaults to None.
 
         Returns:
             Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
@@ -201,11 +198,38 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         ), "from_counter must be smaller than to_counter"
         secret_counters = [c for c in range(from_counter, to_counter + 1)]
         secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
+            await self.generate_determinstic_secret(s, keyset_id)
+            for s in secret_counters
         ]
         # secrets are supplied as str
         secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
         # rs are supplied as PrivateKey
         rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
         derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
+        return secrets, rs, derivation_paths
+
+    async def generate_locked_secrets(
+        self, send_outputs: List[int], keep_outputs: List[int], secret_lock: Secret
+    ) -> Tuple[List[str], List[PrivateKey], List[str]]:
+        """Generates secrets and blinding factors for a transaction with `send_outputs` and `keep_outputs`.
+
+        Args:
+            send_outputs (List[int]): List of amounts to send
+            keep_outputs (List[int]): List of amounts to keep
+
+        Returns:
+            Tuple[List[str], List[PrivateKey], List[str]]: Secrets, blinding factors, derivation paths
+        """
+        rs: List[PrivateKey] = []
+        # generate secrets for receiver
+        secret_locks = [secret_lock.serialize() for i in range(len(send_outputs))]
+        logger.debug(f"Creating proofs with custom secrets: {secret_locks}")
+        # append predefined secrets (to send) to random secrets (to keep)
+        # generate secrets to keep
+        secrets = [
+            await self._generate_random_secret() for s in range(len(keep_outputs))
+        ] + secret_locks
+        # TODO: derive derivation paths from secrets
+        derivation_paths = ["custom"] * len(secrets)
+
         return secrets, rs, derivation_paths

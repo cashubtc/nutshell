@@ -2,9 +2,10 @@ from typing import List
 
 import pytest
 
-from cashu.core.base import BlindedMessage, PostMintQuoteRequest, Proof
+from cashu.core.base import BlindedMessage, Proof
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.helpers import calculate_number_of_blank_outputs
+from cashu.core.models import PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest
@@ -68,7 +69,7 @@ async def test_get_keyset(ledger: Ledger):
 @pytest.mark.asyncio
 async def test_mint(ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
-    pay_if_regtest(quote.request)
+    await pay_if_regtest(quote.request)
     blinded_messages_mock = [
         BlindedMessage(
             amount=8,
@@ -86,9 +87,25 @@ async def test_mint(ledger: Ledger):
 
 
 @pytest.mark.asyncio
+async def test_mint_invalid_quote(ledger: Ledger):
+    await assert_err(
+        ledger.get_mint_quote(quote_id="invalid_quote_id"),
+        "quote not found",
+    )
+
+
+@pytest.mark.asyncio
+async def test_melt_invalid_quote(ledger: Ledger):
+    await assert_err(
+        ledger.get_melt_quote(quote_id="invalid_quote_id"),
+        "quote not found",
+    )
+
+
+@pytest.mark.asyncio
 async def test_mint_invalid_blinded_message(ledger: Ledger):
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
-    pay_if_regtest(quote.request)
+    await pay_if_regtest(quote.request)
     blinded_messages_mock_invalid_key = [
         BlindedMessage(
             amount=8,
@@ -129,9 +146,9 @@ async def test_generate_promises(ledger: Ledger):
 async def test_generate_change_promises(ledger: Ledger):
     # Example slightly adapted from NUT-08 because we want to ensure the dynamic change
     # token amount works: `n_blank_outputs != n_returned_promises != 4`.
-    invoice_amount = 100_000
+    # invoice_amount = 100_000
     fee_reserve = 2_000
-    total_provided = invoice_amount + fee_reserve
+    # total_provided = invoice_amount + fee_reserve
     actual_fee = 100
 
     expected_returned_promises = 7  # Amounts = [4, 8, 32, 64, 256, 512, 1024]
@@ -149,7 +166,7 @@ async def test_generate_change_promises(ledger: Ledger):
     ]
 
     promises = await ledger._generate_change_promises(
-        total_provided, invoice_amount, actual_fee, outputs
+        fee_provided=fee_reserve, fee_paid=actual_fee, outputs=outputs
     )
 
     assert len(promises) == expected_returned_promises
@@ -160,9 +177,9 @@ async def test_generate_change_promises(ledger: Ledger):
 async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
     # Check if mint handles a legacy wallet implementation (always sends 4 blank
     # outputs) as well.
-    invoice_amount = 100_000
+    # invoice_amount = 100_000
     fee_reserve = 2_000
-    total_provided = invoice_amount + fee_reserve
+    # total_provided = invoice_amount + fee_reserve
     actual_fee = 100
 
     expected_returned_promises = 4  # Amounts = [64, 256, 512, 1024]
@@ -179,9 +196,7 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
         for b, _ in blinded_msgs
     ]
 
-    promises = await ledger._generate_change_promises(
-        total_provided, invoice_amount, actual_fee, outputs
-    )
+    promises = await ledger._generate_change_promises(fee_reserve, actual_fee, outputs)
 
     assert len(promises) == expected_returned_promises
     assert sum([promise.amount for promise in promises]) == expected_returned_fees
@@ -189,14 +204,14 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_generate_change_promises_returns_empty_if_no_outputs(ledger: Ledger):
-    invoice_amount = 100_000
+    # invoice_amount = 100_000
     fee_reserve = 1_000
-    total_provided = invoice_amount + fee_reserve
+    # total_provided = invoice_amount + fee_reserve
     actual_fee_msat = 100_000
     outputs = None
 
     promises = await ledger._generate_change_promises(
-        total_provided, invoice_amount, actual_fee_msat, outputs
+        fee_reserve, actual_fee_msat, outputs
     )
     assert len(promises) == 0
 

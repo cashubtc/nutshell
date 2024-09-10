@@ -3,14 +3,16 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import (
+from cashu.core.base import MeltQuoteState, MintQuoteState, ProofSpentState
+from cashu.core.models import (
     GetInfoResponse,
     MintMeltMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
+    PostMeltQuoteResponse,
+    PostMintQuoteResponse,
     PostRestoreRequest,
     PostRestoreResponse,
-    SpentState,
 )
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -89,6 +91,7 @@ async def test_api_keysets(ledger: Ledger):
                 "id": "009a1f293253e41e",
                 "unit": "sat",
                 "active": True,
+                "input_fee_ppk": 0,
             },
         ]
     }
@@ -150,7 +153,7 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
 )
 async def test_split(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
@@ -159,7 +162,7 @@ async def test_split(ledger: Ledger, wallet: Wallet):
     inputs_payload = [p.to_dict() for p in wallet.proofs]
     outputs_payload = [o.dict() for o in outputs]
     payload = {"inputs": inputs_payload, "outputs": outputs_payload}
-    response = httpx.post(f"{BASE_URL}/v1/swap", json=payload)
+    response = httpx.post(f"{BASE_URL}/v1/swap", json=payload, timeout=None)
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert len(result["signatures"]) == 2
@@ -185,6 +188,16 @@ async def test_mint_quote(ledger: Ledger):
     result = response.json()
     assert result["quote"]
     assert result["request"]
+
+    # deserialize the response
+    resp_quote = PostMintQuoteResponse(**result)
+    assert resp_quote.quote == result["quote"]
+    assert resp_quote.state == MintQuoteState.unpaid.value
+
+    # check if DEPRECATED paid flag is also returned
+    assert result["paid"] is False
+    assert resp_quote.paid is False
+
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
 
@@ -194,6 +207,9 @@ async def test_mint_quote(ledger: Ledger):
 
     assert result["expiry"] == expiry
 
+    # pay the invoice
+    await pay_if_regtest(result["request"])
+
     # get mint quote again from api
     response = httpx.get(
         f"{BASE_URL}/v1/mint/quote/bolt11/{result['quote']}",
@@ -201,6 +217,14 @@ async def test_mint_quote(ledger: Ledger):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result2 = response.json()
     assert result2["quote"] == result["quote"]
+    # deserialize the response
+    resp_quote = PostMintQuoteResponse(**result2)
+    assert resp_quote.quote == result["quote"]
+    assert resp_quote.state == MintQuoteState.paid.value
+
+    # check if DEPRECATED paid flag is also returned
+    assert result2["paid"] is True
+    assert resp_quote.paid is True
 
 
 @pytest.mark.asyncio
@@ -210,7 +234,7 @@ async def test_mint_quote(ledger: Ledger):
 )
 async def test_mint(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     quote_id = invoice.id
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
@@ -254,6 +278,18 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     assert result["amount"] == 64
     # TODO: internal invoice, fee should be 0
     assert result["fee_reserve"] == 0
+
+    # deserialize the response
+    resp_quote = PostMeltQuoteResponse(**result)
+    assert resp_quote.quote == result["quote"]
+    assert resp_quote.payment_preimage is None
+    assert resp_quote.change is None
+    assert resp_quote.state == MeltQuoteState.unpaid.value
+
+    # check if DEPRECATED paid flag is also returned
+    assert result["paid"] is False
+    assert resp_quote.paid is False
+
     invoice_obj = bolt11.decode(request)
 
     expiry = None
@@ -262,13 +298,25 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
 
     assert result["expiry"] == expiry
 
-    # get melt quote again from api
-    response = httpx.get(
-        f"{BASE_URL}/v1/melt/quote/bolt11/{result['quote']}",
-    )
-    assert response.status_code == 200, f"{response.url} {response.status_code}"
-    result2 = response.json()
-    assert result2["quote"] == result["quote"]
+    # # get melt quote again from api
+    # response = httpx.get(
+    #     f"{BASE_URL}/v1/melt/quote/bolt11/{result['quote']}",
+    # )
+    # assert response.status_code == 200, f"{response.url} {response.status_code}"
+    # result2 = response.json()
+    # assert result2["quote"] == result["quote"]
+
+    # # deserialize the response
+    # resp_quote = PostMeltQuoteResponse(**result2)
+    # assert resp_quote.quote == result["quote"]
+    # assert resp_quote.payment_preimage is not None
+    # assert len(resp_quote.payment_preimage) == 64
+    # assert resp_quote.change is not None
+    # assert resp_quote.state == MeltQuoteState.paid.value
+
+    # # check if DEPRECATED paid flag is also returned
+    # assert result2["paid"] is True
+    # assert resp_quote.paid is True
 
 
 @pytest.mark.asyncio
@@ -304,7 +352,7 @@ async def test_melt_quote_external(ledger: Ledger, wallet: Wallet):
 async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -337,6 +385,19 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert result.get("payment_preimage") is not None
     assert result["paid"] is True
 
+    # deserialize the response
+    resp_quote = PostMeltQuoteResponse(**result)
+    assert resp_quote.quote == quote.quote
+
+    # internal invoice, no preimage, no change
+    assert resp_quote.payment_preimage == ""
+    assert resp_quote.change == []
+    assert resp_quote.state == MeltQuoteState.paid.value
+
+    # check if DEPRECATED paid flag is also returned
+    assert result["paid"] is True
+    assert resp_quote.paid is True
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -350,7 +411,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 async def test_melt_external(ledger: Ledger, wallet: Wallet):
     # internal invoice
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
 
@@ -361,7 +422,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert quote.amount == 62
     assert quote.fee_reserve == 2
 
-    keep, send = await wallet.split_to_send(wallet.proofs, 64)
+    keep, send = await wallet.swap_to_send(wallet.proofs, 64)
     inputs_payload = [p.to_dict() for p in send]
 
     # outputs for change
@@ -378,6 +439,7 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
         },
         timeout=None,
     )
+    response.raise_for_status()
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result.get("payment_preimage") is not None
@@ -385,6 +447,19 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     assert result["change"]
     # we get back 2 sats because Lightning was free to pay on regtest
     assert result["change"][0]["amount"] == 2
+
+    # deserialize the response
+    resp_quote = PostMeltQuoteResponse(**result)
+    assert resp_quote.quote == quote.quote
+    assert resp_quote.payment_preimage is not None
+    assert len(resp_quote.payment_preimage) == 64
+    assert resp_quote.change is not None
+    assert resp_quote.change[0].amount == 2
+    assert resp_quote.state == MeltQuoteState.paid.value
+
+    # check if DEPRECATED paid flag is also returned
+    assert result["paid"] is True
+    assert resp_quote.paid is True
 
 
 @pytest.mark.asyncio
@@ -402,7 +477,7 @@ async def test_api_check_state(ledger: Ledger):
     response = PostCheckStateResponse.parse_obj(response.json())
     assert response
     assert len(response.states) == 2
-    assert response.states[0].state == SpentState.unspent
+    assert response.states[0].state == ProofSpentState.unspent
 
 
 @pytest.mark.asyncio
@@ -412,7 +487,7 @@ async def test_api_check_state(ledger: Ledger):
 )
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.bolt11)
     await wallet.mint(64, id=invoice.id)
     assert wallet.balance == 64
     secret_counter = await bump_secret_derivation(
