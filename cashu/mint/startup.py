@@ -102,11 +102,17 @@ async def rotate_keys(n_seconds=60):
         await asyncio.sleep(n_seconds)
 
 
-async def start_mint_init():
-    await migrate_databases(ledger.db, migrations)
-    await ledger.startup_ledger()
+async def start_auth():
+    # TODO: use auth migrations, not mint migrations
     await migrate_databases(auth_ledger.db, migrations)
+    logger.info("Starting auth ledger.")
     await auth_ledger.startup_ledger()
+
+
+async def start_mint():
+    await migrate_databases(ledger.db, migrations)
+    logger.info("Starting mint ledger.")
+    await ledger.startup_ledger()
     logger.info("Mint started.")
     # asyncio.create_task(rotate_keys())
 

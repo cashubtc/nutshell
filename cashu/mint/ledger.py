@@ -108,16 +108,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     # ------- STARTUP -------
 
     async def startup_ledger(self):
-        await self._startup_ledger()
+        await self._startup_keysets()
+        await self._check_backends()
         await self._check_pending_proofs_and_melt_quotes()
         self.invoice_listener_tasks = await self.dispatch_listeners()
 
-    async def _startup_ledger(self):
+    async def _startup_keysets(self):
         await self.init_keysets()
-
         for derivation_path in settings.mint_derivation_path_list:
             await self.activate_keyset(derivation_path=derivation_path)
 
+    async def _check_backends(self):
         for method in self.backends:
             for unit in self.backends[method]:
                 logger.info(

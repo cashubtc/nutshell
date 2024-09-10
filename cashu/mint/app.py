@@ -13,8 +13,7 @@ from ..core.settings import settings
 from .auth.router import auth_router
 from .router import router
 from .router_deprecated import router_deprecated
-from .startup import shutdown_mint as shutdown_mint_init
-from .startup import start_mint_init
+from .startup import shutdown_mint, start_auth, start_mint
 
 if settings.debug_profiling:
     pass
@@ -29,7 +28,7 @@ from .middleware import add_middlewares, request_validation_exception_handler
 # @asynccontextmanager
 # async def lifespan(app: FastAPI):
 #     # startup routines here
-#     await start_mint_init()
+#     await start_mint()
 #     yield
 #     # shutdown routines here
 
@@ -105,10 +104,11 @@ app.include_router(auth_router, tags=["Auth"])
 
 
 @app.on_event("startup")
-async def startup_mint():
-    await start_mint_init()
+async def startup():
+    await start_mint()
+    await start_auth()
 
 
 @app.on_event("shutdown")
-async def shutdown_mint():
-    await shutdown_mint_init()
+async def shutdown():
+    await shutdown_mint()
