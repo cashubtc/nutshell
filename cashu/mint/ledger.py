@@ -474,7 +474,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             status: PaymentStatus = await self.backends[method][
                 unit
             ].get_invoice_status(quote.checking_id)
-            if status.paid:
+            if status.settled:
                 # change state to paid in one transaction, it could have been marked paid
                 # by the invoice listener in the mean time
                 async with self.db.get_connection(
@@ -918,19 +918,38 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     melt_quote, melt_quote.fee_reserve * 1000
                 )
                 logger.debug(
-                    f"Melt – Ok: {payment.ok}: preimage: {payment.preimage},"
+                    f"Melt – Result: {str(payment.result)}: preimage: {payment.preimage},"
                     f" fee: {payment.fee.str() if payment.fee is not None else 'None'}"
                 )
-                if not payment.ok:
+                # Temporary solution to a larger problem (asynchronous melt)
+                status = PaymentStatus(
+                    result=payment.result,
+                    fee=payment.fee,
+                    preimage=payment.preimage,
+                    error_message=payment.error_message,
+                )
+                if status.pending:
+                    logger.debug("Payment marked pending: asking for settlement confirmation...")
+                    assert payment.checking_id
+                    for retry_count in range(1, 6):
+                        status = await self.backends[method][unit].get_payment_status(
+                            payment.checking_id
+                        )
+                        if not status.pending:
+                            break
+                        logger.error(f"Payment is still pending after {retry_count} retries")
+                        await asyncio.sleep(2)
+
+                if status.failed or status.unknown:
                     raise LightningError(
-                        f"Lightning payment unsuccessful. {payment.error_message}"
+                        f"Lightning payment unsuccessful. {status.error_message}"
                     )
-                if payment.fee:
-                    melt_quote.fee_paid = payment.fee.to(
+                if status.fee:
+                    melt_quote.fee_paid = status.fee.to(
                         to_unit=unit, round="up"
                     ).amount
-                if payment.preimage:
-                    melt_quote.payment_preimage = payment.preimage
+                if status.preimage:
+                    melt_quote.payment_preimage = status.preimage
                 # set quote as paid
                 melt_quote.paid = True
                 melt_quote.state = MeltQuoteState.paid

@@ -60,20 +60,44 @@ class PaymentResponse(BaseModel):
     preimage: Optional[str] = None
     error_message: Optional[str] = None
 
+    @property
+    def pending(self) -> bool:
+        return self.result == PaymentResult.PENDING
+    
+    @property
+    def settled(self) -> bool:
+        return self.result == PaymentResult.SETTLED
+
+    @property
+    def failed(self) -> bool:
+        return self.result == PaymentResult.FAILED
+
+    @property
+    def unknown(self) -> bool:
+        return self.result == PaymentResult.UNKNOWN
 
 class PaymentStatus(BaseModel):
     result: PaymentResult
     paid: Optional[bool] = None
     fee: Optional[Amount] = None
     preimage: Optional[str] = None
+    error_message: Optional[str] = None
 
     @property
     def pending(self) -> bool:
-        return self.paid is not True
+        return self.result == PaymentResult.PENDING
+    
+    @property
+    def settled(self) -> bool:
+        return self.result == PaymentResult.SETTLED
 
     @property
     def failed(self) -> bool:
-        return self.paid is False
+        return self.result == PaymentResult.FAILED
+
+    @property
+    def unknown(self) -> bool:
+        return self.result == PaymentResult.UNKNOWN
 
     def __str__(self) -> str:
         if self.result == PaymentResult.SETTLED:
