@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 from loguru import logger
 
@@ -6,13 +6,12 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     Method,
-    MintKeyset,
     Proof,
     Unit,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
-from ..core.db import Connection, Database
+from ..core.db import Connection
 from ..core.errors import (
     NoSecretInProofsError,
     NotAllowedError,
@@ -21,11 +20,7 @@ from ..core.errors import (
     TransactionUnitError,
 )
 from ..core.settings import settings
-from ..lightning.base import LightningBackend
-from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
-from .db.read import DbReadHelper
-from .db.write import DbWriteHelper
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
 
@@ -33,14 +28,6 @@ class LedgerVerification(
     LedgerSpendingConditions, SupportsKeysets, SupportsDb, SupportsBackends
 ):
     """Verification functions for the ledger."""
-
-    keyset: MintKeyset
-    keysets: Dict[str, MintKeyset]
-    crud: LedgerCrud
-    db: Database
-    db_read: DbReadHelper
-    db_write: DbWriteHelper
-    lightning: Dict[Unit, LightningBackend]
 
     async def verify_inputs_and_outputs(
         self,

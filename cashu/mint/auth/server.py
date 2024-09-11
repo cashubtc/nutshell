@@ -16,7 +16,6 @@ class AuthLedger(Ledger):
         crud=LedgerCrudSqlite(),
     ):
         super().__init__(db, seed, None, seed_decryption_key, derivation_path, crud)
-        print("auth ledger init")
 
     async def startup_ledger(self):
         await self.init_keysets()

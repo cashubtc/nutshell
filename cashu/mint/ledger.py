@@ -63,13 +63,6 @@ from .verification import LedgerVerification
 
 
 class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures):
-    backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
-    locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
-    keysets: Dict[str, MintKeyset] = {}
-    events = LedgerEventManager()
-    db_read: DbReadHelper
-    invoice_listener_tasks: List[asyncio.Task] = []
-
     def __init__(
         self,
         db: Database,
@@ -79,6 +72,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         derivation_path="",
         crud=LedgerCrudSqlite(),
     ):
+        self.keysets: Dict[str, MintKeyset] = {}
+        self.backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
+        self.events = LedgerEventManager()
+        self.db_read: DbReadHelper
+        self.locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
+        self.invoice_listener_tasks: List[asyncio.Task] = []
+
         if not seed:
             raise Exception("seed not set")
 
