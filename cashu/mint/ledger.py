@@ -71,7 +71,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         seed_decryption_key: Optional[str] = None,
         derivation_path="",
         crud=LedgerCrudSqlite(),
-    ):
+    ) -> None:
         self.keysets: Dict[str, MintKeyset] = {}
         self.backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
         self.events = LedgerEventManager()
@@ -107,18 +107,18 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
     # ------- STARTUP -------
 
-    async def startup_ledger(self):
+    async def startup_ledger(self) -> None:
         await self._startup_keysets()
         await self._check_backends()
         await self._check_pending_proofs_and_melt_quotes()
         self.invoice_listener_tasks = await self.dispatch_listeners()
 
-    async def _startup_keysets(self):
+    async def _startup_keysets(self) -> None:
         await self.init_keysets()
         for derivation_path in settings.mint_derivation_path_list:
             await self.activate_keyset(derivation_path=derivation_path)
 
-    async def _check_backends(self):
+    async def _check_backends(self) -> None:
         for method in self.backends:
             for unit in self.backends[method]:
                 logger.info(
@@ -137,12 +137,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         logger.info(f"Data dir: {settings.cashu_dir}")
 
-    async def shutdown_ledger(self):
+    async def shutdown_ledger(self) -> None:
         await self.db.engine.dispose()
         for task in self.invoice_listener_tasks:
             task.cancel()
 
-    async def _check_pending_proofs_and_melt_quotes(self):
+    async def _check_pending_proofs_and_melt_quotes(self) -> None:
         """Startup routine that checks all pending proofs for their melt state and either invalidates
         them for a successful melt or deletes them if the melt failed.
         """
