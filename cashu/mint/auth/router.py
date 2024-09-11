@@ -1,19 +1,19 @@
 from fastapi import APIRouter
-from loguru import logger
 
-from ..startup import auth_ledger
+from ...mint.startup import auth_ledger
+from .models import PostAuthBlindMintRequest, PostAuthBlindMintResponse
 
 auth_router: APIRouter = APIRouter()
 
 
-@auth_router.get(
-    "/v1/auth/blind",
-    name="Mint information",
-    summary="Mint information, operator contact information, and other info.",
-    # response_model=GetInfoResponse,
-    response_model_exclude_none=True,
+@auth_router.post(
+    "/v1/auth/blind/mint",
+    name="Mint blind auth tokens",
+    summary="Mint blind auth tokens for a user.",
+    response_model=PostAuthBlindMintResponse,
 )
-async def info():
-    logger.trace("> GET /v1/info")
-    await auth_ledger.init_keysets()
-    return "asd"
+async def auth_blind_mint(
+    request: PostAuthBlindMintRequest,
+) -> PostAuthBlindMintResponse:
+    signatures = await auth_ledger.auth_mint(outputs=request.outputs, auth=request.auth)
+    return PostAuthBlindMintResponse(signatures=signatures)

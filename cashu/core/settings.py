@@ -224,6 +224,10 @@ class CoreLightningRestFundingSource(MintSettings):
     mint_corelightning_rest_cert: Optional[str] = Field(default=None)
 
 
+class AuthSettings(MintSettings):
+    auth_blind_max_tokens_mint: int = Field(default=100, gt=0)
+
+
 class Settings(
     EnvSettings,
     LndRPCFundingSource,
@@ -233,6 +237,7 @@ class Settings(
     FakeWalletSettings,
     MintLimits,
     MintBackends,
+    AuthSettings,
     MintSettings,
     MintInformation,
     WalletSettings,
