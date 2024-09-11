@@ -18,7 +18,15 @@ from .settings import settings
 # ------- API: INFO -------
 
 
-class MintMeltMethodSetting(BaseModel):
+class MintMethodSetting(BaseModel):
+    method: str
+    unit: str
+    min_amount: Optional[int] = None
+    max_amount: Optional[int] = None
+    description: Optional[bool] = None
+
+
+class MeltMethodSetting(BaseModel):
     method: str
     unit: str
     min_amount: Optional[int] = None
