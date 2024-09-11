@@ -54,6 +54,7 @@ class CoreLightningRestWallet(LightningBackend):
     supported_units = set([Unit.sat, Unit.msat])
     unit = Unit.sat
     supports_incoming_payment_stream: bool = True
+    supports_description: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)

@@ -1,3 +1,5 @@
+from typing import Optional
+
 import bolt11
 
 from ...core.base import Amount, ProofSpentState, Unit
@@ -34,15 +36,18 @@ class LightningWallet(Wallet):
             pass
         super().__init__(*args, **kwargs)
 
-    async def create_invoice(self, amount: int) -> InvoiceResponse:
+    async def create_invoice(
+        self, amount: int, memo: Optional[str] = None
+    ) -> InvoiceResponse:
         """Create lightning invoice
 
         Args:
             amount (int): amount in satoshis
+            memo (str, optional): invoice memo. Defaults to None.
         Returns:
             str: invoice
         """
-        invoice = await self.request_mint(amount)
+        invoice = await self.request_mint(amount, memo)
         return InvoiceResponse(
             ok=True, payment_request=invoice.bolt11, checking_id=invoice.payment_hash
         )

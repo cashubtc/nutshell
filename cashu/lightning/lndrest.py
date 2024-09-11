@@ -61,6 +61,7 @@ class LndRestWallet(LightningBackend):
     supports_mpp = settings.mint_lnd_enable_mpp
     supports_incoming_payment_stream = True
     supported_units = set([Unit.sat, Unit.msat])
+    supports_description: bool = True
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):

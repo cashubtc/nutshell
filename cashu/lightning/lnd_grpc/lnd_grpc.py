@@ -60,22 +60,24 @@ INVOICE_RESULT_MAP = {
 }
 
 class LndRPCWallet(LightningBackend):
-
     supports_mpp = settings.mint_lnd_enable_mpp
     supports_incoming_payment_stream = True
     supported_units = set([Unit.sat, Unit.msat])
+    supports_description: bool = True
+
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
         self.unit = unit
-        self.endpoint = settings.mint_lnd_rpc_endpoint
         cert_path = settings.mint_lnd_rpc_cert
 
         macaroon_path = settings.mint_lnd_rpc_macaroon
 
-        if not self.endpoint:
+        if not settings.mint_lnd_rpc_endpoint:
             raise Exception("cannot initialize LndRPCWallet: no endpoint")
+
+        self.endpoint = settings.mint_lnd_rpc_endpoint
 
         if not macaroon_path:
             raise Exception("cannot initialize LndRPCWallet: no macaroon")
@@ -83,15 +85,16 @@ class LndRPCWallet(LightningBackend):
         if not cert_path:
             raise Exception("no certificate for LndRPCWallet provided")
 
-        self.macaroon = codecs.encode(open(macaroon_path, 'rb').read(), 'hex')
+        self.macaroon = codecs.encode(open(macaroon_path, "rb").read(), "hex")
 
         def metadata_callback(context, callback):
-            callback([('macaroon', self.macaroon)], None)
+            callback([("macaroon", self.macaroon)], None)
+
         auth_creds = grpc.metadata_call_credentials(metadata_callback)
 
         # create SSL credentials
-        os.environ['GRPC_SSL_CIPHER_SUITES'] = 'HIGH+ECDSA'
-        cert = open(cert_path, 'rb').read()
+        os.environ["GRPC_SSL_CIPHER_SUITES"] = "HIGH+ECDSA"
+        cert = open(cert_path, "rb").read()
         ssl_creds = grpc.ssl_channel_credentials(cert)
 
         # combine macaroon and SSL credentials
@@ -100,11 +103,12 @@ class LndRPCWallet(LightningBackend):
         if self.supports_mpp:
             logger.info("LndRPCWallet enabling MPP feature")
 
-
     async def status(self) -> StatusResponse:
         r = None
         try:
-            async with grpc.aio.secure_channel(self.endpoint, self.combined_creds) as channel:
+            async with grpc.aio.secure_channel(
+                self.endpoint, self.combined_creds
+            ) as channel:
                 lnstub = lightningstub.LightningStub(channel)
                 r = await lnstub.ChannelBalance(lnrpc.ChannelBalanceRequest())
         except AioRpcError as e:
@@ -112,9 +116,8 @@ class LndRPCWallet(LightningBackend):
                 error_message=f"Error calling Lnd gRPC: {e}", balance=0
             )
         # NOTE: `balance` field is deprecated. Change this.
-        return StatusResponse(error_message=None, balance=r.balance*1000)
+        return StatusResponse(error_message=None, balance=r.balance * 1000)
 
-    
     async def create_invoice(
         self,
         amount: Amount,
@@ -138,7 +141,9 @@ class LndRPCWallet(LightningBackend):
 
         r = None
         try:
-            async with grpc.aio.secure_channel(self.endpoint, self.combined_creds) as channel:
+            async with grpc.aio.secure_channel(
+                self.endpoint, self.combined_creds
+            ) as channel:
                 lnstub = lightningstub.LightningStub(channel)
                 r = await lnstub.AddInvoice(data)
         except AioRpcError as e:
@@ -158,7 +163,7 @@ class LndRPCWallet(LightningBackend):
             payment_request=payment_request,
             error_message=None,
         )
-    
+
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
@@ -173,12 +178,12 @@ class LndRPCWallet(LightningBackend):
                 )
 
         # set the fee limit for the payment
-        feelimit = lnrpc.FeeLimit(
-            fixed_msat=fee_limit_msat
-        )
+        feelimit = lnrpc.FeeLimit(fixed_msat=fee_limit_msat)
         r = None
         try:
-            async with grpc.aio.secure_channel(self.endpoint, self.combined_creds) as channel:
+            async with grpc.aio.secure_channel(
+                self.endpoint, self.combined_creds
+            ) as channel:
                 lnstub = lightningstub.LightningStub(channel)
                 r = await lnstub.SendPaymentSync(
                     lnrpc.SendRequest(
@@ -212,14 +217,12 @@ class LndRPCWallet(LightningBackend):
             preimage=preimage,
             error_message=None,
         )
-    
+
     async def pay_partial_invoice(
         self, quote: MeltQuote, amount: Amount, fee_limit_msat: int
     ) -> PaymentResponse:
         # set the fee limit for the payment
-        feelimit = lnrpc.FeeLimit(
-            fixed_msat=fee_limit_msat
-        )
+        feelimit = lnrpc.FeeLimit(fixed_msat=fee_limit_msat)
         invoice = bolt11.decode(quote.request)
 
         invoice_amount = invoice.amount_msat
@@ -237,7 +240,9 @@ class LndRPCWallet(LightningBackend):
         # get the route
         r = None
         try:
-            async with grpc.aio.secure_channel(self.endpoint, self.combined_creds) as channel:
+            async with grpc.aio.secure_channel(
+                self.endpoint, self.combined_creds
+            ) as channel:
                 lnstub = lightningstub.LightningStub(channel)
                 router_stub = routerstub.RouterStub(channel)
                 r = await lnstub.QueryRoutes(
@@ -247,23 +252,27 @@ class LndRPCWallet(LightningBackend):
                         fee_limit=feelimit,
                     )
                 )
-                '''
+                """
                 # We need to set the mpp_record for a partial payment
                 mpp_record = lnrpc.MPPRecord(
                     payment_addr=bytes.fromhex(payer_addr),
                     total_amt_msat=total_amount_msat,
                 )
-                '''
+                """
                 # modify the mpp_record in the last hop
                 route_nr = 0
-                r.routes[route_nr].hops[-1].mpp_record.payment_addr = bytes.fromhex(payer_addr)
-                r.routes[route_nr].hops[-1].mpp_record.total_amt_msat = total_amount_msat
+                r.routes[route_nr].hops[-1].mpp_record.payment_addr = bytes.fromhex(  # type: ignore
+                    payer_addr
+                )
+                r.routes[route_nr].hops[  # type: ignore
+                    -1
+                ].mpp_record.total_amt_msat = total_amount_msat
 
                 # Send to route request
                 r = await router_stub.SendToRouteV2(
                     routerrpc.SendToRouteRequest(
                         payment_hash=bytes.fromhex(invoice.payment_hash),
-                        route=r.routes[route_nr],
+                        route=r.routes[route_nr],  # type: ignore
                     )
                 )
         except AioRpcError as e:
@@ -306,16 +315,16 @@ class LndRPCWallet(LightningBackend):
             preimage=preimage,
             error_message=None,
         )
-    
+
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         r = None
         try:
-            async with grpc.aio.secure_channel(self.endpoint, self.combined_creds) as channel:
+            async with grpc.aio.secure_channel(
+                self.endpoint, self.combined_creds
+            ) as channel:
                 lnstub = lightningstub.LightningStub(channel)
                 r = await lnstub.LookupInvoice(
-                    lnrpc.PaymentHash(
-                        r_hash=bytes.fromhex(checking_id)
-                    )
+                    lnrpc.PaymentHash(r_hash=bytes.fromhex(checking_id))
                 )
         except AioRpcError as e:
             error_message = f"LookupInvoice failed: {e}"
@@ -341,7 +350,9 @@ class LndRPCWallet(LightningBackend):
         request = routerrpc.TrackPaymentRequest(payment_hash=checking_id_bytes)
 
         try:
-            async with grpc.aio.secure_channel(self.endpoint, self.combined_creds) as channel:
+            async with grpc.aio.secure_channel(
+                self.endpoint, self.combined_creds
+            ) as channel:
                 router_stub = routerstub.RouterStub(channel)
                 async for payment in router_stub.TrackPaymentV2(request):
                     if payment is not None and payment.status:
@@ -364,17 +375,19 @@ class LndRPCWallet(LightningBackend):
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:
             try:
-                async with grpc.aio.secure_channel(self.endpoint, self.combined_creds) as channel:
+                async with grpc.aio.secure_channel(
+                    self.endpoint, self.combined_creds
+                ) as channel:
                     lnstub = lightningstub.LightningStub(channel)
-                    async for invoice in lnstub.SubscribeInvoices(lnrpc.InvoiceSubscription()):
+                    async for invoice in lnstub.SubscribeInvoices(
+                        lnrpc.InvoiceSubscription()
+                    ):
                         if invoice.state != lnrpc.Invoice.InvoiceState.SETTLED:
                             continue
                         payment_hash = invoice.r_hash.hex()
                         yield payment_hash
             except AioRpcError as exc:
-                logger.error(
-                    f"SubscribeInvoices failed: {exc}. Retrying in 1 sec..."
-                )
+                logger.error(f"SubscribeInvoices failed: {exc}. Retrying in 1 sec...")
                 await asyncio.sleep(1)
 
     async def get_payment_quote(
