@@ -25,6 +25,7 @@ from .base import (
     PaymentResponse,
     PaymentStatus,
     StatusResponse,
+    PaymentResult,
 )
 
 
@@ -157,6 +158,7 @@ class FakeWallet(LightningBackend):
                 raise ValueError("Invoice already paid")
 
             return PaymentResponse(
+                result=PaymentResult.SETTLED,
                 ok=True,
                 checking_id=invoice.payment_hash,
                 fee=Amount(unit=self.unit, amount=1),
@@ -164,7 +166,9 @@ class FakeWallet(LightningBackend):
             )
         else:
             return PaymentResponse(
-                ok=False, error_message="Only internal invoices can be used!"
+                result=PaymentResult.FAILED,
+                ok=False,
+                error_message="Only internal invoices can be used!",
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
@@ -175,10 +179,16 @@ class FakeWallet(LightningBackend):
         else:
             paid = False
 
-        return PaymentStatus(paid=paid)
+        return PaymentStatus(
+            result=PaymentResult.from_paid_flag(paid),
+            paid=paid,
+        )
 
     async def get_payment_status(self, _: str) -> PaymentStatus:
-        return PaymentStatus(paid=settings.fakewallet_payment_state)
+        return PaymentStatus(
+            result=PaymentResult.from_paid_flag(settings.fakewallet_payment_state),
+            paid=settings.fakewallet_payment_state,
+        )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

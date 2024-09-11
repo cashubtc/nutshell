@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, Coroutine, Optional, Union
+from enum import Enum
 
 from pydantic import BaseModel
 
@@ -33,8 +34,26 @@ class InvoiceResponse(BaseModel):
     payment_request: Optional[str] = None
     error_message: Optional[str] = None
 
+class PaymentResult(Enum):
+    FAILED = 0
+    SETTLED = 1
+    PENDING = 2
+
+    UNKNOWN = 3
+
+    def __str__(self):
+        return self.name
+
+    # We assume `None` is `FAILED`
+    @classmethod
+    def from_paid_flag(cls, paid: Optional[bool]):
+        if paid is None or paid == False:
+            return cls.FAILED
+        elif paid == True:
+            return cls.SETTLED
 
 class PaymentResponse(BaseModel):
+    result: PaymentResult
     ok: Optional[bool] = None  # True: paid, False: failed, None: pending or unknown
     checking_id: Optional[str] = None
     fee: Optional[Amount] = None
@@ -43,6 +62,7 @@ class PaymentResponse(BaseModel):
 
 
 class PaymentStatus(BaseModel):
+    result: PaymentResult
     paid: Optional[bool] = None
     fee: Optional[Amount] = None
     preimage: Optional[str] = None
@@ -56,13 +76,13 @@ class PaymentStatus(BaseModel):
         return self.paid is False
 
     def __str__(self) -> str:
-        if self.paid is True:
+        if self.result == PaymentResult.SETTLED:
             return "settled"
-        elif self.paid is False:
+        elif self.result == PaymentResult.FAILED:
             return "failed"
-        elif self.paid is None:
+        elif self.result == PaymentResult.PENDING:
             return "still pending"
-        else:
+        else: # self.result == PaymentResult.UNKNOWN:
             return "unknown (should never happen)"
 
 
