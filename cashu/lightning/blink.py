@@ -18,6 +18,7 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
 )
@@ -30,6 +31,21 @@ DIRECTION_RECEIVE = "RECEIVE"
 PROBE_FEE_TIMEOUT_SEC = 1
 MINIMUM_FEE_MSAT = 2000
 
+INVOICE_RESULT_MAP = {
+    "PENDING": PaymentResult.PENDING,
+    "PAID": PaymentResult.SETTLED,
+    "EXPIRED": PaymentResult.FAILED,
+}
+PAYMENT_EXECUTION_RESULT_MAP = {
+    "SUCCESS": PaymentResult.SETTLED,
+    "ALREADY_PAID": PaymentResult.UNKNOWN,
+    "FAILURE": PaymentResult.FAILED,
+}
+PAYMENT_RESULT_MAP = {
+    "SUCCESS": PaymentResult.SETTLED,
+    "PENDING": PaymentResult.PENDING,
+    "FAILURE": PaymentResult.FAILED,
+}
 
 class BlinkWallet(LightningBackend):
     """https://dev.blink.sv/
@@ -203,7 +219,11 @@ class BlinkWallet(LightningBackend):
             r.raise_for_status()
         except Exception as e:
             logger.error(f"Blink API error: {str(e)}")
-            return PaymentResponse(ok=False, error_message=str(e))
+            return PaymentResponse(
+                result=PaymentResult.FAILED,
+                ok=False,
+                error_message=str(e),
+            )
 
         resp: dict = r.json()
 
@@ -218,7 +238,10 @@ class BlinkWallet(LightningBackend):
         paid = self.payment_execution_statuses[
             resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("status")
         ]
-        if paid is None:
+        result = PAYMENT_EXECUTION_RESULT_MAP[
+            resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("status")
+        ]
+        if result == PaymentResult.UNKNOWN:
             error_message = "Invoice already paid."
 
         if resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {}):
@@ -238,6 +261,7 @@ class BlinkWallet(LightningBackend):
             preimage = payment_status.preimage
 
         return PaymentResponse(
+            result=result,
             ok=paid,
             checking_id=checking_id,
             fee=Amount(Unit.sat, fee) if fee else None,
@@ -265,18 +289,21 @@ class BlinkWallet(LightningBackend):
             r.raise_for_status()
         except Exception as e:
             logger.error(f"Blink API error: {str(e)}")
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
         resp: dict = r.json()
         if resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("errors"):
             logger.error(
                 "Blink Error",
                 resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("errors"),
             )
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
         paid = self.invoice_statuses[
             resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("status")
         ]
-        return PaymentStatus(paid=paid)
+        result = INVOICE_RESULT_MAP[
+            resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("status")
+        ]
+        return PaymentStatus(result=result, paid=paid)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         # Checking ID is the payment request and blink wants the payment hash
@@ -320,7 +347,11 @@ class BlinkWallet(LightningBackend):
             r.raise_for_status()
         except Exception as e:
             logger.error(f"Blink API error: {str(e)}")
-            return PaymentResponse(ok=False, error_message=str(e))
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN,
+                ok=None,
+                error_message=str(e)
+            )
 
         resp: dict = r.json()
 
@@ -332,7 +363,7 @@ class BlinkWallet(LightningBackend):
             .get("walletById", {})
             .get("transactionsByPaymentHash")
         ):
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
 
         all_payments_with_this_hash = (
             resp.get("data", {})
@@ -350,7 +381,7 @@ class BlinkWallet(LightningBackend):
             p["direction"] in [DIRECTION_SEND, DIRECTION_RECEIVE]
             for p in all_payments_with_this_hash
         ):
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
 
         # if there is only one payment with the same hash, it means that the payment might have succeeded
         # we only care about the payment with "direction" == "SEND"
@@ -363,14 +394,16 @@ class BlinkWallet(LightningBackend):
             None,
         )
         if not payment:
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
 
         # we read the status of the payment
+        result = PAYMENT_RESULT_MAP[payment["status"]]
         paid = self.payment_statuses[payment["status"]]
         fee = payment["settlementFee"]
         preimage = payment["settlementVia"].get("preImage")
 
         return PaymentStatus(
+            result=result,
             paid=paid,
             fee=Amount(Unit.sat, fee),
             preimage=preimage,

@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from cashu.lightning.base import InvoiceResponse, PaymentStatus, PaymentResult
+from cashu.lightning.base import InvoiceResponse, PaymentResult, PaymentStatus
 from cashu.wallet.api.app import app
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
