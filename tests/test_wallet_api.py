@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from cashu.lightning.base import InvoiceResponse, PaymentStatus
+from cashu.lightning.base import InvoiceResponse, PaymentStatus, PaymentResult
 from cashu.wallet.api.app import app
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -29,8 +29,8 @@ async def test_invoice(wallet: Wallet):
         response = client.post("/lightning/create_invoice?amount=100")
         assert response.status_code == 200
         invoice_response = InvoiceResponse.parse_obj(response.json())
-        state = PaymentStatus(paid=False)
-        while not state.paid:
+        state = PaymentStatus(result=PaymentResult.PENDING)
+        while state.pending:
             print("checking invoice state")
             response2 = client.get(
                 f"/lightning/invoice_state?payment_hash={invoice_response.checking_id}"
@@ -171,8 +171,8 @@ async def test_flow(wallet: Wallet):
         initial_balance = response.json()["balance"]
         response = client.post("/lightning/create_invoice?amount=100")
         invoice_response = InvoiceResponse.parse_obj(response.json())
-        state = PaymentStatus(paid=False)
-        while not state.paid:
+        state = PaymentStatus(result=PaymentResult.PENDING)
+        while state.pending:
             print("checking invoice state")
             response2 = client.get(
                 f"/lightning/invoice_state?payment_hash={invoice_response.checking_id}"
