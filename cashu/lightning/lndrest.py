@@ -21,9 +21,9 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
-    PaymentResult,
 )
 from .macaroon import load_macaroon
 

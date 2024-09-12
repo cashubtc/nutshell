@@ -19,10 +19,10 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
     Unsupported,
-    PaymentResult,
 )
 from .macaroon import load_macaroon
 

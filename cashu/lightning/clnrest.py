@@ -20,10 +20,10 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
     Unsupported,
-    PaymentResult,
 )
 
 # https://docs.corelightning.org/reference/lightning-pay

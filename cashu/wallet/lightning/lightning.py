@@ -8,9 +8,9 @@ from ...core.settings import settings
 from ...lightning.base import (
     InvoiceResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
-    PaymentResult,
 )
 from ...wallet.crud import get_lightning_invoice, get_proofs
 from ..wallet import Wallet

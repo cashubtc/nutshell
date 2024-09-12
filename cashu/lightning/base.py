@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import AsyncGenerator, Coroutine, Optional, Union
 from enum import Enum
+from typing import AsyncGenerator, Coroutine, Optional, Union
 
 from pydantic import BaseModel
 
@@ -49,9 +49,9 @@ class PaymentResult(Enum):
     def from_paid_flag(cls, paid: Optional[bool]):
         if paid is None:
             return cls.PENDING
-        if paid == False:
+        elif not paid:
             return cls.FAILED
-        elif paid == True:
+        elif paid:
             return cls.SETTLED
 
 class PaymentResponse(BaseModel):

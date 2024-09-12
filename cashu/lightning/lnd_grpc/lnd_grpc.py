@@ -24,10 +24,10 @@ from cashu.lightning.base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     PostMeltQuoteRequest,
     StatusResponse,
-    PaymentResult,
 )
 
 # maps statuses to None, False, True:
