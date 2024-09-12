@@ -44,10 +44,12 @@ class PaymentResult(Enum):
     def __str__(self):
         return self.name
 
-    # We assume `None` is `FAILED`
+    # We assume `None` is `PENDING`
     @classmethod
     def from_paid_flag(cls, paid: Optional[bool]):
-        if paid is None or paid == False:
+        if paid is None:
+            return cls.PENDING
+        if paid == False:
             return cls.FAILED
         elif paid == True:
             return cls.SETTLED
