@@ -173,10 +173,10 @@ class LNbitsWallet(LightningBackend):
             )
             r.raise_for_status()
         except Exception:
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
         data = r.json()
         if "paid" not in data and "details" not in data:
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
 
         paid_value = None
         result = PaymentResult.UNKNOWN
