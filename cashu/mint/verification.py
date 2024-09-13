@@ -11,13 +11,14 @@ from ..core.base import (
     DiscreetLogContract,
     DlcBadInput,
     DlcOutcome,
+    DlcPayoutWitness,
     Method,
     MintKeyset,
     Proof,
     Unit,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.dlc import merkle_verify
+from ..core.crypto.dlc import merkle_verify, verify_payout_secret, verify_payout_signature
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -29,6 +30,7 @@ from ..core.errors import (
     SecretTooLongError,
     TransactionError,
     TransactionUnitError,
+    DlcPayoutFail,
 )
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
@@ -481,3 +483,20 @@ class LedgerVerification(
                 raise DlcSettlementFail(detail="could not verify inclusion of attestation secret + payout structure")
         else:
             raise DlcSettlementFail(detail="no timeout or attestation secret provided")
+
+
+    async def _verify_dlc_payout_signature(self, dlc_root: str, witness: DlcPayoutWitness, pubkey_hex: str):
+        dlc_root_bytes = bytes.fromhex(dlc_root)
+        pubkey = PublicKey(bytes.fromhex(pubkey_hex), raw=True)
+
+        if witness.signature:
+            signature_bytes = bytes.fromhex(witness.signature)
+            if not verify_payout_signature(dlc_root_bytes, signature_bytes, pubkey):
+                raise DlcPayoutFail(detail="Could not verify payout signature")
+        elif witness.secret:
+            secret_bytes = bytes.fromhex(witness.secret)
+            if not verify_payout_secret(secret_bytes, pubkey):
+                raise DlcPayoutFail(detail="Could not verify payout secret")
+        else:
+            raise DlcPayoutFail(detail="No witness information that provides payout authentication")
+

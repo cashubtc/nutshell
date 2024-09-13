@@ -30,6 +30,8 @@ from ..core.models import (
     PostRestoreResponse,
     PostSwapRequest,
     PostSwapResponse,
+    PostDlcPayoutRequest,
+    PostDlcPayoutResponse,
 )
 from ..core.settings import settings
 from ..mint.startup import ledger
@@ -431,3 +433,16 @@ async def dlc_settle(
 ) -> PostDlcSettleResponse:
     logger.trace(f"> POST /v1/dlc/settle: {payload}")
     return await ledger.settle_dlc(payload)
+
+@router.post(
+    "/v1/dlc/payout",
+    name="Payout",
+    summary="Get DLC payout",
+    response_model=PostDlcPayoutResponse,
+    response_description="Blind signatures for the respective payout amount",
+)
+@router.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def dlc_payout(
+    request: Request, payload: PostDlcPayoutRequest
+) -> PostDlcPayoutRequest:
+    logger.trace(f"> POST /v1/dlc/payout: {payload}")

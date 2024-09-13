@@ -85,3 +85,16 @@ def verify_dlc_signature(
         +funding_amount.to_bytes(8, "big")
     )
     return pubkey.schnorr_verify(message, signature, None, raw=True)
+
+def verify_payout_signature(
+    dlc_root: bytes,
+    signature: bytes,
+    pubkey: PublicKey,
+) -> bool:
+    return pubkey.schnorr_verify(dlc_root, signature, None, raw=True)
+
+def verify_payout_secret(
+    secret: bytes,
+    pubkey: PublicKey,
+) -> bool:
+    return pubkey == PrivateKey(secret, raw=True).pubkey

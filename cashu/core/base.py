@@ -1286,10 +1286,16 @@ class DlcPayoutForm(BaseModel):
     dlc_root: str
     pubkey: str
     outputs: List[BlindedMessage]
-    witness: P2PKWitness
+    witness: DlcPayoutWitness
 
 class DlcPayout(BaseModel):
     dlc_root: str
-    signatures: Optional[List[BlindedSignature]]
-    details: Optional[str] # error details
+    outputs: Optional[List[BlindedSignature]]
+    detail: Optional[str] # error details
 
+class DlcPayoutWitness(BaseModel):
+    # a BIP-340 signature on the root of the contract
+    signature: Optional[str] = None
+
+    # the discrete log of the public key (the private key)
+    secret: Optional[str] = None

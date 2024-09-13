@@ -17,6 +17,7 @@ from ..core.base import (
     DlcFundingProof,
     DlcSettlement,
     DlcSettlementError,
+    DlcPayout,
     MeltQuote,
     MeltQuoteState,
     Method,
@@ -47,6 +48,7 @@ from ..core.errors import (
     NotAllowedError,
     QuoteNotPaidError,
     TransactionError,
+    DlcPayoutFail,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
@@ -58,6 +60,8 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
+    PostDlcPayoutRequest,
+    PostDlcPayoutResponse,
 )
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -1242,3 +1246,29 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             settled=settled,
             errors=errors if len(errors) > 0 else None,
         )
+
+    async def payout_dlc(self, request: PostDlcPayoutRequest) -> PostDlcPayoutResponse:
+        """Ask for payouts from the relevant DLCs
+            Args:
+                request (PostDlcSettleRequest): a request containing a list of DlcPayout,
+                    each containing BlindMessages for the correct amount
+            Returns:
+                PostDlcSettleResponse: Indicates which DLCs have been settled and potential errors.
+        """
+        logger.trace("payout called")
+        verified: List[DlcPayoutForm] = []
+        errors: List[DlcPayout] = []
+        for i, payout in enumerate(request.payouts):
+            try:
+                # First we verify signature on the root, using the provided pubkey
+                await self._verify_dlc_payout_signature(payout.dlc_root, payout.witness, payout.pubkey)
+                verified.append(payout)
+            except (DlcPayoutFail, Exception) as e:
+                errors.append(
+                    DlcPayout(
+                        dlc_root=payout.dlc_root,
+                        detail=str(e),
+                    )
+                )
+        # We do all other checks inside a DB lock
+        # ...
