@@ -1,5 +1,6 @@
 from typing import List, Union
 
+import bolt11
 import pytest
 import pytest_asyncio
 
@@ -7,7 +8,13 @@ from cashu.core.base import Proof
 from cashu.core.errors import CashuError
 from cashu.wallet.lightning import LightningWallet
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import get_real_invoice, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import (
+    get_real_invoice,
+    is_deprecated_api_only,
+    is_fake,
+    is_regtest,
+    pay_if_regtest,
+)
 
 
 async def assert_err(f, msg: Union[str, CashuError]):
@@ -56,6 +63,16 @@ async def test_create_invoice(wallet: LightningWallet):
     invoice = await wallet.create_invoice(64)
     assert invoice.payment_request
     assert invoice.payment_request.startswith("ln")
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_deprecated_api_only, reason="only works with v1 API")
+async def test_create_invoice_with_description(wallet: LightningWallet):
+    invoice = await wallet.create_invoice(64, "test description")
+    assert invoice.payment_request
+    assert invoice.payment_request.startswith("ln")
+    invoiceObj = bolt11.decode(invoice.payment_request)
+    assert invoiceObj.description == "test description"
 
 
 @pytest.mark.asyncio

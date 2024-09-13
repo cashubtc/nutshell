@@ -15,6 +15,8 @@ class MintInfo(BaseModel):
     description_long: Optional[str]
     contact: Optional[List[MintInfoContact]]
     motd: Optional[str]
+    icon_url: Optional[str]
+    time: Optional[int]
     nuts: Optional[Dict[int, Any]]
 
     def __str__(self):

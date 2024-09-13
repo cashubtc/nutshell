@@ -8,9 +8,6 @@ import bolt11
 from bip32 import BIP32
 from loguru import logger
 
-from cashu.core.crypto.keys import derive_keyset_id
-from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
-
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
@@ -22,10 +19,16 @@ from ..core.base import (
     WalletKeyset,
 )
 from ..core.crypto import b_dhke
+from ..core.crypto.keys import derive_keyset_id
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
-from ..core.helpers import amount_summary, calculate_number_of_blank_outputs, sum_proofs
+from ..core.helpers import (
+    amount_summary,
+    calculate_number_of_blank_outputs,
+    sum_proofs,
+)
+from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.migrations import migrate_databases
 from ..core.models import (
     PostCheckStateResponse,
@@ -34,7 +37,8 @@ from ..core.models import (
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
-from ..wallet.crud import (
+from . import migrations
+from .crud import (
     bump_secret_derivation,
     get_keysets,
     get_proofs,
@@ -48,7 +52,6 @@ from ..wallet.crud import (
     update_lightning_invoice,
     update_proof,
 )
-from . import migrations
 from .dlc import WalletSCT
 from .htlc import WalletHTLC
 from .mint_info import MintInfo
@@ -57,6 +60,7 @@ from .proofs import WalletProofs
 from .secrets import WalletSecrets
 from .subscriptions import SubscriptionManager
 from .transactions import WalletTransactions
+from .utils import sanitize_url
 from .v1_api import LedgerAPI
 
 
@@ -108,7 +112,8 @@ class Wallet(
         self.proofs: List[Proof] = []
         self.name = name
         self.unit = Unit[unit]
-        url = url.rstrip("/")
+        url = sanitize_url(url)
+
         super().__init__(url=url, db=self.db)
         logger.debug("Wallet initialized")
         logger.debug(f"Mint URL: {url}")
@@ -375,18 +380,19 @@ class Wallet(
         logger.trace("Secret check complete.")
 
     async def request_mint_with_callback(
-        self, amount: int, callback: Callable
+        self, amount: int, callback: Callable, memo: Optional[str] = None
     ) -> Tuple[Invoice, SubscriptionManager]:
         """Request a Lightning invoice for minting tokens.
 
         Args:
             amount (int): Amount for Lightning invoice in satoshis
             callback (Callable): Callback function to be called when the invoice is paid.
+            memo (Optional[str], optional): Memo for the Lightning invoice. Defaults
 
         Returns:
             Invoice: Lightning invoice
         """
-        mint_qoute = await super().mint_quote(amount, self.unit)
+        mint_qoute = await super().mint_quote(amount, self.unit, memo)
         subscriptions = SubscriptionManager(self.url)
         threading.Thread(
             target=subscriptions.connect, name="SubscriptionManager", daemon=True
@@ -409,17 +415,18 @@ class Wallet(
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice, subscriptions
 
-    async def request_mint(self, amount: int) -> Invoice:
+    async def request_mint(self, amount: int, memo: Optional[str] = None) -> Invoice:
         """Request a Lightning invoice for minting tokens.
 
         Args:
             amount (int): Amount for Lightning invoice in satoshis
             callback (Optional[Callable], optional): Callback function to be called when the invoice is paid. Defaults to None.
+            memo (Optional[str], optional): Memo for the Lightning invoice. Defaults to None.
 
         Returns:
             PostMintQuoteResponse: Mint Quote Response
         """
-        mint_quote_response = await super().mint_quote(amount, self.unit)
+        mint_quote_response = await super().mint_quote(amount, self.unit, memo)
         decoded_invoice = bolt11.decode(mint_quote_response.request)
         invoice = Invoice(
             amount=amount,
@@ -476,11 +483,12 @@ class Wallet(
 
         return amounts
 
-    async def mint_quote(self, amount: int) -> Invoice:
+    async def mint_quote(self, amount: int, memo: Optional[str] = None) -> Invoice:
         """Request a Lightning invoice for minting tokens.
 
         Args:
             amount (int): Amount for Lightning invoice in satoshis
+            memo (Optional[str], optional): Memo for the Lightning invoice. Defaults to None.
 
         Returns:
             Invoice: Lightning invoice for minting tokens
