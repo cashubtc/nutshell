@@ -1282,6 +1282,12 @@ class DlcSettlementError(BaseModel):
     dlc_root: str
     details: str
 
+class DlcPayoutWitness(BaseModel):
+    # a BIP-340 signature on the root of the contract
+    signature: Optional[str] = None
+
+    # the discrete log of the public key (the private key)
+    secret: Optional[str] = None
 class DlcPayoutForm(BaseModel):
     dlc_root: str
     pubkey: str
@@ -1292,10 +1298,3 @@ class DlcPayout(BaseModel):
     dlc_root: str
     outputs: Optional[List[BlindedSignature]] = None
     detail: Optional[str] = None    # error details
-
-class DlcPayoutWitness(BaseModel):
-    # a BIP-340 signature on the root of the contract
-    signature: Optional[str] = None
-
-    # the discrete log of the public key (the private key)
-    secret: Optional[str] = None
