@@ -446,9 +446,6 @@ class LedgerVerification(
             raise DlcSettlementFail(detail="cannot decode the provided payout structure")
 
     async def _verify_dlc_inclusion(self, dlc_root: str, outcome: DlcOutcome, merkle_proof: List[str]):
-        # Verify payout structure
-        await self._verify_dlc_payout(outcome.P)
-
         dlc_root_bytes = None
         merkle_proof_bytes = None
         P = outcome.P.encode("utf-8")

@@ -322,9 +322,14 @@ class DbWriteHelper:
                         raise DlcSettlementFail(detail="No DLC with this root hash")
                     if dlc.settled is True:
                         raise DlcSettlementFail(detail="DLC already settled")
-
                     assert settlement.outcome
-                    await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, settlement.outcome.P, self.db, conn)
+
+                    # Calculate debts map
+                    weights = json.loads(settlement.outcome.P)
+                    weight_sum = sum(weights.values())
+                    debts = dict(((pubkey, dlc.funding_amount * weight // weight_sum) for pubkey, weight in weights.items()))
+                    
+                    await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, json.dumps(debts), self.db, conn)
                     settled.append(DlcSettlementAck(dlc_root=settlement.dlc_root))
                 except (CashuError, Exception) as e:
                     errors.append(DlcSettlementError(
@@ -366,36 +371,17 @@ class DbWriteHelper:
                     
                     # We have already checked the amounts before, so we just sum them
                     blind_messages_amount = sum([b.amount for b in payout.outputs])
-                    denom = sum(dlc.debts.values())
-                    nom = dlc.debts[payout.pubkey]
-                    eligible_amount = int(nom / denom * dlc.funding_amount)
+                    eligible_amount = dlc.debts[payout.pubkey]
                     
                     # Verify the amount of the blind messages is LEQ than the eligible amount
                     if blind_messages_amount > eligible_amount:
                         raise DlcPayoutFail(detail=f"amount requested ({blind_messages_amount}) is bigger than eligible amount ({eligible_amount})")
                     
                     # Discriminate what to do next based on whether the requested amount is exact or less
-                    if blind_messages_amount == eligible_amount:  
-                        # Simply remove the entry
+                    if blind_messages_amount == eligible_amount:
                         del dlc.debts[payout.pubkey]
                     else:    
-                        # Get a new weight for dlc.debts[payout.pubkey]
-                        # e == eligible_amount, b = blind_messages_amount
-                        # f == funding_amount
-                        # e - b > 0
-                        # fx / (x + y + z) == e - b
-                        # fx == (e - b)*(x + y + z)
-                        # fx == (ex + ey + ez - bx - by - bz)
-                        # fx - ex + bx == (ey + ez - by - bz)
-                        # x*(f-e+b) == ey + ez - by - bz
-                        # x == (ey + ez - by - bz) / (f-e+b)
-                        # x == (e*(y+z) - b*(y+z)) / (f-e+b)
-                        w = int((eligible_amount*denom - blind_messages_amount*denom)
-                            / (dlc.funding_amount-eligible_amount+blind_messages_amount))
-                        if w > 0:
-                            dlc.debts[payout.pubkey] = w
-                        else:
-                            del dlc.debts[payout.pubkey]
+                        dlc.debts[payout.pubkey] -= blind_messages_amount
 
                     await self.crud.set_dlc_settled_and_debts(dlc.dlc_root, json.dumps(dlc.debts), self.db, conn)
                     verified.append(payout)
