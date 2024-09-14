@@ -1230,7 +1230,7 @@ class DiscreetLogContract(BaseModel):
             settled=bool(row["settled"]),
             funding_amount=int(row["funding_amount"]),
             unit=row["unit"],
-            debts=row["debts"] or None,
+            debts=json.loads(row["debts"]) if row["debts"] else None,
         )
 
 class DlcBadInput(BaseModel):

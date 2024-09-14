@@ -116,6 +116,7 @@ class DlcAlreadyRegisteredError(CashuError):
 
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
+        self.detail += kwargs['detail']
 
 class DlcNotFoundError(CashuError):
     detail = "dlc not found"
@@ -123,6 +124,7 @@ class DlcNotFoundError(CashuError):
 
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
+        self.detail += kwargs['detail']
 
 class DlcSettlementFail(CashuError):
     detail = "settlement verification failed: "

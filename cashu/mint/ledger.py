@@ -1262,13 +1262,31 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             try:
                 # First we verify signature on the root, using the provided pubkey
                 await self._verify_dlc_payout_signature(payout.dlc_root, payout.witness, payout.pubkey)
-                verified.append(payout)
-            except (DlcPayoutFail, Exception) as e:
+                # Secondly, we verify the outputs
+                await self._verify_outputs(payout.outputs)
+            except (CashuError, Exception) as e:
                 errors.append(
                     DlcPayout(
                         dlc_root=payout.dlc_root,
                         detail=str(e),
                     )
                 )
-        # We do all other checks inside a DB lock
-        # ...
+        # We perform the following checks inside the db lock:
+        #   * Verify dlc_root exists and is settled
+        #   * Verify the sum of amounts in blind messages is <= than the respective payout amount
+        db_verified, db_errors = await self.db_write._verify_and_update_dlc_payouts(verified, self.keysets)
+        errors += db_errors
+
+        # We generate blind signatures
+        payouts: List[DlcPayout] = []
+        for payout in db_verified:
+            outputs = await self._generate_promises(payout.outputs)
+            payouts.append(DlcPayout(
+                dlc_root=payout.dlc_root,
+                outputs=outputs,
+            ))
+
+        return PostDlcPayoutResponse(
+            paid=payouts,
+            errors=errors if len(errors) > 0 else None,
+        )

@@ -10,10 +10,12 @@ from ...core.base import (
     DlcSettlement,
     DlcSettlementAck,
     DlcSettlementError,
+    DlcPayoutForm,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
     MintQuoteState,
+    MintKeyset,
     Proof,
     ProofSpentState,
     ProofState,
@@ -23,6 +25,9 @@ from ...core.errors import (
     DlcAlreadyRegisteredError,
     TokenAlreadySpentError,
     TransactionError,
+    DlcSettlementFail,
+    DlcNotFoundError,
+    DlcPayoutFail,
 )
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
@@ -309,24 +314,88 @@ class DbWriteHelper:
                     # We verify the dlc_root is in the DB
                     dlc = await self.crud.get_registered_dlc(settlement.dlc_root, self.db, conn)
                     if dlc is None:
-                        errors.append(DlcSettlementError(
-                            dlc_root=settlement.dlc_root,
-                            details="no DLC with this root hash"
-                        ))
-                        continue
+                        raise DlcSettlementFail(detail="No DLC with this root hash")
                     if dlc.settled is True:
-                        errors.append(DlcSettlementError(
-                            dlc_root=settlement.dlc_root,
-                            details="DLC already settled"
-                        ))
-                        continue
+                        raise DlcSettlementFail(detail="DLC already settled")
 
                     assert settlement.outcome
                     await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, settlement.outcome.P, self.db, conn)
                     settled.append(DlcSettlementAck(dlc_root=settlement.dlc_root))
-                except Exception as e:
+                except (CashuError, Exception) as e:
                     errors.append(DlcSettlementError(
                         dlc_root=settlement.dlc_root,
                         details=f"error with the DB: {str(e)}"
                     ))
         return (settled, errors)
+
+
+    async def _verify_and_update_dlc_payouts(
+        self,
+        payouts: List[DlcPayoutForm],
+        keysets: Dict[str, MintKeyset],
+    ) -> List[DlcPayoutForm]:
+        """
+        We perform the following checks inside the db lock:
+           * Verify dlc_root exists and is settled
+           * Verify the debts map contains the referenced public key
+           * Verify every blind message from the payout request has keyset ID that
+                matches the DLC in its funding unit.
+           * Verify the sum of amounts in blind messages is <= than the respective payout amount
+        """
+        verified = []
+        errors = []
+        async with self.db.get_connection(lock_table="dlc") as conn:
+            for payout in payouts:
+                try:
+                    dlc = await self.crud.get_registered_dlc(payout.dlc_root, self.db, conn)
+                    if dlc is None:
+                        raise DlcPayoutFail(detail="No DLC with this root hash")
+                    if not dlc.settled:
+                        raise DlcPayoutFail(detail="DLC is not settled")
+                    if not all([keysets[b.id].unit == Unit[dlc.unit] for b in payout.outputs]):
+                        raise DlcPayoutFail(detail="DLC funding unit does not match blind messages unit")
+                    if dlc.debts is None:
+                        raise DlcPayoutFail(detail="Debts map is empty")
+                    if payout.pubkey not in dlc.debts:
+                        raise DlcPayoutFail(detail=f"{pubkey}: no such public key in debts map")
+                    
+                    # We have already checked the amounts before, so we just sum them
+                    blind_messages_amount = sum([b.amount for b in payout.outputs])
+                    denom = sum(dlc.debts.values())
+                    nom = dlc.debts[payout.pubkey]
+                    eligible_amount = int(nom / denom * dlc.funding_amount)
+                    
+                    # Verify the amount of the blind messages is LEQ than the eligible amount
+                    if blind_messages_amount > eligible_amount:
+                        raise DlcPayoutFail(detail=f"amount requested ({blind_messages_amount}) is bigger than eligible amount ({eligible_amount})")
+                    
+                    # Discriminate what to do next based on whether the requested amount is exact or less
+                    if blind_messages_amount == eligible_amount:  
+                        # Simply remove the entry
+                        del dlc.debts[payout.pubkey]
+                    else:    
+                        # Get a new weight for dlc.debts[payout.pubkey]
+                        # e == eligible_amount, b = blind_messages_amount
+                        # f == funding_amount
+                        # e - b > 0
+                        # fx / (x + y + z) == e - b
+                        # fx == (e - b)*(x + y + z)
+                        # fx == (ex + ey + ez - bx - by - bz)
+                        # fx - ex + bx == (ey + ez - by - bz)
+                        # x*(f-e+b) == ey + ez - by - bz
+                        # x == (ey + ez - by - bz) / (f-e+b)
+                        # x == (e*(y+z) - b*(y+z)) / (f-e+b)
+                        w = int((eligible_amount*denom - blind_messages_amount*denom)
+                            / (dlc.funding_amount-eligible_amount+blind_messages_amount))
+                        if w > 0:
+                            dlc.debts[payout.pubkey] = w
+                        else:
+                            del dlc.debts[payout.pubkey]
+
+                    await self.crud.set_dlc_settled_and_debts(dlc.dlc_root, dlc.debts, self.db, conn)
+                    
+                except (CashuError, Exception) as e:
+                    errors.append(DlcPayout(
+                        dlc_root=payout.dlc_root,
+                        detail=f"DB error: {str(e)}"
+                    ))
