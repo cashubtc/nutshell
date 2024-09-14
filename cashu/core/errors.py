@@ -108,7 +108,7 @@ class DlcVerificationFail(CashuError):
 
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
-        self.bad_inputs = kwargs['bad_inputs']
+        self.bad_inputs = kwargs.get("bad_inputs", "")
 
 class DlcAlreadyRegisteredError(CashuError):
     detail = "dlc already registered"
@@ -116,7 +116,7 @@ class DlcAlreadyRegisteredError(CashuError):
 
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
-        self.detail += kwargs['detail']
+        self.detail += kwargs.get("detail", "")
 
 class DlcNotFoundError(CashuError):
     detail = "dlc not found"
@@ -124,7 +124,7 @@ class DlcNotFoundError(CashuError):
 
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
-        self.detail += kwargs['detail']
+        self.detail += kwargs.get('detail', '') 
 
 class DlcSettlementFail(CashuError):
     detail = "settlement verification failed: "
@@ -132,7 +132,7 @@ class DlcSettlementFail(CashuError):
 
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
-        self.detail += kwargs['detail']
+        self.detail += kwargs.get("detail", "")
 
 class DlcPayoutFail(CashuError):
     detail = "payout verification failed: "
@@ -140,4 +140,4 @@ class DlcPayoutFail(CashuError):
 
     def __init__(self, **kwargs):
         super().__init__(self.detail, self.code)
-        self.detail += kwargs['detail']
+        self.detail += kwargs.get("detail", "")
