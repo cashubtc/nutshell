@@ -18,6 +18,7 @@ from ..core.base import (
     DlcSettlement,
     DlcSettlementError,
     DlcPayout,
+    DlcPayoutForm,
     MeltQuote,
     MeltQuoteState,
     Method,

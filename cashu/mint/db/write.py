@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Dict
 
 from loguru import logger
 
@@ -11,6 +11,7 @@ from ...core.base import (
     DlcSettlementAck,
     DlcSettlementError,
     DlcPayoutForm,
+    DlcPayout,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
@@ -19,9 +20,11 @@ from ...core.base import (
     Proof,
     ProofSpentState,
     ProofState,
+    Unit,
 )
 from ...core.db import Connection, Database
 from ...core.errors import (
+    CashuError,
     DlcAlreadyRegisteredError,
     TokenAlreadySpentError,
     TransactionError,
@@ -32,6 +35,8 @@ from ...core.errors import (
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
 from .read import DbReadHelper
+
+import json
 
 
 class DbWriteHelper:
@@ -333,7 +338,7 @@ class DbWriteHelper:
         self,
         payouts: List[DlcPayoutForm],
         keysets: Dict[str, MintKeyset],
-    ) -> List[DlcPayoutForm]:
+    ) -> Tuple[List[DlcPayoutForm], List[DlcPayout]]:
         """
         We perform the following checks inside the db lock:
            * Verify dlc_root exists and is settled
@@ -357,7 +362,7 @@ class DbWriteHelper:
                     if dlc.debts is None:
                         raise DlcPayoutFail(detail="Debts map is empty")
                     if payout.pubkey not in dlc.debts:
-                        raise DlcPayoutFail(detail=f"{pubkey}: no such public key in debts map")
+                        raise DlcPayoutFail(detail=f"{payout.pubkey}: no such public key in debts map")
                     
                     # We have already checked the amounts before, so we just sum them
                     blind_messages_amount = sum([b.amount for b in payout.outputs])
@@ -392,10 +397,12 @@ class DbWriteHelper:
                         else:
                             del dlc.debts[payout.pubkey]
 
-                    await self.crud.set_dlc_settled_and_debts(dlc.dlc_root, dlc.debts, self.db, conn)
-                    
+                    await self.crud.set_dlc_settled_and_debts(dlc.dlc_root, json.dumps(dlc.debts), self.db, conn)
+                    verified.append(payout)
                 except (CashuError, Exception) as e:
                     errors.append(DlcPayout(
                         dlc_root=payout.dlc_root,
                         detail=f"DB error: {str(e)}"
                     ))
+        return (verified, errors)
+            

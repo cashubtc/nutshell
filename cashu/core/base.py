@@ -1290,8 +1290,8 @@ class DlcPayoutForm(BaseModel):
 
 class DlcPayout(BaseModel):
     dlc_root: str
-    outputs: Optional[List[BlindedSignature]]
-    detail: Optional[str] # error details
+    outputs: Optional[List[BlindedSignature]] = None
+    detail: Optional[str] = None    # error details
 
 class DlcPayoutWitness(BaseModel):
     # a BIP-340 signature on the root of the contract

@@ -441,8 +441,9 @@ async def dlc_settle(
     response_model=PostDlcPayoutResponse,
     response_description="Blind signatures for the respective payout amount",
 )
-@router.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 async def dlc_payout(
     request: Request, payload: PostDlcPayoutRequest
-) -> PostDlcPayoutRequest:
+) -> PostDlcPayoutResponse:
     logger.trace(f"> POST /v1/dlc/payout: {payload}")
+    return await ledger.payout_dlc(payload)
