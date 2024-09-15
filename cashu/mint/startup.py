@@ -12,7 +12,8 @@ from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
-from ..mint import migrations
+from ..mint import migrations as mint_migrations
+from ..mint.auth import migrations as auth_migrations
 from ..mint.auth.server import AuthLedger
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
@@ -105,14 +106,14 @@ async def rotate_keys(n_seconds=60):
 
 async def start_auth():
     # TODO: use auth migrations, not mint migrations
-    await migrate_databases(auth_ledger.db, migrations)
+    await migrate_databases(auth_ledger.db, auth_migrations)
     logger.info("Starting auth ledger.")
-    await auth_ledger.startup_ledger()
+    await auth_ledger.init_keysets()
     logger.info("Auth ledger started.")
 
 
 async def start_mint():
-    await migrate_databases(ledger.db, migrations)
+    await migrate_databases(ledger.db, mint_migrations)
     logger.info("Starting mint ledger.")
     await ledger.startup_ledger()
     logger.info("Mint started.")

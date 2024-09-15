@@ -38,6 +38,8 @@ class LedgerVerification(
     ):
         """Checks all proofs and outputs for validity.
 
+        Warning: Does NOT check if the proofs were already spent. Use `db_write._verify_proofs_spendable` for that.
+
         Args:
             proofs (List[Proof]): List of proofs to check.
             outputs (Optional[List[BlindedMessage]], optional): List of outputs to check.

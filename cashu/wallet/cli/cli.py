@@ -1113,3 +1113,13 @@ async def selfpay(ctx: Context, all: bool = False):
     print(token)
     token_obj = TokenV4.deserialize(token)
     await receive(wallet, token_obj)
+
+
+@cli.command("auth", help="Authenticate.")
+@click.pass_context
+@coro
+async def auth(ctx: Context):
+    from cashu.wallet.auth.auth import WalletAuth
+
+    auth_wallet = WalletAuth(ctx.obj["HOST"])
+    await auth_wallet.authenticate()

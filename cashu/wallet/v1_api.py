@@ -26,6 +26,8 @@ from ..core.models import (
     KeysetsResponse,
     KeysetsResponseKeyset,
     KeysResponse,
+    PostAuthBlindMintRequest,
+    PostAuthBlindMintResponse,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostMeltQuoteRequest,
@@ -101,10 +103,10 @@ def async_ensure_mint_loaded(func):
 
 class LedgerAPI(LedgerAPIDeprecated, object):
     tor: TorProxy
-    db: Database  # we need the db for melt_deprecated
     httpx: httpx.AsyncClient
+    api_prefix = "v1"
 
-    def __init__(self, url: str, db: Database):
+    def __init__(self, url: str, db: Optional[Database] = None):
         self.url = url
         self.db = db
 
@@ -158,7 +160,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If no keys are received from the mint
         """
         resp = await self.httpx.get(
-            join(self.url, "/v1/keys"),
+            join(self.url, self.api_prefix, "keys"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -204,7 +206,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = await self.httpx.get(
-            join(self.url, f"/v1/keys/{keyset_id_urlsafe}"),
+            join(self.url, self.api_prefix, f"keys/{keyset_id_urlsafe}"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -241,7 +243,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If no keysets are received from the mint
         """
         resp = await self.httpx.get(
-            join(self.url, "/v1/keysets"),
+            join(self.url, self.api_prefix, "keysets"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -268,7 +270,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             Exception: If the mint info request fails
         """
         resp = await self.httpx.get(
-            join(self.url, "/v1/info"),
+            join(self.url, self.api_prefix, "info"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -302,7 +304,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         logger.trace("Requesting mint: POST /v1/mint/bolt11")
         payload = PostMintQuoteRequest(unit=unit.name, amount=amount, description=memo)
         resp = await self.httpx.post(
-            join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
+            join(self.url, self.api_prefix, "mint/quote/bolt11"), json=payload.dict()
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -344,7 +346,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
         payload = outputs_payload.dict(include=_mintrequest_include_fields(outputs))  # type: ignore
         resp = await self.httpx.post(
-            join(self.url, "/v1/mint/bolt11"),
+            join(self.url, self.api_prefix, "mint/bolt11"),
             json=payload,  # type: ignore
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -355,7 +357,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         response_dict = resp.json()
-        logger.trace("Lightning invoice checked. POST /v1/mint/bolt11")
+        logger.trace(f"Lightning invoice checked. POST {self.api_prefix}/mint/bolt11")
         promises = PostMintResponse.parse_obj(response_dict).signatures
         return promises
 
@@ -379,7 +381,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         )
 
         resp = await self.httpx.post(
-            join(self.url, "/v1/melt/quote/bolt11"),
+            join(self.url, self.api_prefix, "melt/quote/bolt11"),
             json=payload.dict(),
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -429,13 +431,13 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             }
 
         resp = await self.httpx.post(
-            join(self.url, "/v1/melt/bolt11"),
+            join(self.url, self.api_prefix, "melt/bolt11"),
             json=payload.dict(include=_meltrequest_include_fields(proofs, outputs)),  # type: ignore
             timeout=None,
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
-        if resp.status_code == 404:
+        if resp.status_code == 404 and self.db:
             invoice = await get_lightning_invoice(id=quote, db=self.db)
             assert invoice, f"no invoice found for id {quote}"
             ret: PostMeltResponse_deprecated = await self.melt_deprecated(
@@ -468,7 +470,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         outputs: List[BlindedMessage],
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
-        logger.debug("Calling split. POST /v1/swap")
+        logger.debug(f"Calling split. POST {self.api_prefix}/swap")
         split_payload = PostSwapRequest(inputs=proofs, outputs=outputs)
 
         # construct payload
@@ -487,7 +489,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
             }
 
         resp = await self.httpx.post(
-            join(self.url, "/v1/swap"),
+            join(self.url, self.api_prefix, "swap"),
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -514,7 +516,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         payload = PostCheckStateRequest(Ys=[p.Y for p in proofs])
         resp = await self.httpx.post(
-            join(self.url, "/v1/checkstate"),
+            join(self.url, self.api_prefix, "checkstate"),
             json=payload.dict(),
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -545,7 +547,9 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         Asks the mint to restore promises corresponding to outputs.
         """
         payload = PostMintRequest(quote="restore", outputs=outputs)
-        resp = await self.httpx.post(join(self.url, "/v1/restore"), json=payload.dict())
+        resp = await self.httpx.post(
+            join(self.url, self.api_prefix, "restore"), json=payload.dict()
+        )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
@@ -563,3 +567,19 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         # END backwards compatibility < 0.15.1
 
         return returnObj.outputs, returnObj.signatures
+
+    @async_set_httpx_client
+    async def blind_auth_mint(
+        self, auth_token: str, outputs: List[BlindedMessage]
+    ) -> List[BlindedSignature]:
+        """
+        Asks the mint to mint blind auth tokens.
+        """
+        payload = PostAuthBlindMintRequest(outputs=outputs, auth=auth_token)
+        resp = await self.httpx.post(
+            join(self.url, self.api_prefix, "auth/blind/mint"),
+            json=payload.dict(),
+        )
+        self.raise_on_error_request(resp)
+        response_dict = resp.json()
+        return PostAuthBlindMintResponse.parse_obj(response_dict).signatures

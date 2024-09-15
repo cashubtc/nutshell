@@ -640,6 +640,7 @@ class MintKeyset:
     valid_to: Optional[str] = None
     first_seen: Optional[str] = None
     version: Optional[str] = None
+    amounts: List[int]
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -650,6 +651,7 @@ class MintKeyset:
         seed: Optional[str] = None,
         encrypted_seed: Optional[str] = None,
         seed_encryption_method: Optional[str] = None,
+        amounts: Optional[List[int]] = None,
         valid_from: Optional[str] = None,
         valid_to: Optional[str] = None,
         first_seen: Optional[str] = None,
@@ -671,6 +673,12 @@ class MintKeyset:
             self.seed = seed
 
         assert self.seed, "seed not set"
+
+        if amounts:
+            self.amounts = amounts
+        else:
+            # use 2^n amounts by default
+            self.amounts = [2**i for i in range(settings.max_order)]
 
         self.id = id
         self.valid_from = valid_from
@@ -740,23 +748,27 @@ class MintKeyset:
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
                 self.seed, self.derivation_path
             )
-            self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             logger.trace(
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
-            self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
+            self.private_keys = derive_keys_sha256(
+                self.seed, self.amounts, self.derivation_path
+            )
             logger.trace(
                 f"WARNING: Using non-bip32 derivation for keyset {self.id} (backwards"
                 " compatibility < 0.15)"
             )
-            self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         else:
-            self.private_keys = derive_keys(self.seed, self.derivation_path)
-            self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+            self.private_keys = derive_keys(
+                self.seed, self.derivation_path, self.amounts
+            )
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             self.id = id_in_db or derive_keyset_id(self.public_keys)  # type: ignore
 
 
