@@ -1,10 +1,10 @@
 from typing import List, Optional
 
-from cashu.core.db import Database
-from cashu.mint.crud import LedgerCrudSqlite
-
+from ...core.base import TokenV4
+from ...core.db import Database
 from ...core.models import BlindedMessage, BlindedSignature, Proof
 from ...core.settings import settings
+from ..crud import LedgerCrudSqlite
 from ..ledger import Ledger
 from .base import User
 
@@ -16,11 +16,20 @@ class AuthLedger(Ledger):
         seed: str,
         seed_decryption_key: Optional[str] = None,
         derivation_path="",
+        amounts: Optional[List[int]] = None,
         crud=LedgerCrudSqlite(),
     ):
-        super().__init__(db, seed, None, seed_decryption_key, derivation_path, crud)
+        super().__init__(
+            db=db,
+            seed=seed,
+            backends=None,
+            seed_decryption_key=seed_decryption_key,
+            derivation_path=derivation_path,
+            crud=crud,
+            amounts=amounts,
+        )
 
-    def verify_auth(self, auth_token: str) -> User:
+    async def verify_auth(self, auth_token: str) -> User:
         """Verify the clear-auth JWT token and return the user.
 
         Checks:
@@ -34,6 +43,16 @@ class AuthLedger(Ledger):
         Returns:
             User: _description_
         """
+        # TEMP: For testing purposes only.
+        if auth_token == "new_auth_token":
+            print("New auth token.")
+        else:
+            print("Auth token:", auth_token)
+            proofs = TokenV4.deserialize(auth_token).proofs
+            await self.db_write._verify_spent_proofs_and_set_pending(proofs)
+            await self._invalidate_proofs(proofs=proofs)
+            await self.db_write._unset_proofs_pending(proofs)
+
         user_id = "user_id_here"
         return User(id=user_id)
 
@@ -64,7 +83,7 @@ class AuthLedger(Ledger):
             )
 
         try:
-            user = self.verify_auth(auth_token)
+            user = await self.verify_auth(auth_token)
         except Exception as e:
             raise e
         user.quota = 10000

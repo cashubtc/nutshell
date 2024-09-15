@@ -18,7 +18,7 @@ from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
     derive_keys,
-    derive_keys_sha256,
+    derive_keys_deprecated_pre_0_15,
     derive_keyset_id,
     derive_keyset_id_deprecated,
     derive_pubkeys,
@@ -457,6 +457,7 @@ class Unit(Enum):
     usd = 2
     eur = 3
     btc = 4
+    auth = 999
 
     def str(self, amount: int) -> str:
         if self == Unit.sat:
@@ -469,6 +470,8 @@ class Unit(Enum):
             return f"{amount/100:.2f} EUR"
         elif self == Unit.btc:
             return f"{amount/1e8:.8f} BTC"
+        elif self == Unit.auth:
+            return f"{amount} AUTH"
         else:
             raise Exception("Invalid unit")
 
@@ -755,7 +758,7 @@ class MintKeyset:
             )
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
-            self.private_keys = derive_keys_sha256(
+            self.private_keys = derive_keys_deprecated_pre_0_15(
                 self.seed, self.amounts, self.derivation_path
             )
             logger.trace(

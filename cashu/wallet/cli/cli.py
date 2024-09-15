@@ -31,6 +31,7 @@ from ...wallet.crud import (
 )
 from ...wallet.wallet import Wallet as Wallet
 from ..api.api_server import start_api_server
+from ..auth.auth import WalletAuth
 from ..cli.cli_helpers import (
     get_mint_wallet,
     get_unit_wallet,
@@ -567,7 +568,7 @@ async def balance(ctx: Context, verbose):
 @click.pass_context
 @coro
 async def send_command(
-    ctx,
+    ctx: Context,
     amount: int,
     memo: str,
     nostr: str,
@@ -780,7 +781,7 @@ async def pending(ctx: Context, legacy, number: int, offset: int):
 @cli.command("lock", help="Generate receiving lock.")
 @click.pass_context
 @coro
-async def lock(ctx):
+async def lock(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
 
     pubkey = await wallet.create_p2pk_pubkey()
@@ -801,7 +802,7 @@ async def lock(ctx):
 @cli.command("locks", help="Show unused receiving locks.")
 @click.pass_context
 @coro
-async def locks(ctx):
+async def locks(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
     # P2PK lock
     pubkey = await wallet.create_p2pk_pubkey()
@@ -849,7 +850,7 @@ async def locks(ctx):
 )
 @click.pass_context
 @coro
-async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, mint: bool):
+async def invoices(ctx: Context, paid: bool, unpaid: bool, pending: bool, mint: bool):
     wallet: Wallet = ctx.obj["WALLET"]
 
     if paid and unpaid:
@@ -931,7 +932,7 @@ async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, mint: bool):
 @cli.command("wallets", help="List of all available wallets.")
 @click.pass_context
 @coro
-async def wallets(ctx):
+async def wallets(ctx: Context):
     # list all directories
     wallets = [
         d for d in listdir(settings.cashu_dir) if isdir(join(settings.cashu_dir, d))
@@ -1119,7 +1120,12 @@ async def selfpay(ctx: Context, all: bool = False):
 @click.pass_context
 @coro
 async def auth(ctx: Context):
-    from cashu.wallet.auth.auth import WalletAuth
-
-    auth_wallet = WalletAuth(ctx.obj["HOST"])
-    await auth_wallet.authenticate()
+    wallet: Wallet = ctx.obj["WALLET"]
+    auth_wallet = await WalletAuth.with_db(
+        ctx.obj["HOST"], wallet.db.db_location, "auth", unit=Unit.auth.name
+    )
+    auth_wallet.api_prefix = "/v1/auth/blind"
+    await auth_wallet.load_mint_keysets()
+    await auth_wallet.activate_keyset()
+    await auth_wallet.load_proofs()
+    await auth_wallet.get_blind_auth()

@@ -53,6 +53,9 @@ async def m001_initial(db: Database):
                     amount {db.big_int} NOT NULL,
                     b_ TEXT NOT NULL,
                     c_ TEXT NOT NULL,
+                    dleq_e TEXT,
+                    dleq_s TEXT,
+                    created TIMESTAMP,
 
                     UNIQUE (b_)
 
@@ -67,6 +70,9 @@ async def m001_initial(db: Database):
                     c TEXT NOT NULL,
                     secret TEXT NOT NULL,
                     y TEXT NOT NULL,
+                    witness TEXT,
+                    created TIMESTAMP,
+                    melt_quote TEXT,
 
                     UNIQUE (secret)
 
@@ -82,6 +88,9 @@ async def m001_initial(db: Database):
                     c TEXT NOT NULL,
                     secret TEXT NOT NULL,
                     y TEXT NOT NULL,
+                    witness TEXT,
+                    created TIMESTAMP,
+                    melt_quote TEXT,
 
                     UNIQUE (secret)
 

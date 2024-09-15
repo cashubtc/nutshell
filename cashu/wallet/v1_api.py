@@ -577,7 +577,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
         """
         payload = PostAuthBlindMintRequest(outputs=outputs, auth=auth_token)
         resp = await self.httpx.post(
-            join(self.url, self.api_prefix, "auth/blind/mint"),
+            join(self.url, self.api_prefix, "mint"),
             json=payload.dict(),
         )
         self.raise_on_error_request(resp)

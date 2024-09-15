@@ -63,7 +63,7 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=0)
 
-    auth_database: str = Field(default="data/auth")
+    auth_database: str = Field(default="data/mint")
 
 
 class MintBackends(MintSettings):

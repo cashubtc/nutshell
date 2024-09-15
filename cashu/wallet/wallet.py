@@ -99,7 +99,7 @@ class Wallet(
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
 
-    def __init__(self, url: str, db: str, name: str = "no_name", unit: str = "sat"):
+    def __init__(self, url: str, db: str, name: str = "wallet", unit: str = "sat"):
         """A Cashu wallet.
 
         Args:
@@ -107,7 +107,7 @@ class Wallet(
             db (str): Path to the database directory.
             name (str, optional): Name of the wallet database file. Defaults to "no_name".
         """
-        self.db = Database("wallet", db)
+        self.db = Database(name, db)
         self.proofs: List[Proof] = []
         self.name = name
         self.unit = Unit[unit]

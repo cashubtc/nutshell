@@ -83,7 +83,8 @@ ledger = Ledger(
 auth_ledger = AuthLedger(
     db=Database("auth", settings.auth_database),
     seed="auth seed here",
-    derivation_path="m/0",
+    amounts=[1],
+    derivation_path="m/0'/999'/0'",
     crud=LedgerCrudSqlite(),
 )
 

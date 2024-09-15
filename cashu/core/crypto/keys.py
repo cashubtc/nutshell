@@ -23,7 +23,9 @@ def derive_keys(mnemonic: str, derivation_path: str, amounts: List[int]):
     }
 
 
-def derive_keys_sha256(seed: str, amounts: List[int], derivation_path: str = ""):
+def derive_keys_deprecated_pre_0_15(
+    seed: str, amounts: List[int], derivation_path: str = ""
+):
     """
     Deterministic derivation of keys for 2^n values.
     TODO: Implement BIP32.

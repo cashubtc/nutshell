@@ -92,7 +92,6 @@ async def keysets() -> KeysetsResponse:
                 id=keyset.id,
                 unit=keyset.unit.name,
                 active=keyset.active,
-                input_fee_ppk=keyset.input_fee_ppk,
             )
         )
     return KeysetsResponse(keysets=keysets)
