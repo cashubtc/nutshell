@@ -329,7 +329,9 @@ class DbWriteHelper:
                     weight_sum = sum(weights.values())
                     debts = dict(((pubkey, dlc.funding_amount * weight // weight_sum) for pubkey, weight in weights.items()))
                     
+                    # Update DLC in the database
                     await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, json.dumps(debts), self.db, conn)
+
                     settled.append(DlcSettlementAck(dlc_root=settlement.dlc_root))
                 except (CashuError, Exception) as e:
                     errors.append(DlcSettlementError(

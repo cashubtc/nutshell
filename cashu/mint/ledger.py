@@ -1253,20 +1253,21 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     async def payout_dlc(self, request: PostDlcPayoutRequest) -> PostDlcPayoutResponse:
         """Ask for payouts from the relevant DLCs
             Args:
-                request (PostDlcSettleRequest): a request containing a list of DlcPayout,
+                request (PostDlcPayoutRequest): a request containing a list of DlcPayout,
                     each containing BlindMessages for the correct amount
             Returns:
-                PostDlcSettleResponse: Indicates which DLCs have been settled and potential errors.
+                PostDlcPayoutResponse: Indicates which DLCs have been settled and potential errors.
         """
         logger.trace("payout called")
         verified: List[DlcPayoutForm] = []
         errors: List[DlcPayout] = []
-        for i, payout in enumerate(request.payouts):
+        for payout in request.payouts:
             try:
                 # First we verify signature on the root, using the provided pubkey
                 await self._verify_dlc_payout_signature(payout.dlc_root, payout.witness, payout.pubkey)
                 # Secondly, we verify the outputs
                 await self._verify_outputs(payout.outputs)
+                verified.append(payout)
             except (CashuError, Exception) as e:
                 errors.append(
                     DlcPayout(

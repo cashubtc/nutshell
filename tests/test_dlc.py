@@ -13,6 +13,8 @@ from cashu.core.base import (
     DiscreetLogContract,
     DlcOutcome,
     DlcSettlement,
+    DlcPayoutForm,
+    DlcPayoutWitness,
     Proof,
     SCTWitness,
     TokenV4,
@@ -31,6 +33,7 @@ from cashu.core.errors import CashuError
 from cashu.core.models import (
     PostDlcRegistrationRequest,
     PostDlcSettleRequest,
+    PostDlcPayoutRequest,
 )
 from cashu.core.secret import Secret, SecretKind
 from cashu.mint.ledger import Ledger
@@ -451,9 +454,10 @@ async def test_get_dlc_status(wallet: Wallet, ledger: Ledger):
            response.unit == "sat", \
         "GetDlcStatusResponse with unexpected fields"
 
-
-pubkey1 = '0250863ad64a87ae8a2fe83c1af1a8403cb53f53e486d064e5d9c2f5b75098d9fe'
-pubkey2 = '03c6047f9441ed7d6a2626a5b1475a0e4c08ae1f1a8403cb53f53e486d064e5d9c'
+privkey1 = PrivateKey()
+privkey2 = PrivateKey()
+pubkey1 = privkey1.pubkey.serialize(True).hex()
+pubkey2 = privkey2.pubkey.serialize(True).hex()
 
 payouts = [
     # pubkey 1 wins
@@ -575,3 +579,91 @@ async def test_settle_dlc_timeout(wallet: Wallet, ledger: Ledger):
 
     assert response.errors is None, f"Response contains errors: {response.errors}"
     assert len(response.settled) > 0, "Response contains zero settlements."
+
+@pytest.mark.asyncio
+async def test_payout_dlc(wallet: Wallet, ledger: Ledger):
+    invoice = await wallet.request_mint(128)
+    await pay_if_regtest(invoice.bolt11)
+    minted = await wallet.mint(128, id=invoice.id)
+
+    # ORACLE GENERATES
+    k1 = PrivateKey()  # ORACLE secret attestation for event `x` (nobody knows this)
+    k2 = PrivateKey()  # ORACLE secret attestation for event `y` (nobody knows this)
+
+    # Choose blinding factor `b`
+    # This is common knownledge to all parties involved with the DLC (except the mint ofc)
+    b = PrivateKey()
+
+    timeout = int(time.time())                                # TIMEOUT chosen by the parties
+    K_t = hash_to_curve(timeout.to_bytes(8, 'big'))           # TIMEOUT locking point (no blinding)
+    K_1 = k1.pubkey + b.pubkey                                # Blinded locking point
+    K_2 = k2.pubkey + b.pubkey                                # Blinded locking point
+
+    leaves = [
+        sha256(K_1.serialize(True)+json.dumps(payouts[0]).encode()).digest(),
+        sha256(K_2.serialize(True)+json.dumps(payouts[1]).encode()).digest(),
+        sha256(K_t.serialize(True)+json.dumps(payouts[2]).encode()).digest(),
+    ]
+    
+    # Funding (Registering) the contract
+
+    # TUPLE: first is the dlc root, second is the merkle proof for the leaf we required
+    dlc_root, merkle_proof = merkle_root(leaves, 0)
+    assert merkle_verify(dlc_root, leaves[0], merkle_proof)
+    dlc = DiscreetLogContract(
+        funding_amount=127,
+        unit="sat",
+        dlc_root=dlc_root.hex(),
+        inputs=minted,
+    )
+
+    request = PostDlcRegistrationRequest(registrations=[dlc])
+    response = await ledger.register_dlc(request)
+    assert response.errors is None, f"Funding proofs error: {response.errors[0].bad_inputs}"
+
+    # NOW suppose event `x` occurs:
+    #   * Oracle reveals `secret1`
+    #   * We blind `secret1` with our blinding factor `b`
+    #   * Anybody can settle the DLC
+    print(f"{len(b.private_key) = }")
+    k = k1.tweak_add(b.private_key)
+    outcome = DlcOutcome(
+        P=json.dumps(payouts[0]),
+        k=k.hex(),
+    )
+    merkle_proof_hex = [p.hex() for p in merkle_proof]
+    settlement = DlcSettlement(
+        dlc_root=dlc_root.hex(),
+        outcome=outcome,
+        merkle_proof=merkle_proof_hex,
+    )
+    request = PostDlcSettleRequest(settlements=[settlement])
+    response = await ledger.settle_dlc(request)
+
+    assert response.errors is None, f"Response contains errors: {response.errors}"
+    assert len(response.settled) > 0, "Response contains zero settlements."
+
+    # CLAIMING our victorious payout
+    # Generating outputs
+    amounts = [64,32,16,8,4,2,1]
+    secrets, rs, _ = await wallet.generate_n_secrets(
+        len(amounts), skip_bump=True
+    )
+    outputs, rs = wallet._construct_outputs(amounts, secrets, rs)
+
+    payout = DlcPayoutForm(
+        dlc_root=dlc_root.hex(),
+        pubkey=pubkey1,
+        outputs=outputs,
+        witness=DlcPayoutWitness(
+            signature=privkey1.schnorr_sign(dlc_root, None, raw=True).hex()
+        )
+    )
+
+    request = PostDlcPayoutRequest(payouts=[payout])
+    response = await ledger.payout_dlc(request)
+
+    assert response.errors is None, f"Payout failed: {response.errors[0].detail}"
+    assert len(response.paid) > 0, f"Payout failed: paid list is empty"
+    assert response.paid[0].dlc_root == dlc_root.hex()
+    assert len(response.paid[0].outputs) == len(amounts)
