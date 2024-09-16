@@ -15,6 +15,8 @@ from ..core.models import (
     MintInfoContact,
     PostCheckStateRequest,
     PostCheckStateResponse,
+    PostDlcPayoutRequest,
+    PostDlcPayoutResponse,
     PostDlcRegistrationRequest,
     PostDlcRegistrationResponse,
     PostDlcSettleRequest,
@@ -30,8 +32,6 @@ from ..core.models import (
     PostRestoreResponse,
     PostSwapRequest,
     PostSwapResponse,
-    PostDlcPayoutRequest,
-    PostDlcPayoutResponse,
 )
 from ..core.settings import settings
 from ..mint.startup import ledger

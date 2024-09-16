@@ -12,9 +12,9 @@ from secp256k1 import PrivateKey
 from cashu.core.base import (
     DiscreetLogContract,
     DlcOutcome,
-    DlcSettlement,
     DlcPayoutForm,
     DlcPayoutWitness,
+    DlcSettlement,
     Proof,
     SCTWitness,
     TokenV4,
@@ -31,9 +31,9 @@ from cashu.core.crypto.dlc import (
 )
 from cashu.core.errors import CashuError
 from cashu.core.models import (
+    PostDlcPayoutRequest,
     PostDlcRegistrationRequest,
     PostDlcSettleRequest,
-    PostDlcPayoutRequest,
 )
 from cashu.core.secret import Secret, SecretKind
 from cashu.mint.ledger import Ledger
@@ -645,7 +645,7 @@ async def test_payout_dlc(wallet: Wallet, ledger: Ledger):
 
     # CLAIMING our victorious payout
     # Generating outputs
-    amounts = [64,32,16,8,4,2,1]
+    amounts = [128]
     secrets, rs, _ = await wallet.generate_n_secrets(
         len(amounts), skip_bump=True
     )
@@ -664,6 +664,6 @@ async def test_payout_dlc(wallet: Wallet, ledger: Ledger):
     response = await ledger.payout_dlc(request)
 
     assert response.errors is None, f"Payout failed: {response.errors[0].detail}"
-    assert len(response.paid) > 0, f"Payout failed: paid list is empty"
+    assert len(response.paid) > 0, "Payout failed: paid list is empty"
     assert response.paid[0].dlc_root == dlc_root.hex()
     assert len(response.paid[0].outputs) == len(amounts)

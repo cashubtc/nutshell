@@ -1,7 +1,5 @@
 from typing import Dict
-import json
 
-from ..core.base import DlcSettlement
 from ..core.errors import TransactionError
 from ..core.nuts import DLC_NUT
 from .features import LedgerFeatures

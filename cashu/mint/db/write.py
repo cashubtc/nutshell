@@ -1,4 +1,5 @@
-from typing import List, Optional, Tuple, Union, Dict
+import json
+from typing import Dict, List, Optional, Tuple, Union
 
 from loguru import logger
 
@@ -7,16 +8,16 @@ from ...core.base import (
     DlcBadInput,
     DlcFundingAck,
     DlcFundingError,
+    DlcPayout,
+    DlcPayoutForm,
     DlcSettlement,
     DlcSettlementAck,
     DlcSettlementError,
-    DlcPayoutForm,
-    DlcPayout,
     MeltQuote,
     MeltQuoteState,
+    MintKeyset,
     MintQuote,
     MintQuoteState,
-    MintKeyset,
     Proof,
     ProofSpentState,
     ProofState,
@@ -26,17 +27,14 @@ from ...core.db import Connection, Database
 from ...core.errors import (
     CashuError,
     DlcAlreadyRegisteredError,
+    DlcPayoutFail,
+    DlcSettlementFail,
     TokenAlreadySpentError,
     TransactionError,
-    DlcSettlementFail,
-    DlcNotFoundError,
-    DlcPayoutFail,
 )
 from ..crud import LedgerCrud
 from ..events.events import LedgerEventManager
 from .read import DbReadHelper
-
-import json
 
 
 class DbWriteHelper:

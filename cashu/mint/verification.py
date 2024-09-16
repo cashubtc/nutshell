@@ -18,11 +18,16 @@ from ..core.base import (
     Unit,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.dlc import merkle_verify, verify_payout_secret, verify_payout_signature
+from ..core.crypto.dlc import (
+    merkle_verify,
+    verify_payout_secret,
+    verify_payout_signature,
+)
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
+    DlcPayoutFail,
     DlcSettlementFail,
     DlcVerificationFail,
     NoSecretInProofsError,
@@ -30,7 +35,6 @@ from ..core.errors import (
     SecretTooLongError,
     TransactionError,
     TransactionUnitError,
-    DlcPayoutFail,
 )
 from ..core.settings import settings
 from ..lightning.base import LightningBackend

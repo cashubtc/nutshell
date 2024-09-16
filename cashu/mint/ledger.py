@@ -15,10 +15,10 @@ from ..core.base import (
     DlcFundingAck,
     DlcFundingError,
     DlcFundingProof,
-    DlcSettlement,
-    DlcSettlementError,
     DlcPayout,
     DlcPayoutForm,
+    DlcSettlement,
+    DlcSettlementError,
     MeltQuote,
     MeltQuoteState,
     Method,
@@ -49,11 +49,12 @@ from ..core.errors import (
     NotAllowedError,
     QuoteNotPaidError,
     TransactionError,
-    DlcPayoutFail,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
     GetDlcStatusResponse,
+    PostDlcPayoutRequest,
+    PostDlcPayoutResponse,
     PostDlcRegistrationRequest,
     PostDlcRegistrationResponse,
     PostDlcSettleRequest,
@@ -61,8 +62,6 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
-    PostDlcPayoutRequest,
-    PostDlcPayoutResponse,
 )
 from ..core.settings import settings
 from ..core.split import amount_split
