@@ -18,7 +18,7 @@ async def m001_initial(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {db.table_with_schema('users')} (
                     id TEXT PRIMARY KEY,
-                    quota INT NOT NULL,
+                    last_access TIMESTAMP,
 
                     UNIQUE (id)
                 );
@@ -97,3 +97,17 @@ async def m001_initial(db: Database):
                 );
             """
         )
+
+        # await conn.execute(
+        #     f"""
+        #         CREATE TABLE IF NOT EXISTS {db.table_with_schema('access')} (
+        #             user_id TEXT NOT NULL,
+        #             access_token TEXT NOT NULL,
+        #             created TIMESTAMP,
+        #             last_used TIMESTAMP,
+
+        #             UNIQUE (access_token)
+
+        #         );
+        #     """
+        # )

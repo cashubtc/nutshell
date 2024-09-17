@@ -1128,4 +1128,4 @@ async def auth(ctx: Context):
     await auth_wallet.load_mint_keysets()
     await auth_wallet.activate_keyset()
     await auth_wallet.load_proofs()
-    await auth_wallet.get_blind_auth()
+    await auth_wallet.mint_blind_auth_proofs()

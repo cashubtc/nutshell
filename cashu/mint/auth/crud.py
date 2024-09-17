@@ -41,6 +41,15 @@ class AuthLedgerCrud(ABC):
     ) -> Optional[User]:
         ...
 
+    async def update_user(
+        self,
+        *,
+        db: Database,
+        user_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
+
     @abstractmethod
     async def get_keyset(
         self,
@@ -150,6 +159,27 @@ class AuthLedgerCrud(ABC):
     ) -> List[BlindedSignature]:
         ...
 
+    # @abstractmethod
+    # async def store_user_access_token(
+    #     self,
+    #     *,
+    #     db: Database,
+    #     user_id: str,
+    #     access_token: str,
+    #     conn: Optional[Connection] = None,
+    # ) -> None:
+    #     ...
+
+    # @abstractmethod
+    # async def get_access_token(
+    #     self,
+    #     *,
+    #     db: Database,
+    #     access_token: str,
+    #     conn: Optional[Connection] = None,
+    # ) -> Optional[str]:
+    #     ...
+
 
 class AuthLedgerCrudSqlite(AuthLedgerCrud):
     """Implementation of AuthLedgerCrud for sqlite.
@@ -168,10 +198,10 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('users')}
-            (id, quota)
-            VALUES (:id, :quota)
+            (id)
+            VALUES (:id)
             """,
-            {"id": user.id, "quota": user.quota},
+            {"id": user.id},
         )
 
     async def get_user(
@@ -189,6 +219,25 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             {"user_id": user_id},
         )
         return User(**row) if row else None
+
+    async def update_user(
+        self,
+        *,
+        db: Database,
+        user_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('users')}
+            SET last_access = :last_access
+            WHERE id = :user_id
+            """,
+            {
+                "last_access": db.to_timestamp(db.timestamp_now_str()),
+                "user_id": user_id,
+            },
+        )
 
     async def store_promise(
         self,

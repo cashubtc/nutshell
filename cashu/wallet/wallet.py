@@ -52,6 +52,7 @@ from .crud import (
     update_lightning_invoice,
     update_proof,
 )
+from .errors import BalanceTooLowError
 from .htlc import WalletHTLC
 from .mint_info import MintInfo
 from .p2pk import WalletP2PK
@@ -1049,7 +1050,7 @@ class Wallet(
         # select proofs that are not reserved and are in the active keysets of the mint
         proofs = self.active_proofs(proofs)
         if sum_proofs(proofs) < amount:
-            raise Exception("balance too low.")
+            raise BalanceTooLowError()
 
         # coin selection for potentially offline sending
         send_proofs = await self._select_proofs_to_send(
@@ -1105,7 +1106,7 @@ class Wallet(
         # select proofs that are not reserved and are in the active keysets of the mint
         proofs = self.active_proofs(proofs)
         if sum_proofs(proofs) < amount:
-            raise Exception("balance too low.")
+            raise BalanceTooLowError()
 
         # coin selection for swapping
         swap_proofs = await self._select_proofs_to_send(
