@@ -24,10 +24,7 @@ class WalletAuth(Wallet):
             "exp": datetime.datetime.now(datetime.timezone.utc)
             + datetime.timedelta(hours=1),
         }
-
         secret = "your_secret_key"
-
-        # Encode and sign the JWT
         token = jwt.encode(payload, secret, algorithm="HS256")
         return token
 
@@ -43,24 +40,6 @@ class WalletAuth(Wallet):
         return blind_auth_token
 
     async def mint_blind_auth_proofs(self) -> None:
-        # # TODO: For development
-        # clear_auth_token_dict: dict = {
-        #     "user_id": "user_id_here",
-        #     "auth": "new_auth_token",
-        # }
-        # auth_proofs: List[Proof] = []
-        # try:
-        #     auth_proofs, _ = await self.select_to_send(self.proofs, 1)
-        #     blind_auth_token = await self.serialize_proofs(auth_proofs)
-        #     clear_auth_token_dict["auth"] = blind_auth_token
-        # except BalanceTooLowError as e:
-        #     logger.error(f"Error getting auth token: {e}")
-        #     # new user
-        #     clear_auth_token_dict["user_id"] = hashlib.sha256(
-        #         os.urandom(32)
-        #     ).hexdigest()
-        #     clear_auth_token_dict["auth"] = "new_auth_token"
-
         clear_auth_token = self._create_jwt("user_id_here")
         amounts = settings.auth_blind_max_tokens_mint * [1]
         secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
@@ -74,10 +53,6 @@ class WalletAuth(Wallet):
             promises, secrets, rs, derivation_paths
         )
         print(f"Minted {Amount(self.unit, sum_proofs(new_proofs))} blind auth proofs.")
-        # if auth_proofs:
-        #     await self.invalidate(auth_proofs)
-
-        # print(new_proofs)
         print(f"Balance: {Amount(self.unit, self.available_balance)}")
 
         blind_auth = await self.spend_auth_token()

@@ -69,15 +69,7 @@ class AuthLedger(Ledger):
             raise e
         except Exception as e:
             raise e
-        # TEMP: For testing purposes only.
         user_id = decoded["user_id"]
-
-        # blind_auth_token = clear_auth_token["auth"]
-        # if blind_auth_token == "new_auth_token":
-        #     print("New auth token.")
-        #     user = User(id=user_id)
-        #     await self.auth_crud.create_user(user=user, db=self.db)
-        # else:
         user = await self.auth_crud.get_user(user_id=user_id, db=self.db)
         if not user:
             logger.info(f"Creating new user: {user_id}")
@@ -93,8 +85,6 @@ class AuthLedger(Ledger):
             - datetime.timedelta(seconds=auth_rate_limit_seconds)
         ):
             raise Exception("Rate limit exceeded.")
-
-        # await self.melt_blind_auth_token(blind_auth_token)
 
         return user
 
