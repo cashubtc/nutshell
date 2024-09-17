@@ -48,7 +48,7 @@ class GetInfoResponse(BaseModel):
     # BEGIN DEPRECATED: NUT-06 contact field change
     # NUT-06 PR: https://github.com/cashubtc/nuts/pull/117
     @root_validator(pre=True)
-    def preprocess_deprecated_contact_field(cls, values):
+    def preprocess_deprecated_contact_field(cls, values: dict):
         if "contact" in values and values["contact"]:
             if isinstance(values["contact"][0], list):
                 values["contact"] = [
@@ -335,7 +335,7 @@ class PostRestoreResponse(BaseModel):
 class PostAuthBlindMintRequest(BaseModel):
     auth: str = Field(
         ...,
-        max_length=settings.mint_max_request_length,
+        max_length=10000,
         description="Authentication token containing user identifying information.",
     )
     outputs: List[BlindedMessage] = Field(

@@ -1,9 +1,8 @@
 # from ..v1_api import LedgerAPI
-import datetime
 import hashlib
 import os
 
-import jwt
+import httpx
 from loguru import logger
 
 from ...core.base import Amount
@@ -18,16 +17,35 @@ class WalletAuth(Wallet):
     def __init__(self, url: str, db: str, name: str = "auth", unit: str = "auth"):
         super().__init__(url, db, name, unit)
 
-    def _get_jwt(self, user_id: str) -> str:
+    def _get_jwt(self) -> str:
         # this is only for development. eventually, the OAuth2 server will provide the JWT
-        private_key_pem = b"-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIFaxfte0rotEm+cn6Nd4greIxmw19sGlTqpRIM54HwkooAoGCCqGSM49\nAwEHoUQDQgAEcYI6d7GZvxbJkOtk3B2tAj37JeeyPGXz3LyNPVKK6KEcDj1Q38+P\nRPjCpKsg4AwrMfXh8a6L48GX7YMiw3feoA==\n-----END EC PRIVATE KEY-----\n"
-        payload = {
-            "user_id": user_id,
-            "exp": datetime.datetime.now(datetime.timezone.utc)
-            + datetime.timedelta(hours=1),
+        # private_key_pem = b"-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIFaxfte0rotEm+cn6Nd4greIxmw19sGlTqpRIM54HwkooAoGCCqGSM49\nAwEHoUQDQgAEcYI6d7GZvxbJkOtk3B2tAj37JeeyPGXz3LyNPVKK6KEcDj1Q38+P\nRPjCpKsg4AwrMfXh8a6L48GX7YMiw3feoA==\n-----END EC PRIVATE KEY-----\n"
+        # payload = {
+        #     "user_id": user_id,
+        #     "exp": datetime.datetime.now(datetime.timezone.utc)
+        #     + datetime.timedelta(hours=1),
+        # }
+        # token = jwt.encode(payload, private_key_pem, algorithm="ES256")
+        # return token
+        token_url = (
+            "http://localhost:8080/realms/Nutshell/protocol/openid-connect/token"
+        )
+        # Prepare the data for the token request
+        data = {
+            "grant_type": "password",
+            "client_id": "cashu-client",
+            "username": "test@test.com",
+            "password": "test",
         }
-        token = jwt.encode(payload, private_key_pem, algorithm="ES256")
-        return token
+        response = httpx.post(token_url, data=data)
+        # Parse the token response
+        if response.status_code == 200:
+            token_info: dict = response.json()
+            access_token = token_info["access_token"]
+            print("Access Tokens:", access_token)
+        else:
+            print("Failed to obtain token:", response.status_code, response.text)
+        return access_token
 
     async def spend_auth_token(self) -> str:
         try:
@@ -43,7 +61,7 @@ class WalletAuth(Wallet):
         return blind_auth_token
 
     async def mint_blind_auth_proofs(self) -> None:
-        clear_auth_token = self._get_jwt("my_user_id_here")
+        clear_auth_token = self._get_jwt()
         amounts = settings.mint_auth_blind_max_tokens_mint * [1]
         secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
         rs = [PrivateKey(privkey=os.urandom(32), raw=True) for _ in amounts]

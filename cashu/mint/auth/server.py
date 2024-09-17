@@ -16,6 +16,9 @@ from .crud import AuthLedgerCrud, AuthLedgerCrudSqlite
 
 class AuthLedger(Ledger):
     auth_crud: AuthLedgerCrud
+    jwks_url = "http://localhost:8080/realms/Nutshell/protocol/openid-connect/certs"
+    jwks_client: jwt.PyJWKClient
+    signing_key: Optional[jwt.PyJWK] = None
 
     def __init__(
         self,
@@ -37,6 +40,7 @@ class AuthLedger(Ledger):
         )
 
         self.auth_crud = AuthLedgerCrudSqlite()
+        self.jwks_client = jwt.PyJWKClient(self.jwks_url)
 
     async def verify_auth(self, auth_token_str: str) -> User:
         """Verify the clear-auth JWT token and return the user.
@@ -52,12 +56,15 @@ class AuthLedger(Ledger):
         Returns:
             User: _description_
         """
-        if not settings.mint_auth_jwt_public_key:
-            raise Exception("No JWT public key set.")
-        public_key_pem = settings.mint_auth_jwt_public_key.encode()
+        if not self.signing_key:
+            self.signing_key = self.jwks_client.get_signing_key_from_jwt(auth_token_str)
         try:
             decoded = jwt.decode(
-                auth_token_str, public_key_pem, algorithms=["ES256"], verify=True
+                auth_token_str,
+                self.signing_key.key,
+                algorithms=["ES256"],
+                verify=True,
+                options={"verify_aud": False},
             )
             logger.trace(f"Decoded JWT: {decoded}")
         except jwt.ExpiredSignatureError as e:
@@ -71,7 +78,7 @@ class AuthLedger(Ledger):
             raise e
         except Exception as e:
             raise e
-        user_id = decoded["user_id"]
+        user_id = decoded["sub"]
         user = await self.auth_crud.get_user(user_id=user_id, db=self.db)
         if not user:
             logger.info(f"Creating new user: {user_id}")

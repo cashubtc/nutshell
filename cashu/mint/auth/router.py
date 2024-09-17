@@ -7,9 +7,10 @@ from ...core.models import (
     KeysetsResponseKeyset,
     KeysResponse,
     KeysResponseKeyset,
+    PostAuthBlindMintRequest,
+    PostAuthBlindMintResponse,
 )
 from ...mint.startup import auth_ledger
-from .models import PostAuthBlindMintRequest, PostAuthBlindMintResponse
 
 auth_router: APIRouter = APIRouter()
 
