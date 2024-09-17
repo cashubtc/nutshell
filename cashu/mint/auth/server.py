@@ -52,10 +52,12 @@ class AuthLedger(Ledger):
         Returns:
             User: _description_
         """
-        secret = "your_secret_key"
+        if not settings.mint_auth_jwt_public_key:
+            raise Exception("No JWT public key set.")
+        public_key_pem = settings.mint_auth_jwt_public_key.encode()
         try:
             decoded = jwt.decode(
-                auth_token_str, secret, algorithms=["HS256"], verify=True
+                auth_token_str, public_key_pem, algorithms=["ES256"], verify=True
             )
             logger.trace(f"Decoded JWT: {decoded}")
         except jwt.ExpiredSignatureError as e:
@@ -109,9 +111,9 @@ class AuthLedger(Ledger):
             List[BlindedSignature]: _description_
         """
 
-        if len(outputs) > settings.auth_blind_max_tokens_mint:
+        if len(outputs) > settings.mint_auth_blind_max_tokens_mint:
             raise Exception(
-                f"Too many outputs. You can only mint {settings.auth_blind_max_tokens_mint} tokens."
+                f"Too many outputs. You can only mint {settings.mint_auth_blind_max_tokens_mint} tokens."
             )
 
         try:

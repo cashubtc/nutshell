@@ -225,7 +225,8 @@ class CoreLightningRestFundingSource(MintSettings):
 
 
 class AuthSettings(MintSettings):
-    auth_blind_max_tokens_mint: int = Field(default=100, gt=0)
+    mint_auth_blind_max_tokens_mint: int = Field(default=100, gt=0)
+    mint_auth_jwt_public_key: Optional[str] = Field(default=None)
 
 
 class Settings(
