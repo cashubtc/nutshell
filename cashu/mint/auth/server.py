@@ -86,7 +86,7 @@ class AuthLedger(Ledger):
             await self.auth_crud.create_user(user=user, db=self.db)
 
         # rate limit
-        auth_rate_limit_seconds = 10
+        auth_rate_limit_seconds = 5
         if (
             user.last_access
             and user.last_access

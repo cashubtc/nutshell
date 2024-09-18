@@ -1128,4 +1128,21 @@ async def auth(ctx: Context):
     await auth_wallet.load_mint_keysets()
     await auth_wallet.activate_keyset()
     await auth_wallet.load_proofs()
-    await auth_wallet.mint_blind_auth_proofs()
+
+    new_proofs = await auth_wallet.mint_blind_auth_proofs()
+    print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs.")
+    print(f"Balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
+
+
+@cli.command("spend-auth", help="Spend auth tokens.")
+@click.pass_context
+@coro
+async def spendauth(ctx: Context):
+    wallet: Wallet = ctx.obj["WALLET"]
+    auth_wallet = await WalletAuth.with_db(
+        ctx.obj["HOST"], wallet.db.db_location, "auth", unit=Unit.auth.name
+    )
+    await auth_wallet.load_proofs()
+    auth_token = await auth_wallet.spend_auth_token()
+    print(f"Balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
+    print(f"Auth token: {auth_token}")
