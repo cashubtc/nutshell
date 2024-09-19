@@ -75,12 +75,13 @@ class BlinkWallet(LightningBackend):
 
     async def status(self) -> StatusResponse:
         try:
+            data = {
+                "query": "query me { me { defaultAccount { wallets { id walletCurrency balance }}}}",
+                "variables": {},
+            }
             r = await self.client.post(
                 url=self.endpoint,
-                data=(  # type: ignore
-                    '{"query":"query me { me { defaultAccount { wallets { id'
-                    ' walletCurrency balance }}}}", "variables":{}}'
-                ),
+                data=json.dumps(data),  # type: ignore
             )
             r.raise_for_status()
         except Exception as exc:
