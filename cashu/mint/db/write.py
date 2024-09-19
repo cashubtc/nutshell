@@ -189,8 +189,8 @@ class DbWriteHelper:
             )
             if not quote_db:
                 raise TransactionError("Melt quote not found.")
-            if quote_db.pending:
-                raise TransactionError("Melt quote already pending.")
+            # if quote_db.pending:
+            #     raise TransactionError("Melt quote already pending.")
             # set the quote as pending
             quote_copy.state = MeltQuoteState.pending
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
