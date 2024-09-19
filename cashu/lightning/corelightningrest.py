@@ -273,7 +273,8 @@ class CoreLightningRestWallet(LightningBackend):
         data = r.json()
         if r.is_error or "error" in data:
             raise Exception("error in cln response")
-        self.last_pay_index = data["invoices"][-1]["pay_index"]
+        if data.get("invoices"):
+            self.last_pay_index = data["invoices"][-1]["pay_index"]
 
         while True:
             try:

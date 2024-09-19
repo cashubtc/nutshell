@@ -915,8 +915,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         await self.db_write._verify_spent_proofs_and_set_pending(
             proofs, quote_id=melt_quote.quote
         )
-        previous_state = melt_quote.state
-        await self.db_write._set_melt_quote_pending(melt_quote)
+        # previous_state = melt_quote.state
+        # await self.db_write._set_melt_quote_pending(melt_quote)
         try:
             # settle the transaction internally if there is a mint quote with the same payment request
             melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
@@ -979,9 +979,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         except Exception as e:
             logger.trace(f"Melt exception: {e}")
-            await self.db_write._unset_melt_quote_pending(
-                quote=melt_quote, state=previous_state
-            )
+            # await self.db_write._unset_melt_quote_pending(
+            #     quote=melt_quote, state=previous_state
+            # )
             raise e
         finally:
             # delete proofs from pending list

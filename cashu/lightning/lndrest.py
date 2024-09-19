@@ -210,7 +210,7 @@ class LndRestWallet(LightningBackend):
         fee_msat = int(data["payment_route"]["total_fees_msat"])
         preimage = base64.b64decode(data["payment_preimage"]).hex()
         return PaymentResponse(
-            result=PaymentResult.PENDING,
+            result=PaymentResult.SETTLED,
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,

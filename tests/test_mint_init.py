@@ -283,7 +283,6 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
         )
     )
     await asyncio.sleep(SLEEP_TIME)
-    # settle_invoice(preimage=preimage)
 
     # run startup routinge
     await ledger.startup_ledger()
