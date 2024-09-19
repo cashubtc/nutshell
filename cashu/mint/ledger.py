@@ -458,8 +458,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             checking_id=invoice_response.checking_id,
             unit=quote_request.unit,
             amount=quote_request.amount,
-            issued=False,
-            paid=False,
             state=MintQuoteState.unpaid,
             created_time=int(time.time()),
             expiry=expiry,
