@@ -32,13 +32,6 @@ from cashu.lightning.base import (
 
 # maps statuses to None, False, True:
 # https://api.lightning.community/?python=#paymentpaymentstatus
-PAYMENT_STATUSES = {
-    lnrpc.Payment.PaymentStatus.UNKNOWN: None,
-    lnrpc.Payment.PaymentStatus.IN_FLIGHT: None,
-    lnrpc.Payment.PaymentStatus.INITIATED: None,
-    lnrpc.Payment.PaymentStatus.SUCCEEDED: True,
-    lnrpc.Payment.PaymentStatus.FAILED: False,
-}
 PAYMENT_RESULT_MAP = {
     lnrpc.Payment.PaymentStatus.UNKNOWN: PaymentResult.UNKNOWN,
     lnrpc.Payment.PaymentStatus.IN_FLIGHT: PaymentResult.PENDING,
@@ -46,18 +39,13 @@ PAYMENT_RESULT_MAP = {
     lnrpc.Payment.PaymentStatus.SUCCEEDED: PaymentResult.SETTLED,
     lnrpc.Payment.PaymentStatus.FAILED: PaymentResult.FAILED,
 }
-INVOICE_STATUSES = {
-    lnrpc.Invoice.InvoiceState.OPEN: None,
-    lnrpc.Invoice.InvoiceState.SETTLED: True,
-    lnrpc.Invoice.InvoiceState.CANCELED: None,
-    lnrpc.Invoice.InvoiceState.ACCEPTED: None,
-}
 INVOICE_RESULT_MAP = {
     lnrpc.Invoice.InvoiceState.OPEN: PaymentResult.PENDING,
     lnrpc.Invoice.InvoiceState.SETTLED: PaymentResult.SETTLED,
     lnrpc.Invoice.InvoiceState.CANCELED: PaymentResult.FAILED,
     lnrpc.Invoice.InvoiceState.ACCEPTED: PaymentResult.PENDING,
 }
+
 
 class LndRPCWallet(LightningBackend):
     supports_mpp = settings.mint_lnd_enable_mpp
@@ -195,14 +183,12 @@ class LndRPCWallet(LightningBackend):
             error_message = f"SendPaymentSync failed: {e}"
             return PaymentResponse(
                 result=PaymentResult.FAILED,
-                ok=False,
                 error_message=error_message,
             )
 
         if r.payment_error:
             return PaymentResponse(
                 result=PaymentResult.FAILED,
-                ok=False,
                 error_message=r.payment_error,
             )
 
@@ -211,7 +197,6 @@ class LndRPCWallet(LightningBackend):
         preimage = r.payment_preimage.hex()
         return PaymentResponse(
             result=PaymentResult.PENDING,
-            ok=True,
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
@@ -279,7 +264,6 @@ class LndRPCWallet(LightningBackend):
             logger.error(f"QueryRoute or SendToRouteV2 failed: {e}")
             return PaymentResponse(
                 result=PaymentResult.FAILED,
-                ok=False,
                 error_message=str(e),
             )
 
@@ -288,20 +272,15 @@ class LndRPCWallet(LightningBackend):
             logger.error(error_message)
             return PaymentResponse(
                 result=PaymentResult.FAILED,
-                ok=False,
                 error_message=error_message,
             )
 
-        ok = None
         result = PaymentResult.UNKNOWN
         if r.status == lnrpc.HTLCAttempt.HTLCStatus.SUCCEEDED:
-            ok = True
             result = PaymentResult.SETTLED
         elif r.status == lnrpc.HTLCAttempt.HTLCStatus.IN_FLIGHT:
-            ok = True
             result = PaymentResult.PENDING
         else:
-            ok = False
             result = PaymentResult.FAILED
 
         checking_id = invoice.payment_hash
@@ -309,7 +288,6 @@ class LndRPCWallet(LightningBackend):
         preimage = r.preimage.hex()
         return PaymentResponse(
             result=result,
-            ok=ok,
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
@@ -329,13 +307,12 @@ class LndRPCWallet(LightningBackend):
         except AioRpcError as e:
             error_message = f"LookupInvoice failed: {e}"
             logger.error(error_message)
-            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
 
         return PaymentStatus(
             result=INVOICE_RESULT_MAP[r.state],
-            paid=INVOICE_STATUSES[r.state],
         )
-    
+
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         """
         This routine checks the payment status using routerpc.TrackPaymentV2.
@@ -345,7 +322,7 @@ class LndRPCWallet(LightningBackend):
             checking_id_bytes = bytes.fromhex(checking_id)
         except ValueError:
             logger.error(f"Couldn't convert {checking_id = } to bytes")
-            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
 
         request = routerrpc.TrackPaymentRequest(payment_hash=checking_id_bytes)
 
@@ -358,7 +335,6 @@ class LndRPCWallet(LightningBackend):
                     if payment is not None and payment.status:
                         return PaymentStatus(
                             result=PAYMENT_RESULT_MAP[payment.status],
-                            paid=PAYMENT_STATUSES[payment.status],
                             fee=(
                                 Amount(unit=Unit.msat, amount=payment.fee_msat)
                                 if payment.fee_msat
@@ -370,8 +346,8 @@ class LndRPCWallet(LightningBackend):
             error_message = f"TrackPaymentV2 failed: {e}"
             logger.error(error_message)
 
-        return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
-    
+        return PaymentStatus(result=PaymentResult.UNKNOWN)
+
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:
             try:

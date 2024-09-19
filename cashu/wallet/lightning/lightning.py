@@ -66,7 +66,7 @@ class LightningWallet(Wallet):
         assert total_amount > 0, "amount is not positive"
         if self.available_balance < total_amount:
             print("Error: Balance too low.")
-            return PaymentResponse(result=PaymentResult.FAILED, ok=False)
+            return PaymentResponse(result=PaymentResult.FAILED)
         _, send_proofs = await self.swap_to_send(self.proofs, total_amount)
         try:
             resp = await self.melt(send_proofs, pr, quote.fee_reserve, quote.quote)
@@ -78,16 +78,13 @@ class LightningWallet(Wallet):
             invoice_obj = bolt11.decode(pr)
             return PaymentResponse(
                 result=PaymentResult.SETTLED,
-                ok=True,
                 checking_id=invoice_obj.payment_hash,
                 preimage=resp.payment_preimage,
                 fee=Amount(Unit.msat, fees_paid_sat),
             )
         except Exception as e:
             print("Exception:", e)
-            return PaymentResponse(
-                result=PaymentResult.FAILED, ok=False, error_message=str(e)
-            )
+            return PaymentResponse(result=PaymentResult.FAILED, error_message=str(e))
 
     async def get_invoice_status(self, payment_hash: str) -> PaymentStatus:
         """Get lightning invoice status (incoming)
@@ -102,16 +99,16 @@ class LightningWallet(Wallet):
             db=self.db, payment_hash=payment_hash, out=False
         )
         if not invoice:
-            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
         if invoice.paid:
-            return PaymentStatus(result=PaymentResult.SETTLED, paid=True)
+            return PaymentStatus(result=PaymentResult.SETTLED)
         try:
             # to check the invoice state, we try minting tokens
             await self.mint(invoice.amount, id=invoice.id)
-            return PaymentStatus(result=PaymentResult.SETTLED, paid=True)
+            return PaymentStatus(result=PaymentResult.SETTLED)
         except Exception as e:
             print(e)
-            return PaymentStatus(result=PaymentResult.FAILED, paid=False)
+            return PaymentStatus(result=PaymentResult.FAILED)
 
     async def get_payment_status(self, payment_hash: str) -> PaymentStatus:
         """Get lightning payment status (outgoing)
