@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from enum import Enum
+from enum import Enum, auto
 from typing import AsyncGenerator, Coroutine, Optional, Union
 
 from pydantic import BaseModel
@@ -13,8 +13,8 @@ from ..core.models import PostMeltQuoteRequest
 
 
 class StatusResponse(BaseModel):
-    error_message: Optional[str]
     balance: Union[int, float]
+    error_message: Optional[str] = None
 
 
 class InvoiceQuoteResponse(BaseModel):
@@ -34,29 +34,19 @@ class InvoiceResponse(BaseModel):
     payment_request: Optional[str] = None
     error_message: Optional[str] = None
 
-class PaymentResult(Enum):
-    FAILED = 0
-    SETTLED = 1
-    PENDING = 2
 
-    UNKNOWN = 3
+class PaymentResult(Enum):
+    SETTLED = auto()
+    FAILED = auto()
+    PENDING = auto()
+    UNKNOWN = auto()
 
     def __str__(self):
         return self.name
 
-    # We assume `None` is `PENDING`
-    @classmethod
-    def from_paid_flag(cls, paid: Optional[bool]):
-        if paid is None:
-            return cls.PENDING
-        elif not paid:
-            return cls.FAILED
-        elif paid:
-            return cls.SETTLED
 
 class PaymentResponse(BaseModel):
     result: PaymentResult
-    ok: Optional[bool] = None  # True: paid, False: failed, None: pending or unknown
     checking_id: Optional[str] = None
     fee: Optional[Amount] = None
     preimage: Optional[str] = None
@@ -65,7 +55,7 @@ class PaymentResponse(BaseModel):
     @property
     def pending(self) -> bool:
         return self.result == PaymentResult.PENDING
-    
+
     @property
     def settled(self) -> bool:
         return self.result == PaymentResult.SETTLED
@@ -78,9 +68,9 @@ class PaymentResponse(BaseModel):
     def unknown(self) -> bool:
         return self.result == PaymentResult.UNKNOWN
 
+
 class PaymentStatus(BaseModel):
     result: PaymentResult
-    paid: Optional[bool] = None
     fee: Optional[Amount] = None
     preimage: Optional[str] = None
     error_message: Optional[str] = None
@@ -88,7 +78,7 @@ class PaymentStatus(BaseModel):
     @property
     def pending(self) -> bool:
         return self.result == PaymentResult.PENDING
-    
+
     @property
     def settled(self) -> bool:
         return self.result == PaymentResult.SETTLED
@@ -103,13 +93,19 @@ class PaymentStatus(BaseModel):
 
     def __str__(self) -> str:
         if self.result == PaymentResult.SETTLED:
-            return "settled"
+            return (
+                "settled"
+                + (f" (preimage: {self.preimage})" if self.preimage else "")
+                + (f" (fee: {self.fee})" if self.fee else "")
+            )
         elif self.result == PaymentResult.FAILED:
             return "failed"
         elif self.result == PaymentResult.PENDING:
             return "still pending"
-        else: # self.result == PaymentResult.UNKNOWN:
-            return "unknown (should never happen)"
+        else:  # self.result == PaymentResult.UNKNOWN:
+            return "unknown" + (
+                f" (Error: {self.error_message})" if self.error_message else ""
+            )
 
 
 class LightningBackend(ABC):

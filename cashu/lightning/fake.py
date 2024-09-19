@@ -160,7 +160,6 @@ class FakeWallet(LightningBackend):
 
             return PaymentResponse(
                 result=PaymentResult.SETTLED,
-                ok=True,
                 checking_id=invoice.payment_hash,
                 fee=Amount(unit=self.unit, amount=1),
                 preimage=self.payment_secrets.get(invoice.payment_hash) or "0" * 64,
@@ -168,7 +167,6 @@ class FakeWallet(LightningBackend):
         else:
             return PaymentResponse(
                 result=PaymentResult.FAILED,
-                ok=False,
                 error_message="Only internal invoices can be used!",
             )
 
@@ -176,20 +174,19 @@ class FakeWallet(LightningBackend):
         await self.mark_invoice_paid(self.create_dummy_bolt11(checking_id), delay=False)
         paid_chceking_ids = [i.payment_hash for i in self.paid_invoices_incoming]
         if checking_id in paid_chceking_ids:
-            paid = True
+            return PaymentStatus(result=PaymentResult.SETTLED)
         else:
-            paid = False
-
-        return PaymentStatus(
-            result=PaymentResult.from_paid_flag(paid),
-            paid=paid,
-        )
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message="Invoice not found"
+            )
 
     async def get_payment_status(self, _: str) -> PaymentStatus:
-        return PaymentStatus(
-            result=PaymentResult.from_paid_flag(settings.fakewallet_payment_state),
-            paid=settings.fakewallet_payment_state,
-        )
+        if settings.fakewallet_payment_state:
+            return PaymentStatus(
+                result=PaymentResult[settings.fakewallet_payment_state]
+            )
+        else:
+            return PaymentStatus(result=PaymentResult.SETTLED)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

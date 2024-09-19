@@ -1,8 +1,8 @@
-# type: ignore
 import secrets
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Dict, Optional, Union
 
 import httpx
+from pydantic import BaseModel
 
 from ..core.base import Amount, MeltQuote, Unit
 from ..core.models import PostMeltQuoteRequest
@@ -12,6 +12,7 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
 )
@@ -19,12 +20,106 @@ from .base import (
 USDT = "USDT"
 
 
+# class StrikeInvoiceResult(Enum):
+#     PENDING = PaymentResult.PENDING
+#     UNPAID = PaymentResult.PENDING
+#     PAID = PaymentResult.SETTLED
+#     CANCELLED = PaymentResult.FAILED
+
+
+# class StrikePaymentResult(Enum):
+#     PENDING = PaymentResult.PENDING
+#     SETTLED = PaymentResult.SETTLED
+#     FAILED = PaymentResult.FAILED
+
+
+class StrikeAmount(BaseModel):
+    amount: str
+    currency: str
+
+
+class StrikeRate(BaseModel):
+    amount: str
+    sourceCurrency: str
+    targetCurrency: str
+
+
+class StrikeCreateInvoiceResponse(BaseModel):
+    invoiceId: str
+    amount: StrikeAmount
+    state: str
+    description: str
+
+
+# "{'lightningNetworkFee': {'amount': '0', 'currency': 'BTC'}, 'paymentQuoteId': 'ab5afa09-dc54-4b4f-93c8-5909a2688d2c', 'validUntil': '2024-09-19T14:58:03+00:00', 'amount': {'amount': '0.00000001', 'currency': 'BTC'}, 'totalFee': {'amount': '0', 'currency': 'BTC'}, 'totalAmount': {'amount': '0.00000001', 'currency': 'BTC'}}"
+class StrikePaymentQuoteResponse(BaseModel):
+    lightningNetworkFee: StrikeAmount
+    paymentQuoteId: str
+    validUntil: str
+    amount: StrikeAmount
+    totalFee: StrikeAmount
+    totalAmount: StrikeAmount
+
+
+class InvoiceQuoteResponse(BaseModel):
+    quoteId: str
+    description: str
+    lnInvoice: str
+    expiration: str
+    expirationInSec: int
+    targetAmount: StrikeAmount
+    sourceAmount: StrikeAmount
+    conversionRate: StrikeRate
+
+
+# {'paymentId': '587c3742-f0d2-4819-a78c-66cf4bff1482', 'state': 'COMPLETED', 'result': 'SUCCESS', 'completed': '2024-09-18T21:04:06.8895695+00:00', 'delivered': '2024-09-18T21:04:06.8895695+00:00', 'amount': {'amount': '0.00000001', 'currency': 'BTC'}, 'totalFee': {'amount': '0', 'currency': 'BTC'}, 'lightningNetworkFee': {'amount': '0', 'currency': 'BTC'}, 'totalAmount': {'amount': '0.00000001', 'currency': 'BTC'}, 'lightning': {'networkFee': {'amount': '0', 'currency': 'BTC'}}}
+class StrikePaymentResponse(BaseModel):
+    paymentId: str
+    state: str
+    result: str
+    completed: str
+    delivered: str
+    amount: StrikeAmount
+    totalFee: StrikeAmount
+    lightningNetworkFee: StrikeAmount
+    totalAmount: StrikeAmount
+    lightning: Dict[str, StrikeAmount]
+
+
+PAYMENT_RESULT_MAP = {
+    "PENDING": PaymentResult.PENDING,
+    "COMPLETED": PaymentResult.SETTLED,
+    "FAILED": PaymentResult.FAILED,
+}
+
+
+INVOICE_RESULT_MAP = {
+    "PENDING": PaymentResult.PENDING,
+    "UNPAID": PaymentResult.PENDING,
+    "PAID": PaymentResult.SETTLED,
+    "CANCELLED": PaymentResult.FAILED,
+}
+
+
 class StrikeWallet(LightningBackend):
     """https://docs.strike.me/api/"""
 
-    supported_units = [Unit.sat, Unit.usd, Unit.eur]
+    supported_units = set([Unit.sat, Unit.usd, Unit.eur])
     supports_description: bool = False
     currency_map = {Unit.sat: "BTC", Unit.usd: "USD", Unit.eur: "EUR"}
+
+    def fee_int(
+        self, strike_quote: Union[StrikePaymentQuoteResponse, StrikePaymentResponse]
+    ) -> int:
+        fee_str = strike_quote.totalFee.amount
+        if strike_quote.totalFee.currency == self.currency_map[Unit.sat]:
+            fee = int(float(fee_str) * 1e8)
+        elif strike_quote.totalFee.currency in [
+            self.currency_map[Unit.usd],
+            self.currency_map[Unit.eur],
+        ]:
+            fee = int(float(fee_str) * 100)
+        return fee
 
     def __init__(self, unit: Unit, **kwargs):
         self.assert_unit_supported(unit)
@@ -98,45 +193,29 @@ class StrikeWallet(LightningBackend):
 
         payload = {
             "correlationId": secrets.token_hex(16),
-            "description": "Invoice for order 123",
+            "description": memo or "Invoice for order 123",
             "amount": {"amount": amount.to_float_string(), "currency": self.currency},
         }
         try:
             r = await self.client.post(url=f"{self.endpoint}/v1/invoices", json=payload)
             r.raise_for_status()
         except Exception:
-            return InvoiceResponse(
-                paid=False,
-                checking_id=None,
-                payment_request=None,
-                error_message=r.json()["detail"],
-            )
+            return InvoiceResponse(ok=False, error_message=r.json()["detail"])
 
-        quote = r.json()
-        invoice_id = quote.get("invoiceId")
+        invoice = StrikeCreateInvoiceResponse.parse_obj(r.json())
 
         try:
             payload = {"descriptionHash": secrets.token_hex(32)}
             r2 = await self.client.post(
-                f"{self.endpoint}/v1/invoices/{invoice_id}/quote", json=payload
+                f"{self.endpoint}/v1/invoices/{invoice.invoiceId}/quote", json=payload
             )
+            r2.raise_for_status()
         except Exception:
-            return InvoiceResponse(
-                paid=False,
-                checking_id=None,
-                payment_request=None,
-                error_message=r.json()["detail"],
-            )
+            return InvoiceResponse(ok=False, error_message=r.json()["detail"])
 
-        data2 = r2.json()
-        payment_request = data2.get("lnInvoice")
-        assert payment_request, "Did not receive an invoice"
-        checking_id = invoice_id
+        quote = InvoiceQuoteResponse.parse_obj(r2.json())
         return InvoiceResponse(
-            ok=True,
-            checking_id=checking_id,
-            payment_request=payment_request,
-            error_message=None,
+            ok=True, checking_id=invoice.invoiceId, payment_request=quote.lnInvoice
         )
 
     async def get_payment_quote(
@@ -153,13 +232,18 @@ class StrikeWallet(LightningBackend):
         except Exception:
             error_message = r.json()["data"]["message"]
             raise Exception(error_message)
-        data = r.json()
+        strike_quote = StrikePaymentQuoteResponse.parse_obj(r.json())
+        if strike_quote.amount.currency != self.currency_map[self.unit]:
+            raise Exception(
+                f"Expected currency {self.currency_map[self.unit]}, got {strike_quote.amount.currency}"
+            )
+        amount = Amount.from_float(float(strike_quote.amount.amount), self.unit)
+        fee = self.fee_int(strike_quote)
 
-        amount = Amount.from_float(float(data.get("amount").get("amount")), self.unit)
         quote = PaymentQuoteResponse(
             amount=amount,
-            checking_id=data.get("paymentQuoteId"),
-            fee=Amount(self.unit, 0),
+            checking_id=strike_quote.paymentQuoteId,
+            fee=Amount(self.unit, fee),
         )
         return quote
 
@@ -176,49 +260,43 @@ class StrikeWallet(LightningBackend):
         except Exception:
             error_message = r.json()["data"]["message"]
             return PaymentResponse(
-                ok=None,
-                checking_id=None,
-                fee=None,
-                preimage=None,
-                error_message=error_message,
+                result=PaymentResult.FAILED, error_message=error_message
             )
 
-        data = r.json()
-        states = {"PENDING": None, "COMPLETED": True, "FAILED": False}
-        if states[data.get("state")]:
-            return PaymentResponse(
-                ok=True, checking_id=None, fee=None, preimage=None, error_message=None
-            )
-        else:
-            return PaymentResponse(
-                ok=False, checking_id=None, fee=None, preimage=None, error_message=None
-            )
+        payment = StrikePaymentResponse.parse_obj(r.json())
+        fee = self.fee_int(payment)
+        return PaymentResponse(
+            result=PAYMENT_RESULT_MAP[payment.state],
+            checking_id=payment.paymentId,
+            fee=Amount(self.unit, fee),
+        )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         try:
             r = await self.client.get(url=f"{self.endpoint}/v1/invoices/{checking_id}")
             r.raise_for_status()
-        except Exception:
-            return PaymentStatus(paid=None)
+        except Exception as e:
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
         data = r.json()
-        states = {"PENDING": None, "UNPAID": None, "PAID": True, "CANCELLED": False}
-        return PaymentStatus(paid=states[data["state"]])
+        return PaymentStatus(result=INVOICE_RESULT_MAP[data.get("state")])
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         try:
             r = await self.client.get(url=f"{self.endpoint}/v1/payments/{checking_id}")
             r.raise_for_status()
-        except Exception:
-            return PaymentStatus(paid=None)
+        except Exception as e:
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
         data = r.json()
-        if "paid" not in data and "details" not in data:
-            return PaymentStatus(paid=None)
+        if not data.get("state"):
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message="Unknown")
+        if data["paid"]:
+            return PaymentStatus(
+                result=PaymentResult.SETTLED,
+                fee=Amount(self.unit, data["details"]["fee"]),
+                preimage=data["preimage"],
+            )
+        else:
+            return PaymentStatus(result=PaymentResult.FAILED, error_message="Failed")
 
-        return PaymentStatus(
-            paid=data["paid"],
-            fee_msat=data["details"]["fee"],
-            preimage=data["preimage"],
-        )
-
-    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:  # type: ignore
         raise NotImplementedError("paid_invoices_stream not implemented")

@@ -27,25 +27,12 @@ from .base import (
 )
 from .macaroon import load_macaroon
 
-PAYMENT_STATUSES = {
-    "UNKNOWN": None,
-    "IN_FLIGHT": None,
-    "INITIATED": None,
-    "SUCCEEDED": True,
-    "FAILED": False,
-}
 PAYMENT_RESULT_MAP = {
     "UNKNOWN": PaymentResult.UNKNOWN,
     "IN_FLIGHT": PaymentResult.PENDING,
     "INITIATED": PaymentResult.PENDING,
     "SUCCEEDED": PaymentResult.SETTLED,
     "FAILED": PaymentResult.FAILED,
-}
-INVOICE_STATUSES = {
-    "OPEN": None,
-    "SETTLED": True,
-    "CANCELED": None,
-    "ACCEPTED": None,
 }
 INVOICE_RESULT_MAP = {
     "OPEN": PaymentResult.PENDING,
@@ -215,12 +202,7 @@ class LndRestWallet(LightningBackend):
         if r.is_error or r.json().get("payment_error"):
             error_message = r.json().get("payment_error") or r.text
             return PaymentResponse(
-                result=PaymentResult.FAILED,
-                ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
-                error_message=error_message,
+                result=PaymentResult.FAILED, error_message=error_message
             )
 
         data = r.json()
@@ -229,11 +211,9 @@ class LndRestWallet(LightningBackend):
         preimage = base64.b64decode(data["payment_preimage"]).hex()
         return PaymentResponse(
             result=PaymentResult.PENDING,
-            ok=True,
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
-            error_message=None,
         )
 
     async def pay_partial_invoice(
@@ -267,12 +247,7 @@ class LndRestWallet(LightningBackend):
         if r.is_error or data.get("message"):
             error_message = data.get("message") or r.text
             return PaymentResponse(
-                result=PaymentResult.FAILED,
-                ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
-                error_message=error_message,
+                result=PaymentResult.FAILED, error_message=error_message
             )
 
         # We need to set the mpp_record for a partial payment
@@ -303,36 +278,20 @@ class LndRestWallet(LightningBackend):
         if r.is_error or data.get("message"):
             error_message = data.get("message") or r.text
             return PaymentResponse(
-                result=PaymentResult.FAILED,
-                ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
-                error_message=error_message,
+                result=PaymentResult.FAILED, error_message=error_message
             )
 
-        ok = None
-        result = PaymentResult.UNKNOWN
-        if data.get("status") == "SUCCEEDED":
-            ok = True
-            result = PaymentResult.SETTLED
-        elif data.get("status") == "IN_FLIGHT":
-            ok = True
-            result = PaymentResult.PENDING
-        else:
-            ok = False
-            result = PaymentResult.FAILED
-
+        result = PAYMENT_RESULT_MAP.get(data.get("status"), PaymentResult.UNKNOWN)
         checking_id = invoice.payment_hash
-        fee_msat = int(data["route"]["total_fees_msat"])
-        preimage = base64.b64decode(data["preimage"]).hex()
+        fee_msat = int(data["route"]["total_fees_msat"]) if data.get("route") else None
+        preimage = (
+            base64.b64decode(data["preimage"]).hex() if data.get("preimage") else None
+        )
         return PaymentResponse(
             result=result,
-            ok=ok,
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
-            error_message=None,
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
@@ -340,18 +299,20 @@ class LndRestWallet(LightningBackend):
 
         if r.is_error:
             logger.error(f"Couldn't get invoice status: {r.text}")
-            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=r.text)
 
         data = None
         try:
             data = r.json()
         except json.JSONDecodeError as e:
             logger.error(f"Incomprehensible response: {str(e)}")
-            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
-
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+        if not data or not data.get("state"):
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message="no invoice state"
+            )
         return PaymentStatus(
             result=INVOICE_RESULT_MAP[data["state"]],
-            paid=INVOICE_STATUSES[data["state"]],
         )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
@@ -365,7 +326,9 @@ class LndRestWallet(LightningBackend):
             )
         except ValueError:
             logger.error(f"Incomprehensible checking_id: {checking_id}")
-            return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message="invalid checking_id"
+            )
 
         url = f"/v2/router/track/{checking_id}"
 
@@ -382,7 +345,9 @@ class LndRestWallet(LightningBackend):
                             else line["error"]
                         )
                         logger.error(f"LND get_payment_status error: {message}")
-                        return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
+                        return PaymentStatus(
+                            result=PaymentResult.UNKNOWN, error_message=message
+                        )
 
                     payment = line.get("result")
 
@@ -390,7 +355,6 @@ class LndRestWallet(LightningBackend):
                     if payment is not None and payment.get("status"):
                         return PaymentStatus(
                             result=PAYMENT_RESULT_MAP[payment["status"]],
-                            paid=PAYMENT_STATUSES[payment["status"]],
                             fee=(
                                 Amount(unit=Unit.msat, amount=payment.get("fee_msat"))
                                 if payment.get("fee_msat")
@@ -399,11 +363,14 @@ class LndRestWallet(LightningBackend):
                             preimage=payment.get("payment_preimage"),
                         )
                     else:
-                        return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
+                        return PaymentStatus(
+                            result=PaymentResult.UNKNOWN,
+                            error_message="no payment status",
+                        )
                 except Exception:
                     continue
 
-        return PaymentStatus(result=PaymentResult.UNKNOWN, paid=None)
+        return PaymentStatus(result=PaymentResult.UNKNOWN, error_message="timeout")
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:

@@ -234,6 +234,16 @@ class LedgerCrud(ABC):
         ...
 
     @abstractmethod
+    async def get_melt_quote_by_request(
+        self,
+        *,
+        request: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[MeltQuote]:
+        ...
+
+    @abstractmethod
     async def update_melt_quote(
         self,
         *,
@@ -610,8 +620,22 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             values,
         )
-        if row is None:
-            return None
+        return MeltQuote.from_row(row) if row else None
+
+    async def get_melt_quote_by_request(
+        self,
+        *,
+        request: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[MeltQuote]:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT * from {db.table_with_schema('melt_quotes')}
+            WHERE request = :request
+            """,
+            {"request": request},
+        )
         return MeltQuote.from_row(row) if row else None
 
     async def update_melt_quote(
