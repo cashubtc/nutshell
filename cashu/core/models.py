@@ -205,7 +205,7 @@ class PostMeltQuoteResponse(BaseModel):
     fee_reserve: int  # input fee reserve
     paid: Optional[
         bool
-    ]  # whether the request has been paid # DEPRECATED as per NUT PR #136
+    ] = None  # whether the request has been paid # DEPRECATED as per NUT PR #136
     state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
@@ -216,6 +216,8 @@ class PostMeltQuoteResponse(BaseModel):
         to_dict = melt_quote.dict()
         # turn state into string
         to_dict["state"] = melt_quote.state.value
+        # add deprecated "paid" field
+        to_dict["paid"] = melt_quote.paid
         return PostMeltQuoteResponse.parse_obj(to_dict)
 
 

@@ -57,7 +57,6 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
             )
             # set the quote as paid
             if quote.state == MintQuoteState.unpaid:
-                quote.paid = True
                 quote.state = MintQuoteState.paid
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 logger.trace(

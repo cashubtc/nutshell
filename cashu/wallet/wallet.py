@@ -763,7 +763,7 @@ class Wallet(
             # remove the melt_id in proofs
             for p in proofs:
                 p.melt_id = None
-                await update_proof(p, melt_id=None, db=self.db)
+                await update_proof(p, melt_id="", db=self.db)
             raise Exception("could not pay invoice.")
 
         # invoice was paid successfully

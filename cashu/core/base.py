@@ -290,7 +290,6 @@ class MeltQuote(LedgerEvent):
     unit: str
     amount: int
     fee_reserve: int
-    paid: bool
     state: MeltQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
@@ -325,7 +324,6 @@ class MeltQuote(LedgerEvent):
             unit=row["unit"],
             amount=row["amount"],
             fee_reserve=row["fee_reserve"],
-            paid=row["paid"],
             state=MeltQuoteState[row["state"]],
             created_time=created_time,
             paid_time=paid_time,
@@ -344,6 +342,18 @@ class MeltQuote(LedgerEvent):
     def kind(self) -> JSONRPCSubscriptionKinds:
         return JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
 
+    @property
+    def unpaid(self) -> bool:
+        return self.state == MeltQuoteState.unpaid
+
+    @property
+    def pending(self) -> bool:
+        return self.state == MeltQuoteState.pending
+
+    @property
+    def paid(self) -> bool:
+        return self.state == MeltQuoteState.paid
+
     # method that is invoked when the `state` attribute is changed. to protect the state from being set to anything else if the current state is paid
     def __setattr__(self, name, value):
         # an unpaid quote can only be set to pending or paid
@@ -355,6 +365,11 @@ class MeltQuote(LedgerEvent):
         # a paid quote can not be changed
         if name == "state" and self.state == MeltQuoteState.paid:
             raise Exception("Cannot change state of a paid melt quote.")
+
+        if name == "paid":
+            raise Exception(
+                "MeltQuote does not support `paid` anymore! Use `state` instead."
+            )
         super().__setattr__(name, value)
 
 
@@ -375,8 +390,6 @@ class MintQuote(LedgerEvent):
     checking_id: str
     unit: str
     amount: int
-    paid: bool
-    issued: bool
     state: MintQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
@@ -401,8 +414,6 @@ class MintQuote(LedgerEvent):
             checking_id=row["checking_id"],
             unit=row["unit"],
             amount=row["amount"],
-            paid=row["paid"],
-            issued=row["issued"],
             state=MintQuoteState[row["state"]],
             created_time=created_time,
             paid_time=paid_time,
@@ -416,6 +427,22 @@ class MintQuote(LedgerEvent):
     @property
     def kind(self) -> JSONRPCSubscriptionKinds:
         return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
+
+    @property
+    def unpaid(self) -> bool:
+        return self.state == MintQuoteState.unpaid
+
+    @property
+    def paid(self) -> bool:
+        return self.state == MintQuoteState.paid
+
+    @property
+    def pending(self) -> bool:
+        return self.state == MintQuoteState.pending
+
+    @property
+    def issued(self) -> bool:
+        return self.state == MintQuoteState.issued
 
     def __setattr__(self, name, value):
         # un unpaid quote can only be set to paid
@@ -435,6 +462,11 @@ class MintQuote(LedgerEvent):
         # an issued quote cannot be changed
         if name == "state" and self.state == MintQuoteState.issued:
             raise Exception("Cannot change state of an issued mint quote.")
+
+        if name == "paid":
+            raise Exception(
+                "MintQuote does not support `paid` anymore! Use `state` instead."
+            )
         super().__setattr__(name, value)
 
 

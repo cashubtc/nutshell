@@ -125,7 +125,7 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
     )
 
     mint_quote_after_payment = await ledger.get_mint_quote(invoice.id)
-    assert mint_quote_after_payment.paid, "mint quote should be paid"
+    assert mint_quote_after_payment.issued, "mint quote should be issued"
     assert mint_quote_after_payment.state == MintQuoteState.issued
 
 

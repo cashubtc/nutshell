@@ -201,16 +201,6 @@ class LedgerCrud(ABC):
     ) -> None:
         ...
 
-    # @abstractmethod
-    # async def update_mint_quote_paid(
-    #     self,
-    #     *,
-    #     quote_id: str,
-    #     paid: bool,
-    #     db: Database,
-    #     conn: Optional[Connection] = None,
-    # ) -> None: ...
-
     @abstractmethod
     async def store_melt_quote(
         self,
@@ -443,8 +433,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, issued, paid, state, created_time, paid_time)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :issued, :paid, :state, :created_time, :paid_time)
+            (quote, method, request, checking_id, unit, amount, issued, state, created_time, paid_time)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :issued, :state, :created_time, :paid_time)
             """,
             {
                 "quote": quote.quote,
@@ -453,8 +443,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "checking_id": quote.checking_id,
                 "unit": quote.unit,
                 "amount": quote.amount,
-                "issued": quote.issued,
-                "paid": quote.paid,
+                "issued": quote.issued,  # this is deprecated! we need to store it because we have a NOT NULL constraint | we could also remove the column but sqlite doesn't support that (we would have to make a new table)
                 "state": quote.state.name,
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
@@ -523,10 +512,8 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
-            f"UPDATE {db.table_with_schema('mint_quotes')} SET issued = :issued, paid = :paid, state = :state, paid_time = :paid_time WHERE quote = :quote",
+            f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time WHERE quote = :quote",
             {
-                "issued": quote.issued,
-                "paid": quote.paid,
                 "state": quote.state.name,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
@@ -562,8 +549,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, paid, state, created_time, paid_time, fee_paid, proof, change, expiry)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :paid, :state, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, state, created_time, paid_time, fee_paid, proof, change, expiry)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
             """,
             {
                 "quote": quote.quote,
@@ -573,7 +560,6 @@ class LedgerCrudSqlite(LedgerCrud):
                 "unit": quote.unit,
                 "amount": quote.amount,
                 "fee_reserve": quote.fee_reserve or 0,
-                "paid": quote.paid,
                 "state": quote.state.name,
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
@@ -647,10 +633,9 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('melt_quotes')} SET paid = :paid, state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change WHERE quote = :quote
+            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change WHERE quote = :quote
             """,
             {
-                "paid": quote.paid,
                 "state": quote.state.name,
                 "fee_paid": quote.fee_paid,
                 "paid_time": db.to_timestamp(
@@ -702,7 +687,7 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> int:
-        row = await (conn or db).fetchone(
+        row: List = await (conn or db).fetchone(
             f"""
             SELECT * from {db.table_with_schema('balance')}
             """
