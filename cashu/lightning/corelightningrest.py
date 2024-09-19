@@ -253,12 +253,12 @@ class CoreLightningRestWallet(LightningBackend):
             pay = data["pays"][0]
 
             fee_msat, preimage = None, None
-            if INVOICE_RESULT_MAP.get(pay["status"]) == PaymentResult.SETTLED:
+            if PAYMENT_RESULT_MAP.get(pay["status"]) == PaymentResult.SETTLED:
                 fee_msat = -int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
                 preimage = pay["preimage"]
 
             return PaymentStatus(
-                result=INVOICE_RESULT_MAP[pay["status"]],
+                result=PAYMENT_RESULT_MAP[pay["status"]],
                 fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
                 preimage=preimage,
             )
