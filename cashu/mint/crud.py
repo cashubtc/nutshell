@@ -633,7 +633,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change WHERE quote = :quote
+            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change, checking_id = :checking_id WHERE quote = :quote
             """,
             {
                 "state": quote.state.name,
@@ -646,6 +646,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 if quote.change
                 else None,
                 "quote": quote.quote,
+                "checking_id": quote.checking_id,
             },
         )
 

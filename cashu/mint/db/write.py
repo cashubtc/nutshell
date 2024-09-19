@@ -129,9 +129,9 @@ class DbWriteHelper:
             )
             if not quote:
                 raise TransactionError("Mint quote not found.")
-            if quote.state == MintQuoteState.pending:
+            if quote.pending:
                 raise TransactionError("Mint quote already pending.")
-            if not quote.state == MintQuoteState.paid:
+            if not quote.paid:
                 raise TransactionError("Mint quote is not paid yet.")
             # set the quote as pending
             quote.state = MintQuoteState.pending
@@ -189,7 +189,7 @@ class DbWriteHelper:
             )
             if not quote_db:
                 raise TransactionError("Melt quote not found.")
-            if quote_db.state == MeltQuoteState.pending:
+            if quote_db.pending:
                 raise TransactionError("Melt quote already pending.")
             # set the quote as pending
             quote_copy.state = MeltQuoteState.pending

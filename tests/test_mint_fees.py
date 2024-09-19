@@ -237,7 +237,7 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
     )
 
     melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert not melt_quote_pre_payment.state, "melt quote should not be paid"
+    assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
 
     assert not melt_quote.paid, "melt quote should not be paid"
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)

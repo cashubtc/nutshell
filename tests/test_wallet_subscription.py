@@ -3,7 +3,7 @@ import asyncio
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Method, MintQuoteState, ProofSpentState, ProofState
+from cashu.core.base import Method, MintQuoteState, ProofState
 from cashu.core.json_rpc.base import JSONRPCNotficationParams
 from cashu.core.nuts import WEBSOCKETS_NUT
 from cashu.core.settings import settings
@@ -54,13 +54,10 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     assert triggered
     assert len(msg_stack) == 3
 
-    assert msg_stack[0].payload["paid"] is False
     assert msg_stack[0].payload["state"] == MintQuoteState.unpaid.value
 
-    assert msg_stack[1].payload["paid"] is True
     assert msg_stack[1].payload["state"] == MintQuoteState.paid.value
 
-    assert msg_stack[2].payload["paid"] is True
     assert msg_stack[2].payload["state"] == MintQuoteState.issued.value
 
 
@@ -100,16 +97,16 @@ async def test_wallet_subscription_swap(wallet: Wallet):
     pending_stack = msg_stack[:n_subscriptions]
     for msg in pending_stack:
         proof_state = ProofState.parse_obj(msg.payload)
-        assert proof_state.state == ProofSpentState.unspent
+        assert proof_state.unspent
 
     # the second one is the PENDING state
     spent_stack = msg_stack[n_subscriptions : n_subscriptions * 2]
     for msg in spent_stack:
         proof_state = ProofState.parse_obj(msg.payload)
-        assert proof_state.state == ProofSpentState.pending
+        assert proof_state.pending
 
     # the third one is the SPENT state
     spent_stack = msg_stack[n_subscriptions * 2 :]
     for msg in spent_stack:
         proof_state = ProofState.parse_obj(msg.payload)
-        assert proof_state.state == ProofSpentState.spent
+        assert proof_state.spent

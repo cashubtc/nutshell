@@ -80,6 +80,18 @@ class ProofState(LedgerEvent):
     def kind(self) -> JSONRPCSubscriptionKinds:
         return JSONRPCSubscriptionKinds.PROOF_STATE
 
+    @property
+    def unspent(self) -> bool:
+        return self.state == ProofSpentState.unspent
+
+    @property
+    def spent(self) -> bool:
+        return self.state == ProofSpentState.spent
+
+    @property
+    def pending(self) -> bool:
+        return self.state == ProofSpentState.pending
+
 
 class HTLCWitness(BaseModel):
     preimage: Optional[str] = None
@@ -357,13 +369,13 @@ class MeltQuote(LedgerEvent):
     # method that is invoked when the `state` attribute is changed. to protect the state from being set to anything else if the current state is paid
     def __setattr__(self, name, value):
         # an unpaid quote can only be set to pending or paid
-        if name == "state" and self.state == MeltQuoteState.unpaid:
+        if name == "state" and self.unpaid:
             if value not in [MeltQuoteState.pending, MeltQuoteState.paid]:
                 raise Exception(
                     f"Cannot change state of an unpaid melt quote to {value}."
                 )
         # a paid quote can not be changed
-        if name == "state" and self.state == MeltQuoteState.paid:
+        if name == "state" and self.paid:
             raise Exception("Cannot change state of a paid melt quote.")
 
         if name == "paid":
@@ -446,21 +458,21 @@ class MintQuote(LedgerEvent):
 
     def __setattr__(self, name, value):
         # un unpaid quote can only be set to paid
-        if name == "state" and self.state == MintQuoteState.unpaid:
+        if name == "state" and self.unpaid:
             if value != MintQuoteState.paid:
                 raise Exception(
                     f"Cannot change state of an unpaid mint quote to {value}."
                 )
         # a paid quote can only be set to pending or issued
-        if name == "state" and self.state == MintQuoteState.paid:
+        if name == "state" and self.paid:
             if value != MintQuoteState.pending and value != MintQuoteState.issued:
                 raise Exception(f"Cannot change state of a paid mint quote to {value}.")
         # a pending quote can only be set to paid or issued
-        if name == "state" and self.state == MintQuoteState.pending:
+        if name == "state" and self.pending:
             if value not in [MintQuoteState.paid, MintQuoteState.issued]:
                 raise Exception("Cannot change state of a pending mint quote.")
         # an issued quote cannot be changed
-        if name == "state" and self.state == MintQuoteState.issued:
+        if name == "state" and self.issued:
             raise Exception("Cannot change state of an issued mint quote.")
 
         if name == "paid":

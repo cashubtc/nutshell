@@ -14,7 +14,6 @@ from ..core.base import (
     DLEQWallet,
     Invoice,
     Proof,
-    ProofSpentState,
     Unit,
     WalletKeyset,
 )
@@ -995,7 +994,7 @@ class Wallet(
         if check_spendable:
             proof_states = await self.check_proof_state(proofs)
             for i, state in enumerate(proof_states.states):
-                if state.state == ProofSpentState.spent:
+                if state.spent:
                     invalidated_proofs.append(proofs[i])
         else:
             invalidated_proofs = proofs

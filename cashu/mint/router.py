@@ -4,7 +4,6 @@ import time
 from fastapi import APIRouter, Request, WebSocket
 from loguru import logger
 
-from ..core.base import MeltQuoteState, MintQuoteState
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
     GetInfoResponse,
@@ -169,7 +168,7 @@ async def mint_quote(
     resp = PostMintQuoteResponse(
         request=quote.request,
         quote=quote.quote,
-        paid=quote.state == MintQuoteState.paid,  # deprecated
+        paid=quote.paid,  # deprecated
         state=quote.state.value,
         expiry=quote.expiry,
     )
@@ -193,7 +192,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     resp = PostMintQuoteResponse(
         quote=mint_quote.quote,
         request=mint_quote.request,
-        paid=mint_quote.state == MintQuoteState.paid,  # deprecated
+        paid=mint_quote.paid,  # deprecated
         state=mint_quote.state.value,
         expiry=mint_quote.expiry,
     )
@@ -284,7 +283,7 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
         quote=melt_quote.quote,
         amount=melt_quote.amount,
         fee_reserve=melt_quote.fee_reserve,
-        paid=melt_quote.state == MeltQuoteState.paid,
+        paid=melt_quote.paid,
         state=melt_quote.state.value,
         expiry=melt_quote.expiry,
     )
