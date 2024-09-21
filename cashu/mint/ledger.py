@@ -153,7 +153,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             return
         logger.info("Checking pending melt quotes")
         for quote in melt_quotes:
-            quote = await self.get_melt_quote(quote_id=quote.quote)
+            quote = await self.get_melt_quote(quote_id=quote.quote, purge_unknown=True)
             logger.info(f"Melt quote {quote.quote} state: {quote.state}")
 
     # ------- KEYS -------
@@ -682,7 +682,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             expiry=quote.expiry,
         )
 
-    async def get_melt_quote(self, quote_id: str) -> MeltQuote:
+    async def get_melt_quote(self, quote_id: str, purge_unknown=False) -> MeltQuote:
         """Returns a melt quote.
 
         If melt quote is not paid yet and no internal mint quote is associated with it,
@@ -691,6 +691,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         Args:
             quote_id (str): ID of the melt quote.
+            purge_unknown (bool, optional): Rollback unknown payment states to unpaid. Defaults to False.
 
         Raises:
             Exception: Quote not found.
@@ -712,7 +713,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             request=melt_quote.request, db=self.db
         )
 
-        if not melt_quote.paid and not mint_quote:
+        if melt_quote.pending and not mint_quote:
             logger.debug(
                 "Lightning: checking outgoing Lightning payment"
                 f" {melt_quote.checking_id}"
@@ -736,8 +737,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 )
                 await self._invalidate_proofs(proofs=pending_proofs, quote_id=quote_id)
                 await self.db_write._unset_proofs_pending(pending_proofs)
-            if status.failed or status.unknown:
-                logger.debug(f"Setting quote {quote_id} as failed")
+            if status.failed or (purge_unknown and status.unknown):
+                logger.debug(f"Setting quote {quote_id} as unpaid")
                 melt_quote.state = MeltQuoteState.unpaid
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
                 await self.events.submit(melt_quote)
