@@ -233,11 +233,11 @@ class CoreLightningRestWallet(LightningBackend):
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        r = await self.client.get(
-            "/v1/pay/listPays",
-            params={"payment_hash": checking_id},
-        )
         try:
+            r = await self.client.get(
+                "/v1/pay/listPays",
+                params={"payment_hash": checking_id},
+            )
             r.raise_for_status()
             data = r.json()
 

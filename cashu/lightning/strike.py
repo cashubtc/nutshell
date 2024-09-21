@@ -284,19 +284,23 @@ class StrikeWallet(LightningBackend):
         try:
             r = await self.client.get(url=f"{self.endpoint}/v1/payments/{checking_id}")
             r.raise_for_status()
+            data = r.json()
+            if not data.get("state"):
+                return PaymentStatus(
+                    result=PaymentResult.UNKNOWN, error_message="Unknown"
+                )
+            if data["paid"]:
+                return PaymentStatus(
+                    result=PaymentResult.SETTLED,
+                    fee=Amount(self.unit, data["details"]["fee"]),
+                    preimage=data["preimage"],
+                )
+            else:
+                return PaymentStatus(
+                    result=PaymentResult.FAILED, error_message="Failed"
+                )
         except Exception as e:
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
-        data = r.json()
-        if not data.get("state"):
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message="Unknown")
-        if data["paid"]:
-            return PaymentStatus(
-                result=PaymentResult.SETTLED,
-                fee=Amount(self.unit, data["details"]["fee"]),
-                preimage=data["preimage"],
-            )
-        else:
-            return PaymentStatus(result=PaymentResult.FAILED, error_message="Failed")
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:  # type: ignore
         raise NotImplementedError("paid_invoices_stream not implemented")

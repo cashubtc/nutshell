@@ -251,11 +251,11 @@ class CLNRestWallet(LightningBackend):
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        r = await self.client.post(
-            "/v1/listpays",
-            data={"payment_hash": checking_id},
-        )
         try:
+            r = await self.client.post(
+                "/v1/listpays",
+                data={"payment_hash": checking_id},
+            )
             r.raise_for_status()
             data = r.json()
 

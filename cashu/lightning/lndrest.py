@@ -353,6 +353,12 @@ class LndRestWallet(LightningBackend):
 
                     # payment exists
                     if payment is not None and payment.get("status"):
+                        preimage = (
+                            payment.get("payment_preimage")
+                            if payment.get("payment_preimage")
+                            != "0000000000000000000000000000000000000000000000000000000000000000"
+                            else None
+                        )
                         return PaymentStatus(
                             result=PAYMENT_RESULT_MAP[payment["status"]],
                             fee=(
@@ -360,7 +366,7 @@ class LndRestWallet(LightningBackend):
                                 if payment.get("fee_msat")
                                 else None
                             ),
-                            preimage=payment.get("payment_preimage"),
+                            preimage=preimage,
                         )
                     else:
                         return PaymentStatus(

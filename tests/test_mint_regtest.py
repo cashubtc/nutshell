@@ -3,14 +3,19 @@ import asyncio
 import pytest
 import pytest_asyncio
 
+from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Unit
+from cashu.core.models import PostMeltQuoteRequest
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     SLEEP_TIME,
     get_hold_invoice,
+    get_real_invoice,
+    get_real_invoice_cln,
     is_fake,
     pay_if_regtest,
+    pay_real_invoice,
     settle_invoice,
 )
 
@@ -24,6 +29,85 @@ async def wallet():
     )
     await wallet.load_mint()
     yield wallet
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_lightning_create_invoice(ledger: Ledger):
+    invoice = await ledger.backends[Method.bolt11][Unit.sat].create_invoice(
+        Amount(Unit.sat, 1000)
+    )
+    assert invoice.ok
+    assert invoice.payment_request
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_lightning_pay_invoice(ledger: Ledger):
+    invoice_dict = get_real_invoice(64)
+    request = invoice_dict["payment_request"]
+    quote = MeltQuote(
+        quote="test",
+        method=Method.bolt11.name,
+        unit=Unit.sat.name,
+        state=MeltQuoteState.unpaid,
+        request=request,
+        checking_id="test",
+        amount=64,
+        fee_reserve=0,
+    )
+    payment = await ledger.backends[Method.bolt11][Unit.sat].pay_invoice(quote, 1000)
+    assert payment.settled
+    assert payment.preimage
+    assert payment.checking_id
+    assert not payment.error_message
+
+    # TEST 2: check the payment status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+        payment.checking_id
+    )
+    assert status.settled
+    assert status.preimage
+    assert not status.error_message
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_lightning_pay_invoice_failure(ledger: Ledger):
+    request = get_real_invoice_cln(64)
+    # pay the invoice so that the attempt later fails
+    pay_real_invoice(request)
+
+    # we call get_payment_quote to get a checking_id that we will use to check for the failed pending state later with get_payment_status
+    payment_quote = await ledger.backends[Method.bolt11][Unit.sat].get_payment_quote(
+        PostMeltQuoteRequest(request=request, unit=Unit.sat.name)
+    )
+    checking_id = payment_quote.checking_id
+
+    quote = MeltQuote(
+        quote="test",
+        method=Method.bolt11.name,
+        unit=Unit.sat.name,
+        state=MeltQuoteState.unpaid,
+        request=request,
+        checking_id="test",
+        amount=64,
+        fee_reserve=0,
+    )
+    payment = await ledger.backends[Method.bolt11][Unit.sat].pay_invoice(quote, 1000)
+
+    assert payment.failed
+    assert not payment.preimage
+    assert payment.error_message
+    assert not payment.checking_id
+
+    # TEST 2: check the payment status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+        checking_id
+    )
+
+    assert status.failed or status.unknown
+    assert not status.preimage
 
 
 @pytest.mark.asyncio

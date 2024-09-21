@@ -180,13 +180,12 @@ class FakeWallet(LightningBackend):
                 result=PaymentResult.UNKNOWN, error_message="Invoice not found"
             )
 
-    async def get_payment_status(self, _: str) -> PaymentStatus:
+    async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         if settings.fakewallet_payment_state:
             return PaymentStatus(
                 result=PaymentResult[settings.fakewallet_payment_state]
             )
-        else:
-            return PaymentStatus(result=PaymentResult.SETTLED)
+        return PaymentStatus(result=PaymentResult.SETTLED)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

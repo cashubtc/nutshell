@@ -153,7 +153,6 @@ class LNbitsWallet(LightningBackend):
                 result=PaymentResult.UNKNOWN, error_message=data["detail"]
             )
 
-        result = PaymentResult.UNKNOWN
         if data["paid"]:
             result = PaymentResult.SETTLED
         elif not data["paid"] and data["details"]["pending"]:
@@ -161,7 +160,7 @@ class LNbitsWallet(LightningBackend):
         elif not data["paid"] and not data["details"]["pending"]:
             result = PaymentResult.FAILED
         else:
-            raise ValueError(f"unexpected value for paid: {data['paid']}")
+            result = PaymentResult.UNKNOWN
 
         return PaymentStatus(
             result=result,
@@ -175,29 +174,29 @@ class LNbitsWallet(LightningBackend):
                 url=f"{self.endpoint}/api/v1/payments/{checking_id}"
             )
             r.raise_for_status()
+
+            data = r.json()
+            if "paid" not in data and "details" not in data:
+                return PaymentStatus(
+                    result=PaymentResult.UNKNOWN, error_message="invalid response"
+                )
+
+            if data["paid"]:
+                result = PaymentResult.SETTLED
+            elif not data["paid"] and data["details"]["pending"]:
+                result = PaymentResult.PENDING
+            elif not data["paid"] and not data["details"]["pending"]:
+                result = PaymentResult.FAILED
+            else:
+                result = PaymentResult.UNKNOWN
+
+            return PaymentStatus(
+                result=result,
+                fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
+                preimage=data.get("preimage"),
+            )
         except Exception as e:
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
-        data = r.json()
-        if "paid" not in data and "details" not in data:
-            return PaymentStatus(
-                result=PaymentResult.UNKNOWN, error_message="invalid response"
-            )
-
-        result = PaymentResult.UNKNOWN
-        if data["paid"]:
-            result = PaymentResult.SETTLED
-        elif not data["paid"] and data["details"]["pending"]:
-            result = PaymentResult.PENDING
-        elif not data["paid"] and not data["details"]["pending"]:
-            result = PaymentResult.FAILED
-        else:
-            raise ValueError(f"unexpected value for paid: {data['paid']}")
-
-        return PaymentStatus(
-            result=result,
-            fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
-            preimage=data.get("preimage"),
-        )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

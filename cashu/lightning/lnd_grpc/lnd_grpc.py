@@ -333,6 +333,12 @@ class LndRPCWallet(LightningBackend):
                 router_stub = routerstub.RouterStub(channel)
                 async for payment in router_stub.TrackPaymentV2(request):
                     if payment is not None and payment.status:
+                        preimage = (
+                            payment.payment_preimage
+                            if payment.payment_preimage
+                            != "0000000000000000000000000000000000000000000000000000000000000000"
+                            else None
+                        )
                         return PaymentStatus(
                             result=PAYMENT_RESULT_MAP[payment.status],
                             fee=(
@@ -340,12 +346,14 @@ class LndRPCWallet(LightningBackend):
                                 if payment.fee_msat
                                 else None
                             ),
-                            preimage=payment.payment_preimage,
+                            preimage=preimage,
                         )
         except AioRpcError as e:
             error_message = f"TrackPaymentV2 failed: {e}"
             logger.error(error_message)
-
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message=error_message
+            )
         return PaymentStatus(result=PaymentResult.UNKNOWN)
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
