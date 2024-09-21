@@ -245,7 +245,7 @@ class BlinkWallet(LightningBackend):
         # we check the payment status to get the preimage
         preimage: Union[None, str] = None
         payment_status = await self.get_payment_status(checking_id)
-        if payment_status.result == PaymentResult.SETTLED:
+        if payment_status.settled:
             preimage = payment_status.preimage
 
         return PaymentResponse(

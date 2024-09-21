@@ -5,7 +5,6 @@ from httpx import Response
 from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Unit
 from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult
 from cashu.lightning.blink import MINIMUM_FEE_MSAT, BlinkWallet  # type: ignore
 
 settings.mint_blink_key = "123"
@@ -99,11 +98,10 @@ async def test_blink_pay_invoice():
         unit="sat",
         amount=100,
         fee_reserve=12,
-        paid=False,
         state=MeltQuoteState.unpaid,
     )
     payment = await blink.pay_invoice(quote, 1000)
-    assert payment.result == PaymentResult.SETTLED
+    assert payment.settled
     assert payment.fee
     assert payment.fee.amount == 10
     assert payment.error_message is None
@@ -132,11 +130,10 @@ async def test_blink_pay_invoice_failure():
         unit="sat",
         amount=100,
         fee_reserve=12,
-        paid=False,
         state=MeltQuoteState.unpaid,
     )
     payment = await blink.pay_invoice(quote, 1000)
-    assert payment.result != PaymentResult.SETTLED
+    assert not payment.settled
     assert payment.fee is None
     assert payment.error_message
     assert "This is the error" in payment.error_message
@@ -156,7 +153,7 @@ async def test_blink_get_invoice_status():
     }
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     status = await blink.get_invoice_status("123")
-    assert status.result == PaymentResult.SETTLED
+    assert status.settled
 
 
 @respx.mock
@@ -184,7 +181,7 @@ async def test_blink_get_payment_status():
     }
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     status = await blink.get_payment_status(payment_request)
-    assert status.result == PaymentResult.SETTLED
+    assert status.settled
     assert status.fee
     assert status.fee.amount == 10
     assert status.preimage == "123"
