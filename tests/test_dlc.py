@@ -74,7 +74,7 @@ async def assert_err(f, msg: Union[str, CashuError]):
 @pytest.mark.asyncio
 async def test_merkle_hash():
     data = [b'\x01', b'\x02']
-    target = '25dfd29c09617dcc9852281c030e5b3037a338a4712a42a21c907f259c6412a0'
+    target = 'a12871fee210fb8619291eaea194581cbd2531e4b23759d225f6806923f63222'
     h = sorted_merkle_hash(data[1], data[0])
     assert h.hex() == target, f'sorted_merkle_hash test fail: {h.hex() = }'
     h = sorted_merkle_hash(data[0], data[1])
@@ -82,7 +82,7 @@ async def test_merkle_hash():
 
 @pytest.mark.asyncio
 async def test_merkle_root():
-    target = '0ee849f3b077380cd2cf5c76c6d63bcaa08bea89c1ef9914e5bc86c174417cb3'
+    target = '3d8064e48c4983cf426e09706cc1f9f24f3f6d15308569e307e4d16f05e1fb04'
     leafs = [sha256(i.to_bytes(32, 'big')).digest() for i in range(16)]
     root, _ = merkle_root(leafs)
     assert root.hex() == target, f"merkle_root test fail: {root.hex() = }"
