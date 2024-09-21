@@ -13,6 +13,7 @@ from ..core.base import (
     BlindedSignature,
     DLEQWallet,
     Invoice,
+    MeltQuoteState,
     Proof,
     Unit,
     WalletKeyset,
@@ -758,13 +759,18 @@ class Wallet(
         status = await super().melt(quote_id, proofs, change_outputs)
 
         # if payment fails
-        if not status.paid:
-            # remove the melt_id in proofs
+        if MeltQuoteState(status.state) == MeltQuoteState.unpaid:
+            # remove the melt_id in proofs and set reserved to False
             for p in proofs:
                 p.melt_id = None
+                p.reserved = False
                 await update_proof(p, melt_id="", db=self.db)
             raise Exception("could not pay invoice.")
+        elif MeltQuoteState(status.state) == MeltQuoteState.pending:
+            # payment is still pending
+            return status
 
+        # else:
         # invoice was paid successfully
 
         await self.invalidate(proofs)

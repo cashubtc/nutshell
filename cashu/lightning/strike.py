@@ -77,8 +77,8 @@ class StrikePaymentResponse(BaseModel):
     paymentId: str
     state: str
     result: str
-    completed: str
-    delivered: str
+    completed: Optional[str]
+    delivered: Optional[str]
     amount: StrikeAmount
     totalFee: StrikeAmount
     lightningNetworkFee: StrikeAmount
@@ -284,21 +284,12 @@ class StrikeWallet(LightningBackend):
         try:
             r = await self.client.get(url=f"{self.endpoint}/v1/payments/{checking_id}")
             r.raise_for_status()
-            data = r.json()
-            if not data.get("state"):
-                return PaymentStatus(
-                    result=PaymentResult.UNKNOWN, error_message="Unknown"
-                )
-            if data["paid"]:
-                return PaymentStatus(
-                    result=PaymentResult.SETTLED,
-                    fee=Amount(self.unit, data["details"]["fee"]),
-                    preimage=data["preimage"],
-                )
-            else:
-                return PaymentStatus(
-                    result=PaymentResult.FAILED, error_message="Failed"
-                )
+            payment = StrikePaymentResponse.parse_obj(r.json())
+            fee = self.fee_int(payment)
+            return PaymentStatus(
+                result=PAYMENT_RESULT_MAP[payment.state],
+                fee=Amount(self.unit, fee),
+            )
         except Exception as e:
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
 

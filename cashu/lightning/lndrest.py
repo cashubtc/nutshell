@@ -355,8 +355,7 @@ class LndRestWallet(LightningBackend):
                     if payment is not None and payment.get("status"):
                         preimage = (
                             payment.get("payment_preimage")
-                            if payment.get("payment_preimage")
-                            != "0000000000000000000000000000000000000000000000000000000000000000"
+                            if payment.get("payment_preimage") != "0" * 64
                             else None
                         )
                         return PaymentStatus(
