@@ -374,16 +374,16 @@ class DbWriteHelper:
                     eligible_amount = dlc.debts[payout.pubkey]
                     
                     # Verify the amount of the blind messages is LEQ than the eligible amount
-                    if blind_messages_amount > eligible_amount:
+                    if blind_messages_amount != eligible_amount:
                         raise DlcPayoutFail(detail=f"amount requested ({blind_messages_amount}) is bigger than eligible amount ({eligible_amount})")
                     
-                    # Discriminate what to do next based on whether the requested amount is exact or less
-                    if blind_messages_amount == eligible_amount:
-                        del dlc.debts[payout.pubkey]
-                    else:    
-                        dlc.debts[payout.pubkey] -= blind_messages_amount
+                    # Remove the payout from the map
+                    del dlc.debts[payout.pubkey]
 
+                    # Update the database
                     await self.crud.set_dlc_settled_and_debts(dlc.dlc_root, json.dumps(dlc.debts), self.db, conn)
+
+                    # Append payout to verified results
                     verified.append(payout)
                 except (CashuError, Exception) as e:
                     errors.append(DlcPayout(

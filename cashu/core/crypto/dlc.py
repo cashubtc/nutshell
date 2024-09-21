@@ -8,7 +8,7 @@ def sorted_merkle_hash(left: bytes, right: bytes) -> bytes:
     '''Sorts `left` and `right` in non-ascending order and
         computes the hash of their concatenation
     '''
-    if left < right:
+    if right < left:
         left, right = right, left
     return sha256(left+right).digest()
 
