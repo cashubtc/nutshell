@@ -1,5 +1,6 @@
 import asyncio
 
+import bolt11
 import pytest
 import pytest_asyncio
 
@@ -10,6 +11,7 @@ from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     SLEEP_TIME,
+    cancel_invoice,
     get_hold_invoice,
     get_real_invoice,
     get_real_invoice_cln,
@@ -113,6 +115,13 @@ async def test_lightning_pay_invoice_failure(ledger: Ledger):
     )
     checking_id = payment_quote.checking_id
 
+    # TEST 1: check the payment status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+        checking_id
+    )
+    assert status.unknown
+
+    # TEST 2: pay the invoice
     quote = MeltQuote(
         quote="test",
         method=Method.bolt11.name,
@@ -130,13 +139,135 @@ async def test_lightning_pay_invoice_failure(ledger: Ledger):
     assert payment.error_message
     assert not payment.checking_id
 
-    # TEST 2: check the payment status
+    # TEST 3: check the payment status
     status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
         checking_id
     )
 
     assert status.failed or status.unknown
     assert not status.preimage
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_lightning_pay_invoice_pending_success(ledger: Ledger):
+    # create a hold invoice
+    preimage, invoice_dict = get_hold_invoice(64)
+    request = str(invoice_dict["payment_request"])
+
+    # we call get_payment_quote to get a checking_id that we will use to check for the failed pending state later with get_payment_status
+    payment_quote = await ledger.backends[Method.bolt11][Unit.sat].get_payment_quote(
+        PostMeltQuoteRequest(request=request, unit=Unit.sat.name)
+    )
+    checking_id = payment_quote.checking_id
+
+    # pay the invoice
+    quote = MeltQuote(
+        quote="test",
+        method=Method.bolt11.name,
+        unit=Unit.sat.name,
+        state=MeltQuoteState.unpaid,
+        request=request,
+        checking_id=checking_id,
+        amount=64,
+        fee_reserve=0,
+    )
+
+    async def pay():
+        payment = await ledger.backends[Method.bolt11][Unit.sat].pay_invoice(
+            quote, 1000
+        )
+        return payment
+
+    task = asyncio.create_task(pay())
+    await asyncio.sleep(SLEEP_TIME)
+
+    # check the payment status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+        quote.checking_id
+    )
+    assert status.pending
+
+    # settle the invoice
+    settle_invoice(preimage=preimage)
+    await asyncio.sleep(SLEEP_TIME)
+
+    # collect the payment
+    payment = await task
+    assert payment.settled
+    assert payment.preimage
+    assert payment.checking_id
+    assert not payment.error_message
+
+    # check the payment status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+        quote.checking_id
+    )
+    assert status.settled
+    assert status.preimage
+    assert not status.error_message
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_lightning_pay_invoice_pending_failure(ledger: Ledger):
+    # create a hold invoice
+    preimage, invoice_dict = get_hold_invoice(64)
+    request = str(invoice_dict["payment_request"])
+    payment_hash = bolt11.decode(request).payment_hash
+
+    # we call get_payment_quote to get a checking_id that we will use to check for the failed pending state later with get_payment_status
+    payment_quote = await ledger.backends[Method.bolt11][Unit.sat].get_payment_quote(
+        PostMeltQuoteRequest(request=request, unit=Unit.sat.name)
+    )
+    checking_id = payment_quote.checking_id
+
+    # pay the invoice
+    quote = MeltQuote(
+        quote="test",
+        method=Method.bolt11.name,
+        unit=Unit.sat.name,
+        state=MeltQuoteState.unpaid,
+        request=request,
+        checking_id=checking_id,
+        amount=64,
+        fee_reserve=0,
+    )
+
+    async def pay():
+        payment = await ledger.backends[Method.bolt11][Unit.sat].pay_invoice(
+            quote, 1000
+        )
+        return payment
+
+    task = asyncio.create_task(pay())
+    await asyncio.sleep(SLEEP_TIME)
+
+    # check the payment status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+        quote.checking_id
+    )
+    assert status.pending
+
+    # cancel the invoice
+    cancel_invoice(payment_hash)
+    await asyncio.sleep(SLEEP_TIME)
+
+    # collect the payment
+    payment = await task
+    assert payment.failed
+    assert not payment.preimage
+    # assert payment.error_message
+
+    # check the payment status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
+        quote.checking_id
+    )
+    assert (
+        status.failed or status.unknown
+    )  # some backends send unknown instead of failed if they can't find the payment
+    assert not status.preimage
+    # assert status.error_message
 
 
 @pytest.mark.asyncio
