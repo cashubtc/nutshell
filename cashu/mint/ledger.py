@@ -151,52 +151,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         )
         if not melt_quotes:
             return
+        logger.info("Checking pending melt quotes")
         for quote in melt_quotes:
-            # get pending proofs for quote
-            pending_proofs = await self.crud.get_pending_proofs_for_quote(
-                quote_id=quote.quote, db=self.db
-            )
-            # check with the backend whether the quote has been paid during downtime
-            status = await self.backends[Method[quote.method]][
-                Unit[quote.unit]
-            ].get_payment_status(quote.checking_id)
-            match status.result:
-                case PaymentResult.SETTLED:
-                    logger.success(
-                        f"Melt quote checking_id {quote.checking_id} state: {status}"
-                    )
-                    quote.paid_time = int(time.time())
-                    if not quote.paid:
-                        quote.state = MeltQuoteState.paid
-                    if status.fee:
-                        quote.fee_paid = status.fee.to(Unit[quote.unit]).amount
-                    quote.payment_preimage = status.preimage or ""
-                    await self.crud.update_melt_quote(quote=quote, db=self.db)
-                    # invalidate proofs
-                    await self._invalidate_proofs(
-                        proofs=pending_proofs, quote_id=quote.quote
-                    )
-                    # unset pending
-                    await self.db_write._unset_proofs_pending(pending_proofs)
-                case PaymentResult.FAILED | PaymentResult.UNKNOWN:
-                    logger.info(
-                        f"Melt quote checking_id {quote.checking_id} state: {status}"
-                    )
-                    logger.info(
-                        f"Unsetting pending proofs: {Amount(Unit[quote.unit], sum_proofs(pending_proofs)).str()}"
-                    )
-                    # unset pending
-                    await self.db_write._unset_proofs_pending(
-                        pending_proofs, spent=False
-                    )
-                case PaymentResult.PENDING:
-                    logger.info(
-                        f"Melt quote checking_id  {quote.checking_id} state: {status}"
-                    )
-                    pass
-                case _:
-                    logger.error(f"Melt quote state unknown: {status.error_message}")
-                    pass
+            quote = await self.get_melt_quote(quote_id=quote.quote)
+            logger.info(f"Melt quote {quote.quote} state: {quote.state}")
 
     # ------- KEYS -------
 
@@ -755,15 +713,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         )
 
         if not melt_quote.paid and not mint_quote:
-            logger.trace(
+            logger.debug(
                 "Lightning: checking outgoing Lightning payment"
                 f" {melt_quote.checking_id}"
             )
             status: PaymentStatus = await self.backends[method][
                 unit
             ].get_payment_status(melt_quote.checking_id)
+            logger.debug(f"State: {status.result}")
             if status.settled:
-                logger.trace(f"Setting quote {quote_id} as paid")
+                logger.debug(f"Setting quote {quote_id} as paid")
                 melt_quote.state = MeltQuoteState.paid
                 if status.fee:
                     melt_quote.fee_paid = status.fee.to(unit).amount
@@ -772,6 +731,20 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 melt_quote.paid_time = int(time.time())
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
                 await self.events.submit(melt_quote)
+                pending_proofs = await self.crud.get_pending_proofs_for_quote(
+                    quote_id=quote_id, db=self.db
+                )
+                await self._invalidate_proofs(proofs=pending_proofs, quote_id=quote_id)
+                await self.db_write._unset_proofs_pending(pending_proofs)
+            if status.failed or status.unknown:
+                logger.debug(f"Setting quote {quote_id} as failed")
+                melt_quote.state = MeltQuoteState.unpaid
+                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+                await self.events.submit(melt_quote)
+                pending_proofs = await self.crud.get_pending_proofs_for_quote(
+                    quote_id=quote_id, db=self.db
+                )
+                await self.db_write._unset_proofs_pending(pending_proofs)
 
         return melt_quote
 

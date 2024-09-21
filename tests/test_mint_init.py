@@ -144,7 +144,7 @@ async def create_pending_melts(
         request="asdasd",
         checking_id=check_id,
         unit="sat",
-        state=MeltQuoteState.unpaid,
+        state=MeltQuoteState.pending,
         amount=100,
         fee_reserve=1,
     )
