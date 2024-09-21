@@ -165,8 +165,8 @@ async def test_fakewallet_pending_quote_get_melt_quote_unknown(ledger: Ledger):
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
 
-    # get_melt_quote should check the payment status and update the db
-    quote2 = await ledger.get_melt_quote(quote_id=quote.quote)
+    # get_melt_quote(..., purge_unknown=True) should check the payment status and update the db
+    quote2 = await ledger.get_melt_quote(quote_id=quote.quote, purge_unknown=True)
     assert quote2.state == MeltQuoteState.unpaid
 
     # expect that pending tokens are still in db
