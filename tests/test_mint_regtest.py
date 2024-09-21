@@ -39,6 +39,34 @@ async def test_lightning_create_invoice(ledger: Ledger):
     )
     assert invoice.ok
     assert invoice.payment_request
+    assert invoice.checking_id
+
+    # TEST 2: check the invoice status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
+        invoice.checking_id
+    )
+    assert status.pending
+
+    # settle the invoice
+    await pay_if_regtest(invoice.payment_request)
+
+    # TEST 3: check the invoice status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
+        invoice.checking_id
+    )
+    assert status.settled
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_lightning_get_payment_quote(ledger: Ledger):
+    invoice_dict = get_real_invoice(64)
+    request = invoice_dict["payment_request"]
+    payment_quote = await ledger.backends[Method.bolt11][Unit.sat].get_payment_quote(
+        PostMeltQuoteRequest(request=request, unit=Unit.sat.name)
+    )
+    assert payment_quote.amount == Amount(Unit.sat, 64)
+    assert payment_quote.checking_id
 
 
 @pytest.mark.asyncio
@@ -74,6 +102,7 @@ async def test_lightning_pay_invoice(ledger: Ledger):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_lightning_pay_invoice_failure(ledger: Ledger):
+    # create an invoice with the external CLN node and pay it with the external LND – so that our mint backend can't pay it
     request = get_real_invoice_cln(64)
     # pay the invoice so that the attempt later fails
     pay_real_invoice(request)
