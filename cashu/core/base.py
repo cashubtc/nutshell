@@ -839,7 +839,7 @@ class TokenV3(Token):
 
     @property
     def keysets(self) -> List[str]:
-        return list(set([p.id for p in self.proofs]))
+        return list({p.id for p in self.proofs})
 
     @property
     def mint(self) -> str:
@@ -847,7 +847,7 @@ class TokenV3(Token):
 
     @property
     def mints(self) -> List[str]:
-        return list(set([t.mint for t in self.token if t.mint]))
+        return list({t.mint for t in self.token if t.mint})
 
     @property
     def memo(self) -> Optional[str]:
@@ -1037,7 +1037,7 @@ class TokenV4(Token):
 
     @property
     def keysets(self) -> List[str]:
-        return list(set([p.i.hex() for p in self.t]))
+        return list({p.i.hex() for p in self.t})
 
     @classmethod
     def from_tokenv3(cls, tokenv3: TokenV3):

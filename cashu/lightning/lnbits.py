@@ -25,7 +25,7 @@ from .base import (
 class LNbitsWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
-    supported_units = set([Unit.sat])
+    supported_units = {Unit.sat}
     unit = Unit.sat
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True

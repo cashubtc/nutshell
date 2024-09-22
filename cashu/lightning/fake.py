@@ -39,12 +39,12 @@ class FakeWallet(LightningBackend):
     privkey: str = hashlib.pbkdf2_hmac(
         "sha256",
         secret.encode(),
-        ("FakeWallet").encode(),
+        b"FakeWallet",
         2048,
         32,
     ).hex()
 
-    supported_units = set([Unit.sat, Unit.msat, Unit.usd, Unit.eur])
+    supported_units = {Unit.sat, Unit.msat, Unit.usd, Unit.eur}
     unit = Unit.sat
 
     supports_incoming_payment_stream: bool = True

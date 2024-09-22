@@ -34,7 +34,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         self, proofs: List[Proof], unit: Optional[Unit] = None
     ) -> Dict[str, List[Proof]]:
         ret: Dict[str, List[Proof]] = {}
-        keyset_ids = set([p.id for p in proofs])
+        keyset_ids = {p.id for p in proofs}
         for id in keyset_ids:
             if id is None:
                 continue
@@ -178,7 +178,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         if not keysets:
             raise ValueError("No keysets found for proofs")
         assert (
-            len(set([k.unit for k in keysets.values()])) == 1
+            len({k.unit for k in keysets.values()}) == 1
         ), "All keysets must have the same unit"
         unit = keysets[list(keysets.keys())[0]].unit
 
@@ -216,14 +216,14 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         except KeyError:
             raise ValueError("Keysets of proofs are not loaded in wallet")
         # we make sure that all proofs are from keysets of the same mint
-        if len(set([k.mint_url for k in keysets])) > 1:
+        if len({k.mint_url for k in keysets}) > 1:
             raise ValueError("TokenV4 can only contain proofs from a single mint URL")
         mint_url = keysets[0].mint_url
         if not mint_url:
             raise ValueError("No mint URL found for keyset")
 
         # we make sure that all keysets have the same unit
-        if len(set([k.unit for k in keysets])) > 1:
+        if len({k.unit for k in keysets}) > 1:
             raise ValueError(
                 "TokenV4 can only contain proofs from keysets with the same unit"
             )
