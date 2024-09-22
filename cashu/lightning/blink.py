@@ -228,9 +228,11 @@ class BlinkWallet(LightningBackend):
                 or "Unknown error"
             )
 
-        result = PAYMENT_EXECUTION_RESULT_MAP[
-            resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("status")
-        ]
+        status_str = resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("status")
+        result = PAYMENT_EXECUTION_RESULT_MAP[status_str]
+
+        if status_str == "ALREADY_PAID":
+            error_message = "Invoice already paid"
 
         if resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {}):
             fee = (
