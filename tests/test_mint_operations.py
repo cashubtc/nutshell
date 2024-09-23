@@ -38,9 +38,8 @@ async def wallet1(ledger: Ledger):
 async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     # mint twice so we have enough to pay the second invoice back
     invoice = await wallet1.request_mint(128)
-    await pay_if_regtest(invoice.bolt11)
+    await ledger.get_mint_quote(invoice.id)
     await wallet1.mint(128, id=invoice.id)
-    await pay_if_regtest(invoice.bolt11)
     assert wallet1.balance == 128
 
     # create a mint quote so that we can melt to it internally
@@ -106,7 +105,7 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
     invoice = await wallet1.request_mint(128)
-    await pay_if_regtest(invoice.bolt11)
+    await ledger.get_mint_quote(invoice.id)
     mint_quote = await ledger.get_mint_quote(invoice.id)
 
     assert mint_quote.paid, "mint quote should be paid"

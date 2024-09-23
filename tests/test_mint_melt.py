@@ -13,7 +13,6 @@ from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     is_regtest,
-    pay_if_regtest,
 )
 
 SEED = "TEST_PRIVATE_KEY"
@@ -187,7 +186,6 @@ async def test_fakewallet_pending_quote_get_melt_quote_unknown(ledger: Ledger):
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_settled(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
     await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
     await wallet.mint(64, id=invoice.id)
     # invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
@@ -208,7 +206,6 @@ async def test_melt_lightning_pay_invoice_settled(ledger: Ledger, wallet: Wallet
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: Wallet):
     invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
     await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
     await wallet.mint(64, id=invoice.id)
     # invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
@@ -258,7 +255,6 @@ async def test_melt_lightning_pay_invoice_failed_settled(
     ledger: Ledger, wallet: Wallet
 ):
     invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
     await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
     await wallet.mint(64, id=invoice.id)
     invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
@@ -283,7 +279,6 @@ async def test_melt_lightning_pay_invoice_failed_pending(
     ledger: Ledger, wallet: Wallet
 ):
     invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
     await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
     await wallet.mint(64, id=invoice.id)
     invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
