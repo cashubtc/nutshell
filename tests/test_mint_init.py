@@ -444,8 +444,8 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
     assert melt_quote
     assert melt_quote.pending
 
-    # manipulate the checking_id
-    melt_quote.checking_id = "unknown_payment"
+    # manipulate the checking_id 32 bytes hexadecmial
+    melt_quote.checking_id = "a" * 64
     await ledger.crud.update_melt_quote(quote=melt_quote, db=ledger.db)
 
     await asyncio.sleep(SLEEP_TIME)

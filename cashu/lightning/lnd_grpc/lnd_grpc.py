@@ -325,23 +325,27 @@ class LndRPCWallet(LightningBackend):
             self.endpoint, self.combined_creds
         ) as channel:
             router_stub = routerstub.RouterStub(channel)
-            async for payment in router_stub.TrackPaymentV2(request):
-                if payment is not None and payment.status:
-                    preimage = (
-                        payment.payment_preimage
-                        if payment.payment_preimage
-                        != "0000000000000000000000000000000000000000000000000000000000000000"
-                        else None
-                    )
-                    return PaymentStatus(
-                        result=PAYMENT_RESULT_MAP[payment.status],
-                        fee=(
-                            Amount(unit=Unit.msat, amount=payment.fee_msat)
-                            if payment.fee_msat
+            try:
+                async for payment in router_stub.TrackPaymentV2(request):
+                    if payment is not None and payment.status:
+                        preimage = (
+                            payment.payment_preimage
+                            if payment.payment_preimage != "0" * 64
                             else None
-                        ),
-                        preimage=preimage,
-                    )
+                        )
+                        return PaymentStatus(
+                            result=PAYMENT_RESULT_MAP[payment.status],
+                            fee=(
+                                Amount(unit=Unit.msat, amount=payment.fee_msat)
+                                if payment.fee_msat
+                                else None
+                            ),
+                            preimage=preimage,
+                        )
+            except AioRpcError as e:
+                # status = StatusCode.NOT_FOUND
+                if e.code() == grpc.StatusCode.NOT_FOUND:
+                    return PaymentStatus(result=PaymentResult.UNKNOWN)
 
         return PaymentStatus(result=PaymentResult.UNKNOWN)
 
