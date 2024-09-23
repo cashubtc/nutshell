@@ -238,6 +238,7 @@ class BlinkWallet(LightningBackend):
             return PaymentResponse(
                 result=result,
                 error_message=error_message,
+                checking_id=quote.request,
             )
 
         if resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {}):
