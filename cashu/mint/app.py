@@ -4,6 +4,9 @@ from traceback import print_exception
 from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from redis import asyncio as aioredis
 from loguru import logger
 from starlette.requests import Request
 
@@ -48,6 +51,11 @@ def create_app(config_object="core.settings") -> FastAPI:
 
     return app
 
+
+redis = None
+if settings.mint_cache_activate:
+    redis = aioredis.from_url(settings.mint_cache_redis_url or "redis://localhost")
+    FastAPICache.init(RedisBackend(redis), prefix="fastapi-cache")
 
 app = create_app()
 

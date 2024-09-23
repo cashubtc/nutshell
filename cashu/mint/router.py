@@ -1,7 +1,8 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, Request, WebSocket
+from fastapi import APIRouter, Request, Response, WebSocket
+from fastapi_cache.decorator import cache
 from loguru import logger
 
 from ..core.errors import KeysetNotFoundError
@@ -32,6 +33,28 @@ from .limit import limit_websocket, limiter
 
 router: APIRouter = APIRouter()
 
+def request_key_builder(
+    func,
+    namespace: str = "",
+    *,
+    request: Request,
+    response: Response,
+    **kwargs,
+):
+    if request.method.lower() == 'get':
+        return ":".join([
+            namespace,
+            request.method.lower(),
+            request.url.path,
+            repr(sorted(request.query_params.items()))
+        ])
+    elif request.method.lower() == 'post':
+        return ":".join([
+            namespace,
+            request.method.lower(),
+            request.url.path,
+            repr(request.json())
+        ])
 
 @router.get(
     "/v1/info",
@@ -230,6 +253,11 @@ async def websocket_endpoint(websocket: WebSocket):
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@cache(
+    expire=settings.mint_cache_bolt11_ttl or 3600,
+    namespace="mint-cache",
+    key_builder=request_key_builder
+)
 async def mint(
     request: Request,
     payload: PostMintRequest,
@@ -305,6 +333,11 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@cache(
+    expire=settings.mint_cache_bolt11_ttl or 3600,
+    namespace="melt-cache",
+    key_builder=request_key_builder
+)
 async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
@@ -327,6 +360,11 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@cache(
+    expire=settings.mint_cache_bolt11_ttl or 3600,
+    namespace="swap-cache",
+    key_builder=request_key_builder
+)
 async def swap(
     request: Request,
     payload: PostSwapRequest,
