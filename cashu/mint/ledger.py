@@ -685,9 +685,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     async def get_melt_quote(self, quote_id: str, purge_unknown=False) -> MeltQuote:
         """Returns a melt quote.
 
-        If melt quote is not paid yet and no internal mint quote is associated with it,
-        checks with the backend for the state of the payment request. If the backend
-        says that the quote has been paid, updates the melt quote in the database.
+        If the melt quote is pending, checks status of the payment with the backend.
+            - If settled, sets the quote as paid and invalidates pending proofs (commit).
+            - If failed, sets the quote as unpaid and unsets pending proofs (rollback).
+            - If purge_unknown is set, do the same for unknown states as for failed states.
 
         Args:
             quote_id (str): ID of the melt quote.
@@ -709,11 +710,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         # we only check the state with the backend if there is no associated internal
         # mint quote for this melt quote
-        mint_quote = await self.crud.get_mint_quote(
+        is_internal = await self.crud.get_mint_quote(
             request=melt_quote.request, db=self.db
         )
 
-        if melt_quote.pending and not mint_quote:
+        if melt_quote.pending and not is_internal:
             logger.debug(
                 "Lightning: checking outgoing Lightning payment"
                 f" {melt_quote.checking_id}"
@@ -845,13 +846,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         """
         # get melt quote and check if it was already paid
         melt_quote = await self.get_melt_quote(quote_id=quote)
+        if not melt_quote.unpaid:
+            raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
 
         unit, method = self._verify_and_get_unit_method(
             melt_quote.unit, melt_quote.method
         )
-
-        if not melt_quote.unpaid:
-            raise TransactionError(f"melt quote is not unpaid: {melt_quote.state}")
 
         # make sure that the outputs (for fee return) are in the same unit as the quote
         if outputs:

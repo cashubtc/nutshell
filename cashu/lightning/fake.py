@@ -152,6 +152,14 @@ class FakeWallet(LightningBackend):
         if settings.fakewallet_delay_outgoing_payment:
             await asyncio.sleep(settings.fakewallet_delay_outgoing_payment)
 
+        if settings.fakewallet_pay_invoice_state:
+            return PaymentResponse(
+                result=PaymentResult[settings.fakewallet_pay_invoice_state],
+                checking_id=invoice.payment_hash,
+                fee=Amount(unit=self.unit, amount=1),
+                preimage=self.payment_secrets.get(invoice.payment_hash) or "0" * 64,
+            )
+
         if invoice.payment_hash in self.payment_secrets or settings.fakewallet_brr:
             if invoice not in self.paid_invoices_outgoing:
                 self.paid_invoices_outgoing.append(invoice)
