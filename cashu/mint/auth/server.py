@@ -16,7 +16,7 @@ from .crud import AuthLedgerCrud, AuthLedgerCrudSqlite
 
 class AuthLedger(Ledger):
     auth_crud: AuthLedgerCrud
-    jwks_url = "http://localhost:8080/realms/Nutshell/protocol/openid-connect/certs"
+    jwks_url = "http://localhost:8080/realms/nutshell/protocol/openid-connect/certs"
     jwks_client: jwt.PyJWKClient
     signing_key: Optional[jwt.PyJWK] = None
 

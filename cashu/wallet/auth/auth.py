@@ -19,13 +19,13 @@ class WalletAuth(Wallet):
 
     def _get_jwt(self) -> str:
         token_url = (
-            "http://localhost:8080/realms/Nutshell/protocol/openid-connect/token"
+            "http://localhost:8080/realms/nutshell/protocol/openid-connect/token"
         )
         data = {
             "grant_type": "password",
             "client_id": "cashu-client",
             "username": "asd@asd.com",
-            "password": "asd",
+            "password": "asdasd",
         }
         response = httpx.post(token_url, data=data)
         if response.status_code == 200:
@@ -34,6 +34,7 @@ class WalletAuth(Wallet):
             print("Access Tokens:", access_token)
         else:
             print("Failed to obtain token:", response.status_code, response.text)
+        response.raise_for_status()
         return access_token
 
     async def spend_auth_token(self) -> str:
