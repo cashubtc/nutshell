@@ -320,18 +320,10 @@ class LndRestWallet(LightningBackend):
         This routine checks the payment status using routerpc.TrackPaymentV2.
         """
         # convert checking_id from hex to base64 and some LND magic
-        try:
-            checking_id = base64.urlsafe_b64encode(bytes.fromhex(checking_id)).decode(
-                "ascii"
-            )
-        except ValueError:
-            logger.error(f"Incomprehensible checking_id: {checking_id}")
-            return PaymentStatus(
-                result=PaymentResult.UNKNOWN, error_message="invalid checking_id"
-            )
-
+        checking_id = base64.urlsafe_b64encode(bytes.fromhex(checking_id)).decode(
+            "ascii"
+        )
         url = f"/v2/router/track/{checking_id}"
-
         async with self.client.stream("GET", url, timeout=None) as r:
             async for json_line in r.aiter_lines():
                 try:

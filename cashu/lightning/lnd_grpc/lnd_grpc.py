@@ -318,42 +318,31 @@ class LndRPCWallet(LightningBackend):
         This routine checks the payment status using routerpc.TrackPaymentV2.
         """
         # convert checking_id from hex to bytes and some LND magic
-        try:
-            checking_id_bytes = bytes.fromhex(checking_id)
-        except ValueError:
-            logger.error(f"Couldn't convert {checking_id = } to bytes")
-            return PaymentStatus(result=PaymentResult.UNKNOWN)
-
+        checking_id_bytes = bytes.fromhex(checking_id)
         request = routerrpc.TrackPaymentRequest(payment_hash=checking_id_bytes)
 
-        try:
-            async with grpc.aio.secure_channel(
-                self.endpoint, self.combined_creds
-            ) as channel:
-                router_stub = routerstub.RouterStub(channel)
-                async for payment in router_stub.TrackPaymentV2(request):
-                    if payment is not None and payment.status:
-                        preimage = (
-                            payment.payment_preimage
-                            if payment.payment_preimage
-                            != "0000000000000000000000000000000000000000000000000000000000000000"
+        async with grpc.aio.secure_channel(
+            self.endpoint, self.combined_creds
+        ) as channel:
+            router_stub = routerstub.RouterStub(channel)
+            async for payment in router_stub.TrackPaymentV2(request):
+                if payment is not None and payment.status:
+                    preimage = (
+                        payment.payment_preimage
+                        if payment.payment_preimage
+                        != "0000000000000000000000000000000000000000000000000000000000000000"
+                        else None
+                    )
+                    return PaymentStatus(
+                        result=PAYMENT_RESULT_MAP[payment.status],
+                        fee=(
+                            Amount(unit=Unit.msat, amount=payment.fee_msat)
+                            if payment.fee_msat
                             else None
-                        )
-                        return PaymentStatus(
-                            result=PAYMENT_RESULT_MAP[payment.status],
-                            fee=(
-                                Amount(unit=Unit.msat, amount=payment.fee_msat)
-                                if payment.fee_msat
-                                else None
-                            ),
-                            preimage=preimage,
-                        )
-        except AioRpcError as e:
-            error_message = f"TrackPaymentV2 failed: {e}"
-            logger.error(error_message)
-            return PaymentStatus(
-                result=PaymentResult.UNKNOWN, error_message=error_message
-            )
+                        ),
+                        preimage=preimage,
+                    )
+
         return PaymentStatus(result=PaymentResult.UNKNOWN)
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:

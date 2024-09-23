@@ -290,8 +290,12 @@ class StrikeWallet(LightningBackend):
                 result=PAYMENT_RESULT_MAP[payment.state],
                 fee=Amount(self.unit, fee),
             )
-        except Exception as e:
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404:
+                raise exc
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message=exc.response.text
+            )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:  # type: ignore
         raise NotImplementedError("paid_invoices_stream not implemented")

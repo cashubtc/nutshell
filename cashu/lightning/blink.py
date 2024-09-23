@@ -214,7 +214,7 @@ class BlinkWallet(LightningBackend):
         except Exception as e:
             logger.error(f"Blink API error: {str(e)}")
             return PaymentResponse(
-                result=PaymentResult.FAILED,
+                result=PaymentResult.UNKNOWN,
                 error_message=str(e),
             )
 
@@ -234,6 +234,12 @@ class BlinkWallet(LightningBackend):
         if status_str == "ALREADY_PAID":
             error_message = "Invoice already paid"
 
+        if result == PaymentResult.FAILED:
+            return PaymentResponse(
+                result=result,
+                error_message=error_message,
+            )
+
         if resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {}):
             fee = (
                 resp.get("data", {})
@@ -243,7 +249,6 @@ class BlinkWallet(LightningBackend):
             )
 
         checking_id = quote.request
-
         # we check the payment status to get the preimage
         preimage: Union[None, str] = None
         payment_status = await self.get_payment_status(checking_id)
@@ -297,108 +302,103 @@ class BlinkWallet(LightningBackend):
         return PaymentStatus(result=result)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
-        try:
-            # Checking ID is the payment request and blink wants the payment hash
-            payment_hash = bolt11.decode(checking_id).payment_hash
-            variables = {
-                "paymentHash": payment_hash,
-                "walletId": self.wallet_ids[Unit.sat],
-            }
-            data = {
-                "query": """
-                query TransactionsByPaymentHash($paymentHash: PaymentHash!, $walletId: WalletId!) {
-                    me {
-                        defaultAccount {
-                            walletById(walletId: $walletId) {
-                                transactionsByPaymentHash(paymentHash: $paymentHash) {
-                                    status
-                                    direction
-                                    settlementFee
-                                    settlementVia {
-                                        ... on SettlementViaIntraLedger {
-                                            preImage
-                                        }
-                                        ... on SettlementViaLn {
-                                            preImage
-                                        }
+        # Checking ID is the payment request and blink wants the payment hash
+        payment_hash = bolt11.decode(checking_id).payment_hash
+        variables = {
+            "paymentHash": payment_hash,
+            "walletId": self.wallet_ids[Unit.sat],
+        }
+        data = {
+            "query": """
+            query TransactionsByPaymentHash($paymentHash: PaymentHash!, $walletId: WalletId!) {
+                me {
+                    defaultAccount {
+                        walletById(walletId: $walletId) {
+                            transactionsByPaymentHash(paymentHash: $paymentHash) {
+                                status
+                                direction
+                                settlementFee
+                                settlementVia {
+                                    ... on SettlementViaIntraLedger {
+                                        preImage
+                                    }
+                                    ... on SettlementViaLn {
+                                        preImage
                                     }
                                 }
                             }
                         }
                     }
                 }
-                """,
-                "variables": variables,
             }
-            r = await self.client.post(
-                url=self.endpoint,
-                data=json.dumps(data),  # type: ignore
-            )
-            r.raise_for_status()
+            """,
+            "variables": variables,
+        }
+        r = await self.client.post(
+            url=self.endpoint,
+            data=json.dumps(data),  # type: ignore
+        )
+        r.raise_for_status()
 
-            resp: dict = r.json()
+        resp: dict = r.json()
 
-            # no result found, this payment has not been attempted before
-            if (
-                not resp.get("data", {})
-                .get("me", {})
-                .get("defaultAccount", {})
-                .get("walletById", {})
-                .get("transactionsByPaymentHash")
-            ):
-                return PaymentStatus(
-                    result=PaymentResult.UNKNOWN, error_message="No payment found"
-                )
-
-            all_payments_with_this_hash = (
-                resp.get("data", {})
-                .get("me", {})
-                .get("defaultAccount", {})
-                .get("walletById", {})
-                .get("transactionsByPaymentHash")
-            )
-
-            # Blink API edge case: for a previously failed payment attempt, it returns the two payments with the same hash
-            # if there are two payments with the same hash with "direction" == "SEND" and "RECEIVE"
-            # it means that the payment previously failed and we can ignore the attempt and return
-            # PaymentStatus(status=FAILED)
-            if len(all_payments_with_this_hash) == 2 and all(
-                p["direction"] in [DIRECTION_SEND, DIRECTION_RECEIVE]  # type: ignore
-                for p in all_payments_with_this_hash
-            ):
-                return PaymentStatus(
-                    result=PaymentResult.FAILED, error_message="Payment failed"
-                )
-
-            # if there is only one payment with the same hash, it means that the payment might have succeeded
-            # we only care about the payment with "direction" == "SEND"
-            payment = next(
-                (
-                    p
-                    for p in all_payments_with_this_hash
-                    if p.get("direction") == DIRECTION_SEND
-                ),
-                None,
-            )
-            if not payment:
-                return PaymentStatus(
-                    result=PaymentResult.UNKNOWN, error_message="No payment found"
-                )
-
-            # we read the status of the payment
-            result = PAYMENT_RESULT_MAP[payment["status"]]  # type: ignore
-            fee = payment["settlementFee"]  # type: ignore
-            preimage = payment["settlementVia"].get("preImage")  # type: ignore
-
+        # no result found, this payment has not been attempted before
+        if (
+            not resp.get("data", {})
+            .get("me", {})
+            .get("defaultAccount", {})
+            .get("walletById", {})
+            .get("transactionsByPaymentHash")
+        ):
             return PaymentStatus(
-                result=result,
-                fee=Amount(Unit.sat, fee),
-                preimage=preimage,
+                result=PaymentResult.UNKNOWN, error_message="No payment found"
             )
 
-        except Exception as e:
-            logger.error(f"Blink error: {str(e)}")
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+        all_payments_with_this_hash = (
+            resp.get("data", {})
+            .get("me", {})
+            .get("defaultAccount", {})
+            .get("walletById", {})
+            .get("transactionsByPaymentHash")
+        )
+
+        # Blink API edge case: for a previously failed payment attempt, it returns the two payments with the same hash
+        # if there are two payments with the same hash with "direction" == "SEND" and "RECEIVE"
+        # it means that the payment previously failed and we can ignore the attempt and return
+        # PaymentStatus(status=FAILED)
+        if len(all_payments_with_this_hash) == 2 and all(
+            p["direction"] in [DIRECTION_SEND, DIRECTION_RECEIVE]  # type: ignore
+            for p in all_payments_with_this_hash
+        ):
+            return PaymentStatus(
+                result=PaymentResult.FAILED, error_message="Payment failed"
+            )
+
+        # if there is only one payment with the same hash, it means that the payment might have succeeded
+        # we only care about the payment with "direction" == "SEND"
+        payment = next(
+            (
+                p
+                for p in all_payments_with_this_hash
+                if p.get("direction") == DIRECTION_SEND
+            ),
+            None,
+        )
+        if not payment:
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message="No payment found"
+            )
+
+        # we read the status of the payment
+        result = PAYMENT_RESULT_MAP[payment["status"]]  # type: ignore
+        fee = payment["settlementFee"]  # type: ignore
+        preimage = payment["settlementVia"].get("preImage")  # type: ignore
+
+        return PaymentStatus(
+            result=result,
+            fee=Amount(Unit.sat, fee),
+            preimage=preimage,
+        )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

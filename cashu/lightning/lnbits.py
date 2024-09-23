@@ -174,29 +174,33 @@ class LNbitsWallet(LightningBackend):
                 url=f"{self.endpoint}/api/v1/payments/{checking_id}"
             )
             r.raise_for_status()
-
-            data = r.json()
-            if "paid" not in data and "details" not in data:
-                return PaymentStatus(
-                    result=PaymentResult.UNKNOWN, error_message="invalid response"
-                )
-
-            if data["paid"]:
-                result = PaymentResult.SETTLED
-            elif not data["paid"] and data["details"]["pending"]:
-                result = PaymentResult.PENDING
-            elif not data["paid"] and not data["details"]["pending"]:
-                result = PaymentResult.FAILED
-            else:
-                result = PaymentResult.UNKNOWN
-
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 404:
+                raise e
             return PaymentStatus(
-                result=result,
-                fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
-                preimage=data.get("preimage"),
+                result=PaymentResult.UNKNOWN, error_message=e.response.text
             )
-        except Exception as e:
-            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+
+        data = r.json()
+        if "paid" not in data and "details" not in data:
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message="invalid response"
+            )
+
+        if data["paid"]:
+            result = PaymentResult.SETTLED
+        elif not data["paid"] and data["details"]["pending"]:
+            result = PaymentResult.PENDING
+        elif not data["paid"] and not data["details"]["pending"]:
+            result = PaymentResult.FAILED
+        else:
+            result = PaymentResult.UNKNOWN
+
+        return PaymentStatus(
+            result=result,
+            fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
+            preimage=data.get("preimage"),
+        )
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
