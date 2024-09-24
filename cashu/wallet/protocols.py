@@ -1,10 +1,11 @@
-from typing import Dict, Protocol
+from typing import Dict, List, Protocol
 
 import httpx
 
-from ..core.base import Unit, WalletKeyset
+from ..core.base import Proof, Unit, WalletKeyset
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
+from .mint_info import MintInfo
 
 
 class SupportsPrivateKey(Protocol):
@@ -27,3 +28,8 @@ class SupportsHttpxClient(Protocol):
 
 class SupportsMintURL(Protocol):
     url: str
+
+
+class SupportsAuth(Protocol):
+    auth_proofs: List[Proof]
+    mint_info: MintInfo

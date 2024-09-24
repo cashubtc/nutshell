@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from sqlite3 import Row
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
@@ -173,6 +173,9 @@ class Proof(BaseModel):
             return_dict["witness"] = self.witness
 
         return return_dict
+
+    def to_base64(self):
+        return base64.b64encode(cbor2.dumps(self.to_dict(include_dleq=True))).decode()
 
     def to_dict_no_dleq(self):
         # dictionary without the fields that don't need to be send to Carol
@@ -1187,3 +1190,33 @@ class TokenV4(Token):
             t=[TokenV4Token(**t) for t in token_dict["t"]],
             d=token_dict.get("d", None),
         )
+
+
+class AuthProof(BaseModel):
+    """
+    Blind authentication token
+    """
+
+    id: str
+    secret: str  # secret
+    C: str  # signature
+
+    prefix: ClassVar[str] = "authA"
+
+    @classmethod
+    def from_proof(cls, proof: Proof):
+        return cls(id=proof.id, secret=proof.secret, C=proof.C)
+
+    def to_base64(self):
+        return self.prefix + base64.b64encode(json.dumps(self.dict()).encode()).decode()
+
+    @classmethod
+    def from_base64(cls, base64_str: str):
+        assert base64_str.startswith(cls.prefix), Exception(
+            f"Token prefix not valid. Expected {cls.prefix}."
+        )
+        base64_str = base64_str[len(cls.prefix) :]
+        return cls.parse_obj(json.loads(base64.b64decode(base64_str).decode()))
+
+    def to_proof(self):
+        return Proof(id=self.id, secret=self.secret, C=self.C)

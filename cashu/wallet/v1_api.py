@@ -9,6 +9,7 @@ from httpx import Response
 from loguru import logger
 
 from ..core.base import (
+    AuthProof,
     BlindedMessage,
     BlindedSignature,
     MeltQuoteState,
@@ -49,6 +50,8 @@ from ..tor.tor import TorProxy
 from .crud import (
     get_lightning_invoice,
 )
+from .mint_info import MintInfo
+from .protocols import SupportsAuth
 from .wallet_deprecated import LedgerAPIDeprecated
 
 
@@ -101,10 +104,37 @@ def async_ensure_mint_loaded(func):
     return wrapper
 
 
-class LedgerAPI(LedgerAPIDeprecated, object):
+def async_add_auth_proofs_to_headers(func):
+    """Decorator that adds the auth proofs to the headers of the request."""
+
+    async def wrapper(self, *args, **kwargs):
+        if self.auth_proofs:
+            proof = self.auth_proofs[0]
+            auth_token = AuthProof.from_proof(proof).to_base64()
+            print("Blind auth token:", auth_token)
+        else:
+            raise Exception("No auth proofs found.")
+        headers_dict = {
+            "Client-version": settings.version,
+            "Blindauth": f"{auth_token}",
+        }
+        self.httpx.headers.update(headers_dict)
+        ret = await func(self, *args, **kwargs)
+
+        self.auth_proofs.remove(proof)
+
+        return ret
+
+    return wrapper
+
+
+class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
     tor: TorProxy
     httpx: httpx.AsyncClient
     api_prefix = "v1"
+
+    auth_proofs: List[Proof]
+    mint_info: MintInfo
 
     def __init__(self, url: str, db: Optional[Database] = None):
         self.url = url
@@ -285,6 +315,7 @@ class LedgerAPI(LedgerAPIDeprecated, object):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
+    @async_add_auth_proofs_to_headers
     async def mint_quote(
         self, amount: int, unit: Unit, memo: Optional[str] = None
     ) -> PostMintQuoteResponse:

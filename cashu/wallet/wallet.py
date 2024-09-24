@@ -425,10 +425,6 @@ class Wallet(
             time_created=int(time.time()),
         )
         await store_lightning_invoice(db=self.db, invoice=invoice)
-        # TMP
-        if self.auth_proofs:
-            auth_token = await self.serialize_proofs(self.auth_proofs)
-            print("Blind auth token:", auth_token)
         return invoice, subscriptions
 
     async def request_mint(self, amount: int, memo: Optional[str] = None) -> Invoice:

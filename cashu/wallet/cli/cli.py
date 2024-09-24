@@ -75,6 +75,8 @@ def coro(f):
 
 
 def require_auth(func):
+    """Decorator to pass auth_proofs to the Wallet object."""
+
     @wraps(func)
     async def wrapper(*args, **kwargs):
         ctx = args[0]  # Assuming the first argument is 'ctx'
@@ -82,14 +84,18 @@ def require_auth(func):
         db_location = wallet.db.db_location
         MIN_BALANCE = 10
 
+        async def init_auth_wallet() -> WalletAuth:
+            auth_wallet = await WalletAuth.with_db(
+                ctx.obj["HOST"], db_location, "auth", unit=Unit.auth.name
+            )
+            auth_wallet.api_prefix = "/v1/auth/blind"
+            await auth_wallet.load_mint_keysets()
+            await auth_wallet.activate_keyset()
+            await auth_wallet.load_proofs()
+            return auth_wallet
+
         # Initialize WalletAuth
-        auth_wallet = await WalletAuth.with_db(
-            ctx.obj["HOST"], db_location, "auth", unit=Unit.auth.name
-        )
-        auth_wallet.api_prefix = "/v1/auth/blind"
-        await auth_wallet.load_mint_keysets()
-        await auth_wallet.activate_keyset()
-        await auth_wallet.load_proofs()
+        auth_wallet = await init_auth_wallet()
 
         # Check balance and mint new proofs if necessary
         if auth_wallet.available_balance < MIN_BALANCE:
@@ -101,14 +107,17 @@ def require_auth(func):
                 f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs."
             )
 
-        # Store auth_proofs in ctx.obj
-        ctx.obj["auth_proofs"] = auth_wallet.proofs
-
         # Store proofs in Wallet.auth_proofs
-        wallet.auth_proofs = auth_wallet.proofs
+        wallet.auth_proofs = auth_wallet.proofs.copy()
 
         # Proceed to the original function
-        return await func(*args, **kwargs)
+        ret = await func(*args, **kwargs)
+
+        # Invalidate auth_proofs that were used
+        used_proofs = [p for p in auth_wallet.proofs if p not in wallet.auth_proofs]
+        await auth_wallet.invalidate(used_proofs)
+
+        return ret
 
     return wrapper
 

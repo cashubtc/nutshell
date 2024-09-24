@@ -4,7 +4,7 @@ from typing import List, Optional
 import jwt
 from loguru import logger
 
-from ...core.base import TokenV4
+from ...core.base import AuthProof
 from ...core.db import Database
 from ...core.models import BlindedMessage, BlindedSignature
 from ...core.settings import settings
@@ -145,10 +145,11 @@ class AuthLedger(Ledger):
         Raises:
             Exception: Proof already spent or pending.
         """
-        logger.trace("Blind auth token:", blind_auth_token)
-        proofs = TokenV4.deserialize(blind_auth_token).proofs
-        if len(proofs) != 1:
-            raise Exception("Need exactly one blind auth proof.")
-        await self.db_write._verify_spent_proofs_and_set_pending(proofs)
-        await self._invalidate_proofs(proofs=proofs)
-        await self.db_write._unset_proofs_pending(proofs)
+        logger.trace(f"Blind auth token: {blind_auth_token}")
+        try:
+            proof = AuthProof.from_base64(blind_auth_token).to_proof()
+            await self.db_write._verify_spent_proofs_and_set_pending([proof])
+            await self._invalidate_proofs(proofs=[proof])
+            await self.db_write._unset_proofs_pending([proof])
+        except Exception as e:
+            raise Exception(f"Blind auth error: {e}")

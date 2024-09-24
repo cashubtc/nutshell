@@ -1,3 +1,5 @@
+import re
+
 from fastapi import FastAPI
 from fastapi.exception_handlers import (
     request_validation_exception_handler as _request_validation_exception_handler,
@@ -5,8 +7,13 @@ from fastapi.exception_handlers import (
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
+from starlette.middleware.base import (
+    BaseHTTPMiddleware,
+    RequestResponseEndpoint,
+)
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
+from starlette.responses import Response
 
 from ..core.settings import settings
 from .limit import _rate_limit_exceeded_handler, limiter_global
@@ -16,6 +23,8 @@ if settings.debug_profiling:
 
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+
+from .startup import auth_ledger
 
 
 def add_middlewares(app: FastAPI):
@@ -35,6 +44,35 @@ def add_middlewares(app: FastAPI):
         app.state.limiter = limiter_global
         app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
         app.add_middleware(SlowAPIMiddleware)
+
+    if settings.mint_require_auth:
+        app.add_middleware(BlindAuthMiddleware)
+
+
+class BlindAuthMiddleware(BaseHTTPMiddleware):
+    # implement this middleware that checks if the requested path is one of the paths that require authentication and extract the "blindauth" token from the request headers
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        mint_auth_paths_regex = [
+            r"^/v1/mint/quote$",
+            r"^/v1/mint/quote/[^/]+$",
+        ]
+
+        # check if the requested path matches one of the regex patterns
+        if settings.mint_require_auth and any(
+            re.match(pattern, request.url.path) for pattern in mint_auth_paths_regex
+        ):
+            # extract the "blindauth" token from the request headers
+            blind_auth_token = request.headers.get("blindauth")
+            if not blind_auth_token:
+                raise Exception("Missing blindauth token.")
+            # check if the "blindauth" token is valid
+            try:
+                await auth_ledger.blind_auth_melt(blind_auth_token=blind_auth_token)
+            except Exception as e:
+                raise e
+        return await call_next(request)
 
 
 async def request_validation_exception_handler(
