@@ -38,7 +38,6 @@ class StrikeCreateInvoiceResponse(BaseModel):
     description: str
 
 
-# "{'lightningNetworkFee': {'amount': '0', 'currency': 'BTC'}, 'paymentQuoteId': 'ab5afa09-dc54-4b4f-93c8-5909a2688d2c', 'validUntil': '2024-09-19T14:58:03+00:00', 'amount': {'amount': '0.00000001', 'currency': 'BTC'}, 'totalFee': {'amount': '0', 'currency': 'BTC'}, 'totalAmount': {'amount': '0.00000001', 'currency': 'BTC'}}"
 class StrikePaymentQuoteResponse(BaseModel):
     lightningNetworkFee: StrikeAmount
     paymentQuoteId: str
@@ -59,7 +58,6 @@ class InvoiceQuoteResponse(BaseModel):
     conversionRate: StrikeRate
 
 
-# {'paymentId': '587c3742-f0d2-4819-a78c-66cf4bff1482', 'state': 'COMPLETED', 'result': 'SUCCESS', 'completed': '2024-09-18T21:04:06.8895695+00:00', 'delivered': '2024-09-18T21:04:06.8895695+00:00', 'amount': {'amount': '0.00000001', 'currency': 'BTC'}, 'totalFee': {'amount': '0', 'currency': 'BTC'}, 'lightningNetworkFee': {'amount': '0', 'currency': 'BTC'}, 'totalAmount': {'amount': '0.00000001', 'currency': 'BTC'}, 'lightning': {'networkFee': {'amount': '0', 'currency': 'BTC'}}}
 class StrikePaymentResponse(BaseModel):
     paymentId: str
     state: str
