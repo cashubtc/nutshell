@@ -1,7 +1,14 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, Request, Response, WebSocket
+from contextlib import asynccontextmanager
+from fastapi import APIRouter, WebSocket
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from starlette.requests import Request
+from starlette.responses import Response
+from redis import asyncio as aioredis
 from fastapi_cache.decorator import cache
 from loguru import logger
 
@@ -31,7 +38,11 @@ from ..core.settings import settings
 from ..mint.startup import ledger
 from .limit import limit_websocket, limiter
 
-router: APIRouter = APIRouter()
+router = APIRouter()
+
+@cache()
+async def get_cache():
+    return 1
 
 def request_key_builder(
     func,
@@ -256,7 +267,7 @@ async def websocket_endpoint(websocket: WebSocket):
 @cache(
     expire=settings.mint_cache_bolt11_ttl or 3600,
     namespace="mint-cache",
-    key_builder=request_key_builder
+    key_builder=request_key_builder,
 )
 async def mint(
     request: Request,
