@@ -74,6 +74,45 @@ def coro(f):
     return wrapper
 
 
+def require_auth(func):
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        ctx = args[0]  # Assuming the first argument is 'ctx'
+        wallet: Wallet = ctx.obj["WALLET"]
+        db_location = wallet.db.db_location
+        MIN_BALANCE = 10
+
+        # Initialize WalletAuth
+        auth_wallet = await WalletAuth.with_db(
+            ctx.obj["HOST"], db_location, "auth", unit=Unit.auth.name
+        )
+        auth_wallet.api_prefix = "/v1/auth/blind"
+        await auth_wallet.load_mint_keysets()
+        await auth_wallet.activate_keyset()
+        await auth_wallet.load_proofs()
+
+        # Check balance and mint new proofs if necessary
+        if auth_wallet.available_balance < MIN_BALANCE:
+            print(
+                f"Balance too low. Mint at least {auth_wallet.unit.str(MIN_BALANCE)} auth tokens."
+            )
+            new_proofs = await auth_wallet.mint_blind_auth_proofs()
+            print(
+                f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs."
+            )
+
+        # Store auth_proofs in ctx.obj
+        ctx.obj["auth_proofs"] = auth_wallet.proofs
+
+        # Store proofs in Wallet.auth_proofs
+        wallet.auth_proofs = auth_wallet.proofs
+
+        # Proceed to the original function
+        return await func(*args, **kwargs)
+
+    return wrapper
+
+
 @click.group(cls=NaturalOrderGroup)
 @click.option(
     "--host",
@@ -195,6 +234,7 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 )
 @click.pass_context
 @coro
+@require_auth
 async def pay(
     ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False
 ):
@@ -261,6 +301,7 @@ async def pay(
 )
 @click.pass_context
 @coro
+@require_auth
 async def invoice(
     ctx: Context,
     amount: float,
@@ -400,6 +441,7 @@ async def invoice(
 @cli.command("swap", help="Swap funds between mints.")
 @click.pass_context
 @coro
+@require_auth
 async def swap(ctx: Context):
     print("Select the mint to swap from:")
     outgoing_wallet = await get_mint_wallet(ctx, force_select=True)
@@ -567,6 +609,7 @@ async def balance(ctx: Context, verbose):
 )
 @click.pass_context
 @coro
+@require_auth
 async def send_command(
     ctx: Context,
     amount: int,
@@ -614,6 +657,7 @@ async def send_command(
 )
 @click.pass_context
 @coro
+@require_auth
 async def receive_cli(
     ctx: Context,
     token: str,
@@ -1057,6 +1101,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
 )
 @click.pass_context
 @coro
+@require_auth
 async def restore(ctx: Context, to: int, batch: int):
     wallet: Wallet = ctx.obj["WALLET"]
     # check if there is already a mnemonic in the database
@@ -1091,6 +1136,7 @@ async def restore(ctx: Context, to: int, batch: int):
 # @click.option("--all", default=False, is_flag=True, help="Execute on all available mints.")
 @click.pass_context
 @coro
+@require_auth
 async def selfpay(ctx: Context, all: bool = False):
     wallet = await get_mint_wallet(ctx, force_select=True)
     await wallet.load_mint()
@@ -1121,17 +1167,24 @@ async def selfpay(ctx: Context, all: bool = False):
 @coro
 async def auth(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
+    db_location = wallet.db.db_location
+    MIN_BALANCE = 10
     auth_wallet = await WalletAuth.with_db(
-        ctx.obj["HOST"], wallet.db.db_location, "auth", unit=Unit.auth.name
+        ctx.obj["HOST"], db_location, "auth", unit=Unit.auth.name
     )
     auth_wallet.api_prefix = "/v1/auth/blind"
     await auth_wallet.load_mint_keysets()
     await auth_wallet.activate_keyset()
     await auth_wallet.load_proofs()
-
-    new_proofs = await auth_wallet.mint_blind_auth_proofs()
-    print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs.")
     print(f"Balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
+    if auth_wallet.available_balance < MIN_BALANCE:
+        print(
+            f"Balance too low. Mint at least {auth_wallet.unit.str(MIN_BALANCE)} auth tokens."
+        )
+        new_proofs = await auth_wallet.mint_blind_auth_proofs()
+        print(
+            f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs."
+        )
 
 
 @cli.command("spend-auth", help="Spend auth tokens.")

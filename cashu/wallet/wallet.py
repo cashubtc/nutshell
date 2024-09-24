@@ -101,6 +101,7 @@ class Wallet(
     db: Database
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
+    auth_proofs: List[Proof] = []
 
     def __init__(
         self,
@@ -108,7 +109,7 @@ class Wallet(
         db: str,
         name: str = "wallet",
         unit: str = "sat",
-        auth_wallet=None,
+        auth_proofs: List[Proof] = [],
     ):
         """A Cashu wallet.
 
@@ -118,7 +119,7 @@ class Wallet(
             name (str, optional): Name of the wallet database file. Defaults to "no_name".
         """
         self.db = Database(name, db)
-        self.auth_wallet = auth_wallet
+        self.auth_proofs = auth_proofs
         self.proofs: List[Proof] = []
         self.name = name
         self.unit = Unit[unit]
@@ -138,7 +139,7 @@ class Wallet(
         name: str = "no_name",
         skip_db_read: bool = False,
         unit: str = "sat",
-        auth_wallet=None,
+        auth_proofs: List[Proof] = [],
         load_all_keysets: bool = False,
     ):
         """Initializes a wallet with a database and initializes the private key.
@@ -158,7 +159,7 @@ class Wallet(
             Wallet: Initialized wallet.
         """
         logger.trace(f"Initializing wallet with database: {db}")
-        self = cls(url=url, db=db, name=name, unit=unit)
+        self = cls(url=url, db=db, name=name, unit=unit, auth_proofs=auth_proofs)
         await self._migrate_database()
 
         if skip_db_read:
@@ -425,8 +426,8 @@ class Wallet(
         )
         await store_lightning_invoice(db=self.db, invoice=invoice)
         # TMP
-        if self.auth_wallet:
-            auth_token = await self.auth_wallet.spend_auth_token()
+        if self.auth_proofs:
+            auth_token = await self.serialize_proofs(self.auth_proofs)
             print("Blind auth token:", auth_token)
         return invoice, subscriptions
 

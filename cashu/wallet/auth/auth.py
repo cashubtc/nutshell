@@ -14,7 +14,9 @@ from ..wallet import Wallet
 
 
 class WalletAuth(Wallet):
-    def __init__(self, url: str, db: str, name: str = "auth", unit: str = "auth"):
+    def __init__(
+        self, url: str, db: str, name: str = "auth", unit: str = "auth", **kwargs
+    ):
         super().__init__(url, db, name, unit)
 
     def _get_jwt(self) -> str:
