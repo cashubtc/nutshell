@@ -522,23 +522,6 @@ class LedgerCrudSqlite(LedgerCrud):
             },
         )
 
-    # async def update_mint_quote_paid(
-    #     self,
-    #     *,
-    #     quote_id: str,
-    #     paid: bool,
-    #     db: Database,
-    #     conn: Optional[Connection] = None,
-    # ) -> None:
-    #     await (conn or db).execute(
-    #         f"UPDATE {db.table_with_schema('mint_quotes')} SET paid = ? WHERE"
-    #         " quote = ?",
-    #         (
-    #             paid,
-    #             quote_id,
-    #         ),
-    #     )
-
     async def store_melt_quote(
         self,
         *,

@@ -770,9 +770,7 @@ class Wallet(
             # payment is still pending
             return status
 
-        # else:
         # invoice was paid successfully
-
         await self.invalidate(proofs)
 
         # update paid status in db
