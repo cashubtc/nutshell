@@ -20,19 +20,6 @@ from .base import (
 USDT = "USDT"
 
 
-# class StrikeInvoiceResult(Enum):
-#     PENDING = PaymentResult.PENDING
-#     UNPAID = PaymentResult.PENDING
-#     PAID = PaymentResult.SETTLED
-#     CANCELLED = PaymentResult.FAILED
-
-
-# class StrikePaymentResult(Enum):
-#     PENDING = PaymentResult.PENDING
-#     SETTLED = PaymentResult.SETTLED
-#     FAILED = PaymentResult.FAILED
-
-
 class StrikeAmount(BaseModel):
     amount: str
     currency: str
