@@ -129,9 +129,9 @@ class DbWriteHelper:
             )
             if not quote:
                 raise TransactionError("Mint quote not found.")
-            if quote.state == MintQuoteState.pending:
+            if quote.pending:
                 raise TransactionError("Mint quote already pending.")
-            if not quote.state == MintQuoteState.paid:
+            if not quote.paid:
                 raise TransactionError("Mint quote is not paid yet.")
             # set the quote as pending
             quote.state = MintQuoteState.pending
@@ -181,15 +181,15 @@ class DbWriteHelper:
         quote_copy = quote.copy()
         async with self.db.get_connection(
             lock_table="melt_quotes",
-            lock_select_statement=f"checking_id='{quote.checking_id}'",
+            lock_select_statement=f"quote='{quote.quote}'",
         ) as conn:
             # get melt quote from db and check if it is already pending
             quote_db = await self.crud.get_melt_quote(
-                checking_id=quote.checking_id, db=self.db, conn=conn
+                quote_id=quote.quote, db=self.db, conn=conn
             )
             if not quote_db:
                 raise TransactionError("Melt quote not found.")
-            if quote_db.state == MeltQuoteState.pending:
+            if quote_db.pending:
                 raise TransactionError("Melt quote already pending.")
             # set the quote as pending
             quote_copy.state = MeltQuoteState.pending

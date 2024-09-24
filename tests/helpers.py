@@ -96,6 +96,7 @@ docker_lightning_unconnected_cli = [
     "--rpcserver=lnd-2",
 ]
 
+
 def docker_clightning_cli(index):
     return [
         "docker",
@@ -104,8 +105,8 @@ def docker_clightning_cli(index):
         "lightning-cli",
         "--network",
         "regtest",
-        "--keywords",
     ]
+
 
 def run_cmd(cmd: list) -> str:
     timeout = 20
@@ -171,10 +172,21 @@ def pay_real_invoice(invoice: str) -> str:
     cmd.extend(["payinvoice", "--force", invoice])
     return run_cmd(cmd)
 
+
 def partial_pay_real_invoice(invoice: str, amount: int, node: int) -> str:
     cmd = docker_clightning_cli(node)
     cmd.extend(["pay", f"bolt11={invoice}", f"partial_msat={amount*1000}"])
     return run_cmd(cmd)
+
+
+def get_real_invoice_cln(sats: int) -> str:
+    cmd = docker_clightning_cli(1)
+    cmd.extend(
+        ["invoice", f"{sats*1000}", hashlib.sha256(os.urandom(32)).hexdigest(), "test"]
+    )
+    result = run_cmd_json(cmd)
+    return result["bolt11"]
+
 
 def mine_blocks(blocks: int = 1) -> str:
     cmd = docker_bitcoin_cli.copy()

@@ -10,7 +10,7 @@ from ..core.settings import settings
 def amount_summary(proofs: List[Proof], unit: Unit) -> str:
     amounts_we_have = [
         (amount, len([p for p in proofs if p.amount == amount]))
-        for amount in set([p.amount for p in proofs])
+        for amount in {p.amount for p in proofs}
     ]
     amounts_we_have.sort(key=lambda x: x[0])
     return (

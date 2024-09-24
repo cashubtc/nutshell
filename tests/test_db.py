@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import os
 import time
-from typing import List
+from typing import List, Tuple
 
 import pytest
 import pytest_asyncio
@@ -63,7 +63,8 @@ async def test_db_tables(ledger: Ledger):
                 "SELECT table_name FROM information_schema.tables WHERE table_schema ="
                 " 'public';"
             )
-        tables = [t[0] for t in tables_res.all()]
+        tables_all: List[Tuple[str]] = tables_res.all()
+        tables = [t[0] for t in tables_all]
         tables_expected = [
             "dbversions",
             "keysets",

@@ -3,10 +3,10 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuoteState, MintQuoteState, ProofSpentState
+from cashu.core.base import MeltQuoteState, MintQuoteState
 from cashu.core.models import (
     GetInfoResponse,
-    MintMeltMethodSetting,
+    MintMethodSetting,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostMeltQuoteResponse,
@@ -14,6 +14,7 @@ from cashu.core.models import (
     PostRestoreRequest,
     PostRestoreResponse,
 )
+from cashu.core.nuts import MINT_NUT
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
@@ -45,8 +46,8 @@ async def test_info(ledger: Ledger):
     assert response.json()["pubkey"] == ledger.pubkey.serialize().hex()
     info = GetInfoResponse(**response.json())
     assert info.nuts
-    assert info.nuts[4]["disabled"] is False
-    setting = MintMeltMethodSetting.parse_obj(info.nuts[4]["methods"][0])
+    assert info.nuts[MINT_NUT]["disabled"] is False
+    setting = MintMethodSetting.parse_obj(info.nuts[MINT_NUT]["methods"][0])
     assert setting.method == "bolt11"
     assert setting.unit == "sat"
 
@@ -476,7 +477,7 @@ async def test_api_check_state(ledger: Ledger):
     response = PostCheckStateResponse.parse_obj(response.json())
     assert response
     assert len(response.states) == 2
-    assert response.states[0].state == ProofSpentState.unspent
+    assert response.states[0].state.unspent
 
 
 @pytest.mark.asyncio

@@ -24,6 +24,7 @@ from cashu.lightning.base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     PostMeltQuoteRequest,
     StatusResponse,
@@ -31,25 +32,25 @@ from cashu.lightning.base import (
 
 # maps statuses to None, False, True:
 # https://api.lightning.community/?python=#paymentpaymentstatus
-PAYMENT_STATUSES = {
-    lnrpc.Payment.PaymentStatus.UNKNOWN: None,
-    lnrpc.Payment.PaymentStatus.IN_FLIGHT: None,
-    lnrpc.Payment.PaymentStatus.INITIATED: None,
-    lnrpc.Payment.PaymentStatus.SUCCEEDED: True,
-    lnrpc.Payment.PaymentStatus.FAILED: False,
+PAYMENT_RESULT_MAP = {
+    lnrpc.Payment.PaymentStatus.UNKNOWN: PaymentResult.UNKNOWN,
+    lnrpc.Payment.PaymentStatus.IN_FLIGHT: PaymentResult.PENDING,
+    lnrpc.Payment.PaymentStatus.INITIATED: PaymentResult.PENDING,
+    lnrpc.Payment.PaymentStatus.SUCCEEDED: PaymentResult.SETTLED,
+    lnrpc.Payment.PaymentStatus.FAILED: PaymentResult.FAILED,
 }
-INVOICE_STATUSES = {
-    lnrpc.Invoice.InvoiceState.OPEN: None,
-    lnrpc.Invoice.InvoiceState.SETTLED: True,
-    lnrpc.Invoice.InvoiceState.CANCELED: None,
-    lnrpc.Invoice.InvoiceState.ACCEPTED: None,
+INVOICE_RESULT_MAP = {
+    lnrpc.Invoice.InvoiceState.OPEN: PaymentResult.PENDING,
+    lnrpc.Invoice.InvoiceState.SETTLED: PaymentResult.SETTLED,
+    lnrpc.Invoice.InvoiceState.CANCELED: PaymentResult.FAILED,
+    lnrpc.Invoice.InvoiceState.ACCEPTED: PaymentResult.PENDING,
 }
 
 
 class LndRPCWallet(LightningBackend):
     supports_mpp = settings.mint_lnd_enable_mpp
     supports_incoming_payment_stream = True
-    supported_units = set([Unit.sat, Unit.msat])
+    supported_units = {Unit.sat, Unit.msat}
     supports_description: bool = True
 
     unit = Unit.sat
@@ -181,13 +182,13 @@ class LndRPCWallet(LightningBackend):
         except AioRpcError as e:
             error_message = f"SendPaymentSync failed: {e}"
             return PaymentResponse(
-                ok=False,
+                result=PaymentResult.FAILED,
                 error_message=error_message,
             )
 
         if r.payment_error:
             return PaymentResponse(
-                ok=False,
+                result=PaymentResult.FAILED,
                 error_message=r.payment_error,
             )
 
@@ -195,7 +196,7 @@ class LndRPCWallet(LightningBackend):
         fee_msat = r.payment_route.total_fees_msat
         preimage = r.payment_preimage.hex()
         return PaymentResponse(
-            ok=True,
+            result=PaymentResult.SETTLED,
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
@@ -262,7 +263,7 @@ class LndRPCWallet(LightningBackend):
         except AioRpcError as e:
             logger.error(f"QueryRoute or SendToRouteV2 failed: {e}")
             return PaymentResponse(
-                ok=False,
+                result=PaymentResult.FAILED,
                 error_message=str(e),
             )
 
@@ -270,16 +271,23 @@ class LndRPCWallet(LightningBackend):
             error_message = f"Sending to route failed with code {r.failure.code}"
             logger.error(error_message)
             return PaymentResponse(
-                ok=False,
+                result=PaymentResult.FAILED,
                 error_message=error_message,
             )
 
-        ok = r.status == lnrpc.HTLCAttempt.HTLCStatus.SUCCEEDED
+        result = PaymentResult.UNKNOWN
+        if r.status == lnrpc.HTLCAttempt.HTLCStatus.SUCCEEDED:
+            result = PaymentResult.SETTLED
+        elif r.status == lnrpc.HTLCAttempt.HTLCStatus.IN_FLIGHT:
+            result = PaymentResult.PENDING
+        else:
+            result = PaymentResult.FAILED
+
         checking_id = invoice.payment_hash
         fee_msat = r.route.total_fees_msat
         preimage = r.preimage.hex()
         return PaymentResponse(
-            ok=ok,
+            result=result,
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
@@ -299,44 +307,47 @@ class LndRPCWallet(LightningBackend):
         except AioRpcError as e:
             error_message = f"LookupInvoice failed: {e}"
             logger.error(error_message)
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
 
-        return PaymentStatus(paid=INVOICE_STATUSES[r.state])
+        return PaymentStatus(
+            result=INVOICE_RESULT_MAP[r.state],
+        )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         """
         This routine checks the payment status using routerpc.TrackPaymentV2.
         """
         # convert checking_id from hex to bytes and some LND magic
-        try:
-            checking_id_bytes = bytes.fromhex(checking_id)
-        except ValueError:
-            logger.error(f"Couldn't convert {checking_id = } to bytes")
-            return PaymentStatus(paid=None)
-
+        checking_id_bytes = bytes.fromhex(checking_id)
         request = routerrpc.TrackPaymentRequest(payment_hash=checking_id_bytes)
 
-        try:
-            async with grpc.aio.secure_channel(
-                self.endpoint, self.combined_creds
-            ) as channel:
-                router_stub = routerstub.RouterStub(channel)
+        async with grpc.aio.secure_channel(
+            self.endpoint, self.combined_creds
+        ) as channel:
+            router_stub = routerstub.RouterStub(channel)
+            try:
                 async for payment in router_stub.TrackPaymentV2(request):
                     if payment is not None and payment.status:
+                        preimage = (
+                            payment.payment_preimage
+                            if payment.payment_preimage != "0" * 64
+                            else None
+                        )
                         return PaymentStatus(
-                            paid=PAYMENT_STATUSES[payment.status],
+                            result=PAYMENT_RESULT_MAP[payment.status],
                             fee=(
                                 Amount(unit=Unit.msat, amount=payment.fee_msat)
                                 if payment.fee_msat
                                 else None
                             ),
-                            preimage=payment.payment_preimage,
+                            preimage=preimage,
                         )
-        except AioRpcError as e:
-            error_message = f"TrackPaymentV2 failed: {e}"
-            logger.error(error_message)
+            except AioRpcError as e:
+                # status = StatusCode.NOT_FOUND
+                if e.code() == grpc.StatusCode.NOT_FOUND:
+                    return PaymentStatus(result=PaymentResult.UNKNOWN)
 
-        return PaymentStatus(paid=None)
+        return PaymentStatus(result=PaymentResult.UNKNOWN)
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         while True:

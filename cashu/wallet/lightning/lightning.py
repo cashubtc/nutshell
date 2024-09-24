@@ -2,12 +2,13 @@ from typing import Optional
 
 import bolt11
 
-from ...core.base import Amount, ProofSpentState, Unit
+from ...core.base import Amount, Unit
 from ...core.helpers import sum_promises
 from ...core.settings import settings
 from ...lightning.base import (
     InvoiceResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
 )
@@ -58,14 +59,14 @@ class LightningWallet(Wallet):
             pr (str): bolt11 payment request
 
         Returns:
-            bool: True if successful
+            PaymentResponse: containing details of the operation
         """
         quote = await self.melt_quote(pr)
         total_amount = quote.amount + quote.fee_reserve
         assert total_amount > 0, "amount is not positive"
         if self.available_balance < total_amount:
             print("Error: Balance too low.")
-            return PaymentResponse(ok=False)
+            return PaymentResponse(result=PaymentResult.FAILED)
         _, send_proofs = await self.swap_to_send(self.proofs, total_amount)
         try:
             resp = await self.melt(send_proofs, pr, quote.fee_reserve, quote.quote)
@@ -76,14 +77,14 @@ class LightningWallet(Wallet):
 
             invoice_obj = bolt11.decode(pr)
             return PaymentResponse(
-                ok=True,
+                result=PaymentResult.SETTLED,
                 checking_id=invoice_obj.payment_hash,
                 preimage=resp.payment_preimage,
                 fee=Amount(Unit.msat, fees_paid_sat),
             )
         except Exception as e:
             print("Exception:", e)
-            return PaymentResponse(ok=False, error_message=str(e))
+            return PaymentResponse(result=PaymentResult.FAILED, error_message=str(e))
 
     async def get_invoice_status(self, payment_hash: str) -> PaymentStatus:
         """Get lightning invoice status (incoming)
@@ -98,16 +99,16 @@ class LightningWallet(Wallet):
             db=self.db, payment_hash=payment_hash, out=False
         )
         if not invoice:
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
         if invoice.paid:
-            return PaymentStatus(paid=True)
+            return PaymentStatus(result=PaymentResult.SETTLED)
         try:
             # to check the invoice state, we try minting tokens
             await self.mint(invoice.amount, id=invoice.id)
-            return PaymentStatus(paid=True)
+            return PaymentStatus(result=PaymentResult.SETTLED)
         except Exception as e:
             print(e)
-            return PaymentStatus(paid=False)
+            return PaymentStatus(result=PaymentResult.FAILED)
 
     async def get_payment_status(self, payment_hash: str) -> PaymentStatus:
         """Get lightning payment status (outgoing)
@@ -126,24 +127,30 @@ class LightningWallet(Wallet):
         )
 
         if not invoice:
-            return PaymentStatus(paid=False)  # "invoice not found (in db)"
+            return PaymentStatus(
+                result=PaymentResult.FAILED
+            )  # "invoice not found (in db)"
         if invoice.paid:
-            return PaymentStatus(paid=True, preimage=invoice.preimage)  # "paid (in db)"
+            return PaymentStatus(
+                result=PaymentResult.SETTLED, preimage=invoice.preimage
+            )  # "paid (in db)"
         proofs = await get_proofs(db=self.db, melt_id=invoice.id)
         if not proofs:
-            return PaymentStatus(paid=False)  # "proofs not fount (in db)"
+            return PaymentStatus(
+                result=PaymentResult.FAILED
+            )  # "proofs not fount (in db)"
         proofs_states = await self.check_proof_state(proofs)
         if not proofs_states:
-            return PaymentStatus(paid=False)  # "states not fount"
+            return PaymentStatus(result=PaymentResult.FAILED)  # "states not fount"
 
-        if all([p.state == ProofSpentState.pending for p in proofs_states.states]):
-            return PaymentStatus(paid=None)  # "pending (with check)"
-        if any([p.state == ProofSpentState.spent for p in proofs_states.states]):
+        if all([p.state.pending for p in proofs_states.states]):
+            return PaymentStatus(result=PaymentResult.PENDING)  # "pending (with check)"
+        if any([p.state.spent for p in proofs_states.states]):
             # NOTE: consider adding this check in wallet.py and mark the invoice as paid if all proofs are spent
-            return PaymentStatus(paid=True)  # "paid (with check)"
-        if all([p.state == ProofSpentState.unspent for p in proofs_states.states]):
-            return PaymentStatus(paid=False)  # "failed (with check)"
-        return PaymentStatus(paid=None)  # "undefined state"
+            return PaymentStatus(result=PaymentResult.SETTLED)  # "paid (with check)"
+        if all([p.state.unspent for p in proofs_states.states]):
+            return PaymentStatus(result=PaymentResult.FAILED)  # "failed (with check)"
+        return PaymentStatus(result=PaymentResult.UNKNOWN)  # "undefined state"
 
     async def get_balance(self) -> StatusResponse:
         """Get lightning balance

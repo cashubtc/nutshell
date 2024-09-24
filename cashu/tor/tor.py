@@ -144,7 +144,7 @@ class TorProxy:
     def read_pid(self):
         if not os.path.isfile(self.pid_file):
             return None
-        with open(self.pid_file, "r") as f:
+        with open(self.pid_file) as f:
             pid = f.readlines()
         # check if pid is valid
         if len(pid) == 0 or not int(pid[0]) > 0:
