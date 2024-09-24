@@ -51,7 +51,7 @@ def create_app(config_object="core.settings") -> FastAPI:
     return app
 
 app = create_app()
-FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+
 # Add middlewares
 add_middlewares(app)
 
@@ -104,11 +104,13 @@ else:
 
 @app.on_event("startup")
 async def startup_mint():
-    FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+    if settings.mint_cache_activate:
+        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
     await start_mint_init()
 
 
 @app.on_event("shutdown")
 async def shutdown_mint():
-    FastAPICache.clear()
+    if settings.mint_cache_activate:
+        await FastAPICache.clear()
     await shutdown_mint_init()

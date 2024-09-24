@@ -1,14 +1,14 @@
 import asyncio
 import time
+import hashlib
+
+from typing import Callable, Any, Optional, Tuple, Dict
 
 from contextlib import asynccontextmanager
 from fastapi import APIRouter, WebSocket
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.redis import RedisBackend
-from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.decorator import cache
 from starlette.requests import Request
 from starlette.responses import Response
-from redis import asyncio as aioredis
 from fastapi_cache.decorator import cache
 from loguru import logger
 
@@ -44,28 +44,26 @@ router = APIRouter()
 async def get_cache():
     return 1
 
+
 def request_key_builder(
-    func,
+    func: Callable[..., Any],
     namespace: str = "",
     *,
-    request: Request,
-    response: Response,
-    **kwargs,
-):
-    if request.method.lower() == 'get':
-        return ":".join([
-            namespace,
-            request.method.lower(),
-            request.url.path,
-            repr(sorted(request.query_params.items()))
-        ])
-    elif request.method.lower() == 'post':
-        return ":".join([
-            namespace,
-            request.method.lower(),
-            request.url.path,
-            repr(request.json())
-        ])
+    request: Optional[Request] = None,
+    response: Optional[Response] = None,
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
+) -> str:
+    cache_key = ""
+    if request and request.method.lower() == 'get':
+        cache_key = hashlib.md5(  # noqa: S324
+            f"{func.__module__}:{func.__name__}:{repr(sorted(request.query_params.items()))}:{args}:{kwargs}".encode()
+        ).hexdigest()
+    elif request and request.method.lower() == 'post':
+        cache_key = hashlib.md5(  # noqa: S324
+            f"{func.__module__}:{func.__name__}:{repr(request.json())}:{args}:{kwargs}".encode()
+        ).hexdigest()
+    return f"{namespace}:{cache_key}"
 
 @router.get(
     "/v1/info",
