@@ -3,7 +3,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuoteState, MintQuoteState, ProofSpentState
+from cashu.core.base import MeltQuoteState, MintQuoteState
 from cashu.core.models import (
     GetInfoResponse,
     MintMethodSetting,
@@ -478,7 +478,7 @@ async def test_api_check_state(ledger: Ledger):
     response = PostCheckStateResponse.parse_obj(response.json())
     assert response
     assert len(response.states) == 2
-    assert response.states[0].state == ProofSpentState.unspent
+    assert response.states[0].state.unspent
 
 
 @pytest.mark.asyncio

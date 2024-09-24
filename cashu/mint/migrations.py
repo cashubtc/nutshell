@@ -1,4 +1,5 @@
 import copy
+from typing import Dict, List
 
 from ..core.base import MintKeyset, Proof
 from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
@@ -287,7 +288,6 @@ async def m011_add_quote_tables(db: Database):
                     checking_id TEXT NOT NULL,
                     unit TEXT NOT NULL,
                     amount {db.big_int} NOT NULL,
-                    paid BOOL NOT NULL,
                     issued BOOL NOT NULL,
                     created_time TIMESTAMP,
                     paid_time TIMESTAMP,
@@ -296,6 +296,7 @@ async def m011_add_quote_tables(db: Database):
 
                 );
             """
+            # NOTE: We remove the paid BOOL NOT NULL column
         )
 
         await conn.execute(
@@ -308,7 +309,6 @@ async def m011_add_quote_tables(db: Database):
                     unit TEXT NOT NULL,
                     amount {db.big_int} NOT NULL,
                     fee_reserve {db.big_int},
-                    paid BOOL NOT NULL,
                     created_time TIMESTAMP,
                     paid_time TIMESTAMP,
                     fee_paid {db.big_int},
@@ -318,13 +318,14 @@ async def m011_add_quote_tables(db: Database):
 
                 );
             """
+            # NOTE: We remove the paid BOOL NOT NULL column
         )
 
         await conn.execute(
             f"INSERT INTO {db.table_with_schema('mint_quotes')} (quote, method,"
-            " request, checking_id, unit, amount, paid, issued, created_time,"
+            " request, checking_id, unit, amount, issued, created_time,"
             " paid_time) SELECT id, 'bolt11', bolt11, COALESCE(payment_hash, 'None'),"
-            f" 'sat', amount, False, issued, COALESCE(created, '{db.timestamp_now_str()}'),"
+            f" 'sat', amount, issued, COALESCE(created, '{db.timestamp_now_str()}'),"
             f" NULL FROM {db.table_with_schema('invoices')} "
         )
 
@@ -788,13 +789,13 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
     # and the `paid` and `issued` column respectively
     # mint quotes:
     async with db.connect() as conn:
-        rows = await conn.fetchall(
+        rows: List[Dict] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('mint_quotes')}"
         )
         for row in rows:
-            if row["issued"]:
+            if row.get("issued"):
                 state = "issued"
-            elif row["paid"]:
+            elif row.get("paid"):
                 state = "paid"
             else:
                 state = "unpaid"
@@ -804,10 +805,10 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
 
     # melt quotes:
     async with db.connect() as conn:
-        rows = await conn.fetchall(
+        rows2: List[Dict] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('melt_quotes')}"
         )
-        for row in rows:
+        for row in rows2:
             if row["paid"]:
                 state = "paid"
             else:

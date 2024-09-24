@@ -222,7 +222,7 @@ async def pay(
         print(" Error: Balance too low.")
         return
     send_proofs, fees = await wallet.select_to_send(
-        wallet.proofs, total_amount, include_fees=True
+        wallet.proofs, total_amount, include_fees=True, set_reserved=True
     )
     try:
         melt_response = await wallet.melt(
@@ -231,11 +231,25 @@ async def pay(
     except Exception as e:
         print(f" Error paying invoice: {str(e)}")
         return
-    print(" Invoice paid", end="", flush=True)
-    if melt_response.payment_preimage and melt_response.payment_preimage != "0" * 64:
-        print(f" (Preimage: {melt_response.payment_preimage}).")
+    if (
+        melt_response.state
+        and MintQuoteState(melt_response.state) == MintQuoteState.paid
+    ):
+        print(" Invoice paid", end="", flush=True)
+        if (
+            melt_response.payment_preimage
+            and melt_response.payment_preimage != "0" * 64
+        ):
+            print(f" (Preimage: {melt_response.payment_preimage}).")
+        else:
+            print(".")
+    elif MintQuoteState(melt_response.state) == MintQuoteState.pending:
+        print(" Invoice pending.")
+    elif MintQuoteState(melt_response.state) == MintQuoteState.unpaid:
+        print(" Invoice unpaid.")
     else:
-        print(".")
+        print(" Error paying invoice.")
+
     await print_balance(ctx)
 
 

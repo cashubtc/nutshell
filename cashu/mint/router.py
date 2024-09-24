@@ -168,7 +168,7 @@ async def mint_quote(
     resp = PostMintQuoteResponse(
         request=quote.request,
         quote=quote.quote,
-        paid=quote.paid,
+        paid=quote.paid,  # deprecated
         state=quote.state.value,
         expiry=quote.expiry,
     )
@@ -192,7 +192,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     resp = PostMintQuoteResponse(
         quote=mint_quote.quote,
         request=mint_quote.request,
-        paid=mint_quote.paid,
+        paid=mint_quote.paid,  # deprecated
         state=mint_quote.state.value,
         expiry=mint_quote.expiry,
     )
