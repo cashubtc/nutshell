@@ -626,7 +626,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         mint_quote = await self.crud.get_mint_quote(request=request, db=self.db)
         if mint_quote:
             payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
-
         else:
             # not internal
             # verify that the backend supports mpp if the quote request has an amount
@@ -894,7 +893,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             proofs, quote_id=melt_quote.quote
         )
         previous_state = melt_quote.state
-        # Warning: _set_melt_quote_pending does NOT protect against race conditions (it does not throw an error)
         melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
         try:
             # if the melt corresponds to an internal mint, mark both as paid
