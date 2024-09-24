@@ -27,7 +27,7 @@ from .base import (
 
 
 class CLNRestWallet(LightningBackend):
-    supported_units = set([Unit.sat, Unit.msat])
+    supported_units = {Unit.sat, Unit.msat}
     unit = Unit.sat
     supports_mpp = settings.mint_clnrest_enable_mpp
     supports_incoming_payment_stream: bool = True
@@ -41,7 +41,7 @@ class CLNRestWallet(LightningBackend):
             raise Exception("missing rune for clnrest")
         # load from file or use as is
         if os.path.exists(rune_settings):
-            with open(rune_settings, "r") as f:
+            with open(rune_settings) as f:
                 rune = f.read()
             rune = rune.strip()
         else:

@@ -274,7 +274,7 @@ class LedgerSpendingConditions:
 
         # all pubkeys and n_sigs must be the same
         assert (
-            len(set([tuple(pubs_output) for pubs_output in pubkeys_per_proof])) == 1
+            len({tuple(pubs_output) for pubs_output in pubkeys_per_proof}) == 1
         ), "pubkeys in all proofs must match."
         assert len(set(n_sigs_per_proof)) == 1, "n_sigs in all proofs must match."
 

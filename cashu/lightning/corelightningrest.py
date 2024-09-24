@@ -27,7 +27,7 @@ from .macaroon import load_macaroon
 
 
 class CoreLightningRestWallet(LightningBackend):
-    supported_units = set([Unit.sat, Unit.msat])
+    supported_units = {Unit.sat, Unit.msat}
     unit = Unit.sat
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True

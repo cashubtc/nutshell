@@ -76,7 +76,7 @@ class Filter:
             return False
 
         if self.tags:
-            e_tag_identifiers = set([e_tag[0] for e_tag in event.tags])
+            e_tag_identifiers = {e_tag[0] for e_tag in event.tags}
             for f_tag, f_tag_values in self.tags.items():
                 # Omit any NIP-01 or NIP-12 "#" chars on single-letter tags
                 f_tag = f_tag.replace("#", "")
