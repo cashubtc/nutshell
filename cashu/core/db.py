@@ -9,6 +9,7 @@ from typing import Optional, Union
 from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.sql.expression import TextClause
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import NullPool, QueuePool
 
@@ -73,19 +74,19 @@ class Connection(Compat):
         self.name = name
         self.schema = schema
 
-    def rewrite_query(self, query) -> str:
+    def rewrite_query(self, query) -> TextClause:
         if self.type in {POSTGRES, COCKROACH}:
             query = query.replace("%", "%%")
             query = query.replace("?", "%s")
         return text(query)
 
-    async def fetchall(self, query: str, values: dict = {}) -> list:
+    async def fetchall(self, query: str, values: dict = {}):
         result = await self.conn.execute(self.rewrite_query(query), values)
         return result.all()
 
     async def fetchone(self, query: str, values: dict = {}):
         result = await self.conn.execute(self.rewrite_query(query), values)
-        return result.fetchone()
+        return result.one()
 
     async def execute(self, query: str, values: dict = {}):
         return await self.conn.execute(self.rewrite_query(query), values)
