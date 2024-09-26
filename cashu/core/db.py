@@ -86,7 +86,7 @@ class Connection(Compat):
 
     async def fetchone(self, query: str, values: dict = {}):
         result = await self.conn.execute(self.rewrite_query(query), values)
-        return result.one()
+        return result.fetchone()
 
     async def execute(self, query: str, values: dict = {}):
         return await self.conn.execute(self.rewrite_query(query), values)
