@@ -365,7 +365,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {"quote_id": quote_id},
         )
-        return [Proof(**r) for r in rows]
+        return [Proof(**r._mapping) for r in rows]
 
     async def get_proofs_pending(
         self,
@@ -380,7 +380,7 @@ class LedgerCrudSqlite(LedgerCrud):
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
-        return [Proof(**r) for r in rows]
+        return [Proof(**r._mapping) for r in rows]
 
     async def set_proof_pending(
         self,
@@ -718,7 +718,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             values,
         )
-        return [MintKeyset(**row) for row in rows]
+        return [MintKeyset(**row._mapping) for row in rows]
 
     async def get_proofs_used(
         self,
@@ -733,4 +733,4 @@ class LedgerCrudSqlite(LedgerCrud):
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
-        return [Proof(**r) for r in rows] if rows else []
+        return [Proof(**r._mapping) for r in rows] if rows else []

@@ -62,7 +62,7 @@ async def get_proofs(
         """,
         values,
     )
-    return [Proof.from_dict(dict(r)) for r in rows] if rows else []
+    return [Proof.from_dict(dict(r._mapping)) for r in rows] if rows else []
 
 
 async def get_reserved_proofs(
@@ -75,7 +75,7 @@ async def get_reserved_proofs(
         WHERE reserved
         """
     )
-    return [Proof.from_dict(dict(r)) for r in rows]
+    return [Proof.from_dict(dict(r._mapping)) for r in rows]
 
 
 async def invalidate_proof(
@@ -294,7 +294,7 @@ async def get_lightning_invoice(
         query,
         values,
     )
-    return Invoice(**row) if row else None
+    return Invoice(**row._mapping) if row else None
 
 
 async def get_lightning_invoices(
@@ -327,7 +327,7 @@ async def get_lightning_invoices(
         """,
         values,
     )
-    return [Invoice(**r) for r in rows]
+    return [Invoice(**r._mapping) for r in rows]
 
 
 async def update_lightning_invoice(
