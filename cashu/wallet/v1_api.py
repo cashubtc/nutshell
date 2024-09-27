@@ -99,7 +99,7 @@ def async_ensure_mint_loaded(func):
     return wrapper
 
 
-class LedgerAPI(LedgerAPIDeprecated, object):
+class LedgerAPI(LedgerAPIDeprecated):
     tor: TorProxy
     db: Database  # we need the db for melt_deprecated
     httpx: httpx.AsyncClient
