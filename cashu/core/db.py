@@ -133,9 +133,9 @@ class Database(Compat):
         if not settings.db_connection_pool:
             kwargs["poolclass"] = NullPool
         elif self.type == POSTGRES:
-            kwargs["poolclass"] = QueuePool
-            kwargs["pool_size"] = 50
-            kwargs["max_overflow"] = 100
+            kwargs["poolclass"] = QueuePool # type: ignore[assignment]
+            kwargs["pool_size"] = 50        # type: ignore[assignment]
+            kwargs["max_overflow"] = 100    # type: ignore[assignment]
 
         self.engine = create_async_engine(database_uri, **kwargs)
         self.async_session = sessionmaker(

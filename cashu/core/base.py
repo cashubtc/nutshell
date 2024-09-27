@@ -261,7 +261,7 @@ class BlindedSignature(BaseModel):
 
     @classmethod
     def from_row(cls, r: Row):
-        row = r._mapping
+        row = r._mapping    # type: ignore[attr-defined]
         return cls(
             id=row["id"],
             amount=row["amount"],
@@ -313,7 +313,7 @@ class MeltQuote(LedgerEvent):
 
     @classmethod
     def from_row(cls, r: Row):
-        row = r._mapping
+        row = r._mapping    # type: ignore[attr-defined]
         try:
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
@@ -411,7 +411,7 @@ class MintQuote(LedgerEvent):
 
     @classmethod
     def from_row(cls, r: Row):
-        row = r._mapping
+        row = r._mapping    # type: ignore[attr-defined]
         try:
             #  SQLITE: row is timestamp (string)
             created_time = int(row["created_time"]) if row["created_time"] else None
@@ -650,7 +650,7 @@ class WalletKeyset:
                 int(amount): PublicKey(bytes.fromhex(hex_key), raw=True)
                 for amount, hex_key in dict(json.loads(serialized)).items()
             }
-        row = r._mapping
+        row = r._mapping    # type: ignore[attr-defined]
         return cls(
             id=row["id"],
             unit=row["unit"],
