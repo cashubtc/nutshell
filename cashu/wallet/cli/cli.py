@@ -9,7 +9,7 @@ from itertools import groupby, islice
 from operator import itemgetter
 from os import listdir
 from os.path import isdir, join
-from typing import Optional, Union
+from typing import Optional
 
 import click
 from click import Context
@@ -343,8 +343,8 @@ async def invoice(
         )
 
     paid = False
-    invoice_nonlocal: Union[None, Invoice] = None
-    subscription_nonlocal: Union[None, SubscriptionManager] = None
+    invoice_nonlocal: Invoice
+    subscription_nonlocal: SubscriptionManager
 
     def mint_invoice_callback(msg: JSONRPCNotficationParams):
         nonlocal \
@@ -366,9 +366,9 @@ async def invoice(
         # we need to sleep to give the callback map some time to be populated
         time.sleep(0.1)
         if (
-            (quote.paid or quote.state == MintQuoteState.paid.value)
-            and quote.request == invoice.bolt11
-            and msg.subId in subscription.callback_map.keys()
+            (quote.state == MintQuoteState.paid.value)
+            and quote.request == invoice_nonlocal.bolt11
+            and msg.subId in subscription_nonlocal.callback_map.keys()
         ):
             try:
                 asyncio.run(
