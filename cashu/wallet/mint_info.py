@@ -53,3 +53,6 @@ class MintInfo(BaseModel):
                 if "bolt11_mint_quote" in entry["commands"]:
                     return True
         return False
+
+    # def blind_auth_required(self, path: str) -> bool:
+    #     re.match(pattern, path) for pattern in settings.mint_auth_paths_regex

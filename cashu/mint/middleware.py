@@ -50,24 +50,16 @@ def add_middlewares(app: FastAPI):
 
 
 class BlindAuthMiddleware(BaseHTTPMiddleware):
-    # implement this middleware that checks if the requested path is one of the paths that require authentication and extract the "blindauth" token from the request headers
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
-        mint_auth_paths_regex = [
-            r"^/v1/mint/quote$",
-            r"^/v1/mint/quote/[^/]+$",
-        ]
-
-        # check if the requested path matches one of the regex patterns
         if settings.mint_require_auth and any(
-            re.match(pattern, request.url.path) for pattern in mint_auth_paths_regex
+            re.match(pattern, request.url.path)
+            for pattern in settings.mint_auth_paths_regex
         ):
-            # extract the "blindauth" token from the request headers
-            blind_auth_token = request.headers.get("blindauth")
+            blind_auth_token = request.headers.get("blind-auth")
             if not blind_auth_token:
                 raise Exception("Missing blindauth token.")
-            # check if the "blindauth" token is valid
             try:
                 await auth_ledger.blind_auth_melt(blind_auth_token=blind_auth_token)
             except Exception as e:

@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 from posixpath import join
 from typing import List, Optional, Tuple, Union
@@ -83,7 +84,7 @@ def async_set_httpx_client(func):
             verify=not settings.debug,
             proxies=proxies_dict,  # type: ignore
             headers=headers_dict,
-            base_url=self.url,
+            base_url=self.url.rstrip("/"),
             timeout=None if settings.debug else 60,
         )
         return await func(self, *args, **kwargs)
@@ -116,7 +117,7 @@ def async_add_auth_proofs_to_headers(func):
             raise Exception("No auth proofs found.")
         headers_dict = {
             "Client-version": settings.version,
-            "Blindauth": f"{auth_token}",
+            "Blind-auth": f"{auth_token}",
         }
         self.httpx.headers.update(headers_dict)
         ret = await func(self, *args, **kwargs)
@@ -172,6 +173,31 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         # raise for status if no error
         resp.raise_for_status()
 
+    async def _request_auth(self, method: str, path: str, **kwargs):
+        # Check if auth is required for this path
+        # TODO: check self.min_info.blind_auth_required instead of settings.mint_require_auth
+        path = "/" + path if not path.startswith("/") else path
+
+        spent_auth_token = False
+        if settings.mint_require_auth and any(
+            re.match(pattern, path) for pattern in settings.mint_auth_paths_regex
+        ):
+            if self.auth_proofs:
+                spent_auth_token = True
+                proof = self.auth_proofs[0]
+                auth_token = AuthProof.from_proof(proof).to_base64()
+                headers_dict = {
+                    "Client-version": settings.version,
+                    "Blind-auth": f"{auth_token}",
+                }
+                kwargs.setdefault("headers", {}).update(headers_dict)
+            else:
+                raise Exception("No auth proofs found.")
+        response = await self.httpx.request(method, path, **kwargs)
+        if not response.is_error and spent_auth_token:
+            self.auth_proofs.remove(proof)
+        return response
+
     """
     ENDPOINTS
     """
@@ -189,8 +215,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         Raises:
             Exception: If no keys are received from the mint
         """
-        resp = await self.httpx.get(
-            join(self.url, self.api_prefix, "keys"),
+        resp = await self._request_auth(
+            "GET",
+            join(self.api_prefix, "keys"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -235,8 +262,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             Exception: If no keys are received from the mint
         """
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
-        resp = await self.httpx.get(
-            join(self.url, self.api_prefix, f"keys/{keyset_id_urlsafe}"),
+        resp = await self._request_auth(
+            "GET",
+            join(self.api_prefix, f"keys/{keyset_id_urlsafe}"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -272,8 +300,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         Raises:
             Exception: If no keysets are received from the mint
         """
-        resp = await self.httpx.get(
-            join(self.url, self.api_prefix, "keysets"),
+        resp = await self._request_auth(
+            "GET",
+            join(self.api_prefix, "keysets"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -299,8 +328,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         Raises:
             Exception: If the mint info request fails
         """
-        resp = await self.httpx.get(
-            join(self.url, self.api_prefix, "info"),
+        resp = await self._request_auth(
+            "GET",
+            join(self.api_prefix, "info"),
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -315,7 +345,6 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
-    @async_add_auth_proofs_to_headers
     async def mint_quote(
         self, amount: int, unit: Unit, memo: Optional[str] = None
     ) -> PostMintQuoteResponse:
@@ -334,8 +363,8 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         """
         logger.trace("Requesting mint: POST /v1/mint/bolt11")
         payload = PostMintQuoteRequest(unit=unit.name, amount=amount, description=memo)
-        resp = await self.httpx.post(
-            join(self.url, self.api_prefix, "mint/quote/bolt11"), json=payload.dict()
+        resp = await self._request_auth(
+            "POST", join(self.api_prefix, "mint/quote/bolt11"), json=payload.dict()
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -349,6 +378,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
+    @async_add_auth_proofs_to_headers
     async def mint(
         self, outputs: List[BlindedMessage], quote: str
     ) -> List[BlindedSignature]:
@@ -376,8 +406,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             }
 
         payload = outputs_payload.dict(include=_mintrequest_include_fields(outputs))  # type: ignore
-        resp = await self.httpx.post(
-            join(self.url, self.api_prefix, "mint/bolt11"),
+        resp = await self._request_auth(
+            "POST",
+            join(self.api_prefix, "mint/bolt11"),
             json=payload,  # type: ignore
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -411,8 +442,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             unit=unit.name, request=payment_request, options=melt_options
         )
 
-        resp = await self.httpx.post(
-            join(self.url, self.api_prefix, "melt/quote/bolt11"),
+        resp = await self._request_auth(
+            "POST",
+            join(self.api_prefix, "melt/quote/bolt11"),
             json=payload.dict(),
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -461,8 +493,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 "outputs": {i: outputs_include for i in range(len(outputs))},
             }
 
-        resp = await self.httpx.post(
-            join(self.url, self.api_prefix, "melt/bolt11"),
+        resp = await self._request_auth(
+            "POST",
+            join(self.api_prefix, "melt/bolt11"),
             json=payload.dict(include=_meltrequest_include_fields(proofs, outputs)),  # type: ignore
             timeout=None,
         )
@@ -519,8 +552,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 "inputs": {i: proofs_include for i in range(len(proofs))},
             }
 
-        resp = await self.httpx.post(
-            join(self.url, self.api_prefix, "swap"),
+        resp = await self._request_auth(
+            "POST",
+            join(self.api_prefix, "swap"),
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -546,8 +580,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
         payload = PostCheckStateRequest(Ys=[p.Y for p in proofs])
-        resp = await self.httpx.post(
-            join(self.url, self.api_prefix, "checkstate"),
+        resp = await self._request_auth(
+            "POST",
+            join(self.api_prefix, "checkstate"),
             json=payload.dict(),
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -578,8 +613,8 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         Asks the mint to restore promises corresponding to outputs.
         """
         payload = PostMintRequest(quote="restore", outputs=outputs)
-        resp = await self.httpx.post(
-            join(self.url, self.api_prefix, "restore"), json=payload.dict()
+        resp = await self._request_auth(
+            "POST", join(self.api_prefix, "restore"), json=payload.dict()
         )
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
@@ -607,8 +642,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         Asks the mint to mint blind auth tokens.
         """
         payload = PostAuthBlindMintRequest(outputs=outputs, auth=auth_token)
-        resp = await self.httpx.post(
-            join(self.url, self.api_prefix, "mint"),
+        resp = await self._request_auth(
+            "POST",
+            join(self.api_prefix, "mint"),
             json=payload.dict(),
         )
         self.raise_on_error_request(resp)

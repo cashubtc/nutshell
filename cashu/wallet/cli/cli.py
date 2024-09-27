@@ -94,18 +94,24 @@ def require_auth(func):
             await auth_wallet.load_proofs()
             return auth_wallet
 
-        # Initialize WalletAuth
         auth_wallet = await init_auth_wallet()
 
-        # Check balance and mint new proofs if necessary
+        # Check balance and mint new auth proofs if necessary
         if auth_wallet.available_balance < MIN_BALANCE:
             print(
                 f"Balance too low. Mint at least {auth_wallet.unit.str(MIN_BALANCE)} auth tokens."
             )
-            new_proofs = await auth_wallet.mint_blind_auth_proofs()
-            print(
-                f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs."
-            )
+            try:
+                new_proofs = await auth_wallet.mint_blind_auth_proofs()
+                print(
+                    f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs."
+                )
+            except Exception as e:
+                logger.error(f"Error minting auth proofs: {str(e)}")
+
+        if not auth_wallet.proofs:
+            logger.error("No auth proofs available.")
+            return
 
         # Store proofs in Wallet.auth_proofs
         wallet.auth_proofs = auth_wallet.proofs.copy()
@@ -116,6 +122,7 @@ def require_auth(func):
         # Invalidate auth_proofs that were used
         used_proofs = [p for p in auth_wallet.proofs if p not in wallet.auth_proofs]
         await auth_wallet.invalidate(used_proofs)
+        print(f"Balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
 
         return ret
 
