@@ -691,6 +691,7 @@ async def receive_cli(
             mint_url,
             os.path.join(settings.cashu_dir, wallet.name),
             unit=token_obj.unit,
+            auth_proofs=wallet.auth_proofs,
         )
         await verify_mint(mint_wallet, mint_url)
         receive_wallet = await receive(mint_wallet, token_obj)

@@ -175,15 +175,11 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
 
     async def _request_with_blind_auth(self, method: str, path: str, **kwargs):
         # Check if auth is required for this path
-        # TODO: check self.min_info.blind_auth_required instead of settings.mint_require_auth
         path = "/" + path if not path.startswith("/") else path
-
-        spent_auth_token = False
         if settings.mint_require_auth and any(
             re.match(pattern, path) for pattern in settings.mint_auth_paths_regex
         ):
             if self.auth_proofs:
-                spent_auth_token = True
                 proof = self.auth_proofs[0]
                 auth_token = AuthProof.from_proof(proof).to_base64()
                 headers_dict = {
@@ -191,12 +187,11 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                     "Blind-auth": f"{auth_token}",
                 }
                 kwargs.setdefault("headers", {}).update(headers_dict)
+                # remove the spent auth proofs right away (even if the call fails)
+                self.auth_proofs.remove(proof)
             else:
                 raise Exception("No auth proofs found.")
-        response = await self.httpx.request(method, path, **kwargs)
-        if not response.is_error and spent_auth_token:
-            self.auth_proofs.remove(proof)
-        return response
+        return await self.httpx.request(method, path, **kwargs)
 
     """
     ENDPOINTS

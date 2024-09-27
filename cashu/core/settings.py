@@ -229,9 +229,9 @@ class AuthSettings(MintSettings):
     mint_auth_blind_max_tokens_mint: int = Field(default=100, gt=0)
     mint_auth_jwt_public_key: Optional[str] = Field(default=None)
     mint_auth_paths_regex: List[str] = [
-        r"^/v1/mint/quote$",
-        r"^/v1/mint/quote/[^/]+$",
-        r"^/v1/mint/bolt11$",
+        r"^/v1/mint/.*$",
+        r"^/v1/melt/.*$",
+        r"^/v1/swap$",
     ]
 
 
