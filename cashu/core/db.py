@@ -10,7 +10,7 @@ from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool, QueuePool
+from sqlalchemy.pool import NullPool
 from sqlalchemy.sql.expression import TextClause
 
 from cashu.core.settings import settings
@@ -133,7 +133,7 @@ class Database(Compat):
         if not settings.db_connection_pool:
             kwargs["poolclass"] = NullPool
         elif self.type == POSTGRES:
-            #kwargs["poolclass"] = AsyncQueuePool        # type: ignore[assignment]
+            #kwargs["poolclass"] = AsyncQueuePool       # type: ignore[assignment]
             kwargs["pool_size"] = 50                    # type: ignore[assignment]
             kwargs["max_overflow"] = 100                # type: ignore[assignment]
 
