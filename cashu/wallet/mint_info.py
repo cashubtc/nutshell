@@ -57,8 +57,10 @@ class MintInfo(BaseModel):
 
     def requires_clear_auth(self) -> bool:
         supports = self.supports_nut(CLEAR_AUTH_NUT)
+        if not supports:
+            return False
         required = self.nuts[CLEAR_AUTH_NUT]["required"]
-        return supports and required
+        return required
 
     def required_clear_auth_paths(self) -> List[str]:
         if not self.requires_clear_auth():
@@ -76,8 +78,10 @@ class MintInfo(BaseModel):
 
     def requires_blind_auth(self) -> bool:
         supports = self.supports_nut(BLIND_AUTH_NUT)
+        if not supports:
+            return False
         required = self.nuts[BLIND_AUTH_NUT]["required"]
-        return supports and required
+        return required
 
     def required_blind_auth_paths(self) -> List[str]:
         if not self.requires_blind_auth():
