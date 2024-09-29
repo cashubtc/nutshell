@@ -1,5 +1,5 @@
 import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import httpx
 import jwt
@@ -19,7 +19,7 @@ class AuthLedger(Ledger):
     auth_crud: AuthLedgerCrud
     jwks_url: str
     jwks_client: jwt.PyJWKClient
-    signing_key: Optional[jwt.PyJWK] = None
+    signing_key: jwt.PyJWK
 
     def __init__(
         self,
@@ -46,23 +46,15 @@ class AuthLedger(Ledger):
         self.signing_key = self.fetch_es256_signing_key(self.jwks_url)
         logger.info(f"Initialized OpenID Connect issuer: {settings.mint_auth_issuer}")
 
-    def fetch_es256_signing_key(self, jwks_url: str) -> Optional[jwt.PyJWK]:
+    def fetch_es256_signing_key(self, jwks_url: str) -> jwt.PyJWK:
         """Fetch the ES256 signing key from the JWKS."""
-        try:
-            # Fetch the JWKS (JSON Web Key Set) from the issuer's JWKS URL
-            response = httpx.get(jwks_url)
-            response.raise_for_status()
-            jwks = response.json()
-
-            # Loop through the keys in the JWKS and find the one for ES256 and 'sig' use
-            for key in jwks["keys"]:
-                if key.get("alg") == "ES256" and key.get("use") == "sig":
-                    # Return the matching key as a PyJWK object
-                    return jwt.PyJWK.from_dict(key)
-
-        except httpx.HTTPStatusError as e:
-            print(f"Failed to fetch JWKS: {e}")
-        return None
+        response = httpx.get(jwks_url)
+        response.raise_for_status()
+        jwks = response.json()
+        for key in jwks["keys"]:
+            if key.get("alg") == "ES256" and key.get("use") == "sig":
+                return jwt.PyJWK.from_dict(key)
+        raise Exception("No ES256 signing key found in JWKS.")
 
     def _verify_oicd_issuer(self, clear_auth_token: str) -> None:
         """Verify the issuer of the clear-auth token.
@@ -86,25 +78,20 @@ class AuthLedger(Ledger):
         except Exception as e:
             raise e
 
-    async def verify_clear_auth(self, clear_auth_token: str) -> User:
-        """Verify the clear-auth JWT token and return the user.
-
-        Checks:
-            - Token not expired.
-            - Token signature valid.
-            - User exists.
+    def _verify_decode_jwt(self, clear_auth_token: str) -> Any:
+        """Verify the clear-auth JWT token.
 
         Args:
-            auth_token (str): _description_
+            clear_auth_token (str): JWT token.
+
+        Raises:
+            jwt.ExpiredSignatureError: Token has expired.
+            jwt.InvalidSignatureError: Invalid signature.
+            jwt.InvalidTokenError: Invalid token.
 
         Returns:
-            User: _description_
+            Any: Decoded JWT.
         """
-        self._verify_oicd_issuer(clear_auth_token)
-        if not self.signing_key:
-            self.signing_key = self.jwks_client.get_signing_key_from_jwt(
-                clear_auth_token
-            )
         try:
             decoded = jwt.decode(
                 clear_auth_token,
@@ -125,20 +112,50 @@ class AuthLedger(Ledger):
             raise e
         except Exception as e:
             raise e
-        user_id = decoded["sub"]
+
+        return decoded
+
+    async def _get_user(self, decoded_token: Any) -> User:
+        """Get the user from the decoded token. If the user does not exist, create a new one.
+
+        Args:
+            decoded_token (Any): decoded JWT from PyJWT.decode
+
+        Returns:
+            User: User object
+        """
+        user_id = decoded_token["sub"]
         user = await self.auth_crud.get_user(user_id=user_id, db=self.db)
         if not user:
             logger.info(f"Creating new user: {user_id}")
             user = User(id=user_id)
             await self.auth_crud.create_user(user=user, db=self.db)
+        return user
 
-        # rate limit
-        auth_rate_limit_seconds = 5
+    async def verify_clear_auth(self, clear_auth_token: str) -> User:
+        """Verify the clear-auth JWT token and return the user.
+
+        Checks:
+            - Token not expired.
+            - Token signature valid.
+            - User exists.
+
+        Args:
+            auth_token (str): _description_
+
+        Returns:
+            User: _description_
+        """
+        self._verify_oicd_issuer(clear_auth_token)
+        decoded = self._verify_decode_jwt(clear_auth_token)
+        user = await self._get_user(decoded)
+        logger.info(f"User authenticated: {user.id}")
+
         if (
             user.last_access
             and user.last_access
             > datetime.datetime.now()
-            - datetime.timedelta(seconds=auth_rate_limit_seconds)
+            - datetime.timedelta(seconds=settings.mint_auth_rate_limit_seconds)
         ):
             raise Exception("Rate limit exceeded.")
 
