@@ -226,9 +226,13 @@ class CoreLightningRestFundingSource(MintSettings):
 
 class AuthSettings(MintSettings):
     mint_require_auth: bool = Field(default=False)
-    mint_auth_blind_max_tokens_mint: int = Field(default=100, gt=0)
-    mint_auth_jwt_public_key: Optional[str] = Field(default=None)
-    mint_auth_paths_regex: List[str] = [
+    mint_auth_issuer: Optional[str] = Field(default=None)
+    mint_auth_rate_limit_seconds: int = Field(default=24 * 60 * 60)
+    mint_auth_max_blind_tokens: int = Field(default=100, gt=0)
+    mint_require_clear_auth_paths_regex: List[str] = [
+        r"^/v1/auth/blind/mint$",
+    ]
+    mint_require_blind_auth_paths_regex: List[str] = [
         r"^/v1/mint/.*$",
         r"^/v1/melt/.*$",
         r"^/v1/swap$",

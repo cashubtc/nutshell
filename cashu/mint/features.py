@@ -5,6 +5,8 @@ from ..core.models import (
     MintMeltMethodSetting,
 )
 from ..core.nuts import (
+    BLIND_AUTH_NUT,
+    CLEAR_AUTH_NUT,
     DLEQ_NUT,
     FEE_RETURN_NUT,
     MELT_NUT,
@@ -100,5 +102,26 @@ class LedgerFeatures(SupportsBackends):
 
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
+
+        if settings.mint_require_auth:
+            clear_auth_features: Dict[str, Union[bool, str, List[str]]] = {
+                "required": True,
+                "paths": [],
+            }
+
+            for path in settings.mint_require_clear_auth_paths_regex:
+                clear_auth_features["paths"].append(path)  # type: ignore
+
+            mint_features[CLEAR_AUTH_NUT] = clear_auth_features
+
+            blind_auth_features: Dict[str, Union[bool, int, str, List[str]]] = {
+                "required": True,
+                "max_mint": settings.mint_auth_max_blind_tokens,
+                "paths": [],
+            }
+            for path in settings.mint_require_blind_auth_paths_regex:
+                blind_auth_features["paths"].append(path)  # type: ignore
+
+            mint_features[BLIND_AUTH_NUT] = blind_auth_features
 
         return mint_features

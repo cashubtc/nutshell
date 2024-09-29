@@ -1,10 +1,11 @@
+import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
 from ..core.base import Method, Unit
 from ..core.models import MintInfoContact, Nut15MppSupport
-from ..core.nuts import MPP_NUT, WEBSOCKETS_NUT
+from ..core.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
 
 
 class MintInfo(BaseModel):
@@ -17,7 +18,7 @@ class MintInfo(BaseModel):
     motd: Optional[str]
     icon_url: Optional[str]
     time: Optional[int]
-    nuts: Optional[Dict[int, Any]]
+    nuts: Dict[int, Any]
 
     def __str__(self):
         return f"{self.name} ({self.description})"
@@ -54,5 +55,40 @@ class MintInfo(BaseModel):
                     return True
         return False
 
-    # def blind_auth_required(self, path: str) -> bool:
-    #     re.match(pattern, path) for pattern in settings.mint_auth_paths_regex
+    def requires_clear_auth(self) -> bool:
+        supports = self.supports_nut(CLEAR_AUTH_NUT)
+        required = self.nuts[CLEAR_AUTH_NUT]["required"]
+        return supports and required
+
+    def required_clear_auth_paths(self) -> List[str]:
+        if not self.requires_clear_auth():
+            return []
+        return self.nuts[CLEAR_AUTH_NUT]["paths"]
+
+    def requires_clear_auth_path(self, path: str) -> bool:
+        if not self.requires_clear_auth():
+            return False
+        path = "/" + path if not path.startswith("/") else path
+        if any(re.match(pattern, path) for pattern in self.required_clear_auth_paths()):
+            return True
+        else:
+            return False
+
+    def requires_blind_auth(self) -> bool:
+        supports = self.supports_nut(BLIND_AUTH_NUT)
+        required = self.nuts[BLIND_AUTH_NUT]["required"]
+        return supports and required
+
+    def required_blind_auth_paths(self) -> List[str]:
+        if not self.requires_blind_auth():
+            return []
+        return self.nuts[BLIND_AUTH_NUT]["paths"]
+
+    def requires_blind_auth_path(self, path: str) -> bool:
+        if not self.requires_blind_auth():
+            return False
+        path = "/" + path if not path.startswith("/") else path
+        if any(re.match(pattern, path) for pattern in self.required_blind_auth_paths()):
+            return True
+        else:
+            return False

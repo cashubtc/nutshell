@@ -1,5 +1,4 @@
 import json
-import re
 import uuid
 from posixpath import join
 from typing import List, Optional, Tuple, Union
@@ -107,30 +106,6 @@ def async_ensure_mint_loaded(func):
     return wrapper
 
 
-def async_add_auth_proofs_to_headers(func):
-    """Decorator that adds the auth proofs to the headers of the request."""
-
-    async def wrapper(self, *args, **kwargs):
-        if self.auth_proofs:
-            proof = self.auth_proofs[0]
-            auth_token = AuthProof.from_proof(proof).to_base64()
-            print("Blind auth token:", auth_token)
-        else:
-            raise Exception("No auth proofs found.")
-        headers_dict = {
-            "Client-version": settings.version,
-            "Blind-auth": f"{auth_token}",
-        }
-        self.httpx.headers.update(headers_dict)
-        ret = await func(self, *args, **kwargs)
-        if proof in self.auth_proofs:
-            self.auth_proofs.remove(proof)
-
-        return ret
-
-    return wrapper
-
-
 class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
     tor: TorProxy
     httpx: httpx.AsyncClient
@@ -138,7 +113,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
 
     auth_db: Database
     auth_keyset_id: str
-    mint_info: MintInfo
+    mint_info: Optional[MintInfo] = None
 
     def __init__(self, url: str, db: Optional[Database] = None):
         self.url = url
@@ -164,7 +139,6 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         try:
             resp_dict = resp.json()
         except json.JSONDecodeError:
-            # if we can't decode the response, raise for status
             resp.raise_for_status()
             return
         if "detail" in resp_dict:
@@ -173,28 +147,22 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             if "code" in resp_dict:
                 error_message += f" (Code: {resp_dict['code']})"
             raise Exception(error_message)
-        # raise for status if no error
         resp.raise_for_status()
 
     async def _request_with_blind_auth(self, method: str, path: str, **kwargs):
-        # Check if auth is required for this path
-        path = "/" + path if not path.startswith("/") else path
-        if settings.mint_require_auth and any(
-            re.match(pattern, path) for pattern in settings.mint_auth_paths_regex
-        ):
-            if self.auth_db:
-                proofs = await get_proofs(db=self.auth_db, id=self.auth_keyset_id)
-                proof = proofs[0]
-                auth_token = AuthProof.from_proof(proof).to_base64()
-                headers_dict = {
-                    "Client-version": settings.version,
+        if self.mint_info and self.mint_info.requires_blind_auth_path(path):
+            if not self.auth_db or not self.auth_keyset_id:
+                raise Exception(
+                    "Mint requires blind auth, but no auth database is set."
+                )
+            proof = (await get_proofs(db=self.auth_db, id=self.auth_keyset_id))[0]
+            auth_token = AuthProof.from_proof(proof).to_base64()
+            kwargs.setdefault("headers", {}).update(
+                {
                     "Blind-auth": f"{auth_token}",
                 }
-                kwargs.setdefault("headers", {}).update(headers_dict)
-                # remove the spent auth proofs right away (even if the call fails)
-                await invalidate_proof(proof=proof, db=self.auth_db)
-            else:
-                raise Exception("No auth proofs found.")
+            )
+            await invalidate_proof(proof=proof, db=self.auth_db)
         return await self.httpx.request(method, path, **kwargs)
 
     """
@@ -633,13 +601,19 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         return returnObj.outputs, returnObj.signatures
 
     @async_set_httpx_client
-    async def blind_auth_mint(
-        self, auth_token: str, outputs: List[BlindedMessage]
+    async def blind_mint_blind_auth(
+        self, clear_auth_token: str, outputs: List[BlindedMessage]
     ) -> List[BlindedSignature]:
         """
-        Asks the mint to mint blind auth tokens.
+        Asks the mint to mint blind auth tokens. Needs to provide a clear auth token.
         """
-        payload = PostAuthBlindMintRequest(outputs=outputs, auth=auth_token)
+        if not self.mint_info or not self.mint_info.requires_clear_auth_path(
+            join(self.api_prefix, "mint")
+        ):
+            raise Exception("Mint does not require clear authentication.")
+
+        payload = PostAuthBlindMintRequest(outputs=outputs)
+        self.httpx.headers.update({"Clear-auth": clear_auth_token})
         resp = await self._request_with_blind_auth(
             "POST",
             join(self.api_prefix, "mint"),

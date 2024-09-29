@@ -1,6 +1,7 @@
 import datetime
 from typing import List, Optional
 
+import httpx
 import jwt
 from loguru import logger
 
@@ -16,7 +17,7 @@ from .crud import AuthLedgerCrud, AuthLedgerCrudSqlite
 
 class AuthLedger(Ledger):
     auth_crud: AuthLedgerCrud
-    jwks_url = "http://localhost:8080/realms/nutshell/protocol/openid-connect/certs"
+    jwks_url: str
     jwks_client: jwt.PyJWKClient
     signing_key: Optional[jwt.PyJWK] = None
 
@@ -39,10 +40,53 @@ class AuthLedger(Ledger):
             amounts=amounts,
         )
 
+        self.jwks_url = f"{settings.mint_auth_issuer}/protocol/openid-connect/certs"
         self.auth_crud = AuthLedgerCrudSqlite()
         self.jwks_client = jwt.PyJWKClient(self.jwks_url)
+        self.signing_key = self.fetch_es256_signing_key(self.jwks_url)
+        logger.info(f"Initialized OpenID Connect issuer: {settings.mint_auth_issuer}")
 
-    async def verify_auth(self, auth_token_str: str) -> User:
+    def fetch_es256_signing_key(self, jwks_url: str) -> Optional[jwt.PyJWK]:
+        """Fetch the ES256 signing key from the JWKS."""
+        try:
+            # Fetch the JWKS (JSON Web Key Set) from the issuer's JWKS URL
+            response = httpx.get(jwks_url)
+            response.raise_for_status()
+            jwks = response.json()
+
+            # Loop through the keys in the JWKS and find the one for ES256 and 'sig' use
+            for key in jwks["keys"]:
+                if key.get("alg") == "ES256" and key.get("use") == "sig":
+                    # Return the matching key as a PyJWK object
+                    return jwt.PyJWK.from_dict(key)
+
+        except httpx.HTTPStatusError as e:
+            print(f"Failed to fetch JWKS: {e}")
+        return None
+
+    def _verify_oicd_issuer(self, clear_auth_token: str) -> None:
+        """Verify the issuer of the clear-auth token.
+
+        Args:
+            clear_auth_token (str): _description_
+
+        Raises:
+            Exception: Invalid issuer.
+        """
+        try:
+            decoded = jwt.decode(
+                clear_auth_token,
+                options={"verify_signature": False},
+            )
+            issuer = decoded["iss"]
+            if issuer != settings.mint_auth_issuer:
+                raise Exception(
+                    f"Invalid issuer: {issuer}. Expected: {settings.mint_auth_issuer}"
+                )
+        except Exception as e:
+            raise e
+
+    async def verify_clear_auth(self, clear_auth_token: str) -> User:
         """Verify the clear-auth JWT token and return the user.
 
         Checks:
@@ -56,11 +100,14 @@ class AuthLedger(Ledger):
         Returns:
             User: _description_
         """
+        self._verify_oicd_issuer(clear_auth_token)
         if not self.signing_key:
-            self.signing_key = self.jwks_client.get_signing_key_from_jwt(auth_token_str)
+            self.signing_key = self.jwks_client.get_signing_key_from_jwt(
+                clear_auth_token
+            )
         try:
             decoded = jwt.decode(
-                auth_token_str,
+                clear_auth_token,
                 self.signing_key.key,
                 algorithms=["ES256"],
                 verify=True,
@@ -97,17 +144,17 @@ class AuthLedger(Ledger):
 
         return user
 
-    async def auth_mint(
+    async def mint_blind_auth(
         self,
         *,
         outputs: List[BlindedMessage],
-        auth_token: str,
+        user: User,
     ) -> List[BlindedSignature]:
         """Mints auth tokens. Returns a list of promises.
 
         Args:
             outputs (List[BlindedMessage]): Outputs to sign.
-            auth_token (str): Clear-auth token.
+            user (User): Authenticated user.
 
         Raises:
             Exception: Invalid auth.
@@ -118,15 +165,10 @@ class AuthLedger(Ledger):
             List[BlindedSignature]: _description_
         """
 
-        if len(outputs) > settings.mint_auth_blind_max_tokens_mint:
+        if len(outputs) > settings.mint_auth_max_blind_tokens:
             raise Exception(
-                f"Too many outputs. You can only mint {settings.mint_auth_blind_max_tokens_mint} tokens."
+                f"Too many outputs. You can only mint {settings.mint_auth_max_blind_tokens} tokens."
             )
-
-        try:
-            user = await self.verify_auth(auth_token)
-        except Exception as e:
-            raise e
 
         await self._verify_outputs(outputs)
         promises = await self._generate_promises(outputs)
@@ -136,7 +178,7 @@ class AuthLedger(Ledger):
 
         return promises
 
-    async def blind_auth_melt(self, *, blind_auth_token) -> None:
+    async def verify_blind_auth(self, *, blind_auth_token) -> None:
         """Melts the proofs of a blind auth token. Returns if successful, raises an exception otherwise.
 
         Args:

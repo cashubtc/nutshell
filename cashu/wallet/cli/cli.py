@@ -84,38 +84,33 @@ def init_auth_wallet(func):
         db_location = wallet.db.db_location
         MIN_BALANCE = 10
 
-        async def init_auth_wallet() -> WalletAuth:
-            auth_wallet = await WalletAuth.with_db(
-                ctx.obj["HOST"], db_location, "auth", unit=Unit.auth.name
-            )
-            auth_wallet.api_prefix = "/v1/auth/blind"
-            await auth_wallet.load_mint_keysets()
-            await auth_wallet.activate_keyset()
-            await auth_wallet.load_proofs()
-            return auth_wallet
-
-        auth_wallet = await init_auth_wallet()
+        auth_wallet = await WalletAuth.with_db(
+            ctx.obj["HOST"], db_location, "auth", unit=Unit.auth.name
+        )
+        await auth_wallet.init_wallet()
 
         # Check balance and mint new auth proofs if necessary
         if auth_wallet.available_balance < MIN_BALANCE:
-            print(
+            logger.debug(
                 f"Balance too low. Mint at least {auth_wallet.unit.str(MIN_BALANCE)} auth tokens."
             )
             try:
                 new_proofs = await auth_wallet.mint_blind_auth_proofs()
-                print(
+                logger.debug(
                     f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs."
                 )
             except Exception as e:
                 logger.error(f"Error minting auth proofs: {str(e)}")
 
         if not auth_wallet.proofs:
-            logger.error("No auth proofs available.")
+            logger.error("Error initializing auth wallet.")
             return
 
         # Pass auth_db and auth_keyset_id to the wallet object
         wallet.auth_db = auth_wallet.db
         wallet.auth_keyset_id = auth_wallet.keyset_id
+        # let's also pass the mint_info so it doesn't need to be refetched by the wallet
+        wallet.mint_info = auth_wallet.mint_info
 
         # Proceed to the original function
         ret = await func(*args, **kwargs)

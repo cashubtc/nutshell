@@ -47,6 +47,26 @@ def add_middlewares(app: FastAPI):
 
     if settings.mint_require_auth:
         app.add_middleware(BlindAuthMiddleware)
+        # app.add_middleware(ClearAuthMiddleware)
+
+
+# NOTE: We are not using this middleware, the route /v1/auth/blind/mint parses the header directly
+# class ClearAuthMiddleware(BaseHTTPMiddleware):
+#     async def dispatch(
+#         self, request: Request, call_next: RequestResponseEndpoint
+#     ) -> Response:
+#         if settings.mint_require_auth and any(
+#             re.match(pattern, request.url.path)
+#             for pattern in settings.mint_require_clear_auth_paths_regex
+#         ):
+#             clear_auth_token = request.headers.get("clear-auth")
+#             if not clear_auth_token:
+#                 raise Exception("Missing clearauth token.")
+#             try:
+#                 user = await auth_ledger.verify_clear_auth(clear_auth_token=clear_auth_token)
+#             except Exception as e:
+#                 raise e
+#         return await call_next(request)
 
 
 class BlindAuthMiddleware(BaseHTTPMiddleware):
@@ -55,13 +75,13 @@ class BlindAuthMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         if settings.mint_require_auth and any(
             re.match(pattern, request.url.path)
-            for pattern in settings.mint_auth_paths_regex
+            for pattern in settings.mint_require_blind_auth_paths_regex
         ):
             blind_auth_token = request.headers.get("blind-auth")
             if not blind_auth_token:
                 raise Exception("Missing blindauth token.")
             try:
-                await auth_ledger.blind_auth_melt(blind_auth_token=blind_auth_token)
+                await auth_ledger.verify_blind_auth(blind_auth_token=blind_auth_token)
             except Exception as e:
                 raise e
         return await call_next(request)

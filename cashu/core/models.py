@@ -333,11 +333,6 @@ class PostRestoreResponse(BaseModel):
 
 # ------- API: BLIND AUTH -------
 class PostAuthBlindMintRequest(BaseModel):
-    auth: str = Field(
-        ...,
-        max_length=10000,
-        description="Authentication token containing user identifying information.",
-    )
     outputs: List[BlindedMessage] = Field(
         ...,
         max_items=settings.mint_max_request_length,

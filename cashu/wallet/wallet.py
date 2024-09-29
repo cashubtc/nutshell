@@ -204,8 +204,10 @@ class Wallet(
 
     # ---------- API ----------
 
-    async def load_mint_info(self) -> MintInfo:
+    async def load_mint_info(self, reload=False) -> MintInfo:
         """Loads the mint info from the mint."""
+        if self.mint_info and not reload:
+            return self.mint_info
         mint_info_resp = await self._get_info()
         self.mint_info = MintInfo(**mint_info_resp.dict())
         logger.debug(f"Mint info: {self.mint_info}")
@@ -491,7 +493,7 @@ class Wallet(
         # sort by increasing amount
         amounts_we_want.sort()
 
-        logger.debug(
+        logger.trace(
             f"Amounts we have: {[(a, amounts_we_have.count(a)) for a in set(amounts_we_have)]}"
         )
         amounts: list[int] = []
@@ -504,7 +506,7 @@ class Wallet(
         if remaining_amount > 0:
             amounts += amount_split(remaining_amount)
 
-        logger.debug(f"Amounts we want: {amounts}")
+        logger.trace(f"Amounts we want: {amounts}")
         if sum(amounts) != amount:
             raise Exception(f"Amounts do not sum to {amount}.")
 

@@ -1,4 +1,4 @@
-from typing import Dict, Protocol
+from typing import Dict, Optional, Protocol
 
 import httpx
 
@@ -33,4 +33,4 @@ class SupportsMintURL(Protocol):
 class SupportsAuth(Protocol):
     auth_db: Database
     auth_keyset_id: str
-    mint_info: MintInfo
+    mint_info: Optional[MintInfo]

@@ -19,6 +19,25 @@ class WalletAuth(Wallet):
     ):
         super().__init__(url, db, name, unit)
 
+    # overload with_db
+    @classmethod
+    async def with_db(
+        cls,
+        *args,
+        **kwargs,
+    ):
+        # set skip_db_read=True
+        kwargs["skip_db_read"] = True
+        return await super().with_db(*args, **kwargs)
+
+    async def init_wallet(self):
+        # quirk: load mint info from original api_prefix path first
+        await self.load_mint_info()
+        self.api_prefix = "/v1/auth/blind"
+        await self.load_mint_keysets()
+        await self.activate_keyset()
+        await self.load_proofs()
+
     def _get_jwt(self) -> str:
         token_url = (
             "http://localhost:8080/realms/nutshell/protocol/openid-connect/token"
@@ -33,9 +52,8 @@ class WalletAuth(Wallet):
         if response.status_code == 200:
             token_info: dict = response.json()
             access_token = token_info["access_token"]
-            print("Access Tokens:", access_token)
         else:
-            print("Failed to obtain token:", response.status_code, response.text)
+            logger.error(f"Failed to obtain token: {response.text}")
         response.raise_for_status()
         return access_token
 
@@ -54,13 +72,13 @@ class WalletAuth(Wallet):
 
     async def mint_blind_auth_proofs(self) -> List[Proof]:
         clear_auth_token = self._get_jwt()
-        amounts = settings.mint_auth_blind_max_tokens_mint * [1]
+        amounts = settings.mint_auth_max_blind_tokens * [1]
         secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
         rs = [PrivateKey(privkey=os.urandom(32), raw=True) for _ in amounts]
         derivation_paths = ["" for _ in amounts]
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
-        promises = await self.blind_auth_mint(clear_auth_token, outputs)
+        promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
 
         new_proofs = await self._construct_proofs(
             promises, secrets, rs, derivation_paths

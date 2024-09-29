@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from loguru import logger
 
 from ...core.errors import KeysetNotFoundError
@@ -105,9 +105,16 @@ async def keysets() -> KeysetsResponse:
     response_model=PostAuthBlindMintResponse,
 )
 async def auth_blind_mint(
-    request: PostAuthBlindMintRequest,
+    request_data: PostAuthBlindMintRequest, request: Request
 ) -> PostAuthBlindMintResponse:
-    signatures = await auth_ledger.auth_mint(
-        outputs=request.outputs, auth_token=request.auth
+    clear_auth_token = request.headers.get("clear-auth")
+    if not clear_auth_token:
+        raise Exception("Missing clearauth token.")
+    try:
+        user = await auth_ledger.verify_clear_auth(clear_auth_token=clear_auth_token)
+    except Exception as e:
+        raise e
+    signatures = await auth_ledger.mint_blind_auth(
+        outputs=request_data.outputs, user=user
     )
     return PostAuthBlindMintResponse(signatures=signatures)
