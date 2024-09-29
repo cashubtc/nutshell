@@ -50,6 +50,8 @@ from ..core.settings import settings
 from ..tor.tor import TorProxy
 from .crud import (
     get_lightning_invoice,
+    get_proofs,
+    invalidate_proof,
 )
 from .mint_info import MintInfo
 from .protocols import SupportsAuth
@@ -134,7 +136,8 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
     httpx: httpx.AsyncClient
     api_prefix = "v1"
 
-    auth_proofs: List[Proof]
+    auth_db: Database
+    auth_keyset_id: str
     mint_info: MintInfo
 
     def __init__(self, url: str, db: Optional[Database] = None):
@@ -179,8 +182,9 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         if settings.mint_require_auth and any(
             re.match(pattern, path) for pattern in settings.mint_auth_paths_regex
         ):
-            if self.auth_proofs:
-                proof = self.auth_proofs[0]
+            if self.auth_db:
+                proofs = await get_proofs(db=self.auth_db, id=self.auth_keyset_id)
+                proof = proofs[0]
                 auth_token = AuthProof.from_proof(proof).to_base64()
                 headers_dict = {
                     "Client-version": settings.version,
@@ -188,7 +192,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 }
                 kwargs.setdefault("headers", {}).update(headers_dict)
                 # remove the spent auth proofs right away (even if the call fails)
-                self.auth_proofs.remove(proof)
+                await invalidate_proof(proof=proof, db=self.auth_db)
             else:
                 raise Exception("No auth proofs found.")
         return await self.httpx.request(method, path, **kwargs)

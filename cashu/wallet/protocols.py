@@ -1,8 +1,8 @@
-from typing import Dict, List, Protocol
+from typing import Dict, Protocol
 
 import httpx
 
-from ..core.base import Proof, Unit, WalletKeyset
+from ..core.base import Unit, WalletKeyset
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 from .mint_info import MintInfo
@@ -31,5 +31,6 @@ class SupportsMintURL(Protocol):
 
 
 class SupportsAuth(Protocol):
-    auth_proofs: List[Proof]
+    auth_db: Database
+    auth_keyset_id: str
     mint_info: MintInfo

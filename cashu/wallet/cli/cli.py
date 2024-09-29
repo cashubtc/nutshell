@@ -74,8 +74,8 @@ def coro(f):
     return wrapper
 
 
-def require_auth(func):
-    """Decorator to pass auth_proofs to the Wallet object."""
+def init_auth_wallet(func):
+    """Decorator to pass auth_db and auth_keyset_id to the Wallet object."""
 
     @wraps(func)
     async def wrapper(*args, **kwargs):
@@ -113,16 +113,18 @@ def require_auth(func):
             logger.error("No auth proofs available.")
             return
 
-        # Store proofs in Wallet.auth_proofs
-        wallet.auth_proofs = auth_wallet.proofs.copy()
+        # Pass auth_db and auth_keyset_id to the wallet object
+        wallet.auth_db = auth_wallet.db
+        wallet.auth_keyset_id = auth_wallet.keyset_id
 
         # Proceed to the original function
         ret = await func(*args, **kwargs)
 
-        # Invalidate auth_proofs that were used
-        used_proofs = [p for p in auth_wallet.proofs if p not in wallet.auth_proofs]
-        await auth_wallet.invalidate(used_proofs)
-        print(f"Balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
+        if settings.debug:
+            await auth_wallet.load_proofs(reload=True)
+            logger.debug(
+                f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}"
+            )
 
         return ret
 
@@ -250,7 +252,7 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
 )
 @click.pass_context
 @coro
-@require_auth
+@init_auth_wallet
 async def pay(
     ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False
 ):
@@ -317,7 +319,7 @@ async def pay(
 )
 @click.pass_context
 @coro
-@require_auth
+@init_auth_wallet
 async def invoice(
     ctx: Context,
     amount: float,
@@ -457,7 +459,7 @@ async def invoice(
 @cli.command("swap", help="Swap funds between mints.")
 @click.pass_context
 @coro
-@require_auth
+@init_auth_wallet
 async def swap(ctx: Context):
     print("Select the mint to swap from:")
     outgoing_wallet = await get_mint_wallet(ctx, force_select=True)
@@ -625,7 +627,7 @@ async def balance(ctx: Context, verbose):
 )
 @click.pass_context
 @coro
-@require_auth
+@init_auth_wallet
 async def send_command(
     ctx: Context,
     amount: int,
@@ -673,7 +675,7 @@ async def send_command(
 )
 @click.pass_context
 @coro
-@require_auth
+@init_auth_wallet
 async def receive_cli(
     ctx: Context,
     token: str,
@@ -691,7 +693,8 @@ async def receive_cli(
             mint_url,
             os.path.join(settings.cashu_dir, wallet.name),
             unit=token_obj.unit,
-            auth_proofs=wallet.auth_proofs,
+            auth_db=wallet.auth_db.db_location,
+            auth_keyset_id=wallet.auth_keyset_id,
         )
         await verify_mint(mint_wallet, mint_url)
         receive_wallet = await receive(mint_wallet, token_obj)
@@ -1118,7 +1121,7 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
 )
 @click.pass_context
 @coro
-@require_auth
+@init_auth_wallet
 async def restore(ctx: Context, to: int, batch: int):
     wallet: Wallet = ctx.obj["WALLET"]
     # check if there is already a mnemonic in the database
@@ -1153,7 +1156,7 @@ async def restore(ctx: Context, to: int, batch: int):
 # @click.option("--all", default=False, is_flag=True, help="Execute on all available mints.")
 @click.pass_context
 @coro
-@require_auth
+@init_auth_wallet
 async def selfpay(ctx: Context, all: bool = False):
     wallet = await get_mint_wallet(ctx, force_select=True)
     await wallet.load_mint()
