@@ -306,7 +306,7 @@ class LedgerCrudSqlite(LedgerCrud):
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ IN ({','.join([':b_' + str(i) for i in range(len(b_s))])})
+            WHERE b_ IN ({','.join([f":b_{i}" for i in range(len(b_s))])})
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
@@ -376,7 +376,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[Proof]:
         query = f"""
         SELECT * from {db.table_with_schema('proofs_pending')}
-        WHERE y IN ({','.join([':y_' + str(i) for i in range(len(Ys))])})
+        WHERE y IN ({','.join([f":y_{i}" for i in range(len(Ys))])})
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
@@ -729,7 +729,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[Proof]:
         query = f"""
         SELECT * from {db.table_with_schema('proofs_used')}
-        WHERE y IN ({','.join([':y_' + str(i) for i in range(len(Ys))])})
+        WHERE y IN ({','.join([f":y_{i}" for i in range(len(Ys))])})
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)

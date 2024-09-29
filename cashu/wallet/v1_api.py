@@ -170,10 +170,8 @@ class LedgerAPI(LedgerAPIDeprecated):
         keys_dict: dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
-        logger.debug(
-            f"Received {len(keys.keysets)} keysets from mint:"
-            f" {' '.join([k.id + f' ({k.unit})' for k in keys.keysets])}."
-        )
+        keysets_str = ' '.join([f"{k.id} ({k.unit})" for k in keys.keysets])
+        logger.debug(f"Received {len(keys.keysets)} keysets from mint: {keysets_str}.")
         ret = [
             WalletKeyset(
                 id=keyset.id,
@@ -388,7 +386,7 @@ class LedgerAPI(LedgerAPIDeprecated):
             ret: CheckFeesResponse_deprecated = await self.check_fees_deprecated(
                 payment_request
             )
-            quote_id = "deprecated_" + str(uuid.uuid4())
+            quote_id = f"deprecated_{uuid.uuid4()}"
             return PostMeltQuoteResponse(
                 quote=quote_id,
                 amount=amount or invoice_obj.amount_msat // 1000,

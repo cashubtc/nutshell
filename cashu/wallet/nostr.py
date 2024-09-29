@@ -24,7 +24,7 @@ async def nip5_to_pubkey(wallet: Wallet, address: str):
     await wallet._init_s()
     # if no username is given, use default _ (NIP-05 stuff)
     if "@" not in address:
-        address = "_@" + address
+        address = f"_@{address}"
     # now we can use it
     user, host = address.split("@")
     resp_dict = {}

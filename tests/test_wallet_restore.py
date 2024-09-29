@@ -97,7 +97,7 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
     assert derivation_paths1 == derivation_paths2
     for s in secrets1:
-        print('"' + s + '",')
+        print(f'"{s}",')
     assert secrets1 == [
         "485875df74771877439ac06339e284c3acfcd9be7abf3bc20b516faeadfe77ae",
         "8f2b39e8e594a4056eb1e6dbb4b0c38ef13b1b2c751f64f810ec04ee35b77270",
@@ -114,7 +114,7 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     ]
 
     for d in derivation_paths1:
-        print('"' + d + '",')
+        print(f'"{d}",')
     assert derivation_paths1 == [
         "m/129372'/0'/864559728'/0'",
         "m/129372'/0'/864559728'/1'",

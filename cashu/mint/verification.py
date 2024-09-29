@@ -214,7 +214,7 @@ class LedgerVerification(
         """Any amount used should be positive and not larger than 2^MAX_ORDER."""
         valid = amount > 0 and amount < 2**settings.max_order
         if not valid:
-            raise NotAllowedError("invalid amount: " + str(amount))
+            raise NotAllowedError(f"invalid amount: {amount}")
         return amount
 
     def _verify_units_match(

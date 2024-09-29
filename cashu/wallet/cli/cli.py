@@ -232,7 +232,7 @@ async def pay(
             send_proofs, invoice, quote.fee_reserve, quote.quote
         )
     except Exception as e:
-        print(f" Error paying invoice: {str(e)}")
+        print(f" Error paying invoice: {e}")
         return
     if (
         melt_response.state
@@ -336,7 +336,7 @@ async def invoice(
                 # set paid so we won't react to any more callbacks
                 paid = True
             except Exception as e:
-                print(f"Error during mint: {str(e)}")
+                print(f"Error during mint: {e}")
                 return
         else:
             logger.debug("Quote not paid yet.")
@@ -389,7 +389,7 @@ async def invoice(
                     print(".", end="", flush=True)
                     continue
                 else:
-                    print(f"Error: {str(e)}")
+                    print(f"Error: {e}")
         if not paid:
             print("\n")
             print(
@@ -1024,10 +1024,8 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
                     if mint_info.get("time"):
                         print(f"        - Server time: {mint_info['time']}")
                     if mint_info.get("nuts"):
-                        print(
-                            "        - Supported NUTS:"
-                            f" {', '.join(['NUT-'+str(k) for k in mint_info['nuts'].keys()])}"
-                        )
+                        nuts_str = ', '.join([f"NUT-{k}" for k in mint_info['nuts'].keys()])
+                        print(f"        - Supported NUTS: {nuts_str}")
                         print("")
             except Exception as e:
                 print("")
