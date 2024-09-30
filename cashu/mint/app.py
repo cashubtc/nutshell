@@ -4,8 +4,6 @@ from traceback import print_exception
 from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
 from loguru import logger
 from starlette.requests import Request
 
@@ -104,13 +102,9 @@ else:
 
 @app.on_event("startup")
 async def startup_mint():
-    if settings.mint_cache_activate:
-        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
     await start_mint_init()
 
 
 @app.on_event("shutdown")
 async def shutdown_mint():
-    if settings.mint_cache_activate:
-        await FastAPICache.clear()
     await shutdown_mint_init()

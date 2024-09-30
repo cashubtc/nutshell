@@ -5,6 +5,7 @@ import hashlib
 from typing import Callable, Any, Optional, Tuple, Dict
 
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 from fastapi import APIRouter, WebSocket
 from fastapi_cache.decorator import cache
 from starlette.requests import Request
@@ -34,16 +35,22 @@ from ..core.models import (
     PostSwapRequest,
     PostSwapResponse,
 )
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from ..core.settings import settings
 from ..mint.startup import ledger
 from .limit import limit_websocket, limiter
 
-router = APIRouter()
+@asynccontextmanager
+async def lifespan(_: APIRouter) -> AsyncIterator[None]:
+    FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+    yield
+
+router = APIRouter(lifespan=lifespan) if settings.mint_cache_activate else APIRouter()
 
 @cache()
 async def get_cache():
     return 1
-
 
 def request_key_builder(
     func: Callable[..., Any],
@@ -265,7 +272,7 @@ async def websocket_endpoint(websocket: WebSocket):
 @cache(
     expire=settings.mint_cache_bolt11_ttl or 3600,
     namespace="mint-cache",
-    key_builder=request_key_builder,
+    key_builder=request_key_builder
 )
 async def mint(
     request: Request,
@@ -345,7 +352,7 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
 @cache(
     expire=settings.mint_cache_bolt11_ttl or 3600,
     namespace="melt-cache",
-    key_builder=request_key_builder
+    key_builder=request_key_builder,
 )
 async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteResponse:
     """
