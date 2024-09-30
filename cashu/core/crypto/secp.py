@@ -1,3 +1,4 @@
+from ecdsa.curves import SECP256k1
 from secp256k1 import PrivateKey, PublicKey
 
 
@@ -31,6 +32,12 @@ class PublicKeyExt(PublicKey):
         else:
             raise TypeError("Can't multiply with non privatekey")
 
+    def mult_inverse(self, privkey):
+        privkey_int = pk_to_int(privkey)
+        privkey_inv_int = pow(privkey_int, -1, SECP256k1.order)
+        privkey_inv = int_to_pk(privkey_inv_int)
+        return self.mult(privkey_inv)
+
     def __eq__(self, pubkey2):
         if isinstance(pubkey2, PublicKey):
             seq1 = self.to_data()
@@ -44,10 +51,20 @@ class PublicKeyExt(PublicKey):
         return [self.public_key.data[i] for i in range(64)]
 
 
+def pk_to_int(priv: PrivateKey) -> int:
+    assert priv.private_key
+    return int.from_bytes(priv.private_key, byteorder="big")
+
+
+def int_to_pk(k: int) -> PrivateKey:
+    return PrivateKey(k.to_bytes(32, byteorder="big"), raw=True)
+
+
 # Horrible monkeypatching
 PublicKey.__add__ = PublicKeyExt.__add__  # type: ignore
 PublicKey.__neg__ = PublicKeyExt.__neg__  # type: ignore
 PublicKey.__sub__ = PublicKeyExt.__sub__  # type: ignore
 PublicKey.mult = PublicKeyExt.mult  # type: ignore
+PublicKey.mult_inverse = PublicKeyExt.mult_inverse  # type: ignore
 PublicKey.__eq__ = PublicKeyExt.__eq__  # type: ignore
 PublicKey.to_data = PublicKeyExt.to_data  # type: ignore

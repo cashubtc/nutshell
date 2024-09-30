@@ -90,7 +90,7 @@ def step1_alice(
 ) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
-    B_: PublicKey = Y + r.pubkey  # type: ignore
+    B_: PublicKey = Y.mult(r)  # type: ignore
     return B_, r
 
 
@@ -102,7 +102,7 @@ def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, Priv
 
 
 def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
-    C: PublicKey = C_ - A.mult(r)  # type: ignore
+    C: PublicKey = C_.mult_inverse(r)  # type: ignore
     return C
 
 
@@ -166,8 +166,8 @@ def carol_verify_dleq(
     A: PublicKey,
 ) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    C_: PublicKey = C + A.mult(r)  # type: ignore
-    B_: PublicKey = Y + r.pubkey  # type: ignore
+    C_: PublicKey = C.mult(r)  # type: ignore
+    B_: PublicKey = Y.mult(r)  # type: ignore
     valid = alice_verify_dleq(B_, C_, e, s, A)
     # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
     if not valid:
