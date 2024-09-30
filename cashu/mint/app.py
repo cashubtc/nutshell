@@ -14,6 +14,10 @@ from .router import router
 from .router_deprecated import router_deprecated
 from .startup import shutdown_mint as shutdown_mint_init
 from .startup import start_mint_init
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 
 if settings.debug_profiling:
     pass
@@ -32,6 +36,13 @@ from .middleware import add_middlewares, request_validation_exception_handler
 #     yield
 #     # shutdown routines here
 
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+    await start_mint_init()
+    yield
+    await shutdown_mint_init()
+    await FastAPICache.clear()
 
 def create_app(config_object="core.settings") -> FastAPI:
     configure_logger()
@@ -44,6 +55,7 @@ def create_app(config_object="core.settings") -> FastAPI:
             "name": "MIT License",
             "url": "https://raw.githubusercontent.com/cashubtc/cashu/main/LICENSE",
         },
+        lifespan=lifespan if settings.mint_cache_activate else None,
     )
 
     return app
@@ -99,12 +111,12 @@ else:
     app.include_router(router=router, tags=["Mint"])
     app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
 
-
+'''
 @app.on_event("startup")
 async def startup_mint():
-    await start_mint_init()
+    
 
 
 @app.on_event("shutdown")
 async def shutdown_mint():
-    await shutdown_mint_init()
+'''
