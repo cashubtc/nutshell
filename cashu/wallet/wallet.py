@@ -1,5 +1,6 @@
 import base64
 import copy
+import json
 import threading
 import time
 from typing import Callable, Dict, List, Optional, Tuple, Union
@@ -17,6 +18,7 @@ from ..core.base import (
     ProofSpentState,
     Unit,
     WalletKeyset,
+    WalletMint,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.keys import derive_keyset_id
@@ -43,12 +45,14 @@ from . import migrations
 from .crud import (
     bump_secret_derivation,
     get_keysets,
+    get_mint_by_url,
     get_proofs,
     invalidate_proof,
     secret_used,
     set_secret_derivation,
     store_keyset,
     store_lightning_invoice,
+    store_mint,
     store_proof,
     update_keyset,
     update_lightning_invoice,
@@ -208,8 +212,20 @@ class Wallet(
         """Loads the mint info from the mint."""
         if self.mint_info and not reload:
             return self.mint_info
-        mint_info_resp = await self._get_info()
-        self.mint_info = MintInfo(**mint_info_resp.dict())
+        # read mint info from db
+        wallet_mint_db = await get_mint_by_url(url=self.url, db=self.db)
+        if not wallet_mint_db or reload:
+            mint_info_resp = await self._get_info()
+            self.mint_info = MintInfo(**mint_info_resp.dict())
+            if not wallet_mint_db:
+                await store_mint(
+                    db=self.db,
+                    mint=WalletMint(
+                        url=self.url, info=json.dumps(self.mint_info.dict())
+                    ),
+                )
+        else:
+            self.mint_info = MintInfo.from_json_str(wallet_mint_db.info)
         logger.debug(f"Mint info: {self.mint_info}")
         return self.mint_info
 
@@ -353,7 +369,7 @@ class Wallet(
             force_old_keysets (bool, optional): If true, old deprecated base64 keysets are not ignored. This is necessary for restoring tokens from old base64 keysets.
                 Defaults to False.
         """
-        logger.trace("Loading mint.")
+        logger.trace(f"Loading mint {self.url}")
         await self.load_mint_keysets(force_old_keysets)
         await self.activate_keyset(keyset_id)
         try:

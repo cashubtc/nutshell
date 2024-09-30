@@ -1220,3 +1220,9 @@ class AuthProof(BaseModel):
 
     def to_proof(self):
         return Proof(id=self.id, secret=self.secret, C=self.C)
+
+
+class WalletMint(BaseModel):
+    url: str
+    info: str
+    updated: Optional[str] = None

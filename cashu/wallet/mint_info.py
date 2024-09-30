@@ -1,3 +1,4 @@
+import json
 import re
 from typing import Any, Dict, List, Optional
 
@@ -22,6 +23,10 @@ class MintInfo(BaseModel):
 
     def __str__(self):
         return f"{self.name} ({self.description})"
+
+    @classmethod
+    def from_json_str(cls, json_str: str):
+        return cls.parse_obj(json.loads(json_str))
 
     def supports_nut(self, nut: int) -> bool:
         if self.nuts is None:
