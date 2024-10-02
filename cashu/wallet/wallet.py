@@ -1096,7 +1096,7 @@ class Wallet(
                     proofs,
                     amount,
                     set_reserved=False,
-                    include_fees_to_send=include_fees,
+                    include_fees=include_fees,
                 )
             else:
                 raise Exception(
@@ -1114,7 +1114,7 @@ class Wallet(
         *,
         secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
-        include_fees_to_send: bool = True,
+        include_fees: bool = False,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
         Swaps a set of proofs with the mint to get a set that sums up to a desired amount that can be sent. The remaining
@@ -1129,6 +1129,7 @@ class Wallet(
             set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
                 is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
                 displayed to the user to be then sent to someone else. Defaults to False.
+            include_fees (bool, optional): If set, the fees for spending the send_proofs later are included in the amount to be selected. Defaults to True.
 
         Returns:
             Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
@@ -1154,7 +1155,7 @@ class Wallet(
             f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
         )
         keep_proofs, send_proofs = await self.split(
-            swap_proofs, amount, secret_lock, include_fees_to_send
+            swap_proofs, amount, secret_lock, include_fees
         )
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)

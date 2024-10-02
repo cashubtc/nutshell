@@ -62,9 +62,7 @@ async def send_nostr(
         pubkey = await nip5_to_pubkey(wallet, pubkey)
     await wallet.load_mint()
     await wallet.load_proofs()
-    _, send_proofs = await wallet.swap_to_send(
-        wallet.proofs, amount, set_reserved=True, include_fees=False
-    )
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, amount, set_reserved=True)
     token = await wallet.serialize_proofs(send_proofs, include_dleq=include_dleq)
 
     if pubkey.startswith("npub"):
