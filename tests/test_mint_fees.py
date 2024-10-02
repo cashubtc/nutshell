@@ -129,7 +129,9 @@ async def test_wallet_swap_to_send_with_fee(wallet1: Wallet, ledger: Ledger):
 
     # quirk: this should call a `/v1/swap` with the mint but the mint will
     # throw an error since the fees are only changed in the `ledger` instance, not in the uvicorn API server
-    # this *should* succeed normally
+    # this *should* succeed if the fees were set in the API server
+    # at least, we can verify that the wallet is correctly computing the fees
+    # by asserting for this super specific error message from the (API server) mint
     await assert_err(
         wallet1.select_to_send(wallet1.proofs, 10),
         "Mint Error: inputs (32) - fees (0) vs outputs (31) are not balanced.",
