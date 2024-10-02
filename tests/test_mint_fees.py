@@ -244,3 +244,38 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
 
     melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
     assert melt_quote_post_payment.paid, "melt quote should be paid"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only works with Regtest")
+async def test_melt_external_with_fees_with_swap(wallet1: Wallet, ledger: Ledger):
+    # set fees to 100 ppk
+    set_ledger_keyset_fees(100, ledger, wallet1)
+
+    # mint twice so we have enough to pay the second invoice back
+    invoice = await wallet1.request_mint(128)
+    await pay_if_regtest(invoice.bolt11)
+    # we create a split so that the payment later of 32 sat will require a swap before we can melt
+    await wallet1.mint(128, id=invoice.id, split=[64, 64])
+    assert wallet1.balance == 128
+
+    invoice_dict = get_real_invoice(32)
+    invoice_payment_request = invoice_dict["payment_request"]
+
+    mint_quote = await wallet1.melt_quote(invoice_payment_request)
+    total_amount = mint_quote.amount + mint_quote.fee_reserve
+    send_proofs, fee = await wallet1.select_to_send(
+        wallet1.proofs, total_amount, include_fees=True
+    )
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
+    )
+
+    melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
+    assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
+
+    assert not melt_quote.paid, "melt quote should not be paid"
+    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
+
+    melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
+    assert melt_quote_post_payment.paid, "melt quote should be paid"
