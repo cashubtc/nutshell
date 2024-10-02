@@ -96,18 +96,44 @@ async def test_get_fees_for_proofs(wallet1: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
-async def test_wallet_fee(wallet1: Wallet, ledger: Ledger):
-    # THIS TEST IS A FAKE, WE SET THE WALLET FEES MANUALLY IN set_ledger_keyset_fees
-    # It would be better to test if the wallet can get the fees from the mint itself
-    # but the ledger instance does not update the responses from the `mint` that is running in the background
-    # so we just pretend here and test really nothing...
-
+async def test_wallet_selection_with_fee(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(100, ledger, wallet1)
 
+    # THIS TEST IS A FAKE, WE SET THE WALLET FEES MANUALLY IN set_ledger_keyset_fees
     # check if all wallet keysets have the correct fees
     for keyset in wallet1.keysets.values():
         assert keyset.input_fee_ppk == 100
+
+    invoice = await wallet1.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id)
+
+    send_proofs, _ = await wallet1.select_to_send(wallet1.proofs, 10)
+    assert sum_proofs(send_proofs) == 10
+
+    send_proofs_with_fees, _ = await wallet1.select_to_send(
+        wallet1.proofs, 10, include_fees=True
+    )
+    assert sum_proofs(send_proofs_with_fees) == 11
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_wallet_swap_to_send_with_fee(wallet1: Wallet, ledger: Ledger):
+    # set fees to 100 ppk
+    set_ledger_keyset_fees(100, ledger, wallet1)
+    invoice = await wallet1.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id, split=[32, 32])  # make sure we need to swap
+
+    # quirk: this should call a `/v1/swap` with the mint but the mint will
+    # throw an error since the fees are only changed in the `ledger` instance, not in the uvicorn API server
+    # this *should* succeed normally
+    await assert_err(
+        wallet1.select_to_send(wallet1.proofs, 10),
+        "Mint Error: inputs (32) - fees (0) vs outputs (31) are not balanced.",
+    )
 
 
 @pytest.mark.asyncio
@@ -225,41 +251,6 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
     assert wallet1.balance == 128
 
     invoice_dict = get_real_invoice(64)
-    invoice_payment_request = invoice_dict["payment_request"]
-
-    mint_quote = await wallet1.melt_quote(invoice_payment_request)
-    total_amount = mint_quote.amount + mint_quote.fee_reserve
-    send_proofs, fee = await wallet1.select_to_send(
-        wallet1.proofs, total_amount, include_fees=True
-    )
-    melt_quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
-    )
-
-    melt_quote_pre_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
-
-    assert not melt_quote.paid, "melt quote should not be paid"
-    await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
-
-    melt_quote_post_payment = await ledger.get_melt_quote(melt_quote.quote)
-    assert melt_quote_post_payment.paid, "melt quote should be paid"
-
-
-@pytest.mark.asyncio
-@pytest.mark.skipif(is_fake, reason="only works with Regtest")
-async def test_melt_external_with_fees_with_swap(wallet1: Wallet, ledger: Ledger):
-    # set fees to 100 ppk
-    set_ledger_keyset_fees(100, ledger, wallet1)
-
-    # mint twice so we have enough to pay the second invoice back
-    invoice = await wallet1.request_mint(128)
-    await pay_if_regtest(invoice.bolt11)
-    # we create a split so that the payment later of 32 sat will require a swap before we can melt
-    await wallet1.mint(128, id=invoice.id, split=[64, 64])
-    assert wallet1.balance == 128
-
-    invoice_dict = get_real_invoice(32)
     invoice_payment_request = invoice_dict["payment_request"]
 
     mint_quote = await wallet1.melt_quote(invoice_payment_request)

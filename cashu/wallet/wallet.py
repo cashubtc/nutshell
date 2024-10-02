@@ -624,7 +624,7 @@ class Wallet(
         # generate optimal split for outputs to send
         send_amounts = amount_split(send_amt)
 
-        # we subtract the fee for the entire transaction from the amount to keep
+        # we subtract the input fee for the entire transaction from the amount to keep
         keep_amt -= self.get_fees_for_proofs(proofs)
         logger.trace(f"Keep amount: {keep_amt}")
 
@@ -638,6 +638,7 @@ class Wallet(
         proofs: List[Proof],
         amount: int,
         secret_lock: Optional[Secret] = None,
+        include_fees_to_send: bool = False,
     ) -> Tuple[List[Proof], List[Proof]]:
         """Calls the swap API to split the proofs into two sets of proofs, one for keeping and one for sending.
 
@@ -649,6 +650,9 @@ class Wallet(
             proofs (List[Proof]): Proofs to be split.
             amount (int): Amount to be sent.
             secret_lock (Optional[Secret], optional): Secret to lock the tokens to be sent. Defaults to None.
+            include_fees_to_send (bool, optional): If True, the fees are included in the amount to send (output of
+                this method, to be sent in the future). This is not the fee that is required to swap the
+                `proofs` (input to this method). Defaults to False.
 
         Returns:
             Tuple[List[Proof], List[Proof]]: Two lists of proofs, one for keeping and one for sending.
@@ -667,7 +671,10 @@ class Wallet(
         # create a suitable amount lists to keep and send based on the proofs
         # provided and the state of the wallet
         keep_outputs, send_outputs = self.determine_output_amounts(
-            proofs, amount, include_fees_to_send=True, keyset_id_outputs=self.keyset_id
+            proofs,
+            amount,
+            include_fees_to_send=include_fees_to_send,
+            keyset_id_outputs=self.keyset_id,
         )
 
         amounts = keep_outputs + send_outputs
@@ -1060,7 +1067,8 @@ class Wallet(
             amount (int): Amount to split to
             set_reserved (bool, optional): If set, the proofs are marked as reserved. Defaults to False.
             offline (bool, optional): If set, the coin selection is done offline. Defaults to False.
-            include_fees (bool, optional): If set, the fees are included in the amount to be selected. Defaults to False.
+            include_fees (bool, optional): If set, the fees for spending the proofs later are included in the
+                amount to be selected. Defaults to False.
 
         Returns:
             List[Proof]: Proofs to send
@@ -1085,7 +1093,10 @@ class Wallet(
                 logger.debug("Offline coin selection unsuccessful. Splitting proofs.")
                 # we set the proofs as reserved later
                 _, send_proofs = await self.swap_to_send(
-                    proofs, amount, set_reserved=False, include_fees=include_fees
+                    proofs,
+                    amount,
+                    set_reserved=False,
+                    include_fees_to_send=include_fees,
                 )
             else:
                 raise Exception(
@@ -1103,7 +1114,7 @@ class Wallet(
         *,
         secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
-        include_fees: bool = True,
+        include_fees_to_send: bool = True,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
         Swaps a set of proofs with the mint to get a set that sums up to a desired amount that can be sent. The remaining
@@ -1116,8 +1127,8 @@ class Wallet(
             amount (int): Amount to split to
             secret_lock (Optional[str], optional): If set, a custom secret is used to lock new outputs. Defaults to None.
             set_reserved (bool, optional): If set, the proofs are marked as reserved. Should be set to False if a payment attempt
-            is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
-            displayed to the user to be then sent to someone else. Defaults to False.
+                is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
+                displayed to the user to be then sent to someone else. Defaults to False.
 
         Returns:
             Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
@@ -1142,7 +1153,9 @@ class Wallet(
         logger.debug(
             f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
         )
-        keep_proofs, send_proofs = await self.split(swap_proofs, amount, secret_lock)
+        keep_proofs, send_proofs = await self.split(
+            swap_proofs, amount, secret_lock, include_fees_to_send
+        )
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
         return keep_proofs, send_proofs
