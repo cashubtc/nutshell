@@ -223,6 +223,11 @@ class CoreLightningRestFundingSource(MintSettings):
     mint_corelightning_rest_cert: Optional[str] = Field(default=None)
 
 
+class MintCache(MintSettings):
+    mint_cache_activate: bool = Field(default=False)
+    mint_cache_ttl: int = Field(default=3600)
+
+
 class Settings(
     EnvSettings,
     LndRPCFundingSource,
@@ -232,6 +237,7 @@ class Settings(
     FakeWalletSettings,
     MintLimits,
     MintBackends,
+    MintCache,
     MintSettings,
     MintInformation,
     WalletSettings,

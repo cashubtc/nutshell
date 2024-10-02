@@ -1,8 +1,13 @@
 import asyncio
+import hashlib
 import time
+from typing import Any, Callable, Dict, Optional, Tuple
 
-from fastapi import APIRouter, Request, WebSocket
+from fastapi import APIRouter, WebSocket
+from fastapi_cache.decorator import cache
 from loguru import logger
+from starlette.requests import Request
+from starlette.responses import Response
 
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
@@ -30,7 +35,28 @@ from ..core.settings import settings
 from ..mint.startup import ledger
 from .limit import limit_websocket, limiter
 
-router: APIRouter = APIRouter()
+router = APIRouter()
+
+
+def request_key_builder(
+    func: Callable[..., Any],
+    namespace: str = "",
+    *,
+    request: Optional[Request] = None,
+    response: Optional[Response] = None,
+    args: Tuple[Any, ...],
+    kwargs: Dict[str, Any],
+) -> str:
+    cache_key = ""
+    if request and request.method.lower() == "get":
+        cache_key = hashlib.md5(  # noqa: S324
+            f"{func.__module__}:{func.__name__}:{repr(sorted(request.query_params.items()))}:{args}:{kwargs}".encode()
+        ).hexdigest()
+    elif request and request.method.lower() == "post":
+        cache_key = hashlib.md5(  # noqa: S324
+            f"{func.__module__}:{func.__name__}:{repr(request.json())}:{args}:{kwargs}".encode()
+        ).hexdigest()
+    return f"{namespace}:{cache_key}"
 
 
 @router.get(
@@ -230,6 +256,11 @@ async def websocket_endpoint(websocket: WebSocket):
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@cache(
+    expire=settings.mint_cache_ttl,
+    namespace="mint-cache",
+    key_builder=request_key_builder,
+)
 async def mint(
     request: Request,
     payload: PostMintRequest,
@@ -305,6 +336,11 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@cache(
+    expire=settings.mint_cache_ttl,
+    namespace="melt-cache",
+    key_builder=request_key_builder,
+)
 async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
@@ -327,6 +363,11 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@cache(
+    expire=settings.mint_cache_ttl,
+    namespace="swap-cache",
+    key_builder=request_key_builder,
+)
 async def swap(
     request: Request,
     payload: PostSwapRequest,
