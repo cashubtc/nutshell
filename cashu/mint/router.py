@@ -6,6 +6,7 @@ from loguru import logger
 
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
+    GetDlcStatusResponse,
     GetInfoResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
@@ -14,6 +15,12 @@ from ..core.models import (
     MintInfoContact,
     PostCheckStateRequest,
     PostCheckStateResponse,
+    PostDlcPayoutRequest,
+    PostDlcPayoutResponse,
+    PostDlcRegistrationRequest,
+    PostDlcRegistrationResponse,
+    PostDlcSettleRequest,
+    PostDlcSettleResponse,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
@@ -378,3 +385,65 @@ async def restore(payload: PostRestoreRequest) -> PostRestoreResponse:
     assert payload.outputs, Exception("no outputs provided.")
     outputs, signatures = await ledger.restore(payload.outputs)
     return PostRestoreResponse(outputs=outputs, signatures=signatures)
+
+
+@router.post(
+    "/v1/dlc/fund",
+    name="Fund",
+    summary="Register and fund a DLC batch",
+    response_model=PostDlcRegistrationResponse,
+    response_description=(
+        "Two lists describing which DLC were registered and which encountered errors respectively."
+    ),
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def dlc_fund(
+    request: Request, payload: PostDlcRegistrationRequest
+) -> PostDlcRegistrationResponse:
+    logger.trace(f"> POST /v1/dlc/fund: {payload}")
+    assert len(payload.registrations) > 0, "No registrations provided"
+    return await ledger.register_dlc(payload)
+
+
+@router.get(
+    "/v1/dlc/status/{dlc_root}",
+    name="",
+    summary="Register a DLC batch",
+    response_model=GetDlcStatusResponse,
+    response_description=(
+        "Two lists describing which DLC were registered and which encountered errors respectively."
+    ),
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def dlc_status(request: Request, dlc_root: str) -> GetDlcStatusResponse:
+    logger.trace(f"> GET /v1/dlc/status/{dlc_root}")
+    return await ledger.status_dlc(dlc_root)
+
+
+@router.post(
+    "/v1/dlc/settle",
+    name="Settle",
+    summary="Prove DLC outcomes",
+    response_model=PostDlcSettleResponse,
+    response_description="Two lists describing which DLC were settled and which encountered errors respectively.",
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def dlc_settle(
+    request: Request, payload: PostDlcSettleRequest
+) -> PostDlcSettleResponse:
+    logger.trace(f"> POST /v1/dlc/settle: {payload}")
+    return await ledger.settle_dlc(payload)
+
+@router.post(
+    "/v1/dlc/payout",
+    name="Payout",
+    summary="Get DLC payout",
+    response_model=PostDlcPayoutResponse,
+    response_description="Blind signatures for the respective payout amount",
+)
+@limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+async def dlc_payout(
+    request: Request, payload: PostDlcPayoutRequest
+) -> PostDlcPayoutResponse:
+    logger.trace(f"> POST /v1/dlc/payout: {payload}")
+    return await ledger.payout_dlc(payload)

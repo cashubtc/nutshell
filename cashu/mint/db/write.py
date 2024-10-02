@@ -1,18 +1,35 @@
-from typing import List, Optional, Union
+import json
+from typing import Dict, List, Optional, Tuple, Union
 
 from loguru import logger
 
 from ...core.base import (
+    DiscreetLogContract,
+    DlcBadInput,
+    DlcFundingAck,
+    DlcFundingError,
+    DlcPayout,
+    DlcPayoutForm,
+    DlcSettlement,
+    DlcSettlementAck,
+    DlcSettlementError,
     MeltQuote,
     MeltQuoteState,
+    MintKeyset,
     MintQuote,
     MintQuoteState,
     Proof,
     ProofSpentState,
     ProofState,
+    Unit,
 )
 from ...core.db import Connection, Database
 from ...core.errors import (
+    CashuError,
+    DlcAlreadyRegisteredError,
+    DlcPayoutFail,
+    DlcSettlementFail,
+    TokenAlreadySpentError,
     TransactionError,
 )
 from ..crud import LedgerCrud
@@ -223,3 +240,155 @@ class DbWriteHelper:
 
         await self.events.submit(quote_copy)
         return quote_copy
+
+    async def _verify_proofs_and_dlc_registrations(
+        self,
+        registrations: List[Tuple[DiscreetLogContract, DlcFundingAck]],
+    ) -> Tuple[List[Tuple[DiscreetLogContract, DlcFundingAck]], List[DlcFundingError]]:
+        """
+        Method to check if proofs are already spent or registrations already registered. If they are not, we
+        set them as spent and registered respectively
+        Args:
+            registrations (List[Tuple[DiscreetLogContract, DlcFundingAck]]): List of registrations.
+        Returns:
+            List[Tuple[DiscreetLogContract, DlcFundingAck]]: a list of registered DLCs
+            List[DlcFundingError]: a list of errors
+        """
+        checked: List[Tuple[DiscreetLogContract, DlcFundingAck]] = []
+        registered: List[Tuple[DiscreetLogContract, DlcFundingAck]] = []
+        errors: List[DlcFundingError]= []
+        if len(registrations) == 0:
+            logger.trace("Received 0 registrations")
+            return [], []
+        logger.trace("_verify_proofs_and_dlc_registrations acquiring lock")
+        async with self.db.get_connection(lock_table="proofs_used") as conn:
+            for registration in registrations:
+                reg = registration[0]
+                logger.trace("checking whether proofs are already spent")
+                try:
+                    assert reg.inputs
+                    await self.db_read._verify_proofs_spendable(reg.inputs, conn)
+                    await self.db_read._verify_dlc_registrable(reg.dlc_root, conn)
+                    checked.append(registration)
+                except (TokenAlreadySpentError, DlcAlreadyRegisteredError) as e:
+                    logger.trace(f"Proofs already spent for registration {reg.dlc_root}")
+                    errors.append(DlcFundingError(
+                        dlc_root=reg.dlc_root,
+                        bad_inputs=[DlcBadInput(
+                            index=-1,
+                            detail=e.detail
+                        )]
+                    ))
+
+            for registration in checked:
+                reg = registration[0]
+                assert reg.inputs
+                try:
+                    for p in reg.inputs:
+                        logger.trace(f"Invalidating proof {p.Y}")
+                        await self.crud.invalidate_proof(
+                            proof=p, db=self.db, conn=conn
+                        )
+
+                    logger.trace(f"Registering DLC {reg.dlc_root}")
+                    await self.crud.store_dlc(reg, self.db, conn)
+                    registered.append(registration)
+                except Exception as e:
+                    logger.trace(f"Failed to register {reg.dlc_root}: {str(e)}")
+                    errors.append(DlcFundingError(
+                        dlc_root=reg.dlc_root,
+                        bad_inputs=[DlcBadInput(
+                            index=-1,
+                            detail=str(e)
+                        )]
+                    ))
+        logger.trace("_verify_proofs_and_dlc_registrations lock released")
+        return (registered, errors)
+
+    async def _settle_dlc(
+        self,
+        settlements: List[DlcSettlement]
+    ) -> Tuple[List[DlcSettlementAck], List[DlcSettlementError]]:
+        settled = []
+        errors = []
+        async with self.db.get_connection(lock_table="dlc") as conn:
+            for settlement in settlements:
+                try:
+                    # We verify the dlc_root is in the DB
+                    dlc = await self.crud.get_registered_dlc(settlement.dlc_root, self.db, conn)
+                    if dlc is None:
+                        raise DlcSettlementFail(detail="No DLC with this root hash")
+                    if dlc.settled is True:
+                        raise DlcSettlementFail(detail="DLC already settled")
+                    assert settlement.outcome
+
+                    # Calculate debts map
+                    weights = json.loads(settlement.outcome.P)
+                    weight_sum = sum(weights.values())
+                    debts = dict(((pubkey, dlc.funding_amount * weight // weight_sum) for pubkey, weight in weights.items()))
+                    
+                    # Update DLC in the database
+                    await self.crud.set_dlc_settled_and_debts(settlement.dlc_root, json.dumps(debts), self.db, conn)
+
+                    settled.append(DlcSettlementAck(dlc_root=settlement.dlc_root))
+                except (CashuError, Exception) as e:
+                    errors.append(DlcSettlementError(
+                        dlc_root=settlement.dlc_root,
+                        details=f"error with the DB: {str(e)}"
+                    ))
+        return (settled, errors)
+
+
+    async def _verify_and_update_dlc_payouts(
+        self,
+        payouts: List[DlcPayoutForm],
+        keysets: Dict[str, MintKeyset],
+    ) -> Tuple[List[DlcPayoutForm], List[DlcPayout]]:
+        """
+        We perform the following checks inside the db lock:
+           * Verify dlc_root exists and is settled
+           * Verify the debts map contains the referenced public key
+           * Verify every blind message from the payout request has keyset ID that
+                matches the DLC in its funding unit.
+           * Verify the sum of amounts in blind messages is <= than the respective payout amount
+        """
+        verified = []
+        errors = []
+        async with self.db.get_connection(lock_table="dlc") as conn:
+            for payout in payouts:
+                try:
+                    dlc = await self.crud.get_registered_dlc(payout.dlc_root, self.db, conn)
+                    if dlc is None:
+                        raise DlcPayoutFail(detail="No DLC with this root hash")
+                    if not dlc.settled:
+                        raise DlcPayoutFail(detail="DLC is not settled")
+                    if not all([keysets[b.id].unit == Unit[dlc.unit] for b in payout.outputs]):
+                        raise DlcPayoutFail(detail="DLC funding unit does not match blind messages unit")
+                    if dlc.debts is None:
+                        raise DlcPayoutFail(detail="Debts map is empty")
+                    if payout.pubkey not in dlc.debts:
+                        raise DlcPayoutFail(detail=f"{payout.pubkey}: no such public key in debts map")
+                    
+                    # We have already checked the amounts before, so we just sum them
+                    blind_messages_amount = sum([b.amount for b in payout.outputs])
+                    eligible_amount = dlc.debts[payout.pubkey]
+                    
+                    # Verify the amount of the blind messages is LEQ than the eligible amount
+                    if blind_messages_amount != eligible_amount:
+                        raise DlcPayoutFail(detail=f"amount requested ({blind_messages_amount}) is bigger than eligible amount ({eligible_amount})")
+                    
+                    # Remove the payout from the map
+                    del dlc.debts[payout.pubkey]
+
+                    # Update the database
+                    await self.crud.set_dlc_settled_and_debts(dlc.dlc_root, json.dumps(dlc.debts), self.db, conn)
+
+                    # Append payout to verified results
+                    verified.append(payout)
+                except (CashuError, Exception) as e:
+                    errors.append(DlcPayout(
+                        dlc_root=payout.dlc_root,
+                        detail=f"DB error: {str(e)}"
+                    ))
+        return (verified, errors)
+            

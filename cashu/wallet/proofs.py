@@ -135,6 +135,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         include_dleq=False,
         legacy=False,
         memo: Optional[str] = None,
+        dlc_root: Optional[str] = None,
     ) -> str:
         """Produces sharable token with proofs and mint information.
 
@@ -155,7 +156,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             tokenv3 = await self._make_tokenv3(proofs, memo)
             return tokenv3.serialize(include_dleq)
         else:
-            tokenv4 = await self._make_token(proofs, include_dleq, memo)
+            tokenv4 = await self._make_token(proofs, include_dleq, memo, dlc_root)
             return tokenv4.serialize(include_dleq)
 
     async def _make_tokenv3(
@@ -197,7 +198,10 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         return token
 
     async def _make_tokenv4(
-        self, proofs: List[Proof], include_dleq=False, memo: Optional[str] = None
+        self, proofs: List[Proof],
+        include_dleq=False,
+        memo: Optional[str] = None,
+        dlc_root: Optional[str] = None,
     ) -> TokenV4:
         """
         Takes a list of proofs and returns a TokenV4
@@ -238,10 +242,14 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             tokenv4_token = TokenV4Token(i=bytes.fromhex(keyset_id), p=tokenv4_proofs)
             tokens.append(tokenv4_token)
 
-        return TokenV4(m=mint_url, u=unit_str, t=tokens, d=memo)
+        return TokenV4(m=mint_url, u=unit_str, t=tokens, d=memo, r=dlc_root)
 
     async def _make_token(
-        self, proofs: List[Proof], include_dleq=False, memo: Optional[str] = None
+        self,
+        proofs: List[Proof],
+        include_dleq=False,
+        memo: Optional[str] = None,
+        dlc_root: Optional[str] = None,
     ) -> TokenV4:
         """
         Takes a list of proofs and returns a TokenV4
@@ -253,4 +261,4 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             TokenV4: TokenV4 object
         """
 
-        return await self._make_tokenv4(proofs, include_dleq, memo)
+        return await self._make_tokenv4(proofs, include_dleq, memo, dlc_root)

@@ -7,15 +7,17 @@ from bip32 import BIP32
 from loguru import logger
 from mnemonic import Mnemonic
 
+from ..core.crypto.dlc import list_hash, merkle_root
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
-from ..core.secret import Secret
+from ..core.secret import Secret, SecretKind, Tags
 from ..core.settings import settings
 from ..wallet.crud import (
     bump_secret_derivation,
     get_seed_and_mnemonic,
     store_seed_and_mnemonic,
 )
+from .dlc import SecretMetadata
 from .protocols import SupportsDb, SupportsKeysets
 
 
@@ -233,3 +235,71 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         derivation_paths = ["custom"] * len(secrets)
 
         return secrets, rs, derivation_paths
+
+    async def generate_sct_secrets(
+        self,
+        n: int,
+        n_keep: int,
+        dlc_root: str,
+        threshold: int,
+        skip_bump: bool = False,
+    ) -> Tuple[List[SecretMetadata], int]:
+        """
+        Creates a list of DLC locked secrets and associated metadata.
+
+        Args:
+            n (int): number of locked secrets to be created
+            n_keep (int): number of vanilla secrets to be created
+            dlc_root (str): root of the contract the funds will be locked to
+            threshold (int): funding threshold. the mint will register this proof
+                only if the contract's funding amount is greater or equal to threshold
+            skip_bump (int): skip bumping of the secret derivation
+
+        Returns:
+            List[SecretMetadata]: Secrets and associated metadata
+            int: The number of secrets that were generated (used to bump derivation)
+        """
+        secrets_and_metadata = []
+        # We generate `n_keep` normal secrets for the proofs we want to keep
+        keep_secrets, keep_rs, keep_dpath = await self.generate_n_secrets(n_keep, skip_bump=skip_bump)
+        for ksc, krs, kdp in zip(keep_secrets, keep_rs, keep_dpath):
+            secrets_and_metadata.append(SecretMetadata(
+                secret=ksc,
+                blinding_factor=krs,
+                derivation_path=kdp,
+                all_spending_conditions=None,
+            ))
+        n_secrets = n_keep
+        ss, bf, dpath = await self.generate_n_secrets(3*n, skip_bump=skip_bump)
+        n_secrets += 3*n
+        logger.trace(f"Generating {n} DLC locked secrets and {n_keep} vanilla secrets")
+        logger.trace(f"Locked to {dlc_root}")
+        for i in range(0, 3*n, 3):
+            # Commit to the DLC
+            dlc_commit = Secret(
+                kind=SecretKind.DLC.value,
+                nonce=ss[i],
+                data=dlc_root,
+                tags=Tags([["threshold", str(threshold)]]),
+            ).serialize()
+
+            # Commit to the backup secret
+            backup_commit = ss[i+1]
+
+            # Generate Secret
+            all_spending_conditions = [dlc_commit, backup_commit]
+            leaf_hashes = list_hash(all_spending_conditions)
+            root_bytes, _ = merkle_root(leaf_hashes)
+            secret = Secret(
+                kind=SecretKind.SCT.value,
+                nonce=ss[i+2],
+                data=root_bytes.hex(),
+                tags=Tags()
+            )
+            secrets_and_metadata.append(SecretMetadata(
+                secret=secret.serialize(),
+                blinding_factor=bf[i],
+                derivation_path=dpath[i],
+                all_spending_conditions=all_spending_conditions,
+            ))
+        return (secrets_and_metadata, n_secrets)

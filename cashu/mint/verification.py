@@ -1,3 +1,6 @@
+import json
+import time
+from hashlib import sha256
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
@@ -5,15 +8,28 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     BlindedSignature,
+    DiscreetLogContract,
+    DlcBadInput,
+    DlcOutcome,
+    DlcPayoutWitness,
     Method,
     MintKeyset,
     Proof,
     Unit,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.secp import PublicKey
+from ..core.crypto.dlc import (
+    merkle_verify,
+    verify_payout_secret,
+    verify_payout_signature,
+)
+from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
+    CashuError,
+    DlcPayoutFail,
+    DlcSettlementFail,
+    DlcVerificationFail,
     NoSecretInProofsError,
     NotAllowedError,
     SecretTooLongError,
@@ -26,11 +42,12 @@ from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
 from .db.read import DbReadHelper
 from .db.write import DbWriteHelper
+from .dlc import LedgerDLC
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
 
 class LedgerVerification(
-    LedgerSpendingConditions, SupportsKeysets, SupportsDb, SupportsBackends
+    LedgerSpendingConditions, LedgerDLC, SupportsKeysets, SupportsDb, SupportsBackends
 ):
     """Verification functions for the ledger."""
 
@@ -277,3 +294,210 @@ class LedgerVerification(
             )
 
         return unit, method
+
+    async def _verify_dlc_amount_fees_coverage(
+        self,
+        funding_amount: int,
+        fa_unit: str,
+        proofs: List[Proof],
+    ) -> int:
+        """
+            Verifies the sum of the inputs is enough to cover
+            the funding amount + fees
+
+            Args:
+                funding_amount (int): funding amount of the contract
+                fa_unit (str): ONE OF ('sat', 'msat', 'eur', 'usd', 'btc'). The unit in which funding_amount
+                    should be evaluated.
+                proofs: (List[Proof]): proofs to be verified
+
+            Returns:
+                (int): amount provided by the proofs
+
+            Raises:
+                TransactionError
+
+        """
+        u = self.keysets[proofs[0].id].unit
+        # Verify registration's funding_amount unit is the same as the proofs
+        if Unit[fa_unit] != u:
+            raise TransactionError("funding amount unit is not the same as the proofs")
+        fees = await self.get_dlc_fees(fa_unit)
+        amount_provided = sum([p.amount for p in proofs])
+        amount_needed = funding_amount + fees['base'] + (funding_amount * fees['ppk'] // 1000)
+        if amount_provided < amount_needed:
+            raise TransactionError("funds provided do not cover the DLC funding amount")
+        return amount_provided
+
+    async def _verify_dlc_inputs(self, dlc: DiscreetLogContract):
+        """
+            Verifies all inputs to the DLC
+
+            Args:
+                dlc (DiscreetLogContract): the DLC to be funded
+                proofs: (List[Proof]): proofs to be verified
+
+            Raises:
+                DlcVerificationFail
+        """
+        # After we have collected all of the errors
+        # We use this to raise a DlcVerificationFail
+        def raise_if_err(err):
+            if len(err) > 0:
+                logger.error("Failed to verify DLC inputs")
+                raise DlcVerificationFail(bad_inputs=err)
+
+        # We cannot just raise an exception if one proof fails and call it a day
+        # for every proof we need to collect its index and motivation of failure
+        # and report them
+
+        # Verify inputs
+        if not dlc.inputs:
+            raise TransactionError("no proofs provided.")
+
+        errors = []
+        # Verify amounts of inputs
+        for i, p in enumerate(dlc.inputs):
+            try:
+                self._verify_amount(p.amount)
+            except NotAllowedError as e:
+                errors.append(DlcBadInput(
+                    index=i,
+                    detail=e.detail
+                ))
+        raise_if_err(errors)
+
+        # Verify secret criteria
+        for i, p in enumerate(dlc.inputs):
+            try:
+                self._verify_secret_criteria(p)
+            except (SecretTooLongError, NoSecretInProofsError) as e:
+                errors.append(DlcBadInput(
+                    index=i,
+                    detail=e.detail
+                ))
+        raise_if_err(errors)
+
+        # verify that only unique proofs were used
+        if not self._verify_no_duplicate_proofs(dlc.inputs):
+            raise TransactionError("duplicate proofs.")
+
+        # Verify ecash signatures
+        for i, p in enumerate(dlc.inputs):
+            valid = False
+            exc = None
+            try:
+                # _verify_proof_bdhke can also raise an AssertionError...
+                assert self._verify_proof_bdhke(p), "invalid e-cash signature"
+            except AssertionError as e:
+                errors.append(DlcBadInput(
+                    index=i,
+                    detail=str(e)
+                ))
+        raise_if_err(errors)
+
+        # Verify proofs of the same denomination
+        # REASONING: proofs could be usd, eur. We don't want mixed stuff.
+        u = self.keysets[dlc.inputs[0].id].unit
+        for i, p in enumerate(dlc.inputs):
+            if self.keysets[p.id].unit != u:
+                errors.append(DlcBadInput(
+                    index=i,
+                    detail="all the inputs must be of the same denomination"
+                ))
+        raise_if_err(errors)
+
+        for i, p in enumerate(dlc.inputs):
+            valid = False
+            exc = None
+            try:
+                valid = self._verify_input_spending_conditions(p, funding_dlc=dlc)
+            except CashuError as e:
+                exc = e
+            if not valid:
+                errors.append(DlcBadInput(
+                    index=i,
+                    detail=exc.detail if exc else "input spending conditions verification failed"
+                ))
+        raise_if_err(errors)
+
+    async def _verify_dlc_payout(self, P: str):
+        try:
+            payout = json.loads(P)
+            if not isinstance(payout, dict):
+                raise DlcSettlementFail(detail="Provided payout structure is not a dictionary")
+            if not all([isinstance(k, str) and isinstance(v, int) for k, v in payout.items()]):
+                raise DlcSettlementFail(detail="Provided payout structure is not a dictionary mapping strings to integers")
+            for k in payout.keys():
+                try:
+                    tmp = bytes.fromhex(k)
+                    if tmp[0] != 0x02 and tmp[0] != 0x03:
+                        logger.error(f"Provided incorrect public key: {tmp.hex()}")
+                        raise DlcSettlementFail(detail="Provided payout structure contains incorrect public keys")
+                    if len(tmp) != 33:
+                        logger.error(f"Provided incorrect public key: {tmp.hex()}")
+                        raise DlcSettlementFail(detail="Provided payout structure contains incorrect public keys: length != 33")
+                except ValueError as e:
+                    raise DlcSettlementFail(detail=str(e))
+            for v in payout.values():
+                try:
+                    weight = int(v)
+                    if weight < 0:
+                        raise DlcSettlementFail(detail="Provided payout structure contains incorrect payout weights")
+                except ValueError:
+                    raise DlcSettlementFail(detail="Provided payout structure contains incorrect payout weights")
+        except json.JSONDecodeError:
+            raise DlcSettlementFail(detail="cannot decode the provided payout structure")
+
+    async def _verify_dlc_inclusion(self, dlc_root: str, outcome: DlcOutcome, merkle_proof: List[str]):
+        dlc_root_bytes = None
+        merkle_proof_bytes = None
+        P = outcome.P.encode("utf-8")
+        try:
+            dlc_root_bytes = bytes.fromhex(dlc_root)
+            merkle_proof_bytes = [bytes.fromhex(p) for p in merkle_proof]
+            logger.debug(f"{merkle_proof = }")
+        except ValueError:
+            raise DlcSettlementFail(detail="either dlc root or merkle proof are not a hex string")
+
+        # Timeout verification
+        if outcome.t:
+            unix_epoch = int(time.time())
+            if unix_epoch < outcome.t:
+                raise DlcSettlementFail(detail="too early for a timeout settlement")
+            K_t = b_dhke.hash_to_curve(outcome.t.to_bytes(8, "big"))
+            leaf_hash = sha256(K_t.serialize(True) + P).digest()
+            if not merkle_verify(dlc_root_bytes, leaf_hash, merkle_proof_bytes):
+                logger.error(f"Could not verify timeout attestation and payout structure:\n{leaf_hash.hex() = }\n{dlc_root_bytes.hex()}")
+                raise DlcSettlementFail(detail="could not verify inclusion of timeout + payout structure")
+        # Blinded Attestation Secret verification
+        elif outcome.k:
+            k = None
+            try:
+                k = bytes.fromhex(outcome.k)
+            except ValueError:
+                raise DlcSettlementFail(detail="blinded attestation secret k is not a hex string")
+            K = PrivateKey(k, raw=True).pubkey
+            leaf_hash = sha256(K.serialize(True) + P).digest()
+            if not merkle_verify(dlc_root_bytes, leaf_hash, merkle_proof_bytes):
+                logger.error(f"Could not verify secret attestation and payout structure:\n{leaf_hash.hex() = }\n{dlc_root_bytes.hex()}")
+                raise DlcSettlementFail(detail="could not verify inclusion of attestation secret + payout structure")
+        else:
+            raise DlcSettlementFail(detail="no timeout or attestation secret provided")
+
+
+    async def _verify_dlc_payout_signature(self, dlc_root: str, witness: DlcPayoutWitness, pubkey_hex: str):
+        dlc_root_bytes = bytes.fromhex(dlc_root)
+        pubkey = PublicKey(bytes.fromhex(pubkey_hex), raw=True)
+
+        if witness.signature:
+            signature_bytes = bytes.fromhex(witness.signature)
+            if not verify_payout_signature(dlc_root_bytes, signature_bytes, pubkey):
+                raise DlcPayoutFail(detail="Could not verify payout signature")
+        elif witness.secret:
+            secret_bytes = bytes.fromhex(witness.secret)
+            if not verify_payout_secret(secret_bytes, pubkey):
+                raise DlcPayoutFail(detail="Could not verify payout secret")
+        else:
+            raise DlcPayoutFail(detail="No witness information that provides payout authentication")
+
