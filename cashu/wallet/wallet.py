@@ -667,7 +667,7 @@ class Wallet(
         # create a suitable amount lists to keep and send based on the proofs
         # provided and the state of the wallet
         keep_outputs, send_outputs = self.determine_output_amounts(
-            proofs, amount, include_fees_to_send=False, keyset_id_outputs=self.keyset_id
+            proofs, amount, include_fees_to_send=True, keyset_id_outputs=self.keyset_id
         )
 
         amounts = keep_outputs + send_outputs
