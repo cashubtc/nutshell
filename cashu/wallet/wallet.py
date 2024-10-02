@@ -585,8 +585,12 @@ class Wallet(
         self.verify_proofs_dleq(proofs)
         return await self.split(proofs=proofs, amount=0)
 
-    def swap_send_and_keep_output_amounts(
-        self, proofs: List[Proof], amount: int, fees: int = 0
+    def determine_output_amounts(
+        self,
+        proofs: List[Proof],
+        amount: int,
+        include_fees_to_send: bool = False,
+        keyset_id_outputs: Optional[str] = None,
     ) -> Tuple[List[int], List[int]]:
         """This function generates a suitable amount split for the outputs to keep and the outputs to send. It
         calculates the amount to keep based on the wallet state and the amount to send based on the amount
@@ -595,6 +599,11 @@ class Wallet(
         Args:
             proofs (List[Proof]): Proofs to be split.
             amount (int): Amount to be sent.
+            include_fees_to_send (bool, optional): If True, the fees are included in the amount to send (output of
+                this method, to be sent in the future). This is not the fee that is required to swap the
+                `proofs` (input to this method). Defaults to False.
+            keyset_id_outputs (str, optional): The keyset ID of the outputs to be produced, used to determine the
+                fee if `include_fees_to_send` is set.
 
         Returns:
             Tuple[List[int], List[int]]: Two lists of amounts, one for keeping and one for sending.
@@ -602,19 +611,27 @@ class Wallet(
         # create a suitable amount split based on the proofs provided
         total = sum_proofs(proofs)
         keep_amt, send_amt = total - amount, amount
+
+        if include_fees_to_send:
+            keyset_id = keyset_id_outputs or self.keyset_id
+            tmp_proofs = [Proof(id=keyset_id) for _ in amount_split(send_amt)]
+            fee = self.get_fees_for_proofs(tmp_proofs)
+            keep_amt -= fee
+            send_amt += fee
+
         logger.trace(f"Keep amount: {keep_amt}, send amount: {send_amt}")
         logger.trace(f"Total input: {sum_proofs(proofs)}")
-        # generate splits for outputs
-        send_outputs = amount_split(send_amt)
+        # generate optimal split for outputs to send
+        send_amounts = amount_split(send_amt)
 
         # we subtract the fee for the entire transaction from the amount to keep
         keep_amt -= self.get_fees_for_proofs(proofs)
         logger.trace(f"Keep amount: {keep_amt}")
 
         # we determine the amounts to keep based on the wallet state
-        keep_outputs = self.split_wallet_state(keep_amt)
+        keep_amounts = self.split_wallet_state(keep_amt)
 
-        return keep_outputs, send_outputs
+        return keep_amounts, send_amounts
 
     async def split(
         self,
@@ -649,8 +666,8 @@ class Wallet(
         logger.debug(f"Input fees: {input_fees}")
         # create a suitable amount lists to keep and send based on the proofs
         # provided and the state of the wallet
-        keep_outputs, send_outputs = self.swap_send_and_keep_output_amounts(
-            proofs, amount, input_fees
+        keep_outputs, send_outputs = self.determine_output_amounts(
+            proofs, amount, include_fees_to_send=True, keyset_id_outputs=self.keyset_id
         )
 
         amounts = keep_outputs + send_outputs
@@ -674,7 +691,7 @@ class Wallet(
         await self._check_used_secrets(secrets)
 
         # construct outputs
-        outputs, rs = self._construct_outputs(amounts, secrets, rs)
+        outputs, rs = self._construct_outputs(amounts, secrets, rs, self.keyset_id)
 
         # potentially add witnesses to outputs based on what requirement the proofs indicate
         outputs = await self.add_witnesses_to_outputs(proofs, outputs)
@@ -1068,7 +1085,7 @@ class Wallet(
                 logger.debug("Offline coin selection unsuccessful. Splitting proofs.")
                 # we set the proofs as reserved later
                 _, send_proofs = await self.swap_to_send(
-                    proofs, amount, set_reserved=False
+                    proofs, amount, set_reserved=False, include_fees=include_fees
                 )
             else:
                 raise Exception(
