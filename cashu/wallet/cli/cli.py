@@ -203,10 +203,8 @@ async def pay(
     quote = await wallet.melt_quote(invoice, amount)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
-    # we need to include fees so we can use the proofs for melting the `total_amount`
-    send_proofs, ecash_fees = await wallet.select_to_send(
-        wallet.proofs, total_amount, include_fees=True, set_reserved=True
-    )
+    # estimate ecash fee for the coinselected proofs
+    ecash_fees = wallet.coinselect_fee(wallet.proofs, total_amount)
     if not yes:
         potential = (
             f" ({wallet.unit.str(total_amount + ecash_fees)} with potential fees)"
@@ -219,7 +217,10 @@ async def pay(
             abort=True,
             default=True,
         )
-
+    # we need to include fees so we can use the proofs for melting the `total_amount`
+    send_proofs, _ = await wallet.select_to_send(
+        wallet.proofs, total_amount, include_fees=True, set_reserved=True
+    )
     print("Paying Lightning invoice ...", end="", flush=True)
     assert total_amount > 0, "amount is not positive"
     if wallet.available_balance < total_amount:

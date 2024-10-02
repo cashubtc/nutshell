@@ -36,7 +36,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
     def get_fees_for_proofs_ppk(self, proofs: List[Proof]) -> int:
         return sum([self.keysets[p.id].input_fee_ppk for p in proofs])
 
-    async def coinselect(
+    def coinselect(
         self,
         proofs: List[Proof],
         amount_to_send: Union[int, float],
@@ -91,7 +91,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             logger.trace(
                 f"> selecting more proofs from {amount_summary(smaller_proofs[1:], self.unit)} sum: {sum_proofs(smaller_proofs[1:])} to reach {remainder}"
             )
-            selected_proofs += await self.coinselect(
+            selected_proofs += self.coinselect(
                 smaller_proofs[1:], remainder, include_fees=include_fees
             )
         sum_selected_proofs = sum_proofs(selected_proofs)
@@ -104,6 +104,10 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             f"coinselect - selected proof amounts: {amount_summary(selected_proofs, self.unit)} (sum: {sum_proofs(selected_proofs)})"
         )
         return selected_proofs
+
+    def coinselect_fee(self, proofs: List[Proof], amount: int) -> int:
+        proofs_send = self.coinselect(proofs, amount, include_fees=True)
+        return self.get_fees_for_proofs(proofs_send)
 
     async def set_reserved(self, proofs: List[Proof], reserved: bool) -> None:
         """Mark a proof as reserved or reset it in the wallet db to avoid reuse when it is sent.

@@ -1078,7 +1078,7 @@ class Wallet(
             raise Exception("balance too low.")
 
         # coin selection for potentially offline sending
-        send_proofs = await self.coinselect(proofs, amount, include_fees=include_fees)
+        send_proofs = self.coinselect(proofs, amount, include_fees=include_fees)
         fees = self.get_fees_for_proofs(send_proofs)
         logger.trace(
             f"select_to_send: selected: {self.unit.str(sum_proofs(send_proofs))} (+ {self.unit.str(fees)} fees) – wanted: {self.unit.str(amount)}"
@@ -1136,7 +1136,7 @@ class Wallet(
             raise Exception("balance too low.")
 
         # coin selection for swapping, needs to include fees
-        swap_proofs = await self.coinselect(proofs, amount, include_fees=True)
+        swap_proofs = self.coinselect(proofs, amount, include_fees=True)
 
         # Extra rule: add proofs from inactive keysets to swap_proofs to get rid of them
         swap_proofs += [
