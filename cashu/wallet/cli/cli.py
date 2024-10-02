@@ -203,10 +203,14 @@ async def pay(
     quote = await wallet.melt_quote(invoice, amount)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
+    # we need to include fees so we can use the proofs for melting the `total_amount`
+    send_proofs, ecash_fees = await wallet.select_to_send(
+        wallet.proofs, total_amount, include_fees=True, set_reserved=True
+    )
     if not yes:
         potential = (
-            f" ({wallet.unit.str(total_amount)} with potential fees)"
-            if quote.fee_reserve
+            f" ({wallet.unit.str(total_amount + ecash_fees)} with potential fees)"
+            if quote.fee_reserve or ecash_fees
             else ""
         )
         message = f"Pay {wallet.unit.str(quote.amount)}{potential}?"
@@ -221,9 +225,7 @@ async def pay(
     if wallet.available_balance < total_amount:
         print(" Error: Balance too low.")
         return
-    send_proofs, fees = await wallet.select_to_send(
-        wallet.proofs, total_amount, include_fees=True, set_reserved=True
-    )
+
     try:
         melt_response = await wallet.melt(
             send_proofs, invoice, quote.fee_reserve, quote.quote

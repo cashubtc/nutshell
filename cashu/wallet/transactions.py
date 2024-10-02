@@ -36,7 +36,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
     def get_fees_for_proofs_ppk(self, proofs: List[Proof]) -> int:
         return sum([self.keysets[p.id].input_fee_ppk for p in proofs])
 
-    async def _select_proofs_to_send(
+    async def coinselect(
         self,
         proofs: List[Proof],
         amount_to_send: Union[int, float],
@@ -59,7 +59,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             return []
 
         logger.trace(
-            f"_select_proofs_to_send – amount_to_send: {amount_to_send} – amounts we have: {amount_summary(proofs, self.unit)} (sum: {sum_proofs(proofs)})"
+            f"coinselect – amount_to_send: {amount_to_send} – amounts we have: {amount_summary(proofs, self.unit)} (sum: {sum_proofs(proofs)})"
         )
 
         sorted_proofs = sorted(proofs, key=lambda p: p.amount)
@@ -91,7 +91,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             logger.trace(
                 f"> selecting more proofs from {amount_summary(smaller_proofs[1:], self.unit)} sum: {sum_proofs(smaller_proofs[1:])} to reach {remainder}"
             )
-            selected_proofs += await self._select_proofs_to_send(
+            selected_proofs += await self.coinselect(
                 smaller_proofs[1:], remainder, include_fees=include_fees
             )
         sum_selected_proofs = sum_proofs(selected_proofs)
@@ -101,7 +101,7 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
             return [next_bigger]
 
         logger.trace(
-            f"_select_proofs_to_send - selected proof amounts: {amount_summary(selected_proofs, self.unit)} (sum: {sum_proofs(selected_proofs)})"
+            f"coinselect - selected proof amounts: {amount_summary(selected_proofs, self.unit)} (sum: {sum_proofs(selected_proofs)})"
         )
         return selected_proofs
 

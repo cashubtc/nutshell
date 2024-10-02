@@ -254,7 +254,7 @@ async def test_swap_to_send(wallet1: Wallet):
     assert_amt(send_proofs, 32)
     assert_amt(keep_proofs, 0)
 
-    spendable_proofs = await wallet1._select_proofs_to_send(wallet1.proofs, 32)
+    spendable_proofs = await wallet1.coinselect(wallet1.proofs, 32)
     assert sum_proofs(spendable_proofs) == 32
 
     assert sum_proofs(send_proofs) == 32

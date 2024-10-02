@@ -589,21 +589,24 @@ class Wallet(
         self,
         proofs: List[Proof],
         amount: int,
-        include_fees_to_send: bool = False,
+        include_fees: bool = False,
         keyset_id_outputs: Optional[str] = None,
     ) -> Tuple[List[int], List[int]]:
         """This function generates a suitable amount split for the outputs to keep and the outputs to send. It
         calculates the amount to keep based on the wallet state and the amount to send based on the amount
         provided.
 
+        Amount to keep is based on the proofs we have in the wallet
+        Amount to send is optimally split based on the amount provided plus optionally the fees required to receive them.
+
         Args:
             proofs (List[Proof]): Proofs to be split.
             amount (int): Amount to be sent.
-            include_fees_to_send (bool, optional): If True, the fees are included in the amount to send (output of
+            include_fees (bool, optional): If True, the fees are included in the amount to send (output of
                 this method, to be sent in the future). This is not the fee that is required to swap the
                 `proofs` (input to this method). Defaults to False.
             keyset_id_outputs (str, optional): The keyset ID of the outputs to be produced, used to determine the
-                fee if `include_fees_to_send` is set.
+                fee if `include_fees` is set.
 
         Returns:
             Tuple[List[int], List[int]]: Two lists of amounts, one for keeping and one for sending.
@@ -612,7 +615,7 @@ class Wallet(
         total = sum_proofs(proofs)
         keep_amt, send_amt = total - amount, amount
 
-        if include_fees_to_send:
+        if include_fees:
             keyset_id = keyset_id_outputs or self.keyset_id
             tmp_proofs = [Proof(id=keyset_id) for _ in amount_split(send_amt)]
             fee = self.get_fees_for_proofs(tmp_proofs)
@@ -638,7 +641,7 @@ class Wallet(
         proofs: List[Proof],
         amount: int,
         secret_lock: Optional[Secret] = None,
-        include_fees_to_send: bool = False,
+        include_fees: bool = False,
     ) -> Tuple[List[Proof], List[Proof]]:
         """Calls the swap API to split the proofs into two sets of proofs, one for keeping and one for sending.
 
@@ -650,9 +653,9 @@ class Wallet(
             proofs (List[Proof]): Proofs to be split.
             amount (int): Amount to be sent.
             secret_lock (Optional[Secret], optional): Secret to lock the tokens to be sent. Defaults to None.
-            include_fees_to_send (bool, optional): If True, the fees are included in the amount to send (output of
+            include_fees (bool, optional): If True, the fees are included in the amount to send (output of
                 this method, to be sent in the future). This is not the fee that is required to swap the
-                `proofs` (input to this method). Defaults to False.
+                `proofs` (input to this method) which must already be included. Defaults to False.
 
         Returns:
             Tuple[List[Proof], List[Proof]]: Two lists of proofs, one for keeping and one for sending.
@@ -668,20 +671,15 @@ class Wallet(
 
         input_fees = self.get_fees_for_proofs(proofs)
         logger.debug(f"Input fees: {input_fees}")
-        # create a suitable amount lists to keep and send based on the proofs
-        # provided and the state of the wallet
+        # create a suitable amounts to keep and send.
         keep_outputs, send_outputs = self.determine_output_amounts(
             proofs,
             amount,
-            include_fees_to_send=include_fees_to_send,
+            include_fees=include_fees,
             keyset_id_outputs=self.keyset_id,
         )
 
         amounts = keep_outputs + send_outputs
-
-        if not amounts:
-            logger.warning("Swap has no outputs")
-            return [], []
 
         # generate secrets for new outputs
         if secret_lock is None:
@@ -1060,7 +1058,7 @@ class Wallet(
 
         If `set_reserved` is set to True, the proofs are marked as reserved so they aren't used in other transactions.
 
-        If `include_fees` is set to False, the swap fees are not included in the amount to be selected.
+        If `include_fees` is set to True, the selection includes the swap fees to receive the selected proofs.
 
         Args:
             proofs (List[Proof]): Proofs to split
@@ -1080,9 +1078,7 @@ class Wallet(
             raise Exception("balance too low.")
 
         # coin selection for potentially offline sending
-        send_proofs = await self._select_proofs_to_send(
-            proofs, amount, include_fees=include_fees
-        )
+        send_proofs = await self.coinselect(proofs, amount, include_fees=include_fees)
         fees = self.get_fees_for_proofs(send_proofs)
         logger.trace(
             f"select_to_send: selected: {self.unit.str(sum_proofs(send_proofs))} (+ {self.unit.str(fees)} fees) – wanted: {self.unit.str(amount)}"
@@ -1139,11 +1135,10 @@ class Wallet(
         if sum_proofs(proofs) < amount:
             raise Exception("balance too low.")
 
-        # coin selection for swapping
-        swap_proofs = await self._select_proofs_to_send(
-            proofs, amount, include_fees=True
-        )
-        # add proofs from inactive keysets to swap_proofs to get rid of them
+        # coin selection for swapping, needs to include fees
+        swap_proofs = await self.coinselect(proofs, amount, include_fees=True)
+
+        # Extra rule: add proofs from inactive keysets to swap_proofs to get rid of them
         swap_proofs += [
             p
             for p in proofs
@@ -1155,7 +1150,7 @@ class Wallet(
             f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
         )
         keep_proofs, send_proofs = await self.split(
-            swap_proofs, amount, secret_lock, include_fees
+            swap_proofs, amount, secret_lock, include_fees=include_fees
         )
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
