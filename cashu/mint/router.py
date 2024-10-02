@@ -1,15 +1,13 @@
 import asyncio
-import time
 import hashlib
-
-from typing import Callable, Any, Optional, Tuple, Dict
+import time
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from fastapi import APIRouter, WebSocket
 from fastapi_cache.decorator import cache
+from loguru import logger
 from starlette.requests import Request
 from starlette.responses import Response
-from fastapi_cache.decorator import cache
-from loguru import logger
 
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
@@ -37,12 +35,8 @@ from ..core.settings import settings
 from ..mint.startup import ledger
 from .limit import limit_websocket, limiter
 
-
 router = APIRouter()
 
-@cache()
-async def get_cache():
-    return 1
 
 def request_key_builder(
     func: Callable[..., Any],
@@ -54,15 +48,16 @@ def request_key_builder(
     kwargs: Dict[str, Any],
 ) -> str:
     cache_key = ""
-    if request and request.method.lower() == 'get':
+    if request and request.method.lower() == "get":
         cache_key = hashlib.md5(  # noqa: S324
             f"{func.__module__}:{func.__name__}:{repr(sorted(request.query_params.items()))}:{args}:{kwargs}".encode()
         ).hexdigest()
-    elif request and request.method.lower() == 'post':
+    elif request and request.method.lower() == "post":
         cache_key = hashlib.md5(  # noqa: S324
             f"{func.__module__}:{func.__name__}:{repr(request.json())}:{args}:{kwargs}".encode()
         ).hexdigest()
     return f"{namespace}:{cache_key}"
+
 
 @router.get(
     "/v1/info",
@@ -262,9 +257,9 @@ async def websocket_endpoint(websocket: WebSocket):
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 @cache(
-    expire=settings.mint_cache_bolt11_ttl or 3600,
+    expire=settings.mint_cache_ttl,
     namespace="mint-cache",
-    key_builder=request_key_builder
+    key_builder=request_key_builder,
 )
 async def mint(
     request: Request,
@@ -342,7 +337,7 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 @cache(
-    expire=settings.mint_cache_bolt11_ttl or 3600,
+    expire=settings.mint_cache_ttl,
     namespace="melt-cache",
     key_builder=request_key_builder,
 )
@@ -369,9 +364,9 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
 @cache(
-    expire=settings.mint_cache_bolt11_ttl or 3600,
+    expire=settings.mint_cache_ttl,
     namespace="swap-cache",
-    key_builder=request_key_builder
+    key_builder=request_key_builder,
 )
 async def swap(
     request: Request,

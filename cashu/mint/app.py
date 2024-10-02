@@ -1,9 +1,14 @@
+import asyncio
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from traceback import print_exception
 
 from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from loguru import logger
 from starlette.requests import Request
 
@@ -14,10 +19,6 @@ from .router import router
 from .router_deprecated import router_deprecated
 from .startup import shutdown_mint as shutdown_mint_init
 from .startup import start_mint_init
-from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
 
 if settings.debug_profiling:
     pass
@@ -27,38 +28,41 @@ if settings.mint_rate_limit:
 
 from .middleware import add_middlewares, request_validation_exception_handler
 
-# this errors with the tests but is the appropriate way to handle startup and shutdown
-# until then, we use @app.on_event("startup")
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # startup routines here
-#     await start_mint_init()
-#     yield
-#     # shutdown routines here
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
+    if settings.mint_cache_activate:
+        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
     await start_mint_init()
-    yield
-    await shutdown_mint_init()
-    await FastAPICache.clear()
+    try:
+        yield
+    except asyncio.CancelledError:
+        # Handle the cancellation gracefully
+        logger.info("Shutdown process interrupted by CancelledError")
+    finally:
+        try:
+            await shutdown_mint_init()
+            await FastAPICache.clear()
+        except asyncio.CancelledError:
+            logger.info("CancelledError during shutdown, shutting down forcefully")
+
 
 def create_app(config_object="core.settings") -> FastAPI:
     configure_logger()
 
     app = FastAPI(
-        title="Nutshell Cashu Mint",
-        description="Ecash wallet and mint based on the Cashu protocol.",
+        title="Nutshell Mint",
+        description="Ecash mint based on the Cashu protocol.",
         version=settings.version,
         license_info={
             "name": "MIT License",
             "url": "https://raw.githubusercontent.com/cashubtc/cashu/main/LICENSE",
         },
-        lifespan=lifespan if settings.mint_cache_activate else None,
+        lifespan=lifespan,
     )
 
     return app
+
 
 app = create_app()
 
@@ -110,13 +114,3 @@ if settings.debug_mint_only_deprecated:
 else:
     app.include_router(router=router, tags=["Mint"])
     app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
-
-'''
-@app.on_event("startup")
-async def startup_mint():
-    
-
-
-@app.on_event("shutdown")
-async def shutdown_mint():
-'''
