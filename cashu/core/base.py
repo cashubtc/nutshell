@@ -260,8 +260,7 @@ class BlindedSignature(BaseModel):
     dleq: Optional[DLEQ] = None  # DLEQ proof
 
     @classmethod
-    def from_row(cls, r: Row):
-        row = r._mapping    # type: ignore[attr-defined]
+    def from_row(cls, row: Row):
         return cls(
             id=row["id"],
             amount=row["amount"],
@@ -312,8 +311,7 @@ class MeltQuote(LedgerEvent):
     change: Optional[List[BlindedSignature]] = None
 
     @classmethod
-    def from_row(cls, r: Row):
-        row = r._mapping    # type: ignore[attr-defined]
+    def from_row(cls, row: Row):
         try:
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
@@ -410,8 +408,7 @@ class MintQuote(LedgerEvent):
     expiry: Optional[int] = None
 
     @classmethod
-    def from_row(cls, r: Row):
-        row = r._mapping    # type: ignore[attr-defined]
+    def from_row(cls, row: Row):
         try:
             #  SQLITE: row is timestamp (string)
             created_time = int(row["created_time"]) if row["created_time"] else None
@@ -644,13 +641,12 @@ class WalletKeyset:
         )
 
     @classmethod
-    def from_row(cls, r: Row):
+    def from_row(cls, row: Row):
         def deserialize(serialized: str) -> Dict[int, PublicKey]:
             return {
                 int(amount): PublicKey(bytes.fromhex(hex_key), raw=True)
                 for amount, hex_key in dict(json.loads(serialized)).items()
             }
-        row = r._mapping    # type: ignore[attr-defined]
         return cls(
             id=row["id"],
             unit=row["unit"],

@@ -10,7 +10,7 @@ from loguru import logger
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import NullPool, AsyncAdaptedQueuePool
 from sqlalchemy.sql.expression import TextClause
 
 from cashu.core.settings import settings
@@ -65,7 +65,7 @@ class Compat:
     def table_with_schema(self, table: str):
         return f"{self.references_schema if self.schema else ''}{table}"
 
-
+# https://docs.sqlalchemy.org/en/14/core/connections.html#sqlalchemy.engine.CursorResult
 class Connection(Compat):
     def __init__(self, conn: AsyncSession, txn, typ, name, schema):
         self.conn = conn
@@ -82,11 +82,12 @@ class Connection(Compat):
 
     async def fetchall(self, query: str, values: dict = {}):
         result = await self.conn.execute(self.rewrite_query(query), values)
-        return result.all()
+        return [r._mapping for r in result.all()] # will return [] if result list is empty
 
     async def fetchone(self, query: str, values: dict = {}):
         result = await self.conn.execute(self.rewrite_query(query), values)
-        return result.fetchone()
+        r = result.fetchone()
+        return r._mapping if r is not None else None
 
     async def execute(self, query: str, values: dict = {}):
         return await self.conn.execute(self.rewrite_query(query), values)
@@ -133,7 +134,7 @@ class Database(Compat):
         if not settings.db_connection_pool:
             kwargs["poolclass"] = NullPool
         elif self.type == POSTGRES:
-            #kwargs["poolclass"] = AsyncQueuePool       # type: ignore[assignment]
+            kwargs["poolclass"] = AsyncAdaptedQueuePool # type: ignore[assignment]
             kwargs["pool_size"] = 50                    # type: ignore[assignment]
             kwargs["max_overflow"] = 100                # type: ignore[assignment]
 
