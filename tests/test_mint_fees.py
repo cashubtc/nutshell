@@ -96,18 +96,46 @@ async def test_get_fees_for_proofs(wallet1: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
-async def test_wallet_fee(wallet1: Wallet, ledger: Ledger):
-    # THIS TEST IS A FAKE, WE SET THE WALLET FEES MANUALLY IN set_ledger_keyset_fees
-    # It would be better to test if the wallet can get the fees from the mint itself
-    # but the ledger instance does not update the responses from the `mint` that is running in the background
-    # so we just pretend here and test really nothing...
-
+async def test_wallet_selection_with_fee(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(100, ledger, wallet1)
 
+    # THIS TEST IS A FAKE, WE SET THE WALLET FEES MANUALLY IN set_ledger_keyset_fees
     # check if all wallet keysets have the correct fees
     for keyset in wallet1.keysets.values():
         assert keyset.input_fee_ppk == 100
+
+    invoice = await wallet1.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id)
+
+    send_proofs, _ = await wallet1.select_to_send(wallet1.proofs, 10)
+    assert sum_proofs(send_proofs) == 10
+
+    send_proofs_with_fees, _ = await wallet1.select_to_send(
+        wallet1.proofs, 10, include_fees=True
+    )
+    assert sum_proofs(send_proofs_with_fees) == 11
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_wallet_swap_to_send_with_fee(wallet1: Wallet, ledger: Ledger):
+    # set fees to 100 ppk
+    set_ledger_keyset_fees(100, ledger, wallet1)
+    invoice = await wallet1.request_mint(64)
+    await pay_if_regtest(invoice.bolt11)
+    await wallet1.mint(64, id=invoice.id, split=[32, 32])  # make sure we need to swap
+
+    # quirk: this should call a `/v1/swap` with the mint but the mint will
+    # throw an error since the fees are only changed in the `ledger` instance, not in the uvicorn API server
+    # this *should* succeed if the fees were set in the API server
+    # at least, we can verify that the wallet is correctly computing the fees
+    # by asserting for this super specific error message from the (API server) mint
+    await assert_err(
+        wallet1.select_to_send(wallet1.proofs, 10),
+        "Mint Error: inputs (32) - fees (0) vs outputs (31) are not balanced.",
+    )
 
 
 @pytest.mark.asyncio
