@@ -283,12 +283,13 @@ class Database(Compat):
     async def fetchall(self, query: str, values: dict = {}) -> list:
         async with self.connect() as conn:
             result = await conn.execute(query, values)
-            return result.all()
+            return [r._mapping for r in result.all()]
 
     async def fetchone(self, query: str, values: dict = {}):
         async with self.connect() as conn:
             result = await conn.execute(query, values)
-            return result.fetchone()
+            r = result.fetchone()
+            return r._mapping if r is not None else None
 
     async def execute(self, query: str, values: dict = {}):
         async with self.connect() as conn:
