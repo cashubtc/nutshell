@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -24,6 +25,7 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
+    derive_keyset_id,
     derive_pubkey,
     random_hash,
 )
@@ -247,6 +249,41 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # check that we have a least one active keyset
         if not any([k.active for k in self.keysets.values()]):
             raise KeysetError("No active keyset found.")
+
+        # DEPRECATION 0.16.1 – disable base64 keysets if hex equivalent exists
+        if settings.mint_inactivate_base64_keysets:
+            await self.inactivate_base64_keysets()
+
+    async def inactivate_base64_keysets(self) -> None:
+        """Inactivates all base64 keysets that have a hex equivalent."""
+        for keyset in self.keysets.values():
+            if not keyset.active or not keyset.public_keys:
+                continue
+            # test if the keyset id is a hex string, if not it's base64
+            try:
+                int(keyset.id, 16)
+            except ValueError:
+                # verify that it's base64
+                try:
+                    _ = base64.b64decode(keyset.id)
+                except ValueError:
+                    logger.error("Unexpected: keyset id is neither hex nor base64.")
+                    continue
+
+                # verify that we have a hex version of the same keyset by comparing public keys
+                hex_keyset_id = derive_keyset_id(keys=keyset.public_keys)
+                if hex_keyset_id not in [k.id for k in self.keysets.values()]:
+                    logger.warning(
+                        f"Keyset {keyset.id} is base64 but we don't have a hex version. Ignoring."
+                    )
+                    continue
+
+                logger.warning(
+                    f"Keyset {keyset.id} is base64 and has a hex counterpart, setting inactive."
+                )
+                keyset.active = False
+                self.keysets[keyset.id] = keyset
+                await self.crud.update_keyset(keyset=keyset, db=self.db)
 
     def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
         """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
