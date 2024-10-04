@@ -99,13 +99,13 @@ class Wallet(
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
 
-    def __init__(self, url: str, db: str, name: str = "no_name", unit: str = "sat"):
+    def __init__(self, url: str, db: str, name: str = "wallet", unit: str = "sat"):
         """A Cashu wallet.
 
         Args:
             url (str): URL of the mint.
             db (str): Path to the database directory.
-            name (str, optional): Name of the wallet database file. Defaults to "no_name".
+            name (str, optional): Name of the wallet database file. Defaults to "wallet".
         """
         self.db = Database("wallet", db)
         self.proofs: List[Proof] = []
@@ -124,7 +124,7 @@ class Wallet(
         cls,
         url: str,
         db: str,
-        name: str = "no_name",
+        name: str = "wallet",
         skip_db_read: bool = False,
         unit: str = "sat",
         load_all_keysets: bool = False,
@@ -134,7 +134,7 @@ class Wallet(
         Args:
             url (str): URL of the mint.
             db (str): Path to the database.
-            name (str, optional): Name of the wallet. Defaults to "no_name".
+            name (str, optional): Name of the wallet. Defaults to "wallet".
             skip_db_read (bool, optional): If true, values from db like private key and
                 keysets are not loaded. Useful for running only migrations and returning.
                 Defaults to False.
@@ -241,8 +241,13 @@ class Wallet(
                         keyset=keysets_in_db_dict[mint_keyset.id], db=self.db
                     )
 
+        await self.inactivate_base64_keysets(force_old_keysets)
+
+        await self.load_keysets_from_db()
+
+    async def inactivate_base64_keysets(self, force_old_keysets: bool) -> None:
         # BEGIN backwards compatibility: phase out keysets with base64 ID by treating them as inactive
-        if settings.wallet_inactivate_legacy_keysets and not force_old_keysets:
+        if settings.wallet_inactivate_base64_keysets and not force_old_keysets:
             keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
             for keyset in keysets_in_db:
                 if not keyset.active:
@@ -272,8 +277,6 @@ class Wallet(
                     keyset.active = False
                     await update_keyset(keyset=keyset, db=self.db)
         # END backwards compatibility
-
-        await self.load_keysets_from_db()
 
     async def activate_keyset(self, keyset_id: Optional[str] = None) -> None:
         """Activates a keyset by setting self.keyset_id. Either activates a specific keyset

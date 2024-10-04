@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.16.0"
+VERSION = "0.16.1"
 
 
 def find_env_file():
@@ -62,6 +62,10 @@ class MintSettings(CashuSettings):
     mint_max_secret_length: int = Field(default=512)
 
     mint_input_fee_ppk: int = Field(default=0)
+
+
+class MintDeprecationFlags(MintSettings):
+    mint_inactivate_base64_keysets: bool = Field(default=False)
 
 
 class MintBackends(MintSettings):
@@ -186,9 +190,9 @@ class WalletSettings(CashuSettings):
     wallet_target_amount_count: int = Field(default=3)
 
 
-class WalletFeatures(CashuSettings):
-    wallet_inactivate_legacy_keysets: bool = Field(
-        default=False,
+class WalletDeprecationFlags(CashuSettings):
+    wallet_inactivate_base64_keysets: bool = Field(
+        default=True,
         title="Inactivate legacy base64 keysets",
         description="If you turn on this flag, old bas64 keysets will be ignored and the wallet will ony use new keyset versions.",
     )
@@ -232,10 +236,11 @@ class Settings(
     FakeWalletSettings,
     MintLimits,
     MintBackends,
+    MintDeprecationFlags,
     MintSettings,
     MintInformation,
     WalletSettings,
-    WalletFeatures,
+    WalletDeprecationFlags,
     CashuSettings,
 ):
     version: str = Field(default=VERSION)
