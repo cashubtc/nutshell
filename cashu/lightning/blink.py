@@ -85,7 +85,7 @@ class BlinkWallet(LightningBackend):
             )
             r.raise_for_status()
         except Exception as exc:
-            logger.error(f"Blink API error: {str(exc)}")
+            logger.error(f"Blink API error: {exc}")
             return StatusResponse(
                 error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
                 balance=0,
@@ -158,7 +158,7 @@ class BlinkWallet(LightningBackend):
             )
             r.raise_for_status()
         except Exception as e:
-            logger.error(f"Blink API error: {str(e)}")
+            logger.error(f"Blink API error: {e}")
             return InvoiceResponse(ok=False, error_message=str(e))
 
         resp = r.json()
@@ -212,7 +212,7 @@ class BlinkWallet(LightningBackend):
             )
             r.raise_for_status()
         except Exception as e:
-            logger.error(f"Blink API error: {str(e)}")
+            logger.error(f"Blink API error: {e}")
             return PaymentResponse(
                 result=PaymentResult.UNKNOWN,
                 error_message=str(e),
@@ -283,7 +283,7 @@ class BlinkWallet(LightningBackend):
             r = await self.client.post(url=self.endpoint, data=json.dumps(data))  # type: ignore
             r.raise_for_status()
         except Exception as e:
-            logger.error(f"Blink API error: {str(e)}")
+            logger.error(f"Blink API error: {e}")
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
         resp: dict = r.json()
         error_message = (
@@ -449,7 +449,7 @@ class BlinkWallet(LightningBackend):
         except httpx.ReadTimeout:
             pass
         except Exception as e:
-            logger.error(f"Blink API error: {str(e)}")
+            logger.error(f"Blink API error: {e}")
             raise e
 
         invoice_obj = decode(bolt11)

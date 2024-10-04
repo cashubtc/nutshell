@@ -905,7 +905,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         melt_quote, melt_quote.fee_reserve * 1000
                     )
                     logger.debug(
-                        f"Melt – Result: {str(payment.result)}: preimage: {payment.preimage},"
+                        f"Melt – Result: {payment.result}: preimage: {payment.preimage},"
                         f" fee: {payment.fee.str() if payment.fee is not None else 'None'}"
                     )
                     if (

@@ -305,7 +305,7 @@ class LndRestWallet(LightningBackend):
         try:
             data = r.json()
         except json.JSONDecodeError as e:
-            logger.error(f"Incomprehensible response: {str(e)}")
+            logger.error(f"Incomprehensible response: {e}")
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
         if not data or not data.get("state"):
             return PaymentStatus(

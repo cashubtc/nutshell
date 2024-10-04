@@ -162,9 +162,8 @@ class Wallet(
             self.keysets = {k.id: k for k in keysets_active_unit}
         else:
             self.keysets = {k.id: k for k in keysets_list}
-        logger.debug(
-            f"Loaded keysets: {' '.join([i + f' {k.unit}' for i, k in self.keysets.items()])}"
-        )
+        keysets_str = ' '.join([f"{i} {k.unit}" for i, k in self.keysets.items()])
+        logger.debug(f"Loaded keysets: {keysets_str}")
         return self
 
     async def _migrate_database(self):
@@ -349,9 +348,9 @@ class Wallet(
                 for keyset_id in self.keysets:
                     proofs = await get_proofs(db=self.db, id=keyset_id, conn=conn)
                     self.proofs.extend(proofs)
-        logger.trace(
-            f"Proofs loaded for keysets: {' '.join([k.id + f' ({k.unit})' for k in self.keysets.values()])}"
-        )
+        keysets_str = ' '.join([f"{k.id} ({k.unit})" for k in self.keysets.values()])
+        logger.trace(f"Proofs loaded for keysets: {keysets_str}")
+
 
     async def load_keysets_from_db(
         self, url: Union[str, None] = "", unit: Union[str, None] = ""
