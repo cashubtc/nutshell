@@ -68,11 +68,11 @@ from .verification import LedgerVerification
 
 class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
-    locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
     db_read: DbReadHelper
     invoice_listener_tasks: List[asyncio.Task] = []
+    disable_melt: bool = False
 
     def __init__(
         self,
@@ -130,8 +130,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     logger.error(
                         "The backend for"
                         f" {self.backends[method][unit].__class__.__name__} isn't"
-                        f" working properly: '{status.error_message}'",
-                        RuntimeWarning,
+                        f" working properly: '{status.error_message}'"
                     )
                     exit(1)
                 logger.info(f"Backend balance: {status.balance} {unit.name}")
@@ -880,6 +879,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         Returns:
             Tuple[str, List[BlindedMessage]]: Proof of payment and signed outputs for returning overpaid fees to wallet.
         """
+        # make sure we're allowed to melt
+        if self.disable_melt:
+            raise NotAllowedError("Melt is disabled. Please contact the operator.")
+
         # get melt quote and check if it was already paid
         melt_quote = await self.get_melt_quote(quote_id=quote)
         if not melt_quote.unpaid:
@@ -913,16 +916,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise TransactionError(
                 f"not enough fee reserve provided for melt. Provided fee reserve: {fee_reserve_provided}, needed: {melt_quote.fee_reserve}"
             )
-
         # verify that the amount of the proofs is not larger than the maximum allowed
         if settings.mint_max_peg_out and total_provided > settings.mint_max_peg_out:
             raise NotAllowedError(
                 f"Maximum melt amount is {settings.mint_max_peg_out} sat."
             )
-
         # verify inputs and their spending conditions
         # note, we do not verify outputs here, as they are only used for returning overpaid fees
-        # we should have used _verify_outputs here already (see above)
+        # We must have called _verify_outputs here already! (see above)
         await self.verify_inputs_and_outputs(proofs=proofs)
 
         # set proofs to pending to avoid race conditions
@@ -978,6 +979,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                             logger.error(
                                 f"Lightning backend error: could not check payment status. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Error: {e}"
                             )
+                            logger.error(
+                                "!!! Disabling melt. Fix your Lightning backend and restart the mint."
+                            )
+                            self.disable_melt = True
                             return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
                         match status.result:
@@ -990,6 +995,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                                 logger.error(
                                     f"Payment state is {status.result} and payment was {payment.result}. Proofs for melt quote {melt_quote.quote} are stuck as PENDING."
                                 )
+                                logger.error(
+                                    "!!! Disabling melt. Fix your Lightning backend and restart the mint."
+                                )
+                                self.disable_melt = True
                                 return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
                     case PaymentResult.SETTLED:
