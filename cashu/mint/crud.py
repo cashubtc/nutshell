@@ -691,7 +691,10 @@ class LedgerCrudSqlite(LedgerCrud):
             """
         )
         assert row, "Balance not found"
-        return int(row[0])
+
+        # sqlalchemy index of first element
+        key = next(iter(row))
+        return int(row[key])
 
     async def get_keyset(
         self,
