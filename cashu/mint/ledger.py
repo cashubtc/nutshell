@@ -932,52 +932,72 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         )
         previous_state = melt_quote.state
         melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
-        try:
-            # if the melt corresponds to an internal mint, mark both as paid
-            melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
-            # quote not paid yet (not internal), pay it with the backend
-            if not melt_quote.paid:
-                logger.debug(f"Lightning: pay invoice {melt_quote.request}")
-                try:
-                    payment = await self.backends[method][unit].pay_invoice(
-                        melt_quote, melt_quote.fee_reserve * 1000
+
+        # if the melt corresponds to an internal mint, mark both as paid
+        melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
+        # quote not paid yet (not internal), pay it with the backend
+        if not melt_quote.paid:
+            logger.debug(f"Lightning: pay invoice {melt_quote.request}")
+            try:
+                payment = await self.backends[method][unit].pay_invoice(
+                    melt_quote, melt_quote.fee_reserve * 1000
+                )
+                logger.debug(
+                    f"Melt – Result: {payment.result}: preimage: {payment.preimage},"
+                    f" fee: {payment.fee.str() if payment.fee is not None else 'None'}"
+                )
+                if (
+                    payment.checking_id
+                    and payment.checking_id != melt_quote.checking_id
+                ):
+                    logger.warning(
+                        f"pay_invoice returned different checking_id: {payment.checking_id} than melt quote: {melt_quote.checking_id}. Will use it for potentially checking payment status later."
                     )
+                    melt_quote.checking_id = payment.checking_id
+                    await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+            except Exception as e:
+                logger.error(f"Exception during pay_invoice: {e}")
+                payment = PaymentResponse(
+                    result=PaymentResult.UNKNOWN,
+                    error_message=str(e),
+                )
+
+            match payment.result:
+                case PaymentResult.FAILED | PaymentResult.UNKNOWN:
+                    # explicitly check payment status for failed or unknown payment states
+                    checking_id = payment.checking_id or melt_quote.checking_id
                     logger.debug(
-                        f"Melt – Result: {payment.result}: preimage: {payment.preimage},"
-                        f" fee: {payment.fee.str() if payment.fee is not None else 'None'}"
+                        f"Payment state is {payment.result}. Checking status for {checking_id}"
                     )
-                    if (
-                        payment.checking_id
-                        and payment.checking_id != melt_quote.checking_id
-                    ):
-                        logger.warning(
-                            f"pay_invoice returned different checking_id: {payment.checking_id} than melt quote: {melt_quote.checking_id}. Will use it for potentially checking payment status later."
+                    try:
+                        status = await self.backends[method][unit].get_payment_status(
+                            checking_id
                         )
-                        melt_quote.checking_id = payment.checking_id
-                        await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-
-                except Exception as e:
-                    logger.error(f"Exception during pay_invoice: {e}")
-                    payment = PaymentResponse(
-                        result=PaymentResult.UNKNOWN,
-                        error_message=str(e),
-                    )
-
-                match payment.result:
-                    case PaymentResult.FAILED | PaymentResult.UNKNOWN:
-                        # explicitly check payment status for failed or unknown payment states
-                        checking_id = payment.checking_id or melt_quote.checking_id
-                        logger.debug(
-                            f"Payment state is {payment.result}. Checking status for {checking_id}"
+                    except Exception as e:
+                        # Something went wrong. We might have lost connection to the backend. Keep transaction pending and return.
+                        logger.error(
+                            f"Lightning backend error: could not check payment status. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Error: {e}"
                         )
-                        try:
-                            status = await self.backends[method][
-                                unit
-                            ].get_payment_status(checking_id)
-                        except Exception as e:
-                            # Something went wrong, better to keep the proofs in pending state
+                        logger.error(
+                            "!!! Disabling melt. Fix your Lightning backend and restart the mint."
+                        )
+                        self.disable_melt = True
+                        return PostMeltQuoteResponse.from_melt_quote(melt_quote)
+
+                    match status.result:
+                        case PaymentResult.FAILED | PaymentResult.UNKNOWN:
+                            # Everything as expected. Payment AND a status check both agree on a failure. We roll back the transaction.
+                            await self.db_write._unset_proofs_pending(proofs)
+                            await self.db_write._unset_melt_quote_pending(
+                                quote=melt_quote, state=previous_state
+                            )
+                            raise LightningError(
+                                f"Lightning payment failed: {payment.error_message}. Error: {status.error_message}"
+                            )
+                        case _:
+                            # Status check returned different result than payment. Something must be wrong with our implementation or the backend. Keep transaction pending and return.
                             logger.error(
-                                f"Lightning backend error: could not check payment status. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Error: {e}"
+                                f"Payment state is {status.result} and payment was {payment.result}. Proofs for melt quote {melt_quote.quote} are stuck as PENDING."
                             )
                             logger.error(
                                 "!!! Disabling melt. Fix your Lightning backend and restart the mint."
@@ -985,69 +1005,43 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                             self.disable_melt = True
                             return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
-                        match status.result:
-                            case PaymentResult.FAILED | PaymentResult.UNKNOWN:
-                                # NOTE: We only throw a payment error if the payment AND a subsequent status check failed
-                                raise LightningError(
-                                    f"Lightning payment failed: {payment.error_message}. Error: {status.error_message}"
-                                )
-                            case _:
-                                logger.error(
-                                    f"Payment state is {status.result} and payment was {payment.result}. Proofs for melt quote {melt_quote.quote} are stuck as PENDING."
-                                )
-                                logger.error(
-                                    "!!! Disabling melt. Fix your Lightning backend and restart the mint."
-                                )
-                                self.disable_melt = True
-                                return PostMeltQuoteResponse.from_melt_quote(melt_quote)
+                case PaymentResult.SETTLED:
+                    # payment successful
+                    if payment.fee:
+                        melt_quote.fee_paid = payment.fee.to(
+                            to_unit=unit, round="up"
+                        ).amount
+                    if payment.preimage:
+                        melt_quote.payment_preimage = payment.preimage
+                    # set quote as paid
+                    melt_quote.state = MeltQuoteState.paid
+                    melt_quote.paid_time = int(time.time())
+                    # NOTE: This is the only branch for a successful payment
 
-                    case PaymentResult.SETTLED:
-                        # payment successful
-                        if payment.fee:
-                            melt_quote.fee_paid = payment.fee.to(
-                                to_unit=unit, round="up"
-                            ).amount
-                        if payment.preimage:
-                            melt_quote.payment_preimage = payment.preimage
-                        # set quote as paid
-                        melt_quote.state = MeltQuoteState.paid
-                        melt_quote.paid_time = int(time.time())
-                        # NOTE: This is the only return point for a successful payment
+                case PaymentResult.PENDING | _:
+                    logger.debug(f"Lightning payment is pending: {payment.checking_id}")
+                    return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
-                    case PaymentResult.PENDING | _:
-                        logger.debug(
-                            f"Lightning payment is pending: {payment.checking_id}"
-                        )
-                        return PostMeltQuoteResponse.from_melt_quote(melt_quote)
+        # melt was successful (either internal or via backend), invalidate proofs
+        await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
+        await self.db_write._unset_proofs_pending(proofs)
 
-            # melt successful, invalidate proofs
-            await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
-            await self.db_write._unset_proofs_pending(proofs)
-
-            # prepare change to compensate wallet for overpaid fees
-            return_promises: List[BlindedSignature] = []
-            if outputs:
-                return_promises = await self._generate_change_promises(
-                    fee_provided=fee_reserve_provided,
-                    fee_paid=melt_quote.fee_paid,
-                    outputs=outputs,
-                    keyset=self.keysets[outputs[0].id],
-                )
-
-            melt_quote.change = return_promises
-
-            await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-            await self.events.submit(melt_quote)
-
-            return PostMeltQuoteResponse.from_melt_quote(melt_quote)
-
-        except Exception as e:
-            logger.trace(f"Payment has failed: {e}")
-            await self.db_write._unset_proofs_pending(proofs)
-            await self.db_write._unset_melt_quote_pending(
-                quote=melt_quote, state=previous_state
+        # prepare change to compensate wallet for overpaid fees
+        return_promises: List[BlindedSignature] = []
+        if outputs:
+            return_promises = await self._generate_change_promises(
+                fee_provided=fee_reserve_provided,
+                fee_paid=melt_quote.fee_paid,
+                outputs=outputs,
+                keyset=self.keysets[outputs[0].id],
             )
-            raise e
+
+        melt_quote.change = return_promises
+
+        await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+        await self.events.submit(melt_quote)
+
+        return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
     async def swap(
         self,
