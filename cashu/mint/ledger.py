@@ -976,10 +976,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     except Exception as e:
                         # Something went wrong. We might have lost connection to the backend. Keep transaction pending and return.
                         logger.error(
-                            f"Lightning backend error: could not check payment status. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Error: {e}"
-                        )
-                        logger.error(
-                            "!!! Disabling melt. Fix your Lightning backend and restart the mint."
+                            f"Lightning backend error: could not check payment status. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Disabling melt. Fix your Lightning backend and restart the mint.\nError: {e}"
                         )
                         self.disable_melt = True
                         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
@@ -997,10 +994,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         case _:
                             # Status check returned different result than payment. Something must be wrong with our implementation or the backend. Keep transaction pending and return.
                             logger.error(
-                                f"Payment state is {status.result} and payment was {payment.result}. Proofs for melt quote {melt_quote.quote} are stuck as PENDING."
-                            )
-                            logger.error(
-                                "!!! Disabling melt. Fix your Lightning backend and restart the mint."
+                                f"Payment state is {status.result} and payment was {payment.result}. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Disabling melt. Fix your Lightning backend and restart the mint."
                             )
                             self.disable_melt = True
                             return PostMeltQuoteResponse.from_melt_quote(melt_quote)
