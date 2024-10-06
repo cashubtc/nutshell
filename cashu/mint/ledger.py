@@ -943,7 +943,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     melt_quote, melt_quote.fee_reserve * 1000
                 )
                 logger.debug(
-                    f"Melt – Result: {payment.result}: preimage: {payment.preimage},"
+                    f"Melt – Result: {payment.result.name}: preimage: {payment.preimage},"
                     f" fee: {payment.fee.str() if payment.fee is not None else 'None'}"
                 )
                 if (
@@ -967,7 +967,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     # explicitly check payment status for failed or unknown payment states
                     checking_id = payment.checking_id or melt_quote.checking_id
                     logger.debug(
-                        f"Payment state is {payment.result}. Checking status for {checking_id}"
+                        f"Payment state is {payment.result.name}.{' Error: ' + payment.error_message + '.' if payment.error_message else ''} Checking status for {checking_id}."
                     )
                     try:
                         status = await self.backends[method][unit].get_payment_status(
@@ -988,13 +988,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                             await self.db_write._unset_melt_quote_pending(
                                 quote=melt_quote, state=previous_state
                             )
+                            if status.error_message:
+                                logger.error(
+                                    f"Status check error: {status.error_message}"
+                                )
                             raise LightningError(
-                                f"Lightning payment failed: {payment.error_message}. Error: {status.error_message}"
+                                f"Lightning payment failed{': ' + payment.error_message if payment.error_message else ''}."
                             )
                         case _:
-                            # Status check returned different result than payment. Something must be wrong with our implementation or the backend. Keep transaction pending and return.
+                            # Something went wrong with our implementation or the backend. Status check returned different result than payment. Keep transaction pending and return.
                             logger.error(
-                                f"Payment state is {status.result} and payment was {payment.result}. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Disabling melt. Fix your Lightning backend and restart the mint."
+                                f"Payment state is {status.result.name} and payment was {payment.result}. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Disabling melt. Fix your Lightning backend and restart the mint."
                             )
                             self.disable_melt = True
                             return PostMeltQuoteResponse.from_melt_quote(melt_quote)
@@ -1013,7 +1017,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     # NOTE: This is the only branch for a successful payment
 
                 case PaymentResult.PENDING | _:
-                    logger.debug(f"Lightning payment is pending: {payment.checking_id}")
+                    logger.debug(
+                        f"Lightning payment is {payment.result.name}: {payment.checking_id}"
+                    )
                     return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
         # melt was successful (either internal or via backend), invalidate proofs

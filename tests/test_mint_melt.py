@@ -295,3 +295,39 @@ async def test_melt_lightning_pay_invoice_failed_pending(
     # expect that proofs are pending
     states = await ledger.db_read.get_proofs_states([p.Y for p in wallet.proofs])
     assert all([s.pending for s in states])
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_melt_lightning_pay_invoice_exception_exception(
+    ledger: Ledger, wallet: Wallet
+):
+    """Simulates the case where pay_invoice and get_payment_status raise an exception (due to network issues for example)."""
+    invoice = await wallet.request_mint(64)
+    await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
+    await wallet.mint(64, id=invoice.id)
+    # invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=invoice_62_sat)
+        )
+    ).quote
+    # quote = await ledger.get_melt_quote(quote_id)
+    settings.fakewallet_payment_state_exception = True
+    settings.fakewallet_pay_invoice_state_exception = True
+
+    # we expect a pending melt quote because something has gone wrong (for example has lost connection to backend)
+    resp = await ledger.melt(proofs=wallet.proofs, quote=quote_id)
+    assert resp.state == MeltQuoteState.pending.value
+
+    # the mint should be locked now and not allow any other melts until it is restarted
+    quote_id = (
+        await ledger.melt_quote(
+            PostMeltQuoteRequest(unit="sat", request=invoice_62_sat)
+        )
+    ).quote
+    await assert_err(
+        ledger.melt(proofs=wallet.proofs, quote=quote_id),
+        "Melt is disabled. Please contact the operator.",
+    )
