@@ -170,7 +170,7 @@ class LedgerAPI(LedgerAPIDeprecated):
         keys_dict: dict = resp.json()
         assert len(keys_dict), Exception("did not receive any keys")
         keys = KeysResponse.parse_obj(keys_dict)
-        keysets_str = ' '.join([f"{k.id} ({k.unit})" for k in keys.keysets])
+        keysets_str = " ".join([f"{k.id} ({k.unit})" for k in keys.keysets])
         logger.debug(f"Received {len(keys.keysets)} keysets from mint: {keysets_str}.")
         ret = [
             WalletKeyset(
@@ -314,6 +314,24 @@ class LedgerAPI(LedgerAPIDeprecated):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
+    async def get_mint_quote(self, quote: str) -> PostMintQuoteResponse:
+        """Returns an existing mint quote from the server.
+
+        Args:
+            quote (str): Quote ID
+
+        Returns:
+            PostMintQuoteResponse: Mint Quote Response
+        """
+        resp = await self.httpx.get(
+            join(self.url, f"/v1/mint/quote/bolt11/{quote}"),
+        )
+        self.raise_on_error_request(resp)
+        return_dict = resp.json()
+        return PostMintQuoteResponse.parse_obj(return_dict)
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def mint(
         self, outputs: List[BlindedMessage], quote: str
     ) -> List[BlindedSignature]:
@@ -396,6 +414,24 @@ class LedgerAPI(LedgerAPIDeprecated):
                 expiry=invoice_obj.expiry,
             )
         # END backwards compatibility < 0.15.0
+        self.raise_on_error_request(resp)
+        return_dict = resp.json()
+        return PostMeltQuoteResponse.parse_obj(return_dict)
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
+    async def get_melt_quote(self, quote: str) -> PostMeltQuoteResponse:
+        """Returns an existing melt quote from the server.
+
+        Args:
+            quote (str): Quote ID
+
+        Returns:
+            PostMeltQuoteResponse: Melt Quote Response
+        """
+        resp = await self.httpx.get(
+            join(self.url, f"/v1/melt/quote/bolt11/{quote}"),
+        )
         self.raise_on_error_request(resp)
         return_dict = resp.json()
         return PostMeltQuoteResponse.parse_obj(return_dict)

@@ -4,7 +4,7 @@ from typing import List, Union
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof
+from cashu.core.base import MintQuoteState, Proof
 from cashu.core.errors import CashuError, KeysetNotFoundError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
@@ -168,6 +168,10 @@ async def test_request_mint(wallet1: Wallet):
 async def test_mint(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
     await pay_if_regtest(invoice.bolt11)
+    quote_resp = await wallet1.get_mint_quote(invoice.bolt11)
+    assert quote_resp.request == invoice.bolt11
+    assert quote_resp.state == MintQuoteState.pending.value
+
     expected_proof_amounts = wallet1.split_wallet_state(64)
     await wallet1.mint(64, id=invoice.id)
     assert wallet1.balance == 64
@@ -306,6 +310,9 @@ async def test_melt(wallet1: Wallet):
         # we expect a fee reserve of 0 sat for fake
         assert total_amount == 64
         assert quote.fee_reserve == 0
+
+    quote_resp = await wallet1.get_melt_quote(quote.quote)
+    assert quote_resp.amount == quote.amount
 
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
 
