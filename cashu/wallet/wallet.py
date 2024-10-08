@@ -162,7 +162,7 @@ class Wallet(
             self.keysets = {k.id: k for k in keysets_active_unit}
         else:
             self.keysets = {k.id: k for k in keysets_list}
-        keysets_str = ' '.join([f"{i} {k.unit}" for i, k in self.keysets.items()])
+        keysets_str = " ".join([f"{i} {k.unit}" for i, k in self.keysets.items()])
         logger.debug(f"Loaded keysets: {keysets_str}")
         return self
 
@@ -351,9 +351,8 @@ class Wallet(
                 for keyset_id in self.keysets:
                     proofs = await get_proofs(db=self.db, id=keyset_id, conn=conn)
                     self.proofs.extend(proofs)
-        keysets_str = ' '.join([f"{k.id} ({k.unit})" for k in self.keysets.values()])
+        keysets_str = " ".join([f"{k.id} ({k.unit})" for k in self.keysets.values()])
         logger.trace(f"Proofs loaded for keysets: {keysets_str}")
-
 
     async def load_keysets_from_db(
         self, url: Union[str, None] = "", unit: Union[str, None] = ""
@@ -1020,10 +1019,15 @@ class Wallet(
         """
         invalidated_proofs: List[Proof] = []
         if check_spendable:
-            proof_states = await self.check_proof_state(proofs)
-            for i, state in enumerate(proof_states.states):
-                if state.spent:
-                    invalidated_proofs.append(proofs[i])
+            # checks proofs in batches
+            for _proofs in [
+                proofs[i : i + settings.proofs_batch_size]
+                for i in range(0, len(proofs), settings.proofs_batch_size)
+            ]:
+                proof_states = await self.check_proof_state(proofs)
+                for i, state in enumerate(proof_states.states):
+                    if state.spent:
+                        invalidated_proofs.append(proofs[i])
         else:
             invalidated_proofs = proofs
 
@@ -1033,9 +1037,12 @@ class Wallet(
                 f" {self.unit.str(sum_proofs(invalidated_proofs))}."
             )
 
-        async with self.db.connect() as conn:
-            for p in invalidated_proofs:
-                await invalidate_proof(p, db=self.db, conn=conn)
+        for p in invalidated_proofs:
+            try:
+                # mark proof as spent
+                await invalidate_proof(p, db=self.db)
+            except Exception as e:
+                logger.error(f"DB error while invalidating proof: {e}")
 
         invalidate_secrets = [p.secret for p in invalidated_proofs]
         self.proofs = list(

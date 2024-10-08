@@ -381,8 +381,12 @@ async def invoice(
         while time.time() < check_until and not paid:
             await asyncio.sleep(5)
             try:
-                await wallet.mint(amount, split=optional_split, id=invoice.id)
-                paid = True
+                mint_quote_resp = await wallet.get_mint_quote(invoice.id)
+                if mint_quote_resp.state == MintQuoteState.paid.value:
+                    await wallet.mint(amount, split=optional_split, id=invoice.id)
+                    paid = True
+                else:
+                    print(".", end="", flush=True)
             except Exception as e:
                 # TODO: user error codes!
                 if "not paid" in str(e):
@@ -710,12 +714,7 @@ async def burn(ctx: Context, token: str, all: bool, force: bool, delete: str):
     if delete:
         await wallet.invalidate(proofs)
     else:
-        # invalidate proofs in batches
-        for _proofs in [
-            proofs[i : i + settings.proofs_batch_size]
-            for i in range(0, len(proofs), settings.proofs_batch_size)
-        ]:
-            await wallet.invalidate(_proofs, check_spendable=True)
+        await wallet.invalidate(proofs, check_spendable=True)
     await print_balance(ctx)
 
 
@@ -1024,7 +1023,9 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
                     if mint_info.get("time"):
                         print(f"        - Server time: {mint_info['time']}")
                     if mint_info.get("nuts"):
-                        nuts_str = ', '.join([f"NUT-{k}" for k in mint_info['nuts'].keys()])
+                        nuts_str = ", ".join(
+                            [f"NUT-{k}" for k in mint_info["nuts"].keys()]
+                        )
                         print(f"        - Supported NUTS: {nuts_str}")
                         print("")
             except Exception as e:
