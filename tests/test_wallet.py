@@ -168,7 +168,7 @@ async def test_request_mint(wallet1: Wallet):
 async def test_mint(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
     await pay_if_regtest(invoice.bolt11)
-    quote_resp = await wallet1.get_mint_quote(invoice.bolt11)
+    quote_resp = await wallet1.get_mint_quote(invoice.id)
     assert quote_resp.request == invoice.bolt11
     assert quote_resp.state == MintQuoteState.pending.value
 
