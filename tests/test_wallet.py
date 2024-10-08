@@ -168,9 +168,10 @@ async def test_request_mint(wallet1: Wallet):
 async def test_mint(wallet1: Wallet):
     invoice = await wallet1.request_mint(64)
     await pay_if_regtest(invoice.bolt11)
-    quote_resp = await wallet1.get_mint_quote(invoice.id)
-    assert quote_resp.request == invoice.bolt11
-    assert quote_resp.state == MintQuoteState.paid.value
+    if not settings.debug_mint_only_deprecated:
+        quote_resp = await wallet1.get_mint_quote(invoice.id)
+        assert quote_resp.request == invoice.bolt11
+        assert quote_resp.state == MintQuoteState.paid.value
 
     expected_proof_amounts = wallet1.split_wallet_state(64)
     await wallet1.mint(64, id=invoice.id)
@@ -311,8 +312,9 @@ async def test_melt(wallet1: Wallet):
         assert total_amount == 64
         assert quote.fee_reserve == 0
 
-    quote_resp = await wallet1.get_melt_quote(quote.quote)
-    assert quote_resp.amount == quote.amount
+    if not settings.debug_mint_only_deprecated:
+        quote_resp = await wallet1.get_melt_quote(quote.quote)
+        assert quote_resp.amount == quote.amount
 
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
 
