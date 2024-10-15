@@ -117,6 +117,16 @@ class LedgerCrud(ABC):
         ...
 
     @abstractmethod
+    async def update_keyset(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
+
+    @abstractmethod
     async def get_balance(
         self,
         db: Database,
@@ -306,7 +316,7 @@ class LedgerCrudSqlite(LedgerCrud):
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ IN ({','.join([':b_' + str(i) for i in range(len(b_s))])})
+            WHERE b_ IN ({','.join([f":b_{i}" for i in range(len(b_s))])})
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
@@ -376,7 +386,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[Proof]:
         query = f"""
         SELECT * from {db.table_with_schema('proofs_pending')}
-        WHERE y IN ({','.join([':y_' + str(i) for i in range(len(Ys))])})
+        WHERE y IN ({','.join([f":y_{i}" for i in range(len(Ys))])})
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
@@ -433,8 +443,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('mint_quotes')}
-            (quote, method, request, checking_id, unit, amount, issued, state, created_time, paid_time)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :issued, :state, :created_time, :paid_time)
+            (quote, method, request, checking_id, unit, amount, paid, issued, state, created_time, paid_time)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :paid, :issued, :state, :created_time, :paid_time)
             """,
             {
                 "quote": quote.quote,
@@ -443,6 +453,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "checking_id": quote.checking_id,
                 "unit": quote.unit,
                 "amount": quote.amount,
+                "paid": quote.paid,  # this is deprecated! we need to store it because we have a NOT NULL constraint | we could also remove the column but sqlite doesn't support that (we would have to make a new table)
                 "issued": quote.issued,  # this is deprecated! we need to store it because we have a NOT NULL constraint | we could also remove the column but sqlite doesn't support that (we would have to make a new table)
                 "state": quote.state.name,
                 "created_time": db.to_timestamp(
@@ -532,8 +543,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, state, created_time, paid_time, fee_paid, proof, change, expiry)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, change, expiry)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
             """,
             {
                 "quote": quote.quote,
@@ -544,6 +555,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "amount": quote.amount,
                 "fee_reserve": quote.fee_reserve or 0,
                 "state": quote.state.name,
+                "paid": quote.paid,  # this is deprecated! we need to store it because we have a NOT NULL constraint | we could also remove the column but sqlite doesn't support that (we would have to make a new table)
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
                 ),
@@ -625,9 +637,11 @@ class LedgerCrudSqlite(LedgerCrud):
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 ),
                 "proof": quote.payment_preimage,
-                "change": json.dumps([s.dict() for s in quote.change])
-                if quote.change
-                else None,
+                "change": (
+                    json.dumps([s.dict() for s in quote.change])
+                    if quote.change
+                    else None
+                ),
                 "quote": quote.quote,
                 "checking_id": quote.checking_id,
             },
@@ -677,7 +691,10 @@ class LedgerCrudSqlite(LedgerCrud):
             """
         )
         assert row, "Balance not found"
-        return int(row[0])
+
+        # sqlalchemy index of first element
+        key = next(iter(row))
+        return int(row[key])
 
     async def get_keyset(
         self,
@@ -720,6 +737,39 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return [MintKeyset(**row) for row in rows]
 
+    async def update_keyset(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('keysets')}
+            SET seed = :seed, encrypted_seed = :encrypted_seed, seed_encryption_method = :seed_encryption_method, derivation_path = :derivation_path, valid_from = :valid_from, valid_to = :valid_to, first_seen = :first_seen, active = :active, version = :version, unit = :unit, input_fee_ppk = :input_fee_ppk
+            WHERE id = :id
+            """,
+            {
+                "id": keyset.id,
+                "seed": keyset.seed,
+                "encrypted_seed": keyset.encrypted_seed,
+                "seed_encryption_method": keyset.seed_encryption_method,
+                "derivation_path": keyset.derivation_path,
+                "valid_from": db.to_timestamp(
+                    keyset.valid_from or db.timestamp_now_str()
+                ),
+                "valid_to": db.to_timestamp(keyset.valid_to or db.timestamp_now_str()),
+                "first_seen": db.to_timestamp(
+                    keyset.first_seen or db.timestamp_now_str()
+                ),
+                "active": keyset.active,
+                "version": keyset.version,
+                "unit": keyset.unit.name,
+                "input_fee_ppk": keyset.input_fee_ppk,
+            },
+        )
+
     async def get_proofs_used(
         self,
         *,
@@ -729,7 +779,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[Proof]:
         query = f"""
         SELECT * from {db.table_with_schema('proofs_used')}
-        WHERE y IN ({','.join([':y_' + str(i) for i in range(len(Ys))])})
+        WHERE y IN ({','.join([f":y_{i}" for i in range(len(Ys))])})
         """
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)

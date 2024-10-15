@@ -87,11 +87,8 @@ class LNbitsWallet(LightningBackend):
                 url=f"{self.endpoint}/api/v1/payments", json=data
             )
             r.raise_for_status()
-        except Exception:
-            return InvoiceResponse(
-                ok=False,
-                error_message=r.json()["detail"],
-            )
+        except Exception as e:
+            return InvoiceResponse(ok=False, error_message=str(e))
 
         data = r.json()
         checking_id, payment_request = data["checking_id"], data["payment_request"]
@@ -113,21 +110,21 @@ class LNbitsWallet(LightningBackend):
             )
             r.raise_for_status()
         except Exception:
+            error_message = r.json().get("detail") or r.reason_phrase
             return PaymentResponse(
-                result=PaymentResult.FAILED, error_message=r.json()["detail"]
+                result=PaymentResult.FAILED, error_message=error_message
             )
-        if r.status_code > 299:
-            return PaymentResponse(
-                result=PaymentResult.FAILED,
-                error_message=(f"HTTP status: {r.reason_phrase}",),
-            )
-        if "detail" in r.json():
+        if r.json().get("detail"):
             return PaymentResponse(
                 result=PaymentResult.FAILED, error_message=(r.json()["detail"],)
             )
 
         data: dict = r.json()
-        checking_id = data["payment_hash"]
+        checking_id = data.get("payment_hash")
+        if not checking_id:
+            return PaymentResponse(
+                result=PaymentResult.UNKNOWN, error_message="No payment_hash received"
+            )
 
         # we do this to get the fee and preimage
         payment: PaymentStatus = await self.get_payment_status(checking_id)

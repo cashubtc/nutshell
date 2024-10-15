@@ -147,6 +147,9 @@ class FakeWallet(LightningBackend):
         )
 
     async def pay_invoice(self, quote: MeltQuote, fee_limit: int) -> PaymentResponse:
+        if settings.fakewallet_pay_invoice_state_exception:
+            raise Exception("FakeWallet pay_invoice exception")
+
         invoice = decode(quote.request)
 
         if settings.fakewallet_delay_outgoing_payment:
@@ -189,6 +192,8 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
+        if settings.fakewallet_payment_state_exception:
+            raise Exception("FakeWallet get_payment_status exception")
         if settings.fakewallet_payment_state:
             return PaymentStatus(
                 result=PaymentResult[settings.fakewallet_payment_state]

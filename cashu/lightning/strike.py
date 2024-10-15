@@ -89,7 +89,7 @@ INVOICE_RESULT_MAP = {
 class StrikeWallet(LightningBackend):
     """https://docs.strike.me/api/"""
 
-    supported_units = set([Unit.sat, Unit.usd, Unit.eur])
+    supported_units = {Unit.sat, Unit.usd, Unit.eur}
     supports_description: bool = False
     currency_map = {Unit.sat: "BTC", Unit.usd: "USD", Unit.eur: "EUR"}
 
