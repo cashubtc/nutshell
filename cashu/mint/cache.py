@@ -39,6 +39,7 @@ class RedisCache:
                 logger.debug(f"KEY: {key}")
                 # Check if we have a value under this key
                 if await self.redis.exists(key):
+                    logger.info("Returning a cached response...")
                     return json.loads(await self.redis.get(key))
                 result = await func(request, payload)
                 # Cache a successful result for `expire` seconds
