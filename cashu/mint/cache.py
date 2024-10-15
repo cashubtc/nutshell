@@ -27,7 +27,7 @@ class RedisCache:
         def passthrough(func):
             @functools.wraps(func)
             async def wrapper(*args, **kwargs):
-                logger.debug("cache wrapper on route {func.__name__}")
+                logger.debug(f"cache wrapper on route {func.__name__}")
                 result = await func(*args, **kwargs)
                 return result
             return wrapper
