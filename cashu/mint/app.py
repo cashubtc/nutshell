@@ -7,15 +7,13 @@ from traceback import print_exception
 from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
 from loguru import logger
 from starlette.requests import Request
 
 from ..core.errors import CashuError
 from ..core.logging import configure_logger
 from ..core.settings import settings
-from .router import router
+from .router import redis, router
 from .router_deprecated import router_deprecated
 from .startup import shutdown_mint as shutdown_mint_init
 from .startup import start_mint_init
@@ -31,8 +29,6 @@ from .middleware import add_middlewares, request_validation_exception_handler
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    if settings.mint_cache_activate:
-        FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
     await start_mint_init()
     try:
         yield
@@ -41,8 +37,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.info("Shutdown process interrupted by CancelledError")
     finally:
         try:
+            await redis.disconnect()
             await shutdown_mint_init()
-            await FastAPICache.clear()
         except asyncio.CancelledError:
             logger.info("CancelledError during shutdown, shutting down forcefully")
 
