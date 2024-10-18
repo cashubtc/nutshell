@@ -22,8 +22,8 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
-    PaymentStatus,
     PaymentResult,
+    PaymentStatus,
     StatusResponse,
 )
 
@@ -331,7 +331,7 @@ class LNMarketsWallet(LightningBackend):
             return PaymentStatus(result=PaymentResult.UNKNOWN)
 
         logger.debug(f"payment status: {data}")
-        if not "success" in data:
+        if "success" not in data:
             return PaymentStatus(result=PaymentResult.UNKNOWN)
 
         return PaymentStatus(
