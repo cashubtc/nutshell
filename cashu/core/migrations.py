@@ -104,6 +104,6 @@ async def migrate_databases(db: Database, migrations_module):
             f"SELECT * FROM {db.table_with_schema('dbversions')}"
         )
         rows = result.all()
-        current_versions = {row["db"]: row["version"] for row in rows}
+        current_versions = {row._mapping["db"]: row._mapping["version"] for row in rows}
         matcher = re.compile(r"^m(\d\d\d)_")
     await run_migration(db, migrations_module)

@@ -56,8 +56,7 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                 f"Invoice callback dispatcher: quote {quote} trying to set as {MintQuoteState.paid}"
             )
             # set the quote as paid
-            if quote.state == MintQuoteState.unpaid:
-                quote.paid = True
+            if quote.unpaid:
                 quote.state = MintQuoteState.paid
                 await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
                 logger.trace(

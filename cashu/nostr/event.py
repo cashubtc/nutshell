@@ -70,7 +70,7 @@ class Event:
 
     def verify(self) -> bool:
         pub_key = PublicKey(
-            bytes.fromhex("02" + self.public_key), True
+            bytes.fromhex(f"02{self.public_key}"), True
         )  # add 02 for schnorr (bip340)
         return pub_key.schnorr_verify(
             bytes.fromhex(self.id), bytes.fromhex(self.signature), None, raw=True

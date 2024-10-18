@@ -20,7 +20,7 @@ class AESCipher:
 
     def __init__(self, key: str, description=""):
         self.key: str = key
-        self.description = description + " "
+        self.description = f"{description} "
 
     def pad(self, data):
         length = BLOCK_SIZE - (len(data) % BLOCK_SIZE)

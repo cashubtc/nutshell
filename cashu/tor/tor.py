@@ -65,7 +65,7 @@ class TorProxy:
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        logger.debug("Running tor daemon with pid {}".format(self.tor_proc.pid))
+        logger.debug(f"Running tor daemon with pid {self.tor_proc.pid}")
         with open(self.pid_file, "w", encoding="utf-8") as f:
             f.write(str(self.tor_proc.pid))
 
@@ -144,7 +144,7 @@ class TorProxy:
     def read_pid(self):
         if not os.path.isfile(self.pid_file):
             return None
-        with open(self.pid_file, "r") as f:
+        with open(self.pid_file) as f:
             pid = f.readlines()
         # check if pid is valid
         if len(pid) == 0 or not int(pid[0]) > 0:

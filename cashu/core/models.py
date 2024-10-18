@@ -18,7 +18,15 @@ from .settings import settings
 # ------- API: INFO -------
 
 
-class MintMeltMethodSetting(BaseModel):
+class MintMethodSetting(BaseModel):
+    method: str
+    unit: str
+    min_amount: Optional[int] = None
+    max_amount: Optional[int] = None
+    description: Optional[bool] = None
+
+
+class MeltMethodSetting(BaseModel):
     method: str
     unit: str
     min_amount: Optional[int] = None
@@ -38,6 +46,8 @@ class GetInfoResponse(BaseModel):
     description_long: Optional[str] = None
     contact: Optional[List[MintInfoContact]] = None
     motd: Optional[str] = None
+    icon_url: Optional[str] = None
+    time: Optional[int] = None
     nuts: Optional[Dict[int, Any]] = None
 
     def supports(self, nut: int) -> Optional[bool]:
@@ -115,6 +125,9 @@ class KeysetsResponse_deprecated(BaseModel):
 class PostMintQuoteRequest(BaseModel):
     unit: str = Field(..., max_length=settings.mint_max_request_length)  # output unit
     amount: int = Field(..., gt=0)  # output amount
+    description: Optional[str] = Field(
+        default=None, max_length=settings.mint_max_request_length
+    )  # invoice description
 
 
 class PostMintQuoteResponse(BaseModel):
@@ -200,17 +213,19 @@ class PostMeltQuoteResponse(BaseModel):
     fee_reserve: int  # input fee reserve
     paid: Optional[
         bool
-    ]  # whether the request has been paid # DEPRECATED as per NUT PR #136
+    ] = None  # whether the request has been paid # DEPRECATED as per NUT PR #136
     state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
-    change: Union[List[BlindedSignature], None] = None
+    change: Union[List[BlindedSignature], None] = None  # NUT-08 change
 
     @classmethod
     def from_melt_quote(self, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
         to_dict = melt_quote.dict()
         # turn state into string
         to_dict["state"] = melt_quote.state.value
+        # add deprecated "paid" field
+        to_dict["paid"] = melt_quote.paid
         return PostMeltQuoteResponse.parse_obj(to_dict)
 
 

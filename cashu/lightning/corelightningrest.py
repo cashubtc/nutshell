@@ -19,17 +19,33 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
     Unsupported,
 )
 from .macaroon import load_macaroon
 
+# https://docs.corelightning.org/reference/lightning-pay
+PAYMENT_RESULT_MAP = {
+    "complete": PaymentResult.SETTLED,
+    "pending": PaymentResult.PENDING,
+    "failed": PaymentResult.FAILED,
+}
+
+# https://docs.corelightning.org/reference/lightning-listinvoices
+INVOICE_RESULT_MAP = {
+    "paid": PaymentResult.SETTLED,
+    "unpaid": PaymentResult.PENDING,
+    "expired": PaymentResult.FAILED,
+}
+
 
 class CoreLightningRestWallet(LightningBackend):
-    supported_units = set([Unit.sat, Unit.msat])
+    supported_units = {Unit.sat, Unit.msat}
     unit = Unit.sat
     supports_incoming_payment_stream: bool = True
+    supports_description: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
@@ -60,12 +76,6 @@ class CoreLightningRestWallet(LightningBackend):
             base_url=self.url, verify=self.cert, headers=self.auth
         )
         self.last_pay_index = 0
-        self.statuses = {
-            "paid": True,
-            "complete": True,
-            "failed": False,
-            "pending": None,
-        }
 
     async def cleanup(self):
         try:
@@ -139,8 +149,6 @@ class CoreLightningRestWallet(LightningBackend):
 
             return InvoiceResponse(
                 ok=False,
-                checking_id=None,
-                payment_request=None,
                 error_message=error_message,
             )
 
@@ -151,7 +159,6 @@ class CoreLightningRestWallet(LightningBackend):
             ok=True,
             checking_id=data["payment_hash"],
             payment_request=data["bolt11"],
-            error_message=None,
         )
 
     async def pay_invoice(
@@ -161,20 +168,14 @@ class CoreLightningRestWallet(LightningBackend):
             invoice = decode(quote.request)
         except Bolt11Exception as exc:
             return PaymentResponse(
-                ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
+                result=PaymentResult.FAILED,
                 error_message=str(exc),
             )
 
         if not invoice.amount_msat or invoice.amount_msat <= 0:
             error_message = "0 amount invoices are not allowed"
             return PaymentResponse(
-                ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
+                result=PaymentResult.FAILED,
                 error_message=error_message,
             )
         fee_limit_percent = fee_limit_msat / invoice.amount_msat * 100
@@ -192,38 +193,25 @@ class CoreLightningRestWallet(LightningBackend):
         if r.is_error or "error" in r.json():
             try:
                 data = r.json()
-                error_message = data["error"]
+                error_message = data["error"]["message"]
             except Exception:
                 error_message = r.text
             return PaymentResponse(
-                ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
+                result=PaymentResult.FAILED,
                 error_message=error_message,
             )
 
         data = r.json()
-
-        if data["status"] != "complete":
-            return PaymentResponse(
-                ok=False,
-                checking_id=None,
-                fee=None,
-                preimage=None,
-                error_message="payment failed",
-            )
 
         checking_id = data["payment_hash"]
         preimage = data["payment_preimage"]
         fee_msat = data["amount_sent_msat"] - data["amount_msat"]
 
         return PaymentResponse(
-            ok=self.statuses.get(data["status"]),
+            result=PAYMENT_RESULT_MAP[data["status"]],
             checking_id=checking_id,
             fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
             preimage=preimage,
-            error_message=None,
         )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
@@ -237,45 +225,44 @@ class CoreLightningRestWallet(LightningBackend):
 
             if r.is_error or "error" in data or data.get("invoices") is None:
                 raise Exception("error in cln response")
-            return PaymentStatus(paid=self.statuses.get(data["invoices"][0]["status"]))
+            return PaymentStatus(
+                result=INVOICE_RESULT_MAP[data["invoices"][0]["status"]],
+            )
         except Exception as e:
             logger.error(f"Error getting invoice status: {e}")
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         r = await self.client.get(
             "/v1/pay/listPays",
             params={"payment_hash": checking_id},
         )
-        try:
-            r.raise_for_status()
-            data = r.json()
+        r.raise_for_status()
+        data = r.json()
 
-            if not data.get("pays"):
-                # payment not found
-                logger.error(f"payment not found: {data.get('pays')}")
-                raise Exception("payment not found")
-
-            if r.is_error or "error" in data:
-                message = data.get("error") or data
-                raise Exception(f"error in corelightning-rest response: {message}")
-
-            pay = data["pays"][0]
-
-            fee_msat, preimage = None, None
-            if self.statuses[pay["status"]]:
-                # cut off "msat" and convert to int
-                fee_msat = -int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
-                preimage = pay["preimage"]
-
+        if not data.get("pays"):
+            # payment not found
+            logger.error(f"payment not found: {data.get('pays')}")
             return PaymentStatus(
-                paid=self.statuses.get(pay["status"]),
-                fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
-                preimage=preimage,
+                result=PaymentResult.UNKNOWN, error_message="payment not found"
             )
-        except Exception as e:
-            logger.error(f"Error getting payment status: {e}")
-            return PaymentStatus(paid=None)
+
+        if r.is_error or "error" in data:
+            message = data.get("error") or data
+            raise Exception(f"error in corelightning-rest response: {message}")
+
+        pay = data["pays"][0]
+
+        fee_msat, preimage = None, None
+        if PAYMENT_RESULT_MAP.get(pay["status"]) == PaymentResult.SETTLED:
+            fee_msat = -int(pay["amount_sent_msat"]) - int(pay["amount_msat"])
+            preimage = pay["preimage"]
+
+        return PaymentStatus(
+            result=PAYMENT_RESULT_MAP[pay["status"]],
+            fee=Amount(unit=Unit.msat, amount=fee_msat) if fee_msat else None,
+            preimage=preimage,
+        )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         # call listinvoices to determine the last pay_index
@@ -284,7 +271,8 @@ class CoreLightningRestWallet(LightningBackend):
         data = r.json()
         if r.is_error or "error" in data:
             raise Exception("error in cln response")
-        self.last_pay_index = data["invoices"][-1]["pay_index"]
+        if data.get("invoices"):
+            self.last_pay_index = data["invoices"][-1]["pay_index"]
 
         while True:
             try:
@@ -314,9 +302,11 @@ class CoreLightningRestWallet(LightningBackend):
                         )
                         paid_invoce = r.json()
                         logger.trace(f"paid invoice: {paid_invoce}")
-                        assert self.statuses[
-                            paid_invoce["invoices"][0]["status"]
-                        ], "streamed invoice not paid"
+                        if (
+                            INVOICE_RESULT_MAP[paid_invoce["invoices"][0]["status"]]
+                            != PaymentResult.SETTLED
+                        ):
+                            raise Exception("invoice not paid")
                         assert "invoices" in paid_invoce, "no invoices in response"
                         assert len(paid_invoce["invoices"]), "no invoices in response"
                         yield paid_invoce["invoices"][0]["payment_hash"]
