@@ -23,6 +23,7 @@ from .base import (
     PaymentQuoteResponse,
     PaymentResponse,
     PaymentStatus,
+    PaymentResult,
     StatusResponse,
 )
 
@@ -238,9 +239,15 @@ class LNMarketsWallet(LightningBackend):
                 price_data = r.json()
             except (CashuError, json.JSONDecodeError) as e:
                 if isinstance(e, CashuError):
-                    return PaymentResponse(error_message=f"payment failed: {e.detail}")
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED,
+                        error_message=f"payment failed: {e.detail}"
+                    )
                 elif isinstance(e, json.JSONDecodeError):
-                    return PaymentResponse(error_message=f"payment failed: {str(e)}")
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, 
+                        error_message=f"payment failed: {str(e)}"
+                    )
             btc_price = float(price_data["lastPrice"])
         
         headers = await self.get_request_headers(Method.POST, path, data)
@@ -253,13 +260,19 @@ class LNMarketsWallet(LightningBackend):
             )
             raise_if_err(r)
         except CashuError as e:
-            return PaymentResponse(error_message=f"payment failed: {e.detail}")
+            return PaymentResponse(
+                result=PaymentResult.UNKNOWN,
+                error_message=f"payment might have failed: {e.detail}"
+            )
 
         try:
             data = r.json()
         except Exception:
-            logger.error(f"payment failed: {r.text}")
-            return PaymentResponse(error_message=f"payment failed: {r.text}")
+            logger.error(f"payment might have failed: {r.text}")
+            return PaymentResponse(
+                result=PaymentResult.UNKNOWN,
+                error_message=f"payment might have failed: {r.text}"
+            )
 
         # lnmarkets does not provide a payment_preimage :(
         checking_id = data["id"]
@@ -270,7 +283,7 @@ class LNMarketsWallet(LightningBackend):
             fee_paid_usd = fee_paid / 1e8 * btc_price   # sat -> usd
             fee_paid = ceil(fee_paid_usd * 100)         # usd -> cents
         return PaymentResponse(
-            ok=True,
+            result=PaymentResult.PENDING,
             checking_id=checking_id,
             fee=Amount(unit=self.unit, amount=fee_paid),
         )
@@ -286,15 +299,15 @@ class LNMarketsWallet(LightningBackend):
             )
             raise_if_err(r)
         except CashuError:
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
 
         data = None
         try:
             data = r.json()
         except Exception:
             logger.error(f"get invoice status unsuccessful: {r.text}")
-            return PaymentStatus(paid=None)
-        return PaymentStatus(paid=data["success"])
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
+        return PaymentStatus(result=PaymentResult.SETTLED if data["success"] else PaymentResult.FAILED)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         path = f"/v2/user/withdrawals/{checking_id}"
@@ -309,20 +322,20 @@ class LNMarketsWallet(LightningBackend):
             )
             raise_if_err(r)
         except CashuError:
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
 
         try:
             data = r.json()
         except Exception:
             logger.error(f"getting invoice status unsuccessful: {r.text}")
-            return PaymentStatus(paid=None)
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
 
         logger.debug(f"payment status: {data}")
-        if not data["success"]:
-            return PaymentStatus(paid=None)
+        if not "success" in data:
+            return PaymentStatus(result=PaymentResult.UNKNOWN)
 
         return PaymentStatus(
-            paid=data["success"],
+            result=PaymentResult.SETTLED if data["success"] else PaymentResult.FAILED,
             fee=Amount(unit=Unit.sat, amount=int(data["fee"])),
         )
 
