@@ -57,6 +57,7 @@ async def info() -> GetInfoResponse:
         contact=contact_info,
         nuts=mint_features,
         icon_url=settings.mint_info_icon_url,
+        urls=settings.mint_info_urls,
         motd=settings.mint_info_motd,
         time=int(time.time()),
     )
