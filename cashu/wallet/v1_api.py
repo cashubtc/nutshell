@@ -7,6 +7,7 @@ import bolt11
 import httpx
 from httpx import Response
 from loguru import logger
+from pydantic import ValidationError
 
 from ..core.base import (
     BlindedMessage,
@@ -467,14 +468,26 @@ class LedgerAPI(LedgerAPIDeprecated):
             json=payload.dict(include=_meltrequest_include_fields(proofs, outputs)),  # type: ignore
             timeout=None,
         )
-        # BEGIN backwards compatibility < 0.15.0
-        # assume the mint has not upgraded yet if we get a 404
-        if resp.status_code == 404:
-            invoice = await get_lightning_invoice(id=quote, db=self.db)
-            assert invoice, f"no invoice found for id {quote}"
-            ret: PostMeltResponse_deprecated = await self.melt_deprecated(
-                proofs=proofs, outputs=outputs, invoice=invoice.bolt11
-            )
+        try:
+            self.raise_on_error_request(resp)
+            return_dict = resp.json()
+            return PostMeltQuoteResponse.parse_obj(return_dict)
+        except Exception as e:
+            # BEGIN backwards compatibility < 0.15.0
+            # assume the mint has not upgraded yet if we get a 404
+            if resp.status_code == 404:
+                invoice = await get_lightning_invoice(id=quote, db=self.db)
+                assert invoice, f"no invoice found for id {quote}"
+                ret: PostMeltResponse_deprecated = await self.melt_deprecated(
+                    proofs=proofs, outputs=outputs, invoice=invoice.bolt11
+                )
+            elif isinstance(e, ValidationError):
+                # BEGIN backwards compatibility < 0.16.0
+                # before 0.16.0, mints return PostMeltResponse_deprecated
+                ret = PostMeltResponse_deprecated.parse_obj(return_dict)
+                # END backwards compatibility < 0.16.0
+            else:
+                raise e
             return PostMeltQuoteResponse(
                 quote=quote,
                 amount=0,
@@ -489,10 +502,7 @@ class LedgerAPI(LedgerAPIDeprecated):
                 change=ret.change,
                 expiry=None,
             )
-        # END backwards compatibility < 0.15.0
-        self.raise_on_error_request(resp)
-        return_dict = resp.json()
-        return PostMeltQuoteResponse.parse_obj(return_dict)
+            # END backwards compatibility < 0.15.0
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
