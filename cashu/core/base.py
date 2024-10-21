@@ -674,7 +674,6 @@ class WalletKeyset:
                 int(amount): PublicKey(bytes.fromhex(hex_key), raw=True)
                 for amount, hex_key in dict(json.loads(serialized)).items()
             }
-
         return cls(
             id=row["id"],
             unit=row["unit"],

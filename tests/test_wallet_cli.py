@@ -110,6 +110,9 @@ def test_balance(cli_prefix):
 
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 def test_invoice(mint, cli_prefix):
+    if settings.debug_mint_only_deprecated:
+        pytest.skip("only works with v1 API")
+
     runner = CliRunner()
     result = runner.invoke(
         cli,

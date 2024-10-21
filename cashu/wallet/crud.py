@@ -386,7 +386,7 @@ async def bump_secret_derivation(
         )
         counter = 0
     else:
-        counter = int(rows[0])
+        counter = int(rows["counter"])
 
     if not skip:
         await (conn or db).execute(
@@ -446,8 +446,8 @@ async def get_seed_and_mnemonic(
     )
     return (
         (
-            row[0],
-            row[1],
+            row["seed"],
+            row["mnemonic"],
         )
         if row
         else None

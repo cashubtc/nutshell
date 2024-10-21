@@ -228,7 +228,7 @@ class DbWriteHelper:
         async with self.db.get_connection(lock_table="melt_quotes") as conn:
             # get melt quote from db and check if it is pending
             quote_db = await self.crud.get_melt_quote(
-                checking_id=quote.checking_id, db=self.db, conn=conn
+                quote_id=quote.quote, db=self.db, conn=conn
             )
             if not quote_db:
                 raise TransactionError("Melt quote not found.")

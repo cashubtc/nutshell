@@ -288,6 +288,7 @@ async def m011_add_quote_tables(db: Database):
                     checking_id TEXT NOT NULL,
                     unit TEXT NOT NULL,
                     amount {db.big_int} NOT NULL,
+                    paid BOOL NOT NULL,
                     issued BOOL NOT NULL,
                     created_time TIMESTAMP,
                     paid_time TIMESTAMP,
@@ -296,7 +297,6 @@ async def m011_add_quote_tables(db: Database):
 
                 );
             """
-            # NOTE: We remove the paid BOOL NOT NULL column
         )
 
         await conn.execute(
@@ -309,6 +309,7 @@ async def m011_add_quote_tables(db: Database):
                     unit TEXT NOT NULL,
                     amount {db.big_int} NOT NULL,
                     fee_reserve {db.big_int},
+                    paid BOOL NOT NULL,
                     created_time TIMESTAMP,
                     paid_time TIMESTAMP,
                     fee_paid {db.big_int},
@@ -318,14 +319,13 @@ async def m011_add_quote_tables(db: Database):
 
                 );
             """
-            # NOTE: We remove the paid BOOL NOT NULL column
         )
 
         await conn.execute(
             f"INSERT INTO {db.table_with_schema('mint_quotes')} (quote, method,"
-            " request, checking_id, unit, amount, issued, created_time,"
+            " request, checking_id, unit, amount, paid, issued, created_time,"
             " paid_time) SELECT id, 'bolt11', bolt11, COALESCE(payment_hash, 'None'),"
-            f" 'sat', amount, issued, COALESCE(created, '{db.timestamp_now_str()}'),"
+            f" 'sat', amount, False, issued, COALESCE(created, '{db.timestamp_now_str()}'),"
             f" NULL FROM {db.table_with_schema('invoices')} "
         )
 

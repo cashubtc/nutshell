@@ -73,7 +73,7 @@ def bech32_create_checksum(hrp, data, spec):
 def bech32_encode(hrp, data, spec):
     """Compute a Bech32 string given HRP and data values."""
     combined = data + bech32_create_checksum(hrp, data, spec)
-    return hrp + "1" + "".join([CHARSET[d] for d in combined])
+    return f"{hrp}1" + "".join([CHARSET[d] for d in combined])
 
 
 def bech32_decode(bech):
