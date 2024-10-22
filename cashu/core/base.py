@@ -95,21 +95,7 @@ class ProofState(LedgerEvent):
 
 class HTLCWitness(BaseModel):
     preimage: Optional[str] = None
-    signature: Optional[str] = None
-
-    @classmethod
-    def from_witness(cls, witness: str):
-        return cls(**json.loads(witness))
-
-
-class P2SHWitness(BaseModel):
-    """
-    Unlocks P2SH spending condition of a Proof
-    """
-
-    script: str
-    signature: str
-    address: Union[str, None] = None
+    signatures: Optional[List[str]] = None
 
     @classmethod
     def from_witness(cls, witness: str):
@@ -206,9 +192,14 @@ class Proof(BaseModel):
         return P2PKWitness.from_witness(self.witness).signatures
 
     @property
-    def htlcpreimage(self) -> Union[str, None]:
+    def htlcpreimage(self) -> str | None:
         assert self.witness, "Witness is missing for htlc preimage"
         return HTLCWitness.from_witness(self.witness).preimage
+
+    @property
+    def htlcsigs(self) -> List[str] | None:
+        assert self.witness, "Witness is missing for htlc signatures"
+        return HTLCWitness.from_witness(self.witness).signatures
 
 
 class Proofs(BaseModel):
@@ -647,6 +638,7 @@ class WalletKeyset:
                 int(amount): PublicKey(bytes.fromhex(hex_key), raw=True)
                 for amount, hex_key in dict(json.loads(serialized)).items()
             }
+
         return cls(
             id=row["id"],
             unit=row["unit"],

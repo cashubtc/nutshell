@@ -55,7 +55,7 @@ class DbWriteHelper:
             logger.trace("_verify_spent_proofs_and_set_pending acquiring lock")
             async with self.db.get_connection(
                 lock_table="proofs_pending",
-                lock_timeout=1,
+                lock_timeout=10,
             ) as conn:
                 logger.trace("checking whether proofs are already spent")
                 await self.db_read._verify_proofs_spendable(proofs, conn)
