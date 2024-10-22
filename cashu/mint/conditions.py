@@ -44,11 +44,28 @@ class LedgerSpendingConditions:
 
         # extract pubkeys that we require signatures from depending on whether the
         # locktime has passed (refund) or not (pubkeys in secret.data and in tags)
-        # This is implemented in get_p2pk_pubkey_from_secret()
-        pubkeys = p2pk_secret.get_p2pk_pubkey_from_secret()
-        # we will get an empty list if the locktime has passed and no refund pubkey is present
-        if not pubkeys:
-            return True
+
+        # the pubkey in the data field is the pubkey to use for P2PK
+        pubkeys: List[str] = [p2pk_secret.data]
+
+        # get all additional pubkeys from tags for multisig
+        pubkeys += p2pk_secret.tags.get_tag_all("pubkeys")
+
+        # check if locktime is passed and if so, only consider refund pubkeys
+        now = time.time()
+        if p2pk_secret.locktime and p2pk_secret.locktime < now:
+            logger.trace(f"p2pk locktime ran out ({p2pk_secret.locktime}<{now}).")
+            # If a refund pubkey is present, we demand the signature to be from it
+            refund_pubkeys = p2pk_secret.tags.get_tag_all("refund")
+            if not refund_pubkeys:
+                # no refund pubkey is present, anyone can spend
+                return True
+            return self._verify_secret_signatures(
+                proof,
+                refund_pubkeys,
+                proof.p2pksigs,
+                1,  # only 1 sig required for refund
+            )
 
         return self._verify_secret_signatures(
             proof, pubkeys, proof.p2pksigs, p2pk_secret.n_sigs
@@ -97,7 +114,10 @@ class LedgerSpendingConditions:
             refund_pubkeys = htlc_secret.tags.get_tag_all("refund")
             if refund_pubkeys:
                 return self._verify_secret_signatures(
-                    proof, refund_pubkeys, proof.p2pksigs, htlc_secret.n_sigs
+                    proof,
+                    refund_pubkeys,
+                    proof.p2pksigs,
+                    1,  # only one refund signature required
                 )
             # no pubkeys given in secret, anyone can spend
             return True
@@ -257,17 +277,29 @@ class LedgerSpendingConditions:
 
         # extract all pubkeys and n_sigs from secrets
         pubkeys_per_proof = [
-            secret.get_p2pk_pubkey_from_secret() for secret in p2pk_secrets
+            [p2pk_secret.data] + p2pk_secret.tags.get_tag_all("pubkeys")
+            for p2pk_secret in p2pk_secrets
         ]
-        n_sigs_per_proof = [secret.n_sigs for secret in p2pk_secrets]
+        n_sigs_per_proof = [p2pk_secret.n_sigs for p2pk_secret in p2pk_secrets]
+
+        # if locktime passed, we only require the refund pubkeys and 1 signature
+        for p2pk_secret in p2pk_secrets:
+            now = time.time()
+            if p2pk_secret.locktime and p2pk_secret.locktime < now:
+                refund_pubkeys = p2pk_secret.tags.get_tag_all("refund")
+                if refund_pubkeys:
+                    pubkeys_per_proof.append(refund_pubkeys)
+                    n_sigs_per_proof.append(1)  # only 1 sig required for refund
+
+        # if no pubkeys are present, anyone can spend
+        if not pubkeys_per_proof:
+            return True
 
         # all pubkeys and n_sigs must be the same
         assert (
             len({tuple(pubs_output) for pubs_output in pubkeys_per_proof}) == 1
         ), "pubkeys in all proofs must match."
         assert len(set(n_sigs_per_proof)) == 1, "n_sigs in all proofs must match."
-
-        # TODO: add limit for maximum number of pubkeys
 
         # validation successful
 

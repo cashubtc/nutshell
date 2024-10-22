@@ -7,8 +7,6 @@ from .secret import Secret, SecretKind
 class SigFlags(Enum):
     # require signatures only on the inputs (default signature flag)
     SIG_INPUTS = "SIG_INPUTS"
-    # require signatures on inputs and outputs
-    SIG_ALL = "SIG_ALL"
 
 
 class HTLCSecret(Secret):
