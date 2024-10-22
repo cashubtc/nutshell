@@ -13,7 +13,7 @@ from ..core.db import Database
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
-    sign_p2pk_sign,
+    schnorr_sign,
 )
 from ..core.secret import Secret, SecretKind, Tags
 from .protocols import SupportsDb, SupportsPrivateKey
@@ -21,7 +21,7 @@ from .protocols import SupportsDb, SupportsPrivateKey
 
 class WalletP2PK(SupportsPrivateKey, SupportsDb):
     db: Database
-    private_key: Optional[PrivateKey] = None
+    private_key: PrivateKey
     # ---------- P2PK ----------
 
     async def create_p2pk_pubkey(self):
@@ -61,10 +61,15 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             tags=tags,
         )
 
-    async def sign_p2pk_proofs(self, proofs: List[Proof]) -> List[str]:
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
+    def sign_proofs(self, proofs: List[Proof]) -> List[str]:
+        """Signs proof secrets with the private key of the wallet.
+
+        Args:
+            proofs (List[Proof]): Proofs to sign
+
+        Returns:
+            List[str]: List of signatures for each proof
+        """
         private_key = self.private_key
         assert private_key.pubkey
         logger.trace(
@@ -76,7 +81,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             logger.trace(f"Signing message: {proof.secret}")
 
         signatures = [
-            sign_p2pk_sign(
+            schnorr_sign(
                 message=proof.secret.encode("utf-8"),
                 private_key=private_key,
             ).hex()
@@ -85,21 +90,18 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         logger.debug(f"Signatures: {signatures}")
         return signatures
 
-    async def sign_p2pk_outputs(self, outputs: List[BlindedMessage]) -> List[str]:
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
+    def sign_outputs(self, outputs: List[BlindedMessage]) -> List[str]:
         private_key = self.private_key
         assert private_key.pubkey
         return [
-            sign_p2pk_sign(
+            schnorr_sign(
                 message=bytes.fromhex(output.B_),
                 private_key=private_key,
             ).hex()
             for output in outputs
         ]
 
-    async def add_p2pk_witnesses_to_outputs(
+    def add_signature_witnesses_to_outputs(
         self, outputs: List[BlindedMessage]
     ) -> List[BlindedMessage]:
         """Takes a list of outputs and adds a P2PK signatures to each.
@@ -108,12 +110,12 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         Returns:
             List[BlindedMessage]: Outputs with P2PK signatures added
         """
-        p2pk_signatures = await self.sign_p2pk_outputs(outputs)
+        p2pk_signatures = self.sign_outputs(outputs)
         for o, s in zip(outputs, p2pk_signatures):
             o.witness = P2PKWitness(signatures=[s]).json()
         return outputs
 
-    async def add_witnesses_to_outputs(
+    def add_witnesses_to_outputs(
         self, proofs: List[Proof], outputs: List[BlindedMessage]
     ) -> List[BlindedMessage]:
         """Adds witnesses to outputs if the inputs (proofs) indicate an appropriate signature flag
@@ -127,25 +129,24 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         # first we check whether all tokens have serialized secrets as their secret
         try:
             for p in proofs:
-                Secret.deserialize(p.secret)
+                secret = Secret.deserialize(p.secret)
         except Exception:
             # if not, we do not add witnesses (treat as regular token secret)
             return outputs
 
-        # if any of the proofs provided require SIG_ALL, we must provide it
+        # if any of the proofs provided is P2PK and requires SIG_ALL, we must signatures to all outputs
         if any(
             [
-                P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL
+                secret.kind == SecretKind.P2PK.value
+                and P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL
                 for p in proofs
             ]
         ):
-            outputs = await self.add_p2pk_witnesses_to_outputs(outputs)
+            outputs = self.add_signature_witnesses_to_outputs(outputs)
         return outputs
 
-    async def add_p2pk_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
-        p2pk_signatures = await self.sign_p2pk_proofs(proofs)
-        logger.debug(f"Unlock signatures for {len(proofs)} proofs: {p2pk_signatures}")
-        logger.debug(f"Proofs: {proofs}")
+    def add_signature_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+        p2pk_signatures = self.sign_proofs(proofs)
         # attach unlock signatures to proofs
         assert len(proofs) == len(p2pk_signatures), "wrong number of signatures"
         for p, s in zip(proofs, p2pk_signatures):
@@ -157,14 +158,14 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 p.witness = P2PKWitness(signatures=[s]).json()
         return proofs
 
-    async def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
+    def add_witnesses_to_proofs(self, proofs: List[Proof]) -> List[Proof]:
         """Adds witnesses to proofs for P2PK redemption.
 
         This method parses the secret of each proof and determines the correct
         witness type and adds it to the proof if we have it available.
 
         Note: In order for this method to work, all proofs must have the same secret type.
-        For P2PK, we use an individual signature for each token in proofs.
+        For P2PK and HTLC, we use an individual signature for each token in proofs.
 
         Args:
             proofs (List[Proof]): List of proofs to add witnesses to
@@ -172,22 +173,22 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         Returns:
             List[Proof]: List of proofs with witnesses added
         """
-
-        # iterate through proofs and produce witnesses for each
-
         # first we check whether all tokens have serialized secrets as their secret
         try:
             for p in proofs:
-                Secret.deserialize(p.secret)
+                secret = Secret.deserialize(p.secret)
         except Exception:
             # if not, we do not add witnesses (treat as regular token secret)
             return proofs
         logger.debug("Spending conditions detected.")
-        # P2PK signatures
-        if all(
-            [Secret.deserialize(p.secret).kind == SecretKind.P2PK.value for p in proofs]
-        ):
-            logger.debug("P2PK redemption detected.")
-            proofs = await self.add_p2pk_witnesses_to_proofs(proofs)
+        # check if all secrets are either P2PK or HTLC
+        if all([secret.kind == SecretKind.P2PK.value for p in proofs]):
+            proofs = self.add_signature_witnesses_to_proofs(proofs)
+
+        # if all([secret.kind == SecretKind.HTLC.value for p in proofs]):
+        #     for p in proofs:
+        #         htlc_secret = HTLCSecret.deserialize(p.secret)
+        #         if htlc_secret.tags.get_tag("pubkeys"):
+        #             p = self.add_signature_witnesses_to_proofs([p])[0]
 
         return proofs
