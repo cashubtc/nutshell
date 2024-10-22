@@ -141,9 +141,6 @@ class LedgerSpendingConditions:
         if len(set(signatures)) != len(signatures):
             raise TransactionError("signatures must be unique.")
 
-        # we parse the secret as a P2PK commitment
-        # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
-
         # INPUTS: check signatures against pubkey
         # we expect the signature to be on the pubkey (=message) itself
         n_sigs_required = n_sigs_required or 1
@@ -167,7 +164,7 @@ class LedgerSpendingConditions:
                 ):
                     n_valid_sigs_per_output += 1
                     logger.trace(
-                        f"p2pk signature on input is valid: {input_sig} on {pubkey}."
+                        f"signature on input is valid: {input_sig} on {pubkey}."
                     )
 
         # check if we have enough valid signatures
