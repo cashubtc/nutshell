@@ -91,9 +91,6 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         return signatures
 
     def sign_outputs(self, outputs: List[BlindedMessage]) -> List[str]:
-        assert (
-            self.private_key
-        ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
         private_key = self.private_key
         assert private_key.pubkey
         return [
@@ -132,15 +129,16 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         # first we check whether all tokens have serialized secrets as their secret
         try:
             for p in proofs:
-                Secret.deserialize(p.secret)
+                secret = Secret.deserialize(p.secret)
         except Exception:
             # if not, we do not add witnesses (treat as regular token secret)
             return outputs
 
-        # if any of the proofs provided require SIG_ALL, we must provide it
+        # if any of the proofs provided is P2PK and requires SIG_ALL, we must signatures to all outputs
         if any(
             [
-                P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL
+                secret.kind == SecretKind.P2PK.value
+                and P2PKSecret.deserialize(p.secret).sigflag == SigFlags.SIG_ALL
                 for p in proofs
             ]
         ):
