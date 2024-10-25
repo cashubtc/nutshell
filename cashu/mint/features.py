@@ -8,6 +8,7 @@ from ..core.models import (
 from ..core.nuts import (
     DLEQ_NUT,
     FEE_RETURN_NUT,
+    HTLC_NUT,
     MELT_NUT,
     MINT_NUT,
     MPP_NUT,
@@ -58,6 +59,7 @@ class LedgerFeatures(SupportsBackends):
             SCRIPT_NUT: supported_dict,
             P2PK_NUT: supported_dict,
             DLEQ_NUT: supported_dict,
+            HTLC_NUT: supported_dict,
         }
 
         # signal which method-unit pairs support MPP
