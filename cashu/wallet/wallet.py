@@ -667,6 +667,9 @@ class Wallet(
         # make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
 
+        # sort proof
+        proofs.sort(key=lambda p: p.amount)
+
         # potentially add witnesses to unlock provided proofs (if they indicate one)
         proofs = await self.add_witnesses_to_proofs(proofs)
 
