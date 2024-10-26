@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 
+import hashlib
 from loguru import logger
 
 from ..core.base import Token, TokenV3, TokenV4
@@ -169,3 +170,11 @@ async def send(
 
     await wallet.set_reserved(send_proofs, reserved=True)
     return wallet.available_balance, token
+
+def check_payment_preimage(
+    payment_hash: str,
+    preimage: str,
+) -> bool:
+    return bytes.fromhex(payment_hash) == hashlib.sha256(
+        bytes.fromhex(preimage)
+    ).digest()
