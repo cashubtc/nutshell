@@ -11,8 +11,8 @@ from os import listdir
 from os.path import isdir, join
 from typing import Optional, Union
 
-import click
 import bolt11
+import click
 from click import Context
 from loguru import logger
 
@@ -41,12 +41,12 @@ from ..cli.cli_helpers import (
     verify_mint,
 )
 from ..helpers import (
+    check_payment_preimage,
     deserialize_token_from_string,
     init_wallet,
     list_mints,
     receive,
     send,
-    check_payment_preimage,
 )
 from ..nostr import receive_nostr, send_nostr
 from ..subscriptions import SubscriptionManager

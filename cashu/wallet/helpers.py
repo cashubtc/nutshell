@@ -1,7 +1,7 @@
+import hashlib
 import os
 from typing import Optional
 
-import hashlib
 from loguru import logger
 
 from ..core.base import Token, TokenV3, TokenV4
