@@ -109,14 +109,14 @@ class LNbitsWallet(LightningBackend):
             data: dict = r.json()
         except httpx.HTTPStatusError:
             return PaymentResponse(
-                result=PaymentResult.UNKNOWN,
+                result=PaymentResult.FAILED,
                 error_message=f"HTTP status: {r.reason_phrase}",
             )
         except Exception as exc:
-            return PaymentResponse(result=PaymentResult.UNKNOWN, error_message=str(exc))
+            return PaymentResponse(result=PaymentResult.FAILED, error_message=str(exc))
         if data.get("detail"):
             return PaymentResponse(
-                result=PaymentResult.UNKNOWN, error_message=data["detail"]
+                result=PaymentResult.FAILED, error_message=data["detail"]
             )
 
         checking_id = data.get("payment_hash")
