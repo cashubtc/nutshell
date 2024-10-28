@@ -293,9 +293,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
-    async def get_balance(self) -> int:
+    async def get_balance(self, keyset: MintKeyset) -> int:
         """Returns the balance of the mint."""
-        return await self.crud.get_balance(db=self.db)
+        return await self.crud.get_balance(keyset=keyset, db=self.db)
 
     # ------- ECASH -------
 
@@ -419,7 +419,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise NotAllowedError("Backend does not support descriptions.")
 
         if settings.mint_max_balance:
-            balance = await self.get_balance()
+            # get next active keyset for unit
+            active_keyset: MintKeyset = next(
+                filter(lambda k: k.active and k.unit == unit, self.keysets.values())
+            )
+            balance = await self.get_balance(active_keyset)
             if balance + quote_request.amount > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
 
