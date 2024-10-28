@@ -15,7 +15,7 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, Method, MintQuoteState, TokenV4, Unit
+from ...core.base import Invoice, Method, MintQuote, MintQuoteState, TokenV4, Unit
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
@@ -24,8 +24,6 @@ from ...core.settings import settings
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
-    get_lightning_invoice,
-    get_lightning_invoices,
     get_reserved_proofs,
     get_seed_and_mnemonic,
 )
@@ -302,7 +300,7 @@ async def invoice(
         )
 
     paid = False
-    invoice_nonlocal: Union[None, Invoice] = None
+    invoice_nonlocal: Union[None, MintQuote] = None
     subscription_nonlocal: Union[None, SubscriptionManager] = None
 
     def mint_invoice_callback(msg: JSONRPCNotficationParams):
@@ -318,20 +316,24 @@ async def invoice(
         if paid:
             return
         try:
-            quote = PostMintQuoteResponse.parse_obj(msg.payload)
+            ws_quote_resp = PostMintQuoteResponse.parse_obj(msg.payload)
         except Exception:
             return
-        logger.debug(f"Received callback for quote: {quote}")
+        logger.debug(
+            f"Received callback for quote: {ws_quote_resp.quote}: state {ws_quote_resp.state}"
+        )
         # we need to sleep to give the callback map some time to be populated
         time.sleep(0.1)
         if (
-            (quote.paid or quote.state == MintQuoteState.paid.value)
-            and quote.request == invoice.bolt11
+            (ws_quote_resp.state == MintQuoteState.paid.value)
+            and ws_quote_resp.request == mint_quote.request
             and msg.subId in subscription.callback_map.keys()
         ):
             try:
                 asyncio.run(
-                    wallet.mint(int(amount), split=optional_split, id=invoice.id)
+                    wallet.mint(
+                        int(amount), split=optional_split, quote_id=mint_quote.quote
+                    )
                 )
                 # set paid so we won't react to any more callbacks
                 paid = True
@@ -348,21 +350,21 @@ async def invoice(
             Method["bolt11"], wallet.unit
         )
         if mint_supports_websockets and not no_check:
-            invoice, subscription = await wallet.request_mint_with_callback(
+            mint_quote, subscription = await wallet.request_mint_with_callback(
                 amount, callback=mint_invoice_callback, memo=memo
             )
-            invoice_nonlocal, subscription_nonlocal = invoice, subscription
+            invoice_nonlocal, subscription_nonlocal = mint_quote, subscription
         else:
-            invoice = await wallet.request_mint(amount, memo=memo)
-        if invoice.bolt11:
+            mint_quote = await wallet.request_mint(amount, memo=memo)
+        if mint_quote.request:
             print("")
             print(f"Pay invoice to mint {wallet.unit.str(amount)}:")
             print("")
-            print(f"Invoice: {invoice.bolt11}")
+            print(f"Invoice: {mint_quote.request}")
             print("")
             print(
                 "You can use this command to check the invoice: cashu invoice"
-                f" {amount} --id {invoice.id}"
+                f" {amount} --id {mint_quote.quote}"
             )
             if no_check:
                 return
@@ -381,9 +383,11 @@ async def invoice(
         while time.time() < check_until and not paid:
             await asyncio.sleep(5)
             try:
-                mint_quote_resp = await wallet.get_mint_quote(invoice.id)
+                mint_quote_resp = await wallet.get_mint_quote(mint_quote.quote)
                 if mint_quote_resp.state == MintQuoteState.paid.value:
-                    await wallet.mint(amount, split=optional_split, id=invoice.id)
+                    await wallet.mint(
+                        amount, split=optional_split, quote_id=mint_quote.quote
+                    )
                     paid = True
                 else:
                     print(".", end="", flush=True)
@@ -403,7 +407,7 @@ async def invoice(
 
     # user paid invoice before and wants to check the quote id
     elif amount and id:
-        await wallet.mint(amount, split=optional_split, id=id)
+        await wallet.mint(amount, split=optional_split, quote_id=id)
 
     # close open subscriptions so we can exit
     try:
@@ -422,10 +426,10 @@ async def invoice(
 @coro
 async def swap(ctx: Context):
     print("Select the mint to swap from:")
-    outgoing_wallet = await get_mint_wallet(ctx, force_select=True)
+    outgoing_wallet: Wallet = await get_mint_wallet(ctx, force_select=True)
 
     print("Select the mint to swap to:")
-    incoming_wallet = await get_mint_wallet(ctx, force_select=True)
+    incoming_wallet: Wallet = await get_mint_wallet(ctx, force_select=True)
 
     await incoming_wallet.load_mint()
     await outgoing_wallet.load_mint()
@@ -437,22 +441,25 @@ async def swap(ctx: Context):
     assert amount > 0, "amount is not positive"
 
     # request invoice from incoming mint
-    invoice = await incoming_wallet.request_mint(amount)
+    mint_quote = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
-    quote = await outgoing_wallet.melt_quote(invoice.bolt11)
-    total_amount = quote.amount + quote.fee_reserve
+    melt_quote_resp = await outgoing_wallet.melt_quote(mint_quote.request)
+    total_amount = melt_quote_resp.amount + melt_quote_resp.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     send_proofs, fees = await outgoing_wallet.select_to_send(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
     await outgoing_wallet.melt(
-        send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
+        send_proofs,
+        mint_quote.request,
+        melt_quote_resp.fee_reserve,
+        melt_quote_resp.quote,
     )
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, id=invoice.id)
+    await incoming_wallet.mint(amount, quote_id=mint_quote.quote)
 
     await incoming_wallet.load_proofs(reload=True)
     await print_mint_balances(incoming_wallet, show_mints=True)
@@ -918,7 +925,7 @@ async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, mint: bool):
                 (int(float(invoice.time_paid))), timezone.utc
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(f"Paid at: {d}")
-        print(f"\nPayment request: {invoice.bolt11}")
+        print(f"\nPayment request: {mint_quote.request}")
 
     invoices_printed_count = 0
     for invoice in invoices:

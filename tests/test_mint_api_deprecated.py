@@ -66,9 +66,9 @@ async def test_api_keyset_keys(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_split(ledger: Ledger, wallet: Wallet):
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(20000, 20001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
@@ -87,9 +87,9 @@ async def test_split(ledger: Ledger, wallet: Wallet):
 
 @pytest.mark.asyncio
 async def test_split_deprecated_with_amount(ledger: Ledger, wallet: Wallet):
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(80000, 80001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
@@ -123,16 +123,15 @@ async def test_api_mint_validation(ledger):
 
 @pytest.mark.asyncio
 async def test_mint(ledger: Ledger, wallet: Wallet):
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    quote_id = invoice.id
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/mint",
         json={"outputs": outputs_payload},
-        params={"hash": quote_id},
+        params={"hash": mint_quote.quote},
         timeout=None,
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -149,15 +148,15 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 @pytest.mark.asyncio
 async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create invoice to melt to
-    invoice = await wallet.request_mint(64)
+    mint_quote = await wallet.request_mint(64)
 
-    invoice_payment_request = invoice.bolt11
+    invoice_payment_request = mint_quote.request
 
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 64
@@ -189,14 +188,14 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
     # Clients without NUT-08 will not send change outputs
     # internal invoice
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create invoice to melt to
-    invoice = await wallet.request_mint(64)
-    invoice_payment_request = invoice.bolt11
+    mint_quote = await wallet.request_mint(64)
+    invoice_payment_request = mint_quote.request
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 64
     assert quote.fee_reserve == 0
@@ -228,9 +227,9 @@ async def test_melt_internal_no_change_outputs(ledger: Ledger, wallet: Wallet):
 )
 async def test_melt_external(ledger: Ledger, wallet: Wallet):
     # internal invoice
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create invoice to melt to
@@ -270,11 +269,11 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
 @pytest.mark.asyncio
 async def test_checkfees(ledger: Ledger, wallet: Wallet):
     # internal invoice
-    invoice = await wallet.request_mint(64)
+    mint_quote = await wallet.request_mint(64)
     response = httpx.post(
         f"{BASE_URL}/checkfees",
         json={
-            "pr": invoice.bolt11,
+            "pr": mint_quote.request,
         },
         timeout=None,
     )
@@ -322,9 +321,9 @@ async def test_api_check_state(ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
     secret_counter = await bump_secret_derivation(
         db=wallet.db, keyset_id=wallet.keyset_id, by=0, skip=True

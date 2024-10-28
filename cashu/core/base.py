@@ -1,6 +1,7 @@
 import base64
 import json
 import math
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
@@ -260,20 +261,7 @@ class BlindedSignature(BaseModel):
         )
 
 
-# ------- LIGHTNING INVOICE -------
-
-
-class Invoice(BaseModel):
-    amount: int
-    bolt11: str
-    id: str
-    out: Union[None, bool] = None
-    payment_hash: Union[None, str] = None
-    preimage: Union[str, None] = None
-    issued: Union[None, bool] = False
-    paid: Union[None, bool] = False
-    time_created: Union[None, str, int, float] = ""
-    time_paid: Union[None, str, int, float] = ""
+# ------- Quotes -------
 
 
 class MeltQuoteState(Enum):
@@ -297,9 +285,10 @@ class MeltQuote(LedgerEvent):
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     fee_paid: int = 0
-    payment_preimage: str = ""
+    payment_preimage: Optional[str] = None
     expiry: Optional[int] = None
     change: Optional[List[BlindedSignature]] = None
+    mint: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -313,6 +302,8 @@ class MeltQuote(LedgerEvent):
             )
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
             expiry = int(row["expiry"].timestamp()) if row["expiry"] else None
+
+        payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
 
         # parse change from row as json
         change = None
@@ -333,7 +324,24 @@ class MeltQuote(LedgerEvent):
             fee_paid=row["fee_paid"],
             change=change,
             expiry=expiry,
-            payment_preimage=row["proof"],
+            payment_preimage=payment_preimage,
+        )
+
+    @classmethod
+    def from_resp_wallet(
+        cls, melt_quote_resp, mint: str, amount: int, unit: str, request: str
+    ):
+        return cls(
+            quote=melt_quote_resp.quote,
+            method="bolt11",
+            request=request,
+            checking_id="",
+            unit=unit,
+            amount=amount,
+            fee_reserve=melt_quote_resp.fee_reserve,
+            state=MeltQuoteState(melt_quote_resp.state),
+            mint=mint,
+            change=melt_quote_resp.change,
         )
 
     @property
@@ -397,6 +405,7 @@ class MintQuote(LedgerEvent):
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     expiry: Optional[int] = None
+    mint: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -420,6 +429,21 @@ class MintQuote(LedgerEvent):
             state=MintQuoteState[row["state"]],
             created_time=created_time,
             paid_time=paid_time,
+        )
+
+    @classmethod
+    def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str):
+        return cls(
+            quote=mint_quote_resp.quote,
+            method="bolt11",
+            request=mint_quote_resp.request,
+            checking_id="",
+            unit=unit,
+            amount=amount,
+            state=MintQuoteState(mint_quote_resp.state),
+            mint=mint,
+            expiry=mint_quote_resp.expiry,
+            created_time=int(time.time()),
         )
 
     @property

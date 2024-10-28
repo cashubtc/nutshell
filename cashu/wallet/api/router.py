@@ -19,7 +19,11 @@ from ...lightning.base import (
 )
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
-from ...wallet.crud import get_lightning_invoices, get_reserved_proofs
+from ...wallet.crud import (
+    get_bolt11_melt_quotes,
+    get_bolt11_mint_quotes,
+    get_reserved_proofs,
+)
 from ...wallet.helpers import (
     deserialize_token_from_string,
     init_wallet,
@@ -185,11 +189,11 @@ async def swap(
         raise Exception("mints for swap have to be different")
 
     # request invoice from incoming mint
-    invoice = await incoming_wallet.request_mint(amount)
+    mint_quote = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
     await outgoing_wallet.load_proofs(reload=True)
-    quote = await outgoing_wallet.melt_quote(invoice.bolt11)
+    quote = await outgoing_wallet.melt_quote(mint_quote.request)
     total_amount = quote.amount + quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
@@ -198,17 +202,17 @@ async def swap(
         outgoing_wallet.proofs, total_amount, set_reserved=True
     )
     await outgoing_wallet.melt(
-        send_proofs, invoice.bolt11, quote.fee_reserve, quote.quote
+        send_proofs, mint_quote.request, quote.fee_reserve, quote.quote
     )
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, id=invoice.id)
+    await incoming_wallet.mint(amount, quote_id=mint_quote.quote)
     await incoming_wallet.load_proofs(reload=True)
     mint_balances = await incoming_wallet.balance_per_minturl()
     return SwapResponse(
         outgoing_mint=outgoing_mint,
         incoming_mint=incoming_mint,
-        invoice=invoice,
+        mint_quote=mint_quote,
         balances=mint_balances,
     )
 
@@ -386,8 +390,9 @@ async def locks():
     "/invoices", name="List all pending invoices", response_model=InvoicesResponse
 )
 async def invoices():
-    invoices = await get_lightning_invoices(db=wallet.db)
-    return InvoicesResponse(invoices=invoices)
+    mint_quotes = await get_bolt11_mint_quotes(db=wallet.db)
+    melt_quotes = await get_bolt11_melt_quotes(db=wallet.db)
+    return InvoicesResponse(mint_quotes=mint_quotes, melt_quotes=melt_quotes)
 
 
 @router.get(

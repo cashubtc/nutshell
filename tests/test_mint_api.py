@@ -153,9 +153,9 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_split(ledger: Ledger, wallet: Wallet):
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(2)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
@@ -234,15 +234,14 @@ async def test_mint_quote(ledger: Ledger):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_mint(ledger: Ledger, wallet: Wallet):
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    quote_id = invoice.id
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/v1/mint/bolt11",
-        json={"quote": quote_id, "outputs": outputs_payload},
+        json={"quote": mint_quote.quote, "outputs": outputs_payload},
         timeout=None,
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -267,8 +266,8 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
 )
 async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     # internal invoice
-    invoice = await wallet.request_mint(64)
-    request = invoice.bolt11
+    mint_quote = await wallet.request_mint(64)
+    request = mint_quote.request
     response = httpx.post(
         f"{BASE_URL}/v1/melt/quote/bolt11",
         json={"unit": "sat", "request": request},
@@ -352,14 +351,14 @@ async def test_melt_quote_external(ledger: Ledger, wallet: Wallet):
 )
 async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     # internal invoice
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create invoice to melt to
-    invoice = await wallet.request_mint(64)
-    invoice_payment_request = invoice.bolt11
+    mint_quote = await wallet.request_mint(64)
+    invoice_payment_request = mint_quote.request
 
     quote = await wallet.melt_quote(invoice_payment_request)
     assert quote.amount == 64
@@ -411,9 +410,9 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
 )
 async def test_melt_external(ledger: Ledger, wallet: Wallet):
     # internal invoice
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     invoice_dict = get_real_invoice(62)
@@ -487,9 +486,9 @@ async def test_api_check_state(ledger: Ledger):
     reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_api_restore(ledger: Ledger, wallet: Wallet):
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
     secret_counter = await bump_secret_derivation(
         db=wallet.db, keyset_id=wallet.keyset_id, by=0, skip=True

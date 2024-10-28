@@ -49,7 +49,9 @@ class LightningWallet(Wallet):
         """
         invoice = await self.request_mint(amount, memo)
         return InvoiceResponse(
-            ok=True, payment_request=invoice.bolt11, checking_id=invoice.payment_hash
+            ok=True,
+            payment_request=mint_quote.request,
+            checking_id=invoice.payment_hash,
         )
 
     async def pay_invoice(self, pr: str) -> PaymentResponse:
@@ -104,7 +106,7 @@ class LightningWallet(Wallet):
             return PaymentStatus(result=PaymentResult.SETTLED)
         try:
             # to check the invoice state, we try minting tokens
-            await self.mint(invoice.amount, id=invoice.id)
+            await self.mint(invoice.amount, quote_id=mint_quote.quote)
             return PaymentStatus(result=PaymentResult.SETTLED)
         except Exception as e:
             print(e)
@@ -134,7 +136,7 @@ class LightningWallet(Wallet):
             return PaymentStatus(
                 result=PaymentResult.SETTLED, preimage=invoice.preimage
             )  # "paid (in db)"
-        proofs = await get_proofs(db=self.db, melt_id=invoice.id)
+        proofs = await get_proofs(db=self.db, melt_quote_id=mint_quote.quote)
         if not proofs:
             return PaymentStatus(
                 result=PaymentResult.FAILED
