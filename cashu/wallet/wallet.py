@@ -722,11 +722,9 @@ class Wallet(
         for i, j in enumerate(order):
             unsorted_promises[j] = promises[i]
 
-        logger.debug(f"unsorted promises: {[p.amount for p in unsorted_promises]}")
-
         # Construct proofs from returned promises (i.e., unblind the signatures)
         new_proofs = await self._construct_proofs(
-            unsorted_promises, secrets, rs, derivation_paths
+            unsorted_promises, secrets, rs, derivation_paths    # type: ignore[arg-type]
         )
 
         await self.invalidate(proofs)
