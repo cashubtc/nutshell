@@ -411,6 +411,7 @@ class Wallet(
             id=mint_qoute.quote,
             out=False,
             time_created=int(time.time()),
+            mint=self.url,
         )
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice, subscriptions
@@ -435,6 +436,7 @@ class Wallet(
             id=mint_quote_response.quote,
             out=False,
             time_created=int(time.time()),
+            mint=self.url,
         )
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
@@ -502,6 +504,7 @@ class Wallet(
             id=mint_quote_response.quote,
             out=False,
             time_created=int(time.time()),
+            mint=self.url,
         )
         await store_lightning_invoice(db=self.db, invoice=invoice)
         return invoice
@@ -775,6 +778,7 @@ class Wallet(
             time_paid=int(time.time()),
             id=quote_id,  # store the same ID in the invoice
             out=True,  # outgoing invoice
+            mint=self.url,
         )
         # store invoice in db as not paid yet
         await store_lightning_invoice(db=self.db, invoice=invoice_obj)

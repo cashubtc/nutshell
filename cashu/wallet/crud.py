@@ -246,8 +246,8 @@ async def store_lightning_invoice(
     await (conn or db).execute(
         """
         INSERT INTO invoices
-          (amount, bolt11, id, payment_hash, preimage, paid, time_created, time_paid, out)
-        VALUES (:amount, :bolt11, :id, :payment_hash, :preimage, :paid, :time_created, :time_paid, :out)
+          (amount, bolt11, id, payment_hash, preimage, paid, time_created, time_paid, out, mint)
+        VALUES (:amount, :bolt11, :id, :payment_hash, :preimage, :paid, :time_created, :time_paid, :out, :mint)
         """,
         {
             "amount": invoice.amount,
@@ -259,6 +259,7 @@ async def store_lightning_invoice(
             "time_created": invoice.time_created,
             "time_paid": invoice.time_paid,
             "out": invoice.out,
+            "mint": invoice.mint,
         },
     )
 
@@ -301,6 +302,7 @@ async def get_lightning_invoices(
     db: Database,
     paid: Optional[bool] = None,
     pending: Optional[bool] = None,
+    mint: Optional[str] = None,
     conn: Optional[Connection] = None,
 ) -> List[Invoice]:
     clauses = []
@@ -315,6 +317,10 @@ async def get_lightning_invoices(
         values["paid"] = False
         clauses.append("out = :out")
         values["out"] = False
+
+    if mint:
+        clauses.append("mint = :mint")
+        values["mint"] = mint
 
     where = ""
     if clauses:

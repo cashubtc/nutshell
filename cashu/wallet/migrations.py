@@ -245,6 +245,12 @@ async def m012_add_fee_to_keysets(db: Database):
         await conn.execute("UPDATE keysets SET input_fee_ppk = 0")
 
 
+async def m013_add_mint_column_invoices(db: Database):
+    async with db.connect() as conn:
+        # add column for storing the mint of an invoice
+        await conn.execute("ALTER TABLE invoices ADD COLUMN mint TEXT")
+
+
 # # async def m020_add_state_to_mint_and_melt_quotes(db: Database):
 # #     async with db.connect() as conn:
 # #         await conn.execute(

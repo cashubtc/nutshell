@@ -274,6 +274,7 @@ class Invoice(BaseModel):
     paid: Union[None, bool] = False
     time_created: Union[None, str, int, float] = ""
     time_paid: Union[None, str, int, float] = ""
+    mint: Union[None, str] = None
 
 
 class MeltQuoteState(Enum):
