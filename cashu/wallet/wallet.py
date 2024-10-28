@@ -667,9 +667,6 @@ class Wallet(
         # make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
 
-        # sort proof
-        proofs.sort(key=lambda p: p.amount)
-
         # potentially add witnesses to unlock provided proofs (if they indicate one)
         proofs = await self.add_witnesses_to_proofs(proofs)
 
@@ -705,12 +702,31 @@ class Wallet(
         # potentially add witnesses to outputs based on what requirement the proofs indicate
         outputs = await self.add_witnesses_to_outputs(proofs, outputs)
 
+        logger.debug(f"unsorted outputs: {[o.amount for o in outputs]}")
+        
+        # sort outputs, remember original order
+        order_and_sorted_outputs = sorted(enumerate(outputs), key=lambda p: p[1].amount)
+        order = [x[0] for x in order_and_sorted_outputs]
+        outputs = [x[1] for x in order_and_sorted_outputs]
+
+        logger.debug(f"{order = }")
+        logger.debug(f"sorted outputs: {[o.amount for o in outputs]}")
+
         # Call swap API
         promises = await super().split(proofs, outputs)
 
+        logger.debug(f"sorted promises: {[p.amount for p in promises]}")
+
+        # unsort promises
+        unsorted_promises = [None] * len(promises)
+        for i, j in enumerate(order):
+            unsorted_promises[j] = promises[i]
+
+        logger.debug(f"unsorted promises: {[p.amount for p in unsorted_promises]}")
+
         # Construct proofs from returned promises (i.e., unblind the signatures)
         new_proofs = await self._construct_proofs(
-            promises, secrets, rs, derivation_paths
+            unsorted_promises, secrets, rs, derivation_paths
         )
 
         await self.invalidate(proofs)
