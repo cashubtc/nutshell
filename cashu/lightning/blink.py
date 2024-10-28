@@ -1,4 +1,3 @@
-# type: ignore
 import json
 import math
 from typing import AsyncGenerator, Dict, Optional, Union
@@ -18,6 +17,7 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
 )
@@ -30,6 +30,22 @@ DIRECTION_RECEIVE = "RECEIVE"
 PROBE_FEE_TIMEOUT_SEC = 1
 MINIMUM_FEE_MSAT = 2000
 
+INVOICE_RESULT_MAP = {
+    "PENDING": PaymentResult.PENDING,
+    "PAID": PaymentResult.SETTLED,
+    "EXPIRED": PaymentResult.FAILED,
+}
+PAYMENT_EXECUTION_RESULT_MAP = {
+    "SUCCESS": PaymentResult.SETTLED,
+    "ALREADY_PAID": PaymentResult.FAILED,
+    "FAILURE": PaymentResult.FAILED,
+}
+PAYMENT_RESULT_MAP = {
+    "SUCCESS": PaymentResult.SETTLED,
+    "PENDING": PaymentResult.PENDING,
+    "FAILURE": PaymentResult.FAILED,
+}
+
 
 class BlinkWallet(LightningBackend):
     """https://dev.blink.sv/
@@ -38,15 +54,9 @@ class BlinkWallet(LightningBackend):
 
     wallet_ids: Dict[Unit, str] = {}
     endpoint = "https://api.blink.sv/graphql"
-    invoice_statuses = {"PENDING": None, "PAID": True, "EXPIRED": False}
-    payment_execution_statuses = {
-        "SUCCESS": True,
-        "ALREADY_PAID": None,
-        "FAILURE": False,
-    }
-    payment_statuses = {"SUCCESS": True, "PENDING": None, "FAILURE": False}
 
-    supported_units = set([Unit.sat, Unit.msat])
+    supported_units = {Unit.sat, Unit.msat}
+    supports_description: bool = True
     unit = Unit.sat
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
@@ -65,16 +75,17 @@ class BlinkWallet(LightningBackend):
 
     async def status(self) -> StatusResponse:
         try:
+            data = {
+                "query": "query me { me { defaultAccount { wallets { id walletCurrency balance }}}}",
+                "variables": {},
+            }
             r = await self.client.post(
                 url=self.endpoint,
-                data=(
-                    '{"query":"query me { me { defaultAccount { wallets { id'
-                    ' walletCurrency balance }}}}", "variables":{}}'
-                ),
+                data=json.dumps(data),  # type: ignore
             )
             r.raise_for_status()
         except Exception as exc:
-            logger.error(f"Blink API error: {str(exc)}")
+            logger.error(f"Blink API error: {exc}")
             return StatusResponse(
                 error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
                 balance=0,
@@ -95,10 +106,10 @@ class BlinkWallet(LightningBackend):
             resp.get("data", {}).get("me", {}).get("defaultAccount", {}).get("wallets")
         ):
             if wallet_dict.get("walletCurrency") == "USD":
-                self.wallet_ids[Unit.usd] = wallet_dict["id"]
+                self.wallet_ids[Unit.usd] = wallet_dict["id"]  # type: ignore
             elif wallet_dict.get("walletCurrency") == "BTC":
-                self.wallet_ids[Unit.sat] = wallet_dict["id"]
-                balance = wallet_dict["balance"]
+                self.wallet_ids[Unit.sat] = wallet_dict["id"]  # type: ignore
+                balance = wallet_dict["balance"]  # type: ignore
 
         return StatusResponse(error_message=None, balance=balance)
 
@@ -143,11 +154,11 @@ class BlinkWallet(LightningBackend):
         try:
             r = await self.client.post(
                 url=self.endpoint,
-                data=json.dumps(data),
+                data=json.dumps(data),  # type: ignore
             )
             r.raise_for_status()
         except Exception as e:
-            logger.error(f"Blink API error: {str(e)}")
+            logger.error(f"Blink API error: {e}")
             return InvoiceResponse(ok=False, error_message=str(e))
 
         resp = r.json()
@@ -196,13 +207,16 @@ class BlinkWallet(LightningBackend):
         try:
             r = await self.client.post(
                 url=self.endpoint,
-                data=json.dumps(data),
+                data=json.dumps(data),  # type: ignore
                 timeout=None,
             )
             r.raise_for_status()
         except Exception as e:
-            logger.error(f"Blink API error: {str(e)}")
-            return PaymentResponse(ok=False, error_message=str(e))
+            logger.error(f"Blink API error: {e}")
+            return PaymentResponse(
+                result=PaymentResult.UNKNOWN,
+                error_message=str(e),
+            )
 
         resp: dict = r.json()
 
@@ -210,15 +224,22 @@ class BlinkWallet(LightningBackend):
         fee: Union[None, int] = None
         if resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("errors"):
             error_message = (
-                resp["data"]["lnInvoicePaymentSend"]["errors"][0].get("message")
+                resp["data"]["lnInvoicePaymentSend"]["errors"][0].get("message")  # type: ignore
                 or "Unknown error"
             )
 
-        paid = self.payment_execution_statuses[
-            resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("status")
-        ]
-        if paid is None:
-            error_message = "Invoice already paid."
+        status_str = resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("status")
+        result = PAYMENT_EXECUTION_RESULT_MAP[status_str]
+
+        if status_str == "ALREADY_PAID":
+            error_message = "Invoice already paid"
+
+        if result == PaymentResult.FAILED:
+            return PaymentResponse(
+                result=result,
+                error_message=error_message,
+                checking_id=quote.request,
+            )
 
         if resp.get("data", {}).get("lnInvoicePaymentSend", {}).get("transaction", {}):
             fee = (
@@ -229,15 +250,14 @@ class BlinkWallet(LightningBackend):
             )
 
         checking_id = quote.request
-
         # we check the payment status to get the preimage
         preimage: Union[None, str] = None
         payment_status = await self.get_payment_status(checking_id)
-        if payment_status.paid:
+        if payment_status.settled:
             preimage = payment_status.preimage
 
         return PaymentResponse(
-            ok=paid,
+            result=result,
             checking_id=checking_id,
             fee=Amount(Unit.sat, fee) if fee else None,
             preimage=preimage,
@@ -260,22 +280,27 @@ class BlinkWallet(LightningBackend):
             "variables": variables,
         }
         try:
-            r = await self.client.post(url=self.endpoint, data=json.dumps(data))
+            r = await self.client.post(url=self.endpoint, data=json.dumps(data))  # type: ignore
             r.raise_for_status()
         except Exception as e:
-            logger.error(f"Blink API error: {str(e)}")
-            return PaymentStatus(paid=None)
+            logger.error(f"Blink API error: {e}")
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
         resp: dict = r.json()
-        if resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("errors"):
+        error_message = (
+            resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("errors")
+        )
+        if error_message:
             logger.error(
                 "Blink Error",
-                resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("errors"),
+                error_message,
             )
-            return PaymentStatus(paid=None)
-        paid = self.invoice_statuses[
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message=error_message
+            )
+        result = INVOICE_RESULT_MAP[
             resp.get("data", {}).get("lnInvoicePaymentStatus", {}).get("status")
         ]
-        return PaymentStatus(paid=paid)
+        return PaymentStatus(result=result)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         # Checking ID is the payment request and blink wants the payment hash
@@ -310,16 +335,11 @@ class BlinkWallet(LightningBackend):
             """,
             "variables": variables,
         }
-
-        try:
-            r = await self.client.post(
-                url=self.endpoint,
-                data=json.dumps(data),
-            )
-            r.raise_for_status()
-        except Exception as e:
-            logger.error(f"Blink API error: {str(e)}")
-            return PaymentResponse(ok=False, error_message=str(e))
+        r = await self.client.post(
+            url=self.endpoint,
+            data=json.dumps(data),  # type: ignore
+        )
+        r.raise_for_status()
 
         resp: dict = r.json()
 
@@ -331,7 +351,9 @@ class BlinkWallet(LightningBackend):
             .get("walletById", {})
             .get("transactionsByPaymentHash")
         ):
-            return PaymentStatus(paid=None)
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message="No payment found"
+            )
 
         all_payments_with_this_hash = (
             resp.get("data", {})
@@ -344,12 +366,14 @@ class BlinkWallet(LightningBackend):
         # Blink API edge case: for a previously failed payment attempt, it returns the two payments with the same hash
         # if there are two payments with the same hash with "direction" == "SEND" and "RECEIVE"
         # it means that the payment previously failed and we can ignore the attempt and return
-        # PaymentStatus(paid=None)
+        # PaymentStatus(status=FAILED)
         if len(all_payments_with_this_hash) == 2 and all(
-            p["direction"] in [DIRECTION_SEND, DIRECTION_RECEIVE]
+            p["direction"] in [DIRECTION_SEND, DIRECTION_RECEIVE]  # type: ignore
             for p in all_payments_with_this_hash
         ):
-            return PaymentStatus(paid=None)
+            return PaymentStatus(
+                result=PaymentResult.FAILED, error_message="Payment failed"
+            )
 
         # if there is only one payment with the same hash, it means that the payment might have succeeded
         # we only care about the payment with "direction" == "SEND"
@@ -362,15 +386,17 @@ class BlinkWallet(LightningBackend):
             None,
         )
         if not payment:
-            return PaymentStatus(paid=None)
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message="No payment found"
+            )
 
         # we read the status of the payment
-        paid = self.payment_statuses[payment["status"]]
-        fee = payment["settlementFee"]
-        preimage = payment["settlementVia"].get("preImage")
+        result = PAYMENT_RESULT_MAP[payment["status"]]  # type: ignore
+        fee = payment["settlementFee"]  # type: ignore
+        preimage = payment["settlementVia"].get("preImage")  # type: ignore
 
         return PaymentStatus(
-            paid=paid,
+            result=result,
             fee=Amount(Unit.sat, fee),
             preimage=preimage,
         )
@@ -403,7 +429,7 @@ class BlinkWallet(LightningBackend):
         try:
             r = await self.client.post(
                 url=self.endpoint,
-                data=json.dumps(data),
+                data=json.dumps(data),  # type: ignore
                 timeout=PROBE_FEE_TIMEOUT_SEC,
             )
             r.raise_for_status()
@@ -412,7 +438,7 @@ class BlinkWallet(LightningBackend):
                 # if there was an error, we simply ignore the response and decide the fees ourselves
                 fees_response_msat = 0
                 logger.debug(
-                    f"Blink probe error: {resp['data']['lnInvoiceFeeProbe']['errors'][0].get('message')}"
+                    f"Blink probe error: {resp['data']['lnInvoiceFeeProbe']['errors'][0].get('message')}"  # type: ignore
                 )
 
             else:
@@ -423,7 +449,7 @@ class BlinkWallet(LightningBackend):
         except httpx.ReadTimeout:
             pass
         except Exception as e:
-            logger.error(f"Blink API error: {str(e)}")
+            logger.error(f"Blink API error: {e}")
             raise e
 
         invoice_obj = decode(bolt11)
@@ -453,5 +479,5 @@ class BlinkWallet(LightningBackend):
             amount=amount.to(self.unit, round="up"),
         )
 
-    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:  # type: ignore
         raise NotImplementedError("paid_invoices_stream not implemented")

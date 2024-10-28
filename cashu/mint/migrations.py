@@ -1,4 +1,5 @@
 import copy
+from typing import Dict, List
 
 from ..core.base import MintKeyset, Proof
 from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
@@ -788,13 +789,13 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
     # and the `paid` and `issued` column respectively
     # mint quotes:
     async with db.connect() as conn:
-        rows = await conn.fetchall(
+        rows: List[Dict] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('mint_quotes')}"
         )
         for row in rows:
-            if row["issued"]:
+            if row.get("issued"):
                 state = "issued"
-            elif row["paid"]:
+            elif row.get("paid"):
                 state = "paid"
             else:
                 state = "unpaid"
@@ -804,10 +805,10 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
 
     # melt quotes:
     async with db.connect() as conn:
-        rows = await conn.fetchall(
+        rows2: List[Dict] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('melt_quotes')}"
         )
-        for row in rows:
+        for row in rows2:
             if row["paid"]:
                 state = "paid"
             else:

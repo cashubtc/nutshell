@@ -6,6 +6,7 @@ import shutil
 import time
 from pathlib import Path
 
+import httpx
 import pytest
 import pytest_asyncio
 import uvicorn
@@ -27,7 +28,6 @@ settings.log_level = "TRACE"
 settings.cashu_dir = "./test_data/"
 settings.mint_host = "localhost"
 settings.mint_port = SERVER_PORT
-settings.mint_host = "0.0.0.0"
 settings.mint_listen_port = SERVER_PORT
 settings.mint_url = SERVER_ENDPOINT
 settings.tor = False
@@ -48,7 +48,7 @@ settings.mint_seed_decryption_key = ""
 settings.mint_max_balance = 0
 settings.mint_transaction_rate_limit_per_minute = 60
 settings.mint_lnd_enable_mpp = True
-settings.mint_clnrest_enable_mpp = False
+settings.mint_clnrest_enable_mpp = True
 settings.mint_input_fee_ppk = 0
 settings.db_connection_pool = True
 
@@ -139,6 +139,16 @@ def mint():
 
     server = UvicornServer(config=config)
     server.start()
-    time.sleep(1)
+
+    # Wait until the server has bound to the localhost socket. Max out after 10s.
+    tries = 0
+    while tries < 100:
+        try:
+            httpx.get(settings.mint_url)
+            break
+        except httpx.ConnectError:
+            tries += 1
+            time.sleep(0.1)
+
     yield server
     server.stop()

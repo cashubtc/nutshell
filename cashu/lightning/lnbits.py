@@ -17,6 +17,7 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
 )
@@ -25,9 +26,10 @@ from .base import (
 class LNbitsWallet(LightningBackend):
     """https://github.com/lnbits/lnbits"""
 
-    supported_units = set([Unit.sat])
+    supported_units = {Unit.sat}
     unit = Unit.sat
     supports_incoming_payment_stream: bool = True
+    supports_description: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
@@ -111,20 +113,18 @@ class LNbitsWallet(LightningBackend):
             return PaymentResponse(error_message=str(exc))
         if data.get("detail"):
             return PaymentResponse(error_message=data["detail"])
-
-        checking_id = data["payment_hash"]
+          
+        checking_id = data.get("payment_hash")
+        if not checking_id:
+            return PaymentResponse(
+                result=PaymentResult.UNKNOWN, error_message="No payment_hash received"
+            )
 
         # we do this to get the fee and preimage
         payment: PaymentStatus = await self.get_payment_status(checking_id)
 
-        if not payment.paid:
-            return PaymentResponse(
-                ok=False,
-                error_message="Payment failed.",
-            )
-
         return PaymentResponse(
-            ok=payment.paid,
+            result=payment.result,
             checking_id=checking_id,
             fee=payment.fee,
             preimage=payment.preimage,
@@ -137,11 +137,28 @@ class LNbitsWallet(LightningBackend):
             )
             r.raise_for_status()
             data: dict = r.json()
-        except Exception:
-            return PaymentStatus(paid=None)
+        except Exception as e:
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
+        data: dict = r.json()
         if data.get("detail"):
-            return PaymentStatus(paid=None)
-        return PaymentStatus(paid=data["paid"])
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message=data["detail"]
+            )
+
+        if data["paid"]:
+            result = PaymentResult.SETTLED
+        elif not data["paid"] and data["details"]["pending"]:
+            result = PaymentResult.PENDING
+        elif not data["paid"] and not data["details"]["pending"]:
+            result = PaymentResult.FAILED
+        else:
+            result = PaymentResult.UNKNOWN
+
+        return PaymentStatus(
+            result=result,
+            fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
+            preimage=data["preimage"],
+        )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         try:
@@ -150,25 +167,33 @@ class LNbitsWallet(LightningBackend):
             )
             r.raise_for_status()
             data = r.json()
-        except Exception:
-            return PaymentStatus(paid=None)
-        if "paid" not in data and "details" not in data:
-            return PaymentStatus(paid=None)
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 404:
+                raise e
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message=e.response.text
+            )
+        except Exception as e:
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
 
-        paid_value = None
+        if "paid" not in data and "details" not in data:
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message="invalid response"
+            )
+
         if data["paid"]:
-            paid_value = True
+            result = PaymentResult.SETTLED
         elif not data["paid"] and data["details"]["pending"]:
-            paid_value = None
+            result = PaymentResult.PENDING
         elif not data["paid"] and not data["details"]["pending"]:
-            paid_value = False
+            result = PaymentResult.FAILED
         else:
-            raise ValueError(f"unexpected value for paid: {data['paid']}")
+            result = PaymentResult.UNKNOWN
 
         return PaymentStatus(
-            paid=paid_value,
+            result=result,
             fee=Amount(unit=Unit.msat, amount=abs(data["details"]["fee"])),
-            preimage=data["preimage"],
+            preimage=data.get("preimage"),
         )
 
     async def get_payment_quote(

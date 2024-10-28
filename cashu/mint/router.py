@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from fastapi import APIRouter, Request, WebSocket
 from loguru import logger
@@ -55,7 +56,9 @@ async def info() -> GetInfoResponse:
         description_long=settings.mint_info_description_long,
         contact=contact_info,
         nuts=mint_features,
+        icon_url=settings.mint_info_icon_url,
         motd=settings.mint_info_motd,
+        time=int(time.time()),
     )
 
 
@@ -165,7 +168,7 @@ async def mint_quote(
     resp = PostMintQuoteResponse(
         request=quote.request,
         quote=quote.quote,
-        paid=quote.paid,
+        paid=quote.paid,  # deprecated
         state=quote.state.value,
         expiry=quote.expiry,
     )
@@ -189,7 +192,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
     resp = PostMintQuoteResponse(
         quote=mint_quote.quote,
         request=mint_quote.request,
-        paid=mint_quote.paid,
+        paid=mint_quote.paid,  # deprecated
         state=mint_quote.state.value,
         expiry=mint_quote.expiry,
     )

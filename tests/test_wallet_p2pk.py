@@ -7,7 +7,7 @@ from typing import List
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof, ProofSpentState
+from cashu.core.base import Proof
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import SigFlags
@@ -80,7 +80,7 @@ async def test_p2pk(wallet1: Wallet, wallet2: Wallet):
     await wallet2.redeem(send_proofs)
 
     proof_states = await wallet2.check_proof_state(send_proofs)
-    assert all([p.state == ProofSpentState.spent for p in proof_states.states])
+    assert all([p.spent for p in proof_states.states])
 
     if not is_deprecated_api_only:
         for state in proof_states.states:
@@ -267,7 +267,7 @@ async def test_p2pk_multisig_2_of_2(wallet1: Wallet, wallet2: Wallet):
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # add signatures of wallet1
-    send_proofs = await wallet1.add_p2pk_witnesses_to_proofs(send_proofs)
+    send_proofs = wallet1.add_signature_witnesses_to_proofs(send_proofs)
     # here we add the signatures of wallet2
     await wallet2.redeem(send_proofs)
 
@@ -289,10 +289,10 @@ async def test_p2pk_multisig_duplicate_signature(wallet1: Wallet, wallet2: Walle
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # add signatures of wallet2 – this is a duplicate signature
-    send_proofs = await wallet2.add_p2pk_witnesses_to_proofs(send_proofs)
+    send_proofs = wallet2.add_signature_witnesses_to_proofs(send_proofs)
     # here we add the signatures of wallet2
     await assert_err(
-        wallet2.redeem(send_proofs), "Mint Error: p2pk signatures must be unique."
+        wallet2.redeem(send_proofs), "Mint Error: signatures must be unique."
     )
 
 
@@ -334,7 +334,7 @@ async def test_p2pk_multisig_quorum_not_met_2_of_3(wallet1: Wallet, wallet2: Wal
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # add signatures of wallet1
-    send_proofs = await wallet1.add_p2pk_witnesses_to_proofs(send_proofs)
+    send_proofs = wallet1.add_signature_witnesses_to_proofs(send_proofs)
     # here we add the signatures of wallet2
     await assert_err(
         wallet2.redeem(send_proofs),
@@ -381,7 +381,7 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # add signatures of wallet1
-    send_proofs = await wallet1.add_p2pk_witnesses_to_proofs(send_proofs)
+    send_proofs = wallet1.add_signature_witnesses_to_proofs(send_proofs)
     await assert_err(
         wallet2.redeem(send_proofs), "Mint Error: signature threshold not met. 1 < 2."
     )

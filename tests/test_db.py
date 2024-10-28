@@ -2,7 +2,7 @@ import asyncio
 import datetime
 import os
 import time
-from typing import List
+from typing import List, Tuple
 
 import pytest
 import pytest_asyncio
@@ -63,7 +63,8 @@ async def test_db_tables(ledger: Ledger):
                 "SELECT table_name FROM information_schema.tables WHERE table_schema ="
                 " 'public';"
             )
-        tables = [t[0] for t in tables_res.all()]
+        tables_all: List[Tuple[str]] = tables_res.all()
+        tables = [t[0] for t in tables_all]
         tables_expected = [
             "dbversions",
             "keysets",
@@ -132,7 +133,7 @@ async def test_db_get_connection(ledger: Ledger):
 #                         )
 #                 except Exception as exc:
 #                     # this is expected to raise
-#                     raise Exception(f"conn2: {str(exc)}")
+#                     raise Exception(f"conn2: {exc}")
 
 #         except Exception as exc:
 #             if str(exc).startswith("conn2"):
@@ -173,12 +174,12 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
                         )
                 except Exception as exc:
                     # this is expected to raise
-                    raise Exception(f"conn2: {str(exc)}")
+                    raise Exception(f"conn2: {exc}")
         except Exception as exc:
             if "conn2" in str(exc):
                 raise exc
             else:
-                raise Exception(f"not expected to happen: {str(exc)}")
+                raise Exception(f"not expected to happen: {exc}")
 
     await assert_err(get_connection(), "failed to acquire database lock")
 
@@ -279,13 +280,13 @@ async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledg
 
                 except Exception as exc:
                     # this is expected to raise
-                    raise Exception(f"conn2: {str(exc)}")
+                    raise Exception(f"conn2: {exc}")
 
         except Exception as exc:
             if "conn2" in str(exc):
                 raise exc
             else:
-                raise Exception(f"not expected to happen: {str(exc)}")
+                raise Exception(f"not expected to happen: {exc}")
 
     await get_connection2()
 

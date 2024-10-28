@@ -1,16 +1,19 @@
 import asyncio
+import threading
 from typing import List
 
 import pytest
 import pytest_asyncio
 
 from cashu.core.base import Method, Proof
+from cashu.lightning.clnrest import CLNRestWallet
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
     is_fake,
+    partial_pay_real_invoice,
     pay_if_regtest,
 )
 
@@ -42,32 +45,38 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
     proofs1 = await wallet.mint(128, id=topup_invoice.id)
     assert wallet.balance == 128
 
-    topup_invoice = await wallet.request_mint(128)
-    await pay_if_regtest(topup_invoice.bolt11)
-    proofs2 = await wallet.mint(128, id=topup_invoice.id)
-    assert wallet.balance == 256
-
     # this is the invoice we want to pay in two parts
     invoice_dict = get_real_invoice(64)
     invoice_payment_request = invoice_dict["payment_request"]
 
-    async def pay_mpp(amount: int, proofs: List[Proof], delay: float = 0.0):
-        await asyncio.sleep(delay)
+    async def _mint_pay_mpp(invoice: str, amount: int, proofs: List[Proof]):
         # wallet pays 32 sat of the invoice
-        quote = await wallet.melt_quote(invoice_payment_request, amount=amount)
+        quote = await wallet.melt_quote(invoice, amount=amount)
         assert quote.amount == amount
         await wallet.melt(
             proofs,
-            invoice_payment_request,
+            invoice,
             fee_reserve_sat=quote.fee_reserve,
             quote_id=quote.quote,
         )
 
-    # call pay_mpp twice in parallel to pay the full invoice
-    # we delay the second payment so that the wallet doesn't derive the same blindedmessages twice due to a race condition
-    await asyncio.gather(pay_mpp(32, proofs1), pay_mpp(32, proofs2, delay=0.5))
+    def mint_pay_mpp(invoice: str, amount: int, proofs: List[Proof]):
+        asyncio.run(_mint_pay_mpp(invoice, amount, proofs))
 
-    assert wallet.balance <= 256 - 64
+    # call pay_mpp twice in parallel to pay the full invoice
+    t1 = threading.Thread(
+        target=mint_pay_mpp, args=(invoice_payment_request, 32, proofs1)
+    )
+    t2 = threading.Thread(
+        target=partial_pay_real_invoice, args=(invoice_payment_request, 32, 1)
+    )
+
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    assert wallet.balance == 64
 
 
 @pytest.mark.asyncio
@@ -76,6 +85,11 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     # make sure that mpp is supported by the bolt11-sat backend
     if not ledger.backends[Method["bolt11"]][wallet.unit].supports_mpp:
         pytest.skip("backend does not support mpp")
+
+    # This test cannot be done with CLN because we only have one mint
+    # and CLN hates multiple partial payment requests
+    if isinstance(ledger.backends[Method["bolt11"]][wallet.unit], CLNRestWallet):
+        pytest.skip("CLN cannot perform this test")
 
     # make sure wallet knows the backend supports mpp
     assert wallet.mint_info.supports_mpp("bolt11", wallet.unit)

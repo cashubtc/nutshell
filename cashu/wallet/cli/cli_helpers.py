@@ -212,8 +212,8 @@ async def receive_all_pending(ctx: Context, wallet: Wallet):
             if mint_url and token_obj:
                 unit = Unit[token_obj.unit]
                 print(
-                    f"Could not receive {unit.str(token_obj.amount)} from mint {mint_url}: {str(e)}"
+                    f"Could not receive {unit.str(token_obj.amount)} from mint {mint_url}: {e}"
                 )
             else:
-                print(f"Could not receive token: {str(e)}")
+                print(f"Could not receive token: {e}")
             continue

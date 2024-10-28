@@ -10,7 +10,7 @@ class PublicKeyExt(PublicKey):
             new_pub.combine([self.public_key, pubkey2.public_key])
             return new_pub
         else:
-            raise TypeError("Cant add pubkey and %s" % pubkey2.__class__)
+            raise TypeError(f"Can't add pubkey and {pubkey2.__class__}")
 
     def __neg__(self):
         serialized = self.serialize()
@@ -23,7 +23,7 @@ class PublicKeyExt(PublicKey):
         if isinstance(pubkey2, PublicKey):
             return self + (-pubkey2)  # type: ignore
         else:
-            raise TypeError("Can't add pubkey and %s" % pubkey2.__class__)
+            raise TypeError(f"Can't add pubkey and {pubkey2.__class__}")
 
     def mult(self, privkey):
         if isinstance(privkey, PrivateKey):
@@ -37,7 +37,7 @@ class PublicKeyExt(PublicKey):
             seq2 = pubkey2.to_data()  # type: ignore
             return seq1 == seq2
         else:
-            raise TypeError("Can't compare pubkey and %s" % pubkey2.__class__)
+            raise TypeError(f"Can't compare pubkey and {pubkey2.__class__}")
 
     def to_data(self):
         assert self.public_key
