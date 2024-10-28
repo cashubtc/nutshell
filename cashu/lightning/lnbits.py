@@ -44,22 +44,13 @@ class LNbitsWallet(LightningBackend):
         try:
             r = await self.client.get(url=f"{self.endpoint}/api/v1/wallet", timeout=15)
             r.raise_for_status()
+            data: dict = r.json()
         except Exception as exc:
             return StatusResponse(
                 error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
                 balance=0,
             )
-
-        try:
-            data: dict = r.json()
-        except Exception:
-            return StatusResponse(
-                error_message=(
-                    f"Received invalid response from {self.endpoint}: {r.text}"
-                ),
-                balance=0,
-            )
-        if "detail" in data:
+        if data.get("detail"):
             return StatusResponse(
                 error_message=f"LNbits error: {data['detail']}", balance=0
             )
@@ -87,10 +78,16 @@ class LNbitsWallet(LightningBackend):
                 url=f"{self.endpoint}/api/v1/payments", json=data
             )
             r.raise_for_status()
-        except Exception as e:
-            return InvoiceResponse(ok=False, error_message=str(e))
+            data = r.json()
+        except httpx.HTTPStatusError:
+            return InvoiceResponse(
+                ok=False, error_message=f"HTTP status: {r.reason_phrase}"
+            )
+        except Exception as exc:
+            return InvoiceResponse(ok=False, error_message=str(exc))
+        if data.get("detail"):
+            return InvoiceResponse(ok=False, error_message=data["detail"])
 
-        data = r.json()
         checking_id, payment_request = data["checking_id"], data["payment_request"]
 
         return InvoiceResponse(
@@ -109,17 +106,19 @@ class LNbitsWallet(LightningBackend):
                 timeout=None,
             )
             r.raise_for_status()
-        except Exception:
-            error_message = r.json().get("detail") or r.reason_phrase
+            data: dict = r.json()
+        except httpx.HTTPStatusError:
             return PaymentResponse(
-                result=PaymentResult.FAILED, error_message=error_message
+                result=PaymentResult.FAILED,
+                error_message=f"HTTP status: {r.reason_phrase}",
             )
-        if r.json().get("detail"):
+        except Exception as exc:
+            return PaymentResponse(result=PaymentResult.FAILED, error_message=str(exc))
+        if data.get("detail"):
             return PaymentResponse(
-                result=PaymentResult.FAILED, error_message=(r.json()["detail"],)
+                result=PaymentResult.FAILED, error_message=data["detail"]
             )
 
-        data: dict = r.json()
         checking_id = data.get("payment_hash")
         if not checking_id:
             return PaymentResponse(
@@ -142,6 +141,7 @@ class LNbitsWallet(LightningBackend):
                 url=f"{self.endpoint}/api/v1/payments/{checking_id}"
             )
             r.raise_for_status()
+            data: dict = r.json()
         except Exception as e:
             return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
         data: dict = r.json()
@@ -171,14 +171,16 @@ class LNbitsWallet(LightningBackend):
                 url=f"{self.endpoint}/api/v1/payments/{checking_id}"
             )
             r.raise_for_status()
+            data = r.json()
         except httpx.HTTPStatusError as e:
             if e.response.status_code != 404:
                 raise e
             return PaymentStatus(
                 result=PaymentResult.UNKNOWN, error_message=e.response.text
             )
+        except Exception as e:
+            return PaymentStatus(result=PaymentResult.UNKNOWN, error_message=str(e))
 
-        data = r.json()
         if "paid" not in data and "details" not in data:
             return PaymentStatus(
                 result=PaymentResult.UNKNOWN, error_message="invalid response"
