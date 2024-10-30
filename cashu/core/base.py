@@ -218,16 +218,6 @@ class Proof(BaseModel):
         return SCTWitness.from_witness(self.witness).merkle_proof
 
     @property
-    def dlc_leaf_secret(self) -> str:
-        assert self.witness, "Witness is missing for dlc leaf secret"
-        return SCTWitness.from_witness(self.witness).leaf_secret
-
-    @property
-    def dlc_merkle_proof(self) -> List[str]:
-        assert self.witness, "Witness is missing for dlc merkle proof"
-        return SCTWitness.from_witness(self.witness).merkle_proof
-
-    @property
     def htlcpreimage(self) -> str | None:
         assert self.witness, "Witness is missing for htlc preimage"
         return HTLCWitness.from_witness(self.witness).preimage
