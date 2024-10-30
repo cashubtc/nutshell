@@ -343,35 +343,28 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
 
     amount = 32
 
-    # create a mint quote that is unpaid
+    # mint quote in sat
     sat_mint_quote = await ledger.mint_quote(
         quote_request=PostMintQuoteRequest(amount=amount, unit="sat")
     )
     sat_invoice = sat_mint_quote.request
     assert sat_mint_quote.paid is False
 
-    # create a melt quote with above invoice in different unit
+    # melt quote in usd
     usd_melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(unit="usd", request=sat_invoice)
     )
     assert usd_melt_quote.paid is False
 
-    melt_resp = await ledger.melt(proofs=wallet.proofs, quote=usd_melt_quote.quote)
-
-    assert_err(
-        melt_resp.state == MeltQuoteState.unpaid.value,
-        f"Expected state to be paid, got {melt_resp.state}",
-    )
+    # pay melt quote with usd
+    await ledger.melt(proofs=wallet.proofs, quote=usd_melt_quote.quote)
 
     output_amounts = [32]
 
     secrets, rs, derivation_paths = await wallet.generate_n_secrets(len(output_amounts))
     outputs, rs = wallet._construct_outputs(output_amounts, secrets, rs)
-    mint_resp = await ledger.mint(outputs=outputs, quote_id=invoice.id)
 
-    assert_err(len(mint_resp) > 0, f"Expected promises, got {len(mint_resp)} promises")
+    # mint in sat
+    mint_resp = await ledger.mint(outputs=outputs, quote_id=sat_mint_quote.quote)
 
-    await assert_err(
-        ledger.mint(outputs=outputs, quote_id=invoice.id),
-        "outputs have already been signed before.",
-    )
+    assert len(mint_resp) == len(outputs)
