@@ -379,6 +379,5 @@ class PostDlcPayoutResponse(BaseModel):
 
 class GetDlcStatusResponse(BaseModel):
     settled: bool
-    unit: Optional[str] = None
     funding_amount: Optional[int] = None
     debts: Optional[Dict[str, int]] = None

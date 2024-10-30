@@ -1349,5 +1349,5 @@ class DlcPayoutForm(BaseModel):
 
 class DlcPayout(BaseModel):
     dlc_root: str
-    outputs: Optional[List[BlindedSignature]] = None
+    signatures: Optional[List[BlindedSignature]] = None
     detail: Optional[str] = None    # error details

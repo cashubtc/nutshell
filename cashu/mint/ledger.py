@@ -1202,7 +1202,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             return GetDlcStatusResponse(
                 settled=dlc.settled,
                 funding_amount=dlc.funding_amount,
-                unit=dlc.unit,
                 debts=None
             )
         else:
@@ -1354,10 +1353,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # We generate blind signatures
         payouts: List[DlcPayout] = []
         for payout in db_verified:
-            outputs = await self._generate_promises(payout.outputs)
+            promises = await self._generate_promises(payout.outputs)
             payouts.append(DlcPayout(
                 dlc_root=payout.dlc_root,
-                outputs=outputs,
+                signatures=promises,
             ))
 
         return PostDlcPayoutResponse(

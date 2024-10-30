@@ -451,7 +451,6 @@ async def test_get_dlc_status(wallet: Wallet, ledger: Ledger):
     assert response.debts is None and \
            response.settled is False and \
            response.funding_amount == 128 and \
-           response.unit == "sat", \
         "GetDlcStatusResponse with unexpected fields"
 
 privkey1 = PrivateKey()
@@ -666,6 +665,6 @@ async def test_payout_dlc(wallet: Wallet, ledger: Ledger):
     assert response.errors is None, f"Payout failed: {response.errors[0].detail}"
     assert len(response.paid) > 0, "Payout failed: paid list is empty"
     assert response.paid[0].dlc_root == dlc_root.hex()
-    assert len(response.paid[0].outputs) == len(amounts)
+    assert len(response.paid[0].signatures) == len(amounts)
 
-    proofs = await wallet._construct_proofs(response.paid[0].outputs, secrets, rs, dpaths)
+    proofs = await wallet._construct_proofs(response.paid[0].signatures, secrets, rs, dpaths)

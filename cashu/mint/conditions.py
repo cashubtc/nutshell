@@ -167,7 +167,7 @@ class LedgerSpendingConditions:
                 if verify_schnorr_signature(
                     message=proof.secret.encode("utf-8"),
                     pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
-                    signature=bytes.fromhex(signature),
+                    signature=bytes.fromhex(input_sig),
                 ):
                     n_valid_sigs_per_output += 1
                     logger.trace(
