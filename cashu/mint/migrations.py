@@ -826,3 +826,20 @@ async def m021_add_change_and_expiry_to_melt_quotes(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} ADD COLUMN expiry TIMESTAMP"
         )
+
+async def m022_add_dlc_table(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema('dlc')} (
+                    dlc_root TEXT NOT NULL,
+                    settled SMALLINT NOT NULL DEFAULT 0,
+                    funding_amount {db.big_int} NOT NULL,
+                    unit TEXT NOT NULL,
+                    debts TEXT,
+
+                    UNIQUE (dlc_root),
+                    CHECK (funding_amount > 0)
+                );
+            """
+        )

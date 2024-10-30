@@ -52,6 +52,7 @@ from .crud import (
     update_lightning_invoice,
     update_proof,
 )
+from .dlc import WalletSCT
 from .htlc import WalletHTLC
 from .mint_info import MintInfo
 from .p2pk import WalletP2PK
@@ -64,7 +65,7 @@ from .v1_api import LedgerAPI
 
 
 class Wallet(
-    LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets, WalletTransactions, WalletProofs
+    LedgerAPI, WalletP2PK, WalletSCT, WalletHTLC, WalletSecrets, WalletTransactions, WalletProofs
 ):
     """
     Nutshell wallet class.
@@ -643,6 +644,7 @@ class Wallet(
         amount: int,
         secret_lock: Optional[Secret] = None,
         include_fees: bool = False,
+        dlc_data: Optional[Tuple[str, int]] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
         """Calls the swap API to split the proofs into two sets of proofs, one for keeping and one for sending.
 
@@ -653,6 +655,7 @@ class Wallet(
         Args:
             proofs (List[Proof]): Proofs to be split.
             amount (int): Amount to be sent.
+            dlc_data (Tuple[str, int]): DLC root hash + funding threshold for the proofs to be locked to
             secret_lock (Optional[Secret], optional): Secret to lock the tokens to be sent. Defaults to None.
             include_fees (bool, optional): If True, the fees are included in the amount to send (output of
                 this method, to be sent in the future). This is not the fee that is required to swap the
@@ -669,6 +672,7 @@ class Wallet(
 
         # potentially add witnesses to unlock provided proofs (if they indicate one)
         proofs = self.add_witnesses_to_proofs(proofs)
+        proofs = await self._add_sct_witnesses_to_proofs(proofs, backup=True)
 
         input_fees = self.get_fees_for_proofs(proofs)
         logger.debug(f"Input fees: {input_fees}")
@@ -683,12 +687,33 @@ class Wallet(
         amounts = keep_outputs + send_outputs
 
         # generate secrets for new outputs
-        if secret_lock is None:
-            secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
-        else:
+        # CODE COMPLEXITY: for now we limit ourselves to DLC proofs with
+        # vanilla backup secrets. In the future, backup secrets could also be P2PK or HTLC
+        dlc_root = None
+        spending_conditions = None
+        if dlc_data is not None:
+            dlc_root, threshold = dlc_data[0], dlc_data[1]
+            # Verify dlc_root is a hex string
+            try:
+                _ = bytes.fromhex(dlc_root)
+            except ValueError:
+                assert False, "CAREFUL: provided dlc root is non-hex!"
+            dlcsecrets = await self.generate_sct_secrets(
+                len(send_outputs),
+                len(keep_outputs),
+                dlc_root,
+                threshold,
+            )
+            secrets = [dd.secret for dd in dlcsecrets[0]]
+            rs = [dd.blinding_factor for dd in dlcsecrets[0]]
+            derivation_paths = [dd.derivation_path for dd in dlcsecrets[0]]
+            spending_conditions = [dd.all_spending_conditions for dd in dlcsecrets[0]]
+        elif secret_lock is not None:
             secrets, rs, derivation_paths = await self.generate_locked_secrets(
                 send_outputs, keep_outputs, secret_lock
             )
+        else:
+            secrets, rs, derivation_paths = await self.generate_n_secrets(len(amounts))
 
         assert len(secrets) == len(
             amounts
@@ -707,7 +732,12 @@ class Wallet(
 
         # Construct proofs from returned promises (i.e., unblind the signatures)
         new_proofs = await self._construct_proofs(
-            promises, secrets, rs, derivation_paths
+            promises,
+            secrets,
+            rs,
+            derivation_paths,
+            spending_conditions,
+            dlc_root,
         )
 
         await self.invalidate(proofs)
@@ -868,6 +898,8 @@ class Wallet(
         secrets: List[str],
         rs: List[PrivateKey],
         derivation_paths: List[str],
+        spending_conditions: Optional[List[Optional[List[str]]]] = None,
+        dlc_root: Optional[str] = None,
     ) -> List[Proof]:
         """Constructs proofs from promises, secrets, rs and derivation paths.
 
@@ -885,7 +917,17 @@ class Wallet(
         """
         logger.trace("Constructing proofs.")
         proofs: List[Proof] = []
-        for promise, secret, r, path in zip(promises, secrets, rs, derivation_paths):
+        '''
+        flag = (spending_conditions is not None
+            and len(spending_conditions) == len(secrets)
+        )
+
+        zipped = zip(promises, secrets, rs, derivation_paths) if not flag else (
+            zip(promises, secrets, rs, derivation_paths, spending_conditions or [])
+        )
+        '''
+        for i, (promise, secret, r, path) in enumerate(zip(promises, secrets, rs, derivation_paths)):
+            spc = spending_conditions[i] if spending_conditions else None
             if promise.id not in self.keysets:
                 logger.debug(f"Keyset {promise.id} not found in db. Loading from mint.")
                 # we don't have the keyset for this promise, so we load all keysets from the mint
@@ -911,6 +953,8 @@ class Wallet(
                 C=C.serialize().hex(),
                 secret=secret,
                 derivation_path=path,
+                all_spending_conditions=spc,
+                dlc_root=dlc_root if spc is not None else None,
             )
 
             # if the mint returned a dleq proof, we add it to the proof
@@ -1120,6 +1164,7 @@ class Wallet(
         secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
         include_fees: bool = False,
+        dlc_data: Optional[Tuple[str, int]] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
         Swaps a set of proofs with the mint to get a set that sums up to a desired amount that can be sent. The remaining
@@ -1135,6 +1180,8 @@ class Wallet(
                 is made with the split that could fail (like a Lightning payment). Should be set to True if the token to be sent is
                 displayed to the user to be then sent to someone else. Defaults to False.
             include_fees (bool, optional): If set, the fees for spending the send_proofs later are included in the amount to be selected. Defaults to True.
+            dlc_data(Tuple[str, int], optional): Specify DLC root hash and funding threshold. If set, the proofs will be locked to
+                the specified DLC root hash
 
         Returns:
             Tuple[List[Proof], List[Proof]]: Tuple of proofs to keep and proofs to send
@@ -1160,7 +1207,7 @@ class Wallet(
         )
         keep_proofs, send_proofs = await self.split(
             swap_proofs, amount, secret_lock, include_fees=include_fees
-        )
+        , dlc_data=dlc_data)
         if set_reserved:
             await self.set_reserved(send_proofs, reserved=True)
         return keep_proofs, send_proofs

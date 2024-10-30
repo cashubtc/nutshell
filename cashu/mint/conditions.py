@@ -1,10 +1,16 @@
 import hashlib
 import time
-from typing import List
+from typing import List, Optional
 
 from loguru import logger
 
-from ..core.base import BlindedMessage, Proof
+from ..core.base import (
+    BlindedMessage,
+    DiscreetLogContract,
+    Proof,
+    SCTWitness,
+)
+from ..core.crypto.dlc import merkle_verify
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
     TransactionError,
@@ -181,11 +187,90 @@ class LedgerSpendingConditions:
 
         return True
 
-    def _verify_input_spending_conditions(self, proof: Proof) -> bool:
+    def _verify_dlc_spending_conditions(self, p: Proof, secret: Secret, funding_dlc: DiscreetLogContract) -> bool:
+        """
+        Verify DLC spending conditions for a single input.
+        """
+        # Verify secret is of kind DLC
+        if secret.kind != SecretKind.DLC.value:
+            raise TransactionError('expected secret of kind DLC')
+
+        # Verify dlc_root is the one referenced in the secret
+        if secret.data != funding_dlc.dlc_root:
+            raise TransactionError('attempted to use kind:DLC secret to fund a DLC with the wrong root hash')
+
+        # Verify the DLC funding amount meets the threshold tag.
+        # If the threshold tag is invalid or missing, ignore it and allow
+        # spending with any nonzero funding amount.
+        try:
+            tag = secret.tags.get_tag('threshold')
+            if tag is not None:
+                threshold = int(tag)
+        except Exception:
+            threshold = 0
+
+        if funding_dlc.funding_amount < threshold:
+            raise TransactionError('DLC funding_amount does not satisfy DLC secret threshold tag')
+
+        return True
+
+    def _verify_sct_spending_conditions(
+        self,
+        proof: Proof,
+        secret: Secret,
+        funding_dlc: Optional[DiscreetLogContract] = None,
+    ) -> bool:
+        """
+        Verify SCT spending conditions for a single input
+        """
+        if proof.witness is None:
+            raise TransactionError('missing SCT secret witness')
+
+        witness = SCTWitness.from_witness(proof.witness)
+        assert witness, TransactionError("invalid witness data provided for secret kind SCT")
+
+        spending_condition = False
+        try:
+            _ = Secret.deserialize(witness.leaf_secret)
+            logger.trace(f"proof.secret: {proof.secret}")
+            logger.trace(f"secret: {secret}")
+            spending_condition = True
+        except Exception:
+            # leaf secret is not a spending condition (we assume it is a backup secret)
+            pass
+
+        # Merkle Tree verify
+        merkle_root_bytes = bytes.fromhex(secret.data)
+        merkle_proof_bytes = [bytes.fromhex(h) for h in witness.merkle_proof]
+        leaf_secret_bytes = hashlib.sha256(witness.leaf_secret.encode()).digest()
+        valid = merkle_verify(merkle_root_bytes, leaf_secret_bytes, merkle_proof_bytes)
+
+        if not valid:
+            raise TransactionError('SCT secret merkle proof verification failed')
+
+        if not spending_condition:  # means that it is valid and a normal secret
+            return True
+
+        # leaf_secret is a secret of another kind: verify that kind
+        # We only ever need the secret and the witness data
+        new_proof = Proof(
+            secret=witness.leaf_secret,
+            witness=witness.witness
+        )
+        return self._verify_input_spending_conditions(new_proof, funding_dlc)
+
+    def _verify_input_spending_conditions(
+        self,
+        proof: Proof,
+        funding_dlc: Optional[DiscreetLogContract] = None,
+    ) -> bool:
         """
         Verify spending conditions:
          Condition: P2PK - Checks if signature in proof.witness is valid for pubkey in proof.secret
          Condition: HTLC - Checks if preimage in proof.witness is valid for hash in proof.secret
+         Condition: SCT - Checks if leaf_secret in proof.witness is a leaf of the Merkle Tree with
+            root proof.secret.data according to proof.witness.merkle_proof
+         Condition: DLC - NEVER SPEND unless for funding a DLC
         """
 
         try:
@@ -203,6 +288,16 @@ class LedgerSpendingConditions:
         # HTLC
         if SecretKind(secret.kind) == SecretKind.HTLC:
             return self._verify_htlc_spending_conditions(proof, secret)
+
+        # SCT
+        if SecretKind(secret.kind) == SecretKind.SCT:
+            return self._verify_sct_spending_conditions(proof, secret, funding_dlc)
+
+        # DLC
+        if SecretKind(secret.kind) == SecretKind.DLC:
+            if funding_dlc is None:
+                raise TransactionError('cannot spend secret kind DLC unless funding a DLC')
+            return self._verify_dlc_spending_conditions(proof, secret, funding_dlc)
 
         # no spending condition present
         return True

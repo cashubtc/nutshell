@@ -6,6 +6,7 @@ from ..core.models import (
     MintMethodSetting,
 )
 from ..core.nuts import (
+    DLC_NUT,
     DLEQ_NUT,
     FEE_RETURN_NUT,
     MELT_NUT,
@@ -58,6 +59,19 @@ class LedgerFeatures(SupportsBackends):
             SCRIPT_NUT: supported_dict,
             P2PK_NUT: supported_dict,
             DLEQ_NUT: supported_dict,
+            # Hard coded values for now
+            DLC_NUT: dict(
+                supported=True,
+                funding_proof_pubkey='XXXXXX',
+                max_payous=30,
+                ttl=2629743, # 1 month
+                fees=dict(
+                    sat=dict(
+                        base=0,
+                        ppk=0
+                    )
+                )
+            )
         }
 
         # signal which method-unit pairs support MPP

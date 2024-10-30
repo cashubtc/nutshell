@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from ..core.base import (
     BlindedSignature,
+    DiscreetLogContract,
     MeltQuote,
     MintKeyset,
     MintQuote,
@@ -253,6 +254,33 @@ class LedgerCrud(ABC):
     ) -> None:
         ...
 
+    @abstractmethod
+    async def get_registered_dlc(
+        self,
+        dlc_root: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[DiscreetLogContract]:
+        ...
+
+    @abstractmethod
+    async def store_dlc(
+        self,
+        dlc: DiscreetLogContract,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
+
+    @abstractmethod
+    async def set_dlc_settled_and_debts(
+        self,
+        dlc_root: str,
+        debts: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        ...
 
 class LedgerCrudSqlite(LedgerCrud):
     """Implementation of LedgerCrud for sqlite.
@@ -784,3 +812,59 @@ class LedgerCrudSqlite(LedgerCrud):
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
         return [Proof(**r) for r in rows] if rows else []
+
+    async def get_registered_dlc(
+        self,
+        dlc_root: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[DiscreetLogContract]:
+        query = f"""
+        SELECT * from {db.table_with_schema('dlc')}
+        WHERE dlc_root = :dlc_root
+        """
+        row = await (conn or db).fetchone(query, {"dlc_root": dlc_root})
+        if not row:
+            return None
+        return DiscreetLogContract.from_row(row)
+
+    async def store_dlc(
+        self,
+        dlc: DiscreetLogContract,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        query = f"""
+        INSERT INTO {db.table_with_schema('dlc')}
+        (dlc_root, settled, funding_amount, unit)
+        VALUES (:dlc_root, :settled, :funding_amount, :unit)
+        """
+        await (conn or db).execute(
+            query,
+            {
+                "dlc_root": dlc.dlc_root,
+                "settled": 0 if dlc.settled is False else 1,
+                "funding_amount": dlc.funding_amount,
+                "unit": dlc.unit,
+            },
+        )
+
+    async def set_dlc_settled_and_debts(
+        self,
+        dlc_root: str,
+        debts: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        query = f"""
+        UPDATE {db.table_with_schema('dlc')}
+        SET settled = 1, debts = :debts
+        WHERE dlc_root = :dlc_root
+        """
+        await (conn or db).execute(
+            query,
+            {
+                "dlc_root": dlc_root,
+                "debts": debts
+            },
+        )

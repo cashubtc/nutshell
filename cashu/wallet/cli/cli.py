@@ -585,6 +585,21 @@ async def balance(ctx: Context, verbose):
     help="Force swap token.",
     type=bool,
 )
+@click.option(
+    "--dlc-root",
+    default=None,
+    is_flag=False,
+    help="root hash of the DLC you intend to fund",
+    type=str,
+)
+@click.option(
+    "--threshold",
+    "-t",
+    default=1000,
+    is_flag=False,
+    help="fund the DLC only if it's been funded >= threshold",
+    type=int,
+)
 @click.pass_context
 @coro
 async def send_command(
@@ -600,6 +615,8 @@ async def send_command(
     offline: bool,
     include_fees: bool,
     force_swap: bool,
+    dlc_root: str,
+    threshold: int,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
@@ -614,6 +631,7 @@ async def send_command(
             include_fees=include_fees,
             memo=memo,
             force_swap=force_swap,
+            dlc_data=(dlc_root, threshold) if dlc_root else None,
         )
     else:
         await send_nostr(wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes)
@@ -1104,9 +1122,27 @@ async def restore(ctx: Context, to: int, batch: int):
 
 @cli.command("selfpay", help="Refresh tokens.")
 # @click.option("--all", default=False, is_flag=True, help="Execute on all available mints.")
+@click.option(
+    "--dlc-unlock",
+    default=False,
+    is_flag=True,
+    help="Use this option to swap exposed DLC proofs whenever registration takes too long to complete",
+    type=bool,
+)
+@click.option(
+    "--dlc-root",
+    default=None,
+    is_flag=False,
+    help="""root hash of the DLC to unlock own proofs from""",
+    type=str,
+)
 @click.pass_context
 @coro
-async def selfpay(ctx: Context, all: bool = False):
+async def selfpay(
+    ctx: Context, all: bool = False,
+    dlc_unlock: bool = False,
+    dlc_root: str = "",
+):
     wallet = await get_mint_wallet(ctx, force_select=True)
     await wallet.load_mint()
 
@@ -1123,9 +1159,23 @@ async def selfpay(ctx: Context, all: bool = False):
         print("No balance on this mint.")
         return
 
-    token = await wallet.serialize_proofs(reserved_proofs)
-    print(f"Selfpay token for mint {wallet.url}:")
-    print("")
-    print(token)
-    token_obj = TokenV4.deserialize(token)
-    await receive(wallet, token_obj)
+    # separate dlc proofs from non-dlc ones
+    non_dlc_reserved = await wallet.filter_non_dlc_proofs(reserved_proofs)
+    if len(non_dlc_reserved) > 0:
+        token = await wallet.serialize_proofs(non_dlc_reserved)
+        print(f"Selfpay token for mint {wallet.url}:")
+        print("")
+        print(token)
+        token_obj = TokenV4.deserialize(token)
+        await receive(wallet, token_obj)
+    # if user asked to unlock dlc proofs, do so:
+    if dlc_unlock:
+        # any specific root to be unlocked from?
+        if dlc_root and dlc_root != "":
+            dlc_reserved = await wallet.filter_proofs_by_dlc_root(dlc_root, reserved_proofs)
+            await wallet.redeem(dlc_reserved)
+        # no specific root, unlock all dlc proofs
+        else:
+            dlc_reserved = await wallet.filter_dlc_proofs(reserved_proofs)
+            await wallet.redeem(dlc_reserved)
+

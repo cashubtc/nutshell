@@ -14,8 +14,8 @@ async def store_proof(
     await (conn or db).execute(
         """
         INSERT INTO proofs
-          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id)
-        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id)
+          (id, amount, C, secret, time_created, derivation_path, dleq, mint_id, melt_id, all_spending_conditions, dlc_root)
+        VALUES (:id, :amount, :C, :secret, :time_created, :derivation_path, :dleq, :mint_id, :melt_id, :all_spending_conditions, :dlc_root)
         """,
         {
             "id": proof.id,
@@ -27,6 +27,11 @@ async def store_proof(
             "dleq": json.dumps(proof.dleq.dict()) if proof.dleq else "",
             "mint_id": proof.mint_id,
             "melt_id": proof.melt_id,
+            "all_spending_conditions": (json.dumps(proof.all_spending_conditions)
+                if proof.all_spending_conditions
+                else ""
+            ),
+            "dlc_root": proof.dlc_root if proof.dlc_root else ""
         },
     )
 
@@ -37,6 +42,7 @@ async def get_proofs(
     id: Optional[str] = "",
     melt_id: str = "",
     mint_id: str = "",
+    dlc_root: str = "",
     table: str = "proofs",
     conn: Optional[Connection] = None,
 ):
@@ -52,6 +58,9 @@ async def get_proofs(
     if mint_id:
         clauses.append("mint_id = :mint_id")
         values["mint_id"] = mint_id
+    if dlc_root:
+        clauses.append("dlc_root = :dlc_root")
+        values["dlc_root"] = dlc_root
     where = ""
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
