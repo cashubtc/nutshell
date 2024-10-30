@@ -671,7 +671,7 @@ class Wallet(
         proofs = copy.copy(proofs)
 
         # potentially add witnesses to unlock provided proofs (if they indicate one)
-        proofs = await self._add_p2pk_witnesses_to_proofs(proofs)
+        proofs = self.add_witnesses_to_proofs(proofs)
         proofs = await self._add_sct_witnesses_to_proofs(proofs, backup=True)
 
         input_fees = self.get_fees_for_proofs(proofs)
@@ -724,8 +724,8 @@ class Wallet(
         # construct outputs
         outputs, rs = self._construct_outputs(amounts, secrets, rs, self.keyset_id)
 
-        # potentially add p2pk witnesses to outputs based on what requirement the proofs indicate
-        outputs = await self._add_p2pk_witnesses_to_outputs(proofs, outputs)
+        # potentially add witnesses to outputs based on what requirement the proofs indicate
+        outputs = self.add_witnesses_to_outputs(proofs, outputs)
 
         # Call swap API
         promises = await super().split(proofs, outputs)
