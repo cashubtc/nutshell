@@ -7,7 +7,6 @@ from loguru import logger
 from ..core.base import (
     BlindedMessage,
     DiscreetLogContract,
-   
     Proof,
     SCTWitness,
 )

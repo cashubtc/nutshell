@@ -121,15 +121,6 @@ class SCTWitness(BaseModel):
     def from_witness(cls, witness: str):
         return cls(**json.loads(witness))
 
-class SCTWitness(BaseModel):
-    leaf_secret: str
-    merkle_proof: List[str]
-    witness: Optional[str] = None
-
-    @classmethod
-    def from_witness(cls, witness: str):
-        return cls(**json.loads(witness))
-
 
 class Proof(BaseModel):
     """
