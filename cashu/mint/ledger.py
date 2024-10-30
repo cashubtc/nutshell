@@ -811,8 +811,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if not mint_quote:
             return melt_quote
 
-        # try to settle externally if units are different
-        if not mint_quote.unit == melt_quote.unit:
+        # settle externally if units are different
+        if mint_quote.unit != melt_quote.unit:
             return melt_quote
 
         # we settle the transaction internally
