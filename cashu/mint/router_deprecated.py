@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Request
 from loguru import logger
 
-from ..core.base import BlindedMessage, BlindedSignature
+from ..core.base import BlindedMessage, BlindedSignature, Unit
 from ..core.errors import CashuError
 from ..core.models import (
     CheckFeesRequest_deprecated,
@@ -114,7 +114,8 @@ async def keyset_deprecated(idBase64Urlsafe: str) -> Dict[str, str]:
 async def keysets_deprecated() -> KeysetsResponse_deprecated:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
     logger.trace("> GET /keysets")
-    keysets = KeysetsResponse_deprecated(keysets=list(ledger.keysets.keys()))
+    sat_keysets = {k: v for k, v in ledger.keysets.items() if v.unit == Unit.sat}
+    keysets = KeysetsResponse_deprecated(keysets=list(sat_keysets.keys()))
     return keysets
 
 

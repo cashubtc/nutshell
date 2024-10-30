@@ -660,7 +660,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # so that we would be able to handle the transaction internally
         # and therefore respond with internal transaction fees (0 for now)
         mint_quote = await self.crud.get_mint_quote(request=request, db=self.db)
-        if mint_quote:
+        if mint_quote and mint_quote.unit == melt_quote.unit:
             payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
         else:
             # not internal
@@ -811,6 +811,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if not mint_quote:
             return melt_quote
 
+        # settle externally if units are different
+        if mint_quote.unit != melt_quote.unit:
+            return melt_quote
+
         # we settle the transaction internally
         if melt_quote.paid:
             raise TransactionError("melt quote already paid")
@@ -825,8 +829,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise TransactionError("amounts do not match")
         if not bolt11_request == mint_quote.request:
             raise TransactionError("bolt11 requests do not match")
-        if not mint_quote.unit == melt_quote.unit:
-            raise TransactionError("units do not match")
         if not mint_quote.method == melt_quote.method:
             raise TransactionError("methods do not match")
 
