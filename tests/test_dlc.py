@@ -667,4 +667,4 @@ async def test_payout_dlc(wallet: Wallet, ledger: Ledger):
     assert response.paid[0].dlc_root == dlc_root.hex()
     assert len(response.paid[0].signatures) == len(amounts)
 
-    proofs = await wallet._construct_proofs(response.paid[0].signatures, secrets, rs, dpaths)
+    await wallet._construct_proofs(response.paid[0].signatures, secrets, rs, dpaths)
