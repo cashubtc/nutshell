@@ -5,7 +5,7 @@ import pytest_asyncio
 
 from cashu.core.base import MeltQuote, MeltQuoteState, Proof
 from cashu.core.errors import LightningError
-from cashu.core.models import PostMeltQuoteRequest
+from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
 from cashu.mint.ledger import Ledger
@@ -331,3 +331,40 @@ async def test_melt_lightning_pay_invoice_exception_exception(
         ledger.melt(proofs=wallet.proofs, quote=quote_id),
         "Melt is disabled. Please contact the operator.",
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
+    """Mint and melt different units."""
+    # load the wallet
+    invoice = await wallet.request_mint(64)
+    await wallet.mint(64, id=invoice.id)
+
+    amount = 32
+
+    # mint quote in sat
+    sat_mint_quote = await ledger.mint_quote(
+        quote_request=PostMintQuoteRequest(amount=amount, unit="sat")
+    )
+    sat_invoice = sat_mint_quote.request
+    assert sat_mint_quote.paid is False
+
+    # melt quote in usd
+    usd_melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="usd", request=sat_invoice)
+    )
+    assert usd_melt_quote.paid is False
+
+    # pay melt quote with usd
+    await ledger.melt(proofs=wallet.proofs, quote=usd_melt_quote.quote)
+
+    output_amounts = [32]
+
+    secrets, rs, derivation_paths = await wallet.generate_n_secrets(len(output_amounts))
+    outputs, rs = wallet._construct_outputs(output_amounts, secrets, rs)
+
+    # mint in sat
+    mint_resp = await ledger.mint(outputs=outputs, quote_id=sat_mint_quote.quote)
+
+    assert len(mint_resp) == len(outputs)

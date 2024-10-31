@@ -94,6 +94,12 @@ async def test_api_keysets(ledger: Ledger):
                 "active": True,
                 "input_fee_ppk": 0,
             },
+            {
+                "id": "00c074b96c7e2b0e",
+                "unit": "usd",
+                "active": True,
+                "input_fee_ppk": 0,
+            },
         ]
     }
     assert response.json() == expected

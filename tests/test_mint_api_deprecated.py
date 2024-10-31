@@ -2,7 +2,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof
+from cashu.core.base import Proof, Unit
 from cashu.core.models import (
     CheckSpendableRequest_deprecated,
     CheckSpendableResponse_deprecated,
@@ -51,7 +51,8 @@ async def test_api_keysets(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/keysets")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
-    assert response.json()["keysets"] == list(ledger.keysets.keys())
+    sat_keysets = {k: v for k, v in ledger.keysets.items() if v.unit == Unit.sat}
+    assert response.json()["keysets"] == list(sat_keysets.keys())
 
 
 @pytest.mark.asyncio
