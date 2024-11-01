@@ -2,17 +2,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
-from ...core.base import Invoice, MeltQuote, MintQuote
-
-
-class PayResponse(BaseModel):
-    ok: Optional[bool] = None
-
-
-class InvoiceResponse(BaseModel):
-    amount: Optional[int] = None
-    invoice: Optional[Invoice] = None
-    id: Optional[str] = None
+from ...core.base import MeltQuote, MintQuote
 
 
 class SwapResponse(BaseModel):
