@@ -145,7 +145,7 @@ async def create_invoice(
     response_model=PaymentStatus,
 )
 async def invoice_state(
-    payment_hash: str = Query(default=None, description="Payment hash of paid invoice"),
+    payment_request: str = Query(default=None, description="Payment request to check"),
     mint: str = Query(
         default=None,
         description="Mint URL to create an invoice at (None for default mint)",
@@ -154,7 +154,7 @@ async def invoice_state(
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
-    state = await wallet.get_invoice_status(payment_hash)
+    state = await wallet.get_invoice_status(payment_request)
     return state
 
 

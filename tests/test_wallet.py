@@ -291,10 +291,8 @@ async def test_melt(wallet1: Wallet):
     assert wallet1.balance == 128
 
     invoice_payment_request = ""
-    invoice_payment_hash = ""
     if is_regtest:
         invoice_dict = get_real_invoice(64)
-        invoice_payment_hash = str(invoice_dict["r_hash"])
         invoice_payment_request = invoice_dict["payment_request"]
 
     if is_fake:
