@@ -135,12 +135,12 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
-    mint_id: Union[
-        None, str
-    ] = None  # holds the id of the mint operation that created this proof
-    melt_id: Union[
-        None, str
-    ] = None  # holds the id of the melt operation that destroyed this proof
+    mint_id: Union[None, str] = (
+        None  # holds the id of the mint operation that created this proof
+    )
+    melt_id: Union[None, str] = (
+        None  # holds the id of the melt operation that destroyed this proof
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -825,43 +825,35 @@ class MintKeyset:
 class Token(ABC):
     @property
     @abstractmethod
-    def proofs(self) -> List[Proof]:
-        ...
+    def proofs(self) -> List[Proof]: ...
 
     @property
     @abstractmethod
-    def amount(self) -> int:
-        ...
+    def amount(self) -> int: ...
 
     @property
     @abstractmethod
-    def mint(self) -> str:
-        ...
+    def mint(self) -> str: ...
 
     @property
     @abstractmethod
-    def keysets(self) -> List[str]:
-        ...
+    def keysets(self) -> List[str]: ...
 
     @property
     @abstractmethod
-    def memo(self) -> Optional[str]:
-        ...
+    def memo(self) -> Optional[str]: ...
 
     @memo.setter
     @abstractmethod
-    def memo(self, memo: Optional[str]):
-        ...
+    def memo(self, memo: Optional[str]): ...
 
     @property
     @abstractmethod
-    def unit(self) -> str:
-        ...
+    def unit(self) -> str: ...
 
     @unit.setter
     @abstractmethod
-    def unit(self, unit: str):
-        ...
+    def unit(self, unit: str): ...
 
 
 class TokenV3Token(BaseModel):
