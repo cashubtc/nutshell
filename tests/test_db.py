@@ -145,6 +145,10 @@ async def test_db_get_connection_locked(wallet: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not settings.mint_database.startswith("postgres"),
+    reason="SQLite does not support row locking",
+)
 async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
     if ledger.db.type == db.SQLITE:
         pytest.skip("SQLite does not support row locking")
@@ -247,6 +251,10 @@ async def test_db_verify_spent_proofs_and_set_pending_no_race_condition_differen
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not settings.mint_database.startswith("postgres"),
+    reason="SQLite does not support row locking",
+)
 async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledger):
     if ledger.db.type == db.SQLITE:
         pytest.skip("SQLite does not support row locking")
