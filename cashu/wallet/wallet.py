@@ -476,6 +476,7 @@ class Wallet(
         remaining_amount = amount - sum(amounts)
         if remaining_amount > 0:
             amounts += amount_split(remaining_amount)
+        amounts.sort()
 
         logger.debug(f"Amounts we want: {amounts}")
         if sum(amounts) != amount:
