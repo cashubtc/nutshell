@@ -44,9 +44,9 @@ async def test_wallet_subscription_mint(wallet: Wallet):
         nonlocal triggered, msg_stack
         triggered = True
         msg_stack.append(msg)
-        asyncio.run(wallet.mint(int(invoice.amount), quote_id=mint_quote.quote))
+        asyncio.run(wallet.mint(int(mint_quote.amount), quote_id=mint_quote.quote))
 
-    invoice, sub = await wallet.request_mint_with_callback(128, callback=callback)
+    mint_quote, sub = await wallet.request_mint_with_callback(128, callback=callback)
     await pay_if_regtest(mint_quote.request)
     wait = settings.fakewallet_delay_incoming_payment or 2
     await asyncio.sleep(wait + 2)
