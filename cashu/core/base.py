@@ -405,7 +405,7 @@ class MintQuote(LedgerEvent):
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     expiry: Optional[int] = None
-    mint: Optional[str] = "None"
+    mint: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: Row):
