@@ -33,12 +33,14 @@ async def test_invoice(wallet: Wallet):
         while state.pending:
             print("checking invoice state")
             response2 = client.get(
-                f"/lightning/invoice_state?payment_hash={invoice_response.checking_id}"
+                f"/lightning/invoice_state?payment_request={invoice_response.payment_request}"
             )
             state = PaymentStatus.parse_obj(response2.json())
             await asyncio.sleep(0.1)
             print("state:", state)
         print("paid")
+        await wallet.load_proofs()
+        assert wallet.available_balance >= 100
 
 
 @pytest.mark.skipif(is_regtest, reason="regtest")
@@ -175,7 +177,7 @@ async def test_flow(wallet: Wallet):
         while state.pending:
             print("checking invoice state")
             response2 = client.get(
-                f"/lightning/invoice_state?payment_hash={invoice_response.checking_id}"
+                f"/lightning/invoice_state?payment_request={invoice_response.payment_request}"
             )
             state = PaymentStatus.parse_obj(response2.json())
             await asyncio.sleep(0.1)

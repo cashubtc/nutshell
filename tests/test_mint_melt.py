@@ -185,9 +185,9 @@ async def test_fakewallet_pending_quote_get_melt_quote_unknown(ledger: Ledger):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_settled(ledger: Ledger, wallet: Wallet):
-    invoice = await wallet.request_mint(64)
-    await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
+    await wallet.mint(64, quote_id=mint_quote.quote)
     # invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
     invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
     quote_id = (
@@ -205,9 +205,9 @@ async def test_melt_lightning_pay_invoice_settled(ledger: Ledger, wallet: Wallet
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: Wallet):
-    invoice = await wallet.request_mint(64)
-    await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
+    await wallet.mint(64, quote_id=mint_quote.quote)
     # invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
     invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
     quote_id = (
@@ -254,9 +254,9 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
 async def test_melt_lightning_pay_invoice_failed_settled(
     ledger: Ledger, wallet: Wallet
 ):
-    invoice = await wallet.request_mint(64)
-    await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
+    await wallet.mint(64, quote_id=mint_quote.quote)
     invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
     quote_id = (
         await ledger.melt_quote(
@@ -278,9 +278,9 @@ async def test_melt_lightning_pay_invoice_failed_settled(
 async def test_melt_lightning_pay_invoice_failed_pending(
     ledger: Ledger, wallet: Wallet
 ):
-    invoice = await wallet.request_mint(64)
-    await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
+    await wallet.mint(64, quote_id=mint_quote.quote)
     invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
     quote_id = (
         await ledger.melt_quote(
@@ -303,9 +303,9 @@ async def test_melt_lightning_pay_invoice_exception_exception(
     ledger: Ledger, wallet: Wallet
 ):
     """Simulates the case where pay_invoice and get_payment_status raise an exception (due to network issues for example)."""
-    invoice = await wallet.request_mint(64)
-    await ledger.get_mint_quote(invoice.id)  # fakewallet: set the quote to paid
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
+    await wallet.mint(64, quote_id=mint_quote.quote)
     # invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
     invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
     quote_id = (
@@ -338,8 +338,8 @@ async def test_melt_lightning_pay_invoice_exception_exception(
 async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     """Mint and melt different units."""
     # load the wallet
-    invoice = await wallet.request_mint(64)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await wallet.mint(64, quote_id=mint_quote.quote)
 
     amount = 32
 
