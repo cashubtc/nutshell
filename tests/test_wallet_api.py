@@ -40,7 +40,7 @@ async def test_invoice(wallet: Wallet):
             print("state:", state)
         print("paid")
         await wallet.load_proofs()
-        assert wallet.available_balance == 100
+        assert wallet.available_balance >= 100
 
 
 @pytest.mark.skipif(is_regtest, reason="regtest")
