@@ -54,6 +54,10 @@ pre-commit = "^4.0.1"
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+
 [tool.poetry.scripts]
 mint = "cashu.mint.main:main"
 cashu = "cashu.wallet.cli.cli:cli"
