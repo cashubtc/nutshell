@@ -14,6 +14,7 @@ from ..core.base import (
     MeltQuote,
     MeltQuoteState,
     MintQuote,
+    MintQuoteState,
     Proof,
     Unit,
     WalletKeyset,
@@ -529,7 +530,10 @@ class Wallet(
         proofs = await self._construct_proofs(promises, secrets, rs, derivation_paths)
 
         await update_bolt11_mint_quote(
-            db=self.db, quote=quote_id, state="paid", paid_time=int(time.time())
+            db=self.db,
+            quote=quote_id,
+            state=MintQuoteState.paid,
+            paid_time=int(time.time()),
         )
         # store the mint_id in proofs
         async with self.db.connect() as conn:
@@ -773,9 +777,9 @@ class Wallet(
         await update_bolt11_melt_quote(
             db=self.db,
             quote=quote_id,
-            state="paid",
+            state=MeltQuoteState.paid,
             paid_time=int(time.time()),
-            payment_preimage=melt_quote.payment_preimage,
+            payment_preimage=melt_quote.payment_preimage or "",
             fee_paid=fee_paid,
         )
 

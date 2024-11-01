@@ -42,7 +42,7 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
     # top up wallet twice so we have enough for two payments
     topup_mint_quote = await wallet.request_mint(128)
     await pay_if_regtest(topup_mint_quote.request)
-    proofs1 = await wallet.mint(128, id=topup_mint_quote.quote
+    proofs1 = await wallet.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet.balance == 128
 
     # this is the invoice we want to pay in two parts
@@ -97,17 +97,17 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     # top up wallet twice so we have enough for three payments
     topup_mint_quote = await wallet.request_mint(128)
     await pay_if_regtest(topup_mint_quote.request)
-    proofs1 = await wallet.mint(128, id=topup_mint_quote.quote
+    proofs1 = await wallet.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet.balance == 128
 
     topup_mint_quote = await wallet.request_mint(128)
     await pay_if_regtest(topup_mint_quote.request)
-    proofs2 = await wallet.mint(128, id=topup_mint_quote.quote
+    proofs2 = await wallet.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet.balance == 256
 
     topup_mint_quote = await wallet.request_mint(128)
     await pay_if_regtest(topup_mint_quote.request)
-    proofs3 = await wallet.mint(128, id=topup_mint_quote.quote
+    proofs3 = await wallet.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet.balance == 384
 
     # this is the invoice we want to pay in two parts

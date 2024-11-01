@@ -388,7 +388,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
-    assert result.get("payment_preimage") is not None
+    assert result.get("payment_preimage") is None
     assert result["paid"] is True
 
     # deserialize the response
@@ -396,7 +396,7 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert resp_quote.quote == quote.quote
 
     # internal invoice, no preimage, no change
-    assert resp_quote.payment_preimage == ""
+    assert resp_quote.payment_preimage is None
     assert resp_quote.change == []
     assert resp_quote.state == MeltQuoteState.paid.value
 

@@ -156,7 +156,7 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
 @pytest.mark.asyncio
 async def test_restore_wallet_after_mint(wallet3: Wallet):
     await reset_wallet_db(wallet3)
-    invoice = await wallet3.request_mint(64)
+    mint_quote = await wallet3.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet3.mint(64, quote_id=mint_quote.quote)
     assert wallet3.balance == 64
@@ -192,7 +192,7 @@ async def test_restore_wallet_after_swap_to_send(wallet3: Wallet):
     )
     await reset_wallet_db(wallet3)
 
-    invoice = await wallet3.request_mint(64)
+    mint_quote = await wallet3.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet3.mint(64, quote_id=mint_quote.quote)
     assert wallet3.balance == 64
@@ -217,7 +217,7 @@ async def test_restore_wallet_after_send_and_receive(wallet3: Wallet, wallet2: W
         "hello rug want adapt talent together lunar method bean expose beef position"
     )
     await reset_wallet_db(wallet3)
-    invoice = await wallet3.request_mint(64)
+    mint_quote = await wallet3.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet3.mint(64, quote_id=mint_quote.quote)
     assert wallet3.balance == 64
@@ -260,7 +260,7 @@ async def test_restore_wallet_after_send_and_self_receive(wallet3: Wallet):
     )
     await reset_wallet_db(wallet3)
 
-    invoice = await wallet3.request_mint(64)
+    mint_quote = await wallet3.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet3.mint(64, quote_id=mint_quote.quote)
     assert wallet3.balance == 64
@@ -289,7 +289,7 @@ async def test_restore_wallet_after_send_twice(
     wallet3.private_key = PrivateKey()
     await reset_wallet_db(wallet3)
 
-    invoice = await wallet3.request_mint(2)
+    mint_quote = await wallet3.request_mint(2)
     await pay_if_regtest(mint_quote.request)
     await wallet3.mint(2, quote_id=mint_quote.quote)
     box.add(wallet3.proofs)
@@ -348,7 +348,7 @@ async def test_restore_wallet_after_send_and_self_receive_nonquadratic_value(
     )
     await reset_wallet_db(wallet3)
 
-    invoice = await wallet3.request_mint(64)
+    mint_quote = await wallet3.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet3.mint(64, quote_id=mint_quote.quote)
     box.add(wallet3.proofs)

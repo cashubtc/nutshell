@@ -338,8 +338,8 @@ async def test_melt_lightning_pay_invoice_exception_exception(
 async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     """Mint and melt different units."""
     # load the wallet
-    invoice = await wallet.request_mint(64)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await wallet.mint(64, quote_id=mint_quote.quote)
 
     amount = 32
 

@@ -2,7 +2,14 @@ import json
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..core.base import MeltQuote, MintQuote, Proof, WalletKeyset
+from ..core.base import (
+    MeltQuote,
+    MeltQuoteState,
+    MintQuote,
+    MintQuoteState,
+    Proof,
+    WalletKeyset,
+)
 from ..core.db import Connection, Database
 
 
@@ -267,15 +274,31 @@ async def store_bolt11_mint_quote(
 
 async def get_bolt11_mint_quote(
     db: Database,
-    quote: str,
+    quote: str | None = None,
+    request: str | None = None,
     conn: Optional[Connection] = None,
 ) -> Optional[MintQuote]:
+    if not quote and not request:
+        raise ValueError("quote or request must be provided")
+    clauses = []
+    values: Dict[str, Any] = {}
+    if quote:
+        clauses.append("quote = :quote")
+        values["quote"] = quote
+    if request:
+        clauses.append("request = :request")
+        values["request"] = request
+
+    where = ""
+    if clauses:
+        where = f"WHERE {' AND '.join(clauses)}"
+
     row = await (conn or db).fetchone(
-        """
+        f"""
         SELECT * from bolt11_mint_quotes
-        WHERE quote = :quote
+        {where}
         """,
-        {"quote": quote},
+        values,
     )
     return MintQuote.from_row(row) if row else None  # type: ignore
 
@@ -283,7 +306,7 @@ async def get_bolt11_mint_quote(
 async def get_bolt11_mint_quotes(
     db: Database,
     mint: Optional[str] = None,
-    state: Optional[str] = None,
+    state: Optional[MintQuoteState] = None,
     conn: Optional[Connection] = None,
 ) -> List[MintQuote]:
     clauses = []
@@ -293,11 +316,12 @@ async def get_bolt11_mint_quotes(
         values["mint"] = mint
     if state:
         clauses.append("state = :state")
-        values["state"] = state
+        values["state"] = state.value
 
     where = ""
     if clauses:
         where = f"WHERE {' AND '.join(clauses)}"
+
     rows = await (conn or db).fetchall(
         f"""
         SELECT * from bolt11_mint_quotes
@@ -305,13 +329,13 @@ async def get_bolt11_mint_quotes(
         """,
         values,
     )
-    return [MintQuote(**r) for r in rows]
+    return [MintQuote.from_row(r) for r in rows]  # type: ignore
 
 
 async def update_bolt11_mint_quote(
     db: Database,
     quote: str,
-    state: str,
+    state: MintQuoteState,
     paid_time: int,
     conn: Optional[Connection] = None,
 ) -> None:
@@ -322,7 +346,7 @@ async def update_bolt11_mint_quote(
         WHERE quote = :quote
         """,
         {
-            "state": state,
+            "state": state.value,
             "paid_time": paid_time,
             "quote": quote,
         },
@@ -368,6 +392,8 @@ async def get_bolt11_melt_quote(
     request: Optional[str] = None,
     conn: Optional[Connection] = None,
 ) -> Optional[MeltQuote]:
+    if not quote and not request:
+        raise ValueError("quote or request must be provided")
     clauses = []
     values: Dict[str, Any] = {}
     if quote:
@@ -394,7 +420,7 @@ async def get_bolt11_melt_quote(
 async def get_bolt11_melt_quotes(
     db: Database,
     mint: Optional[str] = None,
-    state: Optional[str] = None,
+    state: Optional[MeltQuoteState] = None,
     conn: Optional[Connection] = None,
 ) -> List[MeltQuote]:
     clauses = []
@@ -404,7 +430,7 @@ async def get_bolt11_melt_quotes(
         values["mint"] = mint
     if state:
         clauses.append("state = :state")
-        values["state"] = state
+        values["state"] = state.value
 
     where = ""
     if clauses:
@@ -416,13 +442,13 @@ async def get_bolt11_melt_quotes(
         """,
         values,
     )
-    return [MeltQuote(**r) for r in rows]
+    return [MeltQuote.from_row(r) for r in rows]  # type: ignore
 
 
 async def update_bolt11_melt_quote(
     db: Database,
     quote: str,
-    state: str,
+    state: MeltQuoteState,
     paid_time: int,
     fee_paid: int,
     payment_preimage: str,
@@ -435,7 +461,7 @@ async def update_bolt11_melt_quote(
         WHERE quote = :quote
         """,
         {
-            "state": state,
+            "state": state.value,
             "paid_time": paid_time,
             "fee_paid": fee_paid,
             "payment_preimage": payment_preimage,

@@ -15,7 +15,15 @@ import click
 from click import Context
 from loguru import logger
 
-from ...core.base import Invoice, Method, MintQuote, MintQuoteState, TokenV4, Unit
+from ...core.base import (
+    MeltQuote,
+    MeltQuoteState,
+    Method,
+    MintQuote,
+    MintQuoteState,
+    TokenV4,
+    Unit,
+)
 from ...core.helpers import sum_proofs
 from ...core.json_rpc.base import JSONRPCNotficationParams
 from ...core.logging import configure_logger
@@ -24,6 +32,9 @@ from ...core.settings import settings
 from ...nostr.client.client import NostrClient
 from ...tor.tor import TorProxy
 from ...wallet.crud import (
+    get_bolt11_melt_quotes,
+    get_bolt11_mint_quote,
+    get_bolt11_mint_quotes,
     get_reserved_proofs,
     get_seed_and_mnemonic,
 )
@@ -882,67 +893,85 @@ async def invoices(ctx, paid: bool, unpaid: bool, pending: bool, mint: bool):
     if mint:
         await wallet.load_mint()
 
-    paid_arg = None
+    melt_state: MeltQuoteState | None = None
+    mint_state: MintQuoteState | None = None
     if unpaid:
-        paid_arg = False
+        melt_state = MeltQuoteState.unpaid
+        mint_state = MintQuoteState.unpaid
     elif paid:
-        paid_arg = True
+        melt_state = MeltQuoteState.paid
+        mint_state = MintQuoteState.paid
 
-    invoices = await get_lightning_invoices(
+    melt_quotes = await get_bolt11_melt_quotes(
         db=wallet.db,
-        paid=paid_arg,
-        pending=pending or None,
+        state=melt_state,
     )
 
-    if len(invoices) == 0:
+    mint_quotes = await get_bolt11_mint_quotes(
+        db=wallet.db,
+        state=mint_state,
+    )
+
+    if len(melt_quotes) == 0 and len(mint_quotes) == 0:
         print("No invoices found.")
         return
 
-    async def _try_to_mint_pending_invoice(amount: int, id: str) -> Optional[Invoice]:
+    async def _try_to_mint_pending_invoice(amount: int, id: str) -> Optional[MintQuote]:
         try:
-            await wallet.mint(amount, id)
-            return await get_lightning_invoice(db=wallet.db, id=id)
+            proofs = await wallet.mint(amount, id)
+            print(f"Received {wallet.unit.str(sum_proofs(proofs))}")
+            return await get_bolt11_mint_quote(db=wallet.db, quote=id)
         except Exception as e:
-            logger.error(f"Could not mint pending invoice [{id}]: {e}")
+            logger.error(f"Could not mint pending invoice: {e}")
             return None
 
-    def _print_invoice_info(invoice: Invoice):
+    def _print_quote_info(
+        quote: MintQuote | MeltQuote | None, counter: int | None = None
+    ):
         print("\n--------------------------\n")
-        print(f"Amount: {abs(invoice.amount)}")
-        print(f"ID: {invoice.id}")
-        print(f"Paid: {invoice.paid}")
-        print(f"Incoming: {invoice.amount > 0}")
+        if counter:
+            print(f"#{counter}", end=" ")
+        if isinstance(quote, MintQuote):
+            print("Mint quote (incoming invoice)")
+        elif isinstance(quote, MeltQuote):
+            print("Melt quote (outgoing invoice)")
+        else:
+            return
+        print(f"Amount: {abs(quote.amount)}")
+        print(f"Mint: {quote.mint}")
+        print(f"ID: {quote.quote}")
+        print(f"State: {quote.state}")
 
-        if invoice.preimage:
-            print(f"Preimage: {invoice.preimage}")
-        if invoice.time_created:
+        if isinstance(quote, MeltQuote):
+            if quote.payment_preimage:
+                print(f"Preimage: {quote.payment_preimage}")
+        if quote.created_time:
             d = datetime.fromtimestamp(
-                int(float(invoice.time_created)), timezone.utc
+                int(float(quote.created_time)), timezone.utc
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(f"Created at: {d}")
-        if invoice.time_paid:
+        if quote.paid_time:
             d = datetime.fromtimestamp(
-                (int(float(invoice.time_paid))), timezone.utc
+                (int(float(quote.paid_time))), timezone.utc
             ).strftime("%Y-%m-%d %H:%M:%S")
             print(f"Paid at: {d}")
-        print(f"\nPayment request: {mint_quote.request}")
+        print(f"\nPayment request: {quote.request}")
 
     invoices_printed_count = 0
-    for invoice in invoices:
-        is_pending_invoice = invoice.out is False and invoice.paid is False
-        if is_pending_invoice and mint:
-            # Tries to mint pending invoice
-            updated_invoice = await _try_to_mint_pending_invoice(
-                invoice.amount, invoice.id
-            )
-            # If the mint ran successfully and we are querying for pending or unpaid invoices, do not print it
-            if pending or unpaid:
-                continue
-            # Otherwise, print the invoice with updated values
-            if updated_invoice:
-                invoice = updated_invoice
+    for melt_quote in melt_quotes:
+        _print_quote_info(melt_quote, invoices_printed_count + 1)
+        invoices_printed_count += 1
 
-        _print_invoice_info(invoice)
+    for mint_quote in mint_quotes:
+        if mint_quote.state == MintQuoteState.unpaid and mint:
+            # Tries to mint pending invoice
+            mint_quote_pay = await _try_to_mint_pending_invoice(
+                mint_quote.amount, mint_quote.quote
+            )
+            # If minting was successful, we don't need to print this invoice
+            if mint_quote_pay:
+                continue
+        _print_quote_info(mint_quote, invoices_printed_count + 1)
         invoices_printed_count += 1
 
     if invoices_printed_count == 0:

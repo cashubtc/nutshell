@@ -318,7 +318,7 @@ class MeltQuote(LedgerEvent):
             unit=row["unit"],
             amount=row["amount"],
             fee_reserve=row["fee_reserve"],
-            state=MeltQuoteState[row["state"]],
+            state=MeltQuoteState(row["state"]),
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
@@ -426,7 +426,7 @@ class MintQuote(LedgerEvent):
             checking_id=row["checking_id"],
             unit=row["unit"],
             amount=row["amount"],
-            state=MintQuoteState[row["state"]],
+            state=MintQuoteState(row["state"]),
             created_time=created_time,
             paid_time=paid_time,
         )

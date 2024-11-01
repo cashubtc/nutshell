@@ -304,7 +304,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {"b_": str(b_)},
         )
-        return BlindedSignature.from_row(row) if row else None
+        return BlindedSignature.from_row(row) if row else None  # type: ignore
 
     async def get_promises(
         self,
@@ -320,7 +320,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
-        return [BlindedSignature.from_row(r) for r in rows] if rows else []
+        return [BlindedSignature.from_row(r) for r in rows] if rows else []  # type: ignore
 
     async def invalidate_proof(
         self,
@@ -455,7 +455,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "amount": quote.amount,
                 "paid": quote.paid,  # this is deprecated! we need to store it because we have a NOT NULL constraint | we could also remove the column but sqlite doesn't support that (we would have to make a new table)
                 "issued": quote.issued,  # this is deprecated! we need to store it because we have a NOT NULL constraint | we could also remove the column but sqlite doesn't support that (we would have to make a new table)
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
                 ),
@@ -497,7 +497,7 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         if row is None:
             return None
-        return MintQuote.from_row(row) if row else None
+        return MintQuote.from_row(row) if row else None  # type: ignore
 
     async def get_mint_quote_by_request(
         self,
@@ -513,7 +513,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             {"request": request},
         )
-        return MintQuote.from_row(row) if row else None
+        return MintQuote.from_row(row) if row else None  # type: ignore
 
     async def update_mint_quote(
         self,
@@ -525,7 +525,7 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"UPDATE {db.table_with_schema('mint_quotes')} SET state = :state, paid_time = :paid_time WHERE quote = :quote",
             {
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 ),
@@ -554,7 +554,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "unit": quote.unit,
                 "amount": quote.amount,
                 "fee_reserve": quote.fee_reserve or 0,
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "paid": quote.paid,  # this is deprecated! we need to store it because we have a NOT NULL constraint | we could also remove the column but sqlite doesn't support that (we would have to make a new table)
                 "created_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.created_time) or ""
@@ -631,7 +631,7 @@ class LedgerCrudSqlite(LedgerCrud):
             UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change, checking_id = :checking_id WHERE quote = :quote
             """,
             {
-                "state": quote.state.name,
+                "state": quote.state.value,
                 "fee_paid": quote.fee_paid,
                 "paid_time": db.to_timestamp(
                     db.timestamp_from_seconds(quote.paid_time) or ""
