@@ -60,10 +60,9 @@ Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
 # from cashu.mint.startup import lightning_backend  # noqa
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def event_loop():
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
+    loop = asyncio.new_event_loop()
     yield loop
     loop.close()
 
