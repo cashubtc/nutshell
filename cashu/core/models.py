@@ -211,9 +211,9 @@ class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     amount: int  # input amount
     fee_reserve: int  # input fee reserve
-    paid: Optional[
-        bool
-    ] = None  # whether the request has been paid # DEPRECATED as per NUT PR #136
+    paid: Optional[bool] = (
+        None  # whether the request has been paid # DEPRECATED as per NUT PR #136
+    )
     state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
     payment_preimage: Optional[str] = None  # payment preimage
