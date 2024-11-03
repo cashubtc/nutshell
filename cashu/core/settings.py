@@ -63,6 +63,8 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=0)
 
+    mint_ticket_price_sat: int = Field(default=1337)
+
 
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
