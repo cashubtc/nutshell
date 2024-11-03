@@ -268,8 +268,8 @@ class LedgerVerification(
         method = Method[method_str]
         unit = Unit[unit_str]
 
-        if not any([unit == k.unit for k in self.keysets.values()]):
-            raise NotAllowedError(f"unit '{unit.name}' not supported in any keyset.")
+        # if not any([unit == k.unit for k in self.keysets.values()]):
+        #     raise NotAllowedError(f"unit '{unit.name}' not supported in any keyset.")
 
         if not self.backends.get(method) or unit not in self.backends[method]:
             raise NotAllowedError(
