@@ -408,6 +408,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if settings.mint_peg_out_only:
             raise NotAllowedError("Mint does not allow minting new tokens.")
 
+        # POC: Tickets
+        if quote_request.unit == "ticket":
+            quote_request.unit = "sat"
+            quote_request.amount = quote_request.amount * settings.mint_ticket_price_sat
+
         unit, method = self._verify_and_get_unit_method(
             quote_request.unit, Method.bolt11.name
         )
@@ -551,10 +556,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise QuoteNotPaidError()
         previous_state = quote.state
         await self.db_write._set_mint_quote_pending(quote_id=quote_id)
+        is_ticket = quote.unit == "sat" and output_unit.name == "ticket"
         try:
-            if not quote.unit == output_unit.name:
+            if not quote.unit == output_unit.name and not is_ticket:
                 raise TransactionError("quote unit does not match output unit")
-            if not quote.amount == sum_amount_outputs:
+            if not quote.amount == sum_amount_outputs and not is_ticket:
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry > int(time.time()):
                 raise TransactionError("quote expired")

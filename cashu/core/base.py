@@ -530,6 +530,7 @@ class Unit(Enum):
     usd = 2
     eur = 3
     btc = 4
+    ticket = 99
 
     def str(self, amount: int) -> str:
         if self == Unit.sat:
@@ -543,7 +544,7 @@ class Unit(Enum):
         elif self == Unit.btc:
             return f"{amount/1e8:.8f} BTC"
         else:
-            raise Exception("Invalid unit")
+            return f"{amount} {self.name}"
 
     def __str__(self):
         return self.name
