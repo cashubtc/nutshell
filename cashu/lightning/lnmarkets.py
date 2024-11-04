@@ -307,7 +307,7 @@ class LNMarketsWallet(LightningBackend):
         except Exception:
             logger.error(f"get invoice status unsuccessful: {r.text}")
             return PaymentStatus(result=PaymentResult.UNKNOWN)
-        return PaymentStatus(result=PaymentResult.SETTLED if data["success"] else PaymentResult.FAILED)
+        return PaymentStatus(result=PaymentResult.SETTLED if data["success"] else PaymentResult.PENDING)
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
         path = f"/v2/user/withdrawals/{checking_id}"
@@ -334,10 +334,18 @@ class LNMarketsWallet(LightningBackend):
         if "success" not in data:
             return PaymentStatus(result=PaymentResult.UNKNOWN)
 
-        return PaymentStatus(
-            result=PaymentResult.SETTLED if data["success"] else PaymentResult.FAILED,
-            fee=Amount(unit=Unit.sat, amount=int(data["fee"])),
-        )
+        if data["success"]:
+            return PaymentStatus(
+                result=PaymentResult.SETTLED, 
+                fee=Amount(unit=Unit.sat, amount=int(data["fee"]))
+            )
+        else:
+            # TIMEOUT 30 seconds 
+            now = int(time.time())
+            if 0 <= (now - int(data["ts"])) < 30:
+                return PaymentStatus(result=PaymentResult.PENDING)
+            else:
+                return PaymentStatus(result=PaymentResult.FAILED)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
