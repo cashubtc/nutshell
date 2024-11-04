@@ -14,7 +14,7 @@ from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import is_github_actions, is_postgres, pay_if_regtest
+from tests.helpers import is_github_actions, is_postgres, is_regtest, pay_if_regtest
 
 
 async def assert_err(f, msg):
@@ -300,6 +300,7 @@ async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledg
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
 async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
     # fill wallet
     mint_quote = await wallet.request_mint(64)
