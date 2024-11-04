@@ -573,9 +573,28 @@ class LedgerAPI(LedgerAPIDeprecated):
                     states.append(ProofState(Y=p.Y, state=ProofSpentState.pending))
                 else:
                     states.append(ProofState(Y=p.Y, state=ProofSpentState.spent))
-            ret = PostCheckStateResponse(states=states)
-            return ret
+            return PostCheckStateResponse(states=states)
         # END backwards compatibility < 0.15.0
+
+        # BEGIN backwards compatibility < 0.16.0
+        # payload has "secrets" instead of "Ys"
+        if resp.status_code == 422:
+            logger.warning(
+                "Received HTTP Error 422. Attempting state check with < 0.16.0 compatibility."
+            )
+            payload_secrets = {"secrets": [p.secret for p in proofs]}
+            resp_secrets = await self.httpx.post(
+                join(self.url, "/v1/checkstate"),
+                json=payload_secrets,
+            )
+            self.raise_on_error(resp_secrets)
+            states = [
+                ProofState(Y=p.Y, state=ProofSpentState(s["state"]))
+                for p, s in zip(proofs, resp_secrets.json()["states"])
+            ]
+            return PostCheckStateResponse(states=states)
+        # END backwards compatibility < 0.16.0
+
         self.raise_on_error_request(resp)
         return PostCheckStateResponse.parse_obj(resp.json())
 
