@@ -674,7 +674,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 "keyset": keyset.id,
             }
         )
-        assert row, "Balance not found"
+        
+        if row is None:
+            return 0
 
         # sqlalchemy index of first element
         key = next(iter(row))
