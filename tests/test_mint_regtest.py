@@ -321,3 +321,35 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
         db=ledger.db
     )
     assert not melt_quotes
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_lightning_pay_same_invoice_twice(ledger: Ledger):
+    invoice_dict = get_real_invoice(64)
+    request = invoice_dict["payment_request"]
+    quote = MeltQuote(
+        quote="test",
+        method=Method.bolt11.name,
+        unit=Unit.sat.name,
+        state=MeltQuoteState.unpaid,
+        request=request,
+        checking_id="test",
+        amount=64,
+        fee_reserve=0,
+    )
+    payment = await ledger.backends[Method.bolt11][Unit.sat].pay_invoice(quote, 1000)
+    assert payment.settled
+    assert payment.preimage
+    assert payment.checking_id
+    assert not payment.error_message
+
+    # pay the same invoice again
+    try:
+        payment = await ledger.backends[Method.bolt11][Unit.sat].pay_invoice(
+            quote, 1000
+        )
+    except Exception as e:
+        assert "already paid" in str(e)
+    else:
+        assert False, "Should have raised an exception"
