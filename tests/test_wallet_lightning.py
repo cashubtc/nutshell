@@ -81,8 +81,7 @@ async def test_check_invoice_internal(wallet: LightningWallet):
     # fill wallet
     invoice = await wallet.create_invoice(64)
     assert invoice.payment_request
-    assert invoice.checking_id
-    status = await wallet.get_invoice_status(invoice.checking_id)
+    status = await wallet.get_invoice_status(invoice.payment_request)
     assert status.settled
 
 
@@ -92,11 +91,10 @@ async def test_check_invoice_external(wallet: LightningWallet):
     # fill wallet
     invoice = await wallet.create_invoice(64)
     assert invoice.payment_request
-    assert invoice.checking_id
-    status = await wallet.get_invoice_status(invoice.checking_id)
+    status = await wallet.get_invoice_status(invoice.payment_request)
     assert not status.settled
     await pay_if_regtest(invoice.payment_request)
-    status = await wallet.get_invoice_status(invoice.checking_id)
+    status = await wallet.get_invoice_status(invoice.payment_request)
     assert status.settled
 
 
@@ -106,8 +104,7 @@ async def test_pay_invoice_internal(wallet: LightningWallet):
     # fill wallet
     invoice = await wallet.create_invoice(64)
     assert invoice.payment_request
-    assert invoice.checking_id
-    await wallet.get_invoice_status(invoice.checking_id)
+    await wallet.get_invoice_status(invoice.payment_request)
     assert wallet.available_balance >= 64
 
     # pay invoice
@@ -118,8 +115,7 @@ async def test_pay_invoice_internal(wallet: LightningWallet):
     assert status.settled
 
     # check payment
-    assert invoice2.checking_id
-    status = await wallet.get_payment_status(invoice2.checking_id)
+    status = await wallet.get_payment_status(invoice2.payment_request)
     assert status.settled
 
 
@@ -129,9 +125,8 @@ async def test_pay_invoice_external(wallet: LightningWallet):
     # fill wallet
     invoice = await wallet.create_invoice(64)
     assert invoice.payment_request
-    assert invoice.checking_id
     await pay_if_regtest(invoice.payment_request)
-    status = await wallet.get_invoice_status(invoice.checking_id)
+    status = await wallet.get_invoice_status(invoice.payment_request)
     assert status.settled
     assert wallet.available_balance >= 64
 
@@ -141,7 +136,5 @@ async def test_pay_invoice_external(wallet: LightningWallet):
 
     assert status.settled
 
-    # check payment
-    assert status.checking_id
-    status = await wallet.get_payment_status(status.checking_id)
+    # check payment)
     assert status.settled

@@ -1,6 +1,14 @@
+from enum import Enum
 from typing import Union
 
 from .secret import Secret, SecretKind
+
+
+class SigFlags(Enum):
+    # require signatures only on the inputs (default signature flag)
+    SIG_INPUTS = "SIG_INPUTS"
+    # require signatures on inputs and outputs
+    SIG_ALL = "SIG_ALL"
 
 
 class HTLCSecret(Secret):
@@ -15,3 +23,13 @@ class HTLCSecret(Secret):
     def locktime(self) -> Union[None, int]:
         locktime = self.tags.get_tag("locktime")
         return int(locktime) if locktime else None
+
+    @property
+    def sigflag(self) -> Union[None, SigFlags]:
+        sigflag = self.tags.get_tag("sigflag")
+        return SigFlags(sigflag) if sigflag else None
+
+    @property
+    def n_sigs(self) -> Union[None, int]:
+        n_sigs = self.tags.get_tag("n_sigs")
+        return int(n_sigs) if n_sigs else None

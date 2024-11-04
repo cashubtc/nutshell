@@ -4,7 +4,7 @@ from typing import List
 
 from loguru import logger
 
-from ..core.base import BlindedMessage, HTLCWitness, Proof
+from ..core.base import BlindedMessage, Proof
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
     TransactionError,
@@ -13,7 +13,7 @@ from ..core.htlc import HTLCSecret
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
-    verify_p2pk_signature,
+    verify_schnorr_signature,
 )
 from ..core.secret import Secret, SecretKind
 
@@ -50,62 +50,9 @@ class LedgerSpendingConditions:
         if not pubkeys:
             return True
 
-        assert len(set(pubkeys)) == len(pubkeys), "pubkeys must be unique."
-        logger.trace(f"pubkeys: {pubkeys}")
-
-        # verify that signatures are present
-        if not proof.p2pksigs:
-            # no signature present although secret indicates one
-            logger.error(f"no p2pk signatures in proof: {proof.p2pksigs}")
-            raise TransactionError("no p2pk signatures in proof.")
-
-        # we make sure that there are no duplicate signatures
-        if len(set(proof.p2pksigs)) != len(proof.p2pksigs):
-            raise TransactionError("p2pk signatures must be unique.")
-
-        # we parse the secret as a P2PK commitment
-        # assert len(proof.secret.split(":")) == 5, "p2pk secret format invalid."
-
-        # INPUTS: check signatures proof.p2pksigs against pubkey
-        # we expect the signature to be on the pubkey (=message) itself
-        n_sigs_required = p2pk_secret.n_sigs or 1
-        assert n_sigs_required > 0, "n_sigs must be positive."
-
-        # check if enough signatures are present
-        assert (
-            len(proof.p2pksigs) >= n_sigs_required
-        ), f"not enough signatures provided: {len(proof.p2pksigs)} < {n_sigs_required}."
-
-        n_valid_sigs_per_output = 0
-        # loop over all signatures in output
-        for input_sig in proof.p2pksigs:
-            for pubkey in pubkeys:
-                logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
-                logger.trace(f"Message: {p2pk_secret.serialize().encode('utf-8')}")
-                if verify_p2pk_signature(
-                    message=proof.secret.encode("utf-8"),
-                    pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
-                    signature=bytes.fromhex(input_sig),
-                ):
-                    n_valid_sigs_per_output += 1
-                    logger.trace(
-                        f"p2pk signature on input is valid: {input_sig} on {pubkey}."
-                    )
-
-        # check if we have enough valid signatures
-        assert n_valid_sigs_per_output, "no valid signature provided for input."
-        assert n_valid_sigs_per_output >= n_sigs_required, (
-            f"signature threshold not met. {n_valid_sigs_per_output} <"
-            f" {n_sigs_required}."
+        return self._verify_secret_signatures(
+            proof, pubkeys, proof.p2pksigs, p2pk_secret.n_sigs
         )
-
-        logger.trace(
-            f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures found."
-        )
-        logger.trace(proof.p2pksigs)
-        logger.trace("p2pk signature on inputs is valid.")
-
-        return True
 
     def _verify_htlc_spending_conditions(self, proof: Proof, secret: Secret) -> bool:
         """
@@ -149,18 +96,9 @@ class LedgerSpendingConditions:
         if htlc_secret.locktime and htlc_secret.locktime < time.time():
             refund_pubkeys = htlc_secret.tags.get_tag_all("refund")
             if refund_pubkeys:
-                assert proof.witness, TransactionError("no HTLC refund signature.")
-                signature = HTLCWitness.from_witness(proof.witness).signature
-                assert signature, TransactionError("no HTLC refund signature provided")
-                for pubkey in refund_pubkeys:
-                    if verify_p2pk_signature(
-                        message=proof.secret.encode("utf-8"),
-                        pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
-                        signature=bytes.fromhex(signature),
-                    ):
-                        # a signature matches
-                        return True
-                raise TransactionError("HTLC refund signatures did not match.")
+                return self._verify_secret_signatures(
+                    proof, refund_pubkeys, proof.p2pksigs, htlc_secret.n_sigs
+                )
             # no pubkeys given in secret, anyone can spend
             return True
 
@@ -173,23 +111,74 @@ class LedgerSpendingConditions:
         ).digest() == bytes.fromhex(htlc_secret.data):
             raise TransactionError("HTLC preimage does not match.")
 
-        # then we check whether a signature is required
+        # then we check whether signatures are required
         hashlock_pubkeys = htlc_secret.tags.get_tag_all("pubkeys")
-        if hashlock_pubkeys:
-            assert proof.witness, TransactionError("no HTLC hash lock signature.")
-            signature = HTLCWitness.from_witness(proof.witness).signature
-            assert signature, TransactionError("HTLC no hash lock signatures provided.")
-            for pubkey in hashlock_pubkeys:
-                if verify_p2pk_signature(
+        if not hashlock_pubkeys:
+            # no pubkeys given in secret, anyone can spend
+            return True
+
+        return self._verify_secret_signatures(
+            proof, hashlock_pubkeys, proof.htlcsigs or [], htlc_secret.n_sigs
+        )
+
+    def _verify_secret_signatures(
+        self,
+        proof: Proof,
+        pubkeys: List[str],
+        signatures: List[str],
+        n_sigs_required: int | None = 1,
+    ) -> bool:
+        assert len(set(pubkeys)) == len(pubkeys), "pubkeys must be unique."
+        logger.trace(f"pubkeys: {pubkeys}")
+
+        # verify that signatures are present
+        if not signatures:
+            # no signature present although secret indicates one
+            logger.error(f"no signatures in proof: {proof}")
+            raise TransactionError("no signatures in proof.")
+
+        # we make sure that there are no duplicate signatures
+        if len(set(signatures)) != len(signatures):
+            raise TransactionError("signatures must be unique.")
+
+        # INPUTS: check signatures against pubkey
+        # we expect the signature to be on the pubkey (=message) itself
+        n_sigs_required = n_sigs_required or 1
+        assert n_sigs_required > 0, "n_sigs must be positive."
+
+        # check if enough signatures are present
+        assert (
+            len(signatures) >= n_sigs_required
+        ), f"not enough signatures provided: {len(signatures)} < {n_sigs_required}."
+
+        n_valid_sigs_per_output = 0
+        # loop over all signatures in input
+        for input_sig in signatures:
+            for pubkey in pubkeys:
+                logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
+                logger.trace(f"Message: {proof.secret}")
+                if verify_schnorr_signature(
                     message=proof.secret.encode("utf-8"),
                     pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
-                    signature=bytes.fromhex(signature),
+                    signature=bytes.fromhex(input_sig),
                 ):
-                    # a signature matches
-                    return True
-                # none of the pubkeys had a match
-                raise TransactionError("HTLC hash lock signatures did not match.")
-        # no pubkeys were included, anyone can spend
+                    n_valid_sigs_per_output += 1
+                    logger.trace(
+                        f"signature on input is valid: {input_sig} on {pubkey}."
+                    )
+
+        # check if we have enough valid signatures
+        assert n_valid_sigs_per_output, "no valid signature provided for input."
+        assert n_valid_sigs_per_output >= n_sigs_required, (
+            f"signature threshold not met. {n_valid_sigs_per_output} <"
+            f" {n_sigs_required}."
+        )
+
+        logger.trace(
+            f"{n_valid_sigs_per_output} of {n_sigs_required} valid signatures found."
+        )
+        logger.trace("p2pk signature on inputs is valid.")
+
         return True
 
     def _verify_input_spending_conditions(self, proof: Proof) -> bool:
@@ -304,7 +293,7 @@ class LedgerSpendingConditions:
             # loop over all signatures in output
             for sig in p2pksigs:
                 for pubkey in pubkeys:
-                    if verify_p2pk_signature(
+                    if verify_schnorr_signature(
                         message=bytes.fromhex(output.B_),
                         pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
                         signature=bytes.fromhex(sig),

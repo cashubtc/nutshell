@@ -12,7 +12,11 @@ from ...lightning.base import (
     PaymentStatus,
     StatusResponse,
 )
-from ...wallet.crud import get_lightning_invoice, get_proofs
+from ...wallet.crud import (
+    get_bolt11_melt_quote,
+    get_bolt11_mint_quote,
+    get_proofs,
+)
 from ..wallet import Wallet
 
 
@@ -47,21 +51,22 @@ class LightningWallet(Wallet):
         Returns:
             str: invoice
         """
-        invoice = await self.request_mint(amount, memo)
+        mint_quote = await self.request_mint(amount, memo)
         return InvoiceResponse(
-            ok=True, payment_request=invoice.bolt11, checking_id=invoice.payment_hash
+            ok=True,
+            payment_request=mint_quote.request,
         )
 
-    async def pay_invoice(self, pr: str) -> PaymentResponse:
+    async def pay_invoice(self, request: str) -> PaymentResponse:
         """Pay lightning invoice
 
         Args:
-            pr (str): bolt11 payment request
+            request (str): bolt11 payment request
 
         Returns:
             PaymentResponse: containing details of the operation
         """
-        quote = await self.melt_quote(pr)
+        quote = await self.melt_quote(request)
         total_amount = quote.amount + quote.fee_reserve
         assert total_amount > 0, "amount is not positive"
         if self.available_balance < total_amount:
@@ -69,13 +74,13 @@ class LightningWallet(Wallet):
             return PaymentResponse(result=PaymentResult.FAILED)
         _, send_proofs = await self.swap_to_send(self.proofs, total_amount)
         try:
-            resp = await self.melt(send_proofs, pr, quote.fee_reserve, quote.quote)
+            resp = await self.melt(send_proofs, request, quote.fee_reserve, quote.quote)
             if resp.change:
                 fees_paid_sat = quote.fee_reserve - sum_promises(resp.change)
             else:
                 fees_paid_sat = quote.fee_reserve
 
-            invoice_obj = bolt11.decode(pr)
+            invoice_obj = bolt11.decode(request)
             return PaymentResponse(
                 result=PaymentResult.SETTLED,
                 checking_id=invoice_obj.payment_hash,
@@ -86,55 +91,49 @@ class LightningWallet(Wallet):
             print("Exception:", e)
             return PaymentResponse(result=PaymentResult.FAILED, error_message=str(e))
 
-    async def get_invoice_status(self, payment_hash: str) -> PaymentStatus:
+    async def get_invoice_status(self, request: str) -> PaymentStatus:
         """Get lightning invoice status (incoming)
 
         Args:
-            invoice (str): lightning invoice
+            request (str): lightning invoice request
 
         Returns:
             str: status
         """
-        invoice = await get_lightning_invoice(
-            db=self.db, payment_hash=payment_hash, out=False
-        )
-        if not invoice:
+        mint_quote = await get_bolt11_mint_quote(db=self.db, request=request)
+        if not mint_quote:
             return PaymentStatus(result=PaymentResult.UNKNOWN)
-        if invoice.paid:
+        if mint_quote.paid:
             return PaymentStatus(result=PaymentResult.SETTLED)
         try:
             # to check the invoice state, we try minting tokens
-            await self.mint(invoice.amount, id=invoice.id)
+            await self.mint(mint_quote.amount, quote_id=mint_quote.quote)
             return PaymentStatus(result=PaymentResult.SETTLED)
         except Exception as e:
             print(e)
             return PaymentStatus(result=PaymentResult.FAILED)
 
-    async def get_payment_status(self, payment_hash: str) -> PaymentStatus:
+    async def get_payment_status(self, request: str) -> PaymentStatus:
         """Get lightning payment status (outgoing)
 
         Args:
-            payment_hash (str): lightning invoice payment_hash
+            request (str): lightning invoice request
 
         Returns:
             str: status
         """
 
-        # NOTE: consider adding this in wallet.py and update invoice state to paid in DB
+        melt_quote = await get_bolt11_melt_quote(db=self.db, request=request)
 
-        invoice = await get_lightning_invoice(
-            db=self.db, payment_hash=payment_hash, out=True
-        )
-
-        if not invoice:
+        if not melt_quote:
             return PaymentStatus(
                 result=PaymentResult.FAILED
             )  # "invoice not found (in db)"
-        if invoice.paid:
+        if melt_quote.paid:
             return PaymentStatus(
-                result=PaymentResult.SETTLED, preimage=invoice.preimage
+                result=PaymentResult.SETTLED, preimage=melt_quote.payment_preimage
             )  # "paid (in db)"
-        proofs = await get_proofs(db=self.db, melt_id=invoice.id)
+        proofs = await get_proofs(db=self.db, melt_id=melt_quote.quote)
         if not proofs:
             return PaymentStatus(
                 result=PaymentResult.FAILED

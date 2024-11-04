@@ -7,6 +7,9 @@ import bolt11
 import httpx
 from httpx import Response
 from loguru import logger
+from pydantic import ValidationError
+
+from cashu.wallet.crud import get_bolt11_melt_quote
 
 from ..core.base import (
     BlindedMessage,
@@ -44,9 +47,6 @@ from ..core.models import (
 )
 from ..core.settings import settings
 from ..tor.tor import TorProxy
-from .crud import (
-    get_lightning_invoice,
-)
 from .wallet_deprecated import LedgerAPIDeprecated
 
 
@@ -467,14 +467,26 @@ class LedgerAPI(LedgerAPIDeprecated):
             json=payload.dict(include=_meltrequest_include_fields(proofs, outputs)),  # type: ignore
             timeout=None,
         )
-        # BEGIN backwards compatibility < 0.15.0
-        # assume the mint has not upgraded yet if we get a 404
-        if resp.status_code == 404:
-            invoice = await get_lightning_invoice(id=quote, db=self.db)
-            assert invoice, f"no invoice found for id {quote}"
-            ret: PostMeltResponse_deprecated = await self.melt_deprecated(
-                proofs=proofs, outputs=outputs, invoice=invoice.bolt11
-            )
+        try:
+            self.raise_on_error_request(resp)
+            return_dict = resp.json()
+            return PostMeltQuoteResponse.parse_obj(return_dict)
+        except Exception as e:
+            # BEGIN backwards compatibility < 0.15.0
+            # assume the mint has not upgraded yet if we get a 404
+            if resp.status_code == 404:
+                melt_quote = await get_bolt11_melt_quote(quote=quote, db=self.db)
+                assert melt_quote, f"no melt_quote found for id {quote}"
+                ret: PostMeltResponse_deprecated = await self.melt_deprecated(
+                    proofs=proofs, outputs=outputs, invoice=melt_quote.request
+                )
+            elif isinstance(e, ValidationError):
+                # BEGIN backwards compatibility < 0.16.0
+                # before 0.16.0, mints return PostMeltResponse_deprecated
+                ret = PostMeltResponse_deprecated.parse_obj(return_dict)
+                # END backwards compatibility < 0.16.0
+            else:
+                raise e
             return PostMeltQuoteResponse(
                 quote=quote,
                 amount=0,
@@ -489,10 +501,7 @@ class LedgerAPI(LedgerAPIDeprecated):
                 change=ret.change,
                 expiry=None,
             )
-        # END backwards compatibility < 0.15.0
-        self.raise_on_error_request(resp)
-        return_dict = resp.json()
-        return PostMeltQuoteResponse.parse_obj(return_dict)
+            # END backwards compatibility < 0.15.0
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
@@ -564,9 +573,28 @@ class LedgerAPI(LedgerAPIDeprecated):
                     states.append(ProofState(Y=p.Y, state=ProofSpentState.pending))
                 else:
                     states.append(ProofState(Y=p.Y, state=ProofSpentState.spent))
-            ret = PostCheckStateResponse(states=states)
-            return ret
+            return PostCheckStateResponse(states=states)
         # END backwards compatibility < 0.15.0
+
+        # BEGIN backwards compatibility < 0.16.0
+        # payload has "secrets" instead of "Ys"
+        if resp.status_code == 422:
+            logger.warning(
+                "Received HTTP Error 422. Attempting state check with < 0.16.0 compatibility."
+            )
+            payload_secrets = {"secrets": [p.secret for p in proofs]}
+            resp_secrets = await self.httpx.post(
+                join(self.url, "/v1/checkstate"),
+                json=payload_secrets,
+            )
+            self.raise_on_error(resp_secrets)
+            states = [
+                ProofState(Y=p.Y, state=ProofSpentState(s["state"]))
+                for p, s in zip(proofs, resp_secrets.json()["states"])
+            ]
+            return PostCheckStateResponse(states=states)
+        # END backwards compatibility < 0.16.0
+
         self.raise_on_error_request(resp)
         return PostCheckStateResponse.parse_obj(resp.json())
 
