@@ -418,7 +418,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         ):
             raise NotAllowedError("Backend does not support descriptions.")
 
-        if settings.mint_max_balance:
+        # MINT_MAX_BALANCE refers to sat (for now)
+        if settings.mint_max_balance and unit == Unit.sat:
             # get next active keyset for unit
             active_keyset: MintKeyset = next(
                 filter(lambda k: k.active and k.unit == unit, self.keysets.values())
