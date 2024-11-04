@@ -206,9 +206,9 @@ class Database(Compat):
             session: AsyncSession = self.async_session()  # type: ignore
             try:
                 logger.trace(f"Connecting to database trial: {trial} ({random_int})")
-                async with session.begin() as txn:  # type: ignore
+                async with session.begin():  # type: ignore
                     logger.trace("Connected to database. Starting transaction")
-                    wconn = Connection(session, txn, self.type, self.name, self.schema)
+                    wconn = Connection(session, None, self.type, self.name, self.schema)
                     if lock_table:
                         await self.acquire_lock(
                             wconn, lock_table, lock_select_statement
@@ -232,10 +232,7 @@ class Database(Compat):
             finally:
                 logger.trace(f"Closing session trial: {trial} ({random_int})")
                 await session.close()
-                # if not inherited:
-                #     logger.trace("Closing session")
-                #     await session.close()
-                #     self._connection = None
+
         raise Exception(
             f"failed to acquire database lock on {lock_table} after {timeout}s and {trial} trials ({random_int})"
         )
