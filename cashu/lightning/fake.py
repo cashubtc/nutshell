@@ -30,6 +30,7 @@ from .base import (
 
 
 class FakeWallet(LightningBackend):
+    unit: Unit
     fake_btc_price = 1e8 / 1337
     paid_invoices_queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
@@ -46,7 +47,6 @@ class FakeWallet(LightningBackend):
     ).hex()
 
     supported_units = {Unit.sat, Unit.msat, Unit.usd, Unit.eur}
-    unit = Unit.sat
 
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
