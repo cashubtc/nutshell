@@ -92,7 +92,7 @@ async def ledger():
             # drop all tables
             await conn.execute("DROP SCHEMA public CASCADE;")
             await conn.execute("CREATE SCHEMA public;")
-        await db.engine.dispose()
+        # await db.engine.dispose()
 
     wallets_module = importlib.import_module("cashu.lightning")
     lightning_backend_sat = getattr(wallets_module, settings.mint_backend_bolt11_sat)(
