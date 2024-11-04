@@ -303,6 +303,7 @@ async def test_melt_lightning_pay_invoice_exception_exception(
     ledger: Ledger, wallet: Wallet
 ):
     """Simulates the case where pay_invoice and get_payment_status raise an exception (due to network issues for example)."""
+    settings.mint_disable_melt_on_error = True
     mint_quote = await wallet.request_mint(64)
     await ledger.get_mint_quote(mint_quote.quote)  # fakewallet: set the quote to paid
     await wallet.mint(64, quote_id=mint_quote.quote)
