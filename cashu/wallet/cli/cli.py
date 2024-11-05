@@ -247,10 +247,10 @@ async def pay(
             and melt_response.payment_preimage != "0" * 64
         ):
             if not check_payment_preimage(payment_hash, melt_response.payment_preimage):
-                print("\nINVALID PAYMENT PREIMAGE!")
+                print(" Error: Invalid preimage!", end="", flush=True)
             print(f" (Preimage: {melt_response.payment_preimage}).")
         else:
-            print(" Mint did not provide a payment preimage.")
+            print(" Mint did not provide a preimage.")
     elif MintQuoteState(melt_response.state) == MintQuoteState.pending:
         print(" Invoice pending.")
     elif MintQuoteState(melt_response.state) == MintQuoteState.unpaid:
