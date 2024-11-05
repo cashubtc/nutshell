@@ -49,6 +49,7 @@ async def wallet():
     )
     await wallet.load_mint()
     yield wallet
+    await wallet.db.engine.dispose()
 
 
 @pytest.mark.asyncio

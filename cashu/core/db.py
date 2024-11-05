@@ -228,7 +228,7 @@ class Database(Compat):
                     )
                 else:
                     logger.error(f"Error in session trial: {trial} ({random_int}): {e}")
-                    raise e
+                    raise
             finally:
                 logger.trace(f"Closing session trial: {trial} ({random_int})")
                 await session.close()

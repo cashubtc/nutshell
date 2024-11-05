@@ -138,9 +138,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         logger.info(f"Data dir: {settings.cashu_dir}")
 
     async def shutdown_ledger(self):
-        await self.db.engine.dispose()
         for task in self.invoice_listener_tasks:
             task.cancel()
+        await self.db.engine.dispose()
 
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending proofs for their melt state and either invalidates
