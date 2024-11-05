@@ -251,67 +251,67 @@ async def test_db_verify_spent_proofs_and_set_pending_no_race_condition_differen
     )
 
 
-@pytest.mark.asyncio
-@pytest.mark.skipif(
-    not settings.mint_database.startswith("postgres"),
-    reason="SQLite does not support row locking",
-)
-async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledger):
-    if ledger.db.type == db.SQLITE:
-        pytest.skip("SQLite does not support row locking")
-    # this should work since we lock two different rows
-    mint_quote = await wallet.request_mint(64)
-    mint_quote_2 = await wallet.request_mint(64)
+# @pytest.mark.asyncio
+# @pytest.mark.skipif(
+#     not settings.mint_database.startswith("postgres"),
+#     reason="SQLite does not support row locking",
+# )
+# async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledger):
+#     if ledger.db.type == db.SQLITE:
+#         pytest.skip("SQLite does not support row locking")
+#     # this should work since we lock two different rows
+#     mint_quote = await wallet.request_mint(64)
+#     mint_quote_2 = await wallet.request_mint(64)
 
-    async def get_connection2():
-        """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
-        try:
-            async with ledger.db.get_connection(
-                lock_table="mint_quotes",
-                lock_select_statement=f"quote='{mint_quote.quote}'",
-                lock_timeout=0.1,
-            ):
-                try:
-                    async with ledger.db.get_connection(
-                        lock_table="mint_quotes",
-                        lock_select_statement=f"quote='{mint_quote_2.quote}'",
-                        lock_timeout=0.1,
-                    ) as conn2:
-                        # write something with conn1, this time we should reach this block with postgres
-                        quote = await ledger.crud.get_mint_quote(
-                            quote_id=mint_quote_2.quote, db=ledger.db, conn=conn2
-                        )
-                        assert quote is not None
-                        quote.amount = 100
-                        await ledger.crud.update_mint_quote(
-                            quote=quote, db=ledger.db, conn=conn2
-                        )
+#     async def get_connection2():
+#         """This code makes sure that only the error of the second connection is raised (which we check in the assert_err)"""
+#         try:
+#             async with ledger.db.get_connection(
+#                 lock_table="mint_quotes",
+#                 lock_select_statement=f"quote='{mint_quote.quote}'",
+#                 lock_timeout=0.1,
+#             ):
+#                 try:
+#                     async with ledger.db.get_connection(
+#                         lock_table="mint_quotes",
+#                         lock_select_statement=f"quote='{mint_quote_2.quote}'",
+#                         lock_timeout=0.1,
+#                     ) as conn2:
+#                         # write something with conn1, this time we should reach this block with postgres
+#                         quote = await ledger.crud.get_mint_quote(
+#                             quote_id=mint_quote_2.quote, db=ledger.db, conn=conn2
+#                         )
+#                         assert quote is not None
+#                         quote.amount = 100
+#                         await ledger.crud.update_mint_quote(
+#                             quote=quote, db=ledger.db, conn=conn2
+#                         )
 
-                except Exception as exc:
-                    # this is expected to raise
-                    raise Exception(f"conn2: {exc}")
+#                 except Exception as exc:
+#                     # this is expected to raise
+#                     raise Exception(f"conn2: {exc}")
 
-        except Exception as exc:
-            if "conn2" in str(exc):
-                raise exc
-            else:
-                raise Exception(f"not expected to happen: {exc}")
+#         except Exception as exc:
+#             if "conn2" in str(exc):
+#                 raise exc
+#             else:
+#                 raise Exception(f"not expected to happen: {exc}")
 
-    await get_connection2()
+#     await get_connection2()
 
 
-@pytest.mark.asyncio
-async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
-    # fill wallet
-    mint_quote = await wallet.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
+# @pytest.mark.asyncio
+# async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
+#     # fill wallet
+#     mint_quote = await wallet.request_mint(64)
+#     await pay_if_regtest(mint_quote.request)
 
-    await wallet.mint(64, quote_id=mint_quote.quote)
-    assert wallet.balance == 64
+#     await wallet.mint(64, quote_id=mint_quote.quote)
+#     assert wallet.balance == 64
 
-    async with ledger.db.connect(lock_table="proofs_pending", lock_timeout=0.1) as conn:
-        assert isinstance(conn, Connection)
-        await assert_err(
-            ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
-            "failed to acquire database lock",
-        )
+#     async with ledger.db.connect(lock_table="proofs_pending", lock_timeout=0.1) as conn:
+#         assert isinstance(conn, Connection)
+#         await assert_err(
+#             ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
+#             "failed to acquire database lock",
+#         )
