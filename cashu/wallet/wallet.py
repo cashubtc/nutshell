@@ -464,7 +464,7 @@ class Wallet(
         # sort by increasing amount
         amounts_we_want.sort()
 
-        logger.debug(
+        logger.trace(
             f"Amounts we have: {[(a, amounts_we_have.count(a)) for a in set(amounts_we_have)]}"
         )
         amounts: list[int] = []
@@ -477,7 +477,7 @@ class Wallet(
         if remaining_amount > 0:
             amounts += amount_split(remaining_amount)
 
-        logger.debug(f"Amounts we want: {amounts}")
+        logger.trace(f"Amounts we want: {amounts}")
         if sum(amounts) != amount:
             raise Exception(f"Amounts do not sum to {amount}.")
 
@@ -671,7 +671,7 @@ class Wallet(
         proofs = await self.add_witnesses_to_proofs(proofs)
 
         input_fees = self.get_fees_for_proofs(proofs)
-        logger.debug(f"Input fees: {input_fees}")
+        logger.trace(f"Input fees: {input_fees}")
         # create a suitable amounts to keep and send.
         keep_outputs, send_outputs = self.determine_output_amounts(
             proofs,
@@ -702,29 +702,26 @@ class Wallet(
         # potentially add witnesses to outputs based on what requirement the proofs indicate
         outputs = await self.add_witnesses_to_outputs(proofs, outputs)
 
-        logger.debug(f"unsorted outputs: {[o.amount for o in outputs]}")
-        
-        # sort outputs, remember original order
-        order_and_sorted_outputs = sorted(enumerate(outputs), key=lambda p: p[1].amount)
-        order = [x[0] for x in order_and_sorted_outputs]
-        outputs = [x[1] for x in order_and_sorted_outputs]
-
-        logger.debug(f"{order = }")
-        logger.debug(f"sorted outputs: {[o.amount for o in outputs]}")
+        # sort outputs by amount, remember original order
+        sorted_outputs_with_indices = sorted(
+            enumerate(outputs), key=lambda p: p[1].amount
+        )
+        original_indices, sorted_outputs = zip(*sorted_outputs_with_indices)
 
         # Call swap API
-        promises = await super().split(proofs, outputs)
+        sorted_promises = await super().split(proofs, sorted_outputs)
 
-        logger.debug(f"sorted promises: {[p.amount for p in promises]}")
-
-        # unsort promises
-        unsorted_promises = [None] * len(promises)
-        for i, j in enumerate(order):
-            unsorted_promises[j] = promises[i]
+        # sort promises back to original order
+        promises = [
+            promise
+            for _, promise in sorted(
+                zip(original_indices, sorted_promises), key=lambda x: x[0]
+            )
+        ]
 
         # Construct proofs from returned promises (i.e., unblind the signatures)
         new_proofs = await self._construct_proofs(
-            unsorted_promises, secrets, rs, derivation_paths    # type: ignore[arg-type]
+            promises, secrets, rs, derivation_paths
         )
 
         await self.invalidate(proofs)
