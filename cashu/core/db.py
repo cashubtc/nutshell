@@ -220,6 +220,7 @@ class Database(Compat):
                     logger.trace(
                         f"< Connection yielded. Unlock: {lock_table} - trial {trial} ({random_int})"
                     )
+                    return
             except Exception as e:
                 if _is_lock_exception(e):
                     retry_delay = await _handle_lock_retry(
