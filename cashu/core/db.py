@@ -124,7 +124,9 @@ class Database(Compat):
                 logger.info(f"Creating database directory: {self.db_location}")
                 os.makedirs(self.db_location)
             self.path = os.path.join(self.db_location, f"{self.name}.sqlite3")
-            database_uri = f"sqlite+aiosqlite:///{self.path}?check_same_thread=false"
+            database_uri = (
+                f"sqlite+aiosqlite:///{self.path}?check_same_thread=false&uri=true"
+            )
             self.type = SQLITE
 
         self.schema = self.name
