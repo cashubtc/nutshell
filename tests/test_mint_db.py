@@ -37,9 +37,9 @@ async def wallet(ledger: Ledger):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_github_actions, reason="GITHUB_ACTIONS")
 async def test_mint_proofs_pending(wallet: Wallet, ledger: Ledger):
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     proofs = wallet.proofs.copy()
 
     proofs_states_before_split = await wallet.check_proof_state(proofs)
@@ -61,26 +61,21 @@ async def test_mint_proofs_pending(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint_quote(wallet: Wallet, ledger: Ledger):
-    invoice = await wallet.request_mint(128)
-    assert invoice is not None
-    quote = await ledger.crud.get_mint_quote(quote_id=invoice.id, db=ledger.db)
+    mint_quote = await wallet.request_mint(128)
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
-    assert quote.quote == invoice.id
     assert quote.amount == 128
     assert quote.unit == "sat"
     assert not quote.paid
-    assert quote.checking_id == invoice.payment_hash
     # assert quote.paid_time is None
     assert quote.created_time
 
 
 @pytest.mark.asyncio
 async def test_mint_quote_state_transitions(wallet: Wallet, ledger: Ledger):
-    invoice = await wallet.request_mint(128)
-    assert invoice is not None
-    quote = await ledger.crud.get_mint_quote(quote_id=invoice.id, db=ledger.db)
+    mint_quote = await wallet.request_mint(128)
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
-    assert quote.quote == invoice.id
     assert quote.unpaid
 
     # set pending again
@@ -129,11 +124,9 @@ async def test_mint_quote_state_transitions(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_get_mint_quote_by_request(wallet: Wallet, ledger: Ledger):
-    invoice = await wallet.request_mint(128)
-    assert invoice is not None
-    quote = await ledger.crud.get_mint_quote(request=invoice.bolt11, db=ledger.db)
+    mint_quote = await wallet.request_mint(128)
+    quote = await ledger.crud.get_mint_quote(request=mint_quote.request, db=ledger.db)
     assert quote is not None
-    assert quote.quote == invoice.id
     assert quote.amount == 128
     assert quote.unit == "sat"
     assert not quote.paid
@@ -143,10 +136,9 @@ async def test_get_mint_quote_by_request(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_melt_quote(wallet: Wallet, ledger: Ledger):
-    invoice = await wallet.request_mint(128)
-    assert invoice is not None
+    mint_quote = await wallet.request_mint(128)
     melt_quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=invoice.bolt11, unit="sat")
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
     )
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
     assert quote is not None
@@ -154,17 +146,15 @@ async def test_melt_quote(wallet: Wallet, ledger: Ledger):
     assert quote.amount == 128
     assert quote.unit == "sat"
     assert not quote.paid
-    assert quote.checking_id == invoice.payment_hash
     # assert quote.paid_time is None
     assert quote.created_time
 
 
 @pytest.mark.asyncio
 async def test_melt_quote_set_pending(wallet: Wallet, ledger: Ledger):
-    invoice = await wallet.request_mint(128)
-    assert invoice is not None
+    mint_quote = await wallet.request_mint(128)
     melt_quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=invoice.bolt11, unit="sat")
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
     )
     assert melt_quote is not None
     assert melt_quote.state == MeltQuoteState.unpaid.value
@@ -187,10 +177,9 @@ async def test_melt_quote_set_pending(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_melt_quote_state_transitions(wallet: Wallet, ledger: Ledger):
-    invoice = await wallet.request_mint(128)
-    assert invoice is not None
+    mint_quote = await wallet.request_mint(128)
     melt_quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=invoice.bolt11, unit="sat")
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
     )
     quote = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
     assert quote is not None
@@ -218,33 +207,36 @@ async def test_melt_quote_state_transitions(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
-    invoice = await wallet.request_mint(128)
-    assert invoice is not None
-    quote = await ledger.crud.get_mint_quote(quote_id=invoice.id, db=ledger.db)
-    assert quote is not None
-    assert quote.unpaid
+    mint_quote = await wallet.request_mint(128)
+    mint_quote = await ledger.crud.get_mint_quote(
+        quote_id=mint_quote.quote, db=ledger.db
+    )
+    assert mint_quote is not None
+    assert mint_quote.unpaid
 
     # pay_if_regtest pays on regtest, get_mint_quote pays on FakeWallet
-    await pay_if_regtest(invoice.bolt11)
-    _ = await ledger.get_mint_quote(invoice.id)
+    await pay_if_regtest(mint_quote.request)
+    _ = await ledger.get_mint_quote(mint_quote.quote)
 
-    quote = await ledger.crud.get_mint_quote(quote_id=invoice.id, db=ledger.db)
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.paid
 
     previous_state = MintQuoteState.paid
     await ledger.db_write._set_mint_quote_pending(quote.quote)
-    quote = await ledger.crud.get_mint_quote(quote_id=invoice.id, db=ledger.db)
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.pending
 
     # try to mint while pending
-    await assert_err(wallet.mint(128, id=invoice.id), "Mint quote already pending.")
+    await assert_err(
+        wallet.mint(128, quote_id=mint_quote.quote), "Mint quote already pending."
+    )
 
     # set unpending
     await ledger.db_write._unset_mint_quote_pending(quote.quote, previous_state)
 
-    quote = await ledger.crud.get_mint_quote(quote_id=invoice.id, db=ledger.db)
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.state == previous_state
     assert quote.paid
@@ -253,20 +245,19 @@ async def test_mint_quote_set_pending(wallet: Wallet, ledger: Ledger):
     # quote.state = MintQuoteState.paid
     # await ledger.crud.update_mint_quote(quote=quote, db=ledger.db)
 
-    await wallet.mint(quote.amount, id=quote.quote)
+    await wallet.mint(quote.amount, quote_id=quote.quote)
 
     # check if quote is issued
-    quote = await ledger.crud.get_mint_quote(quote_id=invoice.id, db=ledger.db)
+    quote = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert quote is not None
     assert quote.issued
 
 
 @pytest.mark.asyncio
 async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
-    invoice = await wallet.request_mint(128)
-    assert invoice is not None
+    mint_quote = await wallet.request_mint(128)
     melt_quote = await ledger.melt_quote(
-        PostMeltQuoteRequest(request=invoice.bolt11, unit="sat")
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
     )
     assert melt_quote is not None
     assert melt_quote.state == MeltQuoteState.unpaid.value

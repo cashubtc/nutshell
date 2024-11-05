@@ -32,9 +32,9 @@ async def wallet():
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
     # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create hodl invoice
@@ -70,9 +70,9 @@ async def test_regtest_pending_quote(wallet: Wallet, ledger: Ledger):
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_regtest_failed_quote(wallet: Wallet, ledger: Ledger):
     # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create hodl invoice

@@ -245,79 +245,44 @@ async def m012_add_fee_to_keysets(db: Database):
         await conn.execute("UPDATE keysets SET input_fee_ppk = 0")
 
 
-# # async def m020_add_state_to_mint_and_melt_quotes(db: Database):
-# #     async with db.connect() as conn:
-# #         await conn.execute(
-# #             f"ALTER TABLE {db.table_with_schema('mint_quotes')} ADD COLUMN state TEXT"
-# #         )
-# #         await conn.execute(
-# #             f"ALTER TABLE {db.table_with_schema('melt_quotes')} ADD COLUMN state TEXT"
-# #         )
+async def m013_add_mint_and_melt_quote_tables(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bolt11_mint_quotes (
+                quote TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                request TEXT NOT NULL,
+                checking_id TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                created_time INTEGER,
+                paid_time INTEGER,
+                expiry INTEGER
+            );
+        """
+        )
 
-# #     # get all melt and mint quotes and figure out the state to set using the `paid` column
-# #     # and the `paid` and `issued` column respectively
-# #     # mint quotes:
-# #     async with db.connect() as conn:
-# #         rows = await conn.fetchall(
-# #             f"SELECT * FROM {db.table_with_schema('mint_quotes')}"
-# #         )
-# #         for row in rows:
-# #             if row["issued"]:
-# #                 state = "issued"
-# #             elif row["paid"]:
-# #                 state = "paid"
-# #             else:
-# #                 state = "unpaid"
-# #             await conn.execute(
-# #                 f"UPDATE {db.table_with_schema('mint_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
-# #             )
-
-# #     # melt quotes:
-# #     async with db.connect() as conn:
-# #         rows = await conn.fetchall(
-# #             f"SELECT * FROM {db.table_with_schema('melt_quotes')}"
-# #         )
-# #         for row in rows:
-# #             if row["paid"]:
-# #                 state = "paid"
-# #             else:
-# #                 state = "unpaid"
-# #             await conn.execute(
-# #                 f"UPDATE {db.table_with_schema('melt_quotes')} SET state = '{state}' WHERE quote = '{row['quote']}'"
-# #             )
-# # add the equivalent of the above migration for the wallet here. do not use table_with_schema. use the tables and columns
-# # as they are defined in the wallet db
-
-
-# async def m020_add_state_to_mint_and_melt_quotes(db: Database):
-#     async with db.connect() as conn:
-#         await conn.execute("ALTER TABLE mint_quotes ADD COLUMN state TEXT")
-#         await conn.execute("ALTER TABLE melt_quotes ADD COLUMN state TEXT")
-
-#     # get all melt and mint quotes and figure out the state to set using the `paid` column
-#     # and the `paid` and `issued` column respectively
-#     # mint quotes:
-#     async with db.connect() as conn:
-#         rows = await conn.fetchall("SELECT * FROM mint_quotes")
-#         for row in rows:
-#             if row["issued"]:
-#                 state = "issued"
-#             elif row["paid"]:
-#                 state = "paid"
-#             else:
-#                 state = "unpaid"
-#             await conn.execute(
-#                 f"UPDATE mint_quotes SET state = '{state}' WHERE quote = '{row['quote']}'"
-#             )
-
-#     # melt quotes:
-#     async with db.connect() as conn:
-#         rows = await conn.fetchall("SELECT * FROM melt_quotes")
-#         for row in rows:
-#             if row["paid"]:
-#                 state = "paid"
-#             else:
-#                 state = "unpaid"
-#             await conn.execute(
-#                 f"UPDATE melt_quotes SET state = '{state}' WHERE quote = '{row['quote']}'"
-#             )
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bolt11_melt_quotes (
+                quote TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                request TEXT NOT NULL,
+                checking_id TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                fee_reserve INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                created_time INTEGER,
+                paid_time INTEGER,
+                fee_paid INTEGER,
+                payment_preimage TEXT,
+                expiry INTEGER,
+                change TEXT
+            );
+        """
+        )

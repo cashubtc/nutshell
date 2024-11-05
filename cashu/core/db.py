@@ -65,6 +65,7 @@ class Compat:
     def table_with_schema(self, table: str):
         return f"{self.references_schema if self.schema else ''}{table}"
 
+
 # https://docs.sqlalchemy.org/en/14/core/connections.html#sqlalchemy.engine.CursorResult
 class Connection(Compat):
     def __init__(self, conn: AsyncSession, txn, typ, name, schema):
@@ -82,7 +83,9 @@ class Connection(Compat):
 
     async def fetchall(self, query: str, values: dict = {}):
         result = await self.conn.execute(self.rewrite_query(query), values)
-        return [r._mapping for r in result.all()] # will return [] if result list is empty
+        return [
+            r._mapping for r in result.all()
+        ]  # will return [] if result list is empty
 
     async def fetchone(self, query: str, values: dict = {}):
         result = await self.conn.execute(self.rewrite_query(query), values)
@@ -134,13 +137,13 @@ class Database(Compat):
         if not settings.db_connection_pool:
             kwargs["poolclass"] = NullPool
         elif self.type == POSTGRES:
-            kwargs["poolclass"] = AsyncAdaptedQueuePool # type: ignore[assignment]
-            kwargs["pool_size"] = 50                    # type: ignore[assignment]
-            kwargs["max_overflow"] = 100                # type: ignore[assignment]
+            kwargs["poolclass"] = AsyncAdaptedQueuePool  # type: ignore[assignment]
+            kwargs["pool_size"] = 50  # type: ignore[assignment]
+            kwargs["max_overflow"] = 100  # type: ignore[assignment]
 
         self.engine = create_async_engine(database_uri, **kwargs)
         self.async_session = sessionmaker(
-            self.engine,
+            self.engine,  # type: ignore
             expire_on_commit=False,
             class_=AsyncSession,  # type: ignore
         )
@@ -225,14 +228,11 @@ class Database(Compat):
                     )
                 else:
                     logger.error(f"Error in session trial: {trial} ({random_int}): {e}")
-                    raise e
+                    raise
             finally:
                 logger.trace(f"Closing session trial: {trial} ({random_int})")
                 await session.close()
-                # if not inherited:
-                #     logger.trace("Closing session")
-                #     await session.close()
-                #     self._connection = None
+
         raise Exception(
             f"failed to acquire database lock on {lock_table} after {timeout}s and {trial} trials ({random_int})"
         )

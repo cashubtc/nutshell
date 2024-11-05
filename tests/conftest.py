@@ -1,4 +1,3 @@
-import asyncio
 import importlib
 import multiprocessing
 import os
@@ -33,6 +32,7 @@ settings.mint_url = SERVER_ENDPOINT
 settings.tor = False
 settings.wallet_unit = "sat"
 settings.mint_backend_bolt11_sat = settings.mint_backend_bolt11_sat or "FakeWallet"
+settings.mint_backend_bolt11_usd = settings.mint_backend_bolt11_usd or "FakeWallet"
 settings.fakewallet_brr = True
 settings.fakewallet_delay_outgoing_payment = 0
 settings.fakewallet_delay_incoming_payment = 1
@@ -42,7 +42,7 @@ assert (
 ), "Test database is the same as the main database"
 settings.mint_database = settings.mint_test_database
 settings.mint_derivation_path = "m/0'/0'/0'"
-settings.mint_derivation_path_list = []
+settings.mint_derivation_path_list = ["m/0'/2'/0'"]  # USD
 settings.mint_private_key = "TEST_PRIVATE_KEY"
 settings.mint_seed_decryption_key = ""
 settings.mint_max_balance = 0
@@ -57,14 +57,6 @@ shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
 
 # from cashu.mint.startup import lightning_backend  # noqa
-
-
-@pytest.fixture(scope="session")
-def event_loop():
-    policy = asyncio.get_event_loop_policy()
-    loop = policy.new_event_loop()
-    yield loop
-    loop.close()
 
 
 class UvicornServer(multiprocessing.Process):
@@ -85,13 +77,6 @@ class UvicornServer(multiprocessing.Process):
 async def ledger():
     async def start_mint_init(ledger: Ledger) -> Ledger:
         await migrate_databases(ledger.db, migrations_mint)
-        ledger = Ledger(
-            db=Database("mint", settings.mint_database),
-            seed=settings.mint_private_key,
-            derivation_path=settings.mint_derivation_path,
-            backends=backends,
-            crud=LedgerCrudSqlite(),
-        )
         await ledger.startup_ledger()
         return ledger
 
@@ -110,9 +95,17 @@ async def ledger():
         await db.engine.dispose()
 
     wallets_module = importlib.import_module("cashu.lightning")
-    lightning_backend = getattr(wallets_module, settings.mint_backend_bolt11_sat)()
+    lightning_backend_sat = getattr(wallets_module, settings.mint_backend_bolt11_sat)(
+        unit=Unit.sat
+    )
+    lightning_backend_usd = getattr(wallets_module, settings.mint_backend_bolt11_usd)(
+        unit=Unit.usd
+    )
     backends = {
-        Method.bolt11: {Unit.sat: lightning_backend},
+        Method.bolt11: {
+            Unit.sat: lightning_backend_sat,
+            Unit.usd: lightning_backend_usd,
+        },
     }
     ledger = Ledger(
         db=Database("mint", settings.mint_database),
