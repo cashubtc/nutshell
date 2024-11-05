@@ -228,14 +228,11 @@ class Database(Compat):
                     )
                 else:
                     logger.error(f"Error in session trial: {trial} ({random_int}): {e}")
-                    raise e
+                    raise
             finally:
                 logger.trace(f"Closing session trial: {trial} ({random_int})")
                 await session.close()
-                # if not inherited:
-                #     logger.trace("Closing session")
-                #     await session.close()
-                #     self._connection = None
+
         raise Exception(
             f"failed to acquire database lock on {lock_table} after {timeout}s and {trial} trials ({random_int})"
         )
