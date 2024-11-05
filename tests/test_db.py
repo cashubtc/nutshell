@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import os
 import time
@@ -13,7 +14,7 @@ from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import is_github_actions, is_postgres
+from tests.helpers import is_github_actions, is_postgres, pay_if_regtest
 
 
 async def assert_err(f, msg):
@@ -188,26 +189,26 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
     await assert_err(get_connection(), "failed to acquire database lock")
 
 
-# @pytest.mark.asyncio
-# async def test_db_verify_spent_proofs_and_set_pending_race_condition(
-#     wallet: Wallet, ledger: Ledger
-# ):
-#     # fill wallet
-#     mint_quote = await wallet.request_mint(64)
-#     await pay_if_regtest(mint_quote.request)
-#     await wallet.mint(64, quote_id=mint_quote.quote)
-#     assert wallet.balance == 64
+@pytest.mark.asyncio
+async def test_db_verify_spent_proofs_and_set_pending_race_condition(
+    wallet: Wallet, ledger: Ledger
+):
+    # fill wallet
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
+    assert wallet.balance == 64
 
-#     await assert_err_multiple(
-#         asyncio.gather(
-#             ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
-#             ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
-#         ),
-#         [
-#             "failed to acquire database lock",
-#             "proofs are pending",
-#         ],  # depending on how fast the database is, it can be either
-#     )
+    await assert_err_multiple(
+        asyncio.gather(
+            ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
+            ledger.db_write._verify_spent_proofs_and_set_pending(wallet.proofs),
+        ),
+        [
+            "failed to acquire database lock",
+            "proofs are pending",
+        ],  # depending on how fast the database is, it can be either
+    )
 
 
 # @pytest.mark.asyncio
