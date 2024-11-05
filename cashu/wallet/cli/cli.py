@@ -11,6 +11,7 @@ from os import listdir
 from os.path import isdir, join
 from typing import Optional, Union
 
+import bolt11
 import click
 from click import Context
 from loguru import logger
@@ -49,6 +50,7 @@ from ..cli.cli_helpers import (
     verify_mint,
 )
 from ..helpers import (
+    check_payment_preimage,
     deserialize_token_from_string,
     init_wallet,
     list_mints,
@@ -209,6 +211,7 @@ async def pay(
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
     await print_balance(ctx)
+    payment_hash = bolt11.decode(invoice).payment_hash
     quote = await wallet.melt_quote(invoice, amount)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
@@ -252,9 +255,11 @@ async def pay(
             melt_response.payment_preimage
             and melt_response.payment_preimage != "0" * 64
         ):
+            if not check_payment_preimage(payment_hash, melt_response.payment_preimage):
+                print(" Error: Invalid preimage!", end="", flush=True)
             print(f" (Preimage: {melt_response.payment_preimage}).")
         else:
-            print(".")
+            print(" Mint did not provide a preimage.")
     elif MintQuoteState(melt_response.state) == MintQuoteState.pending:
         print(" Invoice pending.")
     elif MintQuoteState(melt_response.state) == MintQuoteState.unpaid:
