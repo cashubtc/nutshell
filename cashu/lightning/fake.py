@@ -8,8 +8,8 @@ from typing import AsyncGenerator, Dict, List, Optional
 from bolt11 import (
     Bolt11,
     Feature,
-    FeatureState,
     Features,
+    FeatureState,
     MilliSatoshi,
     TagChar,
     Tags,
@@ -93,7 +93,12 @@ class FakeWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
         tags = Tags()
-        tags.add(TagChar.features, Features.from_feature_list({Feature.payment_secret: FeatureState.supported}))
+        tags.add(
+            TagChar.features,
+            Features.from_feature_list(
+                {Feature.payment_secret: FeatureState.supported}
+            ),
+        )
 
         if description_hash:
             tags.add(TagChar.description_hash, description_hash.hex())
