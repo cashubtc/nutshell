@@ -29,9 +29,9 @@ async def wallet(ledger: Ledger):
 async def test_api_mint_cached_responses(wallet: Wallet):
     # Testing mint
     invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
+    await pay_if_regtest(invoice.request)
 
-    quote_id = invoice.id
+    quote_id = invoice.quote
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10010, 10011)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     outputs_payload = [o.dict() for o in outputs]
@@ -56,9 +56,9 @@ async def test_api_mint_cached_responses(wallet: Wallet):
 )
 async def test_api_swap_cached_responses(wallet: Wallet):
     quote = await wallet.request_mint(64)
-    await pay_if_regtest(quote.bolt11)
+    await pay_if_regtest(quote.request)
     
-    minted = await wallet.mint(64, quote.id)
+    minted = await wallet.mint(64, quote.quote)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10010, 10011)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     inputs_payload = [i.dict() for i in minted]
@@ -86,8 +86,8 @@ async def test_api_melt_cached_responses(wallet: Wallet):
     quote = await wallet.request_mint(64)
     melt_quote = await wallet.melt_quote(invoice_32sat)
 
-    await pay_if_regtest(quote.bolt11)
-    minted = await wallet.mint(64, quote.id)
+    await pay_if_regtest(quote.request)
+    minted = await wallet.mint(64, quote.quote)
 
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10010, 10010)
     outputs, rs = wallet._construct_outputs([32], secrets, rs)
