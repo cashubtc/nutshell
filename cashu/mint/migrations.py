@@ -1,7 +1,7 @@
 import copy
 from typing import Dict, List
 
-from ..core.base import MintKeyset, Proof
+from ..core.base import MeltQuoteState, MintKeyset, MintQuoteState, Proof
 from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
 from ..core.db import Connection, Database
 from ..core.settings import settings
@@ -826,3 +826,15 @@ async def m021_add_change_and_expiry_to_melt_quotes(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} ADD COLUMN expiry TIMESTAMP"
         )
+
+
+async def m022_quote_set_states_to_values(db: Database):
+    async with db.connect() as conn:
+        for melt_quote_states in MeltQuoteState:
+            await conn.execute(
+                f"UPDATE {db.table_with_schema('melt_quotes')} SET state = '{melt_quote_states.value}' WHERE state = '{melt_quote_states.name}'"
+            )
+        for mint_quote_states in MintQuoteState:
+            await conn.execute(
+                f"UPDATE {db.table_with_schema('mint_quotes')} SET state = '{mint_quote_states.value}' WHERE state = '{mint_quote_states.name}'"
+            )

@@ -60,7 +60,7 @@ async def wallet(ledger: Ledger):
 async def test_init_keysets(ledger: Ledger):
     ledger.keysets = {}
     await ledger.init_keysets()
-    assert len(ledger.keysets) == 1
+    assert len(ledger.keysets) == 2
 
 
 @pytest.mark.asyncio
@@ -261,9 +261,9 @@ async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Ledger):
     # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create hodl invoice
@@ -305,9 +305,9 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Ledger):
     # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create hodl invoice
@@ -353,9 +353,9 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
 async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Ledger):
     """Simulate a failure to pay the hodl invoice by canceling it."""
     # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create hodl invoice
@@ -407,9 +407,9 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
     points to an unknown payment."""
 
     # fill wallet
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet.mint(64, id=invoice.id)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet.mint(64, quote_id=mint_quote.quote)
     assert wallet.balance == 64
 
     # create hodl invoice

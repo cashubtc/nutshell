@@ -660,7 +660,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # so that we would be able to handle the transaction internally
         # and therefore respond with internal transaction fees (0 for now)
         mint_quote = await self.crud.get_mint_quote(request=request, db=self.db)
-        if mint_quote:
+        if mint_quote and mint_quote.unit == melt_quote.unit:
             payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
         else:
             # not internal
@@ -811,6 +811,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if not mint_quote:
             return melt_quote
 
+        # settle externally if units are different
+        if mint_quote.unit != melt_quote.unit:
+            return melt_quote
+
         # we settle the transaction internally
         if melt_quote.paid:
             raise TransactionError("melt quote already paid")
@@ -825,8 +829,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise TransactionError("amounts do not match")
         if not bolt11_request == mint_quote.request:
             raise TransactionError("bolt11 requests do not match")
-        if not mint_quote.unit == melt_quote.unit:
-            raise TransactionError("units do not match")
         if not mint_quote.method == melt_quote.method:
             raise TransactionError("methods do not match")
 
@@ -880,7 +882,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             Tuple[str, List[BlindedMessage]]: Proof of payment and signed outputs for returning overpaid fees to wallet.
         """
         # make sure we're allowed to melt
-        if self.disable_melt:
+        if self.disable_melt and settings.mint_disable_melt_on_error:
             raise NotAllowedError("Melt is disabled. Please contact the operator.")
 
         # get melt quote and check if it was already paid
@@ -976,7 +978,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     except Exception as e:
                         # Something went wrong. We might have lost connection to the backend. Keep transaction pending and return.
                         logger.error(
-                            f"Lightning backend error: could not check payment status. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Disabling melt. Fix your Lightning backend and restart the mint.\nError: {e}"
+                            f"Lightning backend error: could not check payment status. Proofs for melt quote {melt_quote.quote} are stuck as PENDING.\nError: {e}"
                         )
                         self.disable_melt = True
                         return PostMeltQuoteResponse.from_melt_quote(melt_quote)
@@ -998,7 +1000,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         case _:
                             # Something went wrong with our implementation or the backend. Status check returned different result than payment. Keep transaction pending and return.
                             logger.error(
-                                f"Payment state is {status.result.name} and payment was {payment.result}. Proofs for melt quote {melt_quote.quote} are stuck as PENDING. Disabling melt. Fix your Lightning backend and restart the mint."
+                                f"Payment state was {payment.result} but additional payment state check returned {status.result.name}. Proofs for melt quote {melt_quote.quote} are stuck as PENDING."
                             )
                             self.disable_melt = True
                             return PostMeltQuoteResponse.from_melt_quote(melt_quote)

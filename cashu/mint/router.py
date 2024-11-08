@@ -59,6 +59,7 @@ async def info() -> GetInfoResponse:
         contact=contact_info,
         nuts=mint_features,
         icon_url=settings.mint_info_icon_url,
+        urls=settings.mint_info_urls,
         motd=settings.mint_info_motd,
         time=int(time.time()),
     )
@@ -289,6 +290,8 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
         paid=melt_quote.paid,
         state=melt_quote.state.value,
         expiry=melt_quote.expiry,
+        payment_preimage=melt_quote.payment_preimage,
+        change=melt_quote.change,
     )
     logger.trace(f"< GET /v1/melt/quote/bolt11/{quote}")
     return resp

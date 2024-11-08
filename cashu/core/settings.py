@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.16.1"
+VERSION = "0.16.2"
 
 
 def find_env_file():
@@ -62,6 +62,7 @@ class MintSettings(CashuSettings):
     mint_max_secret_length: int = Field(default=512)
 
     mint_input_fee_ppk: int = Field(default=0)
+    mint_disable_melt_on_error: bool = Field(default=False)
 
 
 class MintDeprecationFlags(MintSettings):
@@ -152,6 +153,7 @@ class MintInformation(CashuSettings):
     mint_info_contact: List[List[str]] = Field(default=[])
     mint_info_motd: str = Field(default=None)
     mint_info_icon_url: str = Field(default=None)
+    mint_info_urls: List[str] = Field(default=None)
 
 
 class WalletSettings(CashuSettings):
@@ -207,7 +209,7 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
-    mint_lnd_enable_mpp: bool = Field(default=False)
+    mint_lnd_enable_mpp: bool = Field(default=True)
 
 
 class LndRPCFundingSource(MintSettings):
@@ -220,7 +222,7 @@ class CLNRestFundingSource(MintSettings):
     mint_clnrest_url: Optional[str] = Field(default=None)
     mint_clnrest_cert: Optional[str] = Field(default=None)
     mint_clnrest_rune: Optional[str] = Field(default=None)
-    mint_clnrest_enable_mpp: bool = Field(default=False)
+    mint_clnrest_enable_mpp: bool = Field(default=True)
 
 
 class CoreLightningRestFundingSource(MintSettings):

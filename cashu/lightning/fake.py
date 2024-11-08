@@ -7,6 +7,9 @@ from typing import AsyncGenerator, Dict, List, Optional
 
 from bolt11 import (
     Bolt11,
+    Feature,
+    Features,
+    FeatureState,
     MilliSatoshi,
     TagChar,
     Tags,
@@ -30,6 +33,7 @@ from .base import (
 
 
 class FakeWallet(LightningBackend):
+    unit: Unit
     fake_btc_price = 1e8 / 1337
     paid_invoices_queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
@@ -46,7 +50,6 @@ class FakeWallet(LightningBackend):
     ).hex()
 
     supported_units = {Unit.sat, Unit.msat, Unit.usd, Unit.eur}
-    unit = Unit.sat
 
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
@@ -90,6 +93,12 @@ class FakeWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
         tags = Tags()
+        tags.add(
+            TagChar.features,
+            Features.from_feature_list(
+                {Feature.payment_secret: FeatureState.supported}
+            ),
+        )
 
         if description_hash:
             tags.add(TagChar.description_hash, description_hash.hex())
