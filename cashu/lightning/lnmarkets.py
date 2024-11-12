@@ -342,7 +342,8 @@ class LNMarketsWallet(LightningBackend):
         else:
             # TIMEOUT 30 seconds 
             now = int(time.time())
-            if 0 <= (now - int(data["ts"])) < 30:
+            payment_timestamp = int(data["ts"]) // 1000
+            if 0 <= (now - payment_timestamp) < 30:
                 return PaymentStatus(result=PaymentResult.PENDING)
             else:
                 return PaymentStatus(result=PaymentResult.FAILED)
