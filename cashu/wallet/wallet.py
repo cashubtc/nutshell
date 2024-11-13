@@ -386,7 +386,7 @@ class Wallet(
         logger.trace("Secret check complete.")
 
     async def request_mint_with_callback(
-        self, amount: int, callback: Callable, memo: Optional[str] = None
+        self, amount: int, callback: Callable, memo: Optional[str] = None, privkey: Optional[PrivateKey] = None,
     ) -> Tuple[MintQuote, SubscriptionManager]:
         """Request a quote invoice for minting tokens.
 
@@ -394,11 +394,13 @@ class Wallet(
             amount (int): Amount for Lightning invoice in satoshis
             callback (Callable): Callback function to be called when the invoice is paid.
             memo (Optional[str], optional): Memo for the Lightning invoice. Defaults
+            privkey (Optional[PrivateKey], optional): [NUT-19] Private key to lock the quote to. Defaults to None.
 
         Returns:
             MintQuote: Mint Quote
         """
-        mint_qoute = await super().mint_quote(amount, self.unit, memo)
+        pubkey = (privkey.pubkey.serialize(True).hex() if privkey else None)
+        mint_qoute = await super().mint_quote(amount, self.unit, memo, pubkey)
         subscriptions = SubscriptionManager(self.url)
         threading.Thread(
             target=subscriptions.connect, name="SubscriptionManager", daemon=True
@@ -408,25 +410,31 @@ class Wallet(
             filters=[mint_qoute.quote],
             callback=callback,
         )
-        quote = MintQuote.from_resp_wallet(mint_qoute, self.url, amount, self.unit.name)
+        quote = MintQuote.from_resp_wallet(mint_qoute, self.url, amount, self.unit.name, privkey.serialize())
         await store_bolt11_mint_quote(db=self.db, quote=quote)
 
         return quote, subscriptions
 
-    async def request_mint(self, amount: int, memo: Optional[str] = None) -> MintQuote:
+    async def request_mint(self,
+        amount: int,
+        memo: Optional[str] = None,
+        privkey: Optional[PrivateKey] = None,
+    ) -> MintQuote:
         """Request a quote invoice for minting tokens.
 
         Args:
             amount (int): Amount for Lightning invoice in satoshis
             callback (Optional[Callable], optional): Callback function to be called when the invoice is paid. Defaults to None.
             memo (Optional[str], optional): Memo for the Lightning invoice. Defaults to None.
+            privkey (Optional[PrivateKey], optional): [NUT-19] Private key to lock the quote to. Defaults to None.
 
         Returns:
             MintQuote: Mint Quote
         """
-        mint_quote_response = await super().mint_quote(amount, self.unit, memo)
+        pubkey = (privkey.pubkey.serialize(True).hex() if privkey else None)
+        mint_quote_response = await super().mint_quote(amount, self.unit, memo, pubkey)
         quote = MintQuote.from_resp_wallet(
-            mint_quote_response, self.url, amount, self.unit.name
+            mint_quote_response, self.url, amount, self.unit.name, privkey.serialize()
         )
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote

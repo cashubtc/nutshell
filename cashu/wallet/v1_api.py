@@ -282,7 +282,7 @@ class LedgerAPI(LedgerAPIDeprecated):
     @async_set_httpx_client
     @async_ensure_mint_loaded
     async def mint_quote(
-        self, amount: int, unit: Unit, memo: Optional[str] = None
+        self, amount: int, unit: Unit, memo: Optional[str] = None, pubkey: Optional[str] = None
     ) -> PostMintQuoteResponse:
         """Requests a mint quote from the server and returns a payment request.
 
@@ -290,7 +290,7 @@ class LedgerAPI(LedgerAPIDeprecated):
             amount (int): Amount of tokens to mint
             unit (Unit): Unit of the amount
             memo (Optional[str], optional): Memo to attach to Lightning invoice. Defaults to None.
-
+            pubkey (Optional[str], optional): Public key from which to expect a signature in a subsequent mint request.
         Returns:
             PostMintQuoteResponse: Mint Quote Response
 
@@ -298,7 +298,7 @@ class LedgerAPI(LedgerAPIDeprecated):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: POST /v1/mint/bolt11")
-        payload = PostMintQuoteRequest(unit=unit.name, amount=amount, description=memo)
+        payload = PostMintQuoteRequest(unit=unit.name, amount=amount, description=memo, pubkey=pubkey)
         resp = await self.httpx.post(
             join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
         )

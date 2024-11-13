@@ -60,6 +60,7 @@ class LedgerFeatures(SupportsBackends):
             P2PK_NUT: supported_dict,
             DLEQ_NUT: supported_dict,
             HTLC_NUT: supported_dict,
+            QUOTE_SIGNATURE_NUT: supported_dict,
         }
 
         # signal which method-unit pairs support MPP

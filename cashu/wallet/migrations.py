@@ -286,3 +286,12 @@ async def m013_add_mint_and_melt_quote_tables(db: Database):
             );
         """
         )
+
+async def m013_add_key_to_mint_quote_table(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            """
+                ALTER TABLE bolt11_mint_quotes
+                ADD COLUMN key TEXT DEFAULT NULL;
+            """
+        )

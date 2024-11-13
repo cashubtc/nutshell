@@ -129,7 +129,9 @@ class PostMintQuoteRequest(BaseModel):
     description: Optional[str] = Field(
         default=None, max_length=settings.mint_max_request_length
     )  # invoice description
-
+    pubkey: Optional[str] = Field(
+        default=None, max_length=settings.mint_max_request_length
+    )
 
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
@@ -153,6 +155,9 @@ class PostMintRequest(BaseModel):
     quote: str = Field(..., max_length=settings.mint_max_request_length)  # quote id
     outputs: List[BlindedMessage] = Field(
         ..., max_items=settings.mint_max_request_length
+    )
+    witness: Optional[str] = Field(
+        default=None, max_length=settings.mint_max_request_length
     )
 
 

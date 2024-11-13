@@ -277,3 +277,15 @@ class LedgerVerification(
             )
 
         return unit, method
+
+    def _verify_quote_signature(
+        self, quote: MintQuote, outputs: List[BlindedMessage], signature: str,
+    ) -> None:
+        """Verify signature on quote id and outputs"""
+        pubkey = PublicKey(bytes.fromhex(quote.key), raw=True)
+        sigbytes = bytes.fromhex(signature)
+        serialized_outputs = b"".join([o.json().encode("utf-8") for o in outputs])
+        msgbytes = quote.quote.encode("utf-8") + serialized_outputs
+
+        if not pubkey.schnorr_verify(msgbytes, sigbytes, raw=True):
+            raise QuoteInvalidWitnessError()

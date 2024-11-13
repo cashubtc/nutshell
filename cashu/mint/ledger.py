@@ -39,6 +39,7 @@ from ..core.errors import (
     NotAllowedError,
     QuoteNotPaidError,
     TransactionError,
+    QuoteWitnessNotProvidedError
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
@@ -459,6 +460,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             state=MintQuoteState.unpaid,
             created_time=int(time.time()),
             expiry=expiry,
+            key=quote_request.pubkey
         )
         await self.crud.store_mint_quote(quote=quote, db=self.db)
         await self.events.submit(quote)
@@ -518,6 +520,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         *,
         outputs: List[BlindedMessage],
         quote_id: str,
+        witness: Optional[str] = None,
     ) -> List[BlindedSignature]:
         """Mints new coins if quote with `quote_id` was paid. Ingest blind messages `outputs` and returns blind signatures `promises`.
 
@@ -525,6 +528,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             outputs (List[BlindedMessage]): Outputs (blinded messages) to sign.
             quote_id (str): Mint quote id.
             keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
+            witness (Optional[str], optional): Optional signature on the mint quote the outputs.
 
         Raises:
             Exception: Validation of outputs failed.
@@ -549,6 +553,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise TransactionError("Mint quote already issued.")
         if not quote.paid:
             raise QuoteNotPaidError()
+        if quote.pubkey and quote.pubkey != "":
+            if witness is None:
+                raise QuoteWitnessNotProvidedError()
+            self._verify_quote_signature(quote, outputs, witness)
         previous_state = quote.state
         await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
