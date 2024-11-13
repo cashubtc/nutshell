@@ -17,6 +17,7 @@ from ..core.nuts import (
     SCRIPT_NUT,
     STATE_NUT,
     WEBSOCKETS_NUT,
+    QUOTE_SIGNATURE_NUT,
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends

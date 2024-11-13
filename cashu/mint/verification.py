@@ -9,6 +9,7 @@ from ..core.base import (
     MintKeyset,
     Proof,
     Unit,
+    MintQuote,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
@@ -19,6 +20,7 @@ from ..core.errors import (
     SecretTooLongError,
     TransactionError,
     TransactionUnitError,
+    QuoteInvalidWitnessError,
 )
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
@@ -282,7 +284,7 @@ class LedgerVerification(
         self, quote: MintQuote, outputs: List[BlindedMessage], signature: str,
     ) -> None:
         """Verify signature on quote id and outputs"""
-        pubkey = PublicKey(bytes.fromhex(quote.key), raw=True)
+        pubkey = PublicKey(bytes.fromhex(quote.key), raw=True)  # type: ignore
         sigbytes = bytes.fromhex(signature)
         serialized_outputs = b"".join([o.json().encode("utf-8") for o in outputs])
         msgbytes = quote.quote.encode("utf-8") + serialized_outputs

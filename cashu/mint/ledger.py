@@ -553,7 +553,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise TransactionError("Mint quote already issued.")
         if not quote.paid:
             raise QuoteNotPaidError()
-        if quote.pubkey and quote.pubkey != "":
+        if quote.key and quote.key != "":
             if witness is None:
                 raise QuoteWitnessNotProvidedError()
             self._verify_quote_signature(quote, outputs, witness)

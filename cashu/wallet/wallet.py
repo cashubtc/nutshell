@@ -30,6 +30,7 @@ from ..core.helpers import (
     sum_promises,
     sum_proofs,
 )
+from ..core.nuts import QUOTE_SIGNATURE_NUT
 from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.migrations import migrate_databases
 from ..core.models import (
@@ -386,7 +387,7 @@ class Wallet(
         logger.trace("Secret check complete.")
 
     async def request_mint_with_callback(
-        self, amount: int, callback: Callable, memo: Optional[str] = None, privkey: Optional[PrivateKey] = None,
+        self, amount: int, callback: Callable, memo: Optional[str] = None
     ) -> Tuple[MintQuote, SubscriptionManager]:
         """Request a quote invoice for minting tokens.
 
@@ -394,11 +395,11 @@ class Wallet(
             amount (int): Amount for Lightning invoice in satoshis
             callback (Callable): Callback function to be called when the invoice is paid.
             memo (Optional[str], optional): Memo for the Lightning invoice. Defaults
-            privkey (Optional[PrivateKey], optional): [NUT-19] Private key to lock the quote to. Defaults to None.
 
         Returns:
             MintQuote: Mint Quote
         """
+        privkey = await self.get_quote_ephemeral_key()
         pubkey = (privkey.pubkey.serialize(True).hex() if privkey else None)
         mint_qoute = await super().mint_quote(amount, self.unit, memo, pubkey)
         subscriptions = SubscriptionManager(self.url)
@@ -410,7 +411,9 @@ class Wallet(
             filters=[mint_qoute.quote],
             callback=callback,
         )
-        quote = MintQuote.from_resp_wallet(mint_qoute, self.url, amount, self.unit.name, privkey.serialize())
+        quote = MintQuote.from_resp_wallet(mint_qoute, self.url, amount, self.unit.name,
+            privkey.serialize() if privkey else None
+        )
         await store_bolt11_mint_quote(db=self.db, quote=quote)
 
         return quote, subscriptions
@@ -418,7 +421,6 @@ class Wallet(
     async def request_mint(self,
         amount: int,
         memo: Optional[str] = None,
-        privkey: Optional[PrivateKey] = None,
     ) -> MintQuote:
         """Request a quote invoice for minting tokens.
 
@@ -426,18 +428,32 @@ class Wallet(
             amount (int): Amount for Lightning invoice in satoshis
             callback (Optional[Callable], optional): Callback function to be called when the invoice is paid. Defaults to None.
             memo (Optional[str], optional): Memo for the Lightning invoice. Defaults to None.
-            privkey (Optional[PrivateKey], optional): [NUT-19] Private key to lock the quote to. Defaults to None.
 
         Returns:
             MintQuote: Mint Quote
         """
+        privkey = await self.get_quote_ephemeral_key()
         pubkey = (privkey.pubkey.serialize(True).hex() if privkey else None)
         mint_quote_response = await super().mint_quote(amount, self.unit, memo, pubkey)
         quote = MintQuote.from_resp_wallet(
-            mint_quote_response, self.url, amount, self.unit.name, privkey.serialize()
+            mint_quote_response, self.url, amount, self.unit.name,
+            privkey.serialize() if privkey else None,
         )
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
+
+    # TODO: generate secret with BIP39 (seed and specific derivation + counter)
+    async def get_quote_ephemeral_key(self) -> Union[PrivateKey, None]:
+        """Creates a secret key for a quote
+        """
+        if not self.mint_info:
+            await self.load_mint_info()
+        assert self.mint_info.nuts
+        nut19 = self.mint_info.nuts.get(QUOTE_SIGNATURE_NUT, None)
+        if nut19 and nut19["supported"]:
+            return PrivateKey()
+        else:
+            return None
 
     def split_wallet_state(self, amount: int) -> List[int]:
         """This function produces an amount split for outputs based on the current state of the wallet.
