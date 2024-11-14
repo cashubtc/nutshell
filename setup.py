@@ -13,7 +13,7 @@ entry_points = {"console_scripts": ["cashu = cashu.wallet.cli.cli:cli"]}
 
 setuptools.setup(
     name="cashu",
-    version="0.16.2",
+    version="0.16.3",
     description="Ecash wallet and mint",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -27,7 +27,7 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.10",
     install_requires=requirements,
     include_package_data=True,
     entry_points=entry_points,
