@@ -7,20 +7,20 @@ from ..core.base import (
     BlindedSignature,
     Method,
     MintKeyset,
+    MintQuote,
     Proof,
     Unit,
-    MintQuote,
 )
-from ..core.crypto import b_dhke
+from ..core.crypto import b_dhke, nut19
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     NoSecretInProofsError,
     NotAllowedError,
+    QuoteInvalidWitnessError,
     SecretTooLongError,
     TransactionError,
     TransactionUnitError,
-    QuoteInvalidWitnessError,
 )
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
@@ -285,9 +285,5 @@ class LedgerVerification(
     ) -> None:
         """Verify signature on quote id and outputs"""
         pubkey = PublicKey(bytes.fromhex(quote.key), raw=True)  # type: ignore
-        sigbytes = bytes.fromhex(signature)
-        serialized_outputs = b"".join([o.json().encode("utf-8") for o in outputs])
-        msgbytes = quote.quote.encode("utf-8") + serialized_outputs
-
-        if not pubkey.schnorr_verify(msgbytes, sigbytes, raw=True):
+        if not nut19.verify_mint_quote(quote.quote, outputs, pubkey, signature):
             raise QuoteInvalidWitnessError()

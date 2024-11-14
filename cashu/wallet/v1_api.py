@@ -333,13 +333,14 @@ class LedgerAPI(LedgerAPIDeprecated):
     @async_set_httpx_client
     @async_ensure_mint_loaded
     async def mint(
-        self, outputs: List[BlindedMessage], quote: str
+        self, outputs: List[BlindedMessage], quote: str, witness: Optional[str] = None 
     ) -> List[BlindedSignature]:
         """Mints new coins and returns a proof of promise.
 
         Args:
             outputs (List[BlindedMessage]): Outputs to mint new tokens with
             quote (str): Quote ID.
+            witness (Optional[str], optional): NUT-19 signature of the request.
 
         Returns:
             list[Proof]: List of proofs.
@@ -347,16 +348,19 @@ class LedgerAPI(LedgerAPIDeprecated):
         Raises:
             Exception: If the minting fails
         """
-        outputs_payload = PostMintRequest(outputs=outputs, quote=quote)
+        outputs_payload = PostMintRequest(outputs=outputs, quote=quote, witness=witness)
         logger.trace("Checking Lightning invoice. POST /v1/mint/bolt11")
 
         def _mintrequest_include_fields(outputs: List[BlindedMessage]):
             """strips away fields from the model that aren't necessary for the /mint"""
             outputs_include = {"id", "amount", "B_"}
-            return {
+            res = {
                 "quote": ...,
                 "outputs": {i: outputs_include for i in range(len(outputs))},
             }
+            if witness:
+                res["witness"] = ...
+            return res
 
         payload = outputs_payload.dict(include=_mintrequest_include_fields(outputs))  # type: ignore
         resp = await self.httpx.post(

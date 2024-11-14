@@ -348,7 +348,7 @@ async def invoice(
             try:
                 asyncio.run(
                     wallet.mint(
-                        int(amount), split=optional_split, quote_id=mint_quote.quote
+                        int(amount), split=optional_split, quote_id=mint_quote.quote, quote_key=mint_quote.key
                     )
                 )
                 # set paid so we won't react to any more callbacks
@@ -402,7 +402,7 @@ async def invoice(
                 mint_quote_resp = await wallet.get_mint_quote(mint_quote.quote)
                 if mint_quote_resp.state == MintQuoteState.paid.value:
                     await wallet.mint(
-                        amount, split=optional_split, quote_id=mint_quote.quote
+                        amount, split=optional_split, quote_id=mint_quote.quote, quote_key=mint_quote.key
                     )
                     paid = True
                 else:
@@ -423,7 +423,10 @@ async def invoice(
 
     # user paid invoice before and wants to check the quote id
     elif amount and id:
-        await wallet.mint(amount, split=optional_split, quote_id=id)
+        quote = await get_bolt11_mint_quote(wallet.db, quote=id)
+        if not quote:
+            raise Exception("Quote not found")
+        await wallet.mint(amount, split=optional_split, quote_id=quote.quote, quote_key=quote.key)
 
     # close open subscriptions so we can exit
     try:

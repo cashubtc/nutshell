@@ -13,11 +13,11 @@ from ..core.nuts import (
     MINT_NUT,
     MPP_NUT,
     P2PK_NUT,
+    QUOTE_SIGNATURE_NUT,
     RESTORE_NUT,
     SCRIPT_NUT,
     STATE_NUT,
     WEBSOCKETS_NUT,
-    QUOTE_SIGNATURE_NUT,
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends

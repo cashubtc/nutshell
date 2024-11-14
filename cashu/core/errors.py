@@ -97,15 +97,15 @@ class QuoteNotPaidError(CashuError):
     def __init__(self):
         super().__init__(self.detail, code=2001)
 
-class QuoteWitnessNotProvidedError(CashuError):
-    detail = "Witness not provided for mint quote"
+class QuoteInvalidWitnessError(CashuError):
+    detail = "Witness is invalid for mint quote"
     code = 20008
 
     def __init__(self):
         super().__init__(self.detail, code=20008)
 
-class QuoteInvalidWitnessError(CashuError):
-    detail = "Witness is invalid for mint quote"
+class QuoteWitnessNotProvidedError(CashuError):
+    detail = "Witness not provided for mint quote"
     code = 20009
 
     def __init__(self):

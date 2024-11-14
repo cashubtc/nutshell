@@ -38,8 +38,8 @@ from ..core.errors import (
     LightningError,
     NotAllowedError,
     QuoteNotPaidError,
+    QuoteWitnessNotProvidedError,
     TransactionError,
-    QuoteWitnessNotProvidedError
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
