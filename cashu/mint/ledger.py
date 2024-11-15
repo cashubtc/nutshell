@@ -37,6 +37,7 @@ from ..core.errors import (
     KeysetNotFoundError,
     LightningError,
     NotAllowedError,
+    QuoteInvalidSignatureError,
     QuoteNotPaidError,
     QuoteWitnessNotProvidedError,
     TransactionError,
@@ -424,6 +425,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             if balance + quote_request.amount > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
 
+        if settings.mint_quote_signature_required and not quote_request.pubkey:
+            raise QuoteRequiresPubkeyError()
+
         logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
         invoice_response: InvoiceResponse = await self.backends[method][
             unit
@@ -527,8 +531,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         Args:
             outputs (List[BlindedMessage]): Outputs (blinded messages) to sign.
             quote_id (str): Mint quote id.
-            keyset (Optional[MintKeyset], optional): Keyset to use. If not provided, uses active keyset. Defaults to None.
-            witness (Optional[str], optional): Optional signature on the mint quote the outputs.
+            witness (Optional[str], optional): NUT-19 witness signature. Defaults to None.
 
         Raises:
             Exception: Validation of outputs failed.
@@ -540,7 +543,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         Returns:
             List[BlindedSignature]: Signatures on the outputs.
         """
-
         await self._verify_outputs(outputs)
         sum_amount_outputs = sum([b.amount for b in outputs])
         # we already know from _verify_outputs that all outputs have the same unit because they have the same keyset
@@ -566,6 +568,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry > int(time.time()):
                 raise TransactionError("quote expired")
+            if not self._verify_nut19_mint_quote_witness(quote, witness, outputs):
+                raise QuoteInvalidSignatureError()
+
             promises = await self._generate_promises(outputs)
         except Exception as e:
             await self.db_write._unset_mint_quote_pending(

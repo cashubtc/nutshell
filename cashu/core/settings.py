@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.16.2"
+VERSION = "0.16.3"
 
 
 def find_env_file():
@@ -63,6 +63,7 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=0)
     mint_disable_melt_on_error: bool = Field(default=False)
+    mint_quote_signature_required: bool = Field(default=False)
 
 
 class MintDeprecationFlags(MintSettings):

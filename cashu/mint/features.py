@@ -11,6 +11,7 @@ from ..core.nuts import (
     HTLC_NUT,
     MELT_NUT,
     MINT_NUT,
+    MINT_QUOTE_SIGNATURE_NUT,
     MPP_NUT,
     P2PK_NUT,
     QUOTE_SIGNATURE_NUT,
@@ -44,6 +45,7 @@ class LedgerFeatures(SupportsBackends):
                 melt_method_settings.append(melt_setting)
 
         supported_dict = dict(supported=True)
+        required_dict = dict(supported=True, required=True)
 
         mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {
             MINT_NUT: dict(
@@ -61,9 +63,10 @@ class LedgerFeatures(SupportsBackends):
             P2PK_NUT: supported_dict,
             DLEQ_NUT: supported_dict,
             HTLC_NUT: supported_dict,
-            QUOTE_SIGNATURE_NUT: supported_dict,
+            MINT_QUOTE_SIGNATURE_NUT: supported_dict,
         }
 
+        # MPP_NUT
         # signal which method-unit pairs support MPP
         mpp_features = []
         for method, unit_dict in self.backends.items():
@@ -80,6 +83,7 @@ class LedgerFeatures(SupportsBackends):
         if mpp_features:
             mint_features[MPP_NUT] = mpp_features
 
+        # WEBSOCKETS_NUT
         # specify which websocket features are supported
         # these two are supported by default
         websocket_features: Dict[str, List[Dict[str, Union[str, List[str]]]]] = {
@@ -106,5 +110,10 @@ class LedgerFeatures(SupportsBackends):
 
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
+
+        # MINT_QUOTE_SIGNATURE_NUT
+        # add "required" field to mint quote signature nut
+        if settings.mint_quote_signature_required:
+            mint_features[MINT_QUOTE_SIGNATURE_NUT] = required_dict
 
         return mint_features

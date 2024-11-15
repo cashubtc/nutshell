@@ -131,7 +131,7 @@ class PostMintQuoteRequest(BaseModel):
     )  # invoice description
     pubkey: Optional[str] = Field(
         default=None, max_length=settings.mint_max_request_length
-    )
+    )  # quote lock pubkey
 
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
@@ -139,6 +139,7 @@ class PostMintQuoteResponse(BaseModel):
     paid: Optional[bool]  # DEPRECATED as per NUT-04 PR #141
     state: Optional[str]  # state of the quote
     expiry: Optional[int]  # expiry of the quote
+    pubkey: Optional[str]  # quote lock pubkey
 
     @classmethod
     def from_mint_quote(self, mint_quote: MintQuote) -> "PostMintQuoteResponse":
@@ -158,7 +159,7 @@ class PostMintRequest(BaseModel):
     )
     witness: Optional[str] = Field(
         default=None, max_length=settings.mint_max_request_length
-    )
+    )  # witness signature
 
 
 class PostMintResponse(BaseModel):

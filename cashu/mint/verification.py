@@ -284,6 +284,8 @@ class LedgerVerification(
         self, quote: MintQuote, outputs: List[BlindedMessage], signature: str,
     ) -> None:
         """Verify signature on quote id and outputs"""
+        if not signature:
+            raise QuoteInvalidWitnessError()
         pubkey = PublicKey(bytes.fromhex(quote.key), raw=True)  # type: ignore
         if not nut19.verify_mint_quote(quote.quote, outputs, pubkey, signature):
             raise QuoteInvalidWitnessError()

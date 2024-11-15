@@ -242,7 +242,9 @@ async def mint(
     """
     logger.trace(f"> POST /v1/mint/bolt11: {payload}")
 
-    promises = await ledger.mint(outputs=payload.outputs, quote_id=payload.quote, witness=payload.witness)
+    promises = await ledger.mint(
+        outputs=payload.outputs, quote_id=payload.quote, witness=payload.witness
+    )
     blinded_signatures = PostMintResponse(signatures=promises)
     logger.trace(f"< POST /v1/mint/bolt11: {blinded_signatures}")
     return blinded_signatures

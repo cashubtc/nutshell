@@ -414,6 +414,7 @@ class MintQuote(LedgerEvent):
     paid_time: Union[int, None] = None
     expiry: Optional[int] = None
     mint: Optional[str] = None
+    pubkey: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: Row):
