@@ -20,7 +20,6 @@ from ..core.base import (
     WalletKeyset,
 )
 from ..core.crypto import b_dhke
-from ..core.nuts import nut19
 from ..core.crypto.keys import derive_keyset_id
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
@@ -37,6 +36,7 @@ from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
 )
+from ..core.nuts import nut19
 from ..core.nuts.nuts import MINT_QUOTE_SIGNATURE_NUT
 from ..core.p2pk import Secret
 from ..core.settings import settings

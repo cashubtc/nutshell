@@ -12,7 +12,6 @@ from ..core.base import (
     Unit,
 )
 from ..core.crypto import b_dhke
-from ..core.nuts import nut19
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -22,6 +21,7 @@ from ..core.errors import (
     TransactionError,
     TransactionUnitError,
 )
+from ..core.nuts import nut19
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
 from ..mint.crud import LedgerCrud
