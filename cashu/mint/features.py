@@ -5,7 +5,7 @@ from ..core.models import (
     MeltMethodSetting,
     MintMethodSetting,
 )
-from ..core.nuts import (
+from ..core.nuts.nuts import (
     DLEQ_NUT,
     FEE_RETURN_NUT,
     HTLC_NUT,

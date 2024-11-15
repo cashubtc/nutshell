@@ -37,7 +37,7 @@ from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
 )
-from ..core.nuts import MINT_QUOTE_SIGNATURE_NUT
+from ..core.nuts.nuts import MINT_QUOTE_SIGNATURE_NUT
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -401,17 +401,17 @@ class Wallet(
             MintQuote: Mint Quote
         """
         privkey, pubkey = await self.get_quote_ephemeral_keypair()
-        mint_qoute = await super().mint_quote(amount, self.unit, memo, pubkey)
+        mint_quote = await super().mint_quote(amount, self.unit, memo, pubkey)
         subscriptions = SubscriptionManager(self.url)
         threading.Thread(
             target=subscriptions.connect, name="SubscriptionManager", daemon=True
         ).start()
         subscriptions.subscribe(
             kind=JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,
-            filters=[mint_qoute.quote],
+            filters=[mint_quote.quote],
             callback=callback,
         )
-        quote = MintQuote.from_resp_wallet(mint_qoute, self.url, amount, self.unit.name, privkey)
+        quote = MintQuote.from_resp_wallet(mint_quote, self.url, amount, self.unit.name)
         await store_bolt11_mint_quote(db=self.db, quote=quote)
 
         return quote, subscriptions
@@ -433,8 +433,9 @@ class Wallet(
         privkey, pubkey = await self.get_quote_ephemeral_keypair()
         mint_quote_response = await super().mint_quote(amount, self.unit, memo, pubkey)
         quote = MintQuote.from_resp_wallet(
-            mint_quote_response, self.url, amount, self.unit.name, privkey,
+            mint_quote_response, self.url, amount, self.unit.name
         )
+        quote.privkey = privkey
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
 
@@ -503,7 +504,7 @@ class Wallet(
         amount: int,
         quote_id: str,
         split: Optional[List[int]] = None,
-        quote_key: Optional[str] = None,
+        quote_privkey: Optional[str] = None,
     ) -> List[Proof]:
         """Mint tokens of a specific amount after an invoice has been paid.
 
@@ -511,7 +512,7 @@ class Wallet(
             amount (int): Total amount of tokens to be minted
             id (str): Id for looking up the paid Lightning invoice.
             split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
-            quote_key (Optional[str], optional): NUT-19 quote key for signing the request.
+            quote_privkey (Optional[str], optional): NUT-19 private key for signing the request.
 
         Raises:
             Exception: Raises exception if `amounts` does not sum to `amount` or has unsupported value.
@@ -546,8 +547,8 @@ class Wallet(
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
         witness: Optional[str] = None
-        if quote_key:
-            witness = nut19.sign_mint_quote(quote_id, outputs, quote_key)
+        if quote_privkey:
+            witness = nut19.sign_mint_quote(quote_id, outputs, quote_privkey)
 
         # will raise exception if mint is unsuccessful
         promises = await super().mint(outputs, quote_id, witness)

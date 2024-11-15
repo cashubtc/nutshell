@@ -464,7 +464,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             state=MintQuoteState.unpaid,
             created_time=int(time.time()),
             expiry=expiry,
-            key=quote_request.pubkey
+            pubkey=quote_request.pubkey
         )
         await self.crud.store_mint_quote(quote=quote, db=self.db)
         await self.events.submit(quote)

@@ -172,7 +172,7 @@ async def mint_quote(
         paid=quote.paid,  # deprecated
         state=quote.state.value,
         expiry=quote.expiry,
-        pubkey=quote.key,
+        pubkey=quote.pubkey,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
@@ -197,7 +197,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
         paid=mint_quote.paid,  # deprecated
         state=mint_quote.state.value,
         expiry=mint_quote.expiry,
-        pubkey=mint_quote.key,
+        pubkey=mint_quote.pubkey,
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp

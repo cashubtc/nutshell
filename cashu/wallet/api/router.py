@@ -206,7 +206,7 @@ async def swap(
     )
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, quote_id=mint_quote.quote, quote_key=mint_quote.key)
+    await incoming_wallet.mint(amount, quote_id=mint_quote.quote, quote_privkey=mint_quote.privkey)
     await incoming_wallet.load_proofs(reload=True)
     mint_balances = await incoming_wallet.balance_per_minturl()
     return SwapResponse(

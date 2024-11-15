@@ -844,6 +844,6 @@ async def m023_add_key_to_mint_quote_table(db: Database):
         await conn.execute(
             f"""
                 ALTER TABLE {db.table_with_schema("mint_quotes")}
-                ADD COLUMN key TEXT DEFAULT NULL
+                ADD COLUMN pubkey TEXT DEFAULT NULL
             """
         )

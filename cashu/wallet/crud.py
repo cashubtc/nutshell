@@ -253,8 +253,8 @@ async def store_bolt11_mint_quote(
     await (conn or db).execute(
         """
         INSERT INTO bolt11_mint_quotes
-            (quote, mint, method, request, checking_id, unit, amount, state, created_time, paid_time, expiry)
-        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :expiry, :key)
+            (quote, mint, method, request, checking_id, unit, amount, state, created_time, paid_time, expiry, privkey)
+        VALUES (:quote, :mint, :method, :request, :checking_id, :unit, :amount, :state, :created_time, :paid_time, :expiry, :privkey)
         """,
         {
             "quote": quote.quote,
@@ -268,7 +268,7 @@ async def store_bolt11_mint_quote(
             "created_time": quote.created_time,
             "paid_time": quote.paid_time,
             "expiry": quote.expiry,
-            "key": quote.key or ""
+            "privkey": quote.privkey or "",
         },
     )
 

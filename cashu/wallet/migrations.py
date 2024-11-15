@@ -292,6 +292,6 @@ async def m013_add_key_to_mint_quote_table(db: Database):
         await conn.execute(
             """
                 ALTER TABLE bolt11_mint_quotes
-                ADD COLUMN key TEXT DEFAULT NULL;
+                ADD COLUMN privkey TEXT DEFAULT NULL;
             """
         )

@@ -409,11 +409,11 @@ class MintQuote(LedgerEvent):
     unit: str
     amount: int
     state: MintQuoteState
-    key: Union[str, None] = None
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     expiry: Optional[int] = None
     mint: Optional[str] = None
+    privkey: Optional[str] = None
     pubkey: Optional[str] = None
 
     @classmethod
@@ -438,11 +438,12 @@ class MintQuote(LedgerEvent):
             state=MintQuoteState(row["state"]),
             created_time=created_time,
             paid_time=paid_time,
-            key=row["key"],
+            pubkey=row["pubkey"] if "pubkey" in row else None,
+            privkey=row["privkey"] if "privkey" in row else None,
         )
 
     @classmethod
-    def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str, key: Optional[str] = None):
+    def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str):
         # BEGIN: BACKWARDS COMPATIBILITY < 0.16.0: "paid" field to "state"
         if mint_quote_resp.state is None:
             if mint_quote_resp.paid is True:
@@ -461,7 +462,7 @@ class MintQuote(LedgerEvent):
             mint=mint,
             expiry=mint_quote_resp.expiry,
             created_time=int(time.time()),
-            key=key,
+            pubkey=mint_quote_resp.pubkey,
         )
 
     @property
