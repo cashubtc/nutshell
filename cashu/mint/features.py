@@ -76,7 +76,7 @@ class LedgerFeatures(SupportsBackends):
                     )
 
         if mpp_features:
-            mint_features[MPP_NUT] = mpp_features
+            mint_features[MPP_NUT] = dict(methods=mpp_features)
 
         # specify which websocket features are supported
         # these two are supported by default
