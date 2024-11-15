@@ -37,7 +37,6 @@ from ..core.errors import (
     KeysetNotFoundError,
     LightningError,
     NotAllowedError,
-    QuoteInvalidSignatureError,
     QuoteNotPaidError,
     QuoteRequiresPubkeyError,
     QuoteInvalidWitnessError,
@@ -566,7 +565,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry > int(time.time()):
                 raise TransactionError("quote expired")
-            if not self._verify_mint_quote_witness(quote, witness, outputs):
+            if not self._verify_mint_quote_witness(quote, outputs, witness):
                 raise QuoteInvalidWitnessError()
 
             promises = await self._generate_promises(outputs)

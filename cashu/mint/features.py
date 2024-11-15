@@ -14,7 +14,6 @@ from ..core.nuts import (
     MINT_QUOTE_SIGNATURE_NUT,
     MPP_NUT,
     P2PK_NUT,
-    QUOTE_SIGNATURE_NUT,
     RESTORE_NUT,
     SCRIPT_NUT,
     STATE_NUT,

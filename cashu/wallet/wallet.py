@@ -36,7 +36,7 @@ from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
 )
-from ..core.nuts import QUOTE_SIGNATURE_NUT
+from ..core.nuts import MINT_QUOTE_SIGNATURE_NUT
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -444,7 +444,7 @@ class Wallet(
         if not self.mint_info:
             await self.load_mint_info()
         assert self.mint_info.nuts
-        nut19 = self.mint_info.nuts.get(QUOTE_SIGNATURE_NUT, None)
+        nut19 = self.mint_info.nuts.get(MINT_QUOTE_SIGNATURE_NUT, None)
         if nut19 and nut19["supported"]:
             privkey = PrivateKey()
             pubkey = privkey.pubkey.serialize(True).hex()
