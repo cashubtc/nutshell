@@ -67,13 +67,7 @@ class LedgerFeatures(SupportsBackends):
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
                 if unit_dict[unit].supports_mpp:
-                    mpp_features.append(
-                        {
-                            "method": method.name,
-                            "unit": unit.name,
-                            "mpp": True,
-                        }
-                    )
+                    mpp_features.append({"method": method.name, "unit": unit.name})
 
         if mpp_features:
             mint_features[MPP_NUT] = dict(methods=mpp_features)
