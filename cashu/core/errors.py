@@ -95,4 +95,28 @@ class QuoteNotPaidError(CashuError):
     code = 20001
 
     def __init__(self):
-        super().__init__(self.detail, code=2001)
+        super().__init__(self.detail, code=self.code)
+
+
+class QuoteRequiresPubkeyError(CashuError):
+    detail = "NUT-19 mint quote pubkey required"
+    code = 20009  # TODO: fix number
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class QuoteInvalidSignatureError(CashuError):
+    detail = "NUT-19 mint quote invalid signature"
+    code = 20008
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class QuoteNoSignatureError(CashuError):
+    detail = "NUT-19 no signature provided"
+    code = 20009
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)

@@ -7,6 +7,7 @@ from ..core.base import (
     BlindedSignature,
     Method,
     MintKeyset,
+    MintQuote,
     Proof,
     Unit,
 )
@@ -277,3 +278,16 @@ class LedgerVerification(
             )
 
         return unit, method
+
+    def _verify_nut19_mint_quote_witness(
+        self, quote: MintQuote, witness: Union[str, None], outputs: List[BlindedMessage]
+    ):
+        """Verify that the witness is valid for the mint quote."""
+        if not quote.pubkey:
+            return True
+        if not witness:
+            return False
+        serialized_outputs = b"".join([o.B_.encode("utf-8") for o in outputs])
+        msgbytes = quote.quote.encode("utf-8") + serialized_outputs
+        pubkey = PublicKey(bytes.fromhex(quote.pubkey), raw=True)
+        return pubkey.schnorr_verify(msgbytes, bytes.fromhex(witness), None, raw=True)
