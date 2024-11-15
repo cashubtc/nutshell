@@ -11,7 +11,8 @@ from ..core.base import (
     Proof,
     Unit,
 )
-from ..core.crypto import b_dhke, nut19
+from ..core.crypto import b_dhke
+from ..core.nuts import nut19
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
@@ -287,5 +288,4 @@ class LedgerVerification(
             return True
         if not witness:
             return False
-        pubkey = PublicKey(bytes.fromhex(quote.key), raw=True)
-        return nut19.verify_mint_quote(quote.quote, outputs, pubkey, witness)
+        return nut19.verify_mint_quote(quote.quote, outputs, quote.key, witness)

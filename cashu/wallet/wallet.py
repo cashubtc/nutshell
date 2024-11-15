@@ -19,7 +19,8 @@ from ..core.base import (
     Unit,
     WalletKeyset,
 )
-from ..core.crypto import b_dhke, nut19
+from ..core.crypto import b_dhke
+from ..core.nuts import nut19
 from ..core.crypto.keys import derive_keyset_id
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
@@ -546,8 +547,7 @@ class Wallet(
 
         witness: Optional[str] = None
         if quote_key:
-            privkey = PrivateKey(bytes.fromhex(quote_key), raw=True)
-            witness = nut19.sign_mint_quote(quote_id, outputs, privkey)
+            witness = nut19.sign_mint_quote(quote_id, outputs, quote_key)
 
         # will raise exception if mint is unsuccessful
         promises = await super().mint(outputs, quote_id, witness)

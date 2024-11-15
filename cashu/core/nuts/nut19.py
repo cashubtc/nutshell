@@ -2,11 +2,11 @@ from hashlib import sha256
 from typing import List
 
 from ..base import BlindedMessage
-from .secp import PrivateKey, PublicKey
+from ..crypto.secp import PrivateKey, PublicKey
 
 
 def construct_message(quote_id: str, outputs: List[BlindedMessage]) -> bytes:
-    serialized_outputs = bytes.fromhex("".join([o.B_ for o in outputs]))
+    serialized_outputs = b"".join([o.B_.encode("utf-8") for o in outputs])
     msgbytes = sha256(
         quote_id.encode("utf-8")
         + serialized_outputs
@@ -16,8 +16,9 @@ def construct_message(quote_id: str, outputs: List[BlindedMessage]) -> bytes:
 def sign_mint_quote(
     quote_id: str,
     outputs: List[BlindedMessage],
-    privkey: PrivateKey,
+    private_key: str,
 ) -> str:
+    privkey = PrivateKey(bytes.fromhex(private_key), raw=True)
     msgbytes = construct_message(quote_id, outputs)
     sig = privkey.schnorr_sign(msgbytes)
     return sig.hex()
@@ -25,9 +26,10 @@ def sign_mint_quote(
 def verify_mint_quote(
     quote_id: str,
     outputs: List[BlindedMessage],
-    pubkey: PublicKey,
+    public_key: str,
     signature: str,
 ) -> bool:
+    pubkey = PublicKey(bytes.fromhex(public_key), raw=True)
     msgbytes = construct_message(quote_id, outputs)
     sig = bytes.fromhex(signature)
     return pubkey.schnorr_verify(msgbytes, sig)
