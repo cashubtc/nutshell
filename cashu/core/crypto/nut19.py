@@ -1,9 +1,8 @@
 from hashlib import sha256
 from typing import List
 
-from .secp import PrivateKey, PublicKey
-
 from ..base import BlindedMessage
+from .secp import PrivateKey, PublicKey
 
 
 def construct_message(quote_id: str, outputs: List[BlindedMessage]) -> bytes:

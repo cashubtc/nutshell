@@ -37,9 +37,9 @@ from ..core.errors import (
     KeysetNotFoundError,
     LightningError,
     NotAllowedError,
+    QuoteInvalidWitnessError,
     QuoteNotPaidError,
     QuoteRequiresPubkeyError,
-    QuoteInvalidWitnessError,
     TransactionError,
 )
 from ..core.helpers import sum_proofs
