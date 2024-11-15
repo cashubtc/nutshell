@@ -1,7 +1,7 @@
 from hashlib import sha256
 from typing import List
 
-from secp import PrivateKey, PublicKey
+from .secp import PrivateKey, PublicKey
 
 from ..base import BlindedMessage
 
