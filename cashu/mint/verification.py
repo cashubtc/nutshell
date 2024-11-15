@@ -17,7 +17,6 @@ from ..core.db import Connection, Database
 from ..core.errors import (
     NoSecretInProofsError,
     NotAllowedError,
-    QuoteInvalidWitnessError,
     SecretTooLongError,
     TransactionError,
     TransactionUnitError,
@@ -280,12 +279,13 @@ class LedgerVerification(
 
         return unit, method
 
-    def _verify_quote_signature(
-        self, quote: MintQuote, outputs: List[BlindedMessage], signature: str,
-    ) -> None:
+    def _verify_mint_quote_witness(
+        self, quote: MintQuote, outputs: List[BlindedMessage], witness: Optional[str],
+    ) -> bool:
         """Verify signature on quote id and outputs"""
-        if not signature:
-            raise QuoteInvalidWitnessError()
-        pubkey = PublicKey(bytes.fromhex(quote.key), raw=True)  # type: ignore
-        if not nut19.verify_mint_quote(quote.quote, outputs, pubkey, signature):
-            raise QuoteInvalidWitnessError()
+        if not quote.key:
+            return True
+        if not witness:
+            return False
+        pubkey = PublicKey(bytes.fromhex(quote.key), raw=True)
+        return nut19.verify_mint_quote(quote.quote, outputs, pubkey, witness)
