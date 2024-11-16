@@ -14,6 +14,9 @@ from ..wallet import Wallet
 
 
 class WalletAuth(Wallet):
+    oidc_discovery_url: str
+    oidc_discovery_json: dict
+
     def __init__(
         self, url: str, db: str, name: str = "auth", unit: str = "auth", **kwargs
     ):
@@ -32,23 +35,33 @@ class WalletAuth(Wallet):
 
     async def init_wallet(self):
         # quirk: load mint info from original api_prefix path first
-        await self.load_mint_info()
+        await self.load_mint_info(reload=True)
+        if not self.mint_info.requires_clear_auth():
+            raise Exception("Mint does not require clear auth.")
+
+        # quirk: from now on we use the blind auth api_prefix for all following requests
         self.api_prefix = "/v1/auth/blind"
         await self.load_mint_keysets()
         await self.activate_keyset()
         await self.load_proofs()
 
+        self.oidc_discovery_url = self.mint_info.oidc_discovery_url()
+        self.oidc_discovery_json = await self._get_oicd_discovery_json()
+        self.oidc_token_endpoint = self.oidc_discovery_json["token_endpoint"]
+
+    async def _get_oicd_discovery_json(self) -> dict:
+        response = httpx.get(self.oidc_discovery_url)
+        response.raise_for_status()
+        return response.json()
+
     def _get_jwt(self) -> str:
-        token_url = (
-            "http://localhost:8080/realms/nutshell/protocol/openid-connect/token"
-        )
         data = {
             "grant_type": "password",
             "client_id": "cashu-client",
             "username": "asd@asd.com",
             "password": "asdasd",
         }
-        response = httpx.post(token_url, data=data)
+        response = httpx.post(self.oidc_token_endpoint, data=data)
         if response.status_code == 200:
             token_info: dict = response.json()
             access_token = token_info["access_token"]

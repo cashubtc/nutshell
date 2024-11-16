@@ -61,11 +61,13 @@ class MintInfo(BaseModel):
         return False
 
     def requires_clear_auth(self) -> bool:
-        supports = self.supports_nut(CLEAR_AUTH_NUT)
-        if not supports:
-            return False
-        required = self.nuts[CLEAR_AUTH_NUT]["required"]
-        return required
+        return self.supports_nut(CLEAR_AUTH_NUT)
+
+    def oidc_discovery_url(self) -> str:
+        if not self.requires_clear_auth():
+            return ""
+        print(self.nuts[CLEAR_AUTH_NUT])
+        return self.nuts[CLEAR_AUTH_NUT]["openid_discovery"]
 
     def required_clear_auth_paths(self) -> List[str]:
         if not self.requires_clear_auth():
@@ -82,11 +84,7 @@ class MintInfo(BaseModel):
             return False
 
     def requires_blind_auth(self) -> bool:
-        supports = self.supports_nut(BLIND_AUTH_NUT)
-        if not supports:
-            return False
-        required = self.nuts[BLIND_AUTH_NUT]["required"]
-        return required
+        return self.supports_nut(BLIND_AUTH_NUT)
 
     def required_blind_auth_paths(self) -> List[str]:
         if not self.requires_blind_auth():

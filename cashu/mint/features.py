@@ -107,9 +107,14 @@ class LedgerFeatures(SupportsBackends):
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
 
+        # signal authentication features
         if settings.mint_require_auth:
+            if not settings.mint_auth_oicd_discovery_url:
+                raise Exception(
+                    "Missing OpenID Connect discovery URL: MINT_AUTH_OICD_DISCOVERY_URL"
+                )
             clear_auth_features: Dict[str, Union[bool, str, List[str]]] = {
-                "required": True,
+                "openid_discovery": settings.mint_auth_oicd_discovery_url,
                 "paths": [],
             }
 
@@ -119,7 +124,6 @@ class LedgerFeatures(SupportsBackends):
             mint_features[CLEAR_AUTH_NUT] = clear_auth_features
 
             blind_auth_features: Dict[str, Union[bool, int, str, List[str]]] = {
-                "required": True,
                 "max_mint": settings.mint_auth_max_blind_tokens,
                 "paths": [],
             }

@@ -54,7 +54,6 @@ from .crud import (
     get_proofs,
     invalidate_proof,
 )
-from .mint_info import MintInfo
 from .protocols import SupportsAuth
 from .wallet_deprecated import LedgerAPIDeprecated
 
@@ -112,10 +111,6 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
     tor: TorProxy
     httpx: httpx.AsyncClient
     api_prefix = "v1"
-
-    auth_db: Database
-    auth_keyset_id: str
-    mint_info: Optional[MintInfo] = None
 
     def __init__(self, url: str, db: Database):
         self.url = url

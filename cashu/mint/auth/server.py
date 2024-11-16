@@ -40,11 +40,18 @@ class AuthLedger(Ledger):
             amounts=amounts,
         )
 
-        self.jwks_url = f"{settings.mint_auth_issuer}/protocol/openid-connect/certs"
-        self.auth_crud = AuthLedgerCrudSqlite()
+        if not settings.mint_auth_oicd_discovery_url:
+            raise Exception("Missing OpenID Connect discovery URL.")
+        self.oicd_discovery_url = settings.mint_auth_oicd_discovery_url
+        logger.info(f"Initializing OpenID Connect: {self.oicd_discovery_url}")
+        self.oicd_discovery_json = self._get_oicd_discovery_json()
+        self.jwks_url = self.oicd_discovery_json["jwks_uri"]
         self.jwks_client = jwt.PyJWKClient(self.jwks_url)
+        logger.info(f"Getting JWKS from: {self.jwks_url}")
         self.signing_key = self.fetch_es256_signing_key(self.jwks_url)
-        logger.info(f"Initialized OpenID Connect issuer: {settings.mint_auth_issuer}")
+        self.auth_crud = AuthLedgerCrudSqlite()
+        self.issuer: str = self.oicd_discovery_json["issuer"]
+        logger.info(f"Initialized OpenID Connect: {self.issuer}")
 
     def fetch_es256_signing_key(self, jwks_url: str) -> jwt.PyJWK:
         """Fetch the ES256 signing key from the JWKS."""
@@ -54,7 +61,12 @@ class AuthLedger(Ledger):
         for key in jwks["keys"]:
             if key.get("alg") == "ES256" and key.get("use") == "sig":
                 return jwt.PyJWK.from_dict(key)
-        raise Exception("No ES256 signing key found in JWKS.")
+        raise Exception("No ES256 signing key found in JWKS. Make sure to enable it.")
+
+    def _get_oicd_discovery_json(self) -> dict:
+        resp = httpx.get(self.oicd_discovery_url)
+        resp.raise_for_status()
+        return resp.json()
 
     def _verify_oicd_issuer(self, clear_auth_token: str) -> None:
         """Verify the issuer of the clear-auth token.
@@ -71,10 +83,8 @@ class AuthLedger(Ledger):
                 options={"verify_signature": False},
             )
             issuer = decoded["iss"]
-            if issuer != settings.mint_auth_issuer:
-                raise Exception(
-                    f"Invalid issuer: {issuer}. Expected: {settings.mint_auth_issuer}"
-                )
+            if issuer != self.issuer:
+                raise Exception(f"Invalid issuer: {issuer}. Expected: {self.issuer}")
         except Exception as e:
             raise e
 

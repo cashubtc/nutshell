@@ -222,6 +222,7 @@ class Wallet(
         # read mint info from db
         wallet_mint_db = await get_mint_by_url(url=self.url, db=self.db)
         if not wallet_mint_db or reload:
+            logger.debug("Loading mint info from mint.")
             mint_info_resp = await self._get_info()
             self.mint_info = MintInfo(**mint_info_resp.dict())
             if not wallet_mint_db:
@@ -232,6 +233,7 @@ class Wallet(
                     ),
                 )
         else:
+            logger.debug("Loading mint info from db.")
             self.mint_info = MintInfo.from_json_str(wallet_mint_db.info)
         logger.debug(f"Mint info: {self.mint_info}")
         return self.mint_info
@@ -385,7 +387,7 @@ class Wallet(
         await self.load_mint_keysets(force_old_keysets)
         await self.activate_keyset(keyset_id)
         try:
-            await self.load_mint_info()
+            await self.load_mint_info(reload=True)
         except Exception as e:
             logger.debug(f"Could not load mint info: {e}")
             pass
