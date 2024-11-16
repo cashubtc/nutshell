@@ -4,11 +4,16 @@ from typing import List, Union
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import Proof
+from cashu.core.base import MintQuoteState, Proof
 from cashu.core.errors import CashuError, KeysetNotFoundError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
-from cashu.wallet.crud import get_keysets, get_lightning_invoice, get_proofs
+from cashu.wallet.crud import (
+    get_bolt11_melt_quote,
+    get_bolt11_mint_quote,
+    get_keysets,
+    get_proofs,
+)
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
@@ -160,39 +165,41 @@ async def test_get_keysets(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_request_mint(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    assert invoice.payment_hash
+    mint_quote = await wallet1.request_mint(64)
+    assert mint_quote.request
 
 
 @pytest.mark.asyncio
 async def test_mint(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    if not settings.debug_mint_only_deprecated:
+        quote_resp = await wallet1.get_mint_quote(mint_quote.quote)
+        assert quote_resp.request == mint_quote.request
+        assert quote_resp.state == MintQuoteState.paid.value
+
     expected_proof_amounts = wallet1.split_wallet_state(64)
-    await wallet1.mint(64, id=invoice.id)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     assert wallet1.balance == 64
 
     # verify that proofs in proofs_used db have the same mint_id as the invoice in the db
-    assert invoice.payment_hash
-    invoice_db = await get_lightning_invoice(
-        db=wallet1.db, payment_hash=invoice.payment_hash, out=False
-    )
-    assert invoice_db
+    mint_quote = await get_bolt11_mint_quote(db=wallet1.db, quote=mint_quote.quote)
+    assert mint_quote
     proofs_minted = await get_proofs(
-        db=wallet1.db, mint_id=invoice_db.id, table="proofs"
+        db=wallet1.db, mint_id=mint_quote.quote, table="proofs"
     )
     assert len(proofs_minted) == len(expected_proof_amounts)
     assert all([p.amount in expected_proof_amounts for p in proofs_minted])
-    assert all([p.mint_id == invoice.id for p in proofs_minted])
+    assert all([p.mint_id == mint_quote.quote for p in proofs_minted])
 
 
 @pytest.mark.asyncio
 async def test_mint_amounts(wallet1: Wallet):
     """Mint predefined amounts"""
     amts = [1, 1, 1, 2, 2, 4, 16]
-    invoice = await wallet1.request_mint(sum(amts))
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(amount=sum(amts), split=amts, id=invoice.id)
+    mint_quote = await wallet1.request_mint(sum(amts))
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(amount=sum(amts), split=amts, quote_id=mint_quote.quote)
     assert wallet1.balance == 27
     assert wallet1.proof_amounts == amts
 
@@ -202,9 +209,9 @@ async def test_mint_amounts_wrong_sum(wallet1: Wallet):
     """Mint predefined amounts"""
 
     amts = [1, 1, 1, 2, 2, 4, 16]
-    invoice = await wallet1.request_mint(sum(amts))
+    mint_quote = await wallet1.request_mint(sum(amts))
     await assert_err(
-        wallet1.mint(amount=sum(amts) + 1, split=amts, id=invoice.id),
+        wallet1.mint(amount=sum(amts) + 1, split=amts, quote_id=mint_quote.quote),
         "split must sum to amount",
     )
 
@@ -213,18 +220,18 @@ async def test_mint_amounts_wrong_sum(wallet1: Wallet):
 async def test_mint_amounts_wrong_order(wallet1: Wallet):
     """Mint amount that is not part in 2^n"""
     amts = [1, 2, 3]
-    invoice = await wallet1.request_mint(sum(amts))
+    mint_quote = await wallet1.request_mint(sum(amts))
     await assert_err(
-        wallet1.mint(amount=sum(amts), split=[1, 2, 3], id=invoice.id),
+        wallet1.mint(amount=sum(amts), split=[1, 2, 3], quote_id=mint_quote.quote),
         f"Can only mint amounts with 2^n up to {2**settings.max_order}.",
     )
 
 
 @pytest.mark.asyncio
 async def test_split(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     assert wallet1.balance == 64
     # the outputs we keep that we expect after the split
     expected_proof_amounts = wallet1.split_wallet_state(44)
@@ -242,9 +249,9 @@ async def test_split(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_swap_to_send(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     assert wallet1.balance == 64
 
     # this will select 32 sats and them (nothing to keep)
@@ -254,7 +261,7 @@ async def test_swap_to_send(wallet1: Wallet):
     assert_amt(send_proofs, 32)
     assert_amt(keep_proofs, 0)
 
-    spendable_proofs = await wallet1._select_proofs_to_send(wallet1.proofs, 32)
+    spendable_proofs = wallet1.coinselect(wallet1.proofs, 32)
     assert sum_proofs(spendable_proofs) == 32
 
     assert sum_proofs(send_proofs) == 32
@@ -264,9 +271,9 @@ async def test_swap_to_send(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_split_more_than_balance(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     await assert_err(
         wallet1.split(wallet1.proofs, 128),
         # "Mint Error: inputs do not have same amount as outputs",
@@ -278,22 +285,19 @@ async def test_split_more_than_balance(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_melt(wallet1: Wallet):
     # mint twice so we have enough to pay the second invoice back
-    topup_invoice = await wallet1.request_mint(128)
-    await pay_if_regtest(topup_invoice.bolt11)
-    await wallet1.mint(128, id=topup_invoice.id)
+    topup_mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    await wallet1.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet1.balance == 128
 
     invoice_payment_request = ""
-    invoice_payment_hash = ""
     if is_regtest:
         invoice_dict = get_real_invoice(64)
-        invoice_payment_hash = str(invoice_dict["r_hash"])
         invoice_payment_request = invoice_dict["payment_request"]
 
     if is_fake:
-        invoice = await wallet1.request_mint(64)
-        invoice_payment_hash = str(invoice.payment_hash)
-        invoice_payment_request = invoice.bolt11
+        mint_quote = await wallet1.request_mint(64)
+        invoice_payment_request = mint_quote.request
 
     quote = await wallet1.melt_quote(invoice_payment_request)
     total_amount = quote.amount + quote.fee_reserve
@@ -306,6 +310,10 @@ async def test_melt(wallet1: Wallet):
         # we expect a fee reserve of 0 sat for fake
         assert total_amount == 64
         assert quote.fee_reserve == 0
+
+    if not settings.debug_mint_only_deprecated:
+        quote_resp = await wallet1.get_melt_quote(quote.quote)
+        assert quote_resp.amount == quote.amount
 
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
 
@@ -325,17 +333,16 @@ async def test_melt(wallet1: Wallet):
         assert melt_response.change[0].id == send_proofs[0].id, "Wrong keyset returned"
 
     # verify that proofs in proofs_used db have the same melt_id as the invoice in the db
-    assert invoice_payment_hash, "No payment hash in invoice"
-    invoice_db = await get_lightning_invoice(
-        db=wallet1.db, payment_hash=invoice_payment_hash, out=True
+    melt_quote_db = await get_bolt11_melt_quote(
+        db=wallet1.db, request=invoice_payment_request
     )
-    assert invoice_db, "No invoice in db"
+    assert melt_quote_db, "No invoice in db"
     proofs_used = await get_proofs(
-        db=wallet1.db, melt_id=invoice_db.id, table="proofs_used"
+        db=wallet1.db, melt_id=melt_quote_db.quote, table="proofs_used"
     )
 
     assert len(proofs_used) == len(send_proofs), "Not all proofs used"
-    assert all([p.melt_id == invoice_db.id for p in proofs_used]), "Wrong melt_id"
+    assert all([p.melt_id == melt_quote_db.quote for p in proofs_used]), "Wrong melt_id"
 
     # the payment was without fees so we need to remove it from the total amount
     assert wallet1.balance == 128 - (total_amount - quote.fee_reserve), "Wrong balance"
@@ -344,9 +351,9 @@ async def test_melt(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_swap_to_send_more_than_balance(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     await assert_err(
         wallet1.swap_to_send(wallet1.proofs, 128, set_reserved=True),
         "balance too low.",
@@ -357,9 +364,9 @@ async def test_swap_to_send_more_than_balance(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_double_spend(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    doublespend = await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    doublespend = await wallet1.mint(64, quote_id=mint_quote.quote)
     await wallet1.split(wallet1.proofs, 20)
     await assert_err(
         wallet1.split(doublespend, 20),
@@ -371,9 +378,9 @@ async def test_double_spend(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_duplicate_proofs_double_spent(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    doublespend = await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    doublespend = await wallet1.mint(64, quote_id=mint_quote.quote)
     await assert_err(
         wallet1.split(wallet1.proofs + doublespend, 20),
         "Mint Error: duplicate proofs.",
@@ -385,9 +392,9 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_github_actions, reason="GITHUB_ACTIONS")
 async def test_split_race_condition(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     # run two splits in parallel
     import asyncio
 
@@ -402,9 +409,9 @@ async def test_split_race_condition(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     _, spendable_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 32, set_reserved=True
     )
@@ -421,9 +428,9 @@ async def test_send_and_redeem(wallet1: Wallet, wallet2: Wallet):
 @pytest.mark.asyncio
 async def test_invalidate_all_proofs(wallet1: Wallet):
     """Try to invalidate proofs that have not been spent yet. Should not work!"""
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     await wallet1.invalidate(wallet1.proofs)
     assert wallet1.balance == 0
 
@@ -431,18 +438,18 @@ async def test_invalidate_all_proofs(wallet1: Wallet):
 @pytest.mark.asyncio
 async def test_invalidate_unspent_proofs_with_checking(wallet1: Wallet):
     """Try to invalidate proofs that have not been spent yet but force no check."""
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     await wallet1.invalidate(wallet1.proofs, check_spendable=True)
     assert wallet1.balance == 64
 
 
 @pytest.mark.asyncio
 async def test_split_invalid_amount(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     await assert_err(
         wallet1.split(wallet1.proofs, -1),
         "amount can't be negative",
@@ -451,9 +458,9 @@ async def test_split_invalid_amount(wallet1: Wallet):
 
 @pytest.mark.asyncio
 async def test_token_state(wallet1: Wallet):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
     assert wallet1.balance == 64
     resp = await wallet1.check_proof_state(wallet1.proofs)
     assert resp.states[0].state.value == "UNSPENT"

@@ -11,7 +11,7 @@ key = bytes.fromhex("3aa925cb69eb613e2928f8a18279c78b1dca04541dfd064df2eda66b598
 BLOCK_SIZE = 16
 
 
-class AESCipher(object):
+class AESCipher:
     """This class is compatible with crypto.createCipheriv('aes-256-cbc')"""
 
     def __init__(self, key=None):

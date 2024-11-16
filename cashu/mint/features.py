@@ -2,13 +2,15 @@ from typing import Any, Dict, List, Union
 
 from ..core.base import Method
 from ..core.models import (
-    MintMeltMethodSetting,
+    MeltMethodSetting,
+    MintMethodSetting,
 )
 from ..core.nuts import (
     BLIND_AUTH_NUT,
     CLEAR_AUTH_NUT,
     DLEQ_NUT,
     FEE_RETURN_NUT,
+    HTLC_NUT,
     MELT_NUT,
     MINT_NUT,
     MPP_NUT,
@@ -24,32 +26,33 @@ from ..mint.protocols import SupportsBackends
 
 class LedgerFeatures(SupportsBackends):
     def mint_features(self) -> Dict[int, Union[List[Any], Dict[str, Any]]]:
-        # determine all method-unit pairs
-        method_settings: Dict[int, List[MintMeltMethodSetting]] = {}
-        for nut in [MINT_NUT, MELT_NUT]:
-            method_settings[nut] = []
-            for method, unit_dict in self.backends.items():
-                for unit in unit_dict.keys():
-                    setting = MintMeltMethodSetting(method=method.name, unit=unit.name)
-
-                    if nut == MINT_NUT and settings.mint_max_peg_in:
-                        setting.max_amount = settings.mint_max_peg_in
-                        setting.min_amount = 0
-                    elif nut == MELT_NUT and settings.mint_max_peg_out:
-                        setting.max_amount = settings.mint_max_peg_out
-                        setting.min_amount = 0
-
-                    method_settings[nut].append(setting)
+        mint_method_settings: List[MintMethodSetting] = []
+        for method, unit_dict in self.backends.items():
+            for unit in unit_dict.keys():
+                mint_setting = MintMethodSetting(method=method.name, unit=unit.name)
+                if settings.mint_max_peg_in:
+                    mint_setting.max_amount = settings.mint_max_peg_in
+                    mint_setting.min_amount = 0
+                mint_method_settings.append(mint_setting)
+                mint_setting.description = unit_dict[unit].supports_description
+        melt_method_settings: List[MeltMethodSetting] = []
+        for method, unit_dict in self.backends.items():
+            for unit in unit_dict.keys():
+                melt_setting = MeltMethodSetting(method=method.name, unit=unit.name)
+                if settings.mint_max_peg_out:
+                    melt_setting.max_amount = settings.mint_max_peg_out
+                    melt_setting.min_amount = 0
+                melt_method_settings.append(melt_setting)
 
         supported_dict = dict(supported=True)
 
         mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {
             MINT_NUT: dict(
-                methods=method_settings[MINT_NUT],
+                methods=mint_method_settings,
                 disabled=settings.mint_peg_out_only,
             ),
             MELT_NUT: dict(
-                methods=method_settings[MELT_NUT],
+                methods=melt_method_settings,
                 disabled=False,
             ),
             STATE_NUT: supported_dict,
@@ -58,6 +61,7 @@ class LedgerFeatures(SupportsBackends):
             SCRIPT_NUT: supported_dict,
             P2PK_NUT: supported_dict,
             DLEQ_NUT: supported_dict,
+            HTLC_NUT: supported_dict,
         }
 
         # signal which method-unit pairs support MPP
@@ -74,7 +78,7 @@ class LedgerFeatures(SupportsBackends):
                     )
 
         if mpp_features:
-            mint_features[MPP_NUT] = mpp_features
+            mint_features[MPP_NUT] = dict(methods=mpp_features)
 
         # specify which websocket features are supported
         # these two are supported by default

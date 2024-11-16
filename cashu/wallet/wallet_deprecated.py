@@ -1,3 +1,4 @@
+import json
 from posixpath import join
 from typing import List, Optional, Tuple, Union
 
@@ -106,7 +107,12 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         Raises:
             Exception: if the response contains an error
         """
-        resp_dict = resp.json()
+        try:
+            resp_dict = resp.json()
+        except json.JSONDecodeError:
+            # if we can't decode the response, raise for status
+            resp.raise_for_status()
+            return
         if "detail" in resp_dict:
             logger.trace(f"Error from mint: {resp_dict}")
             error_message = f"Mint Error: {resp_dict['detail']}"
@@ -155,7 +161,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         """
         logger.warning(f"Using deprecated API call: {url}/keys")
         resp = await self.httpx.get(
-            url + "/keys",
+            f"{url}/keys",
         )
         self.raise_on_error(resp)
         keys: dict = resp.json()
@@ -185,7 +191,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         logger.warning(f"Using deprecated API call: {url}/keys/{keyset_id}")
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
         resp = await self.httpx.get(
-            url + f"/keys/{keyset_id_urlsafe}",
+            f"{url}/keys/{keyset_id_urlsafe}",
         )
         self.raise_on_error(resp)
         keys = resp.json()
@@ -217,7 +223,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         """
         logger.warning(f"Using deprecated API call: {url}/keysets")
         resp = await self.httpx.get(
-            url + "/keysets",
+            f"{url}/keysets",
         )
         self.raise_on_error(resp)
         keysets_dict = resp.json()
@@ -244,7 +250,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             Exception: If the mint request fails
         """
         logger.warning("Using deprecated API call: Requesting mint: GET /mint")
-        resp = await self.httpx.get(self.url + "/mint", params={"amount": amount})
+        resp = await self.httpx.get(f"{self.url}/mint", params={"amount": amount})
         self.raise_on_error(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
@@ -289,7 +295,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             "Using deprecated API call:Checking Lightning invoice. POST /mint"
         )
         resp = await self.httpx.post(
-            self.url + "/mint",
+            f"{self.url}/mint",
             json=payload,
             params={
                 "hash": hash,
@@ -330,7 +336,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             }
 
         resp = await self.httpx.post(
-            self.url + "/melt",
+            f"{self.url}/melt",
             json=payload.dict(include=_meltrequest_include_fields(proofs)),  # type: ignore
         )
         self.raise_on_error(resp)

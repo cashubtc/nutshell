@@ -203,7 +203,7 @@ class LedgerVerification(
         """Any amount used should be positive and not larger than 2^MAX_ORDER."""
         valid = amount > 0 and amount < 2**settings.max_order
         if not valid:
-            raise NotAllowedError("invalid amount: " + str(amount))
+            raise NotAllowedError(f"invalid amount: {amount}")
         return amount
 
     def _verify_units_match(
@@ -223,7 +223,7 @@ class LedgerVerification(
         return units_proofs[0]
 
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
-        if not len(set([self.keysets[p.id].unit for p in proofs])) == 1:
+        if not len({self.keysets[p.id].unit for p in proofs}) == 1:
             raise TransactionUnitError("inputs have different units.")
         fee = (sum([self.keysets[p.id].input_fee_ppk for p in proofs]) + 999) // 1000
         return fee

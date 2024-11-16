@@ -70,25 +70,27 @@ class Event:
 
     def verify(self) -> bool:
         pub_key = PublicKey(
-            bytes.fromhex("02" + self.public_key), True
+            bytes.fromhex(f"02{self.public_key}"), True
         )  # add 02 for schnorr (bip340)
         return pub_key.schnorr_verify(
             bytes.fromhex(self.id), bytes.fromhex(self.signature), None, raw=True
         )
 
     def to_message(self) -> str:
-        return json.dumps([
-            ClientMessageType.EVENT,
-            {
-                "id": self.id,
-                "pubkey": self.public_key,
-                "created_at": self.created_at,
-                "kind": self.kind,
-                "tags": self.tags,
-                "content": self.content,
-                "sig": self.signature,
-            },
-        ])
+        return json.dumps(
+            [
+                ClientMessageType.EVENT,
+                {
+                    "id": self.id,
+                    "pubkey": self.public_key,
+                    "created_at": self.created_at,
+                    "kind": self.kind,
+                    "tags": self.tags,
+                    "content": self.content,
+                    "sig": self.signature,
+                },
+            ]
+        )
 
 
 @dataclass

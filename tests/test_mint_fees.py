@@ -48,9 +48,9 @@ def set_ledger_keyset_fees(
 
 @pytest.mark.asyncio
 async def test_get_fees_for_proofs(wallet1: Wallet, ledger: Ledger):
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, split=[1] * 64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, split=[1] * 64, quote_id=mint_quote.quote)
 
     # two proofs
 
@@ -96,27 +96,57 @@ async def test_get_fees_for_proofs(wallet1: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
-async def test_wallet_fee(wallet1: Wallet, ledger: Ledger):
-    # THIS TEST IS A FAKE, WE SET THE WALLET FEES MANUALLY IN set_ledger_keyset_fees
-    # It would be better to test if the wallet can get the fees from the mint itself
-    # but the ledger instance does not update the responses from the `mint` that is running in the background
-    # so we just pretend here and test really nothing...
-
+async def test_wallet_selection_with_fee(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(100, ledger, wallet1)
 
+    # THIS TEST IS A FAKE, WE SET THE WALLET FEES MANUALLY IN set_ledger_keyset_fees
     # check if all wallet keysets have the correct fees
     for keyset in wallet1.keysets.values():
         assert keyset.input_fee_ppk == 100
+
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    send_proofs, _ = await wallet1.select_to_send(wallet1.proofs, 10)
+    assert sum_proofs(send_proofs) == 10
+
+    send_proofs_with_fees, _ = await wallet1.select_to_send(
+        wallet1.proofs, 10, include_fees=True
+    )
+    assert sum_proofs(send_proofs_with_fees) == 11
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+async def test_wallet_swap_to_send_with_fee(wallet1: Wallet, ledger: Ledger):
+    # set fees to 100 ppk
+    set_ledger_keyset_fees(100, ledger, wallet1)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(
+        64, quote_id=mint_quote.quote, split=[32, 32]
+    )  # make sure we need to swap
+
+    # quirk: this should call a `/v1/swap` with the mint but the mint will
+    # throw an error since the fees are only changed in the `ledger` instance, not in the uvicorn API server
+    # this *should* succeed if the fees were set in the API server
+    # at least, we can verify that the wallet is correctly computing the fees
+    # by asserting for this super specific error message from the (API server) mint
+    await assert_err(
+        wallet1.select_to_send(wallet1.proofs, 10),
+        "Mint Error: inputs (32) - fees (0) vs outputs (31) are not balanced.",
+    )
 
 
 @pytest.mark.asyncio
 async def test_split_with_fees(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(100, ledger)
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
 
     send_proofs, _ = await wallet1.select_to_send(wallet1.proofs, 10)
     fees = ledger.get_fees_for_proofs(send_proofs)
@@ -132,9 +162,9 @@ async def test_split_with_fees(wallet1: Wallet, ledger: Ledger):
 async def test_split_with_high_fees(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(1234, ledger)
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
 
     send_proofs, _ = await wallet1.select_to_send(wallet1.proofs, 10)
     fees = ledger.get_fees_for_proofs(send_proofs)
@@ -150,9 +180,9 @@ async def test_split_with_high_fees(wallet1: Wallet, ledger: Ledger):
 async def test_split_not_enough_fees(wallet1: Wallet, ledger: Ledger):
     # set fees to 100 ppk
     set_ledger_keyset_fees(100, ledger)
-    invoice = await wallet1.request_mint(64)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(64, id=invoice.id)
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
 
     send_proofs, _ = await wallet1.select_to_send(wallet1.proofs, 10)
     fees = ledger.get_fees_for_proofs(send_proofs)
@@ -172,14 +202,14 @@ async def test_melt_internal(wallet1: Wallet, ledger: Ledger):
     set_ledger_keyset_fees(100, ledger, wallet1)
 
     # mint twice so we have enough to pay the second invoice back
-    invoice = await wallet1.request_mint(128)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(128, id=invoice.id)
+    mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(128, quote_id=mint_quote.quote)
     assert wallet1.balance == 128
 
     # create a mint quote so that we can melt to it internally
     invoice_to_pay = await wallet1.request_mint(64)
-    invoice_payment_request = invoice_to_pay.bolt11
+    invoice_payment_request = invoice_to_pay.request
 
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
@@ -219,9 +249,9 @@ async def test_melt_external_with_fees(wallet1: Wallet, ledger: Ledger):
     set_ledger_keyset_fees(100, ledger, wallet1)
 
     # mint twice so we have enough to pay the second invoice back
-    invoice = await wallet1.request_mint(128)
-    await pay_if_regtest(invoice.bolt11)
-    await wallet1.mint(128, id=invoice.id)
+    mint_quote = await wallet1.request_mint(128)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(128, quote_id=mint_quote.quote)
     assert wallet1.balance == 128
 
     invoice_dict = get_real_invoice(64)

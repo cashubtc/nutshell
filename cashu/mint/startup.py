@@ -98,7 +98,7 @@ async def rotate_keys(n_seconds=60):
         i += 1
         logger.info("Rotating keys.")
         incremented_derivation_path = (
-            "/".join(ledger.derivation_path.split("/")[:-1]) + f"/{i}"
+            f"{'/'.join(ledger.derivation_path.split('/')[:-1])}/{i}"
         )
         await ledger.activate_keyset(derivation_path=incremented_derivation_path)
         logger.info(f"Current keyset: {ledger.keyset.id}")

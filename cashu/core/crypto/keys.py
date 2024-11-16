@@ -57,7 +57,7 @@ def derive_keyset_id(keys: Dict[int, PublicKey]):
     # sort public keys by amount
     sorted_keys = dict(sorted(keys.items()))
     pubkeys_concat = b"".join([p.serialize() for _, p in sorted_keys.items()])
-    return "00" + hashlib.sha256(pubkeys_concat).hexdigest()[:14]
+    return f"00{hashlib.sha256(pubkeys_concat).hexdigest()[:14]}"
 
 
 def derive_keyset_id_deprecated(keys: Dict[int, PublicKey]):

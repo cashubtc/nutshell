@@ -1,6 +1,7 @@
 import base64
 import json
 import math
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
@@ -80,24 +81,22 @@ class ProofState(LedgerEvent):
     def kind(self) -> JSONRPCSubscriptionKinds:
         return JSONRPCSubscriptionKinds.PROOF_STATE
 
+    @property
+    def unspent(self) -> bool:
+        return self.state == ProofSpentState.unspent
+
+    @property
+    def spent(self) -> bool:
+        return self.state == ProofSpentState.spent
+
+    @property
+    def pending(self) -> bool:
+        return self.state == ProofSpentState.pending
+
 
 class HTLCWitness(BaseModel):
     preimage: Optional[str] = None
-    signature: Optional[str] = None
-
-    @classmethod
-    def from_witness(cls, witness: str):
-        return cls(**json.loads(witness))
-
-
-class P2SHWitness(BaseModel):
-    """
-    Unlocks P2SH spending condition of a Proof
-    """
-
-    script: str
-    signature: str
-    address: Union[str, None] = None
+    signatures: Optional[List[str]] = None
 
     @classmethod
     def from_witness(cls, witness: str):
@@ -136,12 +135,12 @@ class Proof(BaseModel):
     time_created: Union[None, str] = ""
     time_reserved: Union[None, str] = ""
     derivation_path: Union[None, str] = ""  # derivation path of the proof
-    mint_id: Union[
-        None, str
-    ] = None  # holds the id of the mint operation that created this proof
-    melt_id: Union[
-        None, str
-    ] = None  # holds the id of the melt operation that destroyed this proof
+    mint_id: Union[None, str] = (
+        None  # holds the id of the mint operation that created this proof
+    )
+    melt_id: Union[None, str] = (
+        None  # holds the id of the melt operation that destroyed this proof
+    )
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -197,9 +196,14 @@ class Proof(BaseModel):
         return P2PKWitness.from_witness(self.witness).signatures
 
     @property
-    def htlcpreimage(self) -> Union[str, None]:
+    def htlcpreimage(self) -> str | None:
         assert self.witness, "Witness is missing for htlc preimage"
         return HTLCWitness.from_witness(self.witness).preimage
+
+    @property
+    def htlcsigs(self) -> List[str] | None:
+        assert self.witness, "Witness is missing for htlc signatures"
+        return HTLCWitness.from_witness(self.witness).signatures
 
 
 class Proofs(BaseModel):
@@ -260,20 +264,7 @@ class BlindedSignature(BaseModel):
         )
 
 
-# ------- LIGHTNING INVOICE -------
-
-
-class Invoice(BaseModel):
-    amount: int
-    bolt11: str
-    id: str
-    out: Union[None, bool] = None
-    payment_hash: Union[None, str] = None
-    preimage: Union[str, None] = None
-    issued: Union[None, bool] = False
-    paid: Union[None, bool] = False
-    time_created: Union[None, str, int, float] = ""
-    time_paid: Union[None, str, int, float] = ""
+# ------- Quotes -------
 
 
 class MeltQuoteState(Enum):
@@ -293,14 +284,14 @@ class MeltQuote(LedgerEvent):
     unit: str
     amount: int
     fee_reserve: int
-    paid: bool
     state: MeltQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     fee_paid: int = 0
-    payment_preimage: str = ""
+    payment_preimage: Optional[str] = None
     expiry: Optional[int] = None
     change: Optional[List[BlindedSignature]] = None
+    mint: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -315,6 +306,8 @@ class MeltQuote(LedgerEvent):
             paid_time = int(row["paid_time"].timestamp()) if row["paid_time"] else None
             expiry = int(row["expiry"].timestamp()) if row["expiry"] else None
 
+        payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
+
         # parse change from row as json
         change = None
         if row["change"]:
@@ -328,14 +321,37 @@ class MeltQuote(LedgerEvent):
             unit=row["unit"],
             amount=row["amount"],
             fee_reserve=row["fee_reserve"],
-            paid=row["paid"],
-            state=MeltQuoteState[row["state"]],
+            state=MeltQuoteState(row["state"]),
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
             change=change,
             expiry=expiry,
-            payment_preimage=row["proof"],
+            payment_preimage=payment_preimage,
+        )
+
+    @classmethod
+    def from_resp_wallet(
+        cls, melt_quote_resp, mint: str, amount: int, unit: str, request: str
+    ):
+        # BEGIN: BACKWARDS COMPATIBILITY < 0.16.0: "paid" field to "state"
+        if melt_quote_resp.state is None:
+            if melt_quote_resp.paid is True:
+                melt_quote_resp.state = MeltQuoteState.paid
+            elif melt_quote_resp.paid is False:
+                melt_quote_resp.state = MeltQuoteState.unpaid
+        # END: BACKWARDS COMPATIBILITY < 0.16.0
+        return cls(
+            quote=melt_quote_resp.quote,
+            method="bolt11",
+            request=request,
+            checking_id="",
+            unit=unit,
+            amount=amount,
+            fee_reserve=melt_quote_resp.fee_reserve,
+            state=MeltQuoteState(melt_quote_resp.state),
+            mint=mint,
+            change=melt_quote_resp.change,
         )
 
     @property
@@ -347,17 +363,34 @@ class MeltQuote(LedgerEvent):
     def kind(self) -> JSONRPCSubscriptionKinds:
         return JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE
 
+    @property
+    def unpaid(self) -> bool:
+        return self.state == MeltQuoteState.unpaid
+
+    @property
+    def pending(self) -> bool:
+        return self.state == MeltQuoteState.pending
+
+    @property
+    def paid(self) -> bool:
+        return self.state == MeltQuoteState.paid
+
     # method that is invoked when the `state` attribute is changed. to protect the state from being set to anything else if the current state is paid
     def __setattr__(self, name, value):
         # an unpaid quote can only be set to pending or paid
-        if name == "state" and self.state == MeltQuoteState.unpaid:
+        if name == "state" and self.unpaid:
             if value not in [MeltQuoteState.pending, MeltQuoteState.paid]:
                 raise Exception(
                     f"Cannot change state of an unpaid melt quote to {value}."
                 )
         # a paid quote can not be changed
-        if name == "state" and self.state == MeltQuoteState.paid:
+        if name == "state" and self.paid:
             raise Exception("Cannot change state of a paid melt quote.")
+
+        if name == "paid":
+            raise Exception(
+                "MeltQuote does not support `paid` anymore! Use `state` instead."
+            )
         super().__setattr__(name, value)
 
 
@@ -378,12 +411,11 @@ class MintQuote(LedgerEvent):
     checking_id: str
     unit: str
     amount: int
-    paid: bool
-    issued: bool
     state: MintQuoteState
     created_time: Union[int, None] = None
     paid_time: Union[int, None] = None
     expiry: Optional[int] = None
+    mint: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -404,11 +436,31 @@ class MintQuote(LedgerEvent):
             checking_id=row["checking_id"],
             unit=row["unit"],
             amount=row["amount"],
-            paid=row["paid"],
-            issued=row["issued"],
-            state=MintQuoteState[row["state"]],
+            state=MintQuoteState(row["state"]),
             created_time=created_time,
             paid_time=paid_time,
+        )
+
+    @classmethod
+    def from_resp_wallet(cls, mint_quote_resp, mint: str, amount: int, unit: str):
+        # BEGIN: BACKWARDS COMPATIBILITY < 0.16.0: "paid" field to "state"
+        if mint_quote_resp.state is None:
+            if mint_quote_resp.paid is True:
+                mint_quote_resp.state = MintQuoteState.paid
+            elif mint_quote_resp.paid is False:
+                mint_quote_resp.state = MintQuoteState.unpaid
+        # END: BACKWARDS COMPATIBILITY < 0.16.0
+        return cls(
+            quote=mint_quote_resp.quote,
+            method="bolt11",
+            request=mint_quote_resp.request,
+            checking_id="",
+            unit=unit,
+            amount=amount,
+            state=MintQuoteState(mint_quote_resp.state),
+            mint=mint,
+            expiry=mint_quote_resp.expiry,
+            created_time=int(time.time()),
         )
 
     @property
@@ -420,24 +472,45 @@ class MintQuote(LedgerEvent):
     def kind(self) -> JSONRPCSubscriptionKinds:
         return JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE
 
+    @property
+    def unpaid(self) -> bool:
+        return self.state == MintQuoteState.unpaid
+
+    @property
+    def paid(self) -> bool:
+        return self.state == MintQuoteState.paid
+
+    @property
+    def pending(self) -> bool:
+        return self.state == MintQuoteState.pending
+
+    @property
+    def issued(self) -> bool:
+        return self.state == MintQuoteState.issued
+
     def __setattr__(self, name, value):
         # un unpaid quote can only be set to paid
-        if name == "state" and self.state == MintQuoteState.unpaid:
+        if name == "state" and self.unpaid:
             if value != MintQuoteState.paid:
                 raise Exception(
                     f"Cannot change state of an unpaid mint quote to {value}."
                 )
         # a paid quote can only be set to pending or issued
-        if name == "state" and self.state == MintQuoteState.paid:
+        if name == "state" and self.paid:
             if value != MintQuoteState.pending and value != MintQuoteState.issued:
                 raise Exception(f"Cannot change state of a paid mint quote to {value}.")
         # a pending quote can only be set to paid or issued
-        if name == "state" and self.state == MintQuoteState.pending:
+        if name == "state" and self.pending:
             if value not in [MintQuoteState.paid, MintQuoteState.issued]:
                 raise Exception("Cannot change state of a pending mint quote.")
         # an issued quote cannot be changed
-        if name == "state" and self.state == MintQuoteState.issued:
+        if name == "state" and self.issued:
             raise Exception("Cannot change state of an issued mint quote.")
+
+        if name == "paid":
+            raise Exception(
+                "MintQuote does not support `paid` anymore! Use `state` instead."
+            )
         super().__setattr__(name, value)
 
 
@@ -784,43 +857,35 @@ class MintKeyset:
 class Token(ABC):
     @property
     @abstractmethod
-    def proofs(self) -> List[Proof]:
-        ...
+    def proofs(self) -> List[Proof]: ...
 
     @property
     @abstractmethod
-    def amount(self) -> int:
-        ...
+    def amount(self) -> int: ...
 
     @property
     @abstractmethod
-    def mint(self) -> str:
-        ...
+    def mint(self) -> str: ...
 
     @property
     @abstractmethod
-    def keysets(self) -> List[str]:
-        ...
+    def keysets(self) -> List[str]: ...
 
     @property
     @abstractmethod
-    def memo(self) -> Optional[str]:
-        ...
+    def memo(self) -> Optional[str]: ...
 
     @memo.setter
     @abstractmethod
-    def memo(self, memo: Optional[str]):
-        ...
+    def memo(self, memo: Optional[str]): ...
 
     @property
     @abstractmethod
-    def unit(self) -> str:
-        ...
+    def unit(self) -> str: ...
 
     @unit.setter
     @abstractmethod
-    def unit(self, unit: str):
-        ...
+    def unit(self, unit: str): ...
 
 
 class TokenV3Token(BaseModel):
@@ -857,7 +922,7 @@ class TokenV3(Token):
 
     @property
     def keysets(self) -> List[str]:
-        return list(set([p.id for p in self.proofs]))
+        return list({p.id for p in self.proofs})
 
     @property
     def mint(self) -> str:
@@ -865,7 +930,7 @@ class TokenV3(Token):
 
     @property
     def mints(self) -> List[str]:
-        return list(set([t.mint for t in self.token if t.mint]))
+        return list({t.mint for t in self.token if t.mint})
 
     @property
     def memo(self) -> Optional[str]:
@@ -1055,7 +1120,7 @@ class TokenV4(Token):
 
     @property
     def keysets(self) -> List[str]:
-        return list(set([p.i.hex() for p in self.t]))
+        return list({p.i.hex() for p in self.t})
 
     @classmethod
     def from_tokenv3(cls, tokenv3: TokenV3):

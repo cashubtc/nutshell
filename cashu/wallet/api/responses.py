@@ -2,23 +2,13 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
-from ...core.base import Invoice
-
-
-class PayResponse(BaseModel):
-    ok: Optional[bool] = None
-
-
-class InvoiceResponse(BaseModel):
-    amount: Optional[int] = None
-    invoice: Optional[Invoice] = None
-    id: Optional[str] = None
+from ...core.base import MeltQuote, MintQuote
 
 
 class SwapResponse(BaseModel):
     outgoing_mint: str
     incoming_mint: str
-    invoice: Invoice
+    mint_quote: MintQuote
     balances: Dict
 
 
@@ -56,7 +46,8 @@ class LocksResponse(BaseModel):
 
 
 class InvoicesResponse(BaseModel):
-    invoices: List[Invoice]
+    mint_quotes: List[MintQuote]
+    melt_quotes: List[MeltQuote]
 
 
 class WalletsResponse(BaseModel):

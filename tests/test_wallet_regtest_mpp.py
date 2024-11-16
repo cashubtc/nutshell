@@ -40,9 +40,9 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
     assert wallet.mint_info.supports_mpp("bolt11", wallet.unit)
 
     # top up wallet twice so we have enough for two payments
-    topup_invoice = await wallet.request_mint(128)
-    await pay_if_regtest(topup_invoice.bolt11)
-    proofs1 = await wallet.mint(128, id=topup_invoice.id)
+    topup_mint_quote = await wallet.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    proofs1 = await wallet.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet.balance == 128
 
     # this is the invoice we want to pay in two parts
@@ -59,19 +59,24 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
             fee_reserve_sat=quote.fee_reserve,
             quote_id=quote.quote,
         )
+
     def mint_pay_mpp(invoice: str, amount: int, proofs: List[Proof]):
         asyncio.run(_mint_pay_mpp(invoice, amount, proofs))
 
     # call pay_mpp twice in parallel to pay the full invoice
-    t1 = threading.Thread(target=mint_pay_mpp, args=(invoice_payment_request, 32, proofs1))
-    t2 = threading.Thread(target=partial_pay_real_invoice, args=(invoice_payment_request, 32, 1))
+    t1 = threading.Thread(
+        target=mint_pay_mpp, args=(invoice_payment_request, 32, proofs1)
+    )
+    t2 = threading.Thread(
+        target=partial_pay_real_invoice, args=(invoice_payment_request, 32, 1)
+    )
 
     t1.start()
     t2.start()
     t1.join()
     t2.join()
 
-    assert wallet.balance <= 256 - 32
+    assert wallet.balance == 64
 
 
 @pytest.mark.asyncio
@@ -80,7 +85,7 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     # make sure that mpp is supported by the bolt11-sat backend
     if not ledger.backends[Method["bolt11"]][wallet.unit].supports_mpp:
         pytest.skip("backend does not support mpp")
-    
+
     # This test cannot be done with CLN because we only have one mint
     # and CLN hates multiple partial payment requests
     if isinstance(ledger.backends[Method["bolt11"]][wallet.unit], CLNRestWallet):
@@ -90,19 +95,19 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     assert wallet.mint_info.supports_mpp("bolt11", wallet.unit)
 
     # top up wallet twice so we have enough for three payments
-    topup_invoice = await wallet.request_mint(128)
-    await pay_if_regtest(topup_invoice.bolt11)
-    proofs1 = await wallet.mint(128, id=topup_invoice.id)
+    topup_mint_quote = await wallet.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    proofs1 = await wallet.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet.balance == 128
 
-    topup_invoice = await wallet.request_mint(128)
-    await pay_if_regtest(topup_invoice.bolt11)
-    proofs2 = await wallet.mint(128, id=topup_invoice.id)
+    topup_mint_quote = await wallet.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    proofs2 = await wallet.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet.balance == 256
 
-    topup_invoice = await wallet.request_mint(128)
-    await pay_if_regtest(topup_invoice.bolt11)
-    proofs3 = await wallet.mint(128, id=topup_invoice.id)
+    topup_mint_quote = await wallet.request_mint(128)
+    await pay_if_regtest(topup_mint_quote.request)
+    proofs3 = await wallet.mint(128, quote_id=topup_mint_quote.quote)
     assert wallet.balance == 384
 
     # this is the invoice we want to pay in two parts

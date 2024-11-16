@@ -1,3 +1,4 @@
+import hashlib
 import os
 from typing import Optional
 
@@ -171,3 +172,12 @@ async def send(
 
     await wallet.set_reserved(send_proofs, reserved=True)
     return wallet.available_balance, token
+
+
+def check_payment_preimage(
+    payment_hash: str,
+    preimage: str,
+) -> bool:
+    return (
+        bytes.fromhex(payment_hash) == hashlib.sha256(bytes.fromhex(preimage)).digest()
+    )

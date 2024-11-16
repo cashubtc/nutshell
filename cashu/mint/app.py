@@ -91,7 +91,7 @@ async def catch_exceptions(request: Request, call_next):
 
 
 # Add exception handlers
-app.add_exception_handler(RequestValidationError, request_validation_exception_handler)
+app.add_exception_handler(RequestValidationError, request_validation_exception_handler)  # type: ignore
 
 # Add routers
 if settings.debug_mint_only_deprecated:

@@ -63,7 +63,7 @@ class PrivateKey:
         return sk.tweak_add(scalar)
 
     def compute_shared_secret(self, public_key_hex: str) -> bytes:
-        pk = secp256k1.PublicKey(bytes.fromhex("02" + public_key_hex), True)
+        pk = secp256k1.PublicKey(bytes.fromhex(f"02{public_key_hex}"), True)
         return pk.ecdh(self.raw_secret, hashfn=copy_x)
 
     def encrypt_message(self, message: str, public_key_hex: str) -> str:

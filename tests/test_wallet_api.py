@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 
-from cashu.lightning.base import InvoiceResponse, PaymentStatus
+from cashu.lightning.base import InvoiceResponse, PaymentResult, PaymentStatus
 from cashu.wallet.api.app import app
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -29,16 +29,18 @@ async def test_invoice(wallet: Wallet):
         response = client.post("/lightning/create_invoice?amount=100")
         assert response.status_code == 200
         invoice_response = InvoiceResponse.parse_obj(response.json())
-        state = PaymentStatus(paid=False)
-        while not state.paid:
+        state = PaymentStatus(result=PaymentResult.PENDING)
+        while state.pending:
             print("checking invoice state")
             response2 = client.get(
-                f"/lightning/invoice_state?payment_hash={invoice_response.checking_id}"
+                f"/lightning/invoice_state?payment_request={invoice_response.payment_request}"
             )
             state = PaymentStatus.parse_obj(response2.json())
             await asyncio.sleep(0.1)
             print("state:", state)
         print("paid")
+        await wallet.load_proofs()
+        assert wallet.available_balance >= 100
 
 
 @pytest.mark.skipif(is_regtest, reason="regtest")
@@ -171,11 +173,11 @@ async def test_flow(wallet: Wallet):
         initial_balance = response.json()["balance"]
         response = client.post("/lightning/create_invoice?amount=100")
         invoice_response = InvoiceResponse.parse_obj(response.json())
-        state = PaymentStatus(paid=False)
-        while not state.paid:
+        state = PaymentStatus(result=PaymentResult.PENDING)
+        while state.pending:
             print("checking invoice state")
             response2 = client.get(
-                f"/lightning/invoice_state?payment_hash={invoice_response.checking_id}"
+                f"/lightning/invoice_state?payment_request={invoice_response.payment_request}"
             )
             state = PaymentStatus.parse_obj(response2.json())
             await asyncio.sleep(0.1)

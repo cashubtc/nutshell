@@ -7,6 +7,9 @@ from typing import AsyncGenerator, Dict, List, Optional
 
 from bolt11 import (
     Bolt11,
+    Feature,
+    Features,
+    FeatureState,
     MilliSatoshi,
     TagChar,
     Tags,
@@ -23,12 +26,14 @@ from .base import (
     LightningBackend,
     PaymentQuoteResponse,
     PaymentResponse,
+    PaymentResult,
     PaymentStatus,
     StatusResponse,
 )
 
 
 class FakeWallet(LightningBackend):
+    unit: Unit
     fake_btc_price = 1e8 / 1337
     paid_invoices_queue: asyncio.Queue[Bolt11] = asyncio.Queue(0)
     payment_secrets: Dict[str, str] = dict()
@@ -39,13 +44,12 @@ class FakeWallet(LightningBackend):
     privkey: str = hashlib.pbkdf2_hmac(
         "sha256",
         secret.encode(),
-        ("FakeWallet").encode(),
+        b"FakeWallet",
         2048,
         32,
     ).hex()
 
-    supported_units = set([Unit.sat, Unit.msat, Unit.usd, Unit.eur])
-    unit = Unit.sat
+    supported_units = {Unit.sat, Unit.msat, Unit.usd, Unit.eur}
 
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
@@ -89,6 +93,12 @@ class FakeWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
         tags = Tags()
+        tags.add(
+            TagChar.features,
+            Features.from_feature_list(
+                {Feature.payment_secret: FeatureState.supported}
+            ),
+        )
 
         if description_hash:
             tags.add(TagChar.description_hash, description_hash.hex())
@@ -146,10 +156,21 @@ class FakeWallet(LightningBackend):
         )
 
     async def pay_invoice(self, quote: MeltQuote, fee_limit: int) -> PaymentResponse:
+        if settings.fakewallet_pay_invoice_state_exception:
+            raise Exception("FakeWallet pay_invoice exception")
+
         invoice = decode(quote.request)
 
         if settings.fakewallet_delay_outgoing_payment:
             await asyncio.sleep(settings.fakewallet_delay_outgoing_payment)
+
+        if settings.fakewallet_pay_invoice_state:
+            return PaymentResponse(
+                result=PaymentResult[settings.fakewallet_pay_invoice_state],
+                checking_id=invoice.payment_hash,
+                fee=Amount(unit=self.unit, amount=1),
+                preimage=self.payment_secrets.get(invoice.payment_hash) or "0" * 64,
+            )
 
         if invoice.payment_hash in self.payment_secrets or settings.fakewallet_brr:
             if invoice not in self.paid_invoices_outgoing:
@@ -158,28 +179,35 @@ class FakeWallet(LightningBackend):
                 raise ValueError("Invoice already paid")
 
             return PaymentResponse(
-                ok=True,
+                result=PaymentResult.SETTLED,
                 checking_id=invoice.payment_hash,
                 fee=Amount(unit=self.unit, amount=1),
                 preimage=self.payment_secrets.get(invoice.payment_hash) or "0" * 64,
             )
         else:
             return PaymentResponse(
-                ok=False, error_message="Only internal invoices can be used!"
+                result=PaymentResult.FAILED,
+                error_message="Only internal invoices can be used!",
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
         await self.mark_invoice_paid(self.create_dummy_bolt11(checking_id), delay=False)
         paid_chceking_ids = [i.payment_hash for i in self.paid_invoices_incoming]
         if checking_id in paid_chceking_ids:
-            paid = True
+            return PaymentStatus(result=PaymentResult.SETTLED)
         else:
-            paid = False
+            return PaymentStatus(
+                result=PaymentResult.UNKNOWN, error_message="Invoice not found"
+            )
 
-        return PaymentStatus(paid=paid)
-
-    async def get_payment_status(self, _: str) -> PaymentStatus:
-        return PaymentStatus(paid=settings.fakewallet_payment_state)
+    async def get_payment_status(self, checking_id: str) -> PaymentStatus:
+        if settings.fakewallet_payment_state_exception:
+            raise Exception("FakeWallet get_payment_status exception")
+        if settings.fakewallet_payment_state:
+            return PaymentStatus(
+                result=PaymentResult[settings.fakewallet_payment_state]
+            )
+        return PaymentStatus(result=PaymentResult.SETTLED)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

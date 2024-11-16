@@ -244,7 +244,50 @@ async def m012_add_fee_to_keysets(db: Database):
         await conn.execute("UPDATE keysets SET input_fee_ppk = 0")
 
 
-async def m013_add_mints_table(db: Database):
+async def m013_add_mint_and_melt_quote_tables(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bolt11_mint_quotes (
+                quote TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                request TEXT NOT NULL,
+                checking_id TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                created_time INTEGER,
+                paid_time INTEGER,
+                expiry INTEGER
+            );
+        """
+        )
+
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS bolt11_melt_quotes (
+                quote TEXT PRIMARY KEY,
+                mint TEXT NOT NULL,
+                method TEXT NOT NULL,
+                request TEXT NOT NULL,
+                checking_id TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                fee_reserve INTEGER NOT NULL,
+                state TEXT NOT NULL,
+                created_time INTEGER,
+                paid_time INTEGER,
+                fee_paid INTEGER,
+                payment_preimage TEXT,
+                expiry INTEGER,
+                change TEXT
+            );
+        """
+        )
+
+
+async def m014_add_mints_table(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             f"""

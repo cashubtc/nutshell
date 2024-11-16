@@ -1,0 +1,7 @@
+coverage:
+  status:
+    project: off
+    patch: off
+ignore:
+  - "cashu/lightning/lnd_grpc/protos"
+  - "cashu/nostr"
