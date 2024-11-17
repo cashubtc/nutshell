@@ -14,7 +14,7 @@ from cashu.core.models import (
     PostRestoreRequest,
     PostRestoreResponse,
 )
-from cashu.core.nuts import MINT_NUT
+from cashu.core.nuts.nuts import MINT_NUT
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
