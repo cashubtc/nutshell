@@ -445,9 +445,7 @@ class Wallet(
         """
         if not self.mint_info:
             await self.load_mint_info()
-        assert self.mint_info.nuts
-        nut19 = self.mint_info.nuts.get(MINT_QUOTE_SIGNATURE_NUT, None)
-        if nut19 and nut19["supported"]:
+        if self.mint_info.supports_mint_quote_signature():
             privkey = PrivateKey()
             pubkey = privkey.pubkey.serialize(True).hex()
             return privkey.serialize(), pubkey
