@@ -58,6 +58,7 @@ from .crud import (
     update_bolt11_melt_quote,
     update_bolt11_mint_quote,
     update_keyset,
+    update_mint,
     update_proof,
 )
 from .errors import BalanceTooLowError
@@ -107,8 +108,8 @@ class Wallet(
     db: Database
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
-    auth_db: Database
-    auth_keyset_id: str
+    auth_db: Optional[Database] = None
+    auth_keyset_id: Optional[str] = None
 
     def __init__(
         self,
@@ -206,6 +207,9 @@ class Wallet(
             self.keysets = {k.id: k for k in keysets_list}
         keysets_str = " ".join([f"{i} {k.unit}" for i, k in self.keysets.items()])
         logger.debug(f"Loaded keysets: {keysets_str}")
+
+        await self.load_mint_info(offline=True)
+
         return self
 
     async def _migrate_database(self):
@@ -217,19 +221,27 @@ class Wallet(
 
     # ---------- API ----------
 
-    async def load_mint_info(self, reload=False) -> MintInfo:
-        """Loads the mint info from the mint."""
-        if self.mint_info and not reload:
-            return self.mint_info
+    async def load_mint_info(self, reload=False, offline=False) -> MintInfo | None:
+        """Loads the mint info from the mint.
+
+        Args:
+            reload (bool, optional): If True, the mint info is reloaded from the mint. Defaults to False.
+            offline (bool, optional): If True, the mint info is not loaded from the mint. Defaults to False.
+        """
+        # if self.mint_info and not reload:
+        #     return self.mint_info
+
         # read mint info from db
-        wallet_mint_db = await get_mint_by_url(url=self.url, db=self.db)
         if reload:
+            if offline:
+                raise Exception("Cannot reload mint info offline.")
             logger.debug("Forcing reload of mint info.")
-        if not wallet_mint_db or reload:
-            logger.debug("Loading mint info from mint.")
             mint_info_resp = await self._get_info()
             self.mint_info = MintInfo(**mint_info_resp.dict())
-            if not wallet_mint_db or wallet_mint_db.dict() == self.mint_info.dict():
+
+        wallet_mint_db = await get_mint_by_url(url=self.url, db=self.db)
+        if not wallet_mint_db:
+            if self.mint_info:
                 logger.debug("Storing mint info in db.")
                 await store_mint(
                     db=self.db,
@@ -237,11 +249,35 @@ class Wallet(
                         url=self.url, info=json.dumps(self.mint_info.dict())
                     ),
                 )
+            else:
+                if offline:
+                    return None
+            logger.debug("Loading mint info from mint.")
+            mint_info_resp = await self._get_info()
+            self.mint_info = MintInfo(**mint_info_resp.dict())
+            if not wallet_mint_db:
+                logger.debug("Storing mint info in db.")
+                await store_mint(
+                    db=self.db,
+                    mint=WalletMint(
+                        url=self.url, info=json.dumps(self.mint_info.dict())
+                    ),
+                )
+            return self.mint_info
+        elif (
+            self.mint_info
+            and not json.dumps(self.mint_info.dict()) == wallet_mint_db.info
+        ):
+            logger.debug("Updating mint info in db.")
+            await update_mint(
+                db=self.db,
+                mint=WalletMint(url=self.url, info=json.dumps(self.mint_info.dict())),
+            )
+            return self.mint_info
         else:
             logger.debug("Loading mint info from db.")
             self.mint_info = MintInfo.from_json_str(wallet_mint_db.info)
-        logger.debug(f"Mint info: {self.mint_info}")
-        return self.mint_info
+            return self.mint_info
 
     async def load_mint_keysets(self, force_old_keysets=False):
         """Loads all keyset of the mint and makes sure we have them all in the database.

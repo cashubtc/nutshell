@@ -103,7 +103,12 @@ def init_auth_wallet(func):
             unit=Unit.auth.name,
             wallet_db=wallet_db_name,
         )
-        await auth_wallet.init_wallet()
+
+        requires_auth = await auth_wallet.init_wallet(wallet.mint_info)
+
+        if not requires_auth:
+            logger.debug("Mint does not require clear auth.")
+            return await func(*args, **kwargs)
 
         # Check balance and mint new auth proofs if necessary
         if auth_wallet.available_balance < MIN_BALANCE:
@@ -233,6 +238,10 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
         wallet = await Wallet.with_db(
             ctx.obj["HOST"], db_path, name=walletname, unit=unit
         )
+
+    # if we have never seen this mint before, we load its information
+    if not wallet.mint_info:
+        await wallet.load_mint()
 
     assert wallet, "Wallet not found."
     ctx.obj["WALLET"] = wallet
@@ -737,7 +746,7 @@ async def receive_cli(
             mint_url,
             os.path.join(settings.cashu_dir, wallet.name),
             unit=token_obj.unit,
-            auth_db=wallet.auth_db.db_location,
+            auth_db=wallet.auth_db.db_location if wallet.auth_db else None,
             auth_keyset_id=wallet.auth_keyset_id,
         )
         await verify_mint(mint_wallet, mint_url)
@@ -1083,9 +1092,10 @@ async def wallets(ctx: Context):
 @cli.command("info", help="Information about Cashu wallet.")
 @click.option("--mint", default=False, is_flag=True, help="Fetch mint information.")
 @click.option("--mnemonic", default=False, is_flag=True, help="Show your mnemonic.")
+@click.option("--reload", default=False, is_flag=True, help="Reload mint info.")
 @click.pass_context
 @coro
-async def info(ctx: Context, mint: bool, mnemonic: bool):
+async def info(ctx: Context, mint: bool, mnemonic: bool, reload: bool):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_keysets_from_db(unit=None)
 
@@ -1109,7 +1119,11 @@ async def info(ctx: Context, mint: bool, mnemonic: bool):
         if mint:
             wallet.url = mint_url
             try:
-                mint_info: dict = (await wallet.load_mint_info()).dict()
+                mint_info_obj = await wallet.load_mint_info(reload)
+                if not mint_info_obj:
+                    print("        - Mint information not available.")
+                    continue
+                mint_info = mint_info_obj.dict()
                 if mint_info:
                     print(f"        - Mint name: {mint_info['name']}")
                     if mint_info.get("description"):

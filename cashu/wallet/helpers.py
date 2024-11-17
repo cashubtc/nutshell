@@ -52,7 +52,7 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
             t.mint,
             os.path.join(settings.cashu_dir, wallet.name),
             unit=token.unit or wallet.unit.name,
-            auth_db=wallet.auth_db.db_location,
+            auth_db=wallet.auth_db.db_location if wallet.auth_db else None,
             auth_keyset_id=wallet.auth_keyset_id,
         )
         keyset_ids = mint_wallet._get_proofs_keyset_ids(t.proofs)

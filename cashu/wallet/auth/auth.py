@@ -4,6 +4,8 @@ from typing import List
 
 from loguru import logger
 
+from cashu.wallet.mint_info import MintInfo
+
 from ...core.base import Proof
 from ...core.crypto.secp import PrivateKey
 from ...core.db import Database
@@ -21,6 +23,8 @@ class WalletAuth(Wallet):
     auth_flow: AuthorizationFlow = AuthorizationFlow.AUTHORIZATION_CODE
     username: str | None
     password: str | None
+    # API prefix for all requests
+    api_prefix = "/v1/auth/blind"
 
     def __init__(
         self, url: str, db: str, name: str = "auth", unit: str = "auth", **kwargs
@@ -94,14 +98,18 @@ class WalletAuth(Wallet):
 
         return cls(*args, **kwargs)
 
-    async def init_wallet(self):
-        # Load mint info from original api_prefix path first
+    async def init_wallet(self, mint_info: MintInfo) -> bool:
+        """Initialize authentication wallet.
+
+        Returns:
+            bool: False if the mint does not require clear auth. True otherwise.
+        """
+        self.mint_info = mint_info
         await self.load_mint_info()
         if not self.mint_info.requires_clear_auth():
-            raise Exception("Mint does not require clear auth.")
+            return False
 
         # Use the blind auth api_prefix for all following requests
-        self.api_prefix = "/v1/auth/blind"
         await self.load_mint_keysets()
         await self.activate_keyset()
         await self.load_proofs()
@@ -123,6 +131,8 @@ class WalletAuth(Wallet):
 
         # Store the access and refresh tokens in the database
         await self.store_clear_auth_token()
+
+        return True
 
     async def store_clear_auth_token(self) -> None:
         """Store the access and refresh tokens in the database."""

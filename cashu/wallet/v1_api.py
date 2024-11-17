@@ -660,13 +660,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         """
         Asks the mint to mint blind auth tokens. Needs to provide a clear auth token.
         """
-        # if not self.mint_info or not self.mint_info.requires_clear_auth_path(
-        #     join(self.api_prefix, "mint")
-        # ):
-        #     raise Exception("Mint does not require clear authentication.")
-
         payload = PostAuthBlindMintRequest(outputs=outputs)
-        # self.httpx.headers.update({"Clear-auth": clear_auth_token})
         resp = await self._request(
             POST,
             "mint",

@@ -31,6 +31,6 @@ class SupportsMintURL(Protocol):
 
 
 class SupportsAuth(Protocol):
-    auth_db: Database
-    auth_keyset_id: str
+    auth_db: Optional[Database] = None
+    auth_keyset_id: Optional[str] = None
     mint_info: Optional[MintInfo] = None
