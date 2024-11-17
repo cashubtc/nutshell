@@ -149,9 +149,10 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             raise Exception(error_message)
         resp.raise_for_status()
 
-    async def _request(self, method: str, path: str, **kwargs):
-        api_path = join(self.api_prefix, path)
-        if self.mint_info and self.mint_info.requires_blind_auth_path(api_path):
+    async def _request(self, method: str, path: str, noprefix=False, **kwargs):
+        if not noprefix:
+            path = join(self.api_prefix, path)
+        if self.mint_info and self.mint_info.requires_blind_auth_path(path):
             if not self.auth_db or not self.auth_keyset_id:
                 raise Exception(
                     "Mint requires blind auth, but no auth database is set."
@@ -164,8 +165,8 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 }
             )
             await invalidate_proof(proof=proof, db=self.auth_db)
-        if self.mint_info and self.mint_info.requires_clear_auth_path(api_path):
-            logger.debug(f"Using clear auth token for {api_path}")
+        if self.mint_info and self.mint_info.requires_clear_auth_path(path):
+            logger.debug(f"Using clear auth token for {path}")
             clear_auth_token = kwargs.pop("clear_auth_token")
             if not clear_auth_token:
                 raise Exception(
@@ -177,7 +178,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 }
             )
 
-        return await self.httpx.request(method, api_path, **kwargs)
+        return await self.httpx.request(method, path, **kwargs)
 
     """
     ENDPOINTS
@@ -298,7 +299,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         Raises:
             Exception: If the mint info request fails
         """
-        resp = await self._request(GET, "info")
+        resp = await self._request(GET, "/v1/info", noprefix=True)
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
