@@ -606,13 +606,17 @@ async def update_mint(
     await (conn or db).execute(
         """
         UPDATE mints
-        SET info = :info, updated = :updated
+        SET info = :info, updated = :updated, access_token = :access_token, refresh_token = :refresh_token, username = :username, password = :password
         WHERE url = :url
         """,
         {
             "url": mint.url,
             "info": mint.info,
             "updated": int(time.time()),
+            "access_token": mint.access_token,
+            "refresh_token": mint.refresh_token,
+            "username": mint.username,
+            "password": mint.password,
         },
     )
 

@@ -4,12 +4,11 @@ from typing import List
 
 from loguru import logger
 
-from cashu.wallet.crud import get_mint_by_url
-
 from ...core.base import Proof
 from ...core.crypto.secp import PrivateKey
 from ...core.db import Database
 from ...core.settings import settings
+from ..crud import get_mint_by_url, update_mint
 from ..errors import BalanceTooLowError
 from ..wallet import Wallet
 from .openid_connect.openid_client import AuthorizationFlow, OpenIDClient
@@ -68,10 +67,11 @@ class WalletAuth(Wallet):
 
         dirty_url_parse = args[0]
         dirty_db_parse = args[1]
+        dirty_wallet_name = args[2]
         wallet_db_name = kwargs.get("wallet_db")
         if not wallet_db_name:
             raise Exception("Wallet db location is required.")
-        wallet_db = Database(wallet_db_name, dirty_db_parse)
+        wallet_db = Database(dirty_wallet_name, dirty_db_parse)
 
         # the wallet db could not have been created yet
         try:
@@ -121,6 +121,27 @@ class WalletAuth(Wallet):
         # Authenticate using OpenIDClient
         self.oidc_client.authenticate()
 
+        # Store the access and refresh tokens in the database
+        await self.store_clear_auth_token()
+
+    async def store_clear_auth_token(self) -> None:
+        """Store the access and refresh tokens in the database."""
+        access_token = self.oidc_client.access_token
+        refresh_token = self.oidc_client.refresh_token
+        if not access_token or not refresh_token:
+            raise Exception("Access or refresh token not available.")
+        # Store the tokens in the database
+        mint_db = await get_mint_by_url(self.db, self.url)
+        if not mint_db:
+            raise Exception("Mint not found.")
+        if (
+            mint_db.access_token != access_token
+            or mint_db.refresh_token != refresh_token
+        ):
+            mint_db.access_token = access_token
+            mint_db.refresh_token = refresh_token
+            await update_mint(self.db, mint_db)
+
     async def spend_auth_token(self) -> str:
         try:
             auth_proofs, _ = await self.select_to_send(self.proofs, 1, offline=True)
@@ -138,6 +159,7 @@ class WalletAuth(Wallet):
         # Ensure access token is valid
         if self.oidc_client.is_token_expired():
             self.oidc_client.refresh_access_token()
+            await self.store_clear_auth_token()
         clear_auth_token = self.oidc_client.access_token
         if not clear_auth_token:
             raise Exception("No clear auth token available.")

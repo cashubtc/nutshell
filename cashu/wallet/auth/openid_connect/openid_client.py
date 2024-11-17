@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlencode
 
 import httpx
+import jwt
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -180,9 +181,13 @@ class OpenIDClient:
 
     def is_token_expired(self) -> bool:
         """Check if the access token is expired."""
-        if not self.token_expiration_time:
-            return True
-        return datetime.utcnow() >= self.token_expiration_time
+        if not self.access_token:
+            raise ValueError("Access token is not set.")
+        decoded = jwt.decode(self.access_token, options={"verify_signature": False})
+        exp = decoded.get("exp")
+        if not exp:
+            return False
+        return datetime.now() >= datetime.fromtimestamp(exp)
 
     def refresh_access_token(self) -> None:
         """Refresh the access token using the refresh token."""
