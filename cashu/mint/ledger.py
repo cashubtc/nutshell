@@ -73,6 +73,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     db_read: DbReadHelper
     invoice_listener_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
+    pubkey: PublicKey
 
     def __init__(
         self,

@@ -41,11 +41,13 @@ def derive_keys_deprecated_pre_0_15(
     }
 
 
-def derive_pubkey(seed: str):
-    return PrivateKey(
+def derive_pubkey(seed: str) -> PublicKey:
+    pubkey = PrivateKey(
         hashlib.sha256((seed).encode("utf-8")).digest()[:32],
         raw=True,
     ).pubkey
+    assert pubkey
+    return pubkey
 
 
 def derive_pubkeys(keys: Dict[int, PrivateKey], amounts: List[int]):

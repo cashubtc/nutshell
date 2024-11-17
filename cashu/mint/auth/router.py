@@ -107,14 +107,7 @@ async def keysets() -> KeysetsResponse:
 async def auth_blind_mint(
     request_data: PostAuthBlindMintRequest, request: Request
 ) -> PostAuthBlindMintResponse:
-    clear_auth_token = request.headers.get("clear-auth")
-    if not clear_auth_token:
-        raise Exception("Missing clearauth token.")
-    try:
-        user = await auth_ledger.verify_clear_auth(clear_auth_token=clear_auth_token)
-    except Exception as e:
-        raise e
     signatures = await auth_ledger.mint_blind_auth(
-        outputs=request_data.outputs, user=user
+        outputs=request_data.outputs, user=request.state.user
     )
     return PostAuthBlindMintResponse(signatures=signatures)

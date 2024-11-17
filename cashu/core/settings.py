@@ -238,13 +238,17 @@ class AuthSettings(MintSettings):
     mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
     mint_auth_rate_limit_seconds: int = Field(default=24 * 60 * 60)
     mint_auth_max_blind_tokens: int = Field(default=100, gt=0)
-    mint_require_clear_auth_paths_regex: List[str] = [
-        r"^/v1/auth/blind/mint$",
+    mint_require_clear_auth_paths: List[List[str]] = [
+        ["POST", "/v1/auth/blind/mint"],
     ]
-    mint_require_blind_auth_paths_regex: List[str] = [
-        r"^/v1/mint/.*$",
-        r"^/v1/melt/.*$",
-        r"^/v1/swap$",
+    mint_require_blind_auth_paths: List[List[str]] = [
+        ["POST", "/v1/swap"],
+        ["GET", "/v1/mint/quote/bolt11"],
+        ["POST", "/v1/mint/quote/bolt11"],
+        ["POST", "/v1/mint/bolt11"],
+        ["GET", "/v1/melt/quote/bolt11"],
+        ["POST", "/v1/melt/quote/bolt11"],
+        ["POST", "/v1/melt/bolt11"],
     ]
 
 

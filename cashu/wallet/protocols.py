@@ -5,7 +5,7 @@ import httpx
 from ..core.base import Unit, WalletKeyset
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
-from .mint_info import MintInfo
+from ..core.mint_info import MintInfo
 
 
 class SupportsPrivateKey(Protocol):

@@ -34,6 +34,7 @@ from ..core.helpers import (
 )
 from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.migrations import migrate_databases
+from ..core.mint_info import MintInfo
 from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
@@ -63,7 +64,6 @@ from .crud import (
 )
 from .errors import BalanceTooLowError
 from .htlc import WalletHTLC
-from .mint_info import MintInfo
 from .p2pk import WalletP2PK
 from .proofs import WalletProofs
 from .secrets import WalletSecrets

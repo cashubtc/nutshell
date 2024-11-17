@@ -1,12 +1,11 @@
 import json
-import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
-from ..core.base import Method, Unit
-from ..core.models import MintInfoContact, Nut15MppSupport
-from ..core.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
+from .base import Method, Unit
+from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
+from .nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
 
 
 class MintInfo(BaseModel):
@@ -68,33 +67,39 @@ class MintInfo(BaseModel):
             return ""
         return self.nuts[CLEAR_AUTH_NUT]["openid_discovery"]
 
-    def required_clear_auth_paths(self) -> List[str]:
+    def required_clear_auth_endpoints(self) -> List[MintInfoProtectedEndpoint]:
         if not self.requires_clear_auth():
             return []
-        return self.nuts[CLEAR_AUTH_NUT]["paths"]
+        return [
+            MintInfoProtectedEndpoint.parse_obj(e)
+            for e in self.nuts[CLEAR_AUTH_NUT]["protected_endpoints"]
+        ]
 
-    def requires_clear_auth_path(self, path: str) -> bool:
+    def requires_clear_auth_path(self, method: str, path: str) -> bool:
         if not self.requires_clear_auth():
             return False
         path = "/" + path if not path.startswith("/") else path
-        if any(re.match(pattern, path) for pattern in self.required_clear_auth_paths()):
-            return True
-        else:
-            return False
+        for endpoint in self.required_clear_auth_endpoints():
+            if method == endpoint.method and path == endpoint.path:
+                return True
+        return False
 
     def requires_blind_auth(self) -> bool:
         return self.supports_nut(BLIND_AUTH_NUT)
 
-    def required_blind_auth_paths(self) -> List[str]:
+    def required_blind_auth_paths(self) -> List[MintInfoProtectedEndpoint]:
         if not self.requires_blind_auth():
             return []
-        return self.nuts[BLIND_AUTH_NUT]["paths"]
+        return [
+            MintInfoProtectedEndpoint.parse_obj(e)
+            for e in self.nuts[BLIND_AUTH_NUT]["protected_endpoints"]
+        ]
 
-    def requires_blind_auth_path(self, path: str) -> bool:
+    def requires_blind_auth_path(self, method: str, path: str) -> bool:
         if not self.requires_blind_auth():
             return False
         path = "/" + path if not path.startswith("/") else path
-        if any(re.match(pattern, path) for pattern in self.required_blind_auth_paths()):
-            return True
-        else:
-            return False
+        for endpoint in self.required_blind_auth_paths():
+            if method == endpoint.method and path == endpoint.path:
+                return True
+        return False

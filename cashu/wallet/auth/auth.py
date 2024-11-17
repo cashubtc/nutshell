@@ -4,7 +4,7 @@ from typing import List
 
 from loguru import logger
 
-from cashu.wallet.mint_info import MintInfo
+from cashu.core.mint_info import MintInfo
 
 from ...core.base import Proof
 from ...core.crypto.secp import PrivateKey

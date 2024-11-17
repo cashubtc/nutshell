@@ -38,6 +38,11 @@ class MintInfoContact(BaseModel):
     info: str
 
 
+class MintInfoProtectedEndpoint(BaseModel):
+    method: str
+    path: str
+
+
 class GetInfoResponse(BaseModel):
     name: Optional[str] = None
     pubkey: Optional[str] = None

@@ -152,7 +152,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
     async def _request(self, method: str, path: str, noprefix=False, **kwargs):
         if not noprefix:
             path = join(self.api_prefix, path)
-        if self.mint_info and self.mint_info.requires_blind_auth_path(path):
+        if self.mint_info and self.mint_info.requires_blind_auth_path(method, path):
             if not self.auth_db or not self.auth_keyset_id:
                 raise Exception(
                     "Mint requires blind auth, but no auth database is set."
@@ -165,7 +165,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 }
             )
             await invalidate_proof(proof=proof, db=self.auth_db)
-        if self.mint_info and self.mint_info.requires_clear_auth_path(path):
+        if self.mint_info and self.mint_info.requires_clear_auth_path(method, path):
             logger.debug(f"Using clear auth token for {path}")
             clear_auth_token = kwargs.pop("clear_auth_token")
             if not clear_auth_token:
