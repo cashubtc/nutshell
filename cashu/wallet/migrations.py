@@ -295,7 +295,11 @@ async def m014_add_mints_table(db: Database):
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     url TEXT NOT NULL,
                     info TEXT NOT NULL,
-                    updated TIMESTAMP DEFAULT {db.timestamp_now}
+                    updated TIMESTAMP DEFAULT {db.timestamp_now},
+                    access_token TEXT,
+                    refresh_token TEXT,
+                    username TEXT,
+                    password TEXT
                 );
             """
         )

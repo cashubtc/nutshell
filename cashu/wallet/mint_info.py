@@ -66,7 +66,6 @@ class MintInfo(BaseModel):
     def oidc_discovery_url(self) -> str:
         if not self.requires_clear_auth():
             return ""
-        print(self.nuts[CLEAR_AUTH_NUT])
         return self.nuts[CLEAR_AUTH_NUT]["openid_discovery"]
 
     def required_clear_auth_paths(self) -> List[str]:

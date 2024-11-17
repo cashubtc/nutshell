@@ -93,10 +93,15 @@ def init_auth_wallet(func):
         ctx = args[0]  # Assuming the first argument is 'ctx'
         wallet: Wallet = ctx.obj["WALLET"]
         db_location = wallet.db.db_location
+        wallet_db_name = wallet.db.name
         MIN_BALANCE = 10
 
         auth_wallet = await WalletAuth.with_db(
-            ctx.obj["HOST"], db_location, "auth", unit=Unit.auth.name
+            ctx.obj["HOST"],
+            db_location,
+            "auth",
+            unit=Unit.auth.name,
+            wallet_db=wallet_db_name,
         )
         await auth_wallet.init_wallet()
 
@@ -120,7 +125,7 @@ def init_auth_wallet(func):
         # Pass auth_db and auth_keyset_id to the wallet object
         wallet.auth_db = auth_wallet.db
         wallet.auth_keyset_id = auth_wallet.keyset_id
-        # let's also pass the mint_info so it doesn't need to be refetched by the wallet
+        # pass the mint_info so it doesn't need to be re-fetched
         wallet.mint_info = auth_wallet.mint_info
 
         # Proceed to the original function

@@ -42,8 +42,6 @@ from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
 from . import migrations
-
-# from .auth.auth import WalletAuth
 from .crud import (
     bump_secret_derivation,
     get_keysets,
@@ -161,6 +159,7 @@ class Wallet(
         auth_db: Optional[str] = None,
         auth_keyset_id: Optional[str] = None,
         load_all_keysets: bool = False,
+        **kwargs,
     ):
         """Initializes a wallet with a database and initializes the private key.
 
@@ -174,6 +173,9 @@ class Wallet(
             unit (str, optional): Unit of the wallet. Defaults to "sat".
             load_all_keysets (bool, optional): If true, all keysets are loaded from the database.
                 Defaults to False.
+            auth_db (Optional[str], optional): Path to the auth database directory. Defaults to None.
+            auth_keyset_id (Optional[str], optional): Keyset ID of the auth keyset. Defaults to None.
+            kwargs: Additional keyword arguments.
 
         Returns:
             Wallet: Initialized wallet.
@@ -221,11 +223,14 @@ class Wallet(
             return self.mint_info
         # read mint info from db
         wallet_mint_db = await get_mint_by_url(url=self.url, db=self.db)
+        if reload:
+            logger.debug("Forcing reload of mint info.")
         if not wallet_mint_db or reload:
             logger.debug("Loading mint info from mint.")
             mint_info_resp = await self._get_info()
             self.mint_info = MintInfo(**mint_info_resp.dict())
-            if not wallet_mint_db:
+            if not wallet_mint_db or wallet_mint_db.dict() == self.mint_info.dict():
+                logger.debug("Storing mint info in db.")
                 await store_mint(
                     db=self.db,
                     mint=WalletMint(

@@ -1291,3 +1291,7 @@ class WalletMint(BaseModel):
     url: str
     info: str
     updated: Optional[str] = None
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
