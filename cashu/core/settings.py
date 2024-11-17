@@ -243,10 +243,10 @@ class AuthSettings(MintSettings):
     ]
     mint_require_blind_auth_paths: List[List[str]] = [
         ["POST", "/v1/swap"],
-        ["GET", "/v1/mint/quote/bolt11"],
+        ["GET", r"^/v1/mint/quote/bolt11/.*"],
         ["POST", "/v1/mint/quote/bolt11"],
         ["POST", "/v1/mint/bolt11"],
-        ["GET", "/v1/melt/quote/bolt11"],
+        ["GET", r"^/v1/melt/quote/bolt11/.*"],
         ["POST", "/v1/melt/quote/bolt11"],
         ["POST", "/v1/melt/bolt11"],
     ]

@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
@@ -80,7 +81,7 @@ class MintInfo(BaseModel):
             return False
         path = "/" + path if not path.startswith("/") else path
         for endpoint in self.required_clear_auth_endpoints():
-            if method == endpoint.method and path == endpoint.path:
+            if method == endpoint.method and re.match(endpoint.path, path):
                 return True
         return False
 
@@ -100,6 +101,6 @@ class MintInfo(BaseModel):
             return False
         path = "/" + path if not path.startswith("/") else path
         for endpoint in self.required_blind_auth_paths():
-            if method == endpoint.method and path == endpoint.path:
+            if method == endpoint.method and re.match(endpoint.path, path):
                 return True
         return False
