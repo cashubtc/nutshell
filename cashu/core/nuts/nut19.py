@@ -20,7 +20,7 @@ def sign_mint_quote(
 ) -> str:
     privkey = PrivateKey(bytes.fromhex(private_key), raw=True)
     msgbytes = construct_message(quote_id, outputs)
-    sig = privkey.schnorr_sign(msgbytes)
+    sig = privkey.schnorr_sign(msgbytes, None, raw=True)
     return sig.hex()
 
 def verify_mint_quote(
@@ -32,4 +32,4 @@ def verify_mint_quote(
     pubkey = PublicKey(bytes.fromhex(public_key), raw=True)
     msgbytes = construct_message(quote_id, outputs)
     sig = bytes.fromhex(signature)
-    return pubkey.schnorr_verify(msgbytes, sig)
+    return pubkey.schnorr_verify(msgbytes, sig, None, raw=True)

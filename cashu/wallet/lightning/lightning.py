@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import bolt11
 
@@ -41,17 +41,18 @@ class LightningWallet(Wallet):
         super().__init__(*args, **kwargs)
 
     async def create_invoice(
-        self, amount: int, memo: Optional[str] = None
+        self, amount: int, memo: Optional[str] = None, keypair: Optional[Tuple[str, str]] = None
     ) -> InvoiceResponse:
         """Create lightning invoice
 
         Args:
             amount (int): amount in satoshis
             memo (str, optional): invoice memo. Defaults to None.
+            keypair (Optional[Tuple[str, str]], optional): NUT-19 quote keypair
         Returns:
             str: invoice
         """
-        mint_quote = await self.request_mint(amount, memo)
+        mint_quote = await self.request_mint(amount, memo, keypair=keypair)
         return InvoiceResponse(
             ok=True,
             payment_request=mint_quote.request,

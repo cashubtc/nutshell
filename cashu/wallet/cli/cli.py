@@ -365,13 +365,15 @@ async def invoice(
         mint_supports_websockets = wallet.mint_info.supports_websocket_mint_quote(
             Method["bolt11"], wallet.unit
         )
+        # get keypair for NUT19 or None
+        keypair = await wallet.get_quote_ephemeral_keypair()
         if mint_supports_websockets and not no_check:
             mint_quote, subscription = await wallet.request_mint_with_callback(
-                amount, callback=mint_invoice_callback, memo=memo
+                amount, callback=mint_invoice_callback, memo=memo, keypair=keypair
             )
             invoice_nonlocal, subscription_nonlocal = mint_quote, subscription
         else:
-            mint_quote = await wallet.request_mint(amount, memo=memo)
+            mint_quote = await wallet.request_mint(amount, memo=memo, keypair=keypair)
         if mint_quote.request:
             print("")
             print(f"Pay invoice to mint {wallet.unit.str(amount)}:")

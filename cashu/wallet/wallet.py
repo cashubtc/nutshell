@@ -388,7 +388,7 @@ class Wallet(
         logger.trace("Secret check complete.")
 
     async def request_mint_with_callback(
-        self, amount: int, callback: Callable, memo: Optional[str] = None
+        self, amount: int, callback: Callable, memo: Optional[str] = None, keypair: Optional[Tuple[str, str]] = None
     ) -> Tuple[MintQuote, SubscriptionManager]:
         """Request a quote invoice for minting tokens.
 
@@ -396,11 +396,12 @@ class Wallet(
             amount (int): Amount for Lightning invoice in satoshis
             callback (Callable): Callback function to be called when the invoice is paid.
             memo (Optional[str], optional): Memo for the Lightning invoice. Defaults
+            keypair (Optional[Tuple[str, str], optional]): NUT-19 private public ephemeral keypair. Defaults to None.
 
         Returns:
             MintQuote: Mint Quote
         """
-        privkey, pubkey = await self.get_quote_ephemeral_keypair()
+        privkey, pubkey = keypair or (None, None)
         mint_quote = await super().mint_quote(amount, self.unit, memo, pubkey)
         subscriptions = SubscriptionManager(self.url)
         threading.Thread(
@@ -412,6 +413,7 @@ class Wallet(
             callback=callback,
         )
         quote = MintQuote.from_resp_wallet(mint_quote, self.url, amount, self.unit.name)
+        quote.privkey = privkey
         await store_bolt11_mint_quote(db=self.db, quote=quote)
 
         return quote, subscriptions
@@ -419,6 +421,7 @@ class Wallet(
     async def request_mint(self,
         amount: int,
         memo: Optional[str] = None,
+        keypair: Optional[Tuple[str, str]] = None,
     ) -> MintQuote:
         """Request a quote invoice for minting tokens.
 
@@ -426,11 +429,12 @@ class Wallet(
             amount (int): Amount for Lightning invoice in satoshis
             callback (Optional[Callable], optional): Callback function to be called when the invoice is paid. Defaults to None.
             memo (Optional[str], optional): Memo for the Lightning invoice. Defaults to None.
+            keypair (Optional[Tuple[str, str], optional]): NUT-19 private public ephemeral keypair. Defaults to None.
 
         Returns:
             MintQuote: Mint Quote
         """
-        privkey, pubkey = await self.get_quote_ephemeral_keypair()
+        privkey, pubkey = keypair or (None, None)
         mint_quote_response = await super().mint_quote(amount, self.unit, memo, pubkey)
         quote = MintQuote.from_resp_wallet(
             mint_quote_response, self.url, amount, self.unit.name
@@ -440,7 +444,7 @@ class Wallet(
         return quote
 
     # TODO: generate secret with BIP39 (seed and specific derivation + counter)
-    async def get_quote_ephemeral_keypair(self) -> Tuple[Optional[str], Optional[str]]:
+    async def get_quote_ephemeral_keypair(self) -> Optional[Tuple[str, str]]:
         """Creates a keypair for a quote IF the mint supports NUT-19
         """
         if not self.mint_info:
@@ -450,7 +454,7 @@ class Wallet(
             pubkey = privkey.pubkey.serialize(True).hex()
             return privkey.serialize(), pubkey
         else:
-            return None, None
+            return None
 
     def split_wallet_state(self, amount: int) -> List[int]:
         """This function produces an amount split for outputs based on the current state of the wallet.
