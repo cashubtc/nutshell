@@ -239,8 +239,8 @@ class OpenIDClient:
         # Use the retrieved tokens
         if self.token_response:
             logger.info("Authentication successful!")
-            logger.info("Token response:")
-            logger.info(self.token_response)
+            # logger.info("Token response:")
+            # logger.info(self.token_response)
         else:
             logger.error("Authentication failed.")
 

@@ -54,7 +54,7 @@ async def init_wallet():
     wallet = await Wallet.with_db(
         url=settings.mint_url,
         db="test_data/test_cli_wallet",
-        name="wallet",
+        name="test_cli_wallet",
     )
     await wallet.load_proofs()
     return wallet
@@ -474,7 +474,7 @@ def test_send_too_much(mint, cli_prefix):
         cli,
         [*cli_prefix, "send", "100000"],
     )
-    assert "balance too low" in str(result.exception)
+    assert "Balance too low" in str(result.exception)
 
 
 def test_receive_tokenv3(mint, cli_prefix):

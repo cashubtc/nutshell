@@ -133,6 +133,9 @@ def init_auth_wallet(func):
         # pass the mint_info so it doesn't need to be re-fetched
         wallet.mint_info = auth_wallet.mint_info
 
+        # Pass the auth_wallet to context
+        args[0].obj["AUTH_WALLET"] = auth_wallet
+
         # Proceed to the original function
         ret = await func(*args, **kwargs)
 
@@ -1251,3 +1254,21 @@ async def selfpay(ctx: Context, all: bool = False):
     print(token)
     token_obj = TokenV4.deserialize(token)
     await receive(wallet, token_obj)
+
+
+@cli.command("auth", help="Authenticate with mint.")
+@click.option("--mint", "-m", default=False, is_flag=True, help="Mint new auth tokens.")
+@click.pass_context
+@coro
+@init_auth_wallet
+async def auth(ctx: Context, mint: bool):
+    auth_wallet: WalletAuth = ctx.obj["AUTH_WALLET"]
+    await auth_wallet.load_proofs(reload=True)
+    print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
+
+    if mint:
+        new_proofs = await auth_wallet.mint_blind_auth_proofs()
+        print(
+            f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs."
+        )
+        print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
