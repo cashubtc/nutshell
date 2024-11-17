@@ -1,6 +1,5 @@
 import argparse
 import base64
-import logging
 import secrets
 import threading
 import webbrowser
@@ -15,6 +14,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from loguru import logger
 
 
 class AuthorizationFlow(Enum):
@@ -79,7 +79,7 @@ class OpenIDClient:
             self.introspection_endpoint = oidc_config.get("introspection_endpoint")
             self.revocation_endpoint = oidc_config.get("revocation_endpoint")
         except httpx.HTTPError as e:
-            logging.error(f"Failed to get OpenID configuration: {e}")
+            logger.error(f"Failed to get OpenID configuration: {e}")
             raise
 
     async def read_root(self, request: Request) -> HTMLResponse:
@@ -97,14 +97,7 @@ class OpenIDClient:
                 raise HTTPException(status_code=400, detail="Invalid state parameter")
             # Exchange the code for tokens
             token_data: Dict[str, Any] = await self.exchange_code_for_token(code)
-            self.token_response.update(token_data)
-            self.access_token = token_data.get("access_token")
-            self.refresh_token = token_data.get("refresh_token")
-            expires_in = token_data.get("expires_in")
-            if expires_in:
-                self.token_expiration_time = datetime.utcnow() + timedelta(
-                    seconds=int(expires_in)
-                )
+            self.update_token_data(token_data)
             # Render an HTML page with a green check mark and user info
             response = self.render_success_page(request, token_data)
             self.token_event.set()  # Signal that the token has been received
@@ -140,7 +133,7 @@ class OpenIDClient:
                 response.raise_for_status()
                 return response.json()
             except httpx.HTTPError as e:
-                logging.error(f"HTTP error occurred during token exchange: {e}")
+                logger.error(f"HTTP error occurred during token exchange: {e}")
                 self.token_event.set()
                 return {}
 
@@ -163,15 +156,24 @@ class OpenIDClient:
         # Signal the server to shut down
         server.should_exit = True
 
-    def authenticate(self) -> None:
+    def authenticate(self, force_authenticate: bool = False) -> None:
         """Start the authentication process."""
+        need_authenticate = force_authenticate
         if self.access_token and self.refresh_token:
             # Tokens are provided, check if token is expired
             if self.is_token_expired():
-                self.refresh_access_token()
+                try:
+                    self.refresh_access_token()
+                except httpx.HTTPError:
+                    logger.debug("Failed to refresh token.")
+                    need_authenticate = True
             else:
-                logging.info("Using existing access token.")
+                logger.info("Using existing access token.")
+                return
         else:
+            need_authenticate = True
+
+        if need_authenticate:
             if self.auth_flow == AuthorizationFlow.AUTHORIZATION_CODE:
                 self.authenticate_with_authorization_code()
             elif self.auth_flow == AuthorizationFlow.PASSWORD:
@@ -187,7 +189,7 @@ class OpenIDClient:
         exp = decoded.get("exp")
         if not exp:
             return False
-        return datetime.now() >= datetime.fromtimestamp(exp)
+        return datetime.now() >= datetime.fromtimestamp(exp) - timedelta(minutes=1)
 
     def refresh_access_token(self) -> None:
         """Refresh the access token using the refresh token."""
@@ -203,16 +205,10 @@ class OpenIDClient:
                 response = client.post(self.token_endpoint, data=data)
                 response.raise_for_status()
                 token_data = response.json()
-                self.access_token = token_data.get("access_token")
-                self.refresh_token = token_data.get("refresh_token", self.refresh_token)
-                expires_in = token_data.get("expires_in")
-                if expires_in:
-                    self.token_expiration_time = datetime.utcnow() + timedelta(
-                        seconds=int(expires_in)
-                    )
-                logging.info("Token refreshed successfully.")
+                self.update_token_data(token_data)
+                logger.info("Token refreshed successfully.")
             except httpx.HTTPError as e:
-                logging.error(f"Failed to refresh token: {e}")
+                logger.error(f"Failed to refresh token: {e}")
                 raise
 
     def authenticate_with_authorization_code(self) -> None:
@@ -232,24 +228,40 @@ class OpenIDClient:
         server_thread.start()
 
         # Open the browser or print the URL for the user
-        logging.info("Please open the following URL in your browser to authenticate:")
-        logging.info(auth_url)
+        logger.info("Please open the following URL in your browser to authenticate:")
+        logger.info(auth_url)
         webbrowser.open(auth_url)
 
         # Wait for the token response
-        logging.info("Waiting for authentication...")
+        logger.info("Waiting for authentication...")
         self.token_event.wait()
 
         # Use the retrieved tokens
         if self.token_response:
-            logging.info("Authentication successful!")
-            logging.info("Token response:")
-            logging.info(self.token_response)
+            logger.info("Authentication successful!")
+            logger.info("Token response:")
+            logger.info(self.token_response)
         else:
-            logging.error("Authentication failed.")
+            logger.error("Authentication failed.")
 
         # Wait for the server thread to finish
         server_thread.join()
+
+    def update_token_data(self, token_data: Dict[str, Any]) -> None:
+        self.token_response.update(token_data)
+        self.access_token = token_data.get("access_token")
+        self.refresh_token = token_data.get("refresh_token")
+        expires_in = token_data.get("expires_in")
+        if expires_in:
+            self.token_expiration_time = datetime.utcnow() + timedelta(
+                seconds=int(expires_in)
+            )
+        refresh_expires_in = token_data.get("refresh_expires_in")
+        if refresh_expires_in:
+            logger.info(f"Refresh token expires in {refresh_expires_in} seconds.")
+            self.refresh_token_expiration_time = datetime.utcnow() + timedelta(
+                seconds=int(refresh_expires_in)
+            )
 
     def authenticate_with_password(self) -> None:
         """Authenticate using the resource owner password credentials flow."""
@@ -271,19 +283,12 @@ class OpenIDClient:
                 response = client.post(self.token_endpoint, data=data)
                 response.raise_for_status()
                 token_data = response.json()
-                self.token_response.update(token_data)
-                self.access_token = token_data.get("access_token")
-                self.refresh_token = token_data.get("refresh_token")
-                expires_in = token_data.get("expires_in")
-                if expires_in:
-                    self.token_expiration_time = datetime.utcnow() + timedelta(
-                        seconds=int(expires_in)
-                    )
-                logging.info("Authentication successful!")
-                logging.info("Token response:")
-                logging.info(self.token_response)
+                self.update_token_data(token_data)
+                logger.info("Authentication successful!")
+                logger.info("Token response:")
+                logger.info(self.token_response)
             except httpx.HTTPError as e:
-                logging.error(f"Failed to obtain token: {e}")
+                logger.error(f"Failed to obtain token: {e}")
                 raise
 
     def render_success_page(
@@ -310,8 +315,6 @@ def main() -> None:
     parser.add_argument("--access_token", help="Stored access token")
     parser.add_argument("--refresh_token", help="Stored refresh token")
     args = parser.parse_args()
-
-    logging.basicConfig(level=logging.INFO)
 
     client = OpenIDClient(
         discovery_url=args.discovery_url,
