@@ -129,10 +129,23 @@ class WalletAuth(Wallet):
         # Authenticate using OpenIDClient
         self.oidc_client.authenticate()
 
+        await self.store_username_password()
+
         # Store the access and refresh tokens in the database
         await self.store_clear_auth_token()
 
         return True
+
+    async def store_username_password(self) -> None:
+        """Store the username and password in the database."""
+        if self.username and self.password:
+            mint_db = await get_mint_by_url(self.db, self.url)
+            if not mint_db:
+                raise Exception("Mint not found.")
+            if mint_db.username != self.username or mint_db.password != self.password:
+                mint_db.username = self.username
+                mint_db.password = self.password
+                await update_mint(self.db, mint_db)
 
     async def store_clear_auth_token(self) -> None:
         """Store the access and refresh tokens in the database."""

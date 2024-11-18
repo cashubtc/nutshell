@@ -169,7 +169,6 @@ class OpenIDClient:
                     need_authenticate = True
             else:
                 logger.info("Using existing access token.")
-                return
         else:
             need_authenticate = True
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import asyncio
+import getpass
 import os
 import time
 from datetime import datetime, timezone
@@ -1077,7 +1078,7 @@ async def wallets(ctx: Context):
     for w in wallets:
         wallet = Wallet(ctx.obj["HOST"], os.path.join(settings.cashu_dir, w))
         try:
-            await wallet.load_proofs()
+            await wallet.load_proofs(reload=True, all_keysets=True)
             if wallet.proofs and len(wallet.proofs):
                 active_wallet = False
                 if w == ctx.obj["WALLET_NAME"]:
@@ -1258,11 +1259,40 @@ async def selfpay(ctx: Context, all: bool = False):
 
 @cli.command("auth", help="Authenticate with mint.")
 @click.option("--mint", "-m", default=False, is_flag=True, help="Mint new auth tokens.")
+@click.option(
+    "--password",
+    "-p",
+    default=False,
+    is_flag=True,
+    help="Use username and password for authentication.",
+)
 @click.pass_context
 @coro
-@init_auth_wallet
-async def auth(ctx: Context, mint: bool):
-    auth_wallet: WalletAuth = ctx.obj["AUTH_WALLET"]
+async def auth(ctx: Context, mint: bool, password: bool):
+    # auth_wallet: WalletAuth = ctx.obj["AUTH_WALLET"]
+    wallet: Wallet = ctx.obj["WALLET"]
+    username = None
+    password_str = None
+    if password:
+        username = input("Enter username: ")
+        password_str = getpass.getpass("Enter password: ")
+    auth_wallet = await WalletAuth.with_db(
+        ctx.obj["HOST"],
+        wallet.db.db_location,
+        "auth",
+        unit=Unit.auth.name,
+        wallet_db=wallet.db.name,
+        username=username,
+        password=password_str,
+    )
+
+    requires_auth = await auth_wallet.init_wallet(wallet.mint_info)
+    if not requires_auth:
+        print("Mint does not require authentication.")
+        return
+
+    auth_wallet.oidc_client.authenticate(force_authenticate=True)
+
     await auth_wallet.load_proofs(reload=True)
     print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
 
