@@ -1291,7 +1291,8 @@ async def auth(ctx: Context, mint: bool, password: bool):
         print("Mint does not require authentication.")
         return
 
-    auth_wallet.oidc_client.authenticate(force_authenticate=True)
+    await auth_wallet.oidc_client.initialize()
+    await auth_wallet.oidc_client.authenticate(force_authenticate=True)
 
     await auth_wallet.load_proofs(reload=True)
     print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")

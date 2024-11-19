@@ -40,6 +40,7 @@ async def m001_initial(db: Database):
                         version TEXT,
                         unit TEXT NOT NULL,
                         input_fee_ppk INT,
+                        amounts TEXT,
 
                         UNIQUE (derivation_path)
                     );
@@ -97,17 +98,3 @@ async def m001_initial(db: Database):
                 );
             """
         )
-
-        # await conn.execute(
-        #     f"""
-        #         CREATE TABLE IF NOT EXISTS {db.table_with_schema('access')} (
-        #             user_id TEXT NOT NULL,
-        #             access_token TEXT NOT NULL,
-        #             created TIMESTAMP,
-        #             last_used TIMESTAMP,
-
-        #             UNIQUE (access_token)
-
-        #         );
-        #     """
-        # )

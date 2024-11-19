@@ -127,7 +127,8 @@ class WalletAuth(Wallet):
             refresh_token=self.refresh_token,
         )
         # Authenticate using OpenIDClient
-        self.oidc_client.authenticate()
+        await self.oidc_client.initialize()
+        await self.oidc_client.authenticate()
 
         await self.store_username_password()
 
@@ -181,7 +182,7 @@ class WalletAuth(Wallet):
     async def mint_blind_auth_proofs(self) -> List[Proof]:
         # Ensure access token is valid
         if self.oidc_client.is_token_expired():
-            self.oidc_client.refresh_access_token()
+            await self.oidc_client.refresh_access_token()
             await self.store_clear_auth_token()
         clear_auth_token = self.oidc_client.access_token
         if not clear_auth_token:

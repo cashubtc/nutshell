@@ -802,6 +802,24 @@ class MintKeyset:
 
         logger.trace(f"Loaded keyset id: {self.id} ({self.unit.name})")
 
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            id=row["id"],
+            derivation_path=row["derivation_path"],
+            seed=row["seed"],
+            encrypted_seed=row["encrypted_seed"],
+            seed_encryption_method=row["seed_encryption_method"],
+            valid_from=row["valid_from"],
+            valid_to=row["valid_to"],
+            first_seen=row["first_seen"],
+            active=row["active"],
+            unit=row["unit"],
+            version=row["version"],
+            input_fee_ppk=row["input_fee_ppk"],
+            amounts=json.loads(row["amounts"]),
+        )
+
     @property
     def public_keys_hex(self) -> Dict[int, str]:
         assert self.public_keys, "public keys not set"

@@ -635,8 +635,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('keysets')}
-            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk)
-            VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk)
+            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk, amounts)
+            VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk, :amounts)
             """,
             {
                 "id": keyset.id,
@@ -655,6 +655,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "version": keyset.version,
                 "unit": keyset.unit.name,
                 "input_fee_ppk": keyset.input_fee_ppk,
+                "amounts": json.dumps(keyset.amounts),
             },
         )
 
@@ -713,7 +714,7 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             values,
         )
-        return [MintKeyset(**row) for row in rows]
+        return [MintKeyset.from_row(row) for row in rows]  # type: ignore
 
     async def update_keyset(
         self,

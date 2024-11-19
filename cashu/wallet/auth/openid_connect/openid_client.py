@@ -1,7 +1,7 @@
 import argparse
+import asyncio
 import base64
 import secrets
-import threading
 import webbrowser
 from datetime import datetime, timedelta
 from enum import Enum
@@ -48,7 +48,7 @@ class OpenIDClient:
         self.redirect_uri: str = "http://localhost:33388"
         self.expected_state: str = secrets.token_urlsafe(16)
         self.token_response: Dict[str, Any] = {}
-        self.token_event: threading.Event = threading.Event()
+        self.token_event: asyncio.Event = asyncio.Event()
         self.token_endpoint: str = ""
         self.authorization_endpoint: str = ""
         self.introspection_endpoint: Optional[str] = None
@@ -65,19 +65,21 @@ class OpenIDClient:
         async def read_root(request: Request) -> Any:
             return await self.read_root(request)
 
-        # Fetch OpenID configuration using the discovery URL
-        self.fetch_oidc_configuration()
+    async def initialize(self) -> None:
+        """Initialize the client asynchronously."""
+        await self.fetch_oidc_configuration()
 
-    def fetch_oidc_configuration(self) -> None:
+    async def fetch_oidc_configuration(self) -> None:
         """Fetch OIDC configuration from the discovery URL."""
         try:
-            response = httpx.get(self.discovery_url)
-            response.raise_for_status()
-            oidc_config = response.json()
-            self.authorization_endpoint = oidc_config.get("authorization_endpoint")
-            self.token_endpoint = oidc_config.get("token_endpoint")
-            self.introspection_endpoint = oidc_config.get("introspection_endpoint")
-            self.revocation_endpoint = oidc_config.get("revocation_endpoint")
+            async with httpx.AsyncClient() as client:
+                response = await client.get(self.discovery_url)
+                response.raise_for_status()
+                oidc_config = response.json()
+                self.authorization_endpoint = oidc_config.get("authorization_endpoint")
+                self.token_endpoint = oidc_config.get("token_endpoint")
+                self.introspection_endpoint = oidc_config.get("introspection_endpoint")
+                self.revocation_endpoint = oidc_config.get("revocation_endpoint")
         except httpx.HTTPError as e:
             logger.error(f"Failed to get OpenID configuration: {e}")
             raise
@@ -137,33 +139,26 @@ class OpenIDClient:
                 self.token_event.set()
                 return {}
 
-    def run_server(self) -> None:
+    async def run_server(self) -> None:
         """Run the FastAPI server."""
         config = uvicorn.Config(
             self.app, host="127.0.0.1", port=33388, log_level="error"
         )
-        server = uvicorn.Server(config)
+        self.server = uvicorn.Server(config)
+        await self.server.serve()
 
-        # Start a thread to monitor the token event and stop the server
-        threading.Thread(
-            target=self.wait_for_token, args=(server,), daemon=True
-        ).start()
-        server.run()
+    async def shutdown_server(self) -> None:
+        """Shut down the uvicorn server."""
+        self.server.should_exit = True
 
-    def wait_for_token(self, server) -> None:
-        """Wait for the token event to be set, then stop the server."""
-        self.token_event.wait()
-        # Signal the server to shut down
-        server.should_exit = True
-
-    def authenticate(self, force_authenticate: bool = False) -> None:
+    async def authenticate(self, force_authenticate: bool = False) -> None:
         """Start the authentication process."""
         need_authenticate = force_authenticate
         if self.access_token and self.refresh_token:
             # Tokens are provided, check if token is expired
             if self.is_token_expired():
                 try:
-                    self.refresh_access_token()
+                    await self.refresh_access_token()
                 except httpx.HTTPError:
                     logger.debug("Failed to refresh token.")
                     need_authenticate = True
@@ -174,9 +169,9 @@ class OpenIDClient:
 
         if need_authenticate:
             if self.auth_flow == AuthorizationFlow.AUTHORIZATION_CODE:
-                self.authenticate_with_authorization_code()
+                await self.authenticate_with_authorization_code()
             elif self.auth_flow == AuthorizationFlow.PASSWORD:
-                self.authenticate_with_password()
+                await self.authenticate_with_password()
             else:
                 raise ValueError(f"Unknown authentication flow: {self.auth_flow}")
 
@@ -190,7 +185,7 @@ class OpenIDClient:
             return False
         return datetime.now() >= datetime.fromtimestamp(exp) - timedelta(minutes=1)
 
-    def refresh_access_token(self) -> None:
+    async def refresh_access_token(self) -> None:
         """Refresh the access token using the refresh token."""
         data = {
             "grant_type": "refresh_token",
@@ -199,9 +194,9 @@ class OpenIDClient:
         }
         if self.client_secret:
             data["client_secret"] = self.client_secret
-        with httpx.Client() as client:
+        async with httpx.AsyncClient() as client:
             try:
-                response = client.post(self.token_endpoint, data=data)
+                response = await client.post(self.token_endpoint, data=data)
                 response.raise_for_status()
                 token_data = response.json()
                 self.update_token_data(token_data)
@@ -210,7 +205,7 @@ class OpenIDClient:
                 logger.error(f"Failed to refresh token: {e}")
                 raise
 
-    def authenticate_with_authorization_code(self) -> None:
+    async def authenticate_with_authorization_code(self) -> None:
         """Authenticate using the authorization code flow."""
         # Build the authorization URL
         params = {
@@ -222,9 +217,8 @@ class OpenIDClient:
         }
         auth_url = f"{self.authorization_endpoint}?{urlencode(params)}"
 
-        # Start the web server in a separate thread (non-daemon)
-        server_thread = threading.Thread(target=self.run_server)
-        server_thread.start()
+        # Start the web server as an asyncio task
+        server_task = asyncio.create_task(self.run_server())
 
         # Open the browser or print the URL for the user
         logger.info("Please open the following URL in your browser to authenticate:")
@@ -233,7 +227,7 @@ class OpenIDClient:
 
         # Wait for the token response
         logger.info("Waiting for authentication...")
-        self.token_event.wait()
+        await self.token_event.wait()
 
         # Use the retrieved tokens
         if self.token_response:
@@ -243,8 +237,11 @@ class OpenIDClient:
         else:
             logger.error("Authentication failed.")
 
-        # Wait for the server thread to finish
-        server_thread.join()
+        # Signal the server to shut down
+        await self.shutdown_server()
+
+        # Wait for the server task to finish
+        await server_task
 
     def update_token_data(self, token_data: Dict[str, Any]) -> None:
         self.token_response.update(token_data)
@@ -262,7 +259,7 @@ class OpenIDClient:
                 seconds=int(refresh_expires_in)
             )
 
-    def authenticate_with_password(self) -> None:
+    async def authenticate_with_password(self) -> None:
         """Authenticate using the resource owner password credentials flow."""
         if not self.username or not self.password:
             raise ValueError(
@@ -277,9 +274,9 @@ class OpenIDClient:
         }
         if self.client_secret:
             data["client_secret"] = self.client_secret
-        with httpx.Client() as client:
+        async with httpx.AsyncClient() as client:
             try:
-                response = client.post(self.token_endpoint, data=data)
+                response = await client.post(self.token_endpoint, data=data)
                 response.raise_for_status()
                 token_data = response.json()
                 self.update_token_data(token_data)
@@ -298,7 +295,7 @@ class OpenIDClient:
         return self.templates.TemplateResponse("success.html", context)
 
 
-def main() -> None:
+async def main() -> None:
     parser = argparse.ArgumentParser(description="OpenID Connect Authentication Client")
     parser.add_argument("discovery_url", help="OpenID Connect Discovery URL")
     parser.add_argument("client_id", help="Client ID")
@@ -319,14 +316,15 @@ def main() -> None:
         discovery_url=args.discovery_url,
         client_id=args.client_id,
         client_secret=args.client_secret,
-        auth_flow=args.auth_flow,
+        auth_flow=AuthorizationFlow(args.auth_flow),
         username=args.username,
         password=args.password,
         access_token=args.access_token,
         refresh_token=args.refresh_token,
     )
-    client.authenticate()
+    await client.initialize()
+    await client.authenticate()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
