@@ -37,7 +37,6 @@ from ..core.models import (
     PostMeltQuoteResponse,
 )
 from ..core.nuts import nut19
-from ..core.nuts.nuts import MINT_QUOTE_SIGNATURE_NUT
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split

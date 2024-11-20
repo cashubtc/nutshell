@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from ..core.base import Method, Unit
 from ..core.models import MintInfoContact, Nut15MppSupport
-from ..core.nuts.nuts import MPP_NUT, WEBSOCKETS_NUT, MINT_QUOTE_SIGNATURE_NUT
+from ..core.nuts.nuts import MINT_QUOTE_SIGNATURE_NUT, MPP_NUT, WEBSOCKETS_NUT
 
 
 class MintInfo(BaseModel):
