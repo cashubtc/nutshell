@@ -108,7 +108,7 @@ class LightningWallet(Wallet):
             return PaymentStatus(result=PaymentResult.SETTLED)
         try:
             # to check the invoice state, we try minting tokens
-            await self.mint(mint_quote.amount, quote_id=mint_quote.quote)
+            await self.mint(mint_quote.amount, quote_id=mint_quote.quote, quote_privkey=mint_quote.privkey)
             return PaymentStatus(result=PaymentResult.SETTLED)
         except Exception as e:
             print(e)
