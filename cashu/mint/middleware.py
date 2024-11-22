@@ -1,3 +1,8 @@
+import gzip
+import zlib
+
+import brotli
+import zstandard as zstd
 from fastapi import FastAPI, Request, Response
 from fastapi.exception_handlers import (
     request_validation_exception_handler as _request_validation_exception_handler,
@@ -7,7 +12,6 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from starlette.requests import Request
 
 from ..core.settings import settings
 from .limit import _rate_limit_exceeded_handler, limiter_global
@@ -18,10 +22,6 @@ if settings.debug_profiling:
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
-import brotli
-import gzip
-import zstandard as zstd
-import zlib
 
 def add_middlewares(app: FastAPI):
     app.add_middleware(
