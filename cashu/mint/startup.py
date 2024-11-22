@@ -79,7 +79,6 @@ ledger = Ledger(
 )
 
 # start auth ledger
-
 auth_ledger = AuthLedger(
     db=Database("auth", settings.auth_database),
     seed="auth seed here",
@@ -110,6 +109,7 @@ async def start_auth():
     await migrate_databases(auth_ledger.db, auth_migrations)
     logger.info("Starting auth ledger.")
     await auth_ledger.init_keysets()
+    await auth_ledger.init_auth()
     logger.info("Auth ledger started.")
 
 

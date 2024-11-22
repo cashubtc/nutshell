@@ -106,7 +106,8 @@ app.include_router(auth_router, tags=["Auth"])
 @app.on_event("startup")
 async def startup():
     await start_mint()
-    await start_auth()
+    if settings.mint_require_auth:
+        await start_auth()
 
 
 @app.on_event("shutdown")

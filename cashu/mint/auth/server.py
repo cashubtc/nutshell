@@ -43,6 +43,8 @@ class AuthLedger(Ledger):
         if not settings.mint_auth_oicd_discovery_url:
             raise Exception("Missing OpenID Connect discovery URL.")
         self.oicd_discovery_url = settings.mint_auth_oicd_discovery_url
+
+    async def init_auth(self):
         logger.info(f"Initializing OpenID Connect: {self.oicd_discovery_url}")
         self.oicd_discovery_json = self._get_oicd_discovery_json()
         self.jwks_url = self.oicd_discovery_json["jwks_uri"]
