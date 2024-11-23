@@ -20,6 +20,7 @@ class AuthLedger(Ledger):
     jwks_url: str
     jwks_client: jwt.PyJWKClient
     signing_key: jwt.PyJWK
+    oicd_discovery_url: str
 
     def __init__(
         self,
@@ -39,12 +40,11 @@ class AuthLedger(Ledger):
             crud=crud,
             amounts=amounts,
         )
-
-        if not settings.mint_auth_oicd_discovery_url:
-            raise Exception("Missing OpenID Connect discovery URL.")
-        self.oicd_discovery_url = settings.mint_auth_oicd_discovery_url
+        self.oicd_discovery_url = settings.mint_auth_oicd_discovery_url or ""
 
     async def init_auth(self):
+        if not self.oicd_discovery_url:
+            raise Exception("Missing OpenID Connect discovery URL.")
         logger.info(f"Initializing OpenID Connect: {self.oicd_discovery_url}")
         self.oicd_discovery_json = self._get_oicd_discovery_json()
         self.jwks_url = self.oicd_discovery_json["jwks_uri"]
