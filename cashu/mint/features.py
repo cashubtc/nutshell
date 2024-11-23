@@ -1,11 +1,16 @@
 from typing import Any, Dict, List, Union
 
 from ..core.base import Method
+from ..core.mint_info import MintInfo
 from ..core.models import (
     MeltMethodSetting,
+    MintInfoContact,
+    MintInfoProtectedEndpoint,
     MintMethodSetting,
 )
 from ..core.nuts import (
+    BLIND_AUTH_NUT,
+    CLEAR_AUTH_NUT,
     DLEQ_NUT,
     FEE_RETURN_NUT,
     HTLC_NUT,
@@ -19,10 +24,31 @@ from ..core.nuts import (
     WEBSOCKETS_NUT,
 )
 from ..core.settings import settings
-from ..mint.protocols import SupportsBackends
+from ..mint.protocols import SupportsBackends, SupportsPubkey
 
 
-class LedgerFeatures(SupportsBackends):
+class LedgerFeatures(SupportsBackends, SupportsPubkey):
+    @property
+    def mint_info(self) -> MintInfo:
+        contact_info = [
+            MintInfoContact(method=m, info=i)
+            for m, i in settings.mint_info_contact
+            if m and i
+        ]
+        return MintInfo(
+            name=settings.mint_info_name,
+            pubkey=self.pubkey.serialize().hex() if self.pubkey else None,
+            version=f"Nutshell/{settings.version}",
+            description=settings.mint_info_description,
+            description_long=settings.mint_info_description_long,
+            contact=contact_info,
+            nuts=self.mint_features,
+            icon_url=settings.mint_info_icon_url,
+            motd=settings.mint_info_motd,
+            time=None,
+        )
+
+    @property
     def mint_features(self) -> Dict[int, Union[List[Any], Dict[str, Any]]]:
         mint_method_settings: List[MintMethodSetting] = []
         for method, unit_dict in self.backends.items():
@@ -104,5 +130,36 @@ class LedgerFeatures(SupportsBackends):
 
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
+
+        # signal authentication features
+        if settings.mint_require_auth:
+            if not settings.mint_auth_oicd_discovery_url:
+                raise Exception(
+                    "Missing OpenID Connect discovery URL: MINT_AUTH_OICD_DISCOVERY_URL"
+                )
+            clear_auth_features: Dict[str, Union[bool, str, List[str]]] = {
+                "openid_discovery": settings.mint_auth_oicd_discovery_url,
+                "protected_endpoints": [],
+            }
+
+            for endpoint in [
+                MintInfoProtectedEndpoint(method=e[0], path=e[1])
+                for e in settings.mint_require_clear_auth_paths
+            ]:
+                clear_auth_features["protected_endpoints"].append(endpoint.dict())  # type: ignore
+
+            mint_features[CLEAR_AUTH_NUT] = clear_auth_features
+
+            blind_auth_features: Dict[str, Union[bool, int, str, List[str]]] = {
+                "max_mint": settings.mint_auth_max_blind_tokens,
+                "protected_endpoints": [],
+            }
+            for endpoint in [
+                MintInfoProtectedEndpoint(method=e[0], path=e[1])
+                for e in settings.mint_require_blind_auth_paths
+            ]:
+                blind_auth_features["protected_endpoints"].append(endpoint.dict())  # type: ignore
+
+            mint_features[BLIND_AUTH_NUT] = blind_auth_features
 
         return mint_features

@@ -214,7 +214,6 @@ async def m010_add_ids_to_proofs_and_out_to_invoices(db: Database):
     Columns that store mint and melt id for proofs and invoices.
     """
     async with db.connect() as conn:
-        print("Running wallet migrations")
         await conn.execute("ALTER TABLE proofs ADD COLUMN mint_id TEXT")
         await conn.execute("ALTER TABLE proofs ADD COLUMN melt_id TEXT")
 
@@ -285,4 +284,22 @@ async def m013_add_mint_and_melt_quote_tables(db: Database):
                 change TEXT
             );
         """
+        )
+
+
+async def m014_add_mints_table(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS mints (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL,
+                    info TEXT NOT NULL,
+                    updated TIMESTAMP DEFAULT {db.timestamp_now},
+                    access_token TEXT,
+                    refresh_token TEXT,
+                    username TEXT,
+                    password TEXT
+                );
+            """
         )

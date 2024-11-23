@@ -1,22 +1,14 @@
 import asyncio
-from typing import List, Mapping
+from typing import List
 
 from loguru import logger
 
-from ..core.base import Method, MintQuoteState, Unit
-from ..core.db import Database
+from ..core.base import MintQuoteState
 from ..lightning.base import LightningBackend
-from ..mint.crud import LedgerCrud
-from .events.events import LedgerEventManager
 from .protocols import SupportsBackends, SupportsDb, SupportsEvents
 
 
 class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
-    backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
-    db: Database
-    crud: LedgerCrud
-    events: LedgerEventManager
-
     async def dispatch_listeners(self) -> List[asyncio.Task]:
         tasks = []
         for method, unitbackends in self.backends.items():

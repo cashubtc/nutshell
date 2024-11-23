@@ -84,9 +84,9 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         remainder = amount_to_send
         selected_proofs = [smaller_proofs[0]]
         fee_ppk = self.get_fees_for_proofs_ppk(selected_proofs) if include_fees else 0
-        logger.debug(f"adding proof: {smaller_proofs[0].amount} – fee: {fee_ppk} ppk")
+        logger.trace(f"adding proof: {smaller_proofs[0].amount} – fee: {fee_ppk} ppk")
         remainder -= smaller_proofs[0].amount - fee_ppk / 1000
-        logger.debug(f"remainder: {remainder}")
+        logger.trace(f"remainder: {remainder}")
         if remainder > 0:
             logger.trace(
                 f"> selecting more proofs from {amount_summary(smaller_proofs[1:], self.unit)} sum: {sum_proofs(smaller_proofs[1:])} to reach {remainder}"

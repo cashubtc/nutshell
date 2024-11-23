@@ -22,14 +22,11 @@ class NostrClient:
     relays = [
         "wss://nostr-pub.wellorder.net",
         "wss://relay.damus.io",
-        "wss://nostr.zebedee.cloud",
-        "wss://relay.snort.social",
         "wss://nostr.fmt.wiz.biz",
         "wss://nos.lol",
         "wss://nostr.oxtr.dev",
         "wss://relay.current.fyi",
-        "wss://relay.snort.social",
-    ]  # ["wss://nostr.oxtr.dev"]  # ["wss://relay.nostr.info"] "wss://nostr-pub.wellorder.net"  "ws://91.237.88.218:2700", "wss://nostrrr.bublina.eu.org", ""wss://nostr-relay.freeberty.net"", , "wss://nostr.oxtr.dev", "wss://relay.nostr.info", "wss://nostr-pub.wellorder.net" , "wss://relayer.fiatjaf.com", "wss://nodestr.fmt.wiz.biz/", "wss://no.str.cr"
+    ] 
     relay_manager = RelayManager()
     private_key: PrivateKey
     public_key: PublicKey

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Authentication Successful</title>
+    <style>
+      .success {
+        text-align: center;
+        margin-top: 50px;
+      }
+      .success h1 {
+        color: green;
+      }
+      .checkmark {
+        font-size: 100px;
+        color: green;
+      }
+      .token-data {
+        margin-top: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="success">
+      <div class="checkmark">&#10004;</div>
+      <h1>Authentication Successful</h1>
+      <h3>You can close this window now.</h3>
+      <!-- <div class="token-data">
+        <h3>User Information:</h3>
+        <pre>{{ token_data | tojson(indent=2) }}</pre>
+      </div> -->
+    </div>
+  </body>
+</html>

@@ -339,11 +339,21 @@ class Database(Compat):
             raise Exception("Timestamp is None")
         return timestamp
 
-    def to_timestamp(self, timestamp_str: str) -> Union[str, datetime.datetime]:
-        if not timestamp_str:
-            timestamp_str = self.timestamp_now_str()
+    def to_timestamp(
+        self, timestamp: Union[str, datetime.datetime]
+    ) -> Union[str, datetime.datetime]:
+        if not timestamp:
+            timestamp = self.timestamp_now_str()
         if self.type in {POSTGRES, COCKROACH}:
-            return datetime.datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+            # return datetime.datetime
+            if isinstance(timestamp, datetime.datetime):
+                return timestamp
+            elif isinstance(timestamp, str):
+                return datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
         elif self.type == SQLITE:
-            return timestamp_str
+            # return str
+            if isinstance(timestamp, datetime.datetime):
+                return timestamp.strftime("%Y-%m-%d %H:%M:%S")
+            elif isinstance(timestamp, str):
+                return timestamp
         return "<nothing>"

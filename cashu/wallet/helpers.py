@@ -52,6 +52,8 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
             t.mint,
             os.path.join(settings.cashu_dir, wallet.name),
             unit=token.unit or wallet.unit.name,
+            auth_db=wallet.auth_db.db_location if wallet.auth_db else None,
+            auth_keyset_id=wallet.auth_keyset_id,
         )
         keyset_ids = mint_wallet._get_proofs_keyset_ids(t.proofs)
         logger.trace(f"Keysets in tokens: {' '.join(set(keyset_ids))}")
@@ -171,10 +173,11 @@ async def send(
     await wallet.set_reserved(send_proofs, reserved=True)
     return wallet.available_balance, token
 
+
 def check_payment_preimage(
     payment_hash: str,
     preimage: str,
 ) -> bool:
-    return bytes.fromhex(payment_hash) == hashlib.sha256(
-        bytes.fromhex(preimage)
-    ).digest()
+    return (
+        bytes.fromhex(payment_hash) == hashlib.sha256(bytes.fromhex(preimage)).digest()
+    )

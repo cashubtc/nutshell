@@ -68,6 +68,8 @@ class MintSettings(CashuSettings):
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
 
+    auth_database: str = Field(default="data/mint")
+
 
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
@@ -231,6 +233,25 @@ class CoreLightningRestFundingSource(MintSettings):
     mint_corelightning_rest_cert: Optional[str] = Field(default=None)
 
 
+class AuthSettings(MintSettings):
+    mint_require_auth: bool = Field(default=False)
+    mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
+    mint_auth_rate_limit_seconds: int = Field(default=24 * 60 * 60)
+    mint_auth_max_blind_tokens: int = Field(default=100, gt=0)
+    mint_require_clear_auth_paths: List[List[str]] = [
+        ["POST", "/v1/auth/blind/mint"],
+    ]
+    mint_require_blind_auth_paths: List[List[str]] = [
+        ["POST", "/v1/swap"],
+        ["GET", r"^/v1/mint/quote/bolt11/.*"],
+        ["POST", "/v1/mint/quote/bolt11"],
+        ["POST", "/v1/mint/bolt11"],
+        ["GET", r"^/v1/melt/quote/bolt11/.*"],
+        ["POST", "/v1/melt/quote/bolt11"],
+        ["POST", "/v1/melt/bolt11"],
+    ]
+
+
 class Settings(
     EnvSettings,
     LndRPCFundingSource,
@@ -240,6 +261,7 @@ class Settings(
     FakeWalletSettings,
     MintLimits,
     MintBackends,
+    AuthSettings,
     MintDeprecationFlags,
     MintSettings,
     MintInformation,
