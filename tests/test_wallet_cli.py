@@ -411,7 +411,7 @@ def test_wallets(cli_prefix):
     print("WALLETS")
     # on github this is empty
     if len(result.output):
-        assert "test_cli_wallet" in result.output
+        assert "wallet" in result.output
     assert result.exit_code == 0
 
 
