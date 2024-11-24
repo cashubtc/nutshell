@@ -106,22 +106,26 @@ class LedgerFeatures(SupportsBackends):
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
 
-        mint_features[CACHE_NUT] = {
-            "ttl": settings.mint_redis_cache_ttl,
-            "cached_endpoints": [
-                {
-                    "path": "/v1/mint/bolt11",
-                    "method": "POST",
-                },
-                {
-                    "path": "/v1/melt/bolt11",
-                    "method": "POST",
-                },
-                {
-                    "path": "/v1/swap",
-                    "method": "POST",
-                }
-            ] if settings.mint_redis_cache_enabled else []
-        }
+        if settings.mint_redis_cache_enabled:
+            cache_features: dict[str, list[dict[str, str]] | int] = {
+                "cached_endpoints": [
+                    {
+                        "path": "/v1/mint/bolt11",
+                        "method": "POST",
+                    },
+                    {
+                        "path": "/v1/melt/bolt11",
+                        "method": "POST",
+                    },
+                    {
+                        "path": "/v1/swap",
+                        "method": "POST",
+                    },
+                ]
+            }
+            if settings.mint_redis_cache_ttl:
+                cache_features["ttl"] = settings.mint_redis_cache_ttl
+
+            mint_features[CACHE_NUT] = cache_features
 
         return mint_features
