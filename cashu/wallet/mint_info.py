@@ -31,10 +31,10 @@ class MintInfo(BaseModel):
         if not self.nuts:
             return False
         nut_15 = self.nuts.get(MPP_NUT)
-        if not nut_15 or not self.supports_nut(MPP_NUT):
+        if not nut_15 or not self.supports_nut(MPP_NUT) or not nut_15.get("methods"):
             return False
 
-        for entry in nut_15:
+        for entry in nut_15["methods"]:
             entry_obj = Nut15MppSupport.parse_obj(entry)
             if entry_obj.method == method and entry_obj.unit == unit.name:
                 return True
