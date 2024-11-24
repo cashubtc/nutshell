@@ -1,7 +1,7 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, WebSocket
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from loguru import logger
 from starlette.requests import Request
 
@@ -206,6 +206,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
     limit_websocket(websocket)
+    disconnected = False
     try:
         client = ledger.events.add_client(websocket, ledger.db, ledger.crud)
     except Exception as e:
@@ -216,11 +217,16 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         # this will block until the session is closed
         await client.start()
+    except WebSocketDisconnect as e:
+        logger.debug(f"Websocket disconnected: {e}")
+        disconnected = True
+        return
     except Exception as e:
         logger.debug(f"Exception: {e}")
         ledger.events.remove_client(client)
     finally:
-        await asyncio.wait_for(websocket.close(), timeout=1)
+        if not disconnected:
+            await asyncio.wait_for(websocket.close(), timeout=1)
 
 
 @router.post(
