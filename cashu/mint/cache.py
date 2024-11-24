@@ -18,15 +18,15 @@ class RedisCache:
             if settings.mint_redis_cache_url is None:
                 raise CashuError("Redis cache url not provided")
             self.redis = from_url(settings.mint_redis_cache_url)
-            asyncio.run(self.test_connection())
+            asyncio.create_task(self.test_connection())
 
     async def test_connection(self):
         # PING
         try:
             await self.redis.ping()
-            logger.success("Redis caching server running")
+            logger.success("Connected to Redis caching server.")
         except ConnectionError as e:
-            logger.error("Redis connection error")
+            logger.error("Redis connection error.")
             raise e
 
     def cache(self, expire):
