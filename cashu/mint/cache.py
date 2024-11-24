@@ -54,8 +54,7 @@ class RedisCache:
                     else:
                         raise Exception(f"Found no cached response for key {key}")
                 result = await func(request, payload)
-                # Cache a successful result for `expire` seconds
-                await self.redis.setex(key, expire, result.json())
+                await self.redis.set(name=key, value=result.json(), ex=expire)
                 return result
 
             return wrapper
