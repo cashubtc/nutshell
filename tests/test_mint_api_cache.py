@@ -10,6 +10,7 @@ from tests.helpers import pay_if_regtest
 BASE_URL = "http://localhost:3337"
 invoice_32sat = "lnbc320n1pnsuamsdqqxqrrsssp5w3tlpw2zss396qh28l3a07u35zdx8nmknzryk89ackn23eywdu2spp5ckt298t835ejzh2xepyxlg57f54q27ffc2zjsjh3t5pmx4wghpcqne0vycw5dfalx5y45d2jtwqfwz437hduyccn9nxk2feay0ytxldjpf3fcjrcf5k2s56q3erj86ymlqdp703y89vt4lr4lun5z5duulcqwuwutn"
 
+
 @pytest_asyncio.fixture(scope="function")
 async def wallet(ledger: Ledger):
     wallet1 = await Wallet.with_db(
@@ -49,6 +50,7 @@ async def test_api_mint_cached_responses(wallet: Wallet):
     assert response1.status_code == 200, f"{response1.status_code = }"
     assert response.text == response1.text
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     not settings.mint_redis_cache_enabled,
@@ -57,7 +59,7 @@ async def test_api_mint_cached_responses(wallet: Wallet):
 async def test_api_swap_cached_responses(wallet: Wallet):
     quote = await wallet.request_mint(64)
     await pay_if_regtest(quote.request)
-    
+
     minted = await wallet.mint(64, quote.quote)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10010, 10011)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
@@ -76,6 +78,7 @@ async def test_api_swap_cached_responses(wallet: Wallet):
     assert response.status_code == 200, f"{response.status_code = }"
     assert response1.status_code == 200, f"{response1.status_code = }"
     assert response.text == response1.text
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
@@ -96,12 +99,20 @@ async def test_api_melt_cached_responses(wallet: Wallet):
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/v1/melt/bolt11",
-        json={"quote": melt_quote.quote, "inputs": inputs_payload, "outputs": outputs_payload},
+        json={
+            "quote": melt_quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
         timeout=None,
     )
     response1 = httpx.post(
         f"{BASE_URL}/v1/melt/bolt11",
-        json={"quote": melt_quote.quote, "inputs": inputs_payload, "outputs": outputs_payload},
+        json={
+            "quote": melt_quote.quote,
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+        },
         timeout=None,
     )
     assert response.status_code == 200, f"{response.status_code = }"

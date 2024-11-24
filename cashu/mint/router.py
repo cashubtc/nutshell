@@ -3,7 +3,6 @@ import time
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from loguru import logger
-from starlette.requests import Request
 
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
@@ -34,6 +33,7 @@ from .limit import limit_websocket, limiter
 
 router = APIRouter()
 redis = RedisCache()
+
 
 @router.get(
     "/v1/info",
