@@ -239,7 +239,7 @@ async def websocket_endpoint(websocket: WebSocket):
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-@redis.cache(expire=settings.mint_redis_cache_ttl)
+@redis.cache()
 async def mint(
     request: Request,
     payload: PostMintRequest,
@@ -317,7 +317,7 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-@redis.cache(expire=settings.mint_redis_cache_ttl)
+@redis.cache()
 async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
@@ -340,7 +340,7 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
-@redis.cache(expire=settings.mint_redis_cache_ttl)
+@redis.cache()
 async def swap(
     request: Request,
     payload: PostSwapRequest,
