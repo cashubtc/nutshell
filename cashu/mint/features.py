@@ -6,6 +6,7 @@ from ..core.models import (
     MintMethodSetting,
 )
 from ..core.nuts import (
+    CACHE_NUT,
     DLEQ_NUT,
     FEE_RETURN_NUT,
     HTLC_NUT,
@@ -17,7 +18,6 @@ from ..core.nuts import (
     SCRIPT_NUT,
     STATE_NUT,
     WEBSOCKETS_NUT,
-    CACHE_NUT,
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends
