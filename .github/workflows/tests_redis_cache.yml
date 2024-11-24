@@ -33,12 +33,6 @@ jobs:
           python-version: ${{ inputs.python-version }}
           poetry-version: ${{ inputs.poetry-version }}
 
-      - name: Install Docker Compose Plugin
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
-          docker compose version
-
       - name: Start Redis service
         run: |
           docker compose -f docker/docker-compose.yml up -d redis
