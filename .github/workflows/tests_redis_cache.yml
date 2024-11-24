@@ -24,6 +24,11 @@ jobs:
     name: Run (db ${{ inputs.mint-database }}, deprecated api ${{ inputs.mint-only-deprecated }})
     runs-on: ${{ inputs.os }}
     steps:
+      - name: Start PostgreSQL service
+        if: contains(inputs.mint-database, 'postgres')
+        run: |
+          docker run -d --name postgres -e POSTGRES_USER=cashu -e POSTGRES_PASSWORD=cashu -e POSTGRES_DB=cashu -p 5432:5432 postgres:latest
+          until docker exec postgres pg_isready; do sleep 1; done
       - name: Checkout repository
         uses: actions/checkout@v2
 
