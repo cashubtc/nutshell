@@ -17,6 +17,7 @@ from ..core.nuts import (
     SCRIPT_NUT,
     STATE_NUT,
     WEBSOCKETS_NUT,
+    CACHE_NUT,
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends
@@ -104,5 +105,23 @@ class LedgerFeatures(SupportsBackends):
 
         if websocket_features:
             mint_features[WEBSOCKETS_NUT] = websocket_features
+
+        mint_features[CACHE_NUT] = {
+            "ttl": settings.mint_redis_cache_ttl,
+            "cached_endpoints": [
+                {
+                    "path": "/v1/mint/bolt11",
+                    "method": "POST",
+                },
+                {
+                    "path": "/v1/melt/bolt11",
+                    "method": "POST",
+                },
+                {
+                    "path": "/v1/swap",
+                    "method": "POST",
+                }
+            ] if settings.mint_redis_cache_enabled else []
+        }
 
         return mint_features
