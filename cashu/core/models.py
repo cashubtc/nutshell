@@ -73,7 +73,6 @@ class GetInfoResponse(BaseModel):
 class Nut15MppSupport(BaseModel):
     method: str
     unit: str
-    mpp: bool
 
 
 class GetInfoResponse_deprecated(BaseModel):
