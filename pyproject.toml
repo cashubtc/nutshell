@@ -39,6 +39,8 @@ googleapis-common-protos = "^1.63.2"
 mypy-protobuf = "^3.6.0"
 types-protobuf = "^5.27.0.20240626"
 grpcio-tools = "^1.65.1"
+brotli = "^1.1.0"
+zstandard = "^0.23.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest-asyncio = "^0.24.0"
