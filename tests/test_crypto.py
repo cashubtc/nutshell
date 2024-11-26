@@ -57,7 +57,7 @@ def test_step1():
 
     assert (
         B_.serialize().hex()
-        == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
+        == "0215fdc277c704590f3c3bcc08cf9a8f748f46619b96268cece86442b6c3ac461b"
     )
     assert blinding_factor.private_key == bytes.fromhex(
         "0000000000000000000000000000000000000000000000000000000000000001"
@@ -83,7 +83,7 @@ def test_step2():
     C_, e, s = step2_bob(B_, a)
     assert (
         C_.serialize().hex()
-        == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
+        == "0215fdc277c704590f3c3bcc08cf9a8f748f46619b96268cece86442b6c3ac461b"
     )
 
 
@@ -102,18 +102,11 @@ def test_step3():
         )
     )
 
-    A = PublicKey(
-        pubkey=b"\x02"
-        + bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001",
-        ),
-        raw=True,
-    )
-    C = step3_alice(C_, r, A)
+    C = step3_alice(C_, r)
 
     assert (
         C.serialize().hex()
-        == "0271bf0d702dbad86cbe0af3ab2bfba70a0338f22728e412d88a830ed0580b9de4"
+        == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
     )
 
 
@@ -171,11 +164,11 @@ def test_dleq_step2_bob_dleq():
     e, s = step2_bob_dleq(B_, a, p_bytes)
     assert (
         e.serialize()
-        == "a608ae30a54c6d878c706240ee35d4289b68cfe99454bbfa6578b503bce2dbe1"
+        == "600332a05c0722af1feb9ee95b2917eeafaa14cf17852f116f35e059b9c1ea0a"
     )
     assert (
         s.serialize()
-        == "a608ae30a54c6d878c706240ee35d4289b68cfe99454bbfa6578b503bce2dbe2"
+        == "600332a05c0722af1feb9ee95b2917eeafaa14cf17852f116f35e059b9c1ea0b"
     )  # differs from e only in least significant byte because `a = 0x1`
 
     # change `a`
@@ -188,11 +181,11 @@ def test_dleq_step2_bob_dleq():
     e, s = step2_bob_dleq(B_, a, p_bytes)
     assert (
         e.serialize()
-        == "076cbdda4f368053c33056c438df014d1875eb3c8b28120bece74b6d0e6381bb"
+        == "345b33beec35d507701f513cf4cf60aea6a8c9f9c3b576a4fbb0f01f04888d90"
     )
     assert (
         s.serialize()
-        == "b6d41ac1e12415862bf8cace95e5355e9262eab8a11d201dadd3b6e41584ea6e"
+        == "887e1d5d42b8a3f08679714e0731091912a66ee39b96e53f55de302a113656d4"
     )
 
 
@@ -299,7 +292,7 @@ def test_dleq_carol_verify_from_bob():
     B_, _ = step1_alice(secret_msg, r)
     C_, e, s = step2_bob(B_, a)
     assert alice_verify_dleq(B_, C_, e, s, A)
-    C = step3_alice(C_, r, A)
+    C = step3_alice(C_, r)
     # carol does not know B_ and C_, but she receives C and r from Alice
     assert carol_verify_dleq(secret_msg=secret_msg, C=C, r=r, e=e, s=s, A=A)
 
@@ -307,20 +300,20 @@ def test_dleq_carol_verify_from_bob():
 def test_dleq_carol_on_proof():
     A = PublicKey(
         bytes.fromhex(
-            "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798"
+            "0381d73b92c7ed013476c3e4e64b4964e9c742c1ecc3375bb55c0520acc56e1233"
         ),
         raw=True,
     )
     proof = Proof.parse_obj(
         {
+            "id": "00ad268c4d1f5826",
             "amount": 1,
-            "id": "00882760bfa2eb41",
-            "secret": "daf4dd00a2b68a0858a80450f52c8a7d2ccf87d375e43e216e0c571f089f63e9",
-            "C": "024369d2d22a80ecf78f3937da9d5f30c1b9f74f0c32684d583cca0fa6a61cdcfc",
+            "secret": "202caa260a09bdfb97de9d4c2f43fe4858a2a35a3e84b03471f28f92e5fadf97",
+            "C": "039eafe0acd4a39935bd878aed21259fa1019fb62f54bd5f160f33cb44898d82f1",
             "dleq": {
-                "e": "b31e58ac6527f34975ffab13e70a48b6d2b0d35abc4b03f0151f09ee1a9763d4",
-                "s": "8fbae004c59e754d71df67e392b6ae4e29293113ddc2ec86592a0431d16306d8",
-                "r": "a6d13fcd7a18442e6076f5e1e7c887ad5de40a019824bdfa9fe740d302e8d861",
+                "e": "d9d1ee82155a5630c240607f3ab1d44fbfa5e605b44f0fc9faccfa636215d6bb",
+                "s": "46035f798873d26fdaa85b571147253706c176283495352fe879f5749e766bd5",
+                "r": "dda903ccb8fac8d031e7057b4270c802f1f6b181672bb3439a7bf2d7c3d516cd",
             },
         }
     )
@@ -414,36 +407,6 @@ def test_step2_deprecated():
     assert (
         C_.serialize().hex()
         == "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
-    )
-
-
-def test_step3_deprecated():
-    # C = C_ - A.mult(r)
-    # C_ from test_step2_deprecated
-    C_ = PublicKey(
-        bytes.fromhex(
-            "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
-        ),
-        raw=True,
-    )
-    r = PrivateKey(
-        privkey=bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        )
-    )
-
-    A = PublicKey(
-        pubkey=b"\x02"
-        + bytes.fromhex(
-            "0000000000000000000000000000000000000000000000000000000000000001",
-        ),
-        raw=True,
-    )
-    C = step3_alice(C_, r, A)
-
-    assert (
-        C.serialize().hex()
-        == "03c724d7e6a5443b39ac8acf11f40420adc4f99a02e7cc1b57703d9391f6d129cd"
     )
 
 
