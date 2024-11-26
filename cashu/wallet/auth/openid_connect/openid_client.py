@@ -20,6 +20,7 @@ from loguru import logger
 class AuthorizationFlow(Enum):
     AUTHORIZATION_CODE = "authorization_code"
     PASSWORD = "password"
+    DEVICE_CODE = "device_code"
 
 
 class OpenIDClient:
@@ -28,12 +29,13 @@ class OpenIDClient:
         discovery_url: str,
         client_id: str,
         client_secret: str = "",
-        auth_flow: AuthorizationFlow = AuthorizationFlow.AUTHORIZATION_CODE,
+        auth_flow: AuthorizationFlow = AuthorizationFlow.DEVICE_CODE,
         username: Optional[str] = None,
         password: Optional[str] = None,
         access_token: Optional[str] = None,
         refresh_token: Optional[str] = None,
         token_expiration_time: Optional[datetime] = None,
+        device_code: Optional[str] = None,
     ) -> None:
         self.discovery_url: str = discovery_url
         self.client_id: str = client_id
@@ -44,6 +46,7 @@ class OpenIDClient:
         self.access_token: Optional[str] = access_token
         self.refresh_token: Optional[str] = refresh_token
         self.token_expiration_time: Optional[datetime] = token_expiration_time
+        self.device_code: Optional[str] = device_code
 
         self.redirect_uri: str = "http://localhost:33388"
         self.expected_state: str = secrets.token_urlsafe(16)
@@ -53,6 +56,7 @@ class OpenIDClient:
         self.authorization_endpoint: str = ""
         self.introspection_endpoint: Optional[str] = None
         self.revocation_endpoint: Optional[str] = None
+        self.device_authorization_endpoint: Optional[str] = None
         self.templates: Jinja2Templates = Jinja2Templates(
             directory="cashu/wallet/auth/openid_connect/templates"
         )
@@ -80,6 +84,9 @@ class OpenIDClient:
                 self.token_endpoint = oidc_config.get("token_endpoint")
                 self.introspection_endpoint = oidc_config.get("introspection_endpoint")
                 self.revocation_endpoint = oidc_config.get("revocation_endpoint")
+                self.device_authorization_endpoint = oidc_config.get(
+                    "device_authorization_endpoint"
+                )
         except httpx.HTTPError as e:
             logger.error(f"Failed to get OpenID configuration: {e}")
             raise
@@ -172,6 +179,8 @@ class OpenIDClient:
                 await self.authenticate_with_authorization_code()
             elif self.auth_flow == AuthorizationFlow.PASSWORD:
                 await self.authenticate_with_password()
+            elif self.auth_flow == AuthorizationFlow.DEVICE_CODE:
+                await self.authenticate_with_device_code()
             else:
                 raise ValueError(f"Unknown authentication flow: {self.auth_flow}")
 
@@ -294,6 +303,100 @@ class OpenIDClient:
         context = {"request": request, "token_data": token_data}
         return self.templates.TemplateResponse("success.html", context)
 
+    async def authenticate_with_device_code(self) -> None:
+        """Authenticate using the device code flow."""
+        if not self.device_authorization_endpoint:
+            raise ValueError("Device authorization endpoint not available.")
+
+        data = {
+            "client_id": self.client_id,
+            "scope": "openid profile email",
+        }
+        if self.client_secret:
+            data["client_secret"] = self.client_secret
+
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    self.device_authorization_endpoint, data=data
+                )
+                response.raise_for_status()
+                device_data = response.json()
+            except httpx.HTTPError as e:
+                logger.error(f"Failed to obtain device code: {e}")
+                raise
+
+        # Extract device code data
+        device_code = device_data.get("device_code")
+        user_code = device_data.get("user_code")
+        verification_uri = device_data.get("verification_uri")
+        verification_uri_complete = device_data.get("verification_uri_complete")
+        expires_in = device_data.get("expires_in")
+        interval = device_data.get("interval", 5)  # Default interval is 5 seconds
+
+        if not device_code or not verification_uri:
+            raise ValueError("Invalid response from device authorization endpoint.")
+
+        # Display instructions to the user and open the browser
+        if verification_uri_complete:
+            logger.info("Opening browser to complete authorization...")
+            logger.info(verification_uri_complete)
+            webbrowser.open(verification_uri_complete)
+        else:
+            logger.info("Please visit the following URL to authorize:")
+            logger.info(verification_uri)
+            logger.info(f"Enter the user code: {user_code}")
+            # Construct the URL for the user to enter the code
+            full_verification_uri = f"{verification_uri}?user_code={user_code}"
+            webbrowser.open(full_verification_uri)
+
+        # Start polling the token endpoint
+        start_time = datetime.now()
+        expires_at = start_time + timedelta(seconds=expires_in)
+        token_data = None
+        while datetime.now() < expires_at:
+            await asyncio.sleep(interval)
+            data = {
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                "device_code": device_code,
+                "client_id": self.client_id,
+            }
+            if self.client_secret:
+                data["client_secret"] = self.client_secret
+            async with httpx.AsyncClient() as client:
+                try:
+                    response = await client.post(self.token_endpoint, data=data)
+                    if response.status_code == 200:
+                        # Successful response
+                        token_data = response.json()
+                        self.update_token_data(token_data)
+                        logger.info("Authentication successful!")
+                        break
+                    else:
+                        error_data = response.json()
+                        error = error_data.get("error")
+                        if error == "authorization_pending":
+                            # Continue polling
+                            pass
+                        elif error == "slow_down":
+                            # Increase interval by 5 seconds
+                            interval += 5
+                        elif error == "access_denied":
+                            logger.error("Access denied by user.")
+                            break
+                        elif error == "expired_token":
+                            logger.error("Device code has expired.")
+                            break
+                        else:
+                            logger.error(f"Error during polling: {error}")
+                            break
+                except httpx.HTTPError as e:
+                    logger.error(f"HTTP error during token polling: {e}")
+                    break
+        else:
+            logger.error("Device code has expired before authorization.")
+            raise Exception("Device code expired")
+
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="OpenID Connect Authentication Client")
@@ -302,7 +405,7 @@ async def main() -> None:
     parser.add_argument("--client_secret", help="Client Secret", default="")
     parser.add_argument(
         "--auth_flow",
-        choices=["authorization_code", "password"],
+        choices=["authorization_code", "password", "device_code"],
         default="authorization_code",
         help="Authentication flow to use",
     )
@@ -310,6 +413,7 @@ async def main() -> None:
     parser.add_argument("--password", help="Password for password flow")
     parser.add_argument("--access_token", help="Stored access token")
     parser.add_argument("--refresh_token", help="Stored refresh token")
+    parser.add_argument("--device_code", help="Device code for device flow")
     args = parser.parse_args()
 
     client = OpenIDClient(
@@ -321,6 +425,7 @@ async def main() -> None:
         password=args.password,
         access_token=args.access_token,
         refresh_token=args.refresh_token,
+        device_code=args.device_code,
     )
     await client.initialize()
     await client.authenticate()

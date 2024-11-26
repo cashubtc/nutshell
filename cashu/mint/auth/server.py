@@ -19,8 +19,8 @@ class AuthLedger(Ledger):
     auth_crud: AuthLedgerCrud
     jwks_url: str
     jwks_client: jwt.PyJWKClient
-    signing_key: jwt.PyJWK
-    oicd_discovery_url: str
+    issuer: str
+    oicd_discovery_json: dict
 
     def __init__(
         self,
@@ -50,20 +50,9 @@ class AuthLedger(Ledger):
         self.jwks_url = self.oicd_discovery_json["jwks_uri"]
         self.jwks_client = jwt.PyJWKClient(self.jwks_url)
         logger.info(f"Getting JWKS from: {self.jwks_url}")
-        self.signing_key = self.fetch_es256_signing_key(self.jwks_url)
         self.auth_crud = AuthLedgerCrudSqlite()
         self.issuer: str = self.oicd_discovery_json["issuer"]
         logger.info(f"Initialized OpenID Connect: {self.issuer}")
-
-    def fetch_es256_signing_key(self, jwks_url: str) -> jwt.PyJWK:
-        """Fetch the ES256 signing key from the JWKS."""
-        response = httpx.get(jwks_url)
-        response.raise_for_status()
-        jwks = response.json()
-        for key in jwks["keys"]:
-            if key.get("alg") == "ES256" and key.get("use") == "sig":
-                return jwt.PyJWK.from_dict(key)
-        raise Exception("No ES256 signing key found in JWKS. Make sure to enable it.")
 
     def _get_oicd_discovery_json(self) -> dict:
         resp = httpx.get(self.oicd_discovery_url)
@@ -74,7 +63,7 @@ class AuthLedger(Ledger):
         """Verify the issuer of the clear-auth token.
 
         Args:
-            clear_auth_token (str): _description_
+            clear_auth_token (str): JWT token.
 
         Raises:
             Exception: Invalid issuer.
@@ -105,12 +94,14 @@ class AuthLedger(Ledger):
             Any: Decoded JWT.
         """
         try:
+            # Use PyJWKClient to fetch the appropriate key based on the token's header
+            signing_key = self.jwks_client.get_signing_key_from_jwt(clear_auth_token)
             decoded = jwt.decode(
                 clear_auth_token,
-                self.signing_key.key,
-                algorithms=["ES256"],
-                verify=True,
+                signing_key.key,
+                algorithms=["RS256", "ES256"],
                 options={"verify_aud": False},
+                issuer=self.issuer,
             )
             logger.trace(f"Decoded JWT: {decoded}")
         except jwt.ExpiredSignatureError as e:
@@ -153,10 +144,10 @@ class AuthLedger(Ledger):
             - User exists.
 
         Args:
-            auth_token (str): _description_
+            auth_token (str): JWT token.
 
         Returns:
-            User: _description_
+            User: Authenticated user.
         """
         self._verify_oicd_issuer(clear_auth_token)
         decoded = self._verify_decode_jwt(clear_auth_token)
@@ -191,7 +182,7 @@ class AuthLedger(Ledger):
             Exception: Output quota exceeded.
 
         Returns:
-            List[BlindedSignature]: _description_
+            List[BlindedSignature]: List of blinded signatures.
         """
 
         if len(outputs) > settings.mint_auth_max_blind_tokens:
@@ -211,7 +202,7 @@ class AuthLedger(Ledger):
         """Melts the proofs of a blind auth token. Returns if successful, raises an exception otherwise.
 
         Args:
-            proofs (List[Proof]): Proofs to melt (must be a list of length 1).
+            blind_auth_token (str): Blind auth token.
 
         Raises:
             Exception: Proof already spent or pending.

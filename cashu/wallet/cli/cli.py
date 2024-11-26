@@ -1258,6 +1258,9 @@ async def selfpay(ctx: Context, all: bool = False):
 
 
 @cli.command("auth", help="Authenticate with mint.")
+@click.option(
+    "--force", "-f", default=False, is_flag=True, help="Force re-authentication."
+)
 @click.option("--mint", "-m", default=False, is_flag=True, help="Mint new auth tokens.")
 @click.option(
     "--password",
@@ -1268,7 +1271,7 @@ async def selfpay(ctx: Context, all: bool = False):
 )
 @click.pass_context
 @coro
-async def auth(ctx: Context, mint: bool, password: bool):
+async def auth(ctx: Context, force: bool, mint: bool, password: bool):
     # auth_wallet: WalletAuth = ctx.obj["AUTH_WALLET"]
     wallet: Wallet = ctx.obj["WALLET"]
     username = None
@@ -1292,7 +1295,7 @@ async def auth(ctx: Context, mint: bool, password: bool):
         return
 
     await auth_wallet.oidc_client.initialize()
-    await auth_wallet.oidc_client.authenticate(force_authenticate=True)
+    await auth_wallet.oidc_client.authenticate(force_authenticate=force)
 
     await auth_wallet.load_proofs(reload=True)
     print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
