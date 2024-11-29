@@ -1283,6 +1283,7 @@ class AuthProof(BaseModel):
     id: str
     secret: str  # secret
     C: str  # signature
+    amount: int = 1  # default amount
 
     prefix: ClassVar[str] = "authA"
 
@@ -1291,6 +1292,7 @@ class AuthProof(BaseModel):
         return cls(id=proof.id, secret=proof.secret, C=proof.C)
 
     def to_base64(self):
+        # TODO: exclude amount in serialization
         return self.prefix + base64.b64encode(json.dumps(self.dict()).encode()).decode()
 
     @classmethod
@@ -1302,7 +1304,7 @@ class AuthProof(BaseModel):
         return cls.parse_obj(json.loads(base64.b64decode(base64_str).decode()))
 
     def to_proof(self):
-        return Proof(id=self.id, secret=self.secret, C=self.C)
+        return Proof(id=self.id, secret=self.secret, C=self.C, amount=self.amount)
 
 
 class WalletMint(BaseModel):

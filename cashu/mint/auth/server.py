@@ -1,4 +1,5 @@
 import datetime
+from contextlib import asynccontextmanager
 from typing import Any, List, Optional
 
 import httpx
@@ -198,20 +199,27 @@ class AuthLedger(Ledger):
 
         return promises
 
-    async def verify_blind_auth(self, *, blind_auth_token) -> None:
-        """Melts the proofs of a blind auth token. Returns if successful, raises an exception otherwise.
+    @asynccontextmanager
+    async def verify_blind_auth(self, blind_auth_token):
+        """Wrapper context that puts blind auth tokens into pending list and
+        melts them if the wrapped call succeeds. If it fails, the blind auth
+        token is not invalidated.
 
         Args:
             blind_auth_token (str): Blind auth token.
 
         Raises:
-            Exception: Proof already spent or pending.
+            Exception: Blind auth token validation failed.
         """
-        logger.trace(f"Blind auth token: {blind_auth_token}")
         try:
             proof = AuthProof.from_base64(blind_auth_token).to_proof()
+            await self.verify_inputs_and_outputs(proofs=[proof])
             await self.db_write._verify_spent_proofs_and_set_pending([proof])
-            await self._invalidate_proofs(proofs=[proof])
-            await self.db_write._unset_proofs_pending([proof])
         except Exception as e:
             raise Exception(f"Blind auth error: {e}")
+
+        try:
+            yield
+            await self._invalidate_proofs(proofs=[proof])
+        finally:
+            await self.db_write._unset_proofs_pending([proof])

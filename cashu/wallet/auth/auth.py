@@ -11,7 +11,6 @@ from ...core.crypto.secp import PrivateKey
 from ...core.db import Database
 from ...core.settings import settings
 from ..crud import get_mint_by_url, update_mint
-from ..errors import BalanceTooLowError
 from ..wallet import Wallet
 from .openid_connect.openid_client import AuthorizationFlow, OpenIDClient
 
@@ -50,6 +49,7 @@ class WalletAuth(Wallet):
         """
         super().__init__(url, db, name, unit)
         self.client_id = kwargs.get("client_id", "cashu-client")
+        logger.trace(f"client_id: {self.client_id}")
         self.client_secret = kwargs.get("client_secret", "")
         self.username = kwargs.get("username")
         self.password = kwargs.get("password")
@@ -59,6 +59,7 @@ class WalletAuth(Wallet):
                 raise Exception("Password must be set if username is set.")
             self.auth_flow = AuthorizationFlow.PASSWORD
         else:
+            # self.auth_flow = AuthorizationFlow.AUTHORIZATION_CODE
             self.auth_flow = AuthorizationFlow.DEVICE_CODE
 
         self.access_token = kwargs.get("access_token")
@@ -115,6 +116,8 @@ class WalletAuth(Wallet):
         await self.load_proofs()
 
         self.oidc_discovery_url = self.mint_info.oidc_discovery_url()
+        self.client_id = self.mint_info.oidc_client_id()
+
         # Initialize OpenIDClient
         self.oidc_client = OpenIDClient(
             discovery_url=self.oidc_discovery_url,
@@ -165,19 +168,6 @@ class WalletAuth(Wallet):
             mint_db.access_token = access_token
             mint_db.refresh_token = refresh_token
             await update_mint(self.db, mint_db)
-
-    async def spend_auth_token(self) -> str:
-        try:
-            auth_proofs, _ = await self.select_to_send(self.proofs, 1, offline=True)
-        except BalanceTooLowError:
-            logger.debug("Balance too low. Requesting new blind auth tokens.")
-            await self.mint_blind_auth_proofs()
-            auth_proofs, _ = await self.select_to_send(self.proofs, 1, offline=True)
-        except Exception as e:
-            raise e
-        blind_auth_token = await self.serialize_proofs(auth_proofs)
-        await self.invalidate(auth_proofs)
-        return blind_auth_token
 
     async def mint_blind_auth_proofs(self) -> List[Proof]:
         # Ensure access token is valid

@@ -100,7 +100,8 @@ else:
     app.include_router(router=router, tags=["Mint"])
     app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
 
-app.include_router(auth_router, tags=["Auth"])
+if settings.mint_require_auth:
+    app.include_router(auth_router, tags=["Auth"])
 
 
 @app.on_event("startup")

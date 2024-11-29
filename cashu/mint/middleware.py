@@ -60,7 +60,7 @@ class ClearAuthMiddleware(BaseHTTPMiddleware):
         ):
             clear_auth_token = request.headers.get("clear-auth")
             if not clear_auth_token:
-                raise Exception("Missing clearauth token.")
+                raise Exception("Missing clear auth token.")
             try:
                 user = await auth_ledger.verify_clear_auth(
                     clear_auth_token=clear_auth_token
@@ -83,12 +83,11 @@ class BlindAuthMiddleware(BaseHTTPMiddleware):
         ):
             blind_auth_token = request.headers.get("blind-auth")
             if not blind_auth_token:
-                raise Exception("Missing blindauth token.")
-            try:
-                await auth_ledger.verify_blind_auth(blind_auth_token=blind_auth_token)
-            except Exception as e:
-                raise e
-        return await call_next(request)
+                raise Exception("Missing blind auth token.")
+            async with auth_ledger.verify_blind_auth(blind_auth_token):
+                return await call_next(request)
+        else:
+            return await call_next(request)
 
 
 async def request_validation_exception_handler(

@@ -48,7 +48,7 @@ class OpenIDClient:
         self.token_expiration_time: Optional[datetime] = token_expiration_time
         self.device_code: Optional[str] = device_code
 
-        self.redirect_uri: str = "http://localhost:33388"
+        self.redirect_uri: str = "http://127.0.0.1:33388/callback"
         self.expected_state: str = secrets.token_urlsafe(16)
         self.token_response: Dict[str, Any] = {}
         self.token_event: asyncio.Event = asyncio.Event()
@@ -217,11 +217,12 @@ class OpenIDClient:
     async def authenticate_with_authorization_code(self) -> None:
         """Authenticate using the authorization code flow."""
         # Build the authorization URL
+        print(f"{self.client_id=}")
         params = {
             "response_type": "code",
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
-            "scope": "openid profile email",
+            "scope": "openid offline",
             "state": self.expected_state,
         }
         auth_url = f"{self.authorization_endpoint}?{urlencode(params)}"

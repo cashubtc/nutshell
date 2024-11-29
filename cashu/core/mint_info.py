@@ -65,8 +65,17 @@ class MintInfo(BaseModel):
 
     def oidc_discovery_url(self) -> str:
         if not self.requires_clear_auth():
-            return ""
+            raise Exception(
+                "Could not get OIDC discovery URL. Mint info does not support clear auth."
+            )
         return self.nuts[CLEAR_AUTH_NUT]["openid_discovery"]
+
+    def oidc_client_id(self) -> str:
+        if not self.requires_clear_auth():
+            raise Exception(
+                "Could not get client_id. Mint info does not support clear auth."
+            )
+        return self.nuts[CLEAR_AUTH_NUT]["client_id"]
 
     def required_clear_auth_endpoints(self) -> List[MintInfoProtectedEndpoint]:
         if not self.requires_clear_auth():

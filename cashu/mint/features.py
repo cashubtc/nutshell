@@ -26,6 +26,21 @@ from ..core.nuts import (
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey
 
+_VERSION_PREFIX = "Nutshell"
+_SUPPORTED = "supported"
+_METHOD = "method"
+_UNIT = "unit"
+_BOLT11 = "bolt11"
+_MPP = "mpp"
+_COMMANDS = "commands"
+_BOLT11_MINT_QUOTE = "bolt11_mint_quote"
+_BOLT11_MELT_QUOTE = "bolt11_melt_quote"
+_PROOF_STATE = "proof_state"
+_PROTECTED_ENDPOINTS = "protected_endpoints"
+_BAT_MAX_MINT = "bat_max_mint"
+_OPENID_DISCOVERY = "openid_discovery"
+_CLIENT_ID = "client_id"
+
 
 class LedgerFeatures(SupportsBackends, SupportsPubkey):
     @property
@@ -38,7 +53,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         return MintInfo(
             name=settings.mint_info_name,
             pubkey=self.pubkey.serialize().hex() if self.pubkey else None,
-            version=f"Nutshell/{settings.version}",
+            version=f"{_VERSION_PREFIX}/{settings.version}",
             description=settings.mint_info_description,
             description_long=settings.mint_info_description_long,
             contact=contact_info,
@@ -95,9 +110,9 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                 if unit_dict[unit].supports_mpp:
                     mpp_features.append(
                         {
-                            "method": method.name,
-                            "unit": unit.name,
-                            "mpp": True,
+                            _METHOD: method.name,
+                            _UNIT: unit.name,
+                            _MPP: True,
                         }
                     )
 
@@ -107,25 +122,25 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         # specify which websocket features are supported
         # these two are supported by default
         websocket_features: Dict[str, List[Dict[str, Union[str, List[str]]]]] = {
-            "supported": []
+            _SUPPORTED: []
         }
         # we check the backend to see if "bolt11_mint_quote" is supported as well
         for method, unit_dict in self.backends.items():
-            if method == Method["bolt11"]:
+            if method == Method[_BOLT11]:
                 for unit in unit_dict.keys():
-                    websocket_features["supported"].append(
+                    websocket_features[_SUPPORTED].append(
                         {
-                            "method": method.name,
-                            "unit": unit.name,
-                            "commands": ["bolt11_melt_quote", "proof_state"],
+                            _METHOD: method.name,
+                            _UNIT: unit.name,
+                            _COMMANDS: [_BOLT11_MELT_QUOTE, _PROOF_STATE],
                         }
                     )
                     if unit_dict[unit].supports_incoming_payment_stream:
                         supported_features: List[str] = list(
-                            websocket_features["supported"][-1]["commands"]
+                            websocket_features[_SUPPORTED][-1][_COMMANDS]
                         )
-                        websocket_features["supported"][-1]["commands"] = (
-                            supported_features + ["bolt11_mint_quote"]
+                        websocket_features[_SUPPORTED][-1][_COMMANDS] = (
+                            supported_features + [_BOLT11_MINT_QUOTE]
                         )
 
         if websocket_features:
@@ -138,27 +153,28 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                     "Missing OpenID Connect discovery URL: MINT_AUTH_OICD_DISCOVERY_URL"
                 )
             clear_auth_features: Dict[str, Union[bool, str, List[str]]] = {
-                "openid_discovery": settings.mint_auth_oicd_discovery_url,
-                "protected_endpoints": [],
+                _OPENID_DISCOVERY: settings.mint_auth_oicd_discovery_url,
+                _CLIENT_ID: settings.mint_auth_oicd_client_id,
+                _PROTECTED_ENDPOINTS: [],
             }
 
             for endpoint in [
                 MintInfoProtectedEndpoint(method=e[0], path=e[1])
                 for e in settings.mint_require_clear_auth_paths
             ]:
-                clear_auth_features["protected_endpoints"].append(endpoint.dict())  # type: ignore
+                clear_auth_features[_PROTECTED_ENDPOINTS].append(endpoint.dict())  # type: ignore
 
             mint_features[CLEAR_AUTH_NUT] = clear_auth_features
 
             blind_auth_features: Dict[str, Union[bool, int, str, List[str]]] = {
-                "max_mint": settings.mint_auth_max_blind_tokens,
-                "protected_endpoints": [],
+                _BAT_MAX_MINT: settings.mint_auth_max_blind_tokens,
+                _PROTECTED_ENDPOINTS: [],
             }
             for endpoint in [
                 MintInfoProtectedEndpoint(method=e[0], path=e[1])
                 for e in settings.mint_require_blind_auth_paths
             ]:
-                blind_auth_features["protected_endpoints"].append(endpoint.dict())  # type: ignore
+                blind_auth_features[_PROTECTED_ENDPOINTS].append(endpoint.dict())  # type: ignore
 
             mint_features[BLIND_AUTH_NUT] = blind_auth_features
 

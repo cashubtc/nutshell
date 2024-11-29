@@ -205,8 +205,10 @@ class Wallet(
             self.keysets = {k.id: k for k in keysets_active_unit}
         else:
             self.keysets = {k.id: k for k in keysets_list}
-        keysets_str = " ".join([f"{i} {k.unit}" for i, k in self.keysets.items()])
-        logger.debug(f"Loaded keysets: {keysets_str}")
+
+        if self.keysets:
+            keysets_str = " ".join([f"{i} {k.unit}" for i, k in self.keysets.items()])
+            logger.debug(f"Loaded keysets: {keysets_str}")
 
         await self.load_mint_info(offline=True)
 

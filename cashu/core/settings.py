@@ -236,6 +236,7 @@ class CoreLightningRestFundingSource(MintSettings):
 class AuthSettings(MintSettings):
     mint_require_auth: bool = Field(default=False)
     mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
+    mint_auth_oicd_client_id: str = Field(default="cashu-client")
     mint_auth_rate_limit_seconds: int = Field(default=24 * 60 * 60)
     mint_auth_max_blind_tokens: int = Field(default=100, gt=0)
     mint_require_clear_auth_paths: List[List[str]] = [
