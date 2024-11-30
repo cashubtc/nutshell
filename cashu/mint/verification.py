@@ -335,7 +335,6 @@ class LedgerVerification(
 
             Args:
                 dlc (DiscreetLogContract): the DLC to be funded
-                proofs: (List[Proof]): proofs to be verified
 
             Raises:
                 DlcVerificationFail

@@ -1223,8 +1223,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         for registration in request.registrations:
             try:
                 logger.trace(f"processing registration {registration.dlc_root}")
-                assert registration.inputs is not None # mypy give me a break
+                assert registration.inputs is not None
                 await self._verify_dlc_inputs(registration)
+
                 amount_provided = await self._verify_dlc_amount_fees_coverage(
                     registration.funding_amount,
                     registration.unit,

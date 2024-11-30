@@ -63,7 +63,7 @@ class LedgerFeatures(SupportsBackends):
             DLC_NUT: dict(
                 supported=True,
                 funding_proof_pubkey='XXXXXX',
-                max_payous=30,
+                max_payouts=30,
                 ttl=2629743, # 1 month
                 fees=dict(
                     sat=dict(
