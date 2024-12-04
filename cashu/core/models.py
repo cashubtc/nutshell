@@ -73,7 +73,6 @@ class GetInfoResponse(BaseModel):
 class Nut15MppSupport(BaseModel):
     method: str
     unit: str
-    mpp: bool
 
 
 class GetInfoResponse_deprecated(BaseModel):
@@ -132,6 +131,7 @@ class PostMintQuoteRequest(BaseModel):
     pubkey: Optional[str] = Field(
         default=None, max_length=settings.mint_max_request_length
     )  # quote lock pubkey
+
 
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id

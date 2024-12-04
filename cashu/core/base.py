@@ -737,6 +737,12 @@ class MintKeyset:
         input_fee_ppk: Optional[int] = None,
         id: str = "",
     ):
+        DEFAULT_SEED = "supersecretprivatekey"
+        if seed == DEFAULT_SEED:
+            raise Exception(
+                f"Seed is set to default value '{DEFAULT_SEED}'. Please change it."
+            )
+
         self.derivation_path = derivation_path
 
         if encrypted_seed and not settings.mint_seed_decryption_key:

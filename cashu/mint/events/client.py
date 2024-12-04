@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import List, Union
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 from loguru import logger
 
 from ...core.base import MeltQuote, MintQuote, ProofState
@@ -122,6 +122,9 @@ class LedgerEventClientManager:
                 resp = await self._handle_request(req)
                 # Send the response
                 await self._send_msg(resp)
+            except WebSocketDisconnect as e:
+                logger.debug(f"Websocket disconnected: {e}")
+                raise e
             except Exception as e:
                 err = JSONRPCErrorResponse(
                     error=JSONRPCError(

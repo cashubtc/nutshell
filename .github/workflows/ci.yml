@@ -8,6 +8,7 @@ on:
 jobs:
   checks:
     uses: ./.github/workflows/checks.yml
+
   tests:
     strategy:
       fail-fast: false
@@ -25,6 +26,22 @@ jobs:
       poetry-version: ${{ matrix.poetry-version }}
       mint-only-deprecated: ${{ matrix.mint-only-deprecated }}
       mint-database: ${{ matrix.mint-database }}
+
+  tests_redis_cache:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10"]
+        poetry-version: ["1.7.1"]
+        mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
+    uses: ./.github/workflows/tests_redis_cache.yml
+    with:
+      os: ${{ matrix.os }}
+      python-version: ${{ matrix.python-version }}
+      poetry-version: ${{ matrix.poetry-version }}
+      mint-database: ${{ matrix.mint-database }}
+
   regtest:
     uses: ./.github/workflows/regtest.yml
     strategy:
