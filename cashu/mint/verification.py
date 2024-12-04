@@ -21,7 +21,7 @@ from ..core.errors import (
     TransactionError,
     TransactionUnitError,
 )
-from ..core.nuts import nutxx
+from ..core.nuts import nut20
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
 from ..mint.crud import LedgerCrud
@@ -281,11 +281,14 @@ class LedgerVerification(
         return unit, method
 
     def _verify_mint_quote_witness(
-        self, quote: MintQuote, outputs: List[BlindedMessage], witness: Optional[str],
+        self,
+        quote: MintQuote,
+        outputs: List[BlindedMessage],
+        witness: Optional[str],
     ) -> bool:
         """Verify signature on quote id and outputs"""
         if not quote.pubkey:
             return True
         if not witness:
             return False
-        return nutxx.verify_mint_quote(quote.quote, outputs, quote.pubkey, witness)
+        return nut20.verify_mint_quote(quote.quote, outputs, quote.pubkey, witness)

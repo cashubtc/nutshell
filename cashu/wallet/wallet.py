@@ -36,7 +36,7 @@ from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
 )
-from ..core.nuts import nutxx
+from ..core.nuts import nut20
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -387,7 +387,11 @@ class Wallet(
         logger.trace("Secret check complete.")
 
     async def request_mint_with_callback(
-        self, amount: int, callback: Callable, memo: Optional[str] = None, keypair: Optional[Tuple[str, str]] = None
+        self,
+        amount: int,
+        callback: Callable,
+        memo: Optional[str] = None,
+        keypair: Optional[Tuple[str, str]] = None,
     ) -> Tuple[MintQuote, SubscriptionManager]:
         """Request a quote invoice for minting tokens.
 
@@ -417,7 +421,8 @@ class Wallet(
 
         return quote, subscriptions
 
-    async def request_mint(self,
+    async def request_mint(
+        self,
         amount: int,
         memo: Optional[str] = None,
         keypair: Optional[Tuple[str, str]] = None,
@@ -444,8 +449,7 @@ class Wallet(
 
     # TODO: generate secret with BIP39 (seed and specific derivation + counter)
     async def get_quote_ephemeral_keypair(self) -> Optional[Tuple[str, str]]:
-        """Creates a keypair for a quote IF the mint supports NUT-19
-        """
+        """Creates a keypair for a quote IF the mint supports NUT-19"""
         if not self.mint_info:
             await self.load_mint_info()
         if self.mint_info.supports_mint_quote_signature():
@@ -549,7 +553,7 @@ class Wallet(
 
         witness: Optional[str] = None
         if quote_privkey:
-            witness = nutxx.sign_mint_quote(quote_id, outputs, quote_privkey)
+            witness = nut20.sign_mint_quote(quote_id, outputs, quote_privkey)
 
         # will raise exception if mint is unsuccessful
         promises = await super().mint(outputs, quote_id, witness)

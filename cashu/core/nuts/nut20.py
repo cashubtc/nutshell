@@ -7,11 +7,9 @@ from ..crypto.secp import PrivateKey, PublicKey
 
 def construct_message(quote_id: str, outputs: List[BlindedMessage]) -> bytes:
     serialized_outputs = b"".join([o.B_.encode("utf-8") for o in outputs])
-    msgbytes = sha256(
-        quote_id.encode("utf-8")
-        + serialized_outputs
-    ).digest()
+    msgbytes = sha256(quote_id.encode("utf-8") + serialized_outputs).digest()
     return msgbytes
+
 
 def sign_mint_quote(
     quote_id: str,
@@ -22,6 +20,7 @@ def sign_mint_quote(
     msgbytes = construct_message(quote_id, outputs)
     sig = privkey.schnorr_sign(msgbytes, None, raw=True)
     return sig.hex()
+
 
 def verify_mint_quote(
     quote_id: str,

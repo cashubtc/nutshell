@@ -189,7 +189,7 @@ async def swap(
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    # get keypair to lock the quote with (NUTXX)
+    # get keypair to lock the quote with (NUT-20)
     keypair = await incoming_wallet.get_quote_ephemeral_keypair()
     # request invoice from incoming mint
     mint_quote = await incoming_wallet.request_mint(amount, keypair=keypair)
@@ -209,7 +209,9 @@ async def swap(
     )
 
     # mint token in incoming mint
-    await incoming_wallet.mint(amount, quote_id=mint_quote.quote, quote_privkey=mint_quote.privkey)
+    await incoming_wallet.mint(
+        amount, quote_id=mint_quote.quote, quote_privkey=mint_quote.privkey
+    )
     await incoming_wallet.load_proofs(reload=True)
     mint_balances = await incoming_wallet.balance_per_minturl()
     return SwapResponse(
