@@ -57,7 +57,7 @@ class MintInfo(BaseModel):
     def supports_mint_quote_signature(self) -> bool:
         if not self.nuts:
             return False
-        nut19 = self.nuts.get(MINT_QUOTE_SIGNATURE_NUT, None)
-        if nut19:
-            return nut19["supported"]
+        nutxx = self.nuts.get(MINT_QUOTE_SIGNATURE_NUT, None)
+        if nutxx:
+            return nutxx["supported"]
         return False

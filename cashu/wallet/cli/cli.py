@@ -365,7 +365,7 @@ async def invoice(
         mint_supports_websockets = wallet.mint_info.supports_websocket_mint_quote(
             Method["bolt11"], wallet.unit
         )
-        # get keypair for NUT19 or None
+        # get keypair for quote
         keypair = await wallet.get_quote_ephemeral_keypair()
         if mint_supports_websockets and not no_check:
             mint_quote, subscription = await wallet.request_mint_with_callback(

@@ -21,7 +21,7 @@ from ..core.errors import (
     TransactionError,
     TransactionUnitError,
 )
-from ..core.nuts import nut19
+from ..core.nuts import nutxx
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
 from ..mint.crud import LedgerCrud
@@ -288,4 +288,4 @@ class LedgerVerification(
             return True
         if not witness:
             return False
-        return nut19.verify_mint_quote(quote.quote, outputs, quote.pubkey, witness)
+        return nutxx.verify_mint_quote(quote.quote, outputs, quote.pubkey, witness)

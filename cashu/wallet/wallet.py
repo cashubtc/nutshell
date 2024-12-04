@@ -36,7 +36,7 @@ from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
 )
-from ..core.nuts import nut19
+from ..core.nuts import nutxx
 from ..core.p2pk import Secret
 from ..core.settings import settings
 from ..core.split import amount_split
@@ -549,7 +549,7 @@ class Wallet(
 
         witness: Optional[str] = None
         if quote_privkey:
-            witness = nut19.sign_mint_quote(quote_id, outputs, quote_privkey)
+            witness = nutxx.sign_mint_quote(quote_id, outputs, quote_privkey)
 
         # will raise exception if mint is unsuccessful
         promises = await super().mint(outputs, quote_id, witness)
