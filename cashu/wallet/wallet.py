@@ -454,6 +454,7 @@ class Wallet(
             await self.load_mint_info()
         if self.mint_info.supports_mint_quote_signature():
             privkey = PrivateKey()
+            assert privkey.pubkey
             pubkey = privkey.pubkey.serialize(True).hex()
             return privkey.serialize(), pubkey
         else:
