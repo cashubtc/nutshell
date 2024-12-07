@@ -261,6 +261,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             paid=False,
             state=MintQuoteState.unpaid.value,
             expiry=decoded_invoice.date + (decoded_invoice.expiry or 0),
+            pubkey=None
         )
 
     @async_set_httpx_client

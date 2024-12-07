@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from ..core.base import Method, Unit
 from ..core.models import MintInfoContact, Nut15MppSupport
-from ..core.nuts import MPP_NUT, WEBSOCKETS_NUT
+from ..core.nuts.nuts import MINT_QUOTE_SIGNATURE_NUT, MPP_NUT, WEBSOCKETS_NUT
 
 
 class MintInfo(BaseModel):
@@ -52,4 +52,12 @@ class MintInfo(BaseModel):
             if entry["method"] == method.name and entry["unit"] == unit.name:
                 if "bolt11_mint_quote" in entry["commands"]:
                     return True
+        return False
+
+    def supports_mint_quote_signature(self) -> bool:
+        if not self.nuts:
+            return False
+        nut20 = self.nuts.get(MINT_QUOTE_SIGNATURE_NUT, None)
+        if nut20:
+            return nut20["supported"]
         return False

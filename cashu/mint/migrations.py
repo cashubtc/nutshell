@@ -838,3 +838,12 @@ async def m022_quote_set_states_to_values(db: Database):
             await conn.execute(
                 f"UPDATE {db.table_with_schema('mint_quotes')} SET state = '{mint_quote_states.value}' WHERE state = '{mint_quote_states.name}'"
             )
+
+async def m023_add_key_to_mint_quote_table(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('mint_quotes')}
+                ADD COLUMN pubkey TEXT DEFAULT NULL
+            """
+        )
