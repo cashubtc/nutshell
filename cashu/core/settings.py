@@ -63,7 +63,6 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=0)
     mint_disable_melt_on_error: bool = Field(default=False)
-    mint_quote_signature_required: bool = Field(default=False)
 
 
 class MintDeprecationFlags(MintSettings):

@@ -39,7 +39,6 @@ from ..core.errors import (
     NotAllowedError,
     QuoteInvalidWitnessError,
     QuoteNotPaidError,
-    QuoteRequiresPubkeyError,
     TransactionError,
 )
 from ..core.helpers import sum_proofs
@@ -424,9 +423,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             balance = await self.get_balance()
             if balance + quote_request.amount > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
-
-        if settings.mint_quote_signature_required and not quote_request.pubkey:
-            raise QuoteRequiresPubkeyError()
 
         logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
         invoice_response: InvoiceResponse = await self.backends[method][
