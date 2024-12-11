@@ -48,7 +48,7 @@ class OpenIDClient:
         self.token_expiration_time: Optional[datetime] = token_expiration_time
         self.device_code: Optional[str] = device_code
 
-        self.redirect_uri: str = "http://127.0.0.1:33388/callback"
+        self.redirect_uri: str = "http://localhost:33388/callback"
         self.expected_state: str = secrets.token_urlsafe(16)
         self.token_response: Dict[str, Any] = {}
         self.token_event: asyncio.Event = asyncio.Event()
@@ -65,9 +65,10 @@ class OpenIDClient:
         self.app.state.client = self  # Store self in app state
 
         # Set up the route handlers
-        @self.app.get("/", response_class=HTMLResponse)
-        async def read_root(request: Request) -> Any:
-            return await self.read_root(request)
+        # TODO: enable callback only for authorization_code flow
+        @self.app.get("/callback", response_class=HTMLResponse)
+        async def handle_callback(request: Request) -> Any:
+            return await self.handle_callback(request)
 
     async def initialize(self) -> None:
         """Initialize the client asynchronously."""
@@ -91,13 +92,16 @@ class OpenIDClient:
             logger.error(f"Failed to get OpenID configuration: {e}")
             raise
 
-    async def read_root(self, request: Request) -> HTMLResponse:
+    async def handle_callback(self, request: Request) -> HTMLResponse:
         """Endpoint to handle the redirect from the OpenID provider."""
         params = request.query_params
         if "error" in params:
+            error_str = params["error"]
+            if "error_description" in params:
+                error_str += f": {params['error_description']}"
             return self.templates.TemplateResponse(
                 "error.html",
-                {"request": request, "error": params["error"]},
+                {"request": request, "error": error_str},
             )
         elif "code" in params and "state" in params:
             code: str = params["code"]
@@ -222,7 +226,7 @@ class OpenIDClient:
             "response_type": "code",
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
-            "scope": "openid offline",
+            "scope": "openid",
             "state": self.expected_state,
         }
         auth_url = f"{self.authorization_endpoint}?{urlencode(params)}"
@@ -257,6 +261,10 @@ class OpenIDClient:
         self.token_response.update(token_data)
         self.access_token = token_data.get("access_token")
         self.refresh_token = token_data.get("refresh_token")
+        if not self.access_token or not self.refresh_token:
+            raise ValueError(
+                "Access token or refresh token not found in token response."
+            )
         expires_in = token_data.get("expires_in")
         if expires_in:
             self.token_expiration_time = datetime.utcnow() + timedelta(
@@ -280,7 +288,7 @@ class OpenIDClient:
             "client_id": self.client_id,
             "username": self.username,
             "password": self.password,
-            "scope": "openid profile email",
+            "scope": "openid",
         }
         if self.client_secret:
             data["client_secret"] = self.client_secret
@@ -311,7 +319,7 @@ class OpenIDClient:
 
         data = {
             "client_id": self.client_id,
-            "scope": "openid profile email",
+            "scope": "openid",
         }
         if self.client_secret:
             data["client_secret"] = self.client_secret

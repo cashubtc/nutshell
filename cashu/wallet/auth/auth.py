@@ -59,8 +59,8 @@ class WalletAuth(Wallet):
                 raise Exception("Password must be set if username is set.")
             self.auth_flow = AuthorizationFlow.PASSWORD
         else:
-            # self.auth_flow = AuthorizationFlow.AUTHORIZATION_CODE
-            self.auth_flow = AuthorizationFlow.DEVICE_CODE
+            self.auth_flow = AuthorizationFlow.AUTHORIZATION_CODE
+            # self.auth_flow = AuthorizationFlow.DEVICE_CODE
 
         self.access_token = kwargs.get("access_token")
         self.refresh_token = kwargs.get("refresh_token")
