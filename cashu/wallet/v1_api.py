@@ -282,7 +282,11 @@ class LedgerAPI(LedgerAPIDeprecated):
     @async_set_httpx_client
     @async_ensure_mint_loaded
     async def mint_quote(
-        self, amount: int, unit: Unit, memo: Optional[str] = None, pubkey: Optional[str] = None
+        self,
+        amount: int,
+        unit: Unit,
+        memo: Optional[str] = None,
+        pubkey: Optional[str] = None,
     ) -> PostMintQuoteResponse:
         """Requests a mint quote from the server and returns a payment request.
 
@@ -298,7 +302,9 @@ class LedgerAPI(LedgerAPIDeprecated):
             Exception: If the mint request fails
         """
         logger.trace("Requesting mint: POST /v1/mint/bolt11")
-        payload = PostMintQuoteRequest(unit=unit.name, amount=amount, description=memo, pubkey=pubkey)
+        payload = PostMintQuoteRequest(
+            unit=unit.name, amount=amount, description=memo, pubkey=pubkey
+        )
         resp = await self.httpx.post(
             join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
         )
@@ -333,14 +339,14 @@ class LedgerAPI(LedgerAPIDeprecated):
     @async_set_httpx_client
     @async_ensure_mint_loaded
     async def mint(
-        self, outputs: List[BlindedMessage], quote: str, witness: Optional[str] = None 
+        self, outputs: List[BlindedMessage], quote: str, signature: Optional[str] = None
     ) -> List[BlindedSignature]:
         """Mints new coins and returns a proof of promise.
 
         Args:
             outputs (List[BlindedMessage]): Outputs to mint new tokens with
             quote (str): Quote ID.
-            witness (Optional[str], optional): NUT-19 signature of the request.
+            signature (Optional[str], optional): NUT-19 signature of the request.
 
         Returns:
             list[Proof]: List of proofs.
@@ -348,7 +354,9 @@ class LedgerAPI(LedgerAPIDeprecated):
         Raises:
             Exception: If the minting fails
         """
-        outputs_payload = PostMintRequest(outputs=outputs, quote=quote, witness=witness)
+        outputs_payload = PostMintRequest(
+            outputs=outputs, quote=quote, signature=signature
+        )
         logger.trace("Checking Lightning invoice. POST /v1/mint/bolt11")
 
         def _mintrequest_include_fields(outputs: List[BlindedMessage]):
@@ -358,8 +366,8 @@ class LedgerAPI(LedgerAPIDeprecated):
                 "quote": ...,
                 "outputs": {i: outputs_include for i in range(len(outputs))},
             }
-            if witness:
-                res["witness"] = ...
+            if signature:
+                res["signature"] = ...
             return res
 
         payload = outputs_payload.dict(include=_mintrequest_include_fields(outputs))  # type: ignore

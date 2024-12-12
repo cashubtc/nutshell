@@ -461,7 +461,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             state=MintQuoteState.unpaid,
             created_time=int(time.time()),
             expiry=expiry,
-            pubkey=quote_request.pubkey
+            pubkey=quote_request.pubkey,
         )
         await self.crud.store_mint_quote(quote=quote, db=self.db)
         await self.events.submit(quote)
@@ -521,7 +521,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         *,
         outputs: List[BlindedMessage],
         quote_id: str,
-        witness: Optional[str] = None,
+        signature: Optional[str] = None,
     ) -> List[BlindedSignature]:
         """Mints new coins if quote with `quote_id` was paid. Ingest blind messages `outputs` and returns blind signatures `promises`.
 
@@ -552,7 +552,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise TransactionError("Mint quote already issued.")
         if not quote.paid:
             raise QuoteNotPaidError()
-            
+
         previous_state = quote.state
         await self.db_write._set_mint_quote_pending(quote_id=quote_id)
         try:
@@ -562,7 +562,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 raise TransactionError("amount to mint does not match quote amount")
             if quote.expiry and quote.expiry > int(time.time()):
                 raise TransactionError("quote expired")
-            if not self._verify_mint_quote_witness(quote, outputs, witness):
+            if not self._verify_mint_quote_witness(quote, outputs, signature):
                 raise QuoteInvalidWitnessError()
 
             promises = await self._generate_promises(outputs)
