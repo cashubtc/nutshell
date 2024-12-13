@@ -37,8 +37,8 @@ from ..core.errors import (
     KeysetNotFoundError,
     LightningError,
     NotAllowedError,
-    QuoteInvalidWitnessError,
     QuoteNotPaidError,
+    QuoteSignatureInvalidError,
     TransactionError,
 )
 from ..core.helpers import sum_proofs
@@ -562,7 +562,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             if quote.expiry and quote.expiry > int(time.time()):
                 raise TransactionError("quote expired")
             if not self._verify_mint_quote_witness(quote, outputs, signature):
-                raise QuoteInvalidWitnessError()
+                raise QuoteSignatureInvalidError()
 
             promises = await self._generate_promises(outputs)
         except Exception as e:

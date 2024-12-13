@@ -14,6 +14,7 @@ from cashu.core.models import (
     PostRestoreRequest,
     PostRestoreResponse,
 )
+from cashu.core.nuts import nut20
 from cashu.core.nuts.nuts import MINT_NUT
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -244,10 +245,16 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     await pay_if_regtest(mint_quote.request)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/v1/mint/bolt11",
-        json={"quote": mint_quote.quote, "outputs": outputs_payload},
+        json={
+            "quote": mint_quote.quote,
+            "outputs": outputs_payload,
+            "signature": signature,
+        },
         timeout=None,
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
