@@ -2,6 +2,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
+from cashu.core.nuts import nut20
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -29,16 +30,18 @@ async def wallet(ledger: Ledger):
 )
 async def test_api_mint_cached_responses(wallet: Wallet):
     # Testing mint
-    invoice = await wallet.request_mint(64)
-    await pay_if_regtest(invoice.request)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
 
-    quote_id = invoice.quote
+    quote_id = mint_quote.quote
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10010, 10011)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(quote_id, outputs, mint_quote.privkey)
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/v1/mint/bolt11",
-        json={"quote": quote_id, "outputs": outputs_payload},
+        json={"quote": quote_id, "outputs": outputs_payload, "signature": signature},
         timeout=None,
     )
     response1 = httpx.post(
@@ -57,17 +60,23 @@ async def test_api_mint_cached_responses(wallet: Wallet):
     reason="settings.mint_redis_cache_enabled is False",
 )
 async def test_api_swap_cached_responses(wallet: Wallet):
-    quote = await wallet.request_mint(64)
-    await pay_if_regtest(quote.request)
+    mint_quote = await wallet.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
 
-    minted = await wallet.mint(64, quote.quote)
+    minted = await wallet.mint(64, mint_quote.quote)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10010, 10011)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
     inputs_payload = [i.dict() for i in minted]
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/v1/swap",
-        json={"inputs": inputs_payload, "outputs": outputs_payload},
+        json={
+            "inputs": inputs_payload,
+            "outputs": outputs_payload,
+            "signature": signature,
+        },
         timeout=None,
     )
     response1 = httpx.post(
@@ -86,15 +95,14 @@ async def test_api_swap_cached_responses(wallet: Wallet):
     reason="settings.mint_redis_cache_enabled is False",
 )
 async def test_api_melt_cached_responses(wallet: Wallet):
-    quote = await wallet.request_mint(64)
+    mint_quote = await wallet.request_mint(64)
     melt_quote = await wallet.melt_quote(invoice_32sat)
 
-    await pay_if_regtest(quote.request)
-    minted = await wallet.mint(64, quote.quote)
+    await pay_if_regtest(mint_quote.request)
+    minted = await wallet.mint(64, mint_quote.quote)
 
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10010, 10010)
     outputs, rs = wallet._construct_outputs([32], secrets, rs)
-
     inputs_payload = [i.dict() for i in minted]
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
