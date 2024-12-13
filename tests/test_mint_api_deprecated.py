@@ -131,7 +131,7 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
         timeout=None,
     )
     mint_quote = GetMintResponse_deprecated.parse_obj(quote_response.json())
-    await pay_if_regtest(mint_quote.hash)
+    await pay_if_regtest(mint_quote.pr)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     outputs_payload = [o.dict() for o in outputs]
