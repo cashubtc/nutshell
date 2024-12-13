@@ -46,7 +46,7 @@ async def test_api_mint_cached_responses(wallet: Wallet):
     )
     response1 = httpx.post(
         f"{BASE_URL}/v1/mint/bolt11",
-        json={"quote": quote_id, "outputs": outputs_payload},
+        json={"quote": quote_id, "outputs": outputs_payload, "signature": signature},
         timeout=None,
     )
     assert response.status_code == 200, f"{response.status_code = }"
