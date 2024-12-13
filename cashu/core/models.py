@@ -130,7 +130,7 @@ class PostMintQuoteRequest(BaseModel):
     )  # invoice description
     pubkey: Optional[str] = Field(
         default=None, max_length=settings.mint_max_request_length
-    )  # quote lock pubkey
+    )  # NUT-20 quote lock pubkey
 
 
 class PostMintQuoteResponse(BaseModel):
@@ -138,15 +138,15 @@ class PostMintQuoteResponse(BaseModel):
     request: str  # input payment request
     state: Optional[str]  # state of the quote (optional for backwards compat)
     expiry: Optional[int]  # expiry of the quote
-    pubkey: Optional[str] = None  # quote lock pubkey
+    pubkey: Optional[str] = None  # NUT-20 quote lock pubkey
     paid: Optional[bool] = None  # DEPRECATED as per NUT-04 PR #141
 
     @classmethod
-    def from_mint_quote(self, mint_quote: MintQuote) -> "PostMintQuoteResponse":
+    def from_mint_quote(cls, mint_quote: MintQuote) -> "PostMintQuoteResponse":
         to_dict = mint_quote.dict()
         # turn state into string
         to_dict["state"] = mint_quote.state.value
-        return PostMintQuoteResponse.parse_obj(to_dict)
+        return cls.parse_obj(to_dict)
 
 
 # ------- API: MINT -------

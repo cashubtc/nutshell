@@ -450,7 +450,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if invoice_obj.expiry is not None:
             expiry = invoice_obj.date + invoice_obj.expiry
 
-        logger.debug(f"{quote_request.pubkey = }")
         quote = MintQuote(
             quote=random_hash(),
             method=method.name,

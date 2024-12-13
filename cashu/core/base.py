@@ -438,8 +438,8 @@ class MintQuote(LedgerEvent):
             state=MintQuoteState(row["state"]),
             created_time=created_time,
             paid_time=paid_time,
-            pubkey=row["pubkey"],
-            privkey=row["privkey"],
+            pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
+            privkey=row["privkey"] if "privkey" in row.keys() else None,
         )
 
     @classmethod

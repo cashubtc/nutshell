@@ -5,6 +5,13 @@ from ..base import BlindedMessage
 from ..crypto.secp import PrivateKey, PublicKey
 
 
+def generate_keypair() -> tuple[str, str]:
+    privkey = PrivateKey()
+    assert privkey.pubkey
+    pubkey = privkey.pubkey
+    return privkey.serialize(), pubkey.serialize(True).hex()
+
+
 def construct_message(quote_id: str, outputs: List[BlindedMessage]) -> bytes:
     serialized_outputs = b"".join([o.B_.encode("utf-8") for o in outputs])
     msgbytes = sha256(quote_id.encode("utf-8") + serialized_outputs).digest()

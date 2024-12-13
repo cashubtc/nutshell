@@ -135,8 +135,7 @@ async def create_invoice(
     global wallet
     if mint:
         wallet = await mint_wallet(mint)
-    keypair = await wallet.get_quote_ephemeral_keypair()
-    invoice = await wallet.create_invoice(amount, keypair=keypair)
+    invoice = await wallet.create_invoice(amount)
     return invoice
 
 
@@ -189,10 +188,8 @@ async def swap(
     if incoming_wallet.url == outgoing_wallet.url:
         raise Exception("mints for swap have to be different")
 
-    # get keypair to lock the quote with (NUT-20)
-    keypair = await incoming_wallet.get_quote_ephemeral_keypair()
     # request invoice from incoming mint
-    mint_quote = await incoming_wallet.request_mint(amount, keypair=keypair)
+    mint_quote = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
     await outgoing_wallet.load_proofs(reload=True)
@@ -209,9 +206,7 @@ async def swap(
     )
 
     # mint token in incoming mint
-    await incoming_wallet.mint(
-        amount, quote_id=mint_quote.quote, quote_privkey=mint_quote.privkey
-    )
+    await incoming_wallet.mint(amount, quote_id=mint_quote.quote)
     await incoming_wallet.load_proofs(reload=True)
     mint_balances = await incoming_wallet.balance_per_minturl()
     return SwapResponse(

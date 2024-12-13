@@ -284,11 +284,11 @@ class LedgerVerification(
         self,
         quote: MintQuote,
         outputs: List[BlindedMessage],
-        witness: Optional[str],
+        signature: Optional[str],
     ) -> bool:
         """Verify signature on quote id and outputs"""
         if not quote.pubkey:
             return True
-        if not witness:
+        if not signature:
             return False
-        return nut20.verify_mint_quote(quote.quote, outputs, quote.pubkey, witness)
+        return nut20.verify_mint_quote(quote.quote, outputs, quote.pubkey, signature)
