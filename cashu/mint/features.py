@@ -5,13 +5,14 @@ from ..core.models import (
     MeltMethodSetting,
     MintMethodSetting,
 )
-from ..core.nuts import (
+from ..core.nuts.nuts import (
     CACHE_NUT,
     DLEQ_NUT,
     FEE_RETURN_NUT,
     HTLC_NUT,
     MELT_NUT,
     MINT_NUT,
+    MINT_QUOTE_SIGNATURE_NUT,
     MPP_NUT,
     P2PK_NUT,
     RESTORE_NUT,
@@ -75,6 +76,7 @@ class LedgerFeatures(SupportsBackends):
         mint_features[P2PK_NUT] = supported_dict
         mint_features[DLEQ_NUT] = supported_dict
         mint_features[HTLC_NUT] = supported_dict
+        mint_features[MINT_QUOTE_SIGNATURE_NUT] = supported_dict
         return mint_features
 
     def add_mpp_features(

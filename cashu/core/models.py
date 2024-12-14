@@ -128,21 +128,25 @@ class PostMintQuoteRequest(BaseModel):
     description: Optional[str] = Field(
         default=None, max_length=settings.mint_max_request_length
     )  # invoice description
+    pubkey: Optional[str] = Field(
+        default=None, max_length=settings.mint_max_request_length
+    )  # NUT-20 quote lock pubkey
 
 
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
-    paid: Optional[bool]  # DEPRECATED as per NUT-04 PR #141
-    state: Optional[str]  # state of the quote
+    state: Optional[str]  # state of the quote (optional for backwards compat)
     expiry: Optional[int]  # expiry of the quote
+    pubkey: Optional[str] = None  # NUT-20 quote lock pubkey
+    paid: Optional[bool] = None  # DEPRECATED as per NUT-04 PR #141
 
     @classmethod
-    def from_mint_quote(self, mint_quote: MintQuote) -> "PostMintQuoteResponse":
+    def from_mint_quote(cls, mint_quote: MintQuote) -> "PostMintQuoteResponse":
         to_dict = mint_quote.dict()
         # turn state into string
         to_dict["state"] = mint_quote.state.value
-        return PostMintQuoteResponse.parse_obj(to_dict)
+        return cls.parse_obj(to_dict)
 
 
 # ------- API: MINT -------
@@ -153,6 +157,9 @@ class PostMintRequest(BaseModel):
     outputs: List[BlindedMessage] = Field(
         ..., max_items=settings.mint_max_request_length
     )
+    signature: Optional[str] = Field(
+        default=None, max_length=settings.mint_max_request_length
+    )  # NUT-20 quote signature
 
 
 class PostMintResponse(BaseModel):

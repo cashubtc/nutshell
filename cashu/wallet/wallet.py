@@ -1,4 +1,3 @@
-import base64
 import copy
 import threading
 import time
@@ -20,7 +19,6 @@ from ..core.base import (
     WalletKeyset,
 )
 from ..core.crypto import b_dhke
-from ..core.crypto.keys import derive_keyset_id
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
@@ -36,12 +34,14 @@ from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
 )
+from ..core.nuts import nut20
 from ..core.p2pk import Secret
 from ..core.settings import settings
-from ..core.split import amount_split
 from . import migrations
+from .compat import WalletCompat
 from .crud import (
     bump_secret_derivation,
+    get_bolt11_mint_quote,
     get_keysets,
     get_proofs,
     invalidate_proof,
@@ -68,7 +68,13 @@ from .v1_api import LedgerAPI
 
 
 class Wallet(
-    LedgerAPI, WalletP2PK, WalletHTLC, WalletSecrets, WalletTransactions, WalletProofs
+    LedgerAPI,
+    WalletP2PK,
+    WalletHTLC,
+    WalletSecrets,
+    WalletTransactions,
+    WalletProofs,
+    WalletCompat,
 ):
     """
     Nutshell wallet class.
@@ -248,39 +254,6 @@ class Wallet(
 
         await self.load_keysets_from_db()
 
-    async def inactivate_base64_keysets(self, force_old_keysets: bool) -> None:
-        # BEGIN backwards compatibility: phase out keysets with base64 ID by treating them as inactive
-        if settings.wallet_inactivate_base64_keysets and not force_old_keysets:
-            keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
-            for keyset in keysets_in_db:
-                if not keyset.active:
-                    continue
-                # test if the keyset id is a hex string, if not it's base64
-                try:
-                    int(keyset.id, 16)
-                except ValueError:
-                    # verify that it's base64
-                    try:
-                        _ = base64.b64decode(keyset.id)
-                    except ValueError:
-                        logger.error("Unexpected: keyset id is neither hex nor base64.")
-                        continue
-
-                    # verify that we have a hex version of the same keyset by comparing public keys
-                    hex_keyset_id = derive_keyset_id(keys=keyset.public_keys)
-                    if hex_keyset_id not in [k.id for k in keysets_in_db]:
-                        logger.warning(
-                            f"Keyset {keyset.id} is base64 but we don't have a hex version. Ignoring."
-                        )
-                        continue
-
-                    logger.warning(
-                        f"Keyset {keyset.id} is base64 and has a hex counterpart, setting inactive."
-                    )
-                    keyset.active = False
-                    await update_keyset(keyset=keyset, db=self.db)
-        # END backwards compatibility
-
     async def activate_keyset(self, keyset_id: Optional[str] = None) -> None:
         """Activates a keyset by setting self.keyset_id. Either activates a specific keyset
         of chooses one of the active keysets of the mint with the same unit as the wallet.
@@ -386,7 +359,10 @@ class Wallet(
         logger.trace("Secret check complete.")
 
     async def request_mint_with_callback(
-        self, amount: int, callback: Callable, memo: Optional[str] = None
+        self,
+        amount: int,
+        callback: Callable,
+        memo: Optional[str] = None,
     ) -> Tuple[MintQuote, SubscriptionManager]:
         """Request a quote invoice for minting tokens.
 
@@ -398,83 +374,55 @@ class Wallet(
         Returns:
             MintQuote: Mint Quote
         """
-        mint_qoute = await super().mint_quote(amount, self.unit, memo)
+        # generate a key for signing the quote request
+        privkey_hex, pubkey_hex = nut20.generate_keypair()
+        mint_quote = await super().mint_quote(amount, self.unit, memo, pubkey_hex)
         subscriptions = SubscriptionManager(self.url)
         threading.Thread(
             target=subscriptions.connect, name="SubscriptionManager", daemon=True
         ).start()
         subscriptions.subscribe(
             kind=JSONRPCSubscriptionKinds.BOLT11_MINT_QUOTE,
-            filters=[mint_qoute.quote],
+            filters=[mint_quote.quote],
             callback=callback,
         )
-        quote = MintQuote.from_resp_wallet(mint_qoute, self.url, amount, self.unit.name)
+        quote = MintQuote.from_resp_wallet(mint_quote, self.url, amount, self.unit.name)
+
+        # store the private key in the quote
+        quote.privkey = privkey_hex
         await store_bolt11_mint_quote(db=self.db, quote=quote)
 
         return quote, subscriptions
 
-    async def request_mint(self, amount: int, memo: Optional[str] = None) -> MintQuote:
+    async def request_mint(
+        self,
+        amount: int,
+        memo: Optional[str] = None,
+    ) -> MintQuote:
         """Request a quote invoice for minting tokens.
 
         Args:
             amount (int): Amount for Lightning invoice in satoshis
             callback (Optional[Callable], optional): Callback function to be called when the invoice is paid. Defaults to None.
             memo (Optional[str], optional): Memo for the Lightning invoice. Defaults to None.
+            keypair (Optional[Tuple[str, str], optional]): NUT-19 private public ephemeral keypair. Defaults to None.
 
         Returns:
             MintQuote: Mint Quote
         """
-        mint_quote_response = await super().mint_quote(amount, self.unit, memo)
+        # generate a key for signing the quote request
+        privkey_hex, pubkey_hex = nut20.generate_keypair()
+
+        mint_quote_response = await super().mint_quote(
+            amount, self.unit, memo, pubkey_hex
+        )
         quote = MintQuote.from_resp_wallet(
             mint_quote_response, self.url, amount, self.unit.name
         )
+
+        quote.privkey = privkey_hex
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
-
-    def split_wallet_state(self, amount: int) -> List[int]:
-        """This function produces an amount split for outputs based on the current state of the wallet.
-        Its objective is to fill up the wallet so that it reaches `n_target` coins of each amount.
-
-        Args:
-            amount (int): Amount to split
-
-        Returns:
-            List[int]: List of amounts to mint
-        """
-        # read the target count for each amount from settings
-        n_target = settings.wallet_target_amount_count
-        amounts_we_have = [p.amount for p in self.proofs if p.reserved is not True]
-        amounts_we_have.sort()
-        # NOTE: Do not assume 2^n here
-        all_possible_amounts: list[int] = [2**i for i in range(settings.max_order)]
-        amounts_we_want_ll = [
-            [a] * max(0, n_target - amounts_we_have.count(a))
-            for a in all_possible_amounts
-        ]
-        # flatten list of lists to list
-        amounts_we_want = [item for sublist in amounts_we_want_ll for item in sublist]
-        # sort by increasing amount
-        amounts_we_want.sort()
-
-        logger.trace(
-            f"Amounts we have: {[(a, amounts_we_have.count(a)) for a in set(amounts_we_have)]}"
-        )
-        amounts: list[int] = []
-        while sum(amounts) < amount and amounts_we_want:
-            if sum(amounts) + amounts_we_want[0] > amount:
-                break
-            amounts.append(amounts_we_want.pop(0))
-
-        remaining_amount = amount - sum(amounts)
-        if remaining_amount > 0:
-            amounts += amount_split(remaining_amount)
-        amounts.sort()
-
-        logger.trace(f"Amounts we want: {amounts}")
-        if sum(amounts) != amount:
-            raise Exception(f"Amounts do not sum to {amount}.")
-
-        return amounts
 
     async def mint(
         self,
@@ -509,8 +457,6 @@ class Wallet(
 
         # split based on our wallet state
         amounts = split or self.split_wallet_state(amount)
-        # if no split was specified, we use the canonical split
-        # amounts = split or amount_split(amount)
 
         # quirk: we skip bumping the secret counter in the database since we are
         # not sure if the minting will succeed. If it succeeds, we will bump it
@@ -521,8 +467,15 @@ class Wallet(
         await self._check_used_secrets(secrets)
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
 
+        quote = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
+        if not quote:
+            raise Exception("Quote not found.")
+        signature: str | None = None
+        if quote.privkey:
+            signature = nut20.sign_mint_quote(quote_id, outputs, quote.privkey)
+
         # will raise exception if mint is unsuccessful
-        promises = await super().mint(outputs, quote_id)
+        promises = await super().mint(outputs, quote_id, signature)
 
         promises_keyset_id = promises[0].id
         await bump_secret_derivation(
@@ -547,67 +500,13 @@ class Wallet(
         self,
         proofs: List[Proof],
     ) -> Tuple[List[Proof], List[Proof]]:
-        """Redeem proofs by sending them to yourself (by calling a split).)
-        Calls `add_witnesses_to_proofs` which parses all proofs and checks whether their
-        secrets corresponds to any locks that we have the unlock conditions for. If so,
-        it adds the unlock conditions to the proofs.
+        """Redeem proofs by sending them to yourself by calling a split.
         Args:
             proofs (List[Proof]): Proofs to be redeemed.
         """
         # verify DLEQ of incoming proofs
         self.verify_proofs_dleq(proofs)
         return await self.split(proofs=proofs, amount=0)
-
-    def determine_output_amounts(
-        self,
-        proofs: List[Proof],
-        amount: int,
-        include_fees: bool = False,
-        keyset_id_outputs: Optional[str] = None,
-    ) -> Tuple[List[int], List[int]]:
-        """This function generates a suitable amount split for the outputs to keep and the outputs to send. It
-        calculates the amount to keep based on the wallet state and the amount to send based on the amount
-        provided.
-
-        Amount to keep is based on the proofs we have in the wallet
-        Amount to send is optimally split based on the amount provided plus optionally the fees required to receive them.
-
-        Args:
-            proofs (List[Proof]): Proofs to be split.
-            amount (int): Amount to be sent.
-            include_fees (bool, optional): If True, the fees are included in the amount to send (output of
-                this method, to be sent in the future). This is not the fee that is required to swap the
-                `proofs` (input to this method). Defaults to False.
-            keyset_id_outputs (str, optional): The keyset ID of the outputs to be produced, used to determine the
-                fee if `include_fees` is set.
-
-        Returns:
-            Tuple[List[int], List[int]]: Two lists of amounts, one for keeping and one for sending.
-        """
-        # create a suitable amount split based on the proofs provided
-        total = sum_proofs(proofs)
-        keep_amt, send_amt = total - amount, amount
-
-        if include_fees:
-            keyset_id = keyset_id_outputs or self.keyset_id
-            tmp_proofs = [Proof(id=keyset_id) for _ in amount_split(send_amt)]
-            fee = self.get_fees_for_proofs(tmp_proofs)
-            keep_amt -= fee
-            send_amt += fee
-
-        logger.trace(f"Keep amount: {keep_amt}, send amount: {send_amt}")
-        logger.trace(f"Total input: {sum_proofs(proofs)}")
-        # generate optimal split for outputs to send
-        send_amounts = amount_split(send_amt)
-
-        # we subtract the input fee for the entire transaction from the amount to keep
-        keep_amt -= self.get_fees_for_proofs(proofs)
-        logger.trace(f"Keep amount: {keep_amt}")
-
-        # we determine the amounts to keep based on the wallet state
-        keep_amounts = self.split_wallet_state(keep_amt)
-
-        return keep_amounts, send_amounts
 
     async def split(
         self,
@@ -621,6 +520,10 @@ class Wallet(
         If secret_lock is None, random secrets will be generated for the tokens to keep (keep_outputs)
         and the promises to send (send_outputs). If secret_lock is provided, the wallet will create
         blinded secrets with those to attach a predefined spending condition to the tokens they want to send.
+
+        Calls `add_witnesses_to_proofs` which parses all proofs and checks whether their
+        secrets corresponds to any locks that we have the unlock conditions for. If so,
+        it adds the unlock conditions to the proofs.
 
         Args:
             proofs (List[Proof]): Proofs to be split.

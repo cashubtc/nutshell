@@ -6,6 +6,7 @@ from cashu.core.base import Proof, Unit
 from cashu.core.models import (
     CheckSpendableRequest_deprecated,
     CheckSpendableResponse_deprecated,
+    GetMintResponse_deprecated,
     PostRestoreRequest,
     PostRestoreResponse,
 )
@@ -124,15 +125,20 @@ async def test_api_mint_validation(ledger):
 
 @pytest.mark.asyncio
 async def test_mint(ledger: Ledger, wallet: Wallet):
-    mint_quote = await wallet.request_mint(64)
-    await pay_if_regtest(mint_quote.request)
+    quote_response = httpx.get(
+        f"{BASE_URL}/mint",
+        params={"amount": 64},
+        timeout=None,
+    )
+    mint_quote = GetMintResponse_deprecated.parse_obj(quote_response.json())
+    await pay_if_regtest(mint_quote.pr)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/mint",
         json={"outputs": outputs_payload},
-        params={"hash": mint_quote.quote},
+        params={"hash": mint_quote.hash},
         timeout=None,
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
