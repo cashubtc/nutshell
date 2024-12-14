@@ -190,12 +190,13 @@ async def test_split(ledger: Ledger, wallet: Wallet):
 async def test_mint_quote(ledger: Ledger):
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11",
-        json={"unit": "sat", "amount": 100},
+        json={"unit": "sat", "amount": 100, "pubkey": "02" + "00" * 32},
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result["quote"]
     assert result["request"]
+    assert result["pubkey"] == "02" + "00" * 32
 
     # deserialize the response
     resp_quote = PostMintQuoteResponse(**result)
@@ -233,6 +234,7 @@ async def test_mint_quote(ledger: Ledger):
     # check if DEPRECATED paid flag is also returned
     assert result2["paid"] is True
     assert resp_quote.paid is True
+    assert resp_quote.pubkey == "02" + "00" * 32
 
 
 @pytest.mark.asyncio
@@ -281,10 +283,15 @@ async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
 
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11",
-        json={"unit": "sat", "amount": 64},
+        json={
+            "unit": "sat",
+            "amount": 64,
+            # no pubkey
+        },
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
+    assert result["pubkey"] is None
     await pay_if_regtest(result["request"])
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
