@@ -273,6 +273,39 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
+async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
+    """
+    For backwards compatibility, we do not require a NUT-20 signature
+    for minting with bolt11.
+    """
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11",
+        json={"unit": "sat", "amount": 64},
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    await pay_if_regtest(result["request"])
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
+    outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
+    outputs_payload = [o.dict() for o in outputs]
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/bolt11",
+        json={
+            "quote": result["quote"],
+            "outputs": outputs_payload,
+            # no signature
+        },
+        timeout=None,
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 @pytest.mark.skipif(
     is_regtest,
     reason="regtest",
