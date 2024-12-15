@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.16.2"
+VERSION = "0.16.3"
 
 
 def find_env_file():
@@ -153,6 +153,7 @@ class MintInformation(CashuSettings):
     mint_info_contact: List[List[str]] = Field(default=[])
     mint_info_motd: str = Field(default=None)
     mint_info_icon_url: str = Field(default=None)
+    mint_info_urls: List[str] = Field(default=None)
 
 
 class WalletSettings(CashuSettings):
@@ -208,7 +209,7 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_rest_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
     mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
-    mint_lnd_enable_mpp: bool = Field(default=False)
+    mint_lnd_enable_mpp: bool = Field(default=True)
 
 
 class LndRPCFundingSource(MintSettings):
@@ -221,13 +222,19 @@ class CLNRestFundingSource(MintSettings):
     mint_clnrest_url: Optional[str] = Field(default=None)
     mint_clnrest_cert: Optional[str] = Field(default=None)
     mint_clnrest_rune: Optional[str] = Field(default=None)
-    mint_clnrest_enable_mpp: bool = Field(default=False)
+    mint_clnrest_enable_mpp: bool = Field(default=True)
 
 
 class CoreLightningRestFundingSource(MintSettings):
     mint_corelightning_rest_url: Optional[str] = Field(default=None)
     mint_corelightning_rest_macaroon: Optional[str] = Field(default=None)
     mint_corelightning_rest_cert: Optional[str] = Field(default=None)
+
+
+class MintRedisCache(MintSettings):
+    mint_redis_cache_enabled: bool = Field(default=False)
+    mint_redis_cache_url: Optional[str] = Field(default=None)
+    mint_redis_cache_ttl: Optional[int] = Field(default=60 * 60 * 24 * 7)  # 1 week
 
 
 class Settings(
@@ -239,6 +246,7 @@ class Settings(
     FakeWalletSettings,
     MintLimits,
     MintBackends,
+    MintRedisCache,
     MintDeprecationFlags,
     MintSettings,
     MintInformation,

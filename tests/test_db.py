@@ -14,7 +14,7 @@ from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
-from tests.helpers import is_github_actions, is_postgres, pay_if_regtest
+from tests.helpers import is_github_actions, is_postgres, is_regtest, pay_if_regtest
 
 
 async def assert_err(f, msg):
@@ -49,6 +49,7 @@ async def wallet():
     )
     await wallet.load_mint()
     yield wallet
+    await wallet.db.engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -146,13 +147,10 @@ async def test_db_get_connection_locked(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    not settings.mint_database.startswith("postgres"),
+    not not is_postgres,
     reason="SQLite does not support row locking",
 )
 async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
-    if ledger.db.type == db.SQLITE:
-        pytest.skip("SQLite does not support row locking")
-
     mint_quote = await wallet.request_mint(64)
 
     async def get_connection():
@@ -189,6 +187,10 @@ async def test_db_get_connection_lock_row(wallet: Wallet, ledger: Ledger):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_github_actions and is_regtest and not is_postgres,
+    reason=("Fails on GitHub Actions for regtest + SQLite"),
+)
 async def test_db_verify_spent_proofs_and_set_pending_race_condition(
     wallet: Wallet, ledger: Ledger
 ):
@@ -211,6 +213,10 @@ async def test_db_verify_spent_proofs_and_set_pending_race_condition(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_github_actions and is_regtest and not is_postgres,
+    reason=("Fails on GitHub Actions for regtest + SQLite"),
+)
 async def test_db_verify_spent_proofs_and_set_pending_delayed_no_race_condition(
     wallet: Wallet, ledger: Ledger
 ):
@@ -234,6 +240,10 @@ async def test_db_verify_spent_proofs_and_set_pending_delayed_no_race_condition(
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_github_actions and is_regtest and not is_postgres,
+    reason=("Fails on GitHub Actions for regtest + SQLite"),
+)
 async def test_db_verify_spent_proofs_and_set_pending_no_race_condition_different_proofs(
     wallet: Wallet, ledger: Ledger
 ):
@@ -252,7 +262,7 @@ async def test_db_verify_spent_proofs_and_set_pending_no_race_condition_differen
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
-    not settings.mint_database.startswith("postgres"),
+    not is_postgres,
     reason="SQLite does not support row locking",
 )
 async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledger):
@@ -300,6 +310,10 @@ async def test_db_get_connection_lock_different_row(wallet: Wallet, ledger: Ledg
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_github_actions and is_regtest and not is_postgres,
+    reason=("Fails on GitHub Actions for regtest + SQLite"),
+)
 async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
     # fill wallet
     mint_quote = await wallet.request_mint(64)

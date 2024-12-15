@@ -1,8 +1,8 @@
-from typing import Dict, Protocol
+from typing import Dict, List, Protocol
 
 import httpx
 
-from ..core.base import Unit, WalletKeyset
+from ..core.base import Proof, Unit, WalletKeyset
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
 
@@ -13,6 +13,7 @@ class SupportsPrivateKey(Protocol):
 
 class SupportsDb(Protocol):
     db: Database
+    proofs: List[Proof]
 
 
 class SupportsKeysets(Protocol):

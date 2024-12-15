@@ -22,4 +22,8 @@ repos:
     rev: v1.6.0
     hooks:
       - id: mypy
-        args: [--ignore-missing, --check-untyped-defs]
+        args:
+          - --ignore-missing
+          - --check-untyped-defs
+        additional_dependencies:
+          - types-redis
