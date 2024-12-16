@@ -250,7 +250,7 @@ async def pay(
         melt_response.state
         and MintQuoteState(melt_response.state) == MintQuoteState.paid
     ):
-        print(" Invoice paid", end="", flush=True)
+        print(" Invoice paid.", end="", flush=True)
         if (
             melt_response.payment_preimage
             and melt_response.payment_preimage != "0" * 64
