@@ -424,6 +424,8 @@ class Wallet(
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
 
+
+
     async def mint(
         self,
         amount: int,
@@ -434,7 +436,7 @@ class Wallet(
 
         Args:
             amount (int): Total amount of tokens to be minted
-            id (str): Id for looking up the paid Lightning invoice.
+            quote_id (str): Id for looking up the paid Lightning invoice.
             split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
 
         Raises:
@@ -448,11 +450,11 @@ class Wallet(
         if split:
             logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
-            allowed_amounts = [2**i for i in range(settings.max_order)]
+            allowed_amounts = self.get_allowed_amounts()  # Get allowed amounts from the mint
             for a in split:
                 if a not in allowed_amounts:
                     raise Exception(
-                        f"Can only mint amounts with 2^n up to {2**settings.max_order}."
+                        f"Can only mint amounts supported by the mint: {allowed_amounts}"
                     )
 
         # split based on our wallet state
