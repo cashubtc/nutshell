@@ -111,6 +111,21 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         proofs_send = self.coinselect(proofs, amount, include_fees=True)
         return self.get_fees_for_proofs(proofs_send)
 
+    def get_allowed_amounts(self):
+        """
+        Infer the allowed amounts from the current keyset's public keys.
+
+        Returns:
+            List[int]: A sorted list of allowed token amounts for the current keyset.
+
+        Raises:
+            Exception: If no active keyset is set.
+        """
+
+        if not self.keyset_id or self.keyset_id not in self.keysets:
+            raise Exception("No active keyset")
+        return sorted(list(self.keysets[self.keyset_id].public_keys.keys()))
+
     def split_wallet_state(self, amount: int) -> List[int]:
         """This function produces an amount split for outputs based on the current state of the wallet.
         Its objective is to fill up the wallet so that it reaches `n_target` coins of each amount.
@@ -125,8 +140,9 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
         n_target = settings.wallet_target_amount_count
         amounts_we_have = [p.amount for p in self.proofs if p.reserved is not True]
         amounts_we_have.sort()
-        # NOTE: Do not assume 2^n here
-        all_possible_amounts: list[int] = [2**i for i in range(settings.max_order)]
+
+        all_possible_amounts = self.get_allowed_amounts()
+
         amounts_we_want_ll = [
             [a] * max(0, n_target - amounts_we_have.count(a))
             for a in all_possible_amounts
