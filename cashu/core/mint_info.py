@@ -97,6 +97,16 @@ class MintInfo(BaseModel):
     def requires_blind_auth(self) -> bool:
         return self.supports_nut(BLIND_AUTH_NUT)
 
+    @property
+    def bat_max_mint(self) -> int:
+        if not self.requires_blind_auth():
+            raise Exception(
+                "Could not get max mint. Mint info does not support blind auth."
+            )
+        if not self.nuts[BLIND_AUTH_NUT].get("bat_max_mint"):
+            raise Exception("Could not get max mint. bat_max_mint not set.")
+        return self.nuts[BLIND_AUTH_NUT]["bat_max_mint"]
+
     def required_blind_auth_paths(self) -> List[MintInfoProtectedEndpoint]:
         if not self.requires_blind_auth():
             return []

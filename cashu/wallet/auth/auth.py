@@ -9,7 +9,6 @@ from cashu.core.mint_info import MintInfo
 from ...core.base import Proof
 from ...core.crypto.secp import PrivateKey
 from ...core.db import Database
-from ...core.settings import settings
 from ..crud import get_mint_by_url, update_mint
 from ..wallet import Wallet
 from .openid_connect.openid_client import AuthorizationFlow, OpenIDClient
@@ -177,7 +176,8 @@ class WalletAuth(Wallet):
         clear_auth_token = self.oidc_client.access_token
         if not clear_auth_token:
             raise Exception("No clear auth token available.")
-        amounts = settings.mint_auth_max_blind_tokens * [1]
+
+        amounts = self.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
         secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
         rs = [PrivateKey(privkey=os.urandom(32), raw=True) for _ in amounts]
         derivation_paths = ["" for _ in amounts]
