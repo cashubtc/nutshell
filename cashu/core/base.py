@@ -308,11 +308,11 @@ class MeltQuote(LedgerEvent):
 
         # parse change from row as json
         change = None
-        if row["change"]:
+        if "change" in row.keys() and row["change"]:
             change = json.loads(row["change"])
 
         outputs = None
-        if row["outputs"]:
+        if "outputs" in row.keys() and row["outputs"]:
             outputs = json.loads(row["outputs"])
 
         return cls(
