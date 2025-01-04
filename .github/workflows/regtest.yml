@@ -63,12 +63,6 @@ jobs:
           MINT_LND_RPC_ENDPOINT: localhost:10009
           MINT_LND_RPC_CERT: ./regtest/data/lnd-3/tls.cert
           MINT_LND_RPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
-
-          MINT_LND_ENABLE_MPP: true
-          #   LND_GRPC_ENDPOINT: localhost
-          #   LND_GRPC_PORT: 10009
-          #   LND_GRPC_CERT: ./regtest/data/lnd-3/tls.cert
-          #   LND_GRPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
           # CoreLightningRestWallet
           MINT_CORELIGHTNING_REST_URL: https://localhost:3001
           MINT_CORELIGHTNING_REST_MACAROON: ./regtest/data/clightning-2-rest/access.macaroon
