@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 from loguru import logger
 
 from ...core.base import (
+    BlindedMessage,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
@@ -172,7 +173,9 @@ class DbWriteHelper:
         await self.events.submit(quote)
         return quote
 
-    async def _set_melt_quote_pending(self, quote: MeltQuote) -> MeltQuote:
+    async def _set_melt_quote_pending(
+        self, quote: MeltQuote, outputs: Optional[List[BlindedMessage]] = None
+    ) -> MeltQuote:
         """Sets the melt quote as pending.
 
         Args:
@@ -193,6 +196,9 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote already pending.")
             # set the quote as pending
             quote_copy.state = MeltQuoteState.pending
+
+            if outputs:
+                quote_copy.outputs = outputs
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
         await self.events.submit(quote_copy)
@@ -219,6 +225,9 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote not pending.")
             # set the quote as pending
             quote_copy.state = state
+
+            # unset outputs
+            quote_copy.outputs = None
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
         await self.events.submit(quote_copy)

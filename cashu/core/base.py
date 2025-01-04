@@ -287,6 +287,7 @@ class MeltQuote(LedgerEvent):
     fee_paid: int = 0
     payment_preimage: Optional[str] = None
     expiry: Optional[int] = None
+    outputs: Optional[List[BlindedMessage]] = None
     change: Optional[List[BlindedSignature]] = None
     mint: Optional[str] = None
 
@@ -310,6 +311,10 @@ class MeltQuote(LedgerEvent):
         if row["change"]:
             change = json.loads(row["change"])
 
+        outputs = None
+        if row["outputs"]:
+            outputs = json.loads(row["outputs"])
+
         return cls(
             quote=row["quote"],
             method=row["method"],
@@ -322,6 +327,7 @@ class MeltQuote(LedgerEvent):
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
+            outputs=outputs,
             change=change,
             expiry=expiry,
             payment_preimage=payment_preimage,

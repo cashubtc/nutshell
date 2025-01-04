@@ -144,17 +144,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             task.cancel()
 
     async def _check_pending_proofs_and_melt_quotes(self):
-        """Startup routine that checks all pending proofs for their melt state and either invalidates
-        them for a successful melt or deletes them if the melt failed.
+        """Startup routine that checks all pending melt quotes and either invalidates
+        their pending proofs for a successful melt or deletes them if the melt failed.
         """
         # get all pending melt quotes
-        melt_quotes = await self.crud.get_all_melt_quotes_from_pending_proofs(
+        pending_melt_quotes = await self.crud.get_all_melt_quotes_from_pending_proofs(
             db=self.db
         )
-        if not melt_quotes:
+        if not pending_melt_quotes:
             return
-        logger.info("Checking pending melt quotes")
-        for quote in melt_quotes:
+        logger.info(f"Checking {len(pending_melt_quotes)} pending melt quotes")
+        for quote in pending_melt_quotes:
             quote = await self.get_melt_quote(quote_id=quote.quote)
             logger.info(f"Melt quote {quote.quote} state: {quote.state}")
 
@@ -772,13 +772,27 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 if status.preimage:
                     melt_quote.payment_preimage = status.preimage
                 melt_quote.paid_time = int(time.time())
-                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-                await self.events.submit(melt_quote)
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
                 await self._invalidate_proofs(proofs=pending_proofs, quote_id=quote_id)
                 await self.db_write._unset_proofs_pending(pending_proofs)
+                # change to compensate wallet for overpaid fees
+                if melt_quote.outputs:
+                    total_provided = sum_proofs(pending_proofs)
+                    input_fees = self.get_fees_for_proofs(pending_proofs)
+                    fee_reserve_provided = (
+                        total_provided - melt_quote.amount - input_fees
+                    )
+                    return_promises = await self._generate_change_promises(
+                        fee_provided=fee_reserve_provided,
+                        fee_paid=melt_quote.fee_paid,
+                        outputs=melt_quote.outputs,
+                        keyset=self.keysets[melt_quote.outputs[0].id],
+                    )
+                    melt_quote.change = return_promises
+                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+                await self.events.submit(melt_quote)
             if status.failed or (rollback_unknown and status.unknown):
                 logger.debug(f"Setting quote {quote_id} as unpaid")
                 melt_quote.state = MeltQuoteState.unpaid
@@ -909,6 +923,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 raise TransactionError(
                     f"output unit {outputs_unit.name} does not match quote unit {melt_quote.unit}"
                 )
+            # we don't need to set it here, _set_melt_quote_pending will set it in the db
+            melt_quote.outputs = outputs
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
@@ -939,7 +955,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             proofs, quote_id=melt_quote.quote
         )
         previous_state = melt_quote.state
-        melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
+        melt_quote = await self.db_write._set_melt_quote_pending(melt_quote, outputs)
 
         # if the melt corresponds to an internal mint, mark both as paid
         melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
