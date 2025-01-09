@@ -260,7 +260,6 @@ class LndRestWallet(LightningBackend):
 
         # add the mpp_record to the last hop
         r = None    # type: ignore
-        data = {}
         for route_nr in range(len(data["routes"])):
             logger.debug(f"Trying to pay partial amount with route number {route_nr+1}")
             data["routes"][route_nr]["hops"][-1].update(mpp_record)
