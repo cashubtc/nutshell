@@ -15,7 +15,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.10"]
-        poetry-version: ["1.7.1"]
+        poetry-version: ["1.8.5"]
         mint-only-deprecated: ["false", "true"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
         backend-wallet-class: ["FakeWallet"]
@@ -33,7 +33,7 @@ jobs:
       matrix:
         os: [ubuntu-latest]
         python-version: ["3.10"]
-        poetry-version: ["1.7.1"]
+        poetry-version: ["1.8.5"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
     uses: ./.github/workflows/tests_redis_cache.yml
     with:
@@ -48,7 +48,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10"]
-        poetry-version: ["1.7.1"]
+        poetry-version: ["1.8.5"]
         backend-wallet-class:
           ["LndRPCWallet", "LndRestWallet", "CLNRestWallet", "CoreLightningRestWallet", "LNbitsWallet"]
         mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
