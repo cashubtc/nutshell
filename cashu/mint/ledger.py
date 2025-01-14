@@ -39,8 +39,8 @@ from ..core.errors import (
     NotAllowedError,
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
-    TransactionError,
     TransactionAmountExceedsLimitError,
+    TransactionError,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (

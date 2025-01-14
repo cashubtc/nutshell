@@ -15,11 +15,11 @@ from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
+    InvalidProofsError,
     NoSecretInProofsError,
     NotAllowedError,
-    SecretTooLongError,
     OutputsAlreadySignedError,
-    InvalidProofsError,
+    SecretTooLongError,
     TransactionError,
     TransactionUnitError,
 )
