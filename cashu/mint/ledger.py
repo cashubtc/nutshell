@@ -40,6 +40,7 @@ from ..core.errors import (
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
     TransactionError,
+    TransactionAmountExceedsLimitError,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
@@ -403,7 +404,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if not quote_request.amount > 0:
             raise TransactionError("amount must be positive")
         if settings.mint_max_peg_in and quote_request.amount > settings.mint_max_peg_in:
-            raise NotAllowedError(
+            raise TransactionAmountExceedsLimitError(
                 f"Maximum mint amount is {settings.mint_max_peg_in} sat."
             )
         if settings.mint_peg_out_only:
