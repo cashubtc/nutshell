@@ -4,6 +4,7 @@ import pytest_asyncio
 from cashu.core.base import MeltQuoteState
 from cashu.core.helpers import sum_proofs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
+from cashu.core.nuts import nut20
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -119,9 +120,9 @@ async def test_melt_external(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
 async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
-    mint_quote = await wallet1.request_mint(128)
-    await ledger.get_mint_quote(mint_quote.quote)
-    mint_quote = await ledger.get_mint_quote(mint_quote.quote)
+    wallet_mint_quote = await wallet1.request_mint(128)
+    await ledger.get_mint_quote(wallet_mint_quote.quote)
+    mint_quote = await ledger.get_mint_quote(wallet_mint_quote.quote)
 
     assert mint_quote.paid, "mint quote should be paid"
 
@@ -136,7 +137,11 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
         len(output_amounts)
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
-    await ledger.mint(outputs=outputs, quote_id=mint_quote.quote)
+    assert wallet_mint_quote.privkey
+    signature = nut20.sign_mint_quote(
+        mint_quote.quote, outputs, wallet_mint_quote.privkey
+    )
+    await ledger.mint(outputs=outputs, quote_id=mint_quote.quote, signature=signature)
 
     await assert_err(
         ledger.mint(outputs=outputs, quote_id=mint_quote.quote),
@@ -151,9 +156,7 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")
 async def test_mint_external(wallet1: Wallet, ledger: Ledger):
-    quote = await ledger.mint_quote(PostMintQuoteRequest(amount=128, unit="sat"))
-    assert not quote.paid, "mint quote should not be paid"
-    assert quote.unpaid
+    quote = await wallet1.request_mint(128)
 
     mint_quote = await ledger.get_mint_quote(quote.quote)
     assert not mint_quote.paid, "mint quote already paid"
@@ -179,7 +182,9 @@ async def test_mint_external(wallet1: Wallet, ledger: Ledger):
         len(output_amounts)
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
-    await ledger.mint(outputs=outputs, quote_id=quote.quote)
+    assert quote.privkey
+    signature = nut20.sign_mint_quote(quote.quote, outputs, quote.privkey)
+    await ledger.mint(outputs=outputs, quote_id=quote.quote, signature=signature)
 
     mint_quote_after_payment = await ledger.get_mint_quote(quote.quote)
     assert mint_quote_after_payment.issued, "mint quote should be issued"
@@ -311,14 +316,18 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
         len(output_amounts)
     )
     outputs, rs = wallet1._construct_outputs(output_amounts, secrets, rs)
-    await ledger.mint(outputs=outputs, quote_id=mint_quote.quote)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
+    await ledger.mint(outputs=outputs, quote_id=mint_quote.quote, signature=signature)
 
     # now try to mint with the same outputs again
     mint_quote_2 = await wallet1.request_mint(128)
     await pay_if_regtest(mint_quote_2.request)
 
+    assert mint_quote_2.privkey
+    signature = nut20.sign_mint_quote(mint_quote_2.quote, outputs, mint_quote_2.privkey)
     await assert_err(
-        ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote),
+        ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote, signature=signature),
         "outputs have already been signed before.",
     )
 
@@ -338,7 +347,9 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     # we use the outputs once for minting
     mint_quote_2 = await wallet1.request_mint(128)
     await pay_if_regtest(mint_quote_2.request)
-    await ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote)
+    assert mint_quote_2.privkey
+    signature = nut20.sign_mint_quote(mint_quote_2.quote, outputs, mint_quote_2.privkey)
+    await ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote, signature=signature)
 
     # use the same outputs for melting
     mint_quote = await ledger.mint_quote(PostMintQuoteRequest(unit="sat", amount=128))

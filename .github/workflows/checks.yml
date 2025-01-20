@@ -7,7 +7,7 @@ on:
         default: "3.10.4"
         type: string
       poetry-version:
-        default: "1.7.1"
+        default: "1.8.5"
         type: string
 
 jobs:

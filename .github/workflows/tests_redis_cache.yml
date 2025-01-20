@@ -1,4 +1,4 @@
-name: tests
+name: tests_redis_cache
 
 on:
   workflow_call:
@@ -29,12 +29,19 @@ jobs:
         run: |
           docker run -d --name postgres -e POSTGRES_USER=cashu -e POSTGRES_PASSWORD=cashu -e POSTGRES_DB=cashu -p 5432:5432 postgres:latest
           until docker exec postgres pg_isready; do sleep 1; done
-      - name: Checkout repository and submodules
+      - name: Checkout repository
         uses: actions/checkout@v2
-      - uses: ./.github/actions/prepare
+
+      - name: Prepare environment
+        uses: ./.github/actions/prepare
         with:
           python-version: ${{ inputs.python-version }}
           poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Start Redis service
+        run: |
+          docker compose -f docker/docker-compose.yml up -d redis
+
       - name: Run tests
         env:
           MINT_BACKEND_BOLT11_SAT: FakeWallet
@@ -42,9 +49,15 @@ jobs:
           MINT_HOST: localhost
           MINT_PORT: 3337
           MINT_TEST_DATABASE: ${{ inputs.mint-database }}
-          DEBUG_MINT_ONLY_DEPRECATED: ${{ inputs.mint-only-deprecated }}
           TOR: false
+          MINT_REDIS_CACHE_ENABLED: true
+          MINT_REDIS_CACHE_URL: redis://localhost:6379
         run: |
-          make test
+          poetry run pytest tests/test_mint_api_cache.py -v --cov=mint --cov-report=xml
+
+      - name: Stop and clean up Docker Compose
+        run: |
+          docker compose -f docker/docker-compose.yml down
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3

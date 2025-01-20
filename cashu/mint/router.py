@@ -1,7 +1,7 @@
 import asyncio
 import time
 
-from fastapi import APIRouter, Request, WebSocket
+from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 from loguru import logger
 
 from ..core.errors import KeysetNotFoundError
@@ -27,9 +27,11 @@ from ..core.models import (
 )
 from ..core.settings import settings
 from ..mint.startup import ledger
+from .cache import RedisCache
 from .limit import limit_websocket, limiter
 
-router: APIRouter = APIRouter()
+router = APIRouter()
+redis = RedisCache()
 
 
 @router.get(
@@ -166,6 +168,7 @@ async def mint_quote(
         paid=quote.paid,  # deprecated
         state=quote.state.value,
         expiry=quote.expiry,
+        pubkey=quote.pubkey,
     )
     logger.trace(f"< POST /v1/mint/quote/bolt11: {resp}")
     return resp
@@ -190,6 +193,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
         paid=mint_quote.paid,  # deprecated
         state=mint_quote.state.value,
         expiry=mint_quote.expiry,
+        pubkey=mint_quote.pubkey,
     )
     logger.trace(f"< GET /v1/mint/quote/bolt11/{quote}")
     return resp
@@ -198,6 +202,7 @@ async def get_mint_quote(request: Request, quote: str) -> PostMintQuoteResponse:
 @router.websocket("/v1/ws", name="Websocket endpoint for subscriptions")
 async def websocket_endpoint(websocket: WebSocket):
     limit_websocket(websocket)
+    disconnected = False
     try:
         client = ledger.events.add_client(websocket, ledger.db, ledger.crud)
     except Exception as e:
@@ -208,11 +213,16 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         # this will block until the session is closed
         await client.start()
+    except WebSocketDisconnect as e:
+        logger.debug(f"Websocket disconnected: {e}")
+        disconnected = True
+        return
     except Exception as e:
         logger.debug(f"Exception: {e}")
         ledger.events.remove_client(client)
     finally:
-        await asyncio.wait_for(websocket.close(), timeout=1)
+        if not disconnected:
+            await asyncio.wait_for(websocket.close(), timeout=1)
 
 
 @router.post(
@@ -225,6 +235,7 @@ async def websocket_endpoint(websocket: WebSocket):
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@redis.cache()
 async def mint(
     request: Request,
     payload: PostMintRequest,
@@ -236,7 +247,9 @@ async def mint(
     """
     logger.trace(f"> POST /v1/mint/bolt11: {payload}")
 
-    promises = await ledger.mint(outputs=payload.outputs, quote_id=payload.quote)
+    promises = await ledger.mint(
+        outputs=payload.outputs, quote_id=payload.quote, signature=payload.signature
+    )
     blinded_signatures = PostMintResponse(signatures=promises)
     logger.trace(f"< POST /v1/mint/bolt11: {blinded_signatures}")
     return blinded_signatures
@@ -302,6 +315,7 @@ async def get_melt_quote(request: Request, quote: str) -> PostMeltQuoteResponse:
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@redis.cache()
 async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteResponse:
     """
     Requests tokens to be destroyed and sent out via Lightning.
@@ -324,6 +338,7 @@ async def melt(request: Request, payload: PostMeltRequest) -> PostMeltQuoteRespo
     ),
 )
 @limiter.limit(f"{settings.mint_transaction_rate_limit_per_minute}/minute")
+@redis.cache()
 async def swap(
     request: Request,
     payload: PostSwapRequest,

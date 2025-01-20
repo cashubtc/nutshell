@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.16.3"
+VERSION = "0.16.4"
 
 
 def find_env_file():
@@ -253,6 +253,12 @@ class AuthSettings(MintSettings):
     ]
 
 
+class MintRedisCache(MintSettings):
+    mint_redis_cache_enabled: bool = Field(default=False)
+    mint_redis_cache_url: Optional[str] = Field(default=None)
+    mint_redis_cache_ttl: Optional[int] = Field(default=60 * 60 * 24 * 7)  # 1 week
+
+
 class Settings(
     EnvSettings,
     LndRPCFundingSource,
@@ -263,6 +269,7 @@ class Settings(
     MintLimits,
     MintBackends,
     AuthSettings,
+    MintRedisCache,
     MintDeprecationFlags,
     MintSettings,
     MintInformation,

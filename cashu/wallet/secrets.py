@@ -156,26 +156,30 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         """
         if n < 1:
             return [], [], []
+        async with self.db.get_connection(lock_table="keysets") as conn:
+            secret_counters_start = await bump_secret_derivation(
+                db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump, conn=conn
+            )
+            logger.trace(f"secret_counters_start: {secret_counters_start}")
+            secret_counters = list(
+                range(secret_counters_start, secret_counters_start + n)
+            )
+            logger.trace(
+                f"Generating secret nr {secret_counters[0]} to {secret_counters[-1]}."
+            )
+            secrets_rs_derivationpaths = [
+                await self.generate_determinstic_secret(s) for s in secret_counters
+            ]
+            # secrets are supplied as str
+            secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
+            # rs are supplied as PrivateKey
+            rs = [
+                PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths
+            ]
 
-        secret_counters_start = await bump_secret_derivation(
-            db=self.db, keyset_id=self.keyset_id, by=n, skip=skip_bump
-        )
-        logger.trace(f"secret_counters_start: {secret_counters_start}")
-        secret_counters = list(range(secret_counters_start, secret_counters_start + n))
-        logger.trace(
-            f"Generating secret nr {secret_counters[0]} to {secret_counters[-1]}."
-        )
-        secrets_rs_derivationpaths = [
-            await self.generate_determinstic_secret(s) for s in secret_counters
-        ]
-        # secrets are supplied as str
-        secrets = [s[0].hex() for s in secrets_rs_derivationpaths]
-        # rs are supplied as PrivateKey
-        rs = [PrivateKey(privkey=s[1], raw=True) for s in secrets_rs_derivationpaths]
+            derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
 
-        derivation_paths = [s[2] for s in secrets_rs_derivationpaths]
-
-        return secrets, rs, derivation_paths
+            return secrets, rs, derivation_paths
 
     async def generate_secrets_from_to(
         self, from_counter: int, to_counter: int, keyset_id: Optional[str] = None

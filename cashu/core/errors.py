@@ -96,3 +96,19 @@ class QuoteNotPaidError(CashuError):
 
     def __init__(self):
         super().__init__(self.detail, code=2001)
+
+
+class QuoteSignatureInvalidError(CashuError):
+    detail = "Signature for mint request invalid"
+    code = 20008
+
+    def __init__(self):
+        super().__init__(self.detail, code=20008)
+
+
+class QuoteRequiresPubkeyError(CashuError):
+    detail = "Pubkey required for mint quote"
+    code = 20009
+
+    def __init__(self):
+        super().__init__(self.detail, code=20009)

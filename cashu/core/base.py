@@ -416,6 +416,8 @@ class MintQuote(LedgerEvent):
     paid_time: Union[int, None] = None
     expiry: Optional[int] = None
     mint: Optional[str] = None
+    privkey: Optional[str] = None
+    pubkey: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: Row):
@@ -439,6 +441,8 @@ class MintQuote(LedgerEvent):
             state=MintQuoteState(row["state"]),
             created_time=created_time,
             paid_time=paid_time,
+            pubkey=row["pubkey"] if "pubkey" in row.keys() else None,
+            privkey=row["privkey"] if "privkey" in row.keys() else None,
         )
 
     @classmethod
@@ -461,6 +465,7 @@ class MintQuote(LedgerEvent):
             mint=mint,
             expiry=mint_quote_resp.expiry,
             created_time=int(time.time()),
+            pubkey=mint_quote_resp.pubkey,
         )
 
     @property
@@ -740,6 +745,12 @@ class MintKeyset:
         input_fee_ppk: Optional[int] = None,
         id: str = "",
     ):
+        DEFAULT_SEED = "supersecretprivatekey"
+        if seed == DEFAULT_SEED:
+            raise Exception(
+                f"Seed is set to default value '{DEFAULT_SEED}'. Please change it."
+            )
+
         self.derivation_path = derivation_path
 
         if encrypted_seed and not settings.mint_seed_decryption_key:

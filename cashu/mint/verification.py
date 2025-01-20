@@ -6,6 +6,7 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     Method,
+    MintQuote,
     Proof,
     Unit,
 )
@@ -19,6 +20,7 @@ from ..core.errors import (
     TransactionError,
     TransactionUnitError,
 )
+from ..core.nuts import nut20
 from ..core.settings import settings
 from .conditions import LedgerSpendingConditions
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
@@ -266,3 +268,16 @@ class LedgerVerification(
             )
 
         return unit, method
+
+    def _verify_mint_quote_witness(
+        self,
+        quote: MintQuote,
+        outputs: List[BlindedMessage],
+        signature: Optional[str],
+    ) -> bool:
+        """Verify signature on quote id and outputs"""
+        if not quote.pubkey:
+            return True
+        if not signature:
+            return False
+        return nut20.verify_mint_quote(quote.quote, outputs, quote.pubkey, signature)

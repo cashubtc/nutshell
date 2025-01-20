@@ -14,7 +14,8 @@ from cashu.core.models import (
     PostRestoreRequest,
     PostRestoreResponse,
 )
-from cashu.core.nuts import MINT_NUT
+from cashu.core.nuts import nut20
+from cashu.core.nuts.nuts import MINT_NUT
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.crud import bump_secret_derivation
@@ -189,12 +190,13 @@ async def test_split(ledger: Ledger, wallet: Wallet):
 async def test_mint_quote(ledger: Ledger):
     response = httpx.post(
         f"{BASE_URL}/v1/mint/quote/bolt11",
-        json={"unit": "sat", "amount": 100},
+        json={"unit": "sat", "amount": 100, "pubkey": "02" + "00" * 32},
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     result = response.json()
     assert result["quote"]
     assert result["request"]
+    assert result["pubkey"] == "02" + "00" * 32
 
     # deserialize the response
     resp_quote = PostMintQuoteResponse(**result)
@@ -232,6 +234,7 @@ async def test_mint_quote(ledger: Ledger):
     # check if DEPRECATED paid flag is also returned
     assert result2["paid"] is True
     assert resp_quote.paid is True
+    assert resp_quote.pubkey == "02" + "00" * 32
 
 
 @pytest.mark.asyncio
@@ -244,10 +247,16 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     await pay_if_regtest(mint_quote.request)
     secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
     outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
+    assert mint_quote.privkey
+    signature = nut20.sign_mint_quote(mint_quote.quote, outputs, mint_quote.privkey)
     outputs_payload = [o.dict() for o in outputs]
     response = httpx.post(
         f"{BASE_URL}/v1/mint/bolt11",
-        json={"quote": mint_quote.quote, "outputs": outputs_payload},
+        json={
+            "quote": mint_quote.quote,
+            "outputs": outputs_payload,
+            "signature": signature,
+        },
         timeout=None,
     )
     assert response.status_code == 200, f"{response.url} {response.status_code}"
@@ -259,6 +268,44 @@ async def test_mint(ledger: Ledger, wallet: Wallet):
     assert result["signatures"][0]["dleq"]
     assert "e" in result["signatures"][0]["dleq"]
     assert "s" in result["signatures"][0]["dleq"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
+async def test_mint_bolt11_no_signature(ledger: Ledger, wallet: Wallet):
+    """
+    For backwards compatibility, we do not require a NUT-20 signature
+    for minting with bolt11.
+    """
+
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11",
+        json={
+            "unit": "sat",
+            "amount": 64,
+            # no pubkey
+        },
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    assert result["pubkey"] is None
+    await pay_if_regtest(result["request"])
+    secrets, rs, derivation_paths = await wallet.generate_secrets_from_to(10000, 10001)
+    outputs, rs = wallet._construct_outputs([32, 32], secrets, rs)
+    outputs_payload = [o.dict() for o in outputs]
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/bolt11",
+        json={
+            "quote": result["quote"],
+            "outputs": outputs_payload,
+            # no signature
+        },
+        timeout=None,
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
 
 
 @pytest.mark.asyncio

@@ -840,7 +840,17 @@ async def m022_quote_set_states_to_values(db: Database):
             )
 
 
-async def m023_add_amounts_to_keysets(db: Database):
+async def m023_add_key_to_mint_quote_table(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('mint_quotes')}
+                ADD COLUMN pubkey TEXT DEFAULT NULL
+            """
+        )
+
+
+async def m024_add_amounts_to_keysets(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('keysets')} ADD COLUMN amounts TEXT"

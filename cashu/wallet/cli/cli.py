@@ -322,7 +322,7 @@ async def pay(
         melt_response.state
         and MintQuoteState(melt_response.state) == MintQuoteState.paid
     ):
-        print(" Invoice paid", end="", flush=True)
+        print(" Invoice paid.", end="", flush=True)
         if (
             melt_response.payment_preimage
             and melt_response.payment_preimage != "0" * 64
@@ -421,7 +421,9 @@ async def invoice(
             try:
                 asyncio.run(
                     wallet.mint(
-                        int(amount), split=optional_split, quote_id=mint_quote.quote
+                        int(amount),
+                        split=optional_split,
+                        quote_id=mint_quote.quote,
                     )
                 )
                 # set paid so we won't react to any more callbacks
@@ -475,7 +477,9 @@ async def invoice(
                 mint_quote_resp = await wallet.get_mint_quote(mint_quote.quote)
                 if mint_quote_resp.state == MintQuoteState.paid.value:
                     await wallet.mint(
-                        amount, split=optional_split, quote_id=mint_quote.quote
+                        amount,
+                        split=optional_split,
+                        quote_id=mint_quote.quote,
                     )
                     paid = True
                 else:
@@ -496,7 +500,14 @@ async def invoice(
 
     # user paid invoice before and wants to check the quote id
     elif amount and id:
-        await wallet.mint(amount, split=optional_split, quote_id=id)
+        quote = await get_bolt11_mint_quote(wallet.db, quote=id)
+        if not quote:
+            raise Exception("Quote not found")
+        await wallet.mint(
+            amount,
+            split=optional_split,
+            quote_id=quote.quote,
+        )
 
     # close open subscriptions so we can exit
     try:
@@ -999,11 +1010,13 @@ async def invoices(ctx: Context, paid: bool, unpaid: bool, pending: bool, mint: 
         print("No invoices found.")
         return
 
-    async def _try_to_mint_pending_invoice(amount: int, id: str) -> Optional[MintQuote]:
+    async def _try_to_mint_pending_invoice(
+        amount: int, quote_id: str
+    ) -> Optional[MintQuote]:
         try:
-            proofs = await wallet.mint(amount, id)
+            proofs = await wallet.mint(amount, quote_id)
             print(f"Received {wallet.unit.str(sum_proofs(proofs))}")
-            return await get_bolt11_mint_quote(db=wallet.db, quote=id)
+            return await get_bolt11_mint_quote(db=wallet.db, quote=quote_id)
         except Exception as e:
             logger.error(f"Could not mint pending invoice: {e}")
             return None
