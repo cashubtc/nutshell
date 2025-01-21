@@ -6,6 +6,7 @@ from fastapi import Request
 from loguru import logger
 from pydantic import BaseModel
 from redis.asyncio import from_url
+from redis.asyncio.client import Redis as RedisType
 from redis.exceptions import ConnectionError
 
 from ..core.errors import CashuError
@@ -13,6 +14,7 @@ from ..core.settings import settings
 
 
 class RedisCache:
+    redis: RedisType
     expiry = settings.mint_redis_cache_ttl
 
     def __init__(self):
@@ -64,4 +66,5 @@ class RedisCache:
         return passthrough if not settings.mint_redis_cache_enabled else decorator
 
     async def disconnect(self):
-        await self.redis.close()
+        if self.redis:
+            await self.redis.close()
