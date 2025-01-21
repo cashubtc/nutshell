@@ -15,8 +15,10 @@ from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
+    InvalidProofsError,
     NoSecretInProofsError,
     NotAllowedError,
+    OutputsAlreadySignedError,
     SecretTooLongError,
     TransactionError,
     TransactionUnitError,
@@ -79,7 +81,7 @@ class LedgerVerification(
             raise TransactionError("duplicate proofs.")
         # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
-            raise TransactionError("could not verify proofs.")
+            raise InvalidProofsError()
         # Verify input spending conditions
         if not all([self._verify_input_spending_conditions(p) for p in proofs]):
             raise TransactionError("validation of input spending conditions failed.")
@@ -141,7 +143,7 @@ class LedgerVerification(
         # verify that outputs have not been signed previously
         signed_before = await self._check_outputs_issued_before(outputs, conn)
         if any(signed_before):
-            raise TransactionError("outputs have already been signed before.")
+            raise OutputsAlreadySignedError()
         logger.trace(f"Verified {len(outputs)} outputs.")
 
     async def _check_outputs_issued_before(
