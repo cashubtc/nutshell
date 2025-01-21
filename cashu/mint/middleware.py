@@ -121,7 +121,7 @@ class CompressionMiddleware(BaseHTTPMiddleware):
             return response
 
         response_body = b""
-        async for chunk in response.body_iterator:
+        async for chunk in response.body_iterator:  # type: ignore
             response_body += chunk
 
         accept_encoding = request.headers.get("Accept-Encoding", "")
