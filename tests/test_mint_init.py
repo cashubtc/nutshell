@@ -239,6 +239,7 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only for fake wallet")
 async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
+    # unknown state simulates a failure th check the lightning backend
     pending_proof, quote = await create_pending_melts(ledger)
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
@@ -250,11 +251,12 @@ async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
         db=ledger.db
     )
-    assert not melt_quotes
+    assert melt_quotes
+    assert melt_quotes[0].state == MeltQuoteState.pending
 
     # expect that proofs are still pending
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
-    assert states[0].unspent
+    assert states[0].pending
 
 
 @pytest.mark.asyncio
@@ -450,18 +452,19 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
 
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routinge
+    # run startup routine
     await ledger.startup_ledger()
 
-    # expect that no melt quote is pending
+    # expect that melt quote is still pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
         db=ledger.db
     )
-    assert not melt_quotes
+    assert melt_quotes
+    assert melt_quotes[0].state == MeltQuoteState.pending
 
-    # expect that proofs are unspent
+    # expect that proofs are pending
     states = await ledger.db_read.get_proofs_states([p.Y for p in send_proofs])
-    assert all([s.unspent for s in states])
+    assert all([s.pending for s in states])
 
     # clean up
     cancel_invoice(preimage_hash=preimage_hash)

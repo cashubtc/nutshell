@@ -18,6 +18,19 @@ class NotAllowedError(CashuError):
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
         super().__init__(detail or self.detail, code=code or self.code)
 
+class OutputsAlreadySignedError(CashuError):
+    detail = "outputs have already been signed before."
+    code = 10002
+
+    def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
+        super().__init__(detail or self.detail, code=code or self.code)
+
+class InvalidProofsError(CashuError):
+    detail = "proofs could not be verified"
+    code = 10003
+
+    def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
+        super().__init__(detail or self.detail, code=code or self.code)
 
 class TransactionError(CashuError):
     detail = "transaction error"
@@ -63,6 +76,11 @@ class TransactionUnitError(TransactionError):
     def __init__(self, detail):
         super().__init__(detail, code=self.code)
 
+class TransactionAmountExceedsLimitError(TransactionError):
+    code = 11006
+
+    def __init__(self, detail):
+        super().__init__(detail, code=self.code)
 
 class KeysetError(CashuError):
     detail = "keyset error"

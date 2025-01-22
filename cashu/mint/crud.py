@@ -522,8 +522,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, change, expiry)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, outputs, change, expiry)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :outputs, :change, :expiry)
             """,
             {
                 "quote": quote.quote,
@@ -543,6 +543,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 ),
                 "fee_paid": quote.fee_paid,
                 "proof": quote.payment_preimage,
+                "outputs": json.dumps(quote.outputs) if quote.outputs else None,
                 "change": json.dumps(quote.change) if quote.change else None,
                 "expiry": db.to_timestamp(
                     db.timestamp_from_seconds(quote.expiry) or ""
@@ -607,7 +608,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change, checking_id = :checking_id WHERE quote = :quote
+            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, outputs = :outputs, change = :change, checking_id = :checking_id WHERE quote = :quote
             """,
             {
                 "state": quote.state.value,
@@ -616,6 +617,11 @@ class LedgerCrudSqlite(LedgerCrud):
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 ),
                 "proof": quote.payment_preimage,
+                "outputs": (
+                    json.dumps([s.dict() for s in quote.outputs])
+                    if quote.outputs
+                    else None
+                ),
                 "change": (
                     json.dumps([s.dict() for s in quote.change])
                     if quote.change
