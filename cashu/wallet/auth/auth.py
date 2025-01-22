@@ -69,22 +69,24 @@ class WalletAuth(Wallet):
     async def with_db(cls, *args, **kwargs) -> "WalletAuth":
         """Create a new wallet with a database."""
 
-        dirty_url_parse = args[0]
-        dirty_db_parse = args[1]
-        dirty_wallet_name = args[2]
+        url: str = kwargs.get("url", "")
+        db = kwargs.get("db", "")
+        name = kwargs.get("name", "auth")
+        username = kwargs.get("username")
+        password = kwargs.get("password")
         wallet_db_name = kwargs.get("wallet_db")
         if not wallet_db_name:
             raise Exception("Wallet db location is required.")
-        wallet_db = Database(dirty_wallet_name, dirty_db_parse)
+        wallet_db = Database(name, db)
 
         # the wallet db could not have been created yet
         try:
-            mint_db = await get_mint_by_url(wallet_db, dirty_url_parse)
+            mint_db = await get_mint_by_url(wallet_db, url)
             if mint_db:
                 kwargs.update(
                     {
-                        "username": mint_db.username,
-                        "password": mint_db.password,
+                        "username": username or mint_db.username,
+                        "password": password or mint_db.password,
                         "access_token": mint_db.access_token,
                         "refresh_token": mint_db.refresh_token,
                     }
@@ -182,9 +184,7 @@ class WalletAuth(Wallet):
         rs = [PrivateKey(privkey=os.urandom(32), raw=True) for _ in amounts]
         derivation_paths = ["" for _ in amounts]
         outputs, rs = self._construct_outputs(amounts, secrets, rs)
-
         promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
-
         new_proofs = await self._construct_proofs(
             promises, secrets, rs, derivation_paths
         )

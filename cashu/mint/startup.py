@@ -105,7 +105,6 @@ async def rotate_keys(n_seconds=60):
 
 
 async def start_auth():
-    # TODO: use auth migrations, not mint migrations
     await migrate_databases(auth_ledger.db, auth_migrations)
     logger.info("Starting auth ledger.")
     await auth_ledger.init_keysets()

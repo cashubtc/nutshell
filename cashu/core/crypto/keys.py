@@ -28,7 +28,6 @@ def derive_keys_deprecated_pre_0_15(
 ):
     """
     Deterministic derivation of keys for 2^n values.
-    TODO: Implement BIP32.
     """
     return {
         a: PrivateKey(

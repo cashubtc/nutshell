@@ -20,10 +20,14 @@ from loguru import logger
 class AuthorizationFlow(Enum):
     AUTHORIZATION_CODE = "authorization_code"
     PASSWORD = "password"
-    DEVICE_CODE = "device_code"
+    DEVICE_CODE = "urn:ietf:params:oauth:grant-type:device_code"
 
 
 class OpenIDClient:
+    """OpenID Connect client for authentication."""
+
+    oidc_config: Dict[str, Any]
+
     def __init__(
         self,
         discovery_url: str,
@@ -64,15 +68,38 @@ class OpenIDClient:
         self.app: FastAPI = FastAPI()
         self.app.state.client = self  # Store self in app state
 
-        # Set up the route handlers
-        # TODO: enable callback only for authorization_code flow
-        @self.app.get("/callback", response_class=HTMLResponse)
-        async def handle_callback(request: Request) -> Any:
-            return await self.handle_callback(request)
-
     async def initialize(self) -> None:
         """Initialize the client asynchronously."""
         await self.fetch_oidc_configuration()
+        await self.determine_auth_flow()
+
+    async def determine_auth_flow(self) -> AuthorizationFlow:
+        """Determine the authentication flow to use from the oidc configuration.
+        Supported flows are chosen in the following order:
+        - device_code
+        - authorization_code
+        - password
+        """
+        if not hasattr(self, "oidc_config"):
+            raise ValueError(
+                "OIDC configuration not loaded. Call fetch_oidc_configuration first."
+            )
+
+        supported_flows = self.oidc_config.get("grant_types_supported", [])
+
+        if AuthorizationFlow.DEVICE_CODE.value in supported_flows:
+            self.auth_flow = AuthorizationFlow.DEVICE_CODE
+        elif AuthorizationFlow.AUTHORIZATION_CODE.value in supported_flows:
+            self.auth_flow = AuthorizationFlow.AUTHORIZATION_CODE
+        elif AuthorizationFlow.PASSWORD.value in supported_flows:
+            self.auth_flow = AuthorizationFlow.PASSWORD
+        else:
+            raise ValueError(
+                "No supported authentication flows found in the OIDC configuration."
+            )
+
+        logger.debug(f"Determined authentication flow: {self.auth_flow.value}")
+        return self.auth_flow
 
     async def fetch_oidc_configuration(self) -> None:
         """Fetch OIDC configuration from the discovery URL."""
@@ -80,12 +107,16 @@ class OpenIDClient:
             async with httpx.AsyncClient() as client:
                 response = await client.get(self.discovery_url)
                 response.raise_for_status()
-                oidc_config = response.json()
-                self.authorization_endpoint = oidc_config.get("authorization_endpoint")
-                self.token_endpoint = oidc_config.get("token_endpoint")
-                self.introspection_endpoint = oidc_config.get("introspection_endpoint")
-                self.revocation_endpoint = oidc_config.get("revocation_endpoint")
-                self.device_authorization_endpoint = oidc_config.get(
+                self.oidc_config = response.json()
+                self.authorization_endpoint = self.oidc_config.get(  # type: ignore
+                    "authorization_endpoint"
+                )
+                self.token_endpoint = self.oidc_config.get("token_endpoint")  # type: ignore
+                self.introspection_endpoint = self.oidc_config.get(
+                    "introspection_endpoint"
+                )
+                self.revocation_endpoint = self.oidc_config.get("revocation_endpoint")
+                self.device_authorization_endpoint = self.oidc_config.get(
                     "device_authorization_endpoint"
                 )
         except httpx.HTTPError as e:
@@ -108,10 +139,8 @@ class OpenIDClient:
             state: str = params["state"]
             if state != self.expected_state:
                 raise HTTPException(status_code=400, detail="Invalid state parameter")
-            # Exchange the code for tokens
             token_data: Dict[str, Any] = await self.exchange_code_for_token(code)
             self.update_token_data(token_data)
-            # Render an HTML page with a green check mark and user info
             response = self.render_success_page(request, token_data)
             self.token_event.set()  # Signal that the token has been received
             return response
@@ -166,7 +195,7 @@ class OpenIDClient:
         """Start the authentication process."""
         need_authenticate = force_authenticate
         if self.access_token and self.refresh_token:
-            # Tokens are provided, check if token is expired
+            # We have a token and a refresh token, check if token is expired
             if self.is_token_expired():
                 try:
                     await self.refresh_access_token()
@@ -215,13 +244,19 @@ class OpenIDClient:
                 self.update_token_data(token_data)
                 logger.info("Token refreshed successfully.")
             except httpx.HTTPError as e:
-                logger.error(f"Failed to refresh token: {e}")
+                logger.debug(f"Failed to refresh token: {e}")
                 raise
 
     async def authenticate_with_authorization_code(self) -> None:
         """Authenticate using the authorization code flow."""
+
+        # Set up the route handlers
+        @self.app.get("/callback", response_class=HTMLResponse)
+        async def handle_callback(request: Request) -> Any:
+            print("CALLBACK")
+            return await self.handle_callback(request)
+
         # Build the authorization URL
-        print(f"{self.client_id=}")
         params = {
             "response_type": "code",
             "client_id": self.client_id,
@@ -272,7 +307,7 @@ class OpenIDClient:
             )
         refresh_expires_in = token_data.get("refresh_expires_in")
         if refresh_expires_in:
-            logger.info(f"Refresh token expires in {refresh_expires_in} seconds.")
+            logger.debug(f"Refresh token expires in {refresh_expires_in} seconds.")
             self.refresh_token_expiration_time = datetime.utcnow() + timedelta(
                 seconds=int(refresh_expires_in)
             )

@@ -95,7 +95,7 @@ def init_auth_wallet(func):
         wallet: Wallet = ctx.obj["WALLET"]
         db_location = wallet.db.db_location
         wallet_db_name = wallet.db.name
-        MIN_BALANCE = 10
+        MIN_BALANCE = wallet.mint_info.bat_max_mint
 
         auth_wallet = await WalletAuth.with_db(
             ctx.obj["HOST"],
@@ -114,7 +114,7 @@ def init_auth_wallet(func):
         # Check balance and mint new auth proofs if necessary
         if auth_wallet.available_balance < MIN_BALANCE:
             logger.debug(
-                f"Balance too low. Mint at least {auth_wallet.unit.str(MIN_BALANCE)} auth tokens."
+                f"Balance too low. Minting {auth_wallet.unit.str(MIN_BALANCE)} auth tokens."
             )
             try:
                 new_proofs = await auth_wallet.mint_blind_auth_proofs()
@@ -1293,9 +1293,9 @@ async def auth(ctx: Context, force: bool, mint: bool, password: bool):
         username = input("Enter username: ")
         password_str = getpass.getpass("Enter password: ")
     auth_wallet = await WalletAuth.with_db(
-        ctx.obj["HOST"],
-        wallet.db.db_location,
-        "auth",
+        url=ctx.obj["HOST"],
+        db=wallet.db.db_location,
+        name="auth",
         unit=Unit.auth.name,
         wallet_db=wallet.db.name,
         username=username,
