@@ -153,9 +153,13 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         if not noprefix:
             path = join(self.api_prefix, path)
         if self.mint_info and self.mint_info.requires_blind_auth_path(method, path):
-            if not self.auth_db or not self.auth_keyset_id:
+            if not self.auth_db:
                 raise Exception(
                     "Mint requires blind auth, but no auth database is set."
+                )
+            if not self.auth_keyset_id:
+                raise Exception(
+                    "Mint requires blind auth, but no auth keyset id is set."
                 )
             proof = (await get_proofs(db=self.auth_db, id=self.auth_keyset_id))[0]
             auth_token = AuthProof.from_proof(proof).to_base64()

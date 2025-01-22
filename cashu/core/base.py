@@ -1309,8 +1309,11 @@ class AuthProof(BaseModel):
         return cls(id=proof.id, secret=proof.secret, C=proof.C)
 
     def to_base64(self):
-        # TODO: exclude amount in serialization
-        return self.prefix + base64.b64encode(json.dumps(self.dict()).encode()).decode()
+        serialize_dict = self.dict()
+        serialize_dict.pop("amount", None)
+        return (
+            self.prefix + base64.b64encode(json.dumps(serialize_dict).encode()).decode()
+        )
 
     @classmethod
     def from_base64(cls, base64_str: str):
