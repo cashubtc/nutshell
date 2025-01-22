@@ -79,7 +79,13 @@ class WalletAuth(Wallet):
             raise Exception("Wallet db location is required.")
         wallet_db = Database(name, db)
 
-        # the wallet db could not have been created yet
+        # run migrations etc
+        kwargs.update(dict(skip_db_read=True))
+        await super().with_db(*args, **kwargs)
+
+        # the wallet might not have been created yet
+        # if it was though, we load the username, password,
+        # access token and refresh token from the database
         try:
             mint_db = await get_mint_by_url(wallet_db, url)
             if mint_db:
@@ -93,10 +99,6 @@ class WalletAuth(Wallet):
                 )
         except Exception:
             pass
-
-        # run migrations etc
-        kwargs.update(dict(skip_db_read=True))
-        await super().with_db(*args, **kwargs)
 
         return cls(*args, **kwargs)
 

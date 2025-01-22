@@ -316,7 +316,7 @@ class OpenIDClient:
         """Authenticate using the resource owner password credentials flow."""
         if not self.username or not self.password:
             raise ValueError(
-                "Username and password must be provided for password flow."
+                'Username and password must be provided. To set a password use: "cashu auth -p"'
             )
         data = {
             "grant_type": "password",
@@ -334,8 +334,8 @@ class OpenIDClient:
                 token_data = response.json()
                 self.update_token_data(token_data)
                 logger.info("Authentication successful!")
-                logger.info("Token response:")
-                logger.info(self.token_response)
+                # logger.info("Token response:")
+                # logger.info(self.token_response)
             except httpx.HTTPError as e:
                 logger.error(f"Failed to obtain token: {e}")
                 raise

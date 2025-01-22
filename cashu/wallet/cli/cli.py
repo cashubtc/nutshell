@@ -95,12 +95,11 @@ def init_auth_wallet(func):
         wallet: Wallet = ctx.obj["WALLET"]
         db_location = wallet.db.db_location
         wallet_db_name = wallet.db.name
-        MIN_BALANCE = wallet.mint_info.bat_max_mint
 
         auth_wallet = await WalletAuth.with_db(
-            ctx.obj["HOST"],
-            db_location,
-            "auth",
+            url=ctx.obj["HOST"],
+            db=db_location,
+            name="auth",
             unit=Unit.auth.name,
             wallet_db=wallet_db_name,
         )
@@ -110,6 +109,8 @@ def init_auth_wallet(func):
         if not requires_auth:
             logger.debug("Mint does not require clear auth.")
             return await func(*args, **kwargs)
+
+        MIN_BALANCE = wallet.mint_info.bat_max_mint
 
         # Check balance and mint new auth proofs if necessary
         if auth_wallet.available_balance < MIN_BALANCE:
