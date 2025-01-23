@@ -148,7 +148,7 @@ async def test_regtest_internal_mpp_melt_quotes(wallet: Wallet, ledger: Ledger):
     assert wallet.mint_info.supports_mpp("bolt11", wallet.unit)
 
     # create a mint quote
-    mint_quote = wallet.request_mint(128)
+    mint_quote = await wallet.request_mint(128)
 
     # try and create a multi-part melt quote
     assert_err(wallet.melt_quote(mint_quote.request, 100), "multi-part internal payments are not possible. try with a regular payment.")
