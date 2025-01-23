@@ -144,8 +144,9 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_regtest_internal_mpp_melt_quotes(wallet: Wallet, ledger: Ledger):
-    # make sure wallet knows the backend supports mpp
-    assert wallet.mint_info.supports_mpp("bolt11", wallet.unit)
+    # make sure that mpp is supported by the bolt11-sat backend
+    if not ledger.backends[Method["bolt11"]][wallet.unit].supports_mpp:
+        pytest.skip("backend does not support mpp")
 
     # create a mint quote
     mint_quote = await wallet.request_mint(128)
