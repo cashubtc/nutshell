@@ -94,14 +94,10 @@ def init_auth_wallet(func):
         ctx = args[0]  # Assuming the first argument is 'ctx'
         wallet: Wallet = ctx.obj["WALLET"]
         db_location = wallet.db.db_location
-        wallet_db_name = wallet.db.name
 
         auth_wallet = await WalletAuth.with_db(
             url=ctx.obj["HOST"],
             db=db_location,
-            name="auth",
-            unit=Unit.auth.name,
-            wallet_db=wallet_db_name,
         )
 
         requires_auth = await auth_wallet.init_wallet(wallet.mint_info)
@@ -110,29 +106,10 @@ def init_auth_wallet(func):
             logger.debug("Mint does not require clear auth.")
             return await func(*args, **kwargs)
 
-        MIN_BALANCE = wallet.mint_info.bat_max_mint
-
-        # Check balance and mint new auth proofs if necessary
-        if auth_wallet.available_balance < MIN_BALANCE:
-            logger.debug(
-                f"Balance too low. Minting {auth_wallet.unit.str(MIN_BALANCE)} auth tokens."
-            )
-            try:
-                new_proofs = await auth_wallet.mint_blind_auth_proofs()
-                logger.debug(
-                    f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs."
-                )
-            except Exception as e:
-                logger.error(f"Error minting auth proofs: {str(e)}")
-
-        if not auth_wallet.proofs:
-            logger.error("Error initializing auth wallet.")
-            return
-
         # Pass auth_db and auth_keyset_id to the wallet object
         wallet.auth_db = auth_wallet.db
         wallet.auth_keyset_id = auth_wallet.keyset_id
-        # pass the mint_info so it doesn't need to be re-fetched
+        # pass the mint_info so the wallet doesn't need to re-fetch it
         wallet.mint_info = auth_wallet.mint_info
 
         # Pass the auth_wallet to context
@@ -1296,9 +1273,6 @@ async def auth(ctx: Context, force: bool, mint: bool, password: bool):
     auth_wallet = await WalletAuth.with_db(
         url=ctx.obj["HOST"],
         db=wallet.db.db_location,
-        name="auth",
-        unit=Unit.auth.name,
-        wallet_db=wallet.db.name,
         username=username,
         password=password_str,
     )

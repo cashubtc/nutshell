@@ -4,6 +4,7 @@ from typing import List
 
 from loguru import logger
 
+from cashu.core.helpers import sum_proofs
 from cashu.core.mint_info import MintInfo
 
 from ...core.base import Proof
@@ -18,7 +19,7 @@ class WalletAuth(Wallet):
     oidc_discovery_url: str
     oidc_client: OpenIDClient
     wallet_db: Database
-    auth_flow: AuthorizationFlow = AuthorizationFlow.AUTHORIZATION_CODE
+    auth_flow: AuthorizationFlow
     username: str | None
     password: str | None
     # API prefix for all requests
@@ -71,12 +72,10 @@ class WalletAuth(Wallet):
 
         url: str = kwargs.get("url", "")
         db = kwargs.get("db", "")
-        name = kwargs.get("name", "auth")
+        kwargs["name"] = kwargs.get("name", "auth")
+        name = kwargs["name"]
         username = kwargs.get("username")
         password = kwargs.get("password")
-        wallet_db_name = kwargs.get("wallet_db")
-        if not wallet_db_name:
-            raise Exception("Wallet db location is required.")
         wallet_db = Database(name, db)
 
         # run migrations etc
@@ -140,6 +139,24 @@ class WalletAuth(Wallet):
 
         # Store the access and refresh tokens in the database
         await self.store_clear_auth_token()
+
+        # mint auth tokens if necessary
+        MIN_BALANCE = self.mint_info.bat_max_mint
+
+        if self.available_balance < MIN_BALANCE:
+            logger.debug(
+                f"Balance too low. Minting {self.unit.str(MIN_BALANCE)} auth tokens."
+            )
+            try:
+                new_proofs = await self.mint_blind_auth_proofs()
+                logger.debug(
+                    f"Minted {self.unit.str(sum_proofs(new_proofs))} blind auth proofs."
+                )
+            except Exception as e:
+                logger.error(f"Error minting auth proofs: {str(e)}")
+
+        if not self.proofs:
+            raise Exception("No auth proofs available.")
 
         return True
 
