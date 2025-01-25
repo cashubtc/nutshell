@@ -18,7 +18,7 @@ on:
 
 jobs:
   poetry:
-    name: Run tests with Keycloak (db ${{ inputs.mint-database }})
+    name: Auth tests with Keycloak (db ${{ inputs.mint-database }})
     runs-on: ${{ inputs.os }}
     steps:
       - name: Checkout repository
