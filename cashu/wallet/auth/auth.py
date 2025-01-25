@@ -68,7 +68,25 @@ class WalletAuth(Wallet):
     # overload with_db
     @classmethod
     async def with_db(cls, *args, **kwargs) -> "WalletAuth":
-        """Create a new wallet with a database."""
+        """Create a new wallet with a database.
+        Keyword arguments:
+            url (str): Mint url.
+            db (str): Wallet db location.
+            name (str, optional): Wallet name. Defaults to "auth".
+            username (str, optional): OpenID username. When set, the username and
+                password flow will be used to authenticate. If a username is already
+                stored in the database, it will be used. Will be stored in the
+                database if not already stored.
+            password (str, optional): OpenID password. Used if username is set. Will
+                be read from the database if already stored. Will be stored in the
+                database if not already stored.
+            client_id (str, optional): OpenID client id. Defaults to "cashu-client".
+            client_secret (str, optional): OpenID client secret. Defaults to "".
+            access_token (str, optional): OpenID access token. Defaults to None.
+            refresh_token (str, optional): OpenID refresh token. Defaults to None.
+        Returns:
+            WalletAuth: WalletAuth instance.
+        """
 
         url: str = kwargs.get("url", "")
         db = kwargs.get("db", "")

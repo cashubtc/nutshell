@@ -33,7 +33,7 @@ class OpenIDClient:
         discovery_url: str,
         client_id: str,
         client_secret: str = "",
-        auth_flow: AuthorizationFlow = AuthorizationFlow.DEVICE_CODE,
+        auth_flow: Optional[AuthorizationFlow] = None,
         username: Optional[str] = None,
         password: Optional[str] = None,
         access_token: Optional[str] = None,
@@ -44,7 +44,7 @@ class OpenIDClient:
         self.discovery_url: str = discovery_url
         self.client_id: str = client_id
         self.client_secret: str = client_secret
-        self.auth_flow: AuthorizationFlow = auth_flow
+        self.auth_flow: Optional[AuthorizationFlow] = auth_flow
         self.username: Optional[str] = username
         self.password: Optional[str] = password
         self.access_token: Optional[str] = access_token
@@ -86,6 +86,14 @@ class OpenIDClient:
             )
 
         supported_flows = self.oidc_config.get("grant_types_supported", [])
+
+        # if self.auth_flow is already set, check if it is supported
+        if self.auth_flow:
+            if self.auth_flow.value not in supported_flows:
+                raise ValueError(
+                    f"Authentication flow {self.auth_flow.value} not supported by the OIDC configuration."
+                )
+            return self.auth_flow
 
         if AuthorizationFlow.DEVICE_CODE.value in supported_flows:
             self.auth_flow = AuthorizationFlow.DEVICE_CODE
