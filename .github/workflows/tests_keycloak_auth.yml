@@ -42,8 +42,7 @@ jobs:
 
       - name: Start Keycloak with Backup
         run: |
-          docker compose -f keycloak/docker-compose-restore.yml up -d postgres
-          docker compose -f keycloak/docker-compose-restore.yml up -d keycloak
+          docker compose -f keycloak/docker-compose-restore.yml up
 
       - name: Verify Keycloak Import
         run: |
