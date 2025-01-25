@@ -1,3 +1,6 @@
+import shutil
+from pathlib import Path
+
 import pytest
 import pytest_asyncio
 
@@ -10,6 +13,9 @@ from tests.helpers import assert_err
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet():
+    dirpath = Path("test_data/wallet")
+    if dirpath.exists() and dirpath.is_dir():
+        shutil.rmtree(dirpath)
     wallet = await Wallet.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet",
