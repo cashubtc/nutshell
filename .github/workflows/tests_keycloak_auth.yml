@@ -42,7 +42,8 @@ jobs:
 
       - name: Start Keycloak with Backup
         run: |
-          docker compose -f keycloak/docker-compose-restore.yml up
+          docker compose -f keycloak/docker-compose-restore.yml up -d
+          until docker logs $(docker ps -q --filter "ancestor=quay.io/keycloak/keycloak:25.0.6") | grep "Keycloak 25.0.6 on JVM (powered by Quarkus 3.8.5) started"; do sleep 1; done
 
       - name: Verify Keycloak Import
         run: |
