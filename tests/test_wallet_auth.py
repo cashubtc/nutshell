@@ -5,7 +5,7 @@ from cashu.core.settings import settings
 from cashu.wallet.auth.auth import WalletAuth
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
-from tests.utils import assert_err
+from tests.helpers import assert_err
 
 
 @pytest_asyncio.fixture(scope="function")
