@@ -22,12 +22,12 @@ services:
       KC_HTTP_ENABLED: true
       KC_HOSTNAME_STRICT_HTTPS: false
       KC_HEALTH_ENABLED: true
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres/${POSTGRES_DB}
-      KC_DB_USERNAME: ${POSTGRES_USER}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_DB_URL: jdbc:postgresql://postgres/cashu
+      KC_DB_USERNAME: cashu
+      KC_DB_PASSWORD: cashu
     ports:
       - 8080:8080
     restart: always

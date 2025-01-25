@@ -44,7 +44,6 @@ jobs:
         run: |
           docker compose -f keycloak/docker-compose-restore.yml up -d postgres
           docker compose -f keycloak/docker-compose-restore.yml up -d keycloak
-          until curl -s http://localhost:8080/realms/master; do sleep 1; done
 
       - name: Verify Keycloak Import
         run: |
