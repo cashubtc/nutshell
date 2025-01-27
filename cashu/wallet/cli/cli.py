@@ -100,7 +100,7 @@ def init_auth_wallet(func):
             db=db_location,
         )
 
-        requires_auth = await auth_wallet.init_wallet(wallet.mint_info)
+        requires_auth = await auth_wallet.init_auth_wallet(wallet.mint_info)
 
         if not requires_auth:
             logger.debug("Mint does not require clear auth.")
@@ -1249,10 +1249,10 @@ async def selfpay(ctx: Context, all: bool = False):
 
 
 @cli.command("auth", help="Authenticate with mint.")
-@click.option(
-    "--force", "-f", default=False, is_flag=True, help="Force re-authentication."
-)
 @click.option("--mint", "-m", default=False, is_flag=True, help="Mint new auth tokens.")
+@click.option(
+    "--force", "-f", default=False, is_flag=True, help="Force authentication."
+)
 @click.option(
     "--password",
     "-p",
@@ -1262,7 +1262,7 @@ async def selfpay(ctx: Context, all: bool = False):
 )
 @click.pass_context
 @coro
-async def auth(ctx: Context, force: bool, mint: bool, password: bool):
+async def auth(ctx: Context, mint: bool, force: bool, password: bool):
     # auth_wallet: WalletAuth = ctx.obj["AUTH_WALLET"]
     wallet: Wallet = ctx.obj["WALLET"]
     username = None
@@ -1277,20 +1277,15 @@ async def auth(ctx: Context, force: bool, mint: bool, password: bool):
         password=password_str,
     )
 
-    requires_auth = await auth_wallet.init_wallet(wallet.mint_info)
+    requires_auth = await auth_wallet.init_auth_wallet(
+        wallet.mint_info, mint_auth_proofs=False, force_auth=force
+    )
     if not requires_auth:
         print("Mint does not require authentication.")
         return
 
-    await auth_wallet.oidc_client.initialize()
-    await auth_wallet.oidc_client.authenticate(force_authenticate=force)
-
-    await auth_wallet.load_proofs(reload=True)
-    print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
-
     if mint:
-        new_proofs = await auth_wallet.mint_blind_auth_proofs()
-        print(
-            f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} blind auth proofs."
-        )
-        print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
+        new_proofs = await auth_wallet.mint_blind_auth()
+        print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
+
+    print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")

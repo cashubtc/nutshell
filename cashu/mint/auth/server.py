@@ -1,4 +1,3 @@
-import datetime
 from contextlib import asynccontextmanager
 from typing import Any, List, Optional
 
@@ -12,6 +11,7 @@ from ...core.models import BlindedMessage, BlindedSignature
 from ...core.settings import settings
 from ..crud import LedgerCrudSqlite
 from ..ledger import Ledger
+from ..limit import assert_limit
 from .base import User
 from .crud import AuthLedgerCrud, AuthLedgerCrudSqlite
 
@@ -154,14 +154,10 @@ class AuthLedger(Ledger):
         decoded = self._verify_decode_jwt(clear_auth_token)
         user = await self._get_user(decoded)
         logger.info(f"User authenticated: {user.id}")
-
-        if (
-            user.last_access
-            and user.last_access
-            > datetime.datetime.now()
-            - datetime.timedelta(seconds=settings.mint_auth_rate_limit_seconds)
-        ):
-            raise Exception("Rate limit exceeded.")
+        try:
+            assert_limit(user.id)
+        except Exception as e:
+            raise e
 
         return user
 

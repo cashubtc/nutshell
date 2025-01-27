@@ -1,6 +1,6 @@
 import hashlib
 import os
-from typing import List
+from typing import List, Optional
 
 from loguru import logger
 
@@ -119,13 +119,26 @@ class WalletAuth(Wallet):
 
         return cls(*args, **kwargs)
 
-    async def init_wallet(self, mint_info: MintInfo) -> bool:
+    async def init_auth_wallet(
+        self,
+        mint_info: Optional[MintInfo] = None,
+        mint_auth_proofs=True,
+        force_auth=False,
+    ) -> bool:
         """Initialize authentication wallet.
+
+        Args:
+            mint_info (MintInfo, optional): Mint information. If not provided, we load the
+                info from the database or the mint directly. Defaults to None.
+            mint_auth_proofs (bool, optional): Whether to mint auth proofs if necessary.
+                Defaults to True.
+            force_auth (bool, optional): Whether to force authentication. Defaults to False.
 
         Returns:
             bool: False if the mint does not require clear auth. True otherwise.
         """
-        self.mint_info = mint_info
+        if mint_info:
+            self.mint_info = mint_info
         await self.load_mint_info()
         if not self.mint_info.requires_clear_auth():
             return False
@@ -151,14 +164,18 @@ class WalletAuth(Wallet):
         )
         # Authenticate using OpenIDClient
         await self.oidc_client.initialize()
-        await self.oidc_client.authenticate()
+        await self.oidc_client.authenticate(force_authenticate=force_auth)
 
         await self.store_username_password()
-
-        # Store the access and refresh tokens in the database
         await self.store_clear_auth_token()
 
-        # mint auth tokens if necessary
+        if mint_auth_proofs:
+            await self.mint_blind_auth_min_balance()
+
+        return True
+
+    async def mint_blind_auth_min_balance(self) -> None:
+        """Mint auth tokens if necessary."""
         MIN_BALANCE = self.mint_info.bat_max_mint
 
         if self.available_balance < MIN_BALANCE:
@@ -166,17 +183,9 @@ class WalletAuth(Wallet):
                 f"Balance too low. Minting {self.unit.str(MIN_BALANCE)} auth tokens."
             )
             try:
-                new_proofs = await self.mint_blind_auth_proofs()
-                logger.debug(
-                    f"Minted {self.unit.str(sum_proofs(new_proofs))} blind auth proofs."
-                )
+                await self.mint_blind_auth()
             except Exception as e:
                 logger.error(f"Error minting auth proofs: {str(e)}")
-
-        if not self.proofs:
-            raise Exception("No auth proofs available.")
-
-        return True
 
     async def store_username_password(self) -> None:
         """Store the username and password in the database."""
@@ -207,7 +216,7 @@ class WalletAuth(Wallet):
             mint_db.refresh_token = refresh_token
             await update_mint(self.db, mint_db)
 
-    async def mint_blind_auth_proofs(self) -> List[Proof]:
+    async def mint_blind_auth(self) -> List[Proof]:
         # Ensure access token is valid
         if self.oidc_client.is_token_expired():
             await self.oidc_client.refresh_access_token()
@@ -224,5 +233,8 @@ class WalletAuth(Wallet):
         promises = await self.blind_mint_blind_auth(clear_auth_token, outputs)
         new_proofs = await self._construct_proofs(
             promises, secrets, rs, derivation_paths
+        )
+        logger.debug(
+            f"Minted {self.unit.str(sum_proofs(new_proofs))} blind auth proofs."
         )
         return new_proofs
