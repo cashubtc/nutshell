@@ -91,6 +91,29 @@ async def test_wallet_auth_mint(wallet: Wallet):
     reason="settings.mint_require_auth is False",
 )
 @pytest.mark.asyncio
+async def test_wallet_auth_mint_manually(wallet: Wallet):
+    auth_wallet = await WalletAuth.with_db(
+        url=wallet.url,
+        db=wallet.db.db_location,
+        username="asd@asd.com",
+        password="asdasd",
+    )
+
+    requires_auth = await auth_wallet.init_auth_wallet(
+        wallet.mint_info, mint_auth_proofs=False
+    )
+    assert requires_auth
+    assert len(auth_wallet.proofs) == 0
+
+    await auth_wallet.mint_blind_auth()
+    assert len(auth_wallet.proofs) == auth_wallet.mint_info.bat_max_mint
+
+
+@pytest.mark.skipif(
+    not settings.mint_require_auth,
+    reason="settings.mint_require_auth is False",
+)
+@pytest.mark.asyncio
 async def test_wallet_auth_invoice(wallet: Wallet):
     # should fail
     await assert_err(wallet.mint_quote(10, Unit.sat), "Mint requires blind auth")
@@ -112,3 +135,38 @@ async def test_wallet_auth_invoice(wallet: Wallet):
 
     # should succeed
     await wallet.mint_quote(10, Unit.sat)
+
+
+@pytest.mark.skipif(
+    not settings.mint_require_auth,
+    reason="settings.mint_require_auth is False",
+)
+@pytest.mark.asyncio
+async def test_wallet_auth_rate_limit(wallet: Wallet):
+    # should fail
+    await assert_err(wallet.mint_quote(10, Unit.sat), "Mint requires blind auth")
+
+    auth_wallet = await WalletAuth.with_db(
+        url=wallet.url,
+        db=wallet.db.db_location,
+        username="asd@asd.com",
+        password="asdasd",
+    )
+    requires_auth = await auth_wallet.init_auth_wallet(
+        wallet.mint_info, mint_auth_proofs=False
+    )
+    assert requires_auth
+
+    errored = False
+    for _ in range(100):
+        try:
+            await auth_wallet.mint_blind_auth()
+        except Exception as e:
+            assert "Rate limit exceeded" in str(e)
+            errored = True
+            break
+
+    assert errored
+
+    # should have minted at least twice
+    assert len(auth_wallet.proofs) > auth_wallet.mint_info.bat_max_mint
