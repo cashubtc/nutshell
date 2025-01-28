@@ -103,6 +103,7 @@ async def receive(
     wallet: Wallet,
     token: Token,
 ) -> Wallet:
+    await wallet.load_proofs()
     mint_wallet = await redeem_universal(wallet, token)
     # reload main wallet so the balance updates
     await wallet.load_proofs(reload=True)
