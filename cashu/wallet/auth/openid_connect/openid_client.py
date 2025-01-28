@@ -211,7 +211,7 @@ class OpenIDClient:
                     logger.debug("Failed to refresh token.")
                     need_authenticate = True
             else:
-                logger.info("Using existing access token.")
+                logger.debug("Using existing access token.")
         else:
             need_authenticate = True
 

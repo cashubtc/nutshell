@@ -175,7 +175,7 @@ class WalletAuth(Wallet):
         return True
 
     async def mint_blind_auth_min_balance(self) -> None:
-        """Mint auth tokens if necessary."""
+        """Mint auth tokens if balance is too low."""
         MIN_BALANCE = self.mint_info.bat_max_mint
 
         if self.available_balance < MIN_BALANCE:
