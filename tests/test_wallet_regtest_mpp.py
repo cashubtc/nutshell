@@ -141,6 +141,7 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
 
     assert wallet.balance <= 384 - 64
 
+
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_regtest_internal_mpp_melt_quotes(wallet: Wallet, ledger: Ledger):
@@ -152,4 +153,6 @@ async def test_regtest_internal_mpp_melt_quotes(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(128)
 
     # try and create a multi-part melt quote
-    assert_err(wallet.melt_quote(mint_quote.request, 100), "multi-part internal payments are not possible. try with a regular payment.")
+    await assert_err(
+        wallet.melt_quote(mint_quote.request, 100), "internal mpp not allowed"
+    )

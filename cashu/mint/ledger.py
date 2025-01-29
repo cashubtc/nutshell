@@ -671,13 +671,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             # check if the melt quote is partial and error if it is.
             # it's just not possible to handle this case
             if melt_quote.is_mpp:
-                raise TransactionError("multi-part internal payments are not possible. try with a regular payment.")
+                raise TransactionError("internal mpp not allowed.")
             payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
         else:
             # not internal
             # verify that the backend supports mpp if the quote request has an amount
             if melt_quote.is_mpp and not self.backends[method][unit].supports_mpp:
-                raise TransactionError("backend does not support mpp")
+                raise TransactionError("backend does not support mpp.")
             # get payment quote by backend
             payment_quote = await self.backends[method][unit].get_payment_quote(
                 melt_quote=melt_quote
