@@ -26,7 +26,7 @@ auth_router: APIRouter = APIRouter()
 )
 async def keys():
     """This endpoint returns a dictionary of all supported token values of the mint and their associated public key."""
-    logger.trace("> GET /v1/keys")
+    logger.trace("> GET /v1/auth/blind/keys")
     keyset = auth_ledger.keyset
     keyset_for_response = []
     for keyset in auth_ledger.keysets.values():
@@ -55,14 +55,7 @@ async def keyset_keys(keyset_id: str) -> KeysResponse:
     """
     Get the public keys of the mint from a specific keyset id.
     """
-    logger.trace(f"> GET /v1/keys/{keyset_id}")
-    # BEGIN BACKWARDS COMPATIBILITY < 0.15.0
-    # if keyset_id is not hex, we assume it is base64 and sanitize it
-    try:
-        int(keyset_id, 16)
-    except ValueError:
-        keyset_id = keyset_id.replace("-", "+").replace("_", "/")
-    # END BACKWARDS COMPATIBILITY < 0.15.0
+    logger.trace(f"> GET /v1/auth/blind/keys/{keyset_id}")
 
     keyset = auth_ledger.keysets.get(keyset_id)
     if keyset is None:
@@ -85,7 +78,7 @@ async def keyset_keys(keyset_id: str) -> KeysResponse:
 )
 async def keysets() -> KeysetsResponse:
     """This endpoint returns a list of keysets that the mint currently supports and will accept tokens from."""
-    logger.trace("> GET /v1/keysets")
+    logger.trace("> GET /v1/auth/blind/keysets")
     keysets = []
     for id, keyset in auth_ledger.keysets.items():
         keysets.append(
