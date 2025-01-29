@@ -11,6 +11,7 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
+    assert_err,
     get_real_invoice,
     is_fake,
     partial_pay_real_invoice,
@@ -139,3 +140,19 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     await asyncio.sleep(2)
 
     assert wallet.balance <= 384 - 64
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_regtest_internal_mpp_melt_quotes(wallet: Wallet, ledger: Ledger):
+    # make sure that mpp is supported by the bolt11-sat backend
+    if not ledger.backends[Method["bolt11"]][wallet.unit].supports_mpp:
+        pytest.skip("backend does not support mpp")
+
+    # create a mint quote
+    mint_quote = await wallet.request_mint(128)
+
+    # try and create a multi-part melt quote
+    await assert_err(
+        wallet.melt_quote(mint_quote.request, 100), "internal mpp not allowed"
+    )
