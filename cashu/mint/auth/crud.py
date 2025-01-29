@@ -28,8 +28,7 @@ class AuthLedgerCrud(ABC):
         db: Database,
         user: User,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_user(
@@ -38,8 +37,7 @@ class AuthLedgerCrud(ABC):
         db: Database,
         user_id: str,
         conn: Optional[Connection] = None,
-    ) -> Optional[User]:
-        ...
+    ) -> Optional[User]: ...
 
     async def update_user(
         self,
@@ -47,8 +45,7 @@ class AuthLedgerCrud(ABC):
         db: Database,
         user_id: str,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_keyset(
@@ -59,8 +56,7 @@ class AuthLedgerCrud(ABC):
         derivation_path: str = "",
         seed: str = "",
         conn: Optional[Connection] = None,
-    ) -> List[MintKeyset]:
-        ...
+    ) -> List[MintKeyset]: ...
 
     @abstractmethod
     async def get_proofs_used(
@@ -69,8 +65,7 @@ class AuthLedgerCrud(ABC):
         Ys: List[str],
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[Proof]:
-        ...
+    ) -> List[Proof]: ...
 
     @abstractmethod
     async def invalidate_proof(
@@ -80,8 +75,7 @@ class AuthLedgerCrud(ABC):
         proof: Proof,
         quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_proofs_pending(
@@ -90,8 +84,7 @@ class AuthLedgerCrud(ABC):
         Ys: List[str],
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> List[Proof]:
-        ...
+    ) -> List[Proof]: ...
 
     @abstractmethod
     async def set_proof_pending(
@@ -101,8 +94,7 @@ class AuthLedgerCrud(ABC):
         proof: Proof,
         quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def unset_proof_pending(
@@ -111,8 +103,7 @@ class AuthLedgerCrud(ABC):
         proof: Proof,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def store_keyset(
@@ -121,8 +112,7 @@ class AuthLedgerCrud(ABC):
         db: Database,
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def store_promise(
@@ -136,8 +126,7 @@ class AuthLedgerCrud(ABC):
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @abstractmethod
     async def get_promise(
@@ -146,8 +135,7 @@ class AuthLedgerCrud(ABC):
         db: Database,
         b_: str,
         conn: Optional[Connection] = None,
-    ) -> Optional[BlindedSignature]:
-        ...
+    ) -> Optional[BlindedSignature]: ...
 
     @abstractmethod
     async def get_promises(
@@ -156,29 +144,7 @@ class AuthLedgerCrud(ABC):
         db: Database,
         b_s: List[str],
         conn: Optional[Connection] = None,
-    ) -> List[BlindedSignature]:
-        ...
-
-    # @abstractmethod
-    # async def store_user_access_token(
-    #     self,
-    #     *,
-    #     db: Database,
-    #     user_id: str,
-    #     access_token: str,
-    #     conn: Optional[Connection] = None,
-    # ) -> None:
-    #     ...
-
-    # @abstractmethod
-    # async def get_access_token(
-    #     self,
-    #     *,
-    #     db: Database,
-    #     access_token: str,
-    #     conn: Optional[Connection] = None,
-    # ) -> Optional[str]:
-    #     ...
+    ) -> List[BlindedSignature]: ...
 
 
 class AuthLedgerCrudSqlite(AuthLedgerCrud):
