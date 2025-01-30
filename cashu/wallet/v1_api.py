@@ -162,6 +162,10 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                     "Mint requires blind auth, but no auth keyset id is set."
                 )
             proofs = await get_proofs(db=self.auth_db, id=self.auth_keyset_id)
+            if not proofs:
+                raise Exception(
+                    "Mint requires blind auth, but no blind auth tokens were found."
+                )
             # select one auth proof
             proof = proofs[0]
             auth_token = AuthProof.from_proof(proof).to_base64()

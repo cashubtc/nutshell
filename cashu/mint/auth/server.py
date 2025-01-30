@@ -7,6 +7,11 @@ from loguru import logger
 
 from ...core.base import AuthProof
 from ...core.db import Database
+from ...core.errors import (
+    BlindAuthAmountExceededError,
+    BlindAuthFailedError,
+    BlindAuthRateLimitExceededError,
+)
 from ...core.models import BlindedMessage, BlindedSignature
 from ...core.settings import settings
 from ..crud import LedgerCrudSqlite
@@ -150,14 +155,18 @@ class AuthLedger(Ledger):
         Returns:
             User: Authenticated user.
         """
-        self._verify_oicd_issuer(clear_auth_token)
-        decoded = self._verify_decode_jwt(clear_auth_token)
-        user = await self._get_user(decoded)
+        try:
+            self._verify_oicd_issuer(clear_auth_token)
+            decoded = self._verify_decode_jwt(clear_auth_token)
+            user = await self._get_user(decoded)
+        except Exception:
+            raise BlindAuthFailedError()
+
         logger.info(f"User authenticated: {user.id}")
         try:
             assert_limit(user.id)
-        except Exception as e:
-            raise e
+        except Exception:
+            raise BlindAuthRateLimitExceededError()
 
         return user
 
@@ -183,7 +192,7 @@ class AuthLedger(Ledger):
         """
 
         if len(outputs) > settings.mint_auth_max_blind_tokens:
-            raise Exception(
+            raise BlindAuthAmountExceededError(
                 f"Too many outputs. You can only mint {settings.mint_auth_max_blind_tokens} tokens."
             )
 
@@ -212,10 +221,14 @@ class AuthLedger(Ledger):
             await self.verify_inputs_and_outputs(proofs=[proof])
             await self.db_write._verify_spent_proofs_and_set_pending([proof])
         except Exception as e:
-            raise Exception(f"Blind auth error: {e}")
+            logger.error(f"Blind auth error: {e}")
+            raise BlindAuthFailedError()
 
         try:
             yield
             await self._invalidate_proofs(proofs=[proof])
+        except Exception as e:
+            logger.error(f"Blind auth error: {e}")
+            raise BlindAuthFailedError()
         finally:
             await self.db_write._unset_proofs_pending([proof])
