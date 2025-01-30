@@ -11,6 +11,7 @@ from ...core.errors import (
     BlindAuthAmountExceededError,
     BlindAuthFailedError,
     BlindAuthRateLimitExceededError,
+    ClearAuthFailedError,
 )
 from ...core.models import BlindedMessage, BlindedSignature
 from ...core.settings import settings
@@ -160,7 +161,7 @@ class AuthLedger(Ledger):
             decoded = self._verify_decode_jwt(clear_auth_token)
             user = await self._get_user(decoded)
         except Exception:
-            raise BlindAuthFailedError()
+            raise ClearAuthFailedError()
 
         logger.info(f"User authenticated: {user.id}")
         try:

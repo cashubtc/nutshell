@@ -1,3 +1,5 @@
+import hashlib
+import os
 import shutil
 from pathlib import Path
 
@@ -6,7 +8,12 @@ import pytest_asyncio
 
 from cashu.core.base import Unit
 from cashu.core.crypto.keys import random_hash
-from cashu.core.errors import BlindAuthFailedError, BlindAuthRateLimitExceededError
+from cashu.core.crypto.secp import PrivateKey
+from cashu.core.errors import (
+    BlindAuthFailedError,
+    BlindAuthRateLimitExceededError,
+    ClearAuthFailedError,
+)
 from cashu.core.settings import settings
 from cashu.wallet.auth.auth import WalletAuth
 from cashu.wallet.wallet import Wallet
@@ -109,6 +116,45 @@ async def test_wallet_auth_mint_manually(wallet: Wallet):
 
     await auth_wallet.mint_blind_auth()
     assert len(auth_wallet.proofs) == auth_wallet.mint_info.bat_max_mint
+
+
+@pytest.mark.skipif(
+    not settings.mint_require_auth,
+    reason="settings.mint_require_auth is False",
+)
+@pytest.mark.asyncio
+async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet):
+    auth_wallet = await WalletAuth.with_db(
+        url=wallet.url,
+        db=wallet.db.db_location,
+        username="asd@asd.com",
+        password="asdasd",
+    )
+
+    requires_auth = await auth_wallet.init_auth_wallet(
+        wallet.mint_info, mint_auth_proofs=False
+    )
+    assert requires_auth
+    assert len(auth_wallet.proofs) == 0
+
+    # invalidate CAT in the database
+    auth_wallet.oidc_client.access_token = random_hash()
+
+    # this is the code executed in auth_wallet.mint_blind_auth():
+    clear_auth_token = auth_wallet.oidc_client.access_token
+    if not clear_auth_token:
+        raise Exception("No clear auth token available.")
+
+    amounts = auth_wallet.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
+    secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
+    rs = [PrivateKey(privkey=os.urandom(32), raw=True) for _ in amounts]
+    outputs, rs = auth_wallet._construct_outputs(amounts, secrets, rs)
+
+    # should fail because of invalid CAT
+    await assert_err(
+        auth_wallet.blind_mint_blind_auth(clear_auth_token, outputs),
+        ClearAuthFailedError.detail,
+    )
 
 
 @pytest.mark.skipif(
