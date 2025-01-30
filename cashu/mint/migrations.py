@@ -858,3 +858,13 @@ async def m024_add_melt_quote_outputs(db: Database):
                 ADD COLUMN outputs TEXT DEFAULT NULL
             """
         )
+
+
+async def m025_add_amounts_to_keysets(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('keysets')} ADD COLUMN amounts TEXT"
+        )
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('keysets')} SET amounts = '[]'"
+        )

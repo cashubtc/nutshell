@@ -18,6 +18,7 @@ class NotAllowedError(CashuError):
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
         super().__init__(detail or self.detail, code=code or self.code)
 
+
 class OutputsAlreadySignedError(CashuError):
     detail = "outputs have already been signed before."
     code = 10002
@@ -25,12 +26,14 @@ class OutputsAlreadySignedError(CashuError):
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
         super().__init__(detail or self.detail, code=code or self.code)
 
+
 class InvalidProofsError(CashuError):
     detail = "proofs could not be verified"
     code = 10003
 
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
         super().__init__(detail or self.detail, code=code or self.code)
+
 
 class TransactionError(CashuError):
     detail = "transaction error"
@@ -76,11 +79,13 @@ class TransactionUnitError(TransactionError):
     def __init__(self, detail):
         super().__init__(detail, code=self.code)
 
+
 class TransactionAmountExceedsLimitError(TransactionError):
     code = 11006
 
     def __init__(self, detail):
         super().__init__(detail, code=self.code)
+
 
 class KeysetError(CashuError):
     detail = "keyset error"
@@ -113,7 +118,7 @@ class QuoteNotPaidError(CashuError):
     code = 20001
 
     def __init__(self):
-        super().__init__(self.detail, code=2001)
+        super().__init__(self.detail, code=self.code)
 
 
 class QuoteSignatureInvalidError(CashuError):
@@ -121,7 +126,7 @@ class QuoteSignatureInvalidError(CashuError):
     code = 20008
 
     def __init__(self):
-        super().__init__(self.detail, code=20008)
+        super().__init__(self.detail, code=self.code)
 
 
 class QuoteRequiresPubkeyError(CashuError):
@@ -129,4 +134,52 @@ class QuoteRequiresPubkeyError(CashuError):
     code = 20009
 
     def __init__(self):
-        super().__init__(self.detail, code=20009)
+        super().__init__(self.detail, code=self.code)
+
+
+class ClearAuthRequiredError(CashuError):
+    detail = "Endpoint requires clear auth"
+    code = 80001
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class ClearAuthFailedError(CashuError):
+    detail = "Clear authentication failed"
+    code = 80002
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class BlindAuthRequiredError(CashuError):
+    detail = "Endpoint requires blind auth"
+    code = 81001
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class BlindAuthFailedError(CashuError):
+    detail = "Blind authentication failed"
+    code = 81002
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)
+
+
+class BlindAuthAmountExceededError(CashuError):
+    detail = "Maximum blind auth amount exceeded"
+    code = 81003
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
+class BlindAuthRateLimitExceededError(CashuError):
+    detail = "Blind auth token mint rate limit exceeded"
+    code = 81004
+
+    def __init__(self):
+        super().__init__(self.detail, code=self.code)

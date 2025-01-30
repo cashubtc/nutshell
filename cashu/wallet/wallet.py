@@ -1,4 +1,5 @@
 import copy
+import json
 import threading
 import time
 from typing import Callable, Dict, List, Optional, Tuple, Union
@@ -17,6 +18,7 @@ from ..core.base import (
     Proof,
     Unit,
     WalletKeyset,
+    WalletMint,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
@@ -30,6 +32,7 @@ from ..core.helpers import (
 )
 from ..core.json_rpc.base import JSONRPCSubscriptionKinds
 from ..core.migrations import migrate_databases
+from ..core.mint_info import MintInfo
 from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
@@ -43,6 +46,7 @@ from .crud import (
     bump_secret_derivation,
     get_bolt11_mint_quote,
     get_keysets,
+    get_mint_by_url,
     get_proofs,
     invalidate_proof,
     secret_used,
@@ -50,14 +54,16 @@ from .crud import (
     store_bolt11_melt_quote,
     store_bolt11_mint_quote,
     store_keyset,
+    store_mint,
     store_proof,
     update_bolt11_melt_quote,
     update_bolt11_mint_quote,
     update_keyset,
+    update_mint,
     update_proof,
 )
+from .errors import BalanceTooLowError
 from .htlc import WalletHTLC
-from .mint_info import MintInfo
 from .p2pk import WalletP2PK
 from .proofs import WalletProofs
 from .secrets import WalletSecrets
@@ -108,20 +114,40 @@ class Wallet(
     db: Database
     bip32: BIP32
     # private_key: Optional[PrivateKey] = None
+    auth_db: Optional[Database] = None
+    auth_keyset_id: Optional[str] = None
 
-    def __init__(self, url: str, db: str, name: str = "wallet", unit: str = "sat"):
+    def __init__(
+        self,
+        url: str,
+        db: str,
+        name: str = "wallet",
+        unit: str = "sat",
+        auth_db: Optional[str] = None,
+        auth_keyset_id: Optional[str] = None,
+    ):
         """A Cashu wallet.
 
         Args:
             url (str): URL of the mint.
             db (str): Path to the database directory.
             name (str, optional): Name of the wallet database file. Defaults to "wallet".
+            unit (str, optional): Unit of the wallet. Defaults to "sat".
+            auth_db (Optional[str], optional): Path to the auth database directory. Defaults to None.
+            auth_keyset_id (Optional[str], optional): Keyset ID of the auth keyset. Defaults to None.
         """
-        self.db = Database("wallet", db)
+        self.db = Database(name, db)
         self.proofs: List[Proof] = []
         self.name = name
         self.unit = Unit[unit]
         url = sanitize_url(url)
+
+        # if this is an auth wallet
+        if (auth_db and not auth_keyset_id) or (not auth_db and auth_keyset_id):
+            raise Exception("Both auth_db and auth_keyset_id must be provided.")
+        if auth_db and auth_keyset_id:
+            self.auth_db = Database("auth", auth_db)
+            self.auth_keyset_id = auth_keyset_id
 
         super().__init__(url=url, db=self.db)
         logger.debug("Wallet initialized")
@@ -137,7 +163,10 @@ class Wallet(
         name: str = "wallet",
         skip_db_read: bool = False,
         unit: str = "sat",
+        auth_db: Optional[str] = None,
+        auth_keyset_id: Optional[str] = None,
         load_all_keysets: bool = False,
+        **kwargs,
     ):
         """Initializes a wallet with a database and initializes the private key.
 
@@ -151,12 +180,22 @@ class Wallet(
             unit (str, optional): Unit of the wallet. Defaults to "sat".
             load_all_keysets (bool, optional): If true, all keysets are loaded from the database.
                 Defaults to False.
+            auth_db (Optional[str], optional): Path to the auth database directory. Defaults to None.
+            auth_keyset_id (Optional[str], optional): Keyset ID of the auth keyset. Defaults to None.
+            kwargs: Additional keyword arguments.
 
         Returns:
             Wallet: Initialized wallet.
         """
         logger.trace(f"Initializing wallet with database: {db}")
-        self = cls(url=url, db=db, name=name, unit=unit)
+        self = cls(
+            url=url,
+            db=db,
+            name=name,
+            unit=unit,
+            auth_db=auth_db,
+            auth_keyset_id=auth_keyset_id,
+        )
         await self._migrate_database()
 
         if skip_db_read:
@@ -172,8 +211,13 @@ class Wallet(
             self.keysets = {k.id: k for k in keysets_active_unit}
         else:
             self.keysets = {k.id: k for k in keysets_list}
-        keysets_str = " ".join([f"{i} {k.unit}" for i, k in self.keysets.items()])
-        logger.debug(f"Loaded keysets: {keysets_str}")
+
+        if self.keysets:
+            keysets_str = " ".join([f"{i} {k.unit}" for i, k in self.keysets.items()])
+            logger.debug(f"Loaded keysets: {keysets_str}")
+
+        await self.load_mint_info(offline=True)
+
         return self
 
     async def _migrate_database(self):
@@ -185,12 +229,63 @@ class Wallet(
 
     # ---------- API ----------
 
-    async def load_mint_info(self) -> MintInfo:
-        """Loads the mint info from the mint."""
-        mint_info_resp = await self._get_info()
-        self.mint_info = MintInfo(**mint_info_resp.dict())
-        logger.debug(f"Mint info: {self.mint_info}")
-        return self.mint_info
+    async def load_mint_info(self, reload=False, offline=False) -> MintInfo | None:
+        """Loads the mint info from the mint.
+
+        Args:
+            reload (bool, optional): If True, the mint info is reloaded from the mint. Defaults to False.
+            offline (bool, optional): If True, the mint info is not loaded from the mint. Defaults to False.
+        """
+        # if self.mint_info and not reload:
+        #     return self.mint_info
+
+        # read mint info from db
+        if reload:
+            if offline:
+                raise Exception("Cannot reload mint info offline.")
+            logger.debug("Forcing reload of mint info.")
+            mint_info_resp = await self._get_info()
+            self.mint_info = MintInfo(**mint_info_resp.dict())
+
+        wallet_mint_db = await get_mint_by_url(url=self.url, db=self.db)
+        if not wallet_mint_db:
+            if self.mint_info:
+                logger.debug("Storing mint info in db.")
+                await store_mint(
+                    db=self.db,
+                    mint=WalletMint(
+                        url=self.url, info=json.dumps(self.mint_info.dict())
+                    ),
+                )
+            else:
+                if offline:
+                    return None
+            logger.debug("Loading mint info from mint.")
+            mint_info_resp = await self._get_info()
+            self.mint_info = MintInfo(**mint_info_resp.dict())
+            if not wallet_mint_db:
+                logger.debug("Storing mint info in db.")
+                await store_mint(
+                    db=self.db,
+                    mint=WalletMint(
+                        url=self.url, info=json.dumps(self.mint_info.dict())
+                    ),
+                )
+            return self.mint_info
+        elif (
+            self.mint_info
+            and not json.dumps(self.mint_info.dict()) == wallet_mint_db.info
+        ):
+            logger.debug("Updating mint info in db.")
+            await update_mint(
+                db=self.db,
+                mint=WalletMint(url=self.url, info=json.dumps(self.mint_info.dict())),
+            )
+            return self.mint_info
+        else:
+            logger.debug("Loading mint info from db.")
+            self.mint_info = MintInfo.from_json_str(wallet_mint_db.info)
+            return self.mint_info
 
     async def load_mint_keysets(self, force_old_keysets=False):
         """Loads all keyset of the mint and makes sure we have them all in the database.
@@ -304,11 +399,11 @@ class Wallet(
             force_old_keysets (bool, optional): If true, old deprecated base64 keysets are not ignored. This is necessary for restoring tokens from old base64 keysets.
                 Defaults to False.
         """
-        logger.trace("Loading mint.")
+        logger.trace(f"Loading mint {self.url}")
         await self.load_mint_keysets(force_old_keysets)
         await self.activate_keyset(keyset_id)
         try:
-            await self.load_mint_info()
+            await self.load_mint_info(reload=True)
         except Exception as e:
             logger.debug(f"Could not load mint info: {e}")
             pass
@@ -979,7 +1074,7 @@ class Wallet(
         # select proofs that are not reserved and are in the active keysets of the mint
         proofs = self.active_proofs(proofs)
         if sum_proofs(proofs) < amount:
-            raise Exception("balance too low.")
+            raise BalanceTooLowError()
 
         # coin selection for potentially offline sending
         send_proofs = self.coinselect(proofs, amount, include_fees=include_fees)
@@ -1037,7 +1132,7 @@ class Wallet(
         # select proofs that are not reserved and are in the active keysets of the mint
         proofs = self.active_proofs(proofs)
         if sum_proofs(proofs) < amount:
-            raise Exception("balance too low.")
+            raise BalanceTooLowError()
 
         # coin selection for swapping, needs to include fees
         swap_proofs = self.coinselect(proofs, amount, include_fees=True)

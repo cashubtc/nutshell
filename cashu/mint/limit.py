@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import WebSocket, status
 from fastapi.responses import JSONResponse
 from limits import RateLimitItemPerMinute
@@ -42,26 +44,26 @@ limiter = Limiter(
 )
 
 
-def assert_limit(identifier: str):
+def assert_limit(identifier: str, limit: Optional[int] = None):
     """Custom rate limit handler that accepts a string identifier
     and raises an exception if the rate limit is exceeded. Uses the
     setting `mint_transaction_rate_limit_per_minute` for the rate limit.
 
     Args:
         identifier (str): The identifier to use for the rate limit. IP address for example.
+        limit (Optional[int], optional): The rate limit per minute to use. Defaults to None
 
     Raises:
         Exception: If the rate limit is exceeded.
     """
     global limiter
+    limit_per_minute = limit or settings.mint_transaction_rate_limit_per_minute
     success = limiter._limiter.hit(
-        RateLimitItemPerMinute(settings.mint_transaction_rate_limit_per_minute),
+        RateLimitItemPerMinute(limit_per_minute),
         identifier,
     )
     if not success:
-        logger.warning(
-            f"Rate limit {settings.mint_transaction_rate_limit_per_minute}/minute exceeded: {identifier}"
-        )
+        logger.warning(f"Rate limit {limit_per_minute}/minute exceeded: {identifier}")
         raise Exception("Rate limit exceeded")
 
 

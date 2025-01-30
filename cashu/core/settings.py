@@ -68,6 +68,8 @@ class MintSettings(CashuSettings):
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
 
+    auth_database: str = Field(default="data/mint")
+
 
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
@@ -231,6 +233,27 @@ class CoreLightningRestFundingSource(MintSettings):
     mint_corelightning_rest_cert: Optional[str] = Field(default=None)
 
 
+class AuthSettings(MintSettings):
+    mint_require_auth: bool = Field(default=False)
+    mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
+    mint_auth_oicd_client_id: str = Field(default="cashu-client")
+    mint_auth_rate_limit_per_minute: int = Field(
+        default=5,
+        title="Auth rate limit per minute",
+        description="Number of requests a user can authenticate per minute.",
+    )
+    mint_auth_max_blind_tokens: int = Field(default=100, gt=0)
+    mint_require_clear_auth_paths: List[List[str]] = [
+        ["POST", "/v1/auth/blind/mint"],
+    ]
+    mint_require_blind_auth_paths: List[List[str]] = [
+        ["POST", "/v1/swap"],
+        ["POST", "/v1/mint/quote/bolt11"],
+        ["POST", "/v1/mint/bolt11"],
+        ["POST", "/v1/melt/bolt11"],
+    ]
+
+
 class MintRedisCache(MintSettings):
     mint_redis_cache_enabled: bool = Field(default=False)
     mint_redis_cache_url: Optional[str] = Field(default=None)
@@ -246,6 +269,7 @@ class Settings(
     FakeWalletSettings,
     MintLimits,
     MintBackends,
+    AuthSettings,
     MintRedisCache,
     MintDeprecationFlags,
     MintSettings,

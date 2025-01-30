@@ -1,0 +1,77 @@
+name: tests_keycloak
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        default: "3.10.4"
+        type: string
+      poetry-version:
+        default: "1.8.5"
+        type: string
+      mint-database:
+        default: ""
+        type: string
+      os:
+        default: "ubuntu-latest"
+        type: string
+
+jobs:
+  poetry:
+    name: Auth tests with Keycloak (db ${{ inputs.mint-database }})
+    runs-on: ${{ inputs.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Prepare environment
+        uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Start PostgreSQL service
+        if: contains(inputs.mint-database, 'postgres')
+        run: |
+          docker run -d --name postgres \
+            -e POSTGRES_USER=cashu \
+            -e POSTGRES_PASSWORD=cashu \
+            -e POSTGRES_DB=cashu \
+            -p 5432:5432 postgres:16.4
+          until docker exec postgres pg_isready; do sleep 1; done
+
+      - name: Prepare environment
+        uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Start Keycloak with Backup
+        run: |
+          docker compose -f tests/keycloak_data/docker-compose-restore.yml up -d
+          until docker logs $(docker ps -q --filter "ancestor=quay.io/keycloak/keycloak:25.0.6") | grep "Keycloak 25.0.6 on JVM (powered by Quarkus 3.8.5) started"; do sleep 1; done
+
+      - name: Verify Keycloak Import
+        run: |
+          docker logs $(docker ps -q --filter "ancestor=quay.io/keycloak/keycloak:25.0.6") | grep "Imported"
+
+      - name: Run tests
+        env:
+          MINT_BACKEND_BOLT11_SAT: FakeWallet
+          WALLET_NAME: test_wallet
+          MINT_HOST: localhost
+          MINT_PORT: 3337
+          MINT_TEST_DATABASE: ${{ inputs.mint-database }}
+          TOR: false
+          MINT_REQUIRE_AUTH: TRUE
+          MINT_AUTH_OICD_DISCOVERY_URL: http://localhost:8080/realms/nutshell/.well-known/openid-configuration
+          MINT_AUTH_OICD_CLIENT_ID: cashu-client
+        run: |
+          poetry run pytest tests/test_wallet_auth.py -v --cov=mint --cov-report=xml
+
+      - name: Stop and clean up Docker Compose
+        run: |
+          docker compose -f tests/keycloak_data/docker-compose-restore.yml down
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
