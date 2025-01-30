@@ -311,6 +311,7 @@ class LndRPCWallet(LightningBackend):
 
         return PaymentStatus(
             result=INVOICE_RESULT_MAP[r.state],
+            preimage=r.r_preimage.hex()
         )
 
     async def get_payment_status(self, checking_id: str) -> PaymentStatus:
