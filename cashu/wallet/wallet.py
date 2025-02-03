@@ -882,9 +882,7 @@ class Wallet(
                 await self.load_mint_keysets()
                 assert promise.id in self.keysets, "Could not load keyset."
             C_ = PublicKey(bytes.fromhex(promise.C_), raw=True)
-            C = b_dhke.step3_alice(
-                C_, r, self.keysets[promise.id].public_keys[promise.amount]
-            )
+            C = b_dhke.step3_alice(C_, r)
 
             if not settings.wallet_use_deprecated_h2c:
                 B_, r = b_dhke.step1_alice(secret, r)  # recompute B_ for dleq proofs
