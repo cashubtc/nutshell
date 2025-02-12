@@ -385,7 +385,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # we make sure that the fee is positive
         overpaid_fee = fee_provided - fee_paid
 
-        if overpaid_fee == 0 or outputs is None:
+        if overpaid_fee <= 0 or outputs is None:
+            if overpaid_fee < 0:
+                logger.error(
+                    f"Overpaid fee is negative ({overpaid_fee}). This should not happen."
+                )
             return []
 
         logger.debug(
