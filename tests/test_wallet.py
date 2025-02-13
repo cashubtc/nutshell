@@ -383,7 +383,7 @@ async def test_duplicate_proofs_double_spent(wallet1: Wallet):
     doublespend = await wallet1.mint(64, quote_id=mint_quote.quote)
     await assert_err(
         wallet1.split(wallet1.proofs + doublespend, 20),
-        "Mint Error: duplicate proofs.",
+        "Mint Error: Duplicate inputs provided",
     )
     assert wallet1.balance == 64
     assert wallet1.available_balance == 64
