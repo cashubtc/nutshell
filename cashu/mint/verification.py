@@ -19,8 +19,12 @@ from ..core.errors import (
     NotAllowedError,
     OutputsAlreadySignedError,
     SecretTooLongError,
+    TransactionDuplicateInputsError,
+    TransactionDuplicateOutputsError,
     TransactionError,
+    TransactionMultipleUnitsError,
     TransactionUnitError,
+    TransactionUnitMismatchError,
 )
 from ..core.nuts import nut20
 from ..core.settings import settings
@@ -67,7 +71,7 @@ class LedgerVerification(
             raise TransactionError("secrets do not match criteria.")
         # verify that only unique proofs were used
         if not self._verify_no_duplicate_proofs(proofs):
-            raise TransactionError("duplicate proofs.")
+            raise TransactionDuplicateInputsError()
         # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
             raise InvalidProofsError()
@@ -128,7 +132,7 @@ class LedgerVerification(
                 raise TransactionError("invalid amount.")
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
-            raise TransactionError("duplicate outputs.")
+            raise TransactionDuplicateOutputsError()
         # verify that outputs have not been signed previously
         signed_before = await self._check_outputs_issued_before(outputs, conn)
         if any(signed_before):
@@ -219,11 +223,11 @@ class LedgerVerification(
         units_proofs = [self.keysets[p.id].unit for p in proofs]
         units_outputs = [self.keysets[o.id].unit for o in outs if o.id]
         if not len(set(units_proofs)) == 1:
-            raise TransactionUnitError("inputs have different units.")
+            raise TransactionMultipleUnitsError("inputs have different units.")
         if not len(set(units_outputs)) == 1:
-            raise TransactionUnitError("outputs have different units.")
+            raise TransactionMultipleUnitsError("outputs have different units.")
         if not units_proofs[0] == units_outputs[0]:
-            raise TransactionUnitError("input and output keysets have different units.")
+            raise TransactionUnitMismatchError()
         return units_proofs[0]
 
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:
