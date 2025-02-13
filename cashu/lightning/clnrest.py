@@ -335,8 +335,7 @@ class CLNRestWallet(LightningBackend):
         amount_msat = invoice_obj.amount_msat
         if melt_quote.is_mpp:
             amount_msat = (
-                Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
-                .to(Unit.msat)
+                Amount(Unit.msat, melt_quote.mpp_amount)
                 .amount
             )
         fees_msat = fee_reserve(amount_msat)
