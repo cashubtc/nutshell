@@ -396,7 +396,7 @@ class LndRestWallet(LightningBackend):
     ) -> PaymentQuoteResponse:
         # Try and get the MPP amount (millisats)
         amount_msat = (
-            Amount(Unit[Unit.msat], melt_quote.mpp_amount)
+            melt_quote.mpp_amount
             if melt_quote.is_mpp
             else None
         )
