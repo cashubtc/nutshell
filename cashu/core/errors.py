@@ -86,12 +86,14 @@ class TransactionAmountExceedsLimitError(TransactionError):
     def __init__(self, detail):
         super().__init__(detail, code=self.code)
 
+
 class TransactionDuplicateInputsError(TransactionError):
     detail = "Duplicate inputs provided"
     code = 11007
 
     def __init__(self, detail: Optional[str] = None):
         super().__init__(detail, code=self.code)
+
 
 class TransactionDuplicateOutputsError(TransactionError):
     detail = "Duplicate outputs provided"
@@ -100,12 +102,14 @@ class TransactionDuplicateOutputsError(TransactionError):
     def __init__(self, detail: Optional[str] = None):
         super().__init__(detail, code=self.code)
 
+
 class TransactionMultipleUnitsError(TransactionError):
     detail = "Inputs/Outputs of multiple units"
     code = 11009
 
     def __init__(self, detail: Optional[str] = None):
         super().__init__(detail, code=self.code)
+
 
 class TransactionUnitMismatchError(TransactionError):
     detail = "Inputs and outputs not of same unit"
