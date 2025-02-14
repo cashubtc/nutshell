@@ -21,7 +21,6 @@ from ..core.base import (
     ProofState,
     Unit,
     WalletKeyset,
-    Amount,
 )
 from ..core.crypto.secp import PublicKey
 from ..core.db import Database
