@@ -380,7 +380,7 @@ class LndRPCWallet(LightningBackend):
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
-        if amount is None:
+        if amount_msat is None:
             amount_msat = int(invoice_obj.amount_msat)
 
         fees_msat = fee_reserve(amount_msat)
