@@ -868,3 +868,17 @@ async def m025_add_amounts_to_keysets(db: Database):
         await conn.execute(
             f"UPDATE {db.table_with_schema('keysets')} SET amounts = '[]'"
         )
+
+
+async def m026_add_balance_log_table(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS balance_log (
+                    unit TEXT NOT NULL,
+                    balance INTEGER NOT NULL,
+                    backend_balance INTEGER NOT NULL,
+                    time TIMESTAMP DEFAULT {db.timestamp_now}
+                );
+            """
+        )

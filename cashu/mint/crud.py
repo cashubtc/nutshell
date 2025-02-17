@@ -8,6 +8,7 @@ from ..core.base import (
     MintKeyset,
     MintQuote,
     Proof,
+    Unit,
 )
 from ..core.db import (
     Connection,
@@ -770,3 +771,6 @@ class LedgerCrudSqlite(LedgerCrud):
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
         return [Proof(**r) for r in rows] if rows else []
+
+    async def get_balance_log(self, unit: Unit) -> List[int]:
+        return []
