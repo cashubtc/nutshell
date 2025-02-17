@@ -63,7 +63,7 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=0)
     mint_disable_melt_on_error: bool = Field(default=False)
-    auth_database: str = Field(default="data/mint")
+
     mint_balance_check_interval_seconds: int = Field(default=10)
 
 
@@ -234,6 +234,7 @@ class CoreLightningRestFundingSource(MintSettings):
 
 
 class AuthSettings(MintSettings):
+    auth_database: str = Field(default="data/mint")
     mint_require_auth: bool = Field(default=False)
     mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
     mint_auth_oicd_client_id: str = Field(default="cashu-client")
