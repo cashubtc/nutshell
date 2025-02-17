@@ -870,7 +870,47 @@ async def m025_add_amounts_to_keysets(db: Database):
         )
 
 
-async def m026_add_balance_log_table(db: Database):
+async def m026_keyset_specific_balance_views(db: Database):
+    async with db.connect() as conn:
+        await drop_balance_views(db, conn)
+        await conn.execute(
+            f"""
+            CREATE VIEW {db.table_with_schema('balance_issued')} AS
+            SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
+                SELECT id, SUM(amount) AS s
+                FROM {db.table_with_schema('promises')}
+                WHERE amount > 0
+                GROUP BY id
+            );
+            """
+        )
+        await conn.execute(
+            f"""
+            CREATE VIEW {db.table_with_schema('balance_redeemed')} AS
+            SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
+                SELECT id, SUM(amount) AS s
+                FROM {db.table_with_schema('proofs_used')}
+                WHERE amount > 0
+                GROUP BY id
+            );
+            """
+        )
+        await conn.execute(
+            f"""
+            CREATE VIEW {db.table_with_schema('balance')} AS
+            SELECT keyset, s_issued - s_used AS balance FROM (
+                SELECT bi.keyset AS keyset,
+                    bi.balance AS s_issued,
+                    COALESCE(bu.balance, 0) AS s_used
+                FROM {db.table_with_schema('balance_issued')} bi
+                LEFT OUTER JOIN {db.table_with_schema('balance_redeemed')} bu
+                ON bi.keyset = bu.keyset
+            );
+            """
+        )
+
+
+async def m027_add_balance_log_table(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             f"""

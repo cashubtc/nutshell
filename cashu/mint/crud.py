@@ -120,6 +120,7 @@ class LedgerCrud(ABC):
     @abstractmethod
     async def get_balance(
         self,
+        keyset: MintKeyset,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> int: ...
@@ -669,15 +670,22 @@ class LedgerCrudSqlite(LedgerCrud):
 
     async def get_balance(
         self,
+        keyset: MintKeyset,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> int:
         row = await (conn or db).fetchone(
             f"""
-            SELECT * from {db.table_with_schema('balance')}
-            """
+            SELECT balance FROM {db.table_with_schema('balance')}
+            WHERE keyset = :keyset
+            """,
+            {
+                "keyset": keyset.id,
+            },
         )
-        assert row, "Balance not found"
+
+        if row is None:
+            return 0
 
         # sqlalchemy index of first element
         key = next(iter(row))
