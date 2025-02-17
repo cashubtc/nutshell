@@ -13,10 +13,10 @@ from starlette.requests import Request
 from ..core.errors import CashuError
 from ..core.logging import configure_logger
 from ..core.settings import settings
+from .auth.router import auth_router
 from .router import redis, router
 from .router_deprecated import router_deprecated
-from .startup import shutdown_mint as shutdown_mint_init
-from .startup import start_mint_init
+from .startup import shutdown_mint, start_auth, start_mint
 
 if settings.debug_profiling:
     pass
@@ -29,7 +29,9 @@ from .middleware import add_middlewares, request_validation_exception_handler
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-    await start_mint_init()
+    await start_mint()
+    if settings.mint_require_auth:
+        await start_auth()
     try:
         yield
     except asyncio.CancelledError:
@@ -38,7 +40,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     finally:
         try:
             await redis.disconnect()
-            await shutdown_mint_init()
+            await shutdown_mint()
         except asyncio.CancelledError:
             logger.info("CancelledError during shutdown, shutting down forcefully")
 
@@ -110,3 +112,6 @@ if settings.debug_mint_only_deprecated:
 else:
     app.include_router(router=router, tags=["Mint"])
     app.include_router(router=router_deprecated, tags=["Deprecated"], deprecated=True)
+
+if settings.mint_require_auth:
+    app.include_router(auth_router, tags=["Auth"])

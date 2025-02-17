@@ -13,6 +13,7 @@ from ..core.settings import settings
 
 
 class RedisCache:
+    initialized = False
     expiry = settings.mint_redis_cache_ttl
 
     def __init__(self):
@@ -27,6 +28,7 @@ class RedisCache:
         try:
             await self.redis.ping()
             logger.success("Connected to Redis caching server.")
+            self.initialized = True
         except ConnectionError as e:
             logger.error("Redis connection error.")
             raise e
@@ -64,4 +66,5 @@ class RedisCache:
         return passthrough if not settings.mint_redis_cache_enabled else decorator
 
     async def disconnect(self):
-        await self.redis.close()
+        if self.initialized:
+            await self.redis.close()

@@ -38,6 +38,11 @@ class MintInfoContact(BaseModel):
     info: str
 
 
+class MintInfoProtectedEndpoint(BaseModel):
+    method: str
+    path: str
+
+
 class GetInfoResponse(BaseModel):
     name: Optional[str] = None
     pubkey: Optional[str] = None
@@ -57,7 +62,7 @@ class GetInfoResponse(BaseModel):
     # BEGIN DEPRECATED: NUT-06 contact field change
     # NUT-06 PR: https://github.com/cashubtc/nuts/pull/117
     @root_validator(pre=True)
-    def preprocess_deprecated_contact_field(cls, values):
+    def preprocess_deprecated_contact_field(cls, values: dict):
         if "contact" in values and values["contact"]:
             if isinstance(values["contact"][0], list):
                 values["contact"] = [
@@ -346,3 +351,16 @@ class PostRestoreResponse(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
         self.promises = self.signatures
+
+
+# ------- API: BLIND AUTH -------
+class PostAuthBlindMintRequest(BaseModel):
+    outputs: List[BlindedMessage] = Field(
+        ...,
+        max_items=settings.mint_max_request_length,
+        description="Blinded messages for creating blind auth tokens.",
+    )
+
+
+class PostAuthBlindMintResponse(BaseModel):
+    signatures: List[BlindedSignature] = []

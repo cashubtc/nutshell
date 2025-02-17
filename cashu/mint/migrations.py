@@ -827,6 +827,7 @@ async def m021_add_change_and_expiry_to_melt_quotes(db: Database):
             f"ALTER TABLE {db.table_with_schema('melt_quotes')} ADD COLUMN expiry TIMESTAMP"
         )
 
+
 async def m022_quote_set_states_to_values(db: Database):
     async with db.connect() as conn:
         for melt_quote_states in MeltQuoteState:
@@ -838,6 +839,7 @@ async def m022_quote_set_states_to_values(db: Database):
                 f"UPDATE {db.table_with_schema('mint_quotes')} SET state = '{mint_quote_states.value}' WHERE state = '{mint_quote_states.name}'"
             )
 
+
 async def m023_add_key_to_mint_quote_table(db: Database):
     async with db.connect() as conn:
         await conn.execute(
@@ -846,7 +848,29 @@ async def m023_add_key_to_mint_quote_table(db: Database):
                 ADD COLUMN pubkey TEXT DEFAULT NULL
             """
         )
-async def m024_keyset_specific_balance_views(db: Database):
+
+
+async def m024_add_melt_quote_outputs(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('melt_quotes')}
+                ADD COLUMN outputs TEXT DEFAULT NULL
+            """
+        )
+
+
+async def m025_add_amounts_to_keysets(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('keysets')} ADD COLUMN amounts TEXT"
+        )
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('keysets')} SET amounts = '[]'"
+        )
+
+
+async def m026_keyset_specific_balance_views(db: Database):
     async with db.connect() as conn:
         await drop_balance_views(db, conn)
         await conn.execute(
@@ -857,7 +881,7 @@ async def m024_keyset_specific_balance_views(db: Database):
                 FROM {db.table_with_schema('promises')}
                 WHERE amount > 0
                 GROUP BY id
-            );  
+            );
             """
         )
         await conn.execute(
@@ -868,7 +892,7 @@ async def m024_keyset_specific_balance_views(db: Database):
                 FROM {db.table_with_schema('proofs_used')}
                 WHERE amount > 0
                 GROUP BY id
-            );  
+            );
             """
         )
         await conn.execute(

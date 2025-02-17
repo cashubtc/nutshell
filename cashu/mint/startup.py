@@ -12,7 +12,9 @@ from ..core.db import Database
 from ..core.migrations import migrate_databases
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
-from ..mint import migrations
+from ..mint import migrations as mint_migrations
+from ..mint.auth import migrations as auth_migrations
+from ..mint.auth.server import AuthLedger
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
 
@@ -76,6 +78,15 @@ ledger = Ledger(
     crud=LedgerCrudSqlite(),
 )
 
+# start auth ledger
+auth_ledger = AuthLedger(
+    db=Database("auth", settings.auth_database),
+    seed="auth seed here",
+    amounts=[1],
+    derivation_path="m/0'/999'/0'",
+    crud=LedgerCrudSqlite(),
+)
+
 
 async def rotate_keys(n_seconds=60):
     """Rotate keyset epoch every n_seconds.
@@ -93,8 +104,17 @@ async def rotate_keys(n_seconds=60):
         await asyncio.sleep(n_seconds)
 
 
-async def start_mint_init():
-    await migrate_databases(ledger.db, migrations)
+async def start_auth():
+    await migrate_databases(auth_ledger.db, auth_migrations)
+    logger.info("Starting auth ledger.")
+    await auth_ledger.init_keysets()
+    await auth_ledger.init_auth()
+    logger.info("Auth ledger started.")
+
+
+async def start_mint():
+    await migrate_databases(ledger.db, mint_migrations)
+    logger.info("Starting mint ledger.")
     await ledger.startup_ledger()
     logger.info("Mint started.")
     # asyncio.create_task(rotate_keys())

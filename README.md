@@ -82,7 +82,7 @@ pyenv init
 pyenv install 3.10.4
 
 # install poetry
-curl -sSL https://install.python-poetry.org | python3 -
+curl -sSL https://install.python-poetry.org | python3 - --version 1.8.5
 echo export PATH=\"$HOME/.local/bin:$PATH\" >> ~/.bashrc
 source ~/.bashrc
 ```
@@ -183,7 +183,7 @@ This command runs the mint on your local computer. Skip this step if you want to
 ## Docker
 
 ```
-docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.16.3 poetry run mint
+docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.16.5 poetry run mint
 ```
 
 ## From this repository

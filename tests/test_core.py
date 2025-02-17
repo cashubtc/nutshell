@@ -8,6 +8,8 @@ from cashu.wallet.helpers import deserialize_token_from_string
 
 def test_get_output_split():
     assert amount_split(13) == [1, 4, 8]
+    assert amount_split(0) == []
+    assert amount_split(-8) == []
 
 
 def test_tokenv3_deserialize_get_attributes():

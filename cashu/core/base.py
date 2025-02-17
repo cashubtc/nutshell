@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from sqlite3 import Row
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, ClassVar, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
@@ -19,7 +19,7 @@ from .crypto.aes import AESCipher
 from .crypto.b_dhke import hash_to_curve
 from .crypto.keys import (
     derive_keys,
-    derive_keys_sha256,
+    derive_keys_deprecated_pre_0_15,
     derive_keyset_id,
     derive_keyset_id_deprecated,
     derive_pubkeys,
@@ -173,6 +173,9 @@ class Proof(BaseModel):
 
         return return_dict
 
+    def to_base64(self):
+        return base64.b64encode(cbor2.dumps(self.to_dict(include_dleq=True))).decode()
+
     def to_dict_no_dleq(self):
         # dictionary without the fields that don't need to be send to Carol
         return dict(id=self.id, amount=self.amount, secret=self.secret, C=self.C)
@@ -287,6 +290,7 @@ class MeltQuote(LedgerEvent):
     fee_paid: int = 0
     payment_preimage: Optional[str] = None
     expiry: Optional[int] = None
+    outputs: Optional[List[BlindedMessage]] = None
     change: Optional[List[BlindedSignature]] = None
     mint: Optional[str] = None
 
@@ -307,8 +311,12 @@ class MeltQuote(LedgerEvent):
 
         # parse change from row as json
         change = None
-        if row["change"]:
+        if "change" in row.keys() and row["change"]:
             change = json.loads(row["change"])
+
+        outputs = None
+        if "outputs" in row.keys() and row["outputs"]:
+            outputs = json.loads(row["outputs"])
 
         return cls(
             quote=row["quote"],
@@ -322,6 +330,7 @@ class MeltQuote(LedgerEvent):
             created_time=created_time,
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
+            outputs=outputs,
             change=change,
             expiry=expiry,
             payment_preimage=payment_preimage,
@@ -535,6 +544,7 @@ class Unit(Enum):
     usd = 2
     eur = 3
     btc = 4
+    auth = 999
 
     def str(self, amount: int) -> str:
         if self == Unit.sat:
@@ -547,6 +557,8 @@ class Unit(Enum):
             return f"{amount/100:.2f} EUR"
         elif self == Unit.btc:
             return f"{amount/1e8:.8f} BTC"
+        elif self == Unit.auth:
+            return f"{amount} AUTH"
         else:
             raise Exception("Invalid unit")
 
@@ -718,6 +730,7 @@ class MintKeyset:
     valid_to: Optional[str] = None
     first_seen: Optional[str] = None
     version: Optional[str] = None
+    amounts: List[int]
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -728,6 +741,7 @@ class MintKeyset:
         seed: Optional[str] = None,
         encrypted_seed: Optional[str] = None,
         seed_encryption_method: Optional[str] = None,
+        amounts: Optional[List[int]] = None,
         valid_from: Optional[str] = None,
         valid_to: Optional[str] = None,
         first_seen: Optional[str] = None,
@@ -755,6 +769,12 @@ class MintKeyset:
             self.seed = seed
 
         assert self.seed, "seed not set"
+
+        if amounts:
+            self.amounts = amounts
+        else:
+            # use 2^n amounts by default
+            self.amounts = [2**i for i in range(settings.max_order)]
 
         self.id = id
         self.valid_from = valid_from
@@ -799,6 +819,24 @@ class MintKeyset:
 
         logger.trace(f"Loaded keyset id: {self.id} ({self.unit.name})")
 
+    @classmethod
+    def from_row(cls, row: Row):
+        return cls(
+            id=row["id"],
+            derivation_path=row["derivation_path"],
+            seed=row["seed"],
+            encrypted_seed=row["encrypted_seed"],
+            seed_encryption_method=row["seed_encryption_method"],
+            valid_from=row["valid_from"],
+            valid_to=row["valid_to"],
+            first_seen=row["first_seen"],
+            active=row["active"],
+            unit=row["unit"],
+            version=row["version"],
+            input_fee_ppk=row["input_fee_ppk"],
+            amounts=json.loads(row["amounts"]),
+        )
+
     @property
     def public_keys_hex(self) -> Dict[int, str]:
         assert self.public_keys, "public keys not set"
@@ -824,23 +862,27 @@ class MintKeyset:
             self.private_keys = derive_keys_backwards_compatible_insecure_pre_0_12(
                 self.seed, self.derivation_path
             )
-            self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             logger.trace(
                 f"WARNING: Using weak key derivation for keyset {self.id} (backwards"
                 " compatibility < 0.12)"
             )
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         elif self.version_tuple < (0, 15):
-            self.private_keys = derive_keys_sha256(self.seed, self.derivation_path)
+            self.private_keys = derive_keys_deprecated_pre_0_15(
+                self.seed, self.amounts, self.derivation_path
+            )
             logger.trace(
                 f"WARNING: Using non-bip32 derivation for keyset {self.id} (backwards"
                 " compatibility < 0.15)"
             )
-            self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
         else:
-            self.private_keys = derive_keys(self.seed, self.derivation_path)
-            self.public_keys = derive_pubkeys(self.private_keys)  # type: ignore
+            self.private_keys = derive_keys(
+                self.seed, self.derivation_path, self.amounts
+            )
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             self.id = id_in_db or derive_keyset_id(self.public_keys)  # type: ignore
 
 
@@ -1248,3 +1290,48 @@ class TokenV4(Token):
             t=[TokenV4Token(**t) for t in token_dict["t"]],
             d=token_dict.get("d", None),
         )
+
+
+class AuthProof(BaseModel):
+    """
+    Blind authentication token
+    """
+
+    id: str
+    secret: str  # secret
+    C: str  # signature
+    amount: int = 1  # default amount
+
+    prefix: ClassVar[str] = "authA"
+
+    @classmethod
+    def from_proof(cls, proof: Proof):
+        return cls(id=proof.id, secret=proof.secret, C=proof.C)
+
+    def to_base64(self):
+        serialize_dict = self.dict()
+        serialize_dict.pop("amount", None)
+        return (
+            self.prefix + base64.b64encode(json.dumps(serialize_dict).encode()).decode()
+        )
+
+    @classmethod
+    def from_base64(cls, base64_str: str):
+        assert base64_str.startswith(cls.prefix), Exception(
+            f"Token prefix not valid. Expected {cls.prefix}."
+        )
+        base64_str = base64_str[len(cls.prefix) :]
+        return cls.parse_obj(json.loads(base64.b64decode(base64_str).decode()))
+
+    def to_proof(self):
+        return Proof(id=self.id, secret=self.secret, C=self.C, amount=self.amount)
+
+
+class WalletMint(BaseModel):
+    url: str
+    info: str
+    updated: Optional[str] = None
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
