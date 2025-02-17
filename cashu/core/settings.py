@@ -63,12 +63,12 @@ class MintSettings(CashuSettings):
 
     mint_input_fee_ppk: int = Field(default=0)
     mint_disable_melt_on_error: bool = Field(default=False)
+    auth_database: str = Field(default="data/mint")
+    mint_balance_check_interval_seconds: int = Field(default=10)
 
 
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
-
-    auth_database: str = Field(default="data/mint")
 
 
 class MintBackends(MintSettings):

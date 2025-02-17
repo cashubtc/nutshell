@@ -546,7 +546,7 @@ class Unit(Enum):
     btc = 4
     auth = 999
 
-    def str(self, amount: int) -> str:
+    def str(self, amount: int | float) -> str:
         if self == Unit.sat:
             return f"{amount} sat"
         elif self == Unit.msat:

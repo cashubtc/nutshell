@@ -66,14 +66,22 @@ from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .tasks import LedgerTasks
 from .verification import LedgerVerification
+from .watchdog import LedgerWatchdog
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures):
+class Ledger(
+    LedgerVerification,
+    LedgerSpendingConditions,
+    LedgerTasks,
+    LedgerFeatures,
+    LedgerWatchdog,
+):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
     db_read: DbReadHelper
     invoice_listener_tasks: List[asyncio.Task] = []
+    watchdog_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
     pubkey: PublicKey
 
@@ -94,6 +102,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.db_read: DbReadHelper
         self.locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
         self.invoice_listener_tasks: List[asyncio.Task] = []
+        self.watchdog_tasks: List[asyncio.Task] = []
 
         if not seed:
             raise Exception("seed not set")
@@ -133,6 +142,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         await self._check_backends()
         await self._check_pending_proofs_and_melt_quotes()
         self.invoice_listener_tasks = await self.dispatch_listeners()
+        self.watchdog_tasks = await self.dispatch_watchdogs()
 
     async def _startup_keysets(self) -> None:
         await self.init_keysets()

@@ -916,7 +916,7 @@ async def m027_add_balance_log_table(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS balance_log (
                     unit TEXT NOT NULL,
-                    balance INTEGER NOT NULL,
+                    mint_balance INTEGER NOT NULL,
                     backend_balance INTEGER NOT NULL,
                     time TIMESTAMP DEFAULT {db.timestamp_now}
                 );

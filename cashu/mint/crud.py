@@ -126,6 +126,14 @@ class LedgerCrud(ABC):
     ) -> int: ...
 
     @abstractmethod
+    async def get_unit_balance(
+        self,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> int: ...
+
+    @abstractmethod
     async def store_promise(
         self,
         *,
@@ -229,6 +237,16 @@ class LedgerCrud(ABC):
         self,
         *,
         quote: MeltQuote,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def store_balance_log(
+        self,
+        unit: Unit,
+        backend_balance: int,
+        mint_balance: int,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
@@ -691,6 +709,19 @@ class LedgerCrudSqlite(LedgerCrud):
         key = next(iter(row))
         return int(row[key])
 
+    async def get_unit_balance(
+        self,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ):
+        keysets = await self.get_keyset(db=db, unit=unit.name, conn=conn)
+        balance = 0
+        for keyset in keysets:
+            balance += await self.get_balance(keyset, db=db, conn=conn)
+
+        return balance
+
     async def get_keyset(
         self,
         *,
@@ -780,5 +811,24 @@ class LedgerCrudSqlite(LedgerCrud):
         rows = await (conn or db).fetchall(query, values)
         return [Proof(**r) for r in rows] if rows else []
 
-    async def get_balance_log(self, unit: Unit) -> List[int]:
-        return []
+    async def store_balance_log(
+        self,
+        unit: Unit,
+        backend_balance: int,
+        mint_balance: int,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ):
+        await (conn or db).execute(
+            f"""
+            INSERT INTO {db.table_with_schema('balance_log')}
+            (unit, backend_balance, mint_balance, time)
+            VALUES (:unit, :backend_balance, :mint_balance, :time)
+            """,
+            {
+                "unit": unit.name,
+                "backend_balance": backend_balance,
+                "mint_balance": mint_balance,
+                "time": db.to_timestamp(db.timestamp_now_str()),
+            },
+        )
