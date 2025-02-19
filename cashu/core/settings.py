@@ -234,7 +234,7 @@ class CoreLightningRestFundingSource(MintSettings):
 
 
 class AuthSettings(MintSettings):
-    auth_database: str = Field(default="data/mint")
+    mint_auth_database: str = Field(default="data/mint")
     mint_require_auth: bool = Field(default=False)
     mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
     mint_auth_oicd_client_id: str = Field(default="cashu-client")
