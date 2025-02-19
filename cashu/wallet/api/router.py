@@ -8,7 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from ...core.base import Token, TokenV3
+from ...core.base import Amount, Token, TokenV3
 from ...core.helpers import sum_proofs
 from ...core.settings import settings
 from ...lightning.base import (
@@ -168,7 +168,7 @@ async def lightning_balance() -> StatusResponse:
     try:
         await wallet.load_proofs(reload=True)
     except Exception as exc:
-        return StatusResponse(error_message=str(exc), balance=0)
+        return StatusResponse(error_message=str(exc), balance=Amount(wallet.unit, 0))
     return StatusResponse(error_message=None, balance=wallet.available_balance * 1000)
 
 

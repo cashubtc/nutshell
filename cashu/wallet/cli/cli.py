@@ -120,9 +120,7 @@ def init_auth_wallet(func):
 
         if settings.debug:
             await auth_wallet.load_proofs(reload=True)
-            logger.debug(
-                f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}"
-            )
+            logger.debug(f"Auth balance: {auth_wallet.available_balance}")
 
         return ret
 
@@ -595,12 +593,12 @@ async def balance(ctx: Context, verbose):
 
     if verbose:
         print(
-            f"Balance: {wallet.unit.str(wallet.available_balance)} (pending:"
-            f" {wallet.unit.str(wallet.balance-wallet.available_balance)}) in"
+            f"Balance: {wallet.available_balance} (pending:"
+            f" {wallet.balance-wallet.available_balance}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
-        print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
+        print(f"Balance: {wallet.available_balance}")
 
 
 @cli.command("send", help="Send tokens.")
@@ -1288,4 +1286,4 @@ async def auth(ctx: Context, mint: bool, force: bool, password: bool):
         new_proofs = await auth_wallet.mint_blind_auth()
         print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
 
-    print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
+    print(f"Auth balance: {auth_wallet.available_balance}")

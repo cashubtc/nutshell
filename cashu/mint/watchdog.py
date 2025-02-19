@@ -30,18 +30,18 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         )
         while True:
             backend_status = await backend.status()
-            backend_balance = int(backend_status.balance)
+            backend_balance = backend_status.balance
             async with self.db.connect() as conn:
                 keyset_balance = await self.crud.get_unit_balance(
                     unit, db=self.db, conn=conn
                 )
                 await self.crud.store_balance_log(
-                    unit, backend_balance, keyset_balance, db=self.db, conn=conn
+                    backend_balance, keyset_balance, db=self.db, conn=conn
                 )
 
             logger.trace(
-                f"Backend balance {backend.__class__.__name__}: {unit.str(backend_balance)}"
+                f"Backend balance {backend.__class__.__name__}: {backend_balance}"
             )
-            logger.trace(f"Unit balance {unit.name}: {unit.str(keyset_balance)}")
+            logger.trace(f"Unit balance {unit.name}: {keyset_balance}")
 
             await asyncio.sleep(settings.mint_balance_check_interval_seconds)

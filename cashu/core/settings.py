@@ -146,6 +146,9 @@ class FakeWalletSettings(MintSettings):
     fakewallet_payment_state_exception: Optional[bool] = Field(default=False)
     fakewallet_pay_invoice_state: Optional[str] = Field(default="SETTLED")
     fakewallet_pay_invoice_state_exception: Optional[bool] = Field(default=False)
+    fakewallet_balance_sat: int = Field(default=1337)
+    fakewallet_balance_usd: int = Field(default=1337)
+    fakewallet_balance_eur: int = Field(default=1337)
 
 
 class MintInformation(CashuSettings):

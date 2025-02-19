@@ -2,7 +2,7 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
-from ...core.base import MeltQuote, MintQuote
+from ...core.base import Amount, MeltQuote, MintQuote
 
 
 class SwapResponse(BaseModel):
@@ -13,24 +13,24 @@ class SwapResponse(BaseModel):
 
 
 class BalanceResponse(BaseModel):
-    balance: int
+    balance: Amount
     keysets: Optional[Dict] = None
     mints: Optional[Dict] = None
 
 
 class SendResponse(BaseModel):
-    balance: int
+    balance: Amount
     token: str
     npub: Optional[str] = None
 
 
 class ReceiveResponse(BaseModel):
-    initial_balance: int
-    balance: int
+    initial_balance: Amount
+    balance: Amount
 
 
 class BurnResponse(BaseModel):
-    balance: int
+    balance: Amount
 
 
 class PendingResponse(BaseModel):
@@ -55,7 +55,7 @@ class WalletsResponse(BaseModel):
 
 
 class RestoreResponse(BaseModel):
-    balance: int
+    balance: Amount
 
 
 class InfoResponse(BaseModel):

@@ -103,14 +103,14 @@ class CLNRestWallet(LightningBackend):
                 error_message=(
                     f"Failed to connect to {self.url}, got: '{error_message}...'"
                 ),
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
 
         data = r.json()
         if len(data) == 0:
-            return StatusResponse(error_message="no data", balance=0)
+            return StatusResponse(error_message="no data", balance=Amount(self.unit, 0))
         balance_msat = int(sum([c["our_amount_msat"] for c in data["channels"]]))
-        return StatusResponse(balance=balance_msat)
+        return StatusResponse(balance=Amount(self.unit, balance_msat // 1000))
 
     async def create_invoice(
         self,

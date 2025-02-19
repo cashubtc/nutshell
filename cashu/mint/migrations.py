@@ -791,7 +791,7 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
     async with db.connect() as conn:
         rows: List[Dict] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('mint_quotes')}"
-        )
+        )  # type: ignore
         for row in rows:
             if row.get("issued"):
                 state = "issued"
@@ -807,7 +807,7 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
     async with db.connect() as conn:
         rows2: List[Dict] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('melt_quotes')}"
-        )
+        )  # type: ignore
         for row in rows2:
             if row["paid"]:
                 state = "paid"

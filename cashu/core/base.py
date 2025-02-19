@@ -626,6 +626,62 @@ class Amount:
     def __repr__(self):
         return self.unit.str(self.amount)
 
+    def __add__(self, other: "Amount | int") -> "Amount":
+        if isinstance(other, int):
+            return Amount(self.unit, self.amount + other)
+
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return Amount(self.unit, self.amount + other.amount)
+
+    def __sub__(self, other: "Amount | int") -> "Amount":
+        if isinstance(other, int):
+            return Amount(self.unit, self.amount - other)
+
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return Amount(self.unit, self.amount - other.amount)
+
+    def __mul__(self, other: int) -> "Amount":
+        return Amount(self.unit, self.amount * other)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, int):
+            return self.amount == other
+        if isinstance(other, Amount):
+            if self.unit != other.unit:
+                raise Exception("Units must be the same")
+            return self.amount == other.amount
+        return False
+
+    def __lt__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount < other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount < other.amount
+
+    def __le__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount <= other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount <= other.amount
+
+    def __gt__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount > other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount > other.amount
+
+    def __ge__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount >= other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount >= other.amount
+
 
 class Method(Enum):
     bolt11 = 0
