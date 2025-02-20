@@ -172,6 +172,8 @@ class Ledger(
         await self.db.engine.dispose()
         for task in self.invoice_listener_tasks:
             task.cancel()
+        for task in self.watchdog_tasks:
+            task.cancel()
 
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending melt quotes and either invalidates
