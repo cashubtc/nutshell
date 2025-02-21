@@ -400,12 +400,12 @@ class Wallet(
                 Defaults to False.
         """
         logger.trace(f"Loading mint {self.url}")
-        await self.load_mint_keysets(force_old_keysets)
-        await self.activate_keyset(keyset_id)
         try:
+            await self.load_mint_keysets(force_old_keysets)
+            await self.activate_keyset(keyset_id)
             await self.load_mint_info(reload=True)
         except Exception as e:
-            logger.debug(f"Could not load mint info: {e}")
+            logger.error(f"Could not load mint info: {e}")
             pass
 
     async def load_proofs(self, reload: bool = False, all_keysets=False) -> None:

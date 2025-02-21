@@ -2,6 +2,7 @@
 
 import asyncio
 import getpass
+import json
 import os
 import time
 from datetime import datetime, timezone
@@ -760,6 +761,26 @@ async def receive_cli(
         return
     await print_balance(ctx)
 
+@cli.command("decode", help="Decode a cashu token and print in JSON format.")
+@click.option(
+    "--no-dleq", default=False, is_flag=True, help="Do not include DLEQ proofs."
+)
+@click.option(
+    "--indent", "-i", default=2, is_flag=False, help="Number of spaces to indent JSON with."
+)
+@click.argument("token", type=str, default="")
+def decode_to_json(token: str, no_dleq: bool, indent: int):
+    include_dleq = not no_dleq
+    if token:
+        token_obj = deserialize_token_from_string(token)
+        token_json = json.dumps(
+            token_obj.serialize_to_dict(include_dleq),
+            default=lambda obj: obj.hex() if isinstance(obj, bytes) else obj,
+            indent=indent,
+        )
+        print(token_json)
+    else:
+        print("Error: enter a token")
 
 @cli.command("burn", help="Burn spent tokens.")
 @click.argument("token", required=False, type=str)
