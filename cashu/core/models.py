@@ -197,7 +197,7 @@ class PostMeltRequestOptionAmountless(BaseModel):
 
 class PostMeltRequestOptions(BaseModel):
     mpp: Optional[PostMeltRequestOptionMpp]
-    amountless: Optional[PostMeltRequestAmount]
+    amountless: Optional[PostMeltRequestOptionAmountless]
 
 
 class PostMeltQuoteRequest(BaseModel):
