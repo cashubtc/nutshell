@@ -695,10 +695,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # and therefore respond with internal transaction fees (0 for now)
         mint_quote = await self.crud.get_mint_quote(request=request, db=self.db)
         if mint_quote and mint_quote.unit == melt_quote.unit:
-            # check if the melt quote is partial and error if it is.
-            # it's just not possible to handle this case
-            if melt_quote.is_mpp:
-                raise TransactionError("internal mpp not allowed.")
             payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
         else:
             # not internal

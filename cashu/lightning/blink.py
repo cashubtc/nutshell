@@ -21,6 +21,7 @@ from .base import (
     PaymentStatus,
     StatusResponse,
 )
+from .errors import TransactionError
 
 # according to https://github.com/GaloyMoney/galoy/blob/7e79cc27304de9b9c2e7d7f4fdd3bac09df23aac/core/api/src/domain/bitcoin/index.ts#L59
 BLINK_MAX_FEE_PERCENT = 0.5
@@ -453,9 +454,15 @@ class BlinkWallet(LightningBackend):
             raise e
 
         invoice_obj = decode(bolt11)
-        assert invoice_obj.amount_msat, "invoice has no amount."
 
-        amount_msat = int(invoice_obj.amount_msat)
+        # Detect and handle amountless request
+        amount_msat = 0
+        if melt_quote.is_amountless:
+            amount_msat = melt_quote.options.amountless.amount_msat
+        elif invoice_obj.amount_msat:
+            amount_msat = invoice_obj.amount_msat
+        else:
+            raise TransactionError("request has no amount and is not specified as amountless")
 
         # we take the highest: fee_msat_response, or BLINK_MAX_FEE_PERCENT, or MINIMUM_FEE_MSAT msat
         # Note: fees with BLINK_MAX_FEE_PERCENT are rounded to the nearest 1000 msat
