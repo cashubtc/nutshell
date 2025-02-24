@@ -64,7 +64,18 @@ class MintSettings(CashuSettings):
     mint_input_fee_ppk: int = Field(default=0)
     mint_disable_melt_on_error: bool = Field(default=False)
 
-    mint_balance_check_interval_seconds: int = Field(default=10)
+
+class MintWatchdogSettings(MintSettings):
+    mint_watchdog_enabled: bool = Field(
+        default=False,
+        title="Balance watchdog",
+        description="The watchdog shuts down the mint if the balance of the mint and the backend do not match.",
+    )
+    mint_watchdog_balance_check_interval_seconds: int = Field(default=10)
+    mint_watchdog_ignore_mismatch: bool = Field(
+        default=False,
+        description="Ignore watchdog errors and continue running. Use this to recover from a watchdog error.",
+    )
 
 
 class MintDeprecationFlags(MintSettings):
@@ -276,6 +287,7 @@ class Settings(
     AuthSettings,
     MintRedisCache,
     MintDeprecationFlags,
+    MintWatchdogSettings,
     MintSettings,
     MintInformation,
     WalletSettings,

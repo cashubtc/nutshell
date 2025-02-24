@@ -1,4 +1,5 @@
 import base64
+import datetime
 import json
 import math
 import time
@@ -11,6 +12,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 import cbor2
 from loguru import logger
 from pydantic import BaseModel, root_validator
+from sqlalchemy import RowMapping
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
@@ -1391,3 +1393,22 @@ class WalletMint(BaseModel):
     refresh_token: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = None
+
+
+class MintBalanceLogEntry(BaseModel):
+    unit: Unit
+    backend_balance: Amount
+    mint_balance: Amount
+    time: datetime.datetime
+
+    @classmethod
+    def from_row(cls, row: RowMapping):
+        return cls(
+            unit=Unit[row["unit"]],
+            backend_balance=Amount(
+                Unit[row["unit"]],
+                row["backend_balance"],
+            ),
+            mint_balance=Amount(Unit[row["unit"]], row["mint_balance"]),
+            time=row["time"],
+        )

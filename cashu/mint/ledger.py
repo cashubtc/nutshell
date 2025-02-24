@@ -142,7 +142,8 @@ class Ledger(
         await self._check_backends()
         await self._check_pending_proofs_and_melt_quotes()
         self.invoice_listener_tasks = await self.dispatch_listeners()
-        self.watchdog_tasks = await self.dispatch_watchdogs()
+        if settings.mint_watchdog_enabled:
+            self.watchdog_tasks = await self.dispatch_watchdogs()
 
     async def _startup_keysets(self) -> None:
         await self.init_keysets()

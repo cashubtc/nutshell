@@ -6,6 +6,7 @@ from ..core.base import (
     Amount,
     BlindedSignature,
     MeltQuote,
+    MintBalanceLogEntry,
     MintKeyset,
     MintQuote,
     Proof,
@@ -250,6 +251,15 @@ class LedgerCrud(ABC):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
+
+    @abstractmethod
+    async def get_last_balance_log_entry(
+        self,
+        *,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> MintBalanceLogEntry | None: ...
 
 
 class LedgerCrudSqlite(LedgerCrud):
@@ -834,3 +844,22 @@ class LedgerCrudSqlite(LedgerCrud):
                 "time": db.to_timestamp(db.timestamp_now_str()),
             },
         )
+
+    async def get_last_balance_log_entry(
+        self,
+        *,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> MintBalanceLogEntry | None:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT * from {db.table_with_schema('balance_log')}
+            WHERE unit = :unit
+            ORDER BY time DESC
+            LIMIT 1
+            """,
+            {"unit": unit.name},
+        )
+
+        return MintBalanceLogEntry.from_row(row) if row else None
