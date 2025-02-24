@@ -165,7 +165,7 @@ class Ledger(
                         f" working properly: '{status.error_message}'"
                     )
                     exit(1)
-                logger.info(f"Backend balance: {status.balance} {unit.name}")
+                logger.info(f"Backend balance: {status.balance}")
 
         logger.info(f"Data dir: {settings.cashu_dir}")
 

@@ -104,8 +104,7 @@ class LndRPCWallet(LightningBackend):
                 error_message=f"Error calling Lnd gRPC: {e}",
                 balance=Amount(self.unit, 0),
             )
-        # NOTE: `balance` field is deprecated. Change this.
-        return StatusResponse(error_message=None, balance=r.balance * 1000)
+        return StatusResponse(error_message=None, balance=Amount(self.unit, r.balance))
 
     async def create_invoice(
         self,
