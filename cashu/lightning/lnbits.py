@@ -56,7 +56,9 @@ class LNbitsWallet(LightningBackend):
                 balance=Amount(self.unit, 0),
             )
 
-        return StatusResponse(error_message=None, balance=data["balance"])
+        return StatusResponse(
+            error_message=None, balance=Amount(self.unit, data["balance"])
+        )
 
     async def create_invoice(
         self,
