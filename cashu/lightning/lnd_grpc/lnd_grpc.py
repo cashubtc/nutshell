@@ -371,19 +371,25 @@ class LndRPCWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         # get amount from melt_quote or from bolt11
-        amount = (
+        mpp_amount = (
             Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
             if melt_quote.is_mpp
             else None
         )
 
         invoice_obj = bolt11.decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-
-        if amount:
-            amount_msat = amount.to(Unit.msat).amount
-        else:
+        
+        # Detect and handle amountless request
+        amount_msat = 0
+        if melt_quote.is_amountless:
+            amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
+        elif invoice_obj.amount_msat:
             amount_msat = int(invoice_obj.amount_msat)
+        else:
+            raise Exception("request has no amount and is not specified as amountless")
+
+        if mpp_amount:
+            amount_msat = mpp_amount.to(Unit.msat).amount
 
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
