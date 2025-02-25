@@ -205,8 +205,15 @@ class LNbitsWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-        amount_msat = int(invoice_obj.amount_msat)
+        # Detect and handle amountless request
+        amount_msat = 0
+        if melt_quote.is_amountless:
+            amount_msat = melt_quote.options.amountless.amount_msat
+        elif invoice_obj.amount_msat:
+            amount_msat = invoice_obj.amount_msat
+        else:
+            raise TransactionError("request has no amount and is not specified as amountless")
+
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
