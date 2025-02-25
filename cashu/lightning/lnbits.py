@@ -210,7 +210,7 @@ class LNbitsWallet(LightningBackend):
         if melt_quote.is_amountless:
             amount_msat = melt_quote.options.amountless.amount_msat
         elif invoice_obj.amount_msat:
-            amount_msat = invoice_obj.amount_msat
+            amount_msat = int(invoice_obj.amount_msat)
         else:
             raise TransactionError("request has no amount and is not specified as amountless")
 

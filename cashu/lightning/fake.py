@@ -219,12 +219,11 @@ class FakeWallet(LightningBackend):
         if melt_quote.is_amountless:
             amount_msat = melt_quote.options.amountless.amount_msat
         elif invoice_obj.amount_msat:
-            amount_msat = invoice_obj.amount_msat
+            amount_msat = int(invoice_obj.amount_msat)
         else:
             raise TransactionError("request has no amount and is not specified as amountless")
 
         if self.unit == Unit.sat:
-            amount_msat = int(amount_msat)
             fees_msat = fee_reserve(amount_msat)
             fees = Amount(unit=Unit.msat, amount=fees_msat)
             amount = Amount(unit=Unit.msat, amount=amount_msat)
