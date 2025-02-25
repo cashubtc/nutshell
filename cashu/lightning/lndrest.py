@@ -406,11 +406,11 @@ class LndRestWallet(LightningBackend):
         # Detect and handle amountless request
         amount_msat = 0
         if melt_quote.is_amountless:
-            amount_msat = melt_quote.options.amountless.amount_msat
+            amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
         elif invoice_obj.amount_msat:
             amount_msat = int(invoice_obj.amount_msat)
         else:
-            raise TransactionError("request has no amount and is not specified as amountless")
+            raise Exception("request has no amount and is not specified as amountless")
 
         if mpp_amount:
             amount_msat = mpp_amount.to(Unit.msat).amount

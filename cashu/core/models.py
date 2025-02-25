@@ -196,8 +196,8 @@ class PostMeltRequestOptionAmountless(BaseModel):
     amount_msat: int = Field(gt=0) # amount to pay to the amountless request
 
 class PostMeltRequestOptions(BaseModel):
-    mpp: Optional[PostMeltRequestOptionMpp]
-    amountless: Optional[PostMeltRequestOptionAmountless]
+    mpp: Optional[PostMeltRequestOptionMpp] = None
+    amountless: Optional[PostMeltRequestOptionAmountless] = None
 
 
 class PostMeltQuoteRequest(BaseModel):
