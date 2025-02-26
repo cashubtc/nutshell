@@ -194,6 +194,30 @@ poetry run mint
 
 For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
 
+## Redis
+To install and run Redis on default port 6379:
+```bash
+sudo apt-get install redis-server
+sudo service redis-server start
+```
+To confirm it’s running:
+```bash
+sudo systemctl status redis-server
+```
+To enable Redis to start on boot:
+```bash
+sudo systemctl enable redis-server
+```
+Edit the .env file and uncomment the Redis lines:
+```
+# NUT-19 Cached responses
+# Enable these settings to cache responses in Redis
+# 
+MINT_REDIS_CACHE_ENABLED=TRUE
+MINT_REDIS_CACHE_URL="redis://localhost:6379"
+```
+
+
 
 # Running tests
 To run the tests in this repository, first install the dev dependencies with
