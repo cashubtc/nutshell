@@ -41,7 +41,6 @@ from ...wallet.crud import (
     get_seed_and_mnemonic,
 )
 from ...wallet.wallet import Wallet as Wallet
-from ..api.api_server import start_api_server
 from ..auth.auth import WalletAuth
 from ..cli.cli_helpers import (
     get_mint_wallet,
@@ -68,13 +67,6 @@ class NaturalOrderGroup(click.Group):
 
     def list_commands(self, ctx):
         return self.commands.keys()
-
-
-def run_api_server(ctx, param, daemon):
-    if not daemon:
-        return
-    start_api_server()
-    ctx.exit()
 
 
 # https://github.com/pallets/click/issues/85#issuecomment-503464628
@@ -120,9 +112,7 @@ def init_auth_wallet(func):
 
         if settings.debug:
             await auth_wallet.load_proofs(reload=True)
-            logger.debug(
-                f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}"
-            )
+            logger.debug(f"Auth balance: {auth_wallet.available_balance}")
 
         return ret
 
@@ -149,15 +139,6 @@ def init_auth_wallet(func):
     "unit",
     default=None,
     help=f"Wallet unit (default: {settings.wallet_unit}).",
-)
-@click.option(
-    "--daemon",
-    "-d",
-    is_flag=True,
-    is_eager=True,
-    expose_value=False,
-    callback=run_api_server,
-    help="Start server for wallet REST API",
 )
 @click.option(
     "--tests",
@@ -595,12 +576,12 @@ async def balance(ctx: Context, verbose):
 
     if verbose:
         print(
-            f"Balance: {wallet.unit.str(wallet.available_balance)} (pending:"
-            f" {wallet.unit.str(wallet.balance-wallet.available_balance)}) in"
+            f"Balance: {wallet.available_balance} (pending:"
+            f" {wallet.balance-wallet.available_balance}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
-        print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
+        print(f"Balance: {wallet.available_balance}")
 
 
 @cli.command("send", help="Send tokens.")
@@ -1288,4 +1269,4 @@ async def auth(ctx: Context, mint: bool, force: bool, password: bool):
         new_proofs = await auth_wallet.mint_blind_auth()
         print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
 
-    print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
+    print(f"Auth balance: {auth_wallet.available_balance}")

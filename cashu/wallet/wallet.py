@@ -8,6 +8,7 @@ from bip32 import BIP32
 from loguru import logger
 
 from ..core.base import (
+    Amount,
     BlindedMessage,
     BlindedSignature,
     DLEQWallet,
@@ -679,7 +680,7 @@ class Wallet(
         original_indices, sorted_outputs = zip(*sorted_outputs_with_indices)
 
         # Call swap API
-        sorted_promises = await super().split(proofs, sorted_outputs)
+        sorted_promises = await super().split(proofs, sorted_outputs)  # type: ignore
 
         # sort promises back to original order
         promises = [
@@ -1158,12 +1159,12 @@ class Wallet(
     # ---------- BALANCE CHECKS ----------
 
     @property
-    def balance(self):
-        return sum_proofs(self.proofs)
+    def balance(self) -> Amount:
+        return Amount(self.unit, sum_proofs(self.proofs))
 
     @property
-    def available_balance(self):
-        return sum_proofs([p for p in self.proofs if not p.reserved])
+    def available_balance(self) -> Amount:
+        return Amount(self.unit, sum_proofs([p for p in self.proofs if not p.reserved]))
 
     @property
     def proof_amounts(self):
