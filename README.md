@@ -86,11 +86,11 @@ curl -sSL https://install.python-poetry.org | python3 - --version 1.8.5
 echo export PATH=\"$HOME/.local/bin:$PATH\" >> ~/.bashrc
 source ~/.bashrc
 ```
-#### Poetry: Install Cashu
+#### Poetry: Install Cashu Nutshell
 ```bash
-# install cashu
-git clone https://github.com/cashubtc/nutshell.git cashu
-cd cashu
+# install nutshell
+git clone https://github.com/cashubtc/nutshell.git nutshell
+cd nutshell
 git checkout <latest_tag>
 pyenv local 3.10.4
 poetry install
