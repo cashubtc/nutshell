@@ -16,6 +16,7 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
     abort_queue: asyncio.Queue = asyncio.Queue(0)
 
     def __init__(self) -> None:
+        self.watcher_db = Database(self.db.name, self.db.db_location)
         return
 
     async def dispatch_watchdogs(self) -> List[asyncio.Task]:
@@ -47,7 +48,6 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         logger.info(
             f"Dispatching backend checker for unit: {unit.name} and backend: {backend.__class__.__name__}"
         )
-        self.watcher_db = Database(self.db.name, self.db.db_location)
         while True:
             backend_status = await backend.status()
             backend_balance = backend_status.balance

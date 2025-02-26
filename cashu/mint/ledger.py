@@ -137,7 +137,7 @@ class Ledger(
         self.db_read = DbReadHelper(self.db, self.crud)
         self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
 
-        super().__init__()
+        LedgerWatchdog.__init__(self)
 
     # ------- STARTUP -------
 
