@@ -79,7 +79,9 @@ class Ledger(
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
+    db: Database
     db_read: DbReadHelper
+    db_write: DbWriteHelper
     invoice_listener_tasks: List[asyncio.Task] = []
     watchdog_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
@@ -134,6 +136,8 @@ class Ledger(
         self.pubkey = derive_pubkey(self.seed)
         self.db_read = DbReadHelper(self.db, self.crud)
         self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
+
+        super().__init__()
 
     # ------- STARTUP -------
 

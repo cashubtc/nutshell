@@ -3,6 +3,8 @@ from typing import List
 
 from loguru import logger
 
+from cashu.core.db import Database
+
 from ..core.base import Amount, MintBalanceLogEntry, Unit
 from ..core.settings import settings
 from ..lightning.base import LightningBackend
@@ -10,6 +12,7 @@ from .protocols import SupportsBackends, SupportsDb
 
 
 class LedgerWatchdog(SupportsDb, SupportsBackends):
+    watcher_db: Database
     abort_queue: asyncio.Queue = asyncio.Queue(0)
 
     def __init__(self) -> None:
@@ -44,16 +47,17 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         logger.info(
             f"Dispatching backend checker for unit: {unit.name} and backend: {backend.__class__.__name__}"
         )
+        self.watcher_db = Database(self.db.name, self.db.db_location)
         while True:
             backend_status = await backend.status()
             backend_balance = backend_status.balance
             last_balance_log_entry: MintBalanceLogEntry | None = None
-            async with self.db.connect() as conn:
+            async with self.watcher_db.connect() as conn:
                 last_balance_log_entry = await self.crud.get_last_balance_log_entry(
-                    unit=unit, db=self.db
+                    unit=unit, db=self.watcher_db
                 )
                 keyset_balance = await self.crud.get_unit_balance(
-                    unit, db=self.db, conn=conn
+                    unit, db=self.watcher_db, conn=conn
                 )
 
             logger.trace(f"Last balance log entry: {last_balance_log_entry}")
