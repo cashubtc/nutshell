@@ -206,9 +206,10 @@ class LNbitsWallet(LightningBackend):
     ) -> PaymentQuoteResponse:
         invoice_obj = decode(melt_quote.request)
         
-        amount_msat = int(invoice_obj.amount_msat)
-        if not amount_msat:
+        if not invoice_obj.amount_msat:
             raise Exception("request has no amount")
+
+        amount_msat = int(invoice_obj.amount_msat)
 
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
