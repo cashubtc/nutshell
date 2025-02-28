@@ -25,7 +25,7 @@ from .base import (
     PaymentStatus,
     StatusResponse,
 )
-from .errors import (
+from ..core.errors import (
     IncorrectRequestAmountError,
 )
 from .macaroon import load_macaroon

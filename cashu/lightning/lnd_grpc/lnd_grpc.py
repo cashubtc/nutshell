@@ -29,9 +29,7 @@ from cashu.lightning.base import (
     PostMeltQuoteRequest,
     StatusResponse,
 )
-from cashu.lightning.errors import (
-    IncorrectRequestAmountError,
-)
+from cashu.core.errors import IncorrectRequestAmountError
 
 # maps statuses to None, False, True:
 # https://api.lightning.community/?python=#paymentpaymentstatus

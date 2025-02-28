@@ -25,7 +25,7 @@ from .base import (
     StatusResponse,
     Unsupported,
 )
-from .errors import IncorrectRequestAmountError
+from ..core.errors import IncorrectRequestAmountError
 
 # https://docs.corelightning.org/reference/lightning-pay
 PAYMENT_RESULT_MAP = {
