@@ -32,6 +32,7 @@ from ..core.crypto.keys import (
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
+    AmountlessInvoiceNotSupportedError,
     CashuError,
     KeysetError,
     KeysetNotFoundError,
@@ -41,7 +42,6 @@ from ..core.errors import (
     QuoteSignatureInvalidError,
     TransactionAmountExceedsLimitError,
     TransactionError,
-    AmountlessInvoiceNotSupportedError,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
