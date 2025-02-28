@@ -17,6 +17,7 @@ import cashu.lightning.lnd_grpc.protos.lightning_pb2_grpc as lightningstub
 import cashu.lightning.lnd_grpc.protos.router_pb2 as routerrpc
 import cashu.lightning.lnd_grpc.protos.router_pb2_grpc as routerstub
 from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.errors import IncorrectRequestAmountError
 from cashu.core.helpers import fee_reserve
 from cashu.core.settings import settings
 from cashu.lightning.base import (
@@ -29,7 +30,6 @@ from cashu.lightning.base import (
     PostMeltQuoteRequest,
     StatusResponse,
 )
-from cashu.core.errors import IncorrectRequestAmountError
 
 # maps statuses to None, False, True:
 # https://api.lightning.community/?python=#paymentpaymentstatus

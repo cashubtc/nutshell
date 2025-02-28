@@ -18,6 +18,9 @@ from bolt11 import (
 )
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.errors import (
+    IncorrectRequestAmountError,
+)
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -29,9 +32,6 @@ from .base import (
     PaymentResult,
     PaymentStatus,
     StatusResponse,
-)
-from ..core.errors import (
-    IncorrectRequestAmountError,
 )
 
 
