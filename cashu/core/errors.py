@@ -90,15 +90,15 @@ class AmountlessInvoiceNotSupportedError(TransactionError):
     detail = "Amountless invoice is not supported"
     code = 11007
 
-    def __init__(self, detail):
-        super().__init__(detail, code=self.code)
+    def __init__(self):
+        super().__init__(detail=self.detail, code=self.code)
 
 class IncorrectRequestAmountError(TransactionError):
     detail = "Amount in request does not equal invoice"
     code = 11008
 
-    def __init__(self, detail):
-        super().__init__(detail, code=self.code)
+    def __init__(self):
+        super().__init__(detail=self.detail, code=self.code)
 
 class KeysetError(CashuError):
     detail = "keyset error"
