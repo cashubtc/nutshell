@@ -25,9 +25,7 @@ from .base import (
     StatusResponse,
     Unsupported,
 )
-from .errors import (
-    IncorrectRequestAmountError
-)
+from .errors import IncorrectRequestAmountError
 
 # https://docs.corelightning.org/reference/lightning-pay
 PAYMENT_RESULT_MAP = {
@@ -338,10 +336,10 @@ class CLNRestWallet(LightningBackend):
 
         # Detect and handle amountless request
         amount_msat = 0
-        if melt_quote.is_amountless:
+        if melt_quote.options and melt_quote.options.amountless:
             # Check that the user isn't doing something cheeky
             if (invoice_obj.amount_msat
-                and melt_quote.options.amountless.amount_msat != invoice.amount_msat
+                and melt_quote.options.amountless.amount_msat != invoice_obj.amount_msat
             ):
                 raise IncorrectRequestAmountError()
             amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore

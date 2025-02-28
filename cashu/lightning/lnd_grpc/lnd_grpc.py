@@ -29,6 +29,9 @@ from cashu.lightning.base import (
     PostMeltQuoteRequest,
     StatusResponse,
 )
+from cashu.lightning.errors import (
+    IncorrectRequestAmountError,
+)
 
 # maps statuses to None, False, True:
 # https://api.lightning.community/?python=#paymentpaymentstatus
@@ -382,13 +385,12 @@ class LndRPCWallet(LightningBackend):
         
         # Detect and handle amountless request
         amount_msat = 0
-        if melt_quote.is_amountless:
+        if melt_quote.options and melt_quote.options.amountless:
             # Check that the user isn't doing something cheeky
             if (invoice_obj.amount_msat
-                and melt_quote.options.amountless.amount_msat != invoice.amount_msat
+                and melt_quote.options.amountless.amount_msat != invoice_obj.amount_msat
             ):
                 raise IncorrectRequestAmountError()
-            
             amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
         elif invoice_obj.amount_msat:
             amount_msat = int(invoice_obj.amount_msat)
