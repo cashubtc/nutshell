@@ -45,6 +45,7 @@ class CLNRestWallet(LightningBackend):
     supported_units = {Unit.sat, Unit.msat}
     unit = Unit.sat
     supports_mpp = settings.mint_clnrest_enable_mpp
+    supports_amountless: bool = True
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
 

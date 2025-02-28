@@ -46,6 +46,7 @@ class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
     supports_mpp = settings.mint_lnd_enable_mpp
+    supports_amountless: bool = True
     supports_incoming_payment_stream = True
     supported_units = {Unit.sat, Unit.msat}
     supports_description: bool = True

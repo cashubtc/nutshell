@@ -53,6 +53,7 @@ class FakeWallet(LightningBackend):
 
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
+    supports_amountless: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
