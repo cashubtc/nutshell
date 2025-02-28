@@ -41,6 +41,7 @@ from ..core.errors import (
     QuoteSignatureInvalidError,
     TransactionAmountExceedsLimitError,
     TransactionError,
+    AmountlessInvoiceNotSupportedError,
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
@@ -701,6 +702,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             # verify that the backend supports mpp if the quote request has an amount
             if melt_quote.is_mpp and not self.backends[method][unit].supports_mpp:
                 raise TransactionError("backend does not support mpp.")
+            # verify that the backend supports amountless if the payment string does not have an amount
+            if melt_quote.is_amountless and not self.backends[method][unit].supports_amountless:
+                raise AmountlessInvoiceNotSupportedError()
             # get payment quote by backend
             payment_quote = await self.backends[method][unit].get_payment_quote(
                 melt_quote=melt_quote

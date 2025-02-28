@@ -31,6 +31,7 @@ class MeltMethodSetting(BaseModel):
     unit: str
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
+    amountless: Optional[bool] = None
 
 
 class MintInfoContact(BaseModel):

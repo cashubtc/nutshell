@@ -86,7 +86,7 @@ class TransactionAmountExceedsLimitError(CashuError):
     def __init__(self, detail):
         super().__init__(detail, code=self.code)
 
-class AmountlessInvoiceNotSupportedError(CashuError):
+class AmountlessInvoiceNotSupportedError(TransactionError):
     detail = "Amountless invoice is not supported"
     code = 11007
 
