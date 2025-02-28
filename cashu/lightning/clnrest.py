@@ -12,6 +12,7 @@ from bolt11 import (
 from loguru import logger
 
 from ..core.base import Amount, MeltQuote, Unit
+from ..core.errors import IncorrectRequestAmountError
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -45,6 +46,7 @@ class CLNRestWallet(LightningBackend):
     supported_units = {Unit.sat, Unit.msat}
     unit = Unit.sat
     supports_mpp = settings.mint_clnrest_enable_mpp
+    supports_amountless: bool = True
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
 
@@ -329,16 +331,30 @@ class CLNRestWallet(LightningBackend):
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
+
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-        assert invoice_obj.amount_msat > 0, "invoice has 0 amount."
-        amount_msat = invoice_obj.amount_msat
+
+        # Detect and handle amountless request
+        amount_msat = 0
+        if melt_quote.options and melt_quote.options.amountless:
+            # Check that the user isn't doing something cheeky
+            if (invoice_obj.amount_msat
+                and melt_quote.options.amountless.amount_msat != invoice_obj.amount_msat
+            ):
+                raise IncorrectRequestAmountError()
+            amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
+        elif invoice_obj.amount_msat:
+            amount_msat = int(invoice_obj.amount_msat)
+        else:
+            raise Exception("request has no amount and is not specified as amountless")
+
         if melt_quote.is_mpp:
             amount_msat = (
                 Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
                 .to(Unit.msat)
                 .amount
             )
+
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)

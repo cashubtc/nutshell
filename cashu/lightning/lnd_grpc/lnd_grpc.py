@@ -17,6 +17,7 @@ import cashu.lightning.lnd_grpc.protos.lightning_pb2_grpc as lightningstub
 import cashu.lightning.lnd_grpc.protos.router_pb2 as routerrpc
 import cashu.lightning.lnd_grpc.protos.router_pb2_grpc as routerstub
 from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.errors import IncorrectRequestAmountError
 from cashu.core.helpers import fee_reserve
 from cashu.core.settings import settings
 from cashu.lightning.base import (
@@ -49,6 +50,7 @@ INVOICE_RESULT_MAP = {
 
 class LndRPCWallet(LightningBackend):
     supports_mpp = settings.mint_lnd_enable_mpp
+    supports_amountless: bool = True
     supports_incoming_payment_stream = True
     supported_units = {Unit.sat, Unit.msat}
     supports_description: bool = True
@@ -371,19 +373,30 @@ class LndRPCWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         # get amount from melt_quote or from bolt11
-        amount = (
+        mpp_amount = (
             Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
             if melt_quote.is_mpp
             else None
         )
 
         invoice_obj = bolt11.decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-
-        if amount:
-            amount_msat = amount.to(Unit.msat).amount
-        else:
+        
+        # Detect and handle amountless request
+        amount_msat = 0
+        if melt_quote.options and melt_quote.options.amountless:
+            # Check that the user isn't doing something cheeky
+            if (invoice_obj.amount_msat
+                and melt_quote.options.amountless.amount_msat != invoice_obj.amount_msat
+            ):
+                raise IncorrectRequestAmountError()
+            amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
+        elif invoice_obj.amount_msat:
             amount_msat = int(invoice_obj.amount_msat)
+        else:
+            raise Exception("request has no amount and is not specified as amountless")
+
+        if mpp_amount:
+            amount_msat = mpp_amount.to(Unit.msat).amount
 
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
