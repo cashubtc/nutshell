@@ -205,8 +205,6 @@ MINT_REDIS_CACHE_ENABLED=TRUE
 MINT_REDIS_CACHE_URL=redis://localhost:6379
 ```
 
-
-
 # Running tests
 To run the tests in this repository, first install the dev dependencies with
 ```bash
