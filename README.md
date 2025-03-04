@@ -29,11 +29,13 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 - Use multiple mints in a single wallet
 
 ### Advanced features
-- Deterministic wallet with seed phrase backup
-- Programmable ecash: P2PK and HTLCs
+- Deterministic wallet with seed phrase backup ([NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md))
+- Programmable ecash: P2PK and HTLCs ([NUT-10](https://github.com/cashubtc/nuts/blob/main/10.md))
 - Wallet and mint support for keyset rotations
-- DLEQ proofs for offline transactions
-- Send and receive tokens on nostr
+- DLEQ proofs for offline transactions ([NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md))
+- Send and receive tokens via nostr
+- Optional caching using Redis ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md))
+- Optional authentication using Keycloak ([NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md))
 
 ## The Cashu protocol
 Different Cashu clients and mints use the same protocol to achieve interoperability. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in developing on your own Cashu project, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts).
@@ -194,27 +196,13 @@ poetry run mint
 
 For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
 
-## Redis
-To install and run Redis on default port 6379:
-```bash
-sudo apt-get install redis-server
-sudo service redis-server start
+### NUT-19 Caching with Redis
+To cache HTTP responses, you can either install Redis manually or use the docker compose file in `docker/docker-compose.yaml` to start Redis in a container.
+
+Edit the `.env` file and uncomment the Redis lines:
 ```
-To confirm it’s running:
-```bash
-sudo systemctl status redis-server
-```
-To enable Redis to start on boot:
-```bash
-sudo systemctl enable redis-server
-```
-Edit the .env file and uncomment the Redis lines:
-```
-# NUT-19 Cached responses
-# Enable these settings to cache responses in Redis
-# 
 MINT_REDIS_CACHE_ENABLED=TRUE
-MINT_REDIS_CACHE_URL="redis://localhost:6379"
+MINT_REDIS_CACHE_URL=redis://localhost:6379
 ```
 
 
