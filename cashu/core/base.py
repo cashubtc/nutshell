@@ -922,6 +922,9 @@ class Token(ABC):
     @abstractmethod
     def unit(self, unit: str): ...
 
+    @abstractmethod
+    def serialize_to_dict(self, include_dleq: bool): ...
+
 
 class TokenV3Token(BaseModel):
     mint: Optional[str] = None
