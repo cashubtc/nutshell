@@ -455,10 +455,12 @@ class BlinkWallet(LightningBackend):
             raise e
 
         invoice_obj = decode(bolt11)
-        assert invoice_obj.amount_msat, "invoice has no amount."
+
+        if not invoice_obj.amount_msat:
+            raise Exception("Invoice with no amount")
 
         amount_msat = int(invoice_obj.amount_msat)
-
+        
         # we take the highest: fee_msat_response, or BLINK_MAX_FEE_PERCENT, or MINIMUM_FEE_MSAT msat
         # Note: fees with BLINK_MAX_FEE_PERCENT are rounded to the nearest 1000 msat
         fees_amount_msat: int = (
