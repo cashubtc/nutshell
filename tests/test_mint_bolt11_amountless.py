@@ -57,4 +57,5 @@ async def test_unsupported_amountless_bolt11_invoice(mint):
 async def test_amountless_in_info_endpoint(mint):
     response = httpx.get(f"{BASE_URL}/v1/info")
     info = response.json()
+    assert response.status_code == 200
     assert info['nuts']['5']['methods'][0]['amountless'] == True
