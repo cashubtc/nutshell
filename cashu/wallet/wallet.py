@@ -701,14 +701,14 @@ class Wallet(
         return keep_proofs, send_proofs
 
     async def melt_quote(
-        self, invoice: str, amount: Optional[int] = None
+        self, invoice: str, amount_msat: Optional[int] = None
     ) -> PostMeltQuoteResponse:
         """
         Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
         """
-        if amount and not self.mint_info.supports_mpp("bolt11", self.unit):
+        if amount_msat and not self.mint_info.supports_mpp("bolt11", self.unit):
             raise Exception("Mint does not support MPP, cannot specify amount.")
-        melt_quote_resp = await super().melt_quote(invoice, self.unit, amount)
+        melt_quote_resp = await super().melt_quote(invoice, self.unit, amount_msat)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote_resp.fee_reserve)} as fee reserve."
         )

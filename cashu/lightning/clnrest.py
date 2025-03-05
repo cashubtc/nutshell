@@ -332,13 +332,9 @@ class CLNRestWallet(LightningBackend):
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
         assert invoice_obj.amount_msat > 0, "invoice has 0 amount."
-        amount_msat = invoice_obj.amount_msat
-        if melt_quote.is_mpp:
-            amount_msat = (
-                Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
-                .to(Unit.msat)
-                .amount
-            )
+        amount_msat =  melt_quote.mpp_amount if melt_quote.is_mpp else (
+            invoice_obj.amount_msat
+        )
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)

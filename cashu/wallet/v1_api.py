@@ -434,16 +434,17 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
     @async_set_httpx_client
     @async_ensure_mint_loaded
     async def melt_quote(
-        self, payment_request: str, unit: Unit, amount: Optional[int] = None
+        self, payment_request: str, unit: Unit, amount_msat: Optional[int] = None
     ) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
+
         # add mpp amount for partial melts
         melt_options = None
-        if amount:
+        if amount_msat:
             melt_options = PostMeltRequestOptions(
-                mpp=PostMeltRequestOptionMpp(amount=amount)
+                mpp=PostMeltRequestOptionMpp(amount=amount_msat)
             )
 
         payload = PostMeltQuoteRequest(
@@ -464,7 +465,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             quote_id = f"deprecated_{uuid.uuid4()}"
             return PostMeltQuoteResponse(
                 quote=quote_id,
-                amount=amount or invoice_obj.amount_msat // 1000,
+                amount=amount_msat or invoice_obj.amount_msat // 1000,
                 fee_reserve=ret.fee or 0,
                 paid=False,
                 state=MeltQuoteState.unpaid.value,

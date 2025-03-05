@@ -263,7 +263,10 @@ async def pay(
     await wallet.load_mint()
     await print_balance(ctx)
     payment_hash = bolt11.decode(invoice).payment_hash
-    quote = await wallet.melt_quote(invoice, amount)
+    if amount:
+        # we assume `amount` to be in sats
+        amount_mpp_msat = amount * 1000
+    quote = await wallet.melt_quote(invoice, amount_mpp_msat)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
     # estimate ecash fee for the coinselected proofs
