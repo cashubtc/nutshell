@@ -48,3 +48,13 @@ async def test_unsupported_amountless_bolt11_invoice(mint):
     )
 
     assert response.status_code == 400
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not(is_cln or is_lnd or is_fake),
+    reason="only run this test on fake, lnd or cln"
+)
+async def test_amountless_in_info_endpoint(mint):
+    response = httpx.get(f"{BASE_URL}/v1/info")
+    info = response.json()
+    assert info['nuts']['5']['methods'][0]['amountless'] == True
