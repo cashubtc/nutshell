@@ -839,11 +839,72 @@ async def m022_quote_set_states_to_values(db: Database):
                 f"UPDATE {db.table_with_schema('mint_quotes')} SET state = '{mint_quote_states.value}' WHERE state = '{mint_quote_states.name}'"
             )
 
+
 async def m023_add_key_to_mint_quote_table(db: Database):
     async with db.connect() as conn:
         await conn.execute(
             f"""
                 ALTER TABLE {db.table_with_schema('mint_quotes')}
                 ADD COLUMN pubkey TEXT DEFAULT NULL
+            """
+        )
+
+
+async def m024_add_melt_quote_outputs(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('melt_quotes')}
+                ADD COLUMN outputs TEXT DEFAULT NULL
+            """
+        )
+
+
+async def m025_add_amounts_to_keysets(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('keysets')} ADD COLUMN amounts TEXT"
+        )
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('keysets')} SET amounts = '[]'"
+        )
+
+
+async def m026_keyset_specific_balance_views(db: Database):
+    async with db.connect() as conn:
+        await drop_balance_views(db, conn)
+        await conn.execute(
+            f"""
+            CREATE VIEW {db.table_with_schema('balance_issued')} AS
+            SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
+                SELECT id, SUM(amount) AS s
+                FROM {db.table_with_schema('promises')}
+                WHERE amount > 0
+                GROUP BY id
+            );
+            """
+        )
+        await conn.execute(
+            f"""
+            CREATE VIEW {db.table_with_schema('balance_redeemed')} AS
+            SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
+                SELECT id, SUM(amount) AS s
+                FROM {db.table_with_schema('proofs_used')}
+                WHERE amount > 0
+                GROUP BY id
+            );
+            """
+        )
+        await conn.execute(
+            f"""
+            CREATE VIEW {db.table_with_schema('balance')} AS
+            SELECT keyset, s_issued - s_used AS balance FROM (
+                SELECT bi.keyset AS keyset,
+                    bi.balance AS s_issued,
+                    COALESCE(bu.balance, 0) AS s_used
+                FROM {db.table_with_schema('balance_issued')} bi
+                LEFT OUTER JOIN {db.table_with_schema('balance_redeemed')} bu
+                ON bi.keyset = bu.keyset
+            );
             """
         )

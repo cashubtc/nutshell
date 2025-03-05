@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 from loguru import logger
 
 from ...core.base import (
+    BlindedMessage,
     MeltQuote,
     MeltQuoteState,
     MintQuote,
@@ -162,7 +163,7 @@ class DbWriteHelper:
                 raise TransactionError(
                     f"Mint quote not pending: {quote.state.value}. Cannot set as {state.value}."
                 )
-            # set the quote as pending
+            # set the quote to previous state
             quote.state = state
             logger.trace(f"crud: setting quote {quote_id} as {state.value}")
             await self.crud.update_mint_quote(quote=quote, db=self.db, conn=conn)
@@ -172,7 +173,9 @@ class DbWriteHelper:
         await self.events.submit(quote)
         return quote
 
-    async def _set_melt_quote_pending(self, quote: MeltQuote) -> MeltQuote:
+    async def _set_melt_quote_pending(
+        self, quote: MeltQuote, outputs: Optional[List[BlindedMessage]] = None
+    ) -> MeltQuote:
         """Sets the melt quote as pending.
 
         Args:
@@ -193,6 +196,8 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote already pending.")
             # set the quote as pending
             quote_copy.state = MeltQuoteState.pending
+            if outputs:
+                quote_copy.outputs = outputs
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
         await self.events.submit(quote_copy)
@@ -217,8 +222,11 @@ class DbWriteHelper:
                 raise TransactionError("Melt quote not found.")
             if quote_db.state != MeltQuoteState.pending:
                 raise TransactionError("Melt quote not pending.")
-            # set the quote as pending
+            # set the quote to previous state
             quote_copy.state = state
+
+            # unset outputs
+            quote_copy.outputs = None
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)
 
         await self.events.submit(quote_copy)

@@ -47,7 +47,7 @@ class SubscriptionManager:
 
         try:
             msg = JSONRPCNotification.parse_raw(message)
-            logger.debug(f"Received notification: {msg}")
+            logger.trace(f"Received notification: {msg}")
         except Exception as e:
             logger.error(f"Error parsing notification: {e}")
             return

@@ -24,11 +24,13 @@ from .base import (
 
 # according to https://github.com/GaloyMoney/galoy/blob/7e79cc27304de9b9c2e7d7f4fdd3bac09df23aac/core/api/src/domain/bitcoin/index.ts#L59
 BLINK_MAX_FEE_PERCENT = 0.5
+# according to https://github.com/GaloyMoney/blink/blob/7e79cc27304de9b9c2e7d7f4fdd3bac09df23aac/core/api/src/domain/bitcoin/index.ts#L60C1-L60C41
+MINIMUM_FEE_MSAT = 10_000
 
 DIRECTION_SEND = "SEND"
 DIRECTION_RECEIVE = "RECEIVE"
 PROBE_FEE_TIMEOUT_SEC = 1
-MINIMUM_FEE_MSAT = 2000
+
 
 INVOICE_RESULT_MAP = {
     "PENDING": PaymentResult.PENDING,

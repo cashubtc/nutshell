@@ -36,9 +36,11 @@ from ..core.errors import (
     KeysetError,
     KeysetNotFoundError,
     LightningError,
+    LightningPaymentFailedError,
     NotAllowedError,
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
+    TransactionAmountExceedsLimitError,
     TransactionError,
 )
 from ..core.helpers import sum_proofs
@@ -74,16 +76,26 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     db_read: DbReadHelper
     invoice_listener_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
+    pubkey: PublicKey
 
     def __init__(
         self,
+        *,
         db: Database,
         seed: str,
-        backends: Mapping[Method, Mapping[Unit, LightningBackend]],
-        seed_decryption_key: Optional[str] = None,
         derivation_path="",
+        amounts: Optional[List[int]] = None,
+        backends: Optional[Mapping[Method, Mapping[Unit, LightningBackend]]] = None,
+        seed_decryption_key: Optional[str] = None,
         crud=LedgerCrudSqlite(),
-    ):
+    ) -> None:
+        self.keysets: Dict[str, MintKeyset] = {}
+        self.backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
+        self.events = LedgerEventManager()
+        self.db_read: DbReadHelper
+        self.locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
+        self.invoice_listener_tasks: List[asyncio.Task] = []
+
         if not seed:
             raise Exception("seed not set")
 
@@ -102,24 +114,33 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         self.db = db
         self.crud = crud
-        self.backends = backends
+
+        if backends:
+            self.backends = backends
+
+        if amounts:
+            self.amounts = amounts
+        else:
+            self.amounts = [2**n for n in range(settings.max_order)]
+
         self.pubkey = derive_pubkey(self.seed)
         self.db_read = DbReadHelper(self.db, self.crud)
         self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
 
     # ------- STARTUP -------
 
-    async def startup_ledger(self):
-        await self._startup_ledger()
+    async def startup_ledger(self) -> None:
+        await self._startup_keysets()
+        await self._check_backends()
         await self._check_pending_proofs_and_melt_quotes()
         self.invoice_listener_tasks = await self.dispatch_listeners()
 
-    async def _startup_ledger(self):
+    async def _startup_keysets(self) -> None:
         await self.init_keysets()
-
         for derivation_path in settings.mint_derivation_path_list:
             await self.activate_keyset(derivation_path=derivation_path)
 
+    async def _check_backends(self) -> None:
         for method in self.backends:
             for unit in self.backends[method]:
                 logger.info(
@@ -138,24 +159,24 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         logger.info(f"Data dir: {settings.cashu_dir}")
 
-    async def shutdown_ledger(self):
+    async def shutdown_ledger(self) -> None:
         await self.db.engine.dispose()
         for task in self.invoice_listener_tasks:
             task.cancel()
 
     async def _check_pending_proofs_and_melt_quotes(self):
-        """Startup routine that checks all pending proofs for their melt state and either invalidates
-        them for a successful melt or deletes them if the melt failed.
+        """Startup routine that checks all pending melt quotes and either invalidates
+        their pending proofs for a successful melt or deletes them if the melt failed.
         """
         # get all pending melt quotes
-        melt_quotes = await self.crud.get_all_melt_quotes_from_pending_proofs(
+        pending_melt_quotes = await self.crud.get_all_melt_quotes_from_pending_proofs(
             db=self.db
         )
-        if not melt_quotes:
+        if not pending_melt_quotes:
             return
-        logger.info("Checking pending melt quotes")
-        for quote in melt_quotes:
-            quote = await self.get_melt_quote(quote_id=quote.quote, purge_unknown=True)
+        logger.info(f"Checking {len(pending_melt_quotes)} pending melt quotes")
+        for quote in pending_melt_quotes:
+            quote = await self.get_melt_quote(quote_id=quote.quote)
             logger.info(f"Melt quote {quote.quote} state: {quote.state}")
 
     # ------- KEYS -------
@@ -168,57 +189,65 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         version: Optional[str] = None,
         autosave=True,
     ) -> MintKeyset:
-        """Load the keyset for a derivation path if it already exists. If not generate new one and store in the db.
+        """
+        Load an existing keyset for the specified derivation path or generate a new one if it doesn't exist.
+        Optionally store the newly created keyset in the database.
 
         Args:
-            derivation_path (_type_): Derivation path from which the keyset is generated.
-            autosave (bool, optional): Store newly-generated keyset if not already in database. Defaults to True.
+            derivation_path (str): Derivation path for keyset generation.
+            seed (Optional[str], optional): Seed value. Defaults to None.
+            version (Optional[str], optional): Version identifier. Defaults to None.
+            autosave (bool, optional): Whether to store the keyset if newly created. Defaults to True.
 
         Returns:
-            MintKeyset: Keyset
+            MintKeyset: The activated keyset.
         """
         if not derivation_path:
-            raise Exception("derivation path not set")
+            raise ValueError("Derivation path must be provided.")
+
         seed = seed or self.seed
-        tmp_keyset_local = MintKeyset(
+        version = version or settings.version
+        # Initialize a temporary keyset to derive the ID
+        temp_keyset = MintKeyset(
             seed=seed,
             derivation_path=derivation_path,
-            version=version or settings.version,
+            version=version,
+            amounts=self.amounts,
         )
         logger.debug(
-            f"Activating keyset for derivation path {derivation_path} with id"
-            f" {tmp_keyset_local.id}."
+            f"Activating keyset for derivation path '{derivation_path}' with ID '{temp_keyset.id}'."
         )
-        # load the keyset from db
-        logger.trace(f"crud: loading keyset for {derivation_path}")
-        tmp_keysets_local: List[MintKeyset] = await self.crud.get_keyset(
-            id=tmp_keyset_local.id, db=self.db
+
+        # Attempt to retrieve existing keysets from the database
+        existing_keysets: List[MintKeyset] = await self.crud.get_keyset(
+            id=temp_keyset.id, db=self.db
         )
-        logger.trace(f"crud: loaded {len(tmp_keysets_local)} keysets")
-        if tmp_keysets_local:
-            # we have a keyset with this derivation path in the database
-            keyset = tmp_keysets_local[0]
+        logger.trace(
+            f"Retrieved {len(existing_keysets)} keyset(s) for derivation path '{derivation_path}'."
+        )
+
+        if existing_keysets:
+            keyset = existing_keysets[0]
         else:
-            # no keyset for this derivation path yet
-            # we create a new keyset (keys will be generated at instantiation)
+            # Create a new keyset if none exists
             keyset = MintKeyset(
-                seed=seed or self.seed,
+                seed=seed,
                 derivation_path=derivation_path,
-                version=version or settings.version,
+                amounts=self.amounts,
+                version=version,
                 input_fee_ppk=settings.mint_input_fee_ppk,
             )
-            logger.debug(f"Generated new keyset {keyset.id}.")
+            logger.debug(f"Generated new keyset with ID '{keyset.id}'.")
+
             if autosave:
-                logger.debug(f"crud: storing new keyset {keyset.id}.")
+                logger.debug(f"Storing new keyset with ID '{keyset.id}'.")
                 await self.crud.store_keyset(keyset=keyset, db=self.db)
-                logger.trace(f"crud: stored new keyset {keyset.id}.")
 
-        # activate this keyset
+        # Activate the keyset
         keyset.active = True
-        # load the new keyset in self.keysets
         self.keysets[keyset.id] = keyset
+        logger.debug(f"Keyset with ID '{keyset.id}' is now active.")
 
-        logger.debug(f"Loaded keyset {keyset.id}")
         return keyset
 
     async def init_keysets(self, autosave: bool = True) -> None:
@@ -294,9 +323,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
-    async def get_balance(self) -> int:
+    async def get_balance(self, keyset: MintKeyset) -> int:
         """Returns the balance of the mint."""
-        return await self.crud.get_balance(db=self.db)
+        return await self.crud.get_balance(keyset=keyset, db=self.db)
 
     # ------- ECASH -------
 
@@ -357,7 +386,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # we make sure that the fee is positive
         overpaid_fee = fee_provided - fee_paid
 
-        if overpaid_fee == 0 or outputs is None:
+        if overpaid_fee <= 0 or outputs is None:
+            if overpaid_fee < 0:
+                logger.error(
+                    f"Overpaid fee is negative ({overpaid_fee}). This should not happen."
+                )
             return []
 
         logger.debug(
@@ -403,7 +436,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if not quote_request.amount > 0:
             raise TransactionError("amount must be positive")
         if settings.mint_max_peg_in and quote_request.amount > settings.mint_max_peg_in:
-            raise NotAllowedError(
+            raise TransactionAmountExceedsLimitError(
                 f"Maximum mint amount is {settings.mint_max_peg_in} sat."
             )
         if settings.mint_peg_out_only:
@@ -419,8 +452,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         ):
             raise NotAllowedError("Backend does not support descriptions.")
 
-        if settings.mint_max_balance:
-            balance = await self.get_balance()
+        # MINT_MAX_BALANCE refers to sat (for now)
+        if settings.mint_max_balance and unit == Unit.sat:
+            # get next active keyset for unit
+            active_keyset: MintKeyset = next(
+                filter(lambda k: k.active and k.unit == unit, self.keysets.values())
+            )
+            balance = await self.get_balance(active_keyset)
             if balance + quote_request.amount > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
 
@@ -629,7 +667,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if not payment_quote.checking_id:
             raise Exception("quote has no checking id")
         # verify that payment quote amount is as expected
-        if melt_quote.is_mpp and melt_quote.mpp_amount != payment_quote.amount.amount:
+        if melt_quote.is_mpp and melt_quote.mpp_amount != payment_quote.amount.to(Unit.msat).amount:
             raise TransactionError("quote amount not as requested")
         # make sure the backend returned the amount with a correct unit
         if not payment_quote.amount.unit == unit:
@@ -667,12 +705,16 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # and therefore respond with internal transaction fees (0 for now)
         mint_quote = await self.crud.get_mint_quote(request=request, db=self.db)
         if mint_quote and mint_quote.unit == melt_quote.unit:
+            # check if the melt quote is partial and error if it is.
+            # it's just not possible to handle this case
+            if melt_quote.is_mpp:
+                raise TransactionError("internal mpp not allowed.")
             payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
         else:
             # not internal
             # verify that the backend supports mpp if the quote request has an amount
             if melt_quote.is_mpp and not self.backends[method][unit].supports_mpp:
-                raise TransactionError("backend does not support mpp")
+                raise TransactionError("backend does not support mpp.")
             # get payment quote by backend
             payment_quote = await self.backends[method][unit].get_payment_quote(
                 melt_quote=melt_quote
@@ -723,17 +765,17 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             expiry=quote.expiry,
         )
 
-    async def get_melt_quote(self, quote_id: str, purge_unknown=False) -> MeltQuote:
+    async def get_melt_quote(self, quote_id: str, rollback_unknown=False) -> MeltQuote:
         """Returns a melt quote.
 
         If the melt quote is pending, checks status of the payment with the backend.
             - If settled, sets the quote as paid and invalidates pending proofs (commit).
             - If failed, sets the quote as unpaid and unsets pending proofs (rollback).
-            - If purge_unknown is set, do the same for unknown states as for failed states.
+            - If rollback_unknown is set, do the same for unknown states as for failed states.
 
         Args:
             quote_id (str): ID of the melt quote.
-            purge_unknown (bool, optional): Rollback unknown payment states to unpaid. Defaults to False.
+            rollback_unknown (bool, optional): Rollback unknown payment states to unpaid. Defaults to False.
 
         Raises:
             Exception: Quote not found.
@@ -772,14 +814,28 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 if status.preimage:
                     melt_quote.payment_preimage = status.preimage
                 melt_quote.paid_time = int(time.time())
-                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
-                await self.events.submit(melt_quote)
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
                 await self._invalidate_proofs(proofs=pending_proofs, quote_id=quote_id)
                 await self.db_write._unset_proofs_pending(pending_proofs)
-            if status.failed or (purge_unknown and status.unknown):
+                # change to compensate wallet for overpaid fees
+                if melt_quote.outputs:
+                    total_provided = sum_proofs(pending_proofs)
+                    input_fees = self.get_fees_for_proofs(pending_proofs)
+                    fee_reserve_provided = (
+                        total_provided - melt_quote.amount - input_fees
+                    )
+                    return_promises = await self._generate_change_promises(
+                        fee_provided=fee_reserve_provided,
+                        fee_paid=melt_quote.fee_paid,
+                        outputs=melt_quote.outputs,
+                        keyset=self.keysets[melt_quote.outputs[0].id],
+                    )
+                    melt_quote.change = return_promises
+                await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
+                await self.events.submit(melt_quote)
+            if status.failed or (rollback_unknown and status.unknown):
                 logger.debug(f"Setting quote {quote_id} as unpaid")
                 melt_quote.state = MeltQuoteState.unpaid
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
@@ -909,6 +965,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 raise TransactionError(
                     f"output unit {outputs_unit.name} does not match quote unit {melt_quote.unit}"
                 )
+            # we don't need to set it here, _set_melt_quote_pending will set it in the db
+            melt_quote.outputs = outputs
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
@@ -939,7 +997,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             proofs, quote_id=melt_quote.quote
         )
         previous_state = melt_quote.state
-        melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
+        melt_quote = await self.db_write._set_melt_quote_pending(melt_quote, outputs)
 
         # if the melt corresponds to an internal mint, mark both as paid
         melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
@@ -1000,7 +1058,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                                 logger.error(
                                     f"Status check error: {status.error_message}"
                                 )
-                            raise LightningError(
+                            raise LightningPaymentFailedError(
                                 f"Lightning payment failed{': ' + payment.error_message if payment.error_message else ''}."
                             )
                         case _:

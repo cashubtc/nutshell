@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from cashu.wallet.crud import get_bolt11_melt_quote
 
 from ..core.base import (
+    AuthProof,
     BlindedMessage,
     BlindedSignature,
     MeltQuoteState,
@@ -29,6 +30,8 @@ from ..core.models import (
     KeysetsResponse,
     KeysetsResponseKeyset,
     KeysResponse,
+    PostAuthBlindMintRequest,
+    PostAuthBlindMintResponse,
     PostCheckStateRequest,
     PostCheckStateResponse,
     PostMeltQuoteRequest,
@@ -47,7 +50,15 @@ from ..core.models import (
 )
 from ..core.settings import settings
 from ..tor.tor import TorProxy
+from .crud import (
+    get_proofs,
+    invalidate_proof,
+)
+from .protocols import SupportsAuth
 from .wallet_deprecated import LedgerAPIDeprecated
+
+GET = "GET"
+POST = "POST"
 
 
 def async_set_httpx_client(func):
@@ -78,7 +89,7 @@ def async_set_httpx_client(func):
             verify=not settings.debug,
             proxies=proxies_dict,  # type: ignore
             headers=headers_dict,
-            base_url=self.url,
+            base_url=self.url.rstrip("/"),
             timeout=None if settings.debug else 60,
         )
         return await func(self, *args, **kwargs)
@@ -99,10 +110,10 @@ def async_ensure_mint_loaded(func):
     return wrapper
 
 
-class LedgerAPI(LedgerAPIDeprecated):
+class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
     tor: TorProxy
-    db: Database  # we need the db for melt_deprecated
     httpx: httpx.AsyncClient
+    api_prefix = "v1"
 
     def __init__(self, url: str, db: Database):
         self.url = url
@@ -128,7 +139,6 @@ class LedgerAPI(LedgerAPIDeprecated):
         try:
             resp_dict = resp.json()
         except json.JSONDecodeError:
-            # if we can't decode the response, raise for status
             resp.raise_for_status()
             return
         if "detail" in resp_dict:
@@ -137,8 +147,48 @@ class LedgerAPI(LedgerAPIDeprecated):
             if "code" in resp_dict:
                 error_message += f" (Code: {resp_dict['code']})"
             raise Exception(error_message)
-        # raise for status if no error
         resp.raise_for_status()
+
+    async def _request(self, method: str, path: str, noprefix=False, **kwargs):
+        if not noprefix:
+            path = join(self.api_prefix, path)
+        if self.mint_info and self.mint_info.requires_blind_auth_path(method, path):
+            if not self.auth_db:
+                raise Exception(
+                    "Mint requires blind auth, but no auth database is set."
+                )
+            if not self.auth_keyset_id:
+                raise Exception(
+                    "Mint requires blind auth, but no auth keyset id is set."
+                )
+            proofs = await get_proofs(db=self.auth_db, id=self.auth_keyset_id)
+            if not proofs:
+                raise Exception(
+                    "Mint requires blind auth, but no blind auth tokens were found."
+                )
+            # select one auth proof
+            proof = proofs[0]
+            auth_token = AuthProof.from_proof(proof).to_base64()
+            kwargs.setdefault("headers", {}).update(
+                {
+                    "Blind-auth": f"{auth_token}",
+                }
+            )
+            await invalidate_proof(proof=proof, db=self.auth_db)
+        if self.mint_info and self.mint_info.requires_clear_auth_path(method, path):
+            logger.debug(f"Using clear auth token for {path}")
+            clear_auth_token = kwargs.pop("clear_auth_token")
+            if not clear_auth_token:
+                raise Exception(
+                    "Mint requires clear auth, but no clear auth token is set."
+                )
+            kwargs.setdefault("headers", {}).update(
+                {
+                    "Clear-auth": f"{clear_auth_token}",
+                }
+            )
+
+        return await self.httpx.request(method, path, **kwargs)
 
     """
     ENDPOINTS
@@ -157,9 +207,7 @@ class LedgerAPI(LedgerAPIDeprecated):
         Raises:
             Exception: If no keys are received from the mint
         """
-        resp = await self.httpx.get(
-            join(self.url, "/v1/keys"),
-        )
+        resp = await self._request(GET, "keys")
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
@@ -201,9 +249,7 @@ class LedgerAPI(LedgerAPIDeprecated):
             Exception: If no keys are received from the mint
         """
         keyset_id_urlsafe = keyset_id.replace("+", "-").replace("/", "_")
-        resp = await self.httpx.get(
-            join(self.url, f"/v1/keys/{keyset_id_urlsafe}"),
-        )
+        resp = await self._request(GET, f"keys/{keyset_id_urlsafe}")
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
@@ -238,9 +284,7 @@ class LedgerAPI(LedgerAPIDeprecated):
         Raises:
             Exception: If no keysets are received from the mint
         """
-        resp = await self.httpx.get(
-            join(self.url, "/v1/keysets"),
-        )
+        resp = await self._request(GET, "keysets")
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
@@ -265,9 +309,7 @@ class LedgerAPI(LedgerAPIDeprecated):
         Raises:
             Exception: If the mint info request fails
         """
-        resp = await self.httpx.get(
-            join(self.url, "/v1/info"),
-        )
+        resp = await self._request(GET, "/v1/info", noprefix=True)
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
@@ -305,9 +347,12 @@ class LedgerAPI(LedgerAPIDeprecated):
         payload = PostMintQuoteRequest(
             unit=unit.name, amount=amount, description=memo, pubkey=pubkey
         )
-        resp = await self.httpx.post(
-            join(self.url, "/v1/mint/quote/bolt11"), json=payload.dict()
+        resp = await self._request(
+            POST,
+            "mint/quote/bolt11",
+            json=payload.dict(),
         )
+
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
@@ -329,9 +374,7 @@ class LedgerAPI(LedgerAPIDeprecated):
         Returns:
             PostMintQuoteResponse: Mint Quote Response
         """
-        resp = await self.httpx.get(
-            join(self.url, f"/v1/mint/quote/bolt11/{quote}"),
-        )
+        resp = await self._request(GET, f"mint/quote/bolt11/{quote}")
         self.raise_on_error_request(resp)
         return_dict = resp.json()
         return PostMintQuoteResponse.parse_obj(return_dict)
@@ -371,8 +414,9 @@ class LedgerAPI(LedgerAPIDeprecated):
             return res
 
         payload = outputs_payload.dict(include=_mintrequest_include_fields(outputs))  # type: ignore
-        resp = await self.httpx.post(
-            join(self.url, "/v1/mint/bolt11"),
+        resp = await self._request(
+            POST,
+            "mint/bolt11",
             json=payload,  # type: ignore
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -383,31 +427,33 @@ class LedgerAPI(LedgerAPIDeprecated):
         # END backwards compatibility < 0.15.0
         self.raise_on_error_request(resp)
         response_dict = resp.json()
-        logger.trace("Lightning invoice checked. POST /v1/mint/bolt11")
+        logger.trace(f"Lightning invoice checked. POST {self.api_prefix}/mint/bolt11")
         promises = PostMintResponse.parse_obj(response_dict).signatures
         return promises
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
     async def melt_quote(
-        self, payment_request: str, unit: Unit, amount: Optional[int] = None
+        self, payment_request: str, unit: Unit, amount_msat: Optional[int] = None
     ) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         assert invoice_obj.amount_msat, "invoice must have amount"
+
         # add mpp amount for partial melts
         melt_options = None
-        if amount:
+        if amount_msat:
             melt_options = PostMeltRequestOptions(
-                mpp=PostMeltRequestOptionMpp(amount=amount)
+                mpp=PostMeltRequestOptionMpp(amount=amount_msat)
             )
 
         payload = PostMeltQuoteRequest(
             unit=unit.name, request=payment_request, options=melt_options
         )
 
-        resp = await self.httpx.post(
-            join(self.url, "/v1/melt/quote/bolt11"),
+        resp = await self._request(
+            POST,
+            "melt/quote/bolt11",
             json=payload.dict(),
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -417,9 +463,12 @@ class LedgerAPI(LedgerAPIDeprecated):
                 payment_request
             )
             quote_id = f"deprecated_{uuid.uuid4()}"
+            amount_sat = (
+                amount_msat // 1000 if amount_msat else invoice_obj.amount_msat // 1000
+            )
             return PostMeltQuoteResponse(
                 quote=quote_id,
-                amount=amount or invoice_obj.amount_msat // 1000,
+                amount=amount_sat,
                 fee_reserve=ret.fee or 0,
                 paid=False,
                 state=MeltQuoteState.unpaid.value,
@@ -441,9 +490,7 @@ class LedgerAPI(LedgerAPIDeprecated):
         Returns:
             PostMeltQuoteResponse: Melt Quote Response
         """
-        resp = await self.httpx.get(
-            join(self.url, f"/v1/melt/quote/bolt11/{quote}"),
-        )
+        resp = await self._request(GET, f"melt/quote/bolt11/{quote}")
         self.raise_on_error_request(resp)
         return_dict = resp.json()
         return PostMeltQuoteResponse.parse_obj(return_dict)
@@ -474,8 +521,9 @@ class LedgerAPI(LedgerAPIDeprecated):
                 "outputs": {i: outputs_include for i in range(len(outputs))},
             }
 
-        resp = await self.httpx.post(
-            join(self.url, "/v1/melt/bolt11"),
+        resp = await self._request(
+            POST,
+            "melt/bolt11",
             json=payload.dict(include=_meltrequest_include_fields(proofs, outputs)),  # type: ignore
             timeout=None,
         )
@@ -523,7 +571,7 @@ class LedgerAPI(LedgerAPIDeprecated):
         outputs: List[BlindedMessage],
     ) -> List[BlindedSignature]:
         """Consume proofs and create new promises based on amount split."""
-        logger.debug("Calling split. POST /v1/swap")
+        logger.debug(f"Calling split. POST {self.api_prefix}/swap")
         split_payload = PostSwapRequest(inputs=proofs, outputs=outputs)
 
         # construct payload
@@ -541,8 +589,9 @@ class LedgerAPI(LedgerAPIDeprecated):
                 "inputs": {i: proofs_include for i in range(len(proofs))},
             }
 
-        resp = await self.httpx.post(
-            join(self.url, "/v1/swap"),
+        resp = await self._request(
+            POST,
+            "swap",
             json=split_payload.dict(include=_splitrequest_include_fields(proofs)),  # type: ignore
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -568,8 +617,9 @@ class LedgerAPI(LedgerAPIDeprecated):
         Checks whether the secrets in proofs are already spent or not and returns a list of booleans.
         """
         payload = PostCheckStateRequest(Ys=[p.Y for p in proofs])
-        resp = await self.httpx.post(
-            join(self.url, "/v1/checkstate"),
+        resp = await self._request(
+            POST,
+            "checkstate",
             json=payload.dict(),
         )
         # BEGIN backwards compatibility < 0.15.0
@@ -595,10 +645,7 @@ class LedgerAPI(LedgerAPIDeprecated):
                 "Received HTTP Error 422. Attempting state check with < 0.16.0 compatibility."
             )
             payload_secrets = {"secrets": [p.secret for p in proofs]}
-            resp_secrets = await self.httpx.post(
-                join(self.url, "/v1/checkstate"),
-                json=payload_secrets,
-            )
+            resp_secrets = await self._request(POST, "checkstate", json=payload_secrets)
             self.raise_on_error(resp_secrets)
             states = [
                 ProofState(Y=p.Y, state=ProofSpentState(s["state"]))
@@ -619,7 +666,7 @@ class LedgerAPI(LedgerAPIDeprecated):
         Asks the mint to restore promises corresponding to outputs.
         """
         payload = PostMintRequest(quote="restore", outputs=outputs)
-        resp = await self.httpx.post(join(self.url, "/v1/restore"), json=payload.dict())
+        resp = await self._request(POST, "restore", json=payload.dict())
         # BEGIN backwards compatibility < 0.15.0
         # assume the mint has not upgraded yet if we get a 404
         if resp.status_code == 404:
@@ -637,3 +684,21 @@ class LedgerAPI(LedgerAPIDeprecated):
         # END backwards compatibility < 0.15.1
 
         return returnObj.outputs, returnObj.signatures
+
+    @async_set_httpx_client
+    async def blind_mint_blind_auth(
+        self, clear_auth_token: str, outputs: List[BlindedMessage]
+    ) -> List[BlindedSignature]:
+        """
+        Asks the mint to mint blind auth tokens. Needs to provide a clear auth token.
+        """
+        payload = PostAuthBlindMintRequest(outputs=outputs)
+        resp = await self._request(
+            POST,
+            "mint",
+            json=payload.dict(),
+            clear_auth_token=clear_auth_token,
+        )
+        self.raise_on_error_request(resp)
+        response_dict = resp.json()
+        return PostAuthBlindMintResponse.parse_obj(response_dict).signatures

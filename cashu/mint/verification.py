@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 from loguru import logger
 
@@ -6,28 +6,29 @@ from ..core.base import (
     BlindedMessage,
     BlindedSignature,
     Method,
-    MintKeyset,
     MintQuote,
     Proof,
     Unit,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
-from ..core.db import Connection, Database
+from ..core.db import Connection
 from ..core.errors import (
+    InvalidProofsError,
     NoSecretInProofsError,
     NotAllowedError,
+    OutputsAlreadySignedError,
     SecretTooLongError,
+    TransactionDuplicateInputsError,
+    TransactionDuplicateOutputsError,
     TransactionError,
+    TransactionMultipleUnitsError,
     TransactionUnitError,
+    TransactionUnitMismatchError,
 )
 from ..core.nuts import nut20
 from ..core.settings import settings
-from ..lightning.base import LightningBackend
-from ..mint.crud import LedgerCrud
 from .conditions import LedgerSpendingConditions
-from .db.read import DbReadHelper
-from .db.write import DbWriteHelper
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
 
@@ -35,14 +36,6 @@ class LedgerVerification(
     LedgerSpendingConditions, SupportsKeysets, SupportsDb, SupportsBackends
 ):
     """Verification functions for the ledger."""
-
-    keyset: MintKeyset
-    keysets: Dict[str, MintKeyset]
-    crud: LedgerCrud
-    db: Database
-    db_read: DbReadHelper
-    db_write: DbWriteHelper
-    lightning: Dict[Unit, LightningBackend]
 
     async def verify_inputs_and_outputs(
         self,
@@ -52,6 +45,8 @@ class LedgerVerification(
         conn: Optional[Connection] = None,
     ):
         """Checks all proofs and outputs for validity.
+
+        Warning: Does NOT check if the proofs were already spent. Use `db_write._verify_proofs_spendable` for that.
 
         Args:
             proofs (List[Proof]): List of proofs to check.
@@ -76,10 +71,10 @@ class LedgerVerification(
             raise TransactionError("secrets do not match criteria.")
         # verify that only unique proofs were used
         if not self._verify_no_duplicate_proofs(proofs):
-            raise TransactionError("duplicate proofs.")
+            raise TransactionDuplicateInputsError()
         # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
-            raise TransactionError("could not verify proofs.")
+            raise InvalidProofsError()
         # Verify input spending conditions
         if not all([self._verify_input_spending_conditions(p) for p in proofs]):
             raise TransactionError("validation of input spending conditions failed.")
@@ -137,11 +132,11 @@ class LedgerVerification(
                 raise TransactionError("invalid amount.")
         # verify that only unique outputs were used
         if not self._verify_no_duplicate_outputs(outputs):
-            raise TransactionError("duplicate outputs.")
+            raise TransactionDuplicateOutputsError()
         # verify that outputs have not been signed previously
         signed_before = await self._check_outputs_issued_before(outputs, conn)
         if any(signed_before):
-            raise TransactionError("outputs have already been signed before.")
+            raise OutputsAlreadySignedError()
         logger.trace(f"Verified {len(outputs)} outputs.")
 
     async def _check_outputs_issued_before(
@@ -228,11 +223,11 @@ class LedgerVerification(
         units_proofs = [self.keysets[p.id].unit for p in proofs]
         units_outputs = [self.keysets[o.id].unit for o in outs if o.id]
         if not len(set(units_proofs)) == 1:
-            raise TransactionUnitError("inputs have different units.")
+            raise TransactionMultipleUnitsError("inputs have different units.")
         if not len(set(units_outputs)) == 1:
-            raise TransactionUnitError("outputs have different units.")
+            raise TransactionMultipleUnitsError("outputs have different units.")
         if not units_proofs[0] == units_outputs[0]:
-            raise TransactionUnitError("input and output keysets have different units.")
+            raise TransactionUnitMismatchError()
         return units_proofs[0]
 
     def get_fees_for_proofs(self, proofs: List[Proof]) -> int:

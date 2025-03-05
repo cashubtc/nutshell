@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuote, MeltQuoteState, Proof
-from cashu.core.errors import LightningError
+from cashu.core.errors import LightningPaymentFailedError
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
@@ -167,8 +167,8 @@ async def test_fakewallet_pending_quote_get_melt_quote_unknown(ledger: Ledger):
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
 
-    # get_melt_quote(..., purge_unknown=True) should check the payment status and update the db
-    quote2 = await ledger.get_melt_quote(quote_id=quote.quote, purge_unknown=True)
+    # get_melt_quote(..., rollback_unknown=True) should check the payment status and update the db
+    quote2 = await ledger.get_melt_quote(quote_id=quote.quote, rollback_unknown=True)
     assert quote2.state == MeltQuoteState.unpaid
 
     # expect that pending tokens are still in db
@@ -220,32 +220,32 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     try:
         await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningError")
-    except LightningError:
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
         pass
 
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     try:
         await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningError")
-    except LightningError:
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
         pass
 
     settings.fakewallet_payment_state = PaymentResult.FAILED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
     try:
         await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningError")
-    except LightningError:
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
         pass
 
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
     settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
     try:
         await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningError")
-    except LightningError:
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
         pass
 
 
