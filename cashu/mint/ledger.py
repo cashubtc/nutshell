@@ -871,7 +871,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         # verify amounts from bolt11 invoice
         bolt11_request = melt_quote.request
-        invoice_obj = bolt11.decode(bolt11_request)
 
         if not mint_quote.amount == melt_quote.amount:
             raise TransactionError("amounts do not match")
