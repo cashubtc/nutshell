@@ -463,9 +463,12 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 payment_request
             )
             quote_id = f"deprecated_{uuid.uuid4()}"
+            amount_sat = (
+                amount_msat // 1000 if amount_msat else invoice_obj.amount_msat // 1000
+            )
             return PostMeltQuoteResponse(
                 quote=quote_id,
-                amount=amount_msat or invoice_obj.amount_msat // 1000,
+                amount=amount_sat,
                 fee_reserve=ret.fee or 0,
                 paid=False,
                 state=MeltQuoteState.unpaid.value,
