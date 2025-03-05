@@ -1,7 +1,7 @@
 import httpx
 import pytest
-import pytest_asyncio
-from .helpers import is_fake, is_cln, is_lnd, assert_err
+
+from .helpers import is_cln, is_fake, is_lnd
 
 BASE_URL = "http://localhost:3337"
 
