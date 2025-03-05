@@ -36,6 +36,7 @@ from ..core.errors import (
     KeysetError,
     KeysetNotFoundError,
     LightningError,
+    LightningPaymentFailedError,
     NotAllowedError,
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
@@ -1057,7 +1058,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                                 logger.error(
                                     f"Status check error: {status.error_message}"
                                 )
-                            raise LightningError(
+                            raise LightningPaymentFailedError(
                                 f"Lightning payment failed{': ' + payment.error_message if payment.error_message else ''}."
                             )
                         case _:
