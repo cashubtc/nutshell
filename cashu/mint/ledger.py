@@ -724,8 +724,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # We assume that the request is a bolt11 invoice, this works since we
         # support only the bol11 method for now.
         invoice_obj = bolt11.decode(melt_quote.request)
-        if not invoice_obj.amount_msat:
-            raise TransactionError("invoice has no amount.")
         # we set the expiry of this quote to the expiry of the bolt11 invoice
         expiry = None
         if invoice_obj.expiry is not None:
@@ -875,8 +873,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         bolt11_request = melt_quote.request
         invoice_obj = bolt11.decode(bolt11_request)
 
-        if not invoice_obj.amount_msat:
-            raise TransactionError("invoice has no amount.")
         if not mint_quote.amount == melt_quote.amount:
             raise TransactionError("amounts do not match")
         if not bolt11_request == mint_quote.request:

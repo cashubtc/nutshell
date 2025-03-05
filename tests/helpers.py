@@ -60,6 +60,8 @@ wallets_module = importlib.import_module("cashu.lightning")
 wallet_class = getattr(wallets_module, settings.mint_backend_bolt11_sat)
 WALLET = wallet_class()
 is_fake: bool = WALLET.__class__.__name__ == "FakeWallet"
+is_cln: bool = WALLET.__class__.__name__ == "CLNRestWallet"
+is_lnd: bool = WALLET.__class__.__name__ == "LndRPCWallet" or WALLET.__class__.__name__ == "LndRestWallet"
 is_regtest: bool = not is_fake
 is_deprecated_api_only = settings.debug_mint_only_deprecated
 is_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
