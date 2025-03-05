@@ -76,6 +76,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     invoice_listener_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
     pubkey: PublicKey
+    hourlyTasksRunning: bool = False
 
     def __init__(
         self,
@@ -131,13 +132,27 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     async def startup_ledger(self) -> None:
         await self._startup_keysets()
         await self._check_backends()
-        await self._check_pending_proofs_and_melt_quotes()
+        self.hourlyTasksRunning = True
+        asyncio.create_task(self._start_hourly_checks())
         self.invoice_listener_tasks = await self.dispatch_listeners()
 
     async def _startup_keysets(self) -> None:
         await self.init_keysets()
         for derivation_path in settings.mint_derivation_path_list:
             await self.activate_keyset(derivation_path=derivation_path)
+
+    async def _start_hourly_checks(self) -> None:
+        # Initial run immediately on startup
+        await self._check_pending_proofs_and_melt_quotes()
+        
+        # Periodic loop
+        while self.hourlyTasksRunning:
+            try:
+                await asyncio.sleep(3600)
+                await self._check_pending_proofs_and_melt_quotes()
+            except Exception as e:
+                logger.error(f"Ledger hourly check failed: {e}")
+                await asyncio.sleep(60) # Brief delay before retrying on error
 
     async def _check_backends(self) -> None:
         for method in self.backends:
@@ -159,6 +174,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         logger.info(f"Data dir: {settings.cashu_dir}")
 
     async def shutdown_ledger(self) -> None:
+        self.hourlyTasksRunning = False
         await self.db.engine.dispose()
         for task in self.invoice_listener_tasks:
             task.cancel()
