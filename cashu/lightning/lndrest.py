@@ -394,12 +394,7 @@ class LndRestWallet(LightningBackend):
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
-        # Try and get the MPP amount (millisats)
-        amount_msat = (
-            melt_quote.mpp_amount
-            if melt_quote.is_mpp
-            else None
-        )
+        amount_msat = melt_quote.mpp_amount if melt_quote.is_mpp else None
 
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
