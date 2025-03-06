@@ -180,7 +180,7 @@ class LndRPCWallet(LightningBackend):
                     # amount of the quote converted to msat
                     send_request = lnrpc.SendRequest(
                         payment_request=quote.request,
-                        amount_msat=Amount(quote.unit, quote.amount).to(Unit.msat, round="up").amount,
+                        amt_msat=Amount(Unit[quote.unit], quote.amount).to(Unit.msat, round="up").amount,
                         fee_limit=feelimit
                     )
                 else:

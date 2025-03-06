@@ -206,7 +206,7 @@ class LndRestWallet(LightningBackend):
             case PaymentQuoteKind.AMOUNTLESS:
                 if self.supports_amountless:
                     # amount of the quote converted to msat
-                    post_data["amt_msat"] = Amount(quote.unit, quote.amount).to(Unit.msat, round="up").amount
+                    post_data["amt_msat"] = Amount(Unit[quote.unit], quote.amount).to(Unit.msat, round="up").amount
                 else:
                     error_message = "Amountless payments are not enabled"
                     logger.error(error_message)
