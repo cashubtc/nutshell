@@ -469,6 +469,8 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             return PostMeltQuoteResponse(
                 quote=quote_id,
                 amount=amount_sat,
+                unit=unit.name,
+                request=payment_request,
                 fee_reserve=ret.fee or 0,
                 paid=False,
                 state=MeltQuoteState.unpaid.value,
@@ -550,6 +552,8 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             return PostMeltQuoteResponse(
                 quote=quote,
                 amount=0,
+                unit="sat",
+                request="lnbc0",
                 fee_reserve=0,
                 paid=ret.paid or False,
                 state=(

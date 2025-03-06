@@ -202,6 +202,9 @@ async def test_mint_quote(ledger: Ledger):
     resp_quote = PostMintQuoteResponse(**result)
     assert resp_quote.quote == result["quote"]
     assert resp_quote.state == MintQuoteState.unpaid.value
+    assert resp_quote.amount == 100
+    assert resp_quote.unit == "sat"
+    assert resp_quote.request == result["request"]
 
     # check if DEPRECATED paid flag is also returned
     assert result["paid"] is False
@@ -230,6 +233,9 @@ async def test_mint_quote(ledger: Ledger):
     resp_quote = PostMintQuoteResponse(**result2)
     assert resp_quote.quote == result["quote"]
     assert resp_quote.state == MintQuoteState.paid.value
+    assert resp_quote.amount == 100
+    assert resp_quote.unit == "sat"
+    assert resp_quote.request == result["request"]
 
     # check if DEPRECATED paid flag is also returned
     assert result2["paid"] is True
@@ -338,6 +344,9 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     assert resp_quote.payment_preimage is None
     assert resp_quote.change is None
     assert resp_quote.state == MeltQuoteState.unpaid.value
+    assert resp_quote.amount == 64
+    assert resp_quote.unit == "sat"
+    assert resp_quote.request == request
 
     # check if DEPRECATED paid flag is also returned
     assert result["paid"] is False
@@ -446,6 +455,9 @@ async def test_melt_internal(ledger: Ledger, wallet: Wallet):
     assert resp_quote.payment_preimage is None
     assert resp_quote.change == []
     assert resp_quote.state == MeltQuoteState.paid.value
+    assert resp_quote.amount == 64
+    assert resp_quote.unit == "sat"
+    assert resp_quote.request == invoice_payment_request
 
     # check if DEPRECATED paid flag is also returned
     assert result["paid"] is True
@@ -504,6 +516,9 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     # deserialize the response
     resp_quote = PostMeltQuoteResponse(**result)
     assert resp_quote.quote == quote.quote
+    assert resp_quote.amount == 62
+    assert resp_quote.unit == "sat"
+    assert resp_quote.request == invoice_payment_request
     assert resp_quote.payment_preimage is not None
     assert len(resp_quote.payment_preimage) == 64
     assert resp_quote.change is not None
