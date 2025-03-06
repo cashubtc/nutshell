@@ -276,8 +276,12 @@ class MeltQuoteState(Enum):
         return self.name
 
 class PaymentQuoteKind(Enum):
+    # Regular payments
     REGULAR = 0
+    # Payments for which the request string did not specify an amount
     AMOUNTLESS = 1
+    # Payments for which this Mint is expect to pay only a part of the total amount
+    # of the request string
     PARTIAL = 2
 
 class MeltQuote(LedgerEvent):

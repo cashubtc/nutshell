@@ -183,23 +183,42 @@ class LndRestWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        # if the amount of the melt quote is different from the request
-        # call pay_partial_invoice instead
-        invoice = bolt11.decode(quote.request)
-        if invoice.amount_msat:
-            amount_msat = int(invoice.amount_msat)
-            if amount_msat != quote.amount * 1000 and self.supports_mpp:
-                return await self.pay_partial_invoice(
-                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
-                )
 
         # set the fee limit for the payment
         lnrpcFeeLimit = dict()
         lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
 
+        post_data = {"payment_request": quote.request, "fee_limit": lnrpcFeeLimit}
+        invoice = bolt11.decode(quote.request)
+
+        match quote.quote_kind:
+            case PaymentQuoteKind.PARTIAL:
+                if self.supports_mpp:
+                    return await self.pay_partial_invoice(
+                        quote, Amount(Unit.sat, quote.amount), fee_limit_msat
+                    )
+                else:
+                    error_message = "MPP Payments are not enabled"
+                    logger.error(error_message)
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=error_message
+                    )
+            case PaymentQuoteKind.AMOUNTLESS:
+                if self.supports_amountless:
+                    # amount of the quote converted to msat
+                    post_data["amt_msat"] = Amount(quote.unit, quote.amount).to(Unit.msat, round="up").amount
+                else:
+                    error_message = "Amountless payments are not enabled"
+                    logger.error(error_message)
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=error_message
+                    )
+            case _:
+                pass
+        
         r = await self.client.post(
             url="/v1/channels/transactions",
-            json={"payment_request": quote.request, "fee_limit": lnrpcFeeLimit},
+            json=post_data,
             timeout=None,
         )
 

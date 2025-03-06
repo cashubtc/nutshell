@@ -181,13 +181,6 @@ class CLNRestWallet(LightningBackend):
                 error_message=str(exc),
             )
 
-        if not invoice.amount_msat or invoice.amount_msat <= 0:
-            error_message = "0 amount invoices are not allowed"
-            return PaymentResponse(
-                result=PaymentResult.FAILED,
-                error_message=error_message,
-            )
-
         quote_amount_msat = Amount(Unit[quote.unit], quote.amount).to(Unit.msat).amount
         fee_limit_percent = fee_limit_msat / quote_amount_msat * 100
         post_data = {
@@ -197,18 +190,40 @@ class CLNRestWallet(LightningBackend):
             # with fee < 5000 millisatoshi (which is default value of exemptfee)
         }
 
-        # Handle Multi-Mint payout where we must only pay part of the invoice amount
         logger.trace(f"{quote_amount_msat = }, {invoice.amount_msat = }")
-        if quote_amount_msat != invoice.amount_msat:
-            logger.trace("Detected Multi-Nut payment")
-            if self.supports_mpp:
-                post_data["partial_msat"] = quote_amount_msat
-            else:
-                error_message = "mint does not support MPP"
-                logger.error(error_message)
-                return PaymentResponse(
-                    result=PaymentResult.FAILED, error_message=error_message
-                )
+
+        # Handle AMOUNTLESS, PARTIAL and REGULAR payment quotes
+        match quote.quote_kind:
+            case PaymentQuoteKind.REGULAR:
+                logger.debug("Paying REGULAR quote")
+                if not invoice.amount_msat:
+                    error_message = "amountless invoices are not allowed"
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED,
+                        error_message=error_message,
+                    )
+            case PaymentQuoteKind.AMOUNTLESS:
+                logger.debug("Paying AMOUNTLESS quote")
+                if self.supports_amountless:
+                    post_data["amount_msat"] = quote_amount_msat
+                else:
+                    error_message = "mint does not support amountless invoices"
+                    logger.error(error_message)
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=error_message
+                    )
+            case PaymentQuoteKind.PARTIAL:
+                logger.debug("Paying PARTIAL/MPP quote")
+                # Handle Multi-Mint payout where we must only pay part of the invoice amount
+                if self.supports_mpp:
+                    post_data["partial_msat"] = quote_amount_msat
+                else:
+                    error_message = "mint does not support MPP"
+                    logger.error(error_message)
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=error_message
+                    )
+            
         r = await self.client.post("/v1/pay", data=post_data, timeout=None)
 
         if r.is_error or "message" in r.json():
