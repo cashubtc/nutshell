@@ -190,7 +190,7 @@ async def test_blink_get_payment_status():
 @respx.mock
 @pytest.mark.asyncio
 async def test_blink_get_payment_quote():
-    # response says 1 sat fees but invoice (1000 sat) * 0.5% is 5 sat so we expect 5 sat
+    # response says 1 sat fees but invoice (1000 sat) * 0.5% is 5 sat so we expect MINIMUM_FEE_MSAT/1000 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 1}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     melt_quote_request = PostMeltQuoteRequest(
@@ -199,7 +199,7 @@ async def test_blink_get_payment_quote():
     quote = await blink.get_payment_quote(melt_quote_request)
     assert quote.checking_id == payment_request
     assert quote.amount == Amount(Unit.sat, 1000)  # sat
-    assert quote.fee == Amount(Unit.sat, 5)  # sat
+    assert quote.fee == Amount(Unit.sat, MINIMUM_FEE_MSAT // 1000)  # msat
 
     # response says 10 sat fees but invoice (1000 sat) * 0.5% is 5 sat so we expect 10 sat
     mock_response = {"data": {"lnInvoiceFeeProbe": {"amount": 10}}}
@@ -238,7 +238,7 @@ async def test_blink_get_payment_quote():
 @respx.mock
 @pytest.mark.asyncio
 async def test_blink_get_payment_quote_backend_error():
-    # response says error but invoice (1000 sat) * 0.5% is 5 sat so we expect 10 sat
+    # response says error but invoice (1000 sat) * 0.5% is 5 sat so we expect 10 sat (MINIMUM_FEE_MSAT)
     mock_response = {"data": {"lnInvoiceFeeProbe": {"errors": [{"message": "error"}]}}}
     respx.post(blink.endpoint).mock(return_value=Response(200, json=mock_response))
     melt_quote_request = PostMeltQuoteRequest(
@@ -247,4 +247,4 @@ async def test_blink_get_payment_quote_backend_error():
     quote = await blink.get_payment_quote(melt_quote_request)
     assert quote.checking_id == payment_request
     assert quote.amount == Amount(Unit.sat, 1000)  # sat
-    assert quote.fee == Amount(Unit.sat, 5)  # sat
+    assert quote.fee == Amount(Unit.sat, MINIMUM_FEE_MSAT // 1000)  # msat

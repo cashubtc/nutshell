@@ -37,6 +37,7 @@ from ..core.errors import (
     KeysetError,
     KeysetNotFoundError,
     LightningError,
+    LightningPaymentFailedError,
     NotAllowedError,
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
@@ -323,9 +324,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
-    async def get_balance(self) -> int:
+    async def get_balance(self, keyset: MintKeyset) -> int:
         """Returns the balance of the mint."""
-        return await self.crud.get_balance(db=self.db)
+        return await self.crud.get_balance(keyset=keyset, db=self.db)
 
     # ------- ECASH -------
 
@@ -386,7 +387,11 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # we make sure that the fee is positive
         overpaid_fee = fee_provided - fee_paid
 
-        if overpaid_fee == 0 or outputs is None:
+        if overpaid_fee <= 0 or outputs is None:
+            if overpaid_fee < 0:
+                logger.error(
+                    f"Overpaid fee is negative ({overpaid_fee}). This should not happen."
+                )
             return []
 
         logger.debug(
@@ -448,8 +453,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         ):
             raise NotAllowedError("Backend does not support descriptions.")
 
-        if settings.mint_max_balance:
-            balance = await self.get_balance()
+        # MINT_MAX_BALANCE refers to sat (for now)
+        if settings.mint_max_balance and unit == Unit.sat:
+            # get next active keyset for unit
+            active_keyset: MintKeyset = next(
+                filter(lambda k: k.active and k.unit == unit, self.keysets.values())
+            )
+            balance = await self.get_balance(active_keyset)
             if balance + quote_request.amount > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
 
@@ -658,7 +668,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if not payment_quote.checking_id:
             raise Exception("quote has no checking id")
         # verify that payment quote amount is as expected
-        if melt_quote.is_mpp and melt_quote.mpp_amount != payment_quote.amount.amount:
+        if melt_quote.is_mpp and melt_quote.mpp_amount != payment_quote.amount.to(Unit.msat).amount:
             raise TransactionError("quote amount not as requested")
         # make sure the backend returned the amount with a correct unit
         if not payment_quote.amount.unit == unit:
@@ -1043,7 +1053,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                                 logger.error(
                                     f"Status check error: {status.error_message}"
                                 )
-                            raise LightningError(
+                            raise LightningPaymentFailedError(
                                 f"Lightning payment failed{': ' + payment.error_message if payment.error_message else ''}."
                             )
                         case _:
