@@ -277,12 +277,15 @@ class MeltQuoteState(Enum):
 
 class PaymentQuoteKind(Enum):
     # Regular payments
-    REGULAR = 0
+    REGULAR = "REGULAR"
     # Payments for which the request string did not specify an amount
-    AMOUNTLESS = 1
+    AMOUNTLESS = "AMOUNTLESS"
     # Payments for which this Mint is expect to pay only a part of the total amount
     # of the request string
-    PARTIAL = 2
+    PARTIAL = "PARTIAL"
+
+    def __str__(self) -> str:
+        return self.name
 
 class MeltQuote(LedgerEvent):
     quote: str
@@ -343,6 +346,7 @@ class MeltQuote(LedgerEvent):
             change=change,
             expiry=expiry,
             payment_preimage=payment_preimage,
+            quote_kind=PaymentQuoteKind(row["kind"]),
         )
 
     @classmethod

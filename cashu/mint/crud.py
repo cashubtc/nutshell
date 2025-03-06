@@ -523,8 +523,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, outputs, change, expiry)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :outputs, :change, :expiry)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, outputs, change, expiry, kind)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :outputs, :change, :expiry, :kind)
             """,
             {
                 "quote": quote.quote,
@@ -549,6 +549,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "expiry": db.to_timestamp(
                     db.timestamp_from_seconds(quote.expiry) or ""
                 ),
+                "kind": str(quote.quote_kind)
             },
         )
 

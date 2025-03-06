@@ -1,7 +1,7 @@
 import copy
 from typing import Dict, List
 
-from ..core.base import MeltQuoteState, MintKeyset, MintQuoteState, Proof
+from ..core.base import MeltQuoteState, MintKeyset, MintQuoteState, Proof, PaymentQuoteKind
 from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
 from ..core.db import Connection, Database
 from ..core.settings import settings
@@ -906,5 +906,14 @@ async def m026_keyset_specific_balance_views(db: Database):
                 LEFT OUTER JOIN {db.table_with_schema('balance_redeemed')} bu
                 ON bi.keyset = bu.keyset
             );
+            """
+        )
+
+async def m027_add_payment_quote_kind(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+            ALTER TABLE {db.table_with_schema('melt_quotes')}
+            ADD COLUMN kind TEXT NOT NULL DEFAULT '{str(PaymentQuoteKind.REGULAR)}'
             """
         )
