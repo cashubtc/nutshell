@@ -17,7 +17,7 @@ from bolt11 import (
     encode,
 )
 
-from ..core.base import Amount, MeltQuote, Unit
+from ..core.base import Amount, MeltQuote, PaymentQuoteKind, Unit
 from ..core.errors import (
     IncorrectRequestAmountError,
 )
@@ -218,15 +218,22 @@ class FakeWallet(LightningBackend):
     ) -> PaymentQuoteResponse:
         invoice_obj = decode(melt_quote.request)
 
-        # Detect and handle amountless request
+        # Payment quote is determined and saved in the response
+        kind = PaymentQuoteKind.REGULAR
+
+        # Detect and handle amountless/partial/normal request
         amount_msat = 0
-        if melt_quote.options and melt_quote.options.amountless:
+        if melt_quote.is_amountless:
             # Check that the user isn't doing something cheeky
             if (invoice_obj.amount_msat
-                and melt_quote.options.amountless.amount_msat != invoice_obj.amount_msat
+                and melt_quote.options.amountless.amount_msat != invoice_obj.amount_msat    # type: ignore
             ):
                 raise IncorrectRequestAmountError()
             amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
+            kind = PaymentQuoteKind.AMOUNTLESS
+        elif melt_quote.is_mpp:
+            amount_msat = melt_quote.options.mpp.amount                 # type: ignore
+            kind = PaymentQuoteKind.PARTIAL
         elif invoice_obj.amount_msat:
             amount_msat = int(invoice_obj.amount_msat)
         else:
@@ -247,6 +254,7 @@ class FakeWallet(LightningBackend):
             checking_id=invoice_obj.payment_hash,
             fee=fees.to(self.unit, round="up"),
             amount=amount.to(self.unit, round="up"),
+            kind=kind,
         )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:

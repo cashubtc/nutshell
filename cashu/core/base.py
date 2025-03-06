@@ -275,6 +275,10 @@ class MeltQuoteState(Enum):
     def __str__(self):
         return self.name
 
+class PaymentQuoteKind(Enum):
+    REGULAR = 0
+    AMOUNTLESS = 1
+    PARTIAL = 2
 
 class MeltQuote(LedgerEvent):
     quote: str
@@ -293,6 +297,7 @@ class MeltQuote(LedgerEvent):
     outputs: Optional[List[BlindedMessage]] = None
     change: Optional[List[BlindedSignature]] = None
     mint: Optional[str] = None
+    quote_kind: PaymentQuoteKind = PaymentQuoteKind.REGULAR
 
     @classmethod
     def from_row(cls, row: Row):

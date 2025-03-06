@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from ..core.base import (
     Amount,
     MeltQuote,
+    PaymentQuoteKind,
     Unit,
 )
 from ..core.models import PostMeltQuoteRequest
@@ -26,6 +27,7 @@ class PaymentQuoteResponse(BaseModel):
     checking_id: str
     amount: Amount
     fee: Amount
+    kind: PaymentQuoteKind = PaymentQuoteKind.REGULAR
 
 
 class InvoiceResponse(BaseModel):

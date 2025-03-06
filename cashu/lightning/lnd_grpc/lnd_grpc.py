@@ -16,7 +16,7 @@ import cashu.lightning.lnd_grpc.protos.lightning_pb2 as lnrpc
 import cashu.lightning.lnd_grpc.protos.lightning_pb2_grpc as lightningstub
 import cashu.lightning.lnd_grpc.protos.router_pb2 as routerrpc
 import cashu.lightning.lnd_grpc.protos.router_pb2_grpc as routerstub
-from cashu.core.base import Amount, MeltQuote, Unit
+from cashu.core.base import Amount, MeltQuote, PaymentQuoteKind, Unit
 from cashu.core.errors import IncorrectRequestAmountError
 from cashu.core.helpers import fee_reserve
 from cashu.core.settings import settings
@@ -379,22 +379,24 @@ class LndRPCWallet(LightningBackend):
     ) -> PaymentQuoteResponse:
         invoice_obj = bolt11.decode(melt_quote.request)
         
-        # Detect and handle amountless request
+        kind = PaymentQuoteKind.REGULAR
+        # Detect and handle amountless/partial/normal request
         amount_msat = 0
-        if melt_quote.options and melt_quote.options.amountless:
+        if melt_quote.is_amountless:
             # Check that the user isn't doing something cheeky
             if (invoice_obj.amount_msat
-                and melt_quote.options.amountless.amount_msat != invoice_obj.amount_msat
+                and melt_quote.options.amountless.amount_msat != invoice_obj.amount_msat    # type: ignore
             ):
                 raise IncorrectRequestAmountError()
             amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
+            kind = PaymentQuoteKind.AMOUNTLESS
+        elif melt_quote.is_mpp:
+            amount_msat = melt_quote.options.mpp.amount                 # type: ignore
+            kind = PaymentQuoteKind.PARTIAL
         elif invoice_obj.amount_msat:
             amount_msat = int(invoice_obj.amount_msat)
         else:
             raise Exception("request has no amount and is not specified as amountless")
-
-        if melt_quote.is_mpp:
-            amount_msat = int(invoice_obj.amount_msat)
 
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
@@ -405,4 +407,5 @@ class LndRPCWallet(LightningBackend):
             checking_id=invoice_obj.payment_hash,
             fee=fees.to(self.unit, round="up"),
             amount=amount.to(self.unit, round="up"),
+            kind=kind,
         )

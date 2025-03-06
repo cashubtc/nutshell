@@ -640,8 +640,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
         if not mint_quote.checking_id:
             raise TransactionError("mint quote has no checking id")
+        
+        # Kind of payment quote: REGULAR, PARTIAL, AMOUNTLESS
         if melt_quote.is_mpp:
             raise TransactionError("internal payments do not support mpp")
+        elif melt_quote.is_amountless:
+            raise TransactionError("internal payments cannot have amountless request strings")           
 
         internal_fee = Amount(unit, 0)  # no internal fees
         amount = Amount(unit, mint_quote.amount)
@@ -734,6 +738,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         # We assume that the request is a bolt11 invoice, this works since we
         # support only the bol11 method for now.
         invoice_obj = bolt11.decode(melt_quote.request)
+        
         # we set the expiry of this quote to the expiry of the bolt11 invoice
         expiry = None
         if invoice_obj.expiry is not None:
@@ -750,6 +755,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=int(time.time()),
             expiry=expiry,
+            quote_kind=payment_quote.kind,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         await self.events.submit(quote)
