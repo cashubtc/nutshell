@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import AsyncGenerator, Coroutine, Optional, Union
+from typing import AsyncGenerator, Coroutine, Optional
 
 from pydantic import BaseModel
 
@@ -13,7 +13,7 @@ from ..core.models import PostMeltQuoteRequest
 
 
 class StatusResponse(BaseModel):
-    balance: Union[int, float]
+    balance: Amount
     error_message: Optional[str] = None
 
 

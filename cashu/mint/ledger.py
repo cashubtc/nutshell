@@ -67,14 +67,24 @@ from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .tasks import LedgerTasks
 from .verification import LedgerVerification
+from .watchdog import LedgerWatchdog
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures):
+class Ledger(
+    LedgerVerification,
+    LedgerSpendingConditions,
+    LedgerTasks,
+    LedgerFeatures,
+    LedgerWatchdog,
+):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
+    db: Database
     db_read: DbReadHelper
+    db_write: DbWriteHelper
     invoice_listener_tasks: List[asyncio.Task] = []
+    watchdog_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
     pubkey: PublicKey
 
@@ -95,6 +105,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.db_read: DbReadHelper
         self.locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
         self.invoice_listener_tasks: List[asyncio.Task] = []
+        self.watchdog_tasks: List[asyncio.Task] = []
 
         if not seed:
             raise Exception("seed not set")
@@ -127,6 +138,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.db_read = DbReadHelper(self.db, self.crud)
         self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
 
+        LedgerWatchdog.__init__(self)
+
     # ------- STARTUP -------
 
     async def startup_ledger(self) -> None:
@@ -134,6 +147,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         await self._check_backends()
         await self._check_pending_proofs_and_melt_quotes()
         self.invoice_listener_tasks = await self.dispatch_listeners()
+        if settings.mint_watchdog_enabled:
+            self.watchdog_tasks = await self.dispatch_watchdogs()
 
     async def _startup_keysets(self) -> None:
         await self.init_keysets()
@@ -155,13 +170,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         f" working properly: '{status.error_message}'"
                     )
                     exit(1)
-                logger.info(f"Backend balance: {status.balance} {unit.name}")
+                logger.info(f"Backend balance: {status.balance}")
 
         logger.info(f"Data dir: {settings.cashu_dir}")
 
     async def shutdown_ledger(self) -> None:
         await self.db.engine.dispose()
         for task in self.invoice_listener_tasks:
+            task.cancel()
+        for task in self.watchdog_tasks:
             task.cancel()
 
     async def _check_pending_proofs_and_melt_quotes(self):
@@ -323,7 +340,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
-    async def get_balance(self, keyset: MintKeyset) -> int:
+    async def get_balance(self, keyset: MintKeyset) -> Amount:
         """Returns the balance of the mint."""
         return await self.crud.get_balance(keyset=keyset, db=self.db)
 

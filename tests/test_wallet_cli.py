@@ -109,7 +109,7 @@ def test_balance(cli_prefix):
     print("------ BALANCE ------")
     print(result.output)
     w = asyncio.run(init_wallet())
-    assert f"Balance: {w.available_balance} sat" in result.output
+    assert f"Balance: {w.available_balance}" in result.output
     assert result.exit_code == 0
 
 

@@ -65,10 +65,21 @@ class MintSettings(CashuSettings):
     mint_disable_melt_on_error: bool = Field(default=False)
 
 
+class MintWatchdogSettings(MintSettings):
+    mint_watchdog_enabled: bool = Field(
+        default=False,
+        title="Balance watchdog",
+        description="The watchdog shuts down the mint if the balance of the mint and the backend do not match.",
+    )
+    mint_watchdog_balance_check_interval_seconds: int = Field(default=10)
+    mint_watchdog_ignore_mismatch: bool = Field(
+        default=False,
+        description="Ignore watchdog errors and continue running. Use this to recover from a watchdog error.",
+    )
+
+
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
-
-    auth_database: str = Field(default="data/mint")
 
 
 class MintBackends(MintSettings):
@@ -146,6 +157,9 @@ class FakeWalletSettings(MintSettings):
     fakewallet_payment_state_exception: Optional[bool] = Field(default=False)
     fakewallet_pay_invoice_state: Optional[str] = Field(default="SETTLED")
     fakewallet_pay_invoice_state_exception: Optional[bool] = Field(default=False)
+    fakewallet_balance_sat: int = Field(default=1337)
+    fakewallet_balance_usd: int = Field(default=1337)
+    fakewallet_balance_eur: int = Field(default=1337)
 
 
 class MintInformation(CashuSettings):
@@ -234,6 +248,7 @@ class CoreLightningRestFundingSource(MintSettings):
 
 
 class AuthSettings(MintSettings):
+    mint_auth_database: str = Field(default="data/mint")
     mint_require_auth: bool = Field(default=False)
     mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
     mint_auth_oicd_client_id: str = Field(default="cashu-client")
@@ -272,6 +287,7 @@ class Settings(
     AuthSettings,
     MintRedisCache,
     MintDeprecationFlags,
+    MintWatchdogSettings,
     MintSettings,
     MintInformation,
     WalletSettings,
