@@ -160,7 +160,7 @@ class LndRPCWallet(LightningBackend):
         
         # set the fee limit for the payment
         send_request = None
-        invoice = bolt11.decode(quote.request)
+        #invoice = bolt11.decode(quote.request)
         feelimit = lnrpc.FeeLimit(fixed_msat=fee_limit_msat)
 
         match quote.quote_kind:

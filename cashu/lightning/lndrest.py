@@ -185,11 +185,11 @@ class LndRestWallet(LightningBackend):
     ) -> PaymentResponse:
 
         # set the fee limit for the payment
-        lnrpcFeeLimit = dict()
-        lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
+        fee_limit_dict = dict()
+        fee_limit_dict["fixed_msat"] = f"{fee_limit_msat}"
 
-        post_data = {"payment_request": quote.request, "fee_limit": lnrpcFeeLimit}
-        invoice = bolt11.decode(quote.request)
+        post_data = {"payment_request": quote.request, "fee_limit": fee_limit_dict}
+        #invoice = bolt11.decode(quote.request)
 
         match quote.quote_kind:
             case PaymentQuoteKind.PARTIAL:

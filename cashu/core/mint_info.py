@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from .base import Method, Unit
 from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
-from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT, MELT_NUT
+from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MELT_NUT, MPP_NUT, WEBSOCKETS_NUT
 
 
 class MintInfo(BaseModel):

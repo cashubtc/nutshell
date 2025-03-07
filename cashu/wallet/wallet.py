@@ -2,9 +2,9 @@ import copy
 import json
 import threading
 import time
-import bolt11
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
+import bolt11
 from bip32 import BIP32
 from loguru import logger
 
@@ -736,7 +736,8 @@ class Wallet(
             proofs (List[Proof]): List of proofs to be spent.
             invoice (str): Lightning invoice to be paid.
             fee_reserve_sat (int): Amount of fees to be reserved for the payment.
-
+            quote_id (str): ID of the melt quote to pay.
+            
         """
         # Make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)

@@ -1,7 +1,13 @@
 import copy
 from typing import Dict, List
 
-from ..core.base import MeltQuoteState, MintKeyset, MintQuoteState, Proof, PaymentQuoteKind
+from ..core.base import (
+    MeltQuoteState,
+    MintKeyset,
+    MintQuoteState,
+    PaymentQuoteKind,
+    Proof,
+)
 from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
 from ..core.db import Connection, Database
 from ..core.settings import settings

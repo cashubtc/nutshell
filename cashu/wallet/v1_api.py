@@ -37,8 +37,8 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
-    PostMeltRequestOptionMpp,
     PostMeltRequestOptionAmountless,
+    PostMeltRequestOptionMpp,
     PostMeltRequestOptions,
     PostMeltResponse_deprecated,
     PostMintQuoteRequest,
@@ -440,7 +440,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         
-        assert amount_msat or invoice_obj.amount_msat (
+        assert amount_msat or invoice_obj.amount_msat, (
             "No amount found. Either the invoice has an amount or the amount must be specified."
         )
 
