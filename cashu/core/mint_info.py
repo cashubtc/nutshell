@@ -51,7 +51,8 @@ class MintInfo(BaseModel):
         if not self.nuts:
             return False
         nut_5 = self.nuts.get(MELT_NUT)
-
+        if not nut_5 or not nut_5.get("methods"):
+            return False
         for entry in nut_5["methods"]:
             if (
                 entry["method"] == method

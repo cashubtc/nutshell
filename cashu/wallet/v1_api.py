@@ -440,6 +440,10 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         
+        assert amount_msat is not None or invoice_obj.amount_msat is not None, (
+            "No amount found. Either the invoice has an amount or the amount must be specified."
+        )
+
         # Add melt options: detect whether this should be an amountless option
         # or a MPP option
         melt_options = None
@@ -470,7 +474,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             )
             quote_id = f"deprecated_{uuid.uuid4()}"
             amount_sat = (
-                amount_msat // 1000 if amount_msat else invoice_obj.amount_msat // 1000
+                amount_msat // 1000 if amount_msat else (invoice_obj.amount_msat or 0) // 1000
             )
             return PostMeltQuoteResponse(
                 quote=quote_id,
