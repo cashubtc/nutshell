@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from .base import Method, Unit
 from .models import MintInfoContact, MintInfoProtectedEndpoint, Nut15MppSupport
-from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT
+from .nuts.nuts import BLIND_AUTH_NUT, CLEAR_AUTH_NUT, MPP_NUT, WEBSOCKETS_NUT, MELT_NUT
 
 
 class MintInfo(BaseModel):
@@ -43,6 +43,21 @@ class MintInfo(BaseModel):
         for entry in nut_15["methods"]:
             entry_obj = Nut15MppSupport.parse_obj(entry)
             if entry_obj.method == method and entry_obj.unit == unit.name:
+                return True
+
+        return False
+
+    def supports_amountless(self, method: str, unit: Unit) -> bool:
+        if not self.nuts:
+            return False
+        nut_5 = self.nuts.get(MELT_NUT)
+
+        for entry in nut_5["methods"]:
+            if (
+                entry["method"] == method
+                and entry["unit"] == str(unit)
+                and entry.get("amountless", None)
+            ):
                 return True
 
         return False
