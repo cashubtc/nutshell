@@ -4,6 +4,7 @@ import pytest_asyncio
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
+    assert_err,
     get_real_invoice,
     is_cln,
     is_fake,
@@ -43,6 +44,8 @@ async def test_amountless_bolt11_invoice(wallet: Wallet):
 
     melt_quote = await wallet.melt_quote(amountless_invoice, 100*1000)
     assert melt_quote.amount == 100
+
+    await pay_if_regtest(amountless_invoice)
 
     result = await wallet.melt(proofs, amountless_invoice, melt_quote.fee_reserve, melt_quote.quote)
     assert result.state == "PAID"
