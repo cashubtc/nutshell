@@ -440,7 +440,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
         
-        assert amount_msat is not None or invoice_obj.amount_msat is not None, (
+        assert amount_msat or invoice_obj.amount_msat (
             "No amount found. Either the invoice has an amount or the amount must be specified."
         )
 
