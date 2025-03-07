@@ -346,7 +346,7 @@ class MeltQuote(LedgerEvent):
             change=change,
             expiry=expiry,
             payment_preimage=payment_preimage,
-            quote_kind=PaymentQuoteKind(row["kind"]),
+            quote_kind=PaymentQuoteKind(row.get("kind", "REGULAR")),
         )
 
     @classmethod
