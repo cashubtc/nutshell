@@ -64,6 +64,13 @@ class MintSettings(CashuSettings):
     mint_input_fee_ppk: int = Field(default=0)
     mint_disable_melt_on_error: bool = Field(default=False)
 
+    mint_regular_tasks_interval_seconds: int = Field(
+        default=3600,
+        gt=0,
+        title="Regular tasks interval",
+        description="Interval (in seconds) for running regular tasks like the invoice checker.",
+    )
+
 
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
