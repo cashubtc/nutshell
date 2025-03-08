@@ -667,7 +667,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         if not payment_quote.checking_id:
             raise Exception("quote has no checking id")
         # verify that payment quote amount is as expected
-        if melt_quote.is_mpp and melt_quote.mpp_amount != payment_quote.amount.to(Unit.msat).amount:
+        if (
+            melt_quote.is_mpp
+            and melt_quote.mpp_amount != payment_quote.amount.to(Unit.msat).amount
+        ):
             raise TransactionError("quote amount not as requested")
         # make sure the backend returned the amount with a correct unit
         if not payment_quote.amount.unit == unit:
@@ -759,6 +762,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         return PostMeltQuoteResponse(
             quote=quote.quote,
             amount=quote.amount,
+            unit=quote.unit,
+            request=quote.request,
             fee_reserve=quote.fee_reserve,
             paid=quote.paid,  # deprecated
             state=quote.state.value,
