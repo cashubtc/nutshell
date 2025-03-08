@@ -13,7 +13,7 @@ certifi==2024.8.30 ; python_version >= "3.10" and python_version < "4.0"
 cffi==1.17.1 ; python_version >= "3.10" and python_version < "4.0"
 cfgv==3.4.0 ; python_version >= "3.10" and python_version < "4.0"
 click==8.1.7 ; python_version >= "3.10" and python_version < "4.0"
-coincurve==20.0.0 ; python_version >= "3.10" and python_version < "4.0"
+coincurve==21.0.0 ; python_version >= "3.10" and python_version < "4.0"
 colorama==0.4.6 ; python_version >= "3.10" and python_version < "4.0" and (platform_system == "Windows" or sys_platform == "win32")
 cryptography==43.0.3 ; python_version >= "3.10" and python_version < "4.0"
 deprecated==1.2.14 ; python_version >= "3.10" and python_version < "4.0"

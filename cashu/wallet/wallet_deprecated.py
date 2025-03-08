@@ -257,9 +257,12 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         return_dict = resp.json()
         mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
         decoded_invoice = bolt11.decode(mint_response.pr)
+        assert decoded_invoice.amount_msat, Exception("no amount in invoice")
         return PostMintQuoteResponse(
             quote=mint_response.hash,
             request=mint_response.pr,
+            amount=decoded_invoice.amount_msat // 1000,
+            unit="sat",
             paid=False,
             state=MintQuoteState.unpaid.value,
             expiry=decoded_invoice.date + (decoded_invoice.expiry or 0),

@@ -4,7 +4,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuote, MeltQuoteState, Proof
-from cashu.core.errors import LightningError
+from cashu.core.errors import LightningPaymentFailedError
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
@@ -220,32 +220,32 @@ async def test_melt_lightning_pay_invoice_failed_failed(ledger: Ledger, wallet: 
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     try:
         await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningError")
-    except LightningError:
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
         pass
 
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
     try:
         await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningError")
-    except LightningError:
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
         pass
 
     settings.fakewallet_payment_state = PaymentResult.FAILED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
     try:
         await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningError")
-    except LightningError:
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
         pass
 
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
     settings.fakewallet_pay_invoice_state = PaymentResult.UNKNOWN.name
     try:
         await ledger.melt(proofs=wallet.proofs, quote=quote_id)
-        raise AssertionError("Expected LightningError")
-    except LightningError:
+        raise AssertionError("Expected LightningPaymentFailedError")
+    except LightningPaymentFailedError:
         pass
 
 

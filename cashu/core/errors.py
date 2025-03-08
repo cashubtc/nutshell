@@ -153,6 +153,14 @@ class QuoteNotPaidError(CashuError):
         super().__init__(self.detail, code=self.code)
 
 
+class LightningPaymentFailedError(CashuError):
+    detail = "Lightning payment failed"
+    code = 20004
+
+    def __init__(self, detail: Optional[str] = None):
+        super().__init__(detail or self.detail, code=self.code)
+
+
 class QuoteSignatureInvalidError(CashuError):
     detail = "Signature for mint request invalid"
     code = 20008
