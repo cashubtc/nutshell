@@ -141,8 +141,8 @@ class PostMintQuoteRequest(BaseModel):
 class PostMintQuoteResponse(BaseModel):
     quote: str  # quote id
     request: str  # input payment request
-    amount: int  # output amount
-    unit: str  # output unit
+    amount: Optional[int]  # output amount (optional for backwards compat)
+    unit: Optional[str]  # output unit (optional for backwards compat)
     state: Optional[str]  # state of the quote (optional for backwards compat)
     expiry: Optional[int]  # expiry of the quote
     pubkey: Optional[str] = None  # NUT-20 quote lock pubkey
@@ -224,8 +224,8 @@ class PostMeltQuoteRequest(BaseModel):
 class PostMeltQuoteResponse(BaseModel):
     quote: str  # quote id
     amount: int  # input amount
-    unit: str  # input unit
-    request: str  # output payment request
+    unit: Optional[str]  # input unit (optional for backwards compat)
+    request: Optional[str]  # output payment request (optional for backwards compat)
     fee_reserve: int  # input fee reserve
     paid: Optional[bool] = (
         None  # whether the request has been paid # DEPRECATED as per NUT PR #136
