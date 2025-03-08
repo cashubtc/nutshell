@@ -97,8 +97,8 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
                 smaller_proofs[1:], remainder, include_fees=include_fees
             )
         sum_selected_proofs = sum_proofs(selected_proofs)
-
-        if sum_selected_proofs < amount_to_send and next_bigger:
+        fee_ppk_selected = self.get_fees_for_proofs_ppk(selected_proofs)
+        if sum_selected_proofs < amount_to_send + fee_ppk_selected and next_bigger:
             logger.trace("> adding next bigger proof")
             return [next_bigger]
 
