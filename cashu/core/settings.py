@@ -157,6 +157,12 @@ class MintInformation(CashuSettings):
     mint_info_icon_url: str = Field(default=None)
     mint_info_urls: List[str] = Field(default=None)
 
+class MintRPCSettings(MintSettings):
+    mint_rpc_enable: bool = Field(default=False)
+    mint_rpc_ca: str = Field(default=None)
+    mint_rpc_cert: str = Field(default=None)
+    mint_rpc_addr: str = Field(default="127.0.0.1")
+    mint_rpc_port: int = Field(default=8086)
 
 class WalletSettings(CashuSettings):
     tor: bool = Field(default=False)
@@ -274,6 +280,7 @@ class Settings(
     MintDeprecationFlags,
     MintSettings,
     MintInformation,
+    MintRPCSettings,
     WalletSettings,
     WalletDeprecationFlags,
     CashuSettings,
