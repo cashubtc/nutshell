@@ -1,6 +1,7 @@
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
+
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT, settings
 from tests.helpers import (
