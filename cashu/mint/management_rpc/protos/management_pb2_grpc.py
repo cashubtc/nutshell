@@ -2,6 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 
 import grpc
+
 import cashu.mint.management_rpc.protos.management_pb2 as management__pb2
 
 GRPC_GENERATED_VERSION = '1.69.0'

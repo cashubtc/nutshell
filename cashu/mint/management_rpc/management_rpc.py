@@ -1,10 +1,10 @@
 
 import grpc
-from cashu.core.settings import settings
 from loguru import logger
 
 import cashu.mint.management_rpc.protos.management_pb2 as management_pb2
 import cashu.mint.management_rpc.protos.management_pb2_grpc as management_pb2_grpc
+from cashu.core.settings import settings
 
 from ..ledger import Ledger
 
