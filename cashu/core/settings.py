@@ -157,7 +157,7 @@ class MintInformation(CashuSettings):
     mint_info_icon_url: str = Field(default=None)
     mint_info_urls: List[str] = Field(default=None)
 
-class MintRPCSettings(MintSettings):
+class MintManagementRPCSettings(MintSettings):
     mint_rpc_enable: bool = Field(default=False)
     mint_rpc_ca: str = Field(default=None)
     mint_rpc_cert: str = Field(default=None)
