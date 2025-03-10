@@ -1,0 +1,115 @@
+syntax = "proto3";
+
+package mint_rpc;
+
+service Mint {
+    rpc GetInfo(GetInfoRequest) returns (GetInfoResponse) {}
+    rpc UpdateMotd(UpdateMotdRequest) returns (UpdateResponse) {}
+    rpc UpdateShortDescription(UpdateDescriptionRequest) returns (UpdateResponse) {}
+    rpc UpdateLongDescription(UpdateDescriptionRequest) returns (UpdateResponse) {}
+    rpc UpdateIconUrl(UpdateIconUrlRequest) returns (UpdateResponse) {}
+    rpc UpdateName(UpdateNameRequest) returns (UpdateResponse) {}
+    rpc AddUrl(UpdateUrlRequest) returns (UpdateResponse) {}
+    rpc RemoveUrl(UpdateUrlRequest) returns (UpdateResponse) {}
+    rpc AddContact(UpdateContactRequest) returns (UpdateResponse) {}
+    rpc RemoveContact(UpdateContactRequest) returns (UpdateResponse) {}
+    rpc UpdateNut04(UpdateNut04Request) returns (UpdateResponse) {}
+    rpc UpdateNut05(UpdateNut05Request) returns (UpdateResponse) {}
+    rpc UpdateQuoteTtl(UpdateQuoteTtlRequest) returns (UpdateResponse) {}
+    rpc UpdateNut04Quote(UpdateNut04QuoteRequest) returns (UpdateNut04QuoteRequest) {}
+    rpc RotateNextKeyset(RotateNextKeysetRequest) returns (RotateNextKeysetResponse) {}
+}
+
+message GetInfoRequest {
+}
+
+message ContactInfo {
+    string method = 1;
+    string info = 2;
+}
+
+message GetInfoResponse {
+    optional string name = 1;
+    optional string version = 2;
+    optional string description = 3;
+    optional string long_description = 4;
+    repeated ContactInfo contact = 5;
+    optional string motd = 6;
+    optional string icon_url = 7;
+    repeated string urls = 8;
+    uint64 total_issued = 9;
+    uint64 total_redeemed = 10;
+}
+
+message UpdateResponse{
+}
+
+message UpdateMotdRequest {
+    string motd = 1;
+}
+
+message UpdateDescriptionRequest {
+    string description = 1;
+}
+
+
+message UpdateIconUrlRequest {
+    string icon_url = 1;
+}
+
+message UpdateNameRequest {
+    string name = 1;
+}
+
+
+message UpdateUrlRequest {
+    string url = 1;
+}
+
+message UpdateContactRequest {
+    string method = 1;
+    string info = 2;
+}
+
+message UpdateNut04Request {
+    string unit = 1;
+    string method = 2;
+    optional bool disabled = 3;
+    optional uint64 min = 4;
+    optional uint64 max = 5;
+    optional bool description = 6;
+}
+
+
+message UpdateNut05Request {
+    string unit = 1;
+    string method = 2;
+    optional bool disabled = 3;
+    optional uint64 min = 4;
+    optional uint64 max = 5;
+}
+
+message UpdateQuoteTtlRequest {
+    optional uint64 mint_ttl = 1;
+    optional uint64 melt_ttl = 2;
+}
+
+
+message UpdateNut04QuoteRequest {
+    string quote_id = 1;
+    string state = 2;
+}
+
+message RotateNextKeysetRequest {
+    string unit = 1;
+    optional uint32 max_order = 2;
+    optional uint64 input_fee_ppk = 3;
+}
+
+
+message RotateNextKeysetResponse {
+    string id = 1;
+    string unit = 2;
+    uint32 max_order = 3;
+    uint64 input_fee_ppk = 4;
+}
