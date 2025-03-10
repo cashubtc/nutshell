@@ -221,9 +221,10 @@ async def test_mint_amounts_wrong_order(wallet1: Wallet):
     """Mint amount that is not part in 2^n"""
     amts = [1, 2, 3]
     mint_quote = await wallet1.request_mint(sum(amts))
+    allowed_amounts = wallet1.get_allowed_amounts()
     await assert_err(
         wallet1.mint(amount=sum(amts), split=[1, 2, 3], quote_id=mint_quote.quote),
-        f"Can only mint amounts with 2^n up to {2**settings.max_order}.",
+        f"Can only mint amounts supported by the mint: {allowed_amounts}",
     )
 
 
