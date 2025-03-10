@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package mint_rpc;
+package management;
 
 service Mint {
     rpc GetInfo(GetInfoRequest) returns (GetInfoResponse) {}

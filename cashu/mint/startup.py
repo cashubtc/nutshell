@@ -7,6 +7,8 @@ from typing import Dict
 
 from loguru import logger
 
+import cashu.mint.management_rpc.management_rpc as management_rpc
+
 from ..core.base import Method, Unit
 from ..core.db import Database
 from ..core.migrations import migrate_databases
@@ -17,8 +19,6 @@ from ..mint.auth import migrations as auth_migrations
 from ..mint.auth.server import AuthLedger
 from ..mint.crud import LedgerCrudSqlite
 from ..mint.ledger import Ledger
-
-import cashu.mint.management_rpc.management_rpc as management_rpc
 
 # kill the program if python runs in non-__debug__ mode
 # which could lead to asserts not being executed for optimized code
@@ -80,12 +80,6 @@ ledger = Ledger(
     crud=LedgerCrudSqlite(),
 )
 
-# Start ledger management gRPC server
-rpc_server = (
-    await management_rpc.serve(ledger) if settings.mint_rpc_enable
-    else None
-)
-
 # start auth ledger
 auth_ledger = AuthLedger(
     db=Database("auth", settings.auth_database),
@@ -130,7 +124,15 @@ async def start_mint():
 
 async def shutdown_mint():
     await ledger.shutdown_ledger()
-    if rpc_server:
-        await management_rpc.shutdown(rpc_server)
     logger.info("Mint shutdown.")
     logger.remove()
+
+rpc_server = None
+
+async def start_management_rpc():
+    global rpc_server
+    rpc_server = await management_rpc.serve(ledger)
+
+async def shutdown_management_rpc():
+    if rpc_server:
+        await management_rpc.shutdown(rpc_server)

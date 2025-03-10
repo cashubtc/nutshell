@@ -1,20 +1,25 @@
-import cashu.mint.management_rpc.protos.management_pb2 as management__pb2
-import cashu.mint.management_rpc.protos.management_pb2_grpc as management__pb2__grpc
+
 import grpc
-import asyncio
-import settings
+from cashu.core.settings import settings
 from loguru import logger
+
+import cashu.mint.management_rpc.protos.management_pb2 as management_pb2
+import cashu.mint.management_rpc.protos.management_pb2_grpc as management_pb2_grpc
+
 from ..ledger import Ledger
 
-class MintManagementRPC(management__pb2__grpc.MintServicer):
+
+class MintManagementRPC(management_pb2_grpc.MintServicer):
 
     def __init__(self, ledger: Ledger):
         self.ledger = ledger
         super().__init__()
 
     def GetInfo(self, request, context):
-        response = management__pb2.GetInfoResponse()
-        response.message = self.ledger.mint_info
+        mint_info = self.ledger.mint_info
+        response = management_pb2.GetInfoResponse(
+            **vars(mint_info).copy().pop("nuts", None)
+        )
         return response
 
     '''
@@ -110,7 +115,7 @@ async def serve(ledger: Ledger):
 
     logger.info(f"Starting Management RPC service on {host}:{port}")
     server = grpc.aio.server()
-    management__pb2__grpc.add_MintServicer_to_server(MintManagementRPC(ledger=ledger), server)
+    management_pb2_grpc.add_MintServicer_to_server(MintManagementRPC(ledger=ledger), server)
     server.add_insecure_port(f"{host}:{port}")
     
     await server.start()

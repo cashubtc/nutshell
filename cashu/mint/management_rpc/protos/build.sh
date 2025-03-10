@@ -8,6 +8,6 @@ echo "Ensuring grpcio is installed..."
 poetry add grpcio grpcio-tools
 
 echo "Compiling proto files..."
-poetry run python3 -m grpc_tools.protoc -I$BASE_DIR --python_out=$BASE_DIR --grpc_python_out=$BASE_DIR $BASE_DIR/management.proto
+poetry run python3 -m grpc_tools.protoc --proto_path=$BASE_DIR/googleapis:$BASE_DIR --mypy_out=$BASE_DIR --python_out=$BASE_DIR --grpc_python_out=$BASE_DIR $BASE_DIR/management.proto
 
 echo "Finished!"

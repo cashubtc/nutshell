@@ -9,6 +9,7 @@ from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
     _runtime_version.Domain.PUBLIC,
     5,
@@ -24,45 +25,45 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10management.proto\x12\x08mint_rpc\"\x10\n\x0eGetInfoRequest\".\n\x0fMintInfoContact\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05\x65mail\x18\x02 \x01(\t\"\xe3\x02\n\x0fGetInfoResponse\x12\x11\n\x04name\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x06pubkey\x18\x02 \x01(\tH\x01\x88\x01\x01\x12\x14\n\x07version\x18\x03 \x01(\tH\x02\x88\x01\x01\x12\x18\n\x0b\x64\x65scription\x18\x04 \x01(\tH\x03\x88\x01\x01\x12\x1d\n\x10\x64\x65scription_long\x18\x05 \x01(\tH\x04\x88\x01\x01\x12*\n\x07\x63ontact\x18\x06 \x03(\x0b\x32\x19.mint_rpc.MintInfoContact\x12\x11\n\x04motd\x18\x07 \x01(\tH\x05\x88\x01\x01\x12\x15\n\x08icon_url\x18\x08 \x01(\tH\x06\x88\x01\x01\x12\x0c\n\x04urls\x18\t \x03(\t\x12\x11\n\x04time\x18\n \x01(\x03H\x07\x88\x01\x01\x42\x07\n\x05_nameB\t\n\x07_pubkeyB\n\n\x08_versionB\x0e\n\x0c_descriptionB\x13\n\x11_description_longB\x07\n\x05_motdB\x0b\n\t_icon_urlB\x07\n\x05_time\"\x10\n\x0eUpdateResponse\"!\n\x11UpdateMotdRequest\x12\x0c\n\x04motd\x18\x01 \x01(\t\"/\n\x18UpdateDescriptionRequest\x12\x13\n\x0b\x64\x65scription\x18\x01 \x01(\t\"(\n\x14UpdateIconUrlRequest\x12\x10\n\x08icon_url\x18\x01 \x01(\t\"!\n\x11UpdateNameRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"\x1f\n\x10UpdateUrlRequest\x12\x0b\n\x03url\x18\x01 \x01(\t\"4\n\x14UpdateContactRequest\x12\x0e\n\x06method\x18\x01 \x01(\t\x12\x0c\n\x04info\x18\x02 \x01(\t\"\xb4\x01\n\x12UpdateNut04Request\x12\x0c\n\x04unit\x18\x01 \x01(\t\x12\x0e\n\x06method\x18\x02 \x01(\t\x12\x15\n\x08\x64isabled\x18\x03 \x01(\x08H\x00\x88\x01\x01\x12\x10\n\x03min\x18\x04 \x01(\x04H\x01\x88\x01\x01\x12\x10\n\x03max\x18\x05 \x01(\x04H\x02\x88\x01\x01\x12\x18\n\x0b\x64\x65scription\x18\x06 \x01(\x08H\x03\x88\x01\x01\x42\x0b\n\t_disabledB\x06\n\x04_minB\x06\n\x04_maxB\x0e\n\x0c_description\"\x8a\x01\n\x12UpdateNut05Request\x12\x0c\n\x04unit\x18\x01 \x01(\t\x12\x0e\n\x06method\x18\x02 \x01(\t\x12\x15\n\x08\x64isabled\x18\x03 \x01(\x08H\x00\x88\x01\x01\x12\x10\n\x03min\x18\x04 \x01(\x04H\x01\x88\x01\x01\x12\x10\n\x03max\x18\x05 \x01(\x04H\x02\x88\x01\x01\x42\x0b\n\t_disabledB\x06\n\x04_minB\x06\n\x04_max\"_\n\x15UpdateQuoteTtlRequest\x12\x15\n\x08mint_ttl\x18\x01 \x01(\x04H\x00\x88\x01\x01\x12\x15\n\x08melt_ttl\x18\x02 \x01(\x04H\x01\x88\x01\x01\x42\x0b\n\t_mint_ttlB\x0b\n\t_melt_ttl\":\n\x17UpdateNut04QuoteRequest\x12\x10\n\x08quote_id\x18\x01 \x01(\t\x12\r\n\x05state\x18\x02 \x01(\t\"{\n\x17RotateNextKeysetRequest\x12\x0c\n\x04unit\x18\x01 \x01(\t\x12\x16\n\tmax_order\x18\x02 \x01(\rH\x00\x88\x01\x01\x12\x1a\n\rinput_fee_ppk\x18\x03 \x01(\x04H\x01\x88\x01\x01\x42\x0c\n\n_max_orderB\x10\n\x0e_input_fee_ppk\"^\n\x18RotateNextKeysetResponse\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04unit\x18\x02 \x01(\t\x12\x11\n\tmax_order\x18\x03 \x01(\r\x12\x15\n\rinput_fee_ppk\x18\x04 \x01(\x04\x32\x8e\t\n\x04Mint\x12@\n\x07GetInfo\x12\x18.mint_rpc.GetInfoRequest\x1a\x19.mint_rpc.GetInfoResponse\"\x00\x12\x45\n\nUpdateMotd\x12\x1b.mint_rpc.UpdateMotdRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12X\n\x16UpdateShortDescription\x12\".mint_rpc.UpdateDescriptionRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12W\n\x15UpdateLongDescription\x12\".mint_rpc.UpdateDescriptionRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12K\n\rUpdateIconUrl\x12\x1e.mint_rpc.UpdateIconUrlRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12\x45\n\nUpdateName\x12\x1b.mint_rpc.UpdateNameRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12@\n\x06\x41\x64\x64Url\x12\x1a.mint_rpc.UpdateUrlRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12\x43\n\tRemoveUrl\x12\x1a.mint_rpc.UpdateUrlRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12H\n\nAddContact\x12\x1e.mint_rpc.UpdateContactRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12K\n\rRemoveContact\x12\x1e.mint_rpc.UpdateContactRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12G\n\x0bUpdateNut04\x12\x1c.mint_rpc.UpdateNut04Request\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12G\n\x0bUpdateNut05\x12\x1c.mint_rpc.UpdateNut05Request\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12M\n\x0eUpdateQuoteTtl\x12\x1f.mint_rpc.UpdateQuoteTtlRequest\x1a\x18.mint_rpc.UpdateResponse\"\x00\x12Z\n\x10UpdateNut04Quote\x12!.mint_rpc.UpdateNut04QuoteRequest\x1a!.mint_rpc.UpdateNut04QuoteRequest\"\x00\x12[\n\x10RotateNextKeyset\x12!.mint_rpc.RotateNextKeysetRequest\x1a\".mint_rpc.RotateNextKeysetResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10management.proto\x12\nmanagement\"\x10\n\x0eGetInfoRequest\".\n\x0fMintInfoContact\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05\x65mail\x18\x02 \x01(\t\"\xe5\x02\n\x0fGetInfoResponse\x12\x11\n\x04name\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x06pubkey\x18\x02 \x01(\tH\x01\x88\x01\x01\x12\x14\n\x07version\x18\x03 \x01(\tH\x02\x88\x01\x01\x12\x18\n\x0b\x64\x65scription\x18\x04 \x01(\tH\x03\x88\x01\x01\x12\x1d\n\x10\x64\x65scription_long\x18\x05 \x01(\tH\x04\x88\x01\x01\x12,\n\x07\x63ontact\x18\x06 \x03(\x0b\x32\x1b.management.MintInfoContact\x12\x11\n\x04motd\x18\x07 \x01(\tH\x05\x88\x01\x01\x12\x15\n\x08icon_url\x18\x08 \x01(\tH\x06\x88\x01\x01\x12\x0c\n\x04urls\x18\t \x03(\t\x12\x11\n\x04time\x18\n \x01(\x03H\x07\x88\x01\x01\x42\x07\n\x05_nameB\t\n\x07_pubkeyB\n\n\x08_versionB\x0e\n\x0c_descriptionB\x13\n\x11_description_longB\x07\n\x05_motdB\x0b\n\t_icon_urlB\x07\n\x05_time\"\x10\n\x0eUpdateResponse\"!\n\x11UpdateMotdRequest\x12\x0c\n\x04motd\x18\x01 \x01(\t\"/\n\x18UpdateDescriptionRequest\x12\x13\n\x0b\x64\x65scription\x18\x01 \x01(\t\"(\n\x14UpdateIconUrlRequest\x12\x10\n\x08icon_url\x18\x01 \x01(\t\"!\n\x11UpdateNameRequest\x12\x0c\n\x04name\x18\x01 \x01(\t\"\x1f\n\x10UpdateUrlRequest\x12\x0b\n\x03url\x18\x01 \x01(\t\"4\n\x14UpdateContactRequest\x12\x0e\n\x06method\x18\x01 \x01(\t\x12\x0c\n\x04info\x18\x02 \x01(\t\"\xb4\x01\n\x12UpdateNut04Request\x12\x0c\n\x04unit\x18\x01 \x01(\t\x12\x0e\n\x06method\x18\x02 \x01(\t\x12\x15\n\x08\x64isabled\x18\x03 \x01(\x08H\x00\x88\x01\x01\x12\x10\n\x03min\x18\x04 \x01(\x04H\x01\x88\x01\x01\x12\x10\n\x03max\x18\x05 \x01(\x04H\x02\x88\x01\x01\x12\x18\n\x0b\x64\x65scription\x18\x06 \x01(\x08H\x03\x88\x01\x01\x42\x0b\n\t_disabledB\x06\n\x04_minB\x06\n\x04_maxB\x0e\n\x0c_description\"\x8a\x01\n\x12UpdateNut05Request\x12\x0c\n\x04unit\x18\x01 \x01(\t\x12\x0e\n\x06method\x18\x02 \x01(\t\x12\x15\n\x08\x64isabled\x18\x03 \x01(\x08H\x00\x88\x01\x01\x12\x10\n\x03min\x18\x04 \x01(\x04H\x01\x88\x01\x01\x12\x10\n\x03max\x18\x05 \x01(\x04H\x02\x88\x01\x01\x42\x0b\n\t_disabledB\x06\n\x04_minB\x06\n\x04_max\"_\n\x15UpdateQuoteTtlRequest\x12\x15\n\x08mint_ttl\x18\x01 \x01(\x04H\x00\x88\x01\x01\x12\x15\n\x08melt_ttl\x18\x02 \x01(\x04H\x01\x88\x01\x01\x42\x0b\n\t_mint_ttlB\x0b\n\t_melt_ttl\":\n\x17UpdateNut04QuoteRequest\x12\x10\n\x08quote_id\x18\x01 \x01(\t\x12\r\n\x05state\x18\x02 \x01(\t\"{\n\x17RotateNextKeysetRequest\x12\x0c\n\x04unit\x18\x01 \x01(\t\x12\x16\n\tmax_order\x18\x02 \x01(\rH\x00\x88\x01\x01\x12\x1a\n\rinput_fee_ppk\x18\x03 \x01(\x04H\x01\x88\x01\x01\x42\x0c\n\n_max_orderB\x10\n\x0e_input_fee_ppk\"^\n\x18RotateNextKeysetResponse\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04unit\x18\x02 \x01(\t\x12\x11\n\tmax_order\x18\x03 \x01(\r\x12\x15\n\rinput_fee_ppk\x18\x04 \x01(\x04\x32\xca\t\n\x04Mint\x12\x44\n\x07GetInfo\x12\x1a.management.GetInfoRequest\x1a\x1b.management.GetInfoResponse\"\x00\x12I\n\nUpdateMotd\x12\x1d.management.UpdateMotdRequest\x1a\x1a.management.UpdateResponse\"\x00\x12\\\n\x16UpdateShortDescription\x12$.management.UpdateDescriptionRequest\x1a\x1a.management.UpdateResponse\"\x00\x12[\n\x15UpdateLongDescription\x12$.management.UpdateDescriptionRequest\x1a\x1a.management.UpdateResponse\"\x00\x12O\n\rUpdateIconUrl\x12 .management.UpdateIconUrlRequest\x1a\x1a.management.UpdateResponse\"\x00\x12I\n\nUpdateName\x12\x1d.management.UpdateNameRequest\x1a\x1a.management.UpdateResponse\"\x00\x12\x44\n\x06\x41\x64\x64Url\x12\x1c.management.UpdateUrlRequest\x1a\x1a.management.UpdateResponse\"\x00\x12G\n\tRemoveUrl\x12\x1c.management.UpdateUrlRequest\x1a\x1a.management.UpdateResponse\"\x00\x12L\n\nAddContact\x12 .management.UpdateContactRequest\x1a\x1a.management.UpdateResponse\"\x00\x12O\n\rRemoveContact\x12 .management.UpdateContactRequest\x1a\x1a.management.UpdateResponse\"\x00\x12K\n\x0bUpdateNut04\x12\x1e.management.UpdateNut04Request\x1a\x1a.management.UpdateResponse\"\x00\x12K\n\x0bUpdateNut05\x12\x1e.management.UpdateNut05Request\x1a\x1a.management.UpdateResponse\"\x00\x12Q\n\x0eUpdateQuoteTtl\x12!.management.UpdateQuoteTtlRequest\x1a\x1a.management.UpdateResponse\"\x00\x12^\n\x10UpdateNut04Quote\x12#.management.UpdateNut04QuoteRequest\x1a#.management.UpdateNut04QuoteRequest\"\x00\x12_\n\x10RotateNextKeyset\x12#.management.RotateNextKeysetRequest\x1a$.management.RotateNextKeysetResponse\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'management_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_GETINFOREQUEST']._serialized_start=30
-  _globals['_GETINFOREQUEST']._serialized_end=46
-  _globals['_MINTINFOCONTACT']._serialized_start=48
-  _globals['_MINTINFOCONTACT']._serialized_end=94
-  _globals['_GETINFORESPONSE']._serialized_start=97
-  _globals['_GETINFORESPONSE']._serialized_end=452
-  _globals['_UPDATERESPONSE']._serialized_start=454
-  _globals['_UPDATERESPONSE']._serialized_end=470
-  _globals['_UPDATEMOTDREQUEST']._serialized_start=472
-  _globals['_UPDATEMOTDREQUEST']._serialized_end=505
-  _globals['_UPDATEDESCRIPTIONREQUEST']._serialized_start=507
-  _globals['_UPDATEDESCRIPTIONREQUEST']._serialized_end=554
-  _globals['_UPDATEICONURLREQUEST']._serialized_start=556
-  _globals['_UPDATEICONURLREQUEST']._serialized_end=596
-  _globals['_UPDATENAMEREQUEST']._serialized_start=598
-  _globals['_UPDATENAMEREQUEST']._serialized_end=631
-  _globals['_UPDATEURLREQUEST']._serialized_start=633
-  _globals['_UPDATEURLREQUEST']._serialized_end=664
-  _globals['_UPDATECONTACTREQUEST']._serialized_start=666
-  _globals['_UPDATECONTACTREQUEST']._serialized_end=718
-  _globals['_UPDATENUT04REQUEST']._serialized_start=721
-  _globals['_UPDATENUT04REQUEST']._serialized_end=901
-  _globals['_UPDATENUT05REQUEST']._serialized_start=904
-  _globals['_UPDATENUT05REQUEST']._serialized_end=1042
-  _globals['_UPDATEQUOTETTLREQUEST']._serialized_start=1044
-  _globals['_UPDATEQUOTETTLREQUEST']._serialized_end=1139
-  _globals['_UPDATENUT04QUOTEREQUEST']._serialized_start=1141
-  _globals['_UPDATENUT04QUOTEREQUEST']._serialized_end=1199
-  _globals['_ROTATENEXTKEYSETREQUEST']._serialized_start=1201
-  _globals['_ROTATENEXTKEYSETREQUEST']._serialized_end=1324
-  _globals['_ROTATENEXTKEYSETRESPONSE']._serialized_start=1326
-  _globals['_ROTATENEXTKEYSETRESPONSE']._serialized_end=1420
-  _globals['_MINT']._serialized_start=1423
-  _globals['_MINT']._serialized_end=2589
+  _globals['_GETINFOREQUEST']._serialized_start=32
+  _globals['_GETINFOREQUEST']._serialized_end=48
+  _globals['_MINTINFOCONTACT']._serialized_start=50
+  _globals['_MINTINFOCONTACT']._serialized_end=96
+  _globals['_GETINFORESPONSE']._serialized_start=99
+  _globals['_GETINFORESPONSE']._serialized_end=456
+  _globals['_UPDATERESPONSE']._serialized_start=458
+  _globals['_UPDATERESPONSE']._serialized_end=474
+  _globals['_UPDATEMOTDREQUEST']._serialized_start=476
+  _globals['_UPDATEMOTDREQUEST']._serialized_end=509
+  _globals['_UPDATEDESCRIPTIONREQUEST']._serialized_start=511
+  _globals['_UPDATEDESCRIPTIONREQUEST']._serialized_end=558
+  _globals['_UPDATEICONURLREQUEST']._serialized_start=560
+  _globals['_UPDATEICONURLREQUEST']._serialized_end=600
+  _globals['_UPDATENAMEREQUEST']._serialized_start=602
+  _globals['_UPDATENAMEREQUEST']._serialized_end=635
+  _globals['_UPDATEURLREQUEST']._serialized_start=637
+  _globals['_UPDATEURLREQUEST']._serialized_end=668
+  _globals['_UPDATECONTACTREQUEST']._serialized_start=670
+  _globals['_UPDATECONTACTREQUEST']._serialized_end=722
+  _globals['_UPDATENUT04REQUEST']._serialized_start=725
+  _globals['_UPDATENUT04REQUEST']._serialized_end=905
+  _globals['_UPDATENUT05REQUEST']._serialized_start=908
+  _globals['_UPDATENUT05REQUEST']._serialized_end=1046
+  _globals['_UPDATEQUOTETTLREQUEST']._serialized_start=1048
+  _globals['_UPDATEQUOTETTLREQUEST']._serialized_end=1143
+  _globals['_UPDATENUT04QUOTEREQUEST']._serialized_start=1145
+  _globals['_UPDATENUT04QUOTEREQUEST']._serialized_end=1203
+  _globals['_ROTATENEXTKEYSETREQUEST']._serialized_start=1205
+  _globals['_ROTATENEXTKEYSETREQUEST']._serialized_end=1328
+  _globals['_ROTATENEXTKEYSETRESPONSE']._serialized_start=1330
+  _globals['_ROTATENEXTKEYSETRESPONSE']._serialized_end=1424
+  _globals['_MINT']._serialized_start=1427
+  _globals['_MINT']._serialized_end=2653
 # @@protoc_insertion_point(module_scope)
