@@ -16,7 +16,13 @@ from ..core.settings import settings
 from .auth.router import auth_router
 from .router import redis, router
 from .router_deprecated import router_deprecated
-from .startup import shutdown_mint, start_auth, start_mint
+from .startup import (
+    shutdown_management_rpc,
+    shutdown_mint,
+    start_auth,
+    start_management_rpc,
+    start_mint,
+)
 
 if settings.debug_profiling:
     pass
@@ -32,6 +38,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await start_mint()
     if settings.mint_require_auth:
         await start_auth()
+    if settings.mint_rpc_enable:
+        await start_management_rpc()
     try:
         yield
     except asyncio.CancelledError:
@@ -39,10 +47,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.info("Shutdown process interrupted by CancelledError")
     finally:
         try:
+            await shutdown_management_rpc()
             await redis.disconnect()
             await shutdown_mint()
         except asyncio.CancelledError:
-            logger.info("CancelledError during shutdown, shutting down forcefully")
+            logger.error("CancelledError during shutdown, shutting down forcefully")
 
 
 def create_app(config_object="core.settings") -> FastAPI:

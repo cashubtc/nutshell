@@ -7,6 +7,8 @@ from typing import Dict
 
 from loguru import logger
 
+import cashu.mint.management_rpc.management_rpc as management_rpc
+
 from ..core.base import Method, Unit
 from ..core.db import Database
 from ..core.migrations import migrate_databases
@@ -124,3 +126,13 @@ async def shutdown_mint():
     await ledger.shutdown_ledger()
     logger.info("Mint shutdown.")
     logger.remove()
+
+rpc_server = None
+
+async def start_management_rpc():
+    global rpc_server
+    rpc_server = await management_rpc.serve(ledger)
+
+async def shutdown_management_rpc():
+    if rpc_server:
+        await management_rpc.shutdown(rpc_server)

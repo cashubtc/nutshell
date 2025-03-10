@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package management;
+
+service Mint {
+    rpc GetInfo(GetInfoRequest) returns (GetInfoResponse) {}
+    rpc UpdateMotd(UpdateMotdRequest) returns (UpdateResponse) {}
+    rpc UpdateShortDescription(UpdateDescriptionRequest) returns (UpdateResponse) {}
+    rpc UpdateLongDescription(UpdateDescriptionRequest) returns (UpdateResponse) {}
+    rpc UpdateIconUrl(UpdateIconUrlRequest) returns (UpdateResponse) {}
+    rpc UpdateName(UpdateNameRequest) returns (UpdateResponse) {}
+    rpc AddUrl(UpdateUrlRequest) returns (UpdateResponse) {}
+    rpc RemoveUrl(UpdateUrlRequest) returns (UpdateResponse) {}
+    rpc AddContact(UpdateContactRequest) returns (UpdateResponse) {}
+    rpc RemoveContact(UpdateContactRequest) returns (UpdateResponse) {}
+    rpc UpdateNut04(UpdateNut04Request) returns (UpdateResponse) {}
+    rpc UpdateNut05(UpdateNut05Request) returns (UpdateResponse) {}
+    rpc UpdateQuoteTtl(UpdateQuoteTtlRequest) returns (UpdateResponse) {}
+    rpc UpdateNut04Quote(UpdateNut04QuoteRequest) returns (UpdateNut04QuoteRequest) {}
+    rpc RotateNextKeyset(RotateNextKeysetRequest) returns (RotateNextKeysetResponse) {}
+}
+
+message GetInfoRequest {
+}
+
+// Define the MintInfoContact message
+message MintInfoContact {
+    // Define fields for MintInfoContact as needed
+    string name = 1; // Example field
+    string email = 2; // Example field
+}
+
+// Define the GetInfoResponse message
+message GetInfoResponse {
+    optional string name = 1; // Optional field
+    optional string pubkey = 2; // Optional field
+    optional string version = 3; // Optional field
+    optional string description = 4; // Optional field
+    optional string description_long = 5; // Optional field
+    repeated MintInfoContact contact = 6; // Optional list of MintInfoContact
+    optional string motd = 7; // Optional field
+    optional string icon_url = 8; // Optional field
+    repeated string urls = 9; // Optional list of strings
+    optional int64 time = 10; // Optional field (use int64 for larger integers)
+}
+
+message UpdateResponse{
+}
+
+message UpdateMotdRequest {
+    string motd = 1;
+}
+
+message UpdateDescriptionRequest {
+    string description = 1;
+}
+
+
+message UpdateIconUrlRequest {
+    string icon_url = 1;
+}
+
+message UpdateNameRequest {
+    string name = 1;
+}
+
+
+message UpdateUrlRequest {
+    string url = 1;
+}
+
+message UpdateContactRequest {
+    string method = 1;
+    string info = 2;
+}
+
+message UpdateNut04Request {
+    string unit = 1;
+    string method = 2;
+    optional bool disabled = 3;
+    optional uint64 min = 4;
+    optional uint64 max = 5;
+    optional bool description = 6;
+}
+
+
+message UpdateNut05Request {
+    string unit = 1;
+    string method = 2;
+    optional bool disabled = 3;
+    optional uint64 min = 4;
+    optional uint64 max = 5;
+}
+
+message UpdateQuoteTtlRequest {
+    optional uint64 mint_ttl = 1;
+    optional uint64 melt_ttl = 2;
+}
+
+
+message UpdateNut04QuoteRequest {
+    string quote_id = 1;
+    string state = 2;
+}
+
+message RotateNextKeysetRequest {
+    string unit = 1;
+    optional uint32 max_order = 2;
+    optional uint64 input_fee_ppk = 3;
+}
+
+
+message RotateNextKeysetResponse {
+    string id = 1;
+    string unit = 2;
+    uint32 max_order = 3;
+    uint64 input_fee_ppk = 4;
+}
