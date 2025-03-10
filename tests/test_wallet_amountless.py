@@ -29,6 +29,10 @@ async def wallet():
     not (is_cln or is_lnd or is_fake),
     reason="only run this test on fake, lnd or cln"
 )
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_amountless_bolt11_invoice(wallet: Wallet):
     # make sure wallet knows the backend supports mpp
     assert wallet.mint_info.supports_amountless("bolt11", wallet.unit)
@@ -55,6 +59,10 @@ async def test_amountless_bolt11_invoice(wallet: Wallet):
 @pytest.mark.skipif(
     is_cln or is_lnd or is_fake,
     reason="only run for backends where amountless is not supported"
+)
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
 )
 async def test_unsupported_amountless_bolt11_invoice(wallet: Wallet):
     amountless_invoice = invoice_no_amount if is_fake else get_real_invoice(0)['payment_request']
