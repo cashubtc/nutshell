@@ -82,7 +82,7 @@ async def test_cheating_attempt_amountless_bolt11_invoice(wallet: Wallet):
     # We try and get a quote for 1 sat.
     # This should not succeed.
     assert_err(
-        httpx.post(
+        lambda x : httpx.post(
             SERVER_ENDPOINT+"/v1/melt/quote/bolt11",
             json={
                 "unit": "sat",
