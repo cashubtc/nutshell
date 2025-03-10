@@ -2,7 +2,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.wallet.wallet import Wallet
-from tests.conftest import SERVER_ENDPOINT
+from tests.conftest import SERVER_ENDPOINT, settings
 from tests.helpers import (
     assert_err,
     get_real_invoice,
