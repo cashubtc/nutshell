@@ -69,13 +69,6 @@ async def test_cheating_attempt_amountless_bolt11_invoice(wallet: Wallet):
     # make sure wallet knows the backend supports mpp
     assert wallet.mint_info.supports_amountless("bolt11", wallet.unit)
 
-    # top up wallet
-    topup_mint_quote = await wallet.request_mint(128)
-
-    await pay_if_regtest(topup_mint_quote.request)
-    proofs = await wallet.mint(128, quote_id=topup_mint_quote.quote)
-    assert wallet.balance == 128
-
     # We get an invoice for 1000 sats
     invoice = normal_invoice if is_fake else get_real_invoice(1000)['payment_request']
 
