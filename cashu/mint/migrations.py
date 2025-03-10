@@ -791,7 +791,7 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
     async with db.connect() as conn:
         rows: List[Dict] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('mint_quotes')}"
-        )
+        )  # type: ignore
         for row in rows:
             if row.get("issued"):
                 state = "issued"
@@ -807,7 +807,7 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
     async with db.connect() as conn:
         rows2: List[Dict] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('melt_quotes')}"
-        )
+        )  # type: ignore
         for row in rows2:
             if row["paid"]:
                 state = "paid"
@@ -906,5 +906,19 @@ async def m026_keyset_specific_balance_views(db: Database):
                 LEFT OUTER JOIN {db.table_with_schema('balance_redeemed')} bu
                 ON bi.keyset = bu.keyset
             );
+            """
+        )
+
+
+async def m027_add_balance_log_table(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS balance_log (
+                    unit TEXT NOT NULL,
+                    mint_balance INTEGER NOT NULL,
+                    backend_balance INTEGER NOT NULL,
+                    time TIMESTAMP DEFAULT {db.timestamp_now}
+                );
             """
         )

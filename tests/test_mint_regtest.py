@@ -61,6 +61,41 @@ async def test_lightning_create_invoice(ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_lightning_create_invoice_balance_change(ledger: Ledger):
+    invoice_amount = 1000  # sat
+    invoice = await ledger.backends[Method.bolt11][Unit.sat].create_invoice(
+        Amount(Unit.sat, invoice_amount)
+    )
+    assert invoice.ok
+    assert invoice.payment_request
+    assert invoice.checking_id
+
+    # TEST 2: check the invoice status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
+        invoice.checking_id
+    )
+    assert status.pending
+
+    status = await ledger.backends[Method.bolt11][Unit.sat].status()
+    balance_before = status.balance
+
+    # settle the invoice
+    await pay_if_regtest(invoice.payment_request)
+
+    # TEST 3: check the invoice status
+    status = await ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
+        invoice.checking_id
+    )
+    assert status.settled
+
+    status = await ledger.backends[Method.bolt11][Unit.sat].status()
+    balance_after = status.balance
+
+    assert balance_after == balance_before + invoice_amount
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
 async def test_lightning_get_payment_quote(ledger: Ledger):
     invoice_dict = get_real_invoice(64)
     request = invoice_dict["payment_request"]

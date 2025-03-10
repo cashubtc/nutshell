@@ -48,14 +48,17 @@ class LNbitsWallet(LightningBackend):
         except Exception as exc:
             return StatusResponse(
                 error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
         if data.get("detail"):
             return StatusResponse(
-                error_message=f"LNbits error: {data['detail']}", balance=0
+                error_message=f"LNbits error: {data['detail']}",
+                balance=Amount(self.unit, 0),
             )
 
-        return StatusResponse(error_message=None, balance=data["balance"])
+        return StatusResponse(
+            error_message=None, balance=Amount(Unit.sat, data["balance"] // 1000)
+        )
 
     async def create_invoice(
         self,

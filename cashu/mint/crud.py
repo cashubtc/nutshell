@@ -3,11 +3,14 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from ..core.base import (
+    Amount,
     BlindedSignature,
     MeltQuote,
+    MintBalanceLogEntry,
     MintKeyset,
     MintQuote,
     Proof,
+    Unit,
 )
 from ..core.db import (
     Connection,
@@ -122,7 +125,15 @@ class LedgerCrud(ABC):
         keyset: MintKeyset,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> int: ...
+    ) -> Amount: ...
+
+    @abstractmethod
+    async def get_unit_balance(
+        self,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Amount: ...
 
     @abstractmethod
     async def store_promise(
@@ -231,6 +242,24 @@ class LedgerCrud(ABC):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
+
+    @abstractmethod
+    async def store_balance_log(
+        self,
+        backend_balance: Amount,
+        mint_balance: Amount,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def get_last_balance_log_entry(
+        self,
+        *,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> MintBalanceLogEntry | None: ...
 
 
 class LedgerCrudSqlite(LedgerCrud):
@@ -672,7 +701,7 @@ class LedgerCrudSqlite(LedgerCrud):
         keyset: MintKeyset,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> int:
+    ) -> Amount:
         row = await (conn or db).fetchone(
             f"""
             SELECT balance FROM {db.table_with_schema('balance')}
@@ -684,11 +713,24 @@ class LedgerCrudSqlite(LedgerCrud):
         )
 
         if row is None:
-            return 0
+            return Amount(keyset.unit, 0)
 
         # sqlalchemy index of first element
         key = next(iter(row))
-        return int(row[key])
+        return Amount(keyset.unit, int(row[key]))
+
+    async def get_unit_balance(
+        self,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Amount:
+        keysets = await self.get_keyset(db=db, unit=unit.name, conn=conn)
+        balance = Amount(unit, 0)
+        for keyset in keysets:
+            balance += await self.get_balance(keyset, db=db, conn=conn)
+
+        return balance
 
     async def get_keyset(
         self,
@@ -778,3 +820,46 @@ class LedgerCrudSqlite(LedgerCrud):
         values = {f"y_{i}": Ys[i] for i in range(len(Ys))}
         rows = await (conn or db).fetchall(query, values)
         return [Proof(**r) for r in rows] if rows else []
+
+    async def store_balance_log(
+        self,
+        backend_balance: Amount,
+        mint_balance: Amount,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ):
+        if backend_balance.unit != mint_balance.unit:
+            raise ValueError("Units do not match")
+
+        await (conn or db).execute(
+            f"""
+            INSERT INTO {db.table_with_schema('balance_log')}
+            (unit, backend_balance, mint_balance, time)
+            VALUES (:unit, :backend_balance, :mint_balance, :time)
+            """,
+            {
+                "unit": backend_balance.unit.name,
+                "backend_balance": backend_balance.amount,
+                "mint_balance": mint_balance.amount,
+                "time": db.to_timestamp(db.timestamp_now_str()),
+            },
+        )
+
+    async def get_last_balance_log_entry(
+        self,
+        *,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> MintBalanceLogEntry | None:
+        row = await (conn or db).fetchone(
+            f"""
+            SELECT * from {db.table_with_schema('balance_log')}
+            WHERE unit = :unit
+            ORDER BY time DESC
+            LIMIT 1
+            """,
+            {"unit": unit.name},
+        )
+
+        return MintBalanceLogEntry.from_row(row) if row else None
