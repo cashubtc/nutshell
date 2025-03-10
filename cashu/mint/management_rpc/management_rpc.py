@@ -1,0 +1,122 @@
+import cashu.mint.management_rpc.protos.management_pb2 as management__pb2
+import cashu.mint.management_rpc.protos.management_pb2_grpc as management__pb2__grpc
+import grpc
+import asyncio
+import settings
+from loguru import logger
+from ..ledger import Ledger
+
+class MintManagementRPC(management__pb2__grpc.MintServicer):
+
+    def __init__(self, ledger: Ledger):
+        self.ledger = ledger
+        super().__init__()
+
+    def GetInfo(self, request, context):
+        response = management__pb2.GetInfoResponse()
+        response.message = self.ledger.mint_info
+        return response
+
+    '''
+    async def UpdateMotd(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def UpdateShortDescription(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def UpdateLongDescription(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def UpdateIconUrl(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def UpdateName(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def AddUrl(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def RemoveUrl(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def AddContact(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def RemoveContact(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def UpdateNut04(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def UpdateNut05(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def UpdateQuoteTtl(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def UpdateNut04Quote(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    async def RotateNextKeyset(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')    
+    '''
+
+
+async def serve(ledger: Ledger):
+    host = settings.mint_rpc_addr
+    port = settings.mint_rpc_port
+
+    logger.info(f"Starting Management RPC service on {host}:{port}")
+    server = grpc.aio.server()
+    management__pb2__grpc.add_MintServicer_to_server(MintManagementRPC(ledger=ledger), server)
+    server.add_insecure_port(f"{host}:{port}")
+    
+    await server.start()
+    return server
+
+async def shutdown(server: grpc.aio.Server):
+    logger.info("Shutting down management RPC gracefully...")
+    await server.stop(grace=2)  # Give clients 2 seconds to finish requests
+    logger.debug("Management RPC shut down.")
