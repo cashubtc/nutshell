@@ -137,3 +137,6 @@ tor.pid
 
 # MacOS
 .DS_Store
+
+# angry-duck vscode extension
+.angry-duck/
