@@ -100,7 +100,7 @@ def get_info(ctx: Context):
     stub = ctx.obj['STUB']
     try:
         response = stub.GetInfo(management_pb2.GetInfoRequest())
-        click.echo(f"Server Info: {response}")
+        click.echo(f"Mint Info:\n{response}")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
         raise e
