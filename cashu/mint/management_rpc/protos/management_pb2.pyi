@@ -5,11 +5,10 @@ isort:skip_file
 
 import builtins
 import collections.abc
-import typing
-
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+import typing
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
@@ -29,21 +28,18 @@ class MintInfoContact(google.protobuf.message.Message):
 
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    NAME_FIELD_NUMBER: builtins.int
-    EMAIL_FIELD_NUMBER: builtins.int
-    name: builtins.str
-    """Define fields for MintInfoContact as needed
-    Example field
-    """
-    email: builtins.str
-    """Example field"""
+    METHOD_FIELD_NUMBER: builtins.int
+    INFO_FIELD_NUMBER: builtins.int
+    method: builtins.str
+    """Define fields for MintInfoContact as needed"""
+    info: builtins.str
     def __init__(
         self,
         *,
-        name: builtins.str = ...,
-        email: builtins.str = ...,
+        method: builtins.str = ...,
+        info: builtins.str = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["email", b"email", "name", b"name"]) -> None: ...
+    def ClearField(self, field_name: typing.Literal["info", b"info", "method", b"method"]) -> None: ...
 
 global___MintInfoContact = MintInfoContact
 

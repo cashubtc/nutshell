@@ -16,10 +16,10 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         super().__init__()
 
     def GetInfo(self, request, context):
-        mint_info = self.ledger.mint_info
-        response = management_pb2.GetInfoResponse(
-            **vars(mint_info).copy().pop("nuts", None)
-        )
+        logger.debug("gRPC GetInfo has been called")
+        mint_info_dict = self.ledger.mint_info.dict()
+        del mint_info_dict["nuts"]
+        response = management_pb2.GetInfoResponse(**mint_info_dict)
         return response
 
     '''

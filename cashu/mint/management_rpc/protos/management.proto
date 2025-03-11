@@ -26,8 +26,8 @@ message GetInfoRequest {
 // Define the MintInfoContact message
 message MintInfoContact {
     // Define fields for MintInfoContact as needed
-    string name = 1; // Example field
-    string email = 2; // Example field
+    string method = 1;
+    string info = 2;
 }
 
 // Define the GetInfoResponse message
