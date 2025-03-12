@@ -5,10 +5,11 @@ isort:skip_file
 
 import builtins
 import collections.abc
+import typing
+
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
-import typing
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
@@ -24,14 +25,11 @@ global___GetInfoRequest = GetInfoRequest
 
 @typing.final
 class MintInfoContact(google.protobuf.message.Message):
-    """Define the MintInfoContact message"""
-
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     METHOD_FIELD_NUMBER: builtins.int
     INFO_FIELD_NUMBER: builtins.int
     method: builtins.str
-    """Define fields for MintInfoContact as needed"""
     info: builtins.str
     def __init__(
         self,
@@ -45,8 +43,6 @@ global___MintInfoContact = MintInfoContact
 
 @typing.final
 class GetInfoResponse(google.protobuf.message.Message):
-    """Define the GetInfoResponse message"""
-
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     NAME_FIELD_NUMBER: builtins.int
@@ -60,29 +56,17 @@ class GetInfoResponse(google.protobuf.message.Message):
     URLS_FIELD_NUMBER: builtins.int
     TIME_FIELD_NUMBER: builtins.int
     name: builtins.str
-    """Optional field"""
     pubkey: builtins.str
-    """Optional field"""
     version: builtins.str
-    """Optional field"""
     description: builtins.str
-    """Optional field"""
     description_long: builtins.str
-    """Optional field"""
     motd: builtins.str
-    """Optional field"""
     icon_url: builtins.str
-    """Optional field"""
     time: builtins.int
-    """Optional field (use int64 for larger integers)"""
     @property
-    def contact(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MintInfoContact]:
-        """Optional list of MintInfoContact"""
-
+    def contact(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MintInfoContact]: ...
     @property
-    def urls(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
-        """Optional list of strings"""
-
+    def urls(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
     def __init__(
         self,
         *,
@@ -298,24 +282,277 @@ global___UpdateNut05Request = UpdateNut05Request
 class UpdateQuoteTtlRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    MINT_TTL_FIELD_NUMBER: builtins.int
-    MELT_TTL_FIELD_NUMBER: builtins.int
-    mint_ttl: builtins.int
-    melt_ttl: builtins.int
+    TTL_FIELD_NUMBER: builtins.int
+    ttl: builtins.int
     def __init__(
         self,
         *,
-        mint_ttl: builtins.int | None = ...,
-        melt_ttl: builtins.int | None = ...,
+        ttl: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_melt_ttl", b"_melt_ttl", "_mint_ttl", b"_mint_ttl", "melt_ttl", b"melt_ttl", "mint_ttl", b"mint_ttl"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_melt_ttl", b"_melt_ttl", "_mint_ttl", b"_mint_ttl", "melt_ttl", b"melt_ttl", "mint_ttl", b"mint_ttl"]) -> None: ...
-    @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_melt_ttl", b"_melt_ttl"]) -> typing.Literal["melt_ttl"] | None: ...
-    @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_mint_ttl", b"_mint_ttl"]) -> typing.Literal["mint_ttl"] | None: ...
+    def HasField(self, field_name: typing.Literal["_ttl", b"_ttl", "ttl", b"ttl"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_ttl", b"_ttl", "ttl", b"ttl"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_ttl", b"_ttl"]) -> typing.Literal["ttl"] | None: ...
 
 global___UpdateQuoteTtlRequest = UpdateQuoteTtlRequest
+
+@typing.final
+class Nut04Quote(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    QUOTE_FIELD_NUMBER: builtins.int
+    METHOD_FIELD_NUMBER: builtins.int
+    REQUEST_FIELD_NUMBER: builtins.int
+    CHECKING_ID_FIELD_NUMBER: builtins.int
+    UNIT_FIELD_NUMBER: builtins.int
+    AMOUNT_FIELD_NUMBER: builtins.int
+    STATE_FIELD_NUMBER: builtins.int
+    CREATED_TIME_FIELD_NUMBER: builtins.int
+    PAID_TIME_FIELD_NUMBER: builtins.int
+    EXPIRY_FIELD_NUMBER: builtins.int
+    PUBKEY_FIELD_NUMBER: builtins.int
+    quote: builtins.str
+    method: builtins.str
+    request: builtins.str
+    checking_id: builtins.str
+    unit: builtins.str
+    amount: builtins.int
+    state: builtins.str
+    created_time: builtins.int
+    paid_time: builtins.int
+    expiry: builtins.int
+    pubkey: builtins.str
+    def __init__(
+        self,
+        *,
+        quote: builtins.str = ...,
+        method: builtins.str = ...,
+        request: builtins.str = ...,
+        checking_id: builtins.str = ...,
+        unit: builtins.str = ...,
+        amount: builtins.int = ...,
+        state: builtins.str | None = ...,
+        created_time: builtins.int | None = ...,
+        paid_time: builtins.int | None = ...,
+        expiry: builtins.int | None = ...,
+        pubkey: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "created_time", b"created_time", "expiry", b"expiry", "paid_time", b"paid_time", "pubkey", b"pubkey", "state", b"state"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_pubkey", b"_pubkey", "_state", b"_state", "amount", b"amount", "checking_id", b"checking_id", "created_time", b"created_time", "expiry", b"expiry", "method", b"method", "paid_time", b"paid_time", "pubkey", b"pubkey", "quote", b"quote", "request", b"request", "state", b"state", "unit", b"unit"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_created_time", b"_created_time"]) -> typing.Literal["created_time"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_expiry", b"_expiry"]) -> typing.Literal["expiry"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_paid_time", b"_paid_time"]) -> typing.Literal["paid_time"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_pubkey", b"_pubkey"]) -> typing.Literal["pubkey"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_state", b"_state"]) -> typing.Literal["state"] | None: ...
+
+global___Nut04Quote = Nut04Quote
+
+@typing.final
+class BlindedMessage(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AMOUNT_FIELD_NUMBER: builtins.int
+    ID_FIELD_NUMBER: builtins.int
+    B__FIELD_NUMBER: builtins.int
+    WITNESS_FIELD_NUMBER: builtins.int
+    amount: builtins.int
+    id: builtins.str
+    B_: builtins.str
+    witness: builtins.str
+    def __init__(
+        self,
+        *,
+        amount: builtins.int = ...,
+        id: builtins.str = ...,
+        B_: builtins.str = ...,
+        witness: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_witness", b"_witness", "witness", b"witness"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["B_", b"B_", "_witness", b"_witness", "amount", b"amount", "id", b"id", "witness", b"witness"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_witness", b"_witness"]) -> typing.Literal["witness"] | None: ...
+
+global___BlindedMessage = BlindedMessage
+
+@typing.final
+class DLEQ(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    E_FIELD_NUMBER: builtins.int
+    S_FIELD_NUMBER: builtins.int
+    e: builtins.str
+    s: builtins.str
+    def __init__(
+        self,
+        *,
+        e: builtins.str = ...,
+        s: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["e", b"e", "s", b"s"]) -> None: ...
+
+global___DLEQ = DLEQ
+
+@typing.final
+class BlindedSignature(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    ID_FIELD_NUMBER: builtins.int
+    AMOUNT_FIELD_NUMBER: builtins.int
+    C__FIELD_NUMBER: builtins.int
+    DLEQ_FIELD_NUMBER: builtins.int
+    id: builtins.str
+    amount: builtins.int
+    C_: builtins.str
+    @property
+    def dleq(self) -> global___DLEQ: ...
+    def __init__(
+        self,
+        *,
+        id: builtins.str = ...,
+        amount: builtins.int = ...,
+        C_: builtins.str = ...,
+        dleq: global___DLEQ | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_dleq", b"_dleq", "dleq", b"dleq"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["C_", b"C_", "_dleq", b"_dleq", "amount", b"amount", "dleq", b"dleq", "id", b"id"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_dleq", b"_dleq"]) -> typing.Literal["dleq"] | None: ...
+
+global___BlindedSignature = BlindedSignature
+
+@typing.final
+class Nut05Quote(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    QUOTE_FIELD_NUMBER: builtins.int
+    METHOD_FIELD_NUMBER: builtins.int
+    REQUEST_FIELD_NUMBER: builtins.int
+    CHECKING_ID_FIELD_NUMBER: builtins.int
+    UNIT_FIELD_NUMBER: builtins.int
+    AMOUNT_FIELD_NUMBER: builtins.int
+    FEE_RESERVE_FIELD_NUMBER: builtins.int
+    STATE_FIELD_NUMBER: builtins.int
+    CREATED_TIME_FIELD_NUMBER: builtins.int
+    PAID_TIME_FIELD_NUMBER: builtins.int
+    FEE_PAID_FIELD_NUMBER: builtins.int
+    PAYMENT_PREIMAGE_FIELD_NUMBER: builtins.int
+    EXPIRY_FIELD_NUMBER: builtins.int
+    OUTPUTS_FIELD_NUMBER: builtins.int
+    CHANGE_FIELD_NUMBER: builtins.int
+    quote: builtins.str
+    method: builtins.str
+    request: builtins.str
+    checking_id: builtins.str
+    unit: builtins.str
+    amount: builtins.int
+    fee_reserve: builtins.int
+    state: builtins.str
+    created_time: builtins.int
+    paid_time: builtins.int
+    fee_paid: builtins.int
+    payment_preimage: builtins.str
+    expiry: builtins.int
+    @property
+    def outputs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedMessage]: ...
+    @property
+    def change(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedSignature]: ...
+    def __init__(
+        self,
+        *,
+        quote: builtins.str = ...,
+        method: builtins.str = ...,
+        request: builtins.str = ...,
+        checking_id: builtins.str = ...,
+        unit: builtins.str = ...,
+        amount: builtins.int = ...,
+        fee_reserve: builtins.int = ...,
+        state: builtins.str = ...,
+        created_time: builtins.int | None = ...,
+        paid_time: builtins.int | None = ...,
+        fee_paid: builtins.int = ...,
+        payment_preimage: builtins.str | None = ...,
+        expiry: builtins.int | None = ...,
+        outputs: collections.abc.Iterable[global___BlindedMessage] | None = ...,
+        change: collections.abc.Iterable[global___BlindedSignature] | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_payment_preimage", b"_payment_preimage", "created_time", b"created_time", "expiry", b"expiry", "paid_time", b"paid_time", "payment_preimage", b"payment_preimage"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_created_time", b"_created_time", "_expiry", b"_expiry", "_paid_time", b"_paid_time", "_payment_preimage", b"_payment_preimage", "amount", b"amount", "change", b"change", "checking_id", b"checking_id", "created_time", b"created_time", "expiry", b"expiry", "fee_paid", b"fee_paid", "fee_reserve", b"fee_reserve", "method", b"method", "outputs", b"outputs", "paid_time", b"paid_time", "payment_preimage", b"payment_preimage", "quote", b"quote", "request", b"request", "state", b"state", "unit", b"unit"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_created_time", b"_created_time"]) -> typing.Literal["created_time"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_expiry", b"_expiry"]) -> typing.Literal["expiry"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_paid_time", b"_paid_time"]) -> typing.Literal["paid_time"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_payment_preimage", b"_payment_preimage"]) -> typing.Literal["payment_preimage"] | None: ...
+
+global___Nut05Quote = Nut05Quote
+
+@typing.final
+class GetNut04QuoteRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    QUOTE_ID_FIELD_NUMBER: builtins.int
+    quote_id: builtins.str
+    def __init__(
+        self,
+        *,
+        quote_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
+
+global___GetNut04QuoteRequest = GetNut04QuoteRequest
+
+@typing.final
+class GetNut04QuoteResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    QUOTE_FIELD_NUMBER: builtins.int
+    @property
+    def quote(self) -> global___Nut04Quote: ...
+    def __init__(
+        self,
+        *,
+        quote: global___Nut04Quote | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["quote", b"quote"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["quote", b"quote"]) -> None: ...
+
+global___GetNut04QuoteResponse = GetNut04QuoteResponse
+
+@typing.final
+class GetNut05QuoteRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    QUOTE_ID_FIELD_NUMBER: builtins.int
+    quote_id: builtins.str
+    def __init__(
+        self,
+        *,
+        quote_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id"]) -> None: ...
+
+global___GetNut05QuoteRequest = GetNut05QuoteRequest
+
+@typing.final
+class GetNut05QuoteResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    QUOTE_FIELD_NUMBER: builtins.int
+    @property
+    def quote(self) -> global___Nut05Quote: ...
+    def __init__(
+        self,
+        *,
+        quote: global___Nut05Quote | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["quote", b"quote"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["quote", b"quote"]) -> None: ...
+
+global___GetNut05QuoteResponse = GetNut05QuoteResponse
 
 @typing.final
 class UpdateNut04QuoteRequest(google.protobuf.message.Message):

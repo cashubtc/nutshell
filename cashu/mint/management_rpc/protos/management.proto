@@ -13,6 +13,8 @@ service Mint {
     rpc RemoveUrl(UpdateUrlRequest) returns (UpdateResponse) {}
     rpc AddContact(UpdateContactRequest) returns (UpdateResponse) {}
     rpc RemoveContact(UpdateContactRequest) returns (UpdateResponse) {}
+    rpc GetNut04Quote(GetNut04QuoteRequest) returns (GetNut04QuoteResponse) {}
+    rpc GetNut05Quote(GetNut05QuoteRequest) returns (GetNut05QuoteResponse) {}
     rpc UpdateNut04(UpdateNut04Request) returns (UpdateResponse) {}
     rpc UpdateNut05(UpdateNut05Request) returns (UpdateResponse) {}
     rpc UpdateQuoteTtl(UpdateQuoteTtlRequest) returns (UpdateResponse) {}
@@ -23,25 +25,22 @@ service Mint {
 message GetInfoRequest {
 }
 
-// Define the MintInfoContact message
 message MintInfoContact {
-    // Define fields for MintInfoContact as needed
     string method = 1;
     string info = 2;
 }
 
-// Define the GetInfoResponse message
 message GetInfoResponse {
-    optional string name = 1; // Optional field
-    optional string pubkey = 2; // Optional field
-    optional string version = 3; // Optional field
-    optional string description = 4; // Optional field
-    optional string description_long = 5; // Optional field
-    repeated MintInfoContact contact = 6; // Optional list of MintInfoContact
-    optional string motd = 7; // Optional field
-    optional string icon_url = 8; // Optional field
-    repeated string urls = 9; // Optional list of strings
-    optional int64 time = 10; // Optional field (use int64 for larger integers)
+    optional string name = 1;
+    optional string pubkey = 2;
+    optional string version = 3;
+    optional string description = 4;
+    optional string description_long = 5;
+    repeated MintInfoContact contact = 6;
+    optional string motd = 7;
+    optional string icon_url = 8;
+    repeated string urls = 9;
+    optional int64 time = 10;
 }
 
 message UpdateResponse{
@@ -93,10 +92,75 @@ message UpdateNut05Request {
 }
 
 message UpdateQuoteTtlRequest {
-    optional uint64 mint_ttl = 1;
-    optional uint64 melt_ttl = 2;
+    optional uint64 ttl = 1;
 }
 
+message Nut04Quote {
+    string quote = 1;
+    string method = 2;
+    string request = 3;
+    string checking_id = 4;
+    string unit = 5;
+    uint64 amount = 6;
+    optional string state = 7;
+    optional int64 created_time = 8;
+    optional int64 paid_time = 9;
+    optional int64 expiry = 10;
+    optional string pubkey = 13;
+}
+
+message BlindedMessage {
+    int32 amount = 1;
+    string id = 2;
+    string B_ = 3;
+    optional string witness = 4;
+}
+
+message DLEQ {
+    string e = 1;
+    string s = 2;
+}
+
+message BlindedSignature {
+    string id = 1;
+    int32 amount = 2;
+    string C_ = 3;
+    optional DLEQ dleq = 4;
+}
+
+message Nut05Quote {
+    string quote = 1;
+    string method = 2;
+    string request = 3;
+    string checking_id = 4;
+    string unit = 5;
+    int32 amount = 6;
+    int32 fee_reserve = 7;
+    string state = 8;
+    optional int64 created_time = 9;
+    optional int64 paid_time = 10;  
+    int32 fee_paid = 11;   
+    optional string payment_preimage = 12;
+    optional int64 expiry = 13;  
+    repeated BlindedMessage outputs = 14;
+    repeated BlindedSignature change = 15;
+}
+
+message GetNut04QuoteRequest {
+    string quote_id = 1;
+}
+
+message GetNut04QuoteResponse {
+    Nut04Quote quote = 1;
+}
+
+message GetNut05QuoteRequest {
+    string quote_id = 1;
+}
+
+message GetNut05QuoteResponse {
+    Nut05Quote quote = 1;
+}
 
 message UpdateNut04QuoteRequest {
     string quote_id = 1;

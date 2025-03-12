@@ -1,12 +1,11 @@
+import os
+
 import click
 import grpc
-import os
-from functools import wraps
 from click import Context
-from loguru import logger
 
-from cashu.core.logging import configure_logger
-from cashu.mint.management_rpc.protos import management_pb2_grpc, management_pb2
+from cashu.mint.management_rpc.protos import management_pb2, management_pb2_grpc
+
 
 class NaturalOrderGroup(click.Group):
     """For listing commands in help in order of definition"""
@@ -103,4 +102,91 @@ def get_info(ctx: Context):
         click.echo(f"Mint Info:\n{response}")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
-        raise e
+
+@cli.group()
+@click.pass_context
+def update(ctx: Context):
+    """Update server information"""
+    pass
+
+@update.command("motd", help="Set the message of the day.")
+@click.argument("motd")
+@click.pass_context
+def update_motd(ctx: Context, motd: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.UpdateMotd(management_pb2.UpdateMotdRequest(motd))
+        click.echo("Motd successfully updated!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.command("description", help="Update the short description.")
+@click.argument("description")
+@click.pass_context
+def update_short_description(ctx: Context, description: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.UpdateShortDescription(management_pb2.UpdateDescriptionRequest(description))
+        click.echo("Short description successfully updated!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.command("long-description", help="Update the long description.")
+@click.argument("description")
+@click.pass_context
+def update_long_description(ctx: Context, description: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.UpdateLongDescription(management_pb2.UpdateDescriptionRequest(description))
+        click.echo("Long description successfully updated!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.command("icon-url", help="Update the icon url.")
+@click.argument("url")
+@click.pass_context
+def update_icon_url(ctx: Context, url: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.UpdateLongDescription(management_pb2.UpdateIconUrlRequest(icon_url=url))
+        click.echo("Icon url successfully updated!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.command("name", help="Set the Mint's name.")
+@click.argument("name")
+@click.pass_context
+def update_name(ctx: Context, name: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.UpdateName(management_pb2.UpdateNameRequest(name))
+        click.echo("Name successfully updated!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.group()
+@click.pass_context
+def url(ctx: Context):
+    pass
+
+@url.command("add", help="Add a new URL for this Mint.")
+@click.argument("url")
+@click.pass_context
+def add_mint_url(ctx: Context, url: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.AddUrl(management_pb2.UpdateUrlRequest(url))
+        click.echo("Url successfully added!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@url.command("remove", help="Remove a URL of this Mint.")
+@click.argument("url")
+@click.pass_context
+def remove_mint_url(ctx: Context, url: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.RemoveUrl(management_pb2.UpdateUrlRequest(url))
+        click.echo("Url successfully removed!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)

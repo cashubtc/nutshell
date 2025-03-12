@@ -61,6 +61,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
             contact=contact_info,
             nuts=self.mint_features,
             icon_url=settings.mint_info_icon_url,
+            urls=settings.mint_info_urls,
             motd=settings.mint_info_motd,
             time=None,
         )

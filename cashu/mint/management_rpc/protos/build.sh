@@ -4,6 +4,15 @@
 
 BASE_DIR=./cashu/mint/management_rpc/protos
 
+# Check if the googleapis directory exists
+if [ -d "$BASE_DIR/googleapis" ]; then
+  echo "$BASE_DIR/googleapis directory already exists. Skipping clone."
+else
+  echo "Cloning googleapis..."
+  echo "If this doesn't work, clone it manually."
+  git clone https://github.com/googleapis/googleapis.git $BASE_DIR/googleapis
+fi
+
 echo "Ensuring grpcio is installed..."
 poetry add grpcio grpcio-tools
 
