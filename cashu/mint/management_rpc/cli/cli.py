@@ -254,6 +254,7 @@ def update_melt_quote(ctx: Context, quote_id: str, state: str):
 @cli.group()
 @click.pass_context
 def get(ctx: Context):
+    """Get mint information"""
     pass
 
 @get.command("mint-quote", help="Get a mint quote by id.")
