@@ -136,6 +136,8 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         return management_pb2.UpdateResponse()
 
     async def RotateNextKeyset(self, request, context):
+        logger.debug("gRPC RotateNextKeyset has been called")
+        """Cannot implement this yet"""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
