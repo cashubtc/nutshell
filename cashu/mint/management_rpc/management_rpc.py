@@ -98,24 +98,40 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         raise NotImplementedError('Method not implemented!')
 
     async def UpdateQuoteTtl(self, request, context):
+        logger.debug("gRPC UpdateQuoteTtl has been called")
         settings.mint_redis_cache_ttl = request.ttl
         return management_pb2.UpdateResponse()
 
     async def GetNut04Quote(self, request, _):
+        logger.debug("gRPC GetNut04Quote has been called")
         mint_quote = await self.ledger.get_mint_quote(request.quote_id)
-        return management_pb2.GetNut04QuoteResponse(**mint_quote.dict())
+        mint_quote_dict = mint_quote.dict()
+        mint_quote_dict['state'] = str(mint_quote_dict['state'])
+        del mint_quote_dict['mint']
+        del mint_quote_dict['privkey']
+        return management_pb2.GetNut04QuoteResponse(
+            quote=management_pb2.Nut04Quote(**mint_quote_dict)
+        )
 
     async def UpdateNut04Quote(self, request, _):
-        state = MintQuoteState[request.state]
+        logger.debug("gRPC UpdateNut04Quote has been called")
+        state = MintQuoteState(request.state)
         await self.ledger.db_write._update_mint_quote_state(request.quote_id, state)
         return management_pb2.UpdateResponse()
 
     async def GetNut05Quote(self, request, context):
+        logger.debug("gRPC GetNut05Quote has been called")
         melt_quote = await self.ledger.get_melt_quote(request.quote_id)
-        return management_pb2.GetNut05QuoteResponse(**melt_quote.dict())
+        melt_quote_dict = melt_quote.dict()
+        melt_quote_dict['state'] = str(melt_quote_dict['state'])
+        del melt_quote_dict['mint']
+        return management_pb2.GetNut05QuoteResponse(
+            quote=management_pb2.Nut05Quote(**melt_quote_dict)
+        )
 
     async def UpdateNut05Quote(self, request, _):
-        state = MeltQuoteState[request.state]
+        logger.debug("gRPC UpdateNut05Quote has been called")
+        state = MeltQuoteState(request.state)
         await self.ledger.db_write._update_melt_quote_state(request.quote_id, state)
         return management_pb2.UpdateResponse()
 

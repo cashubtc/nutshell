@@ -240,7 +240,7 @@ def update_mint_quote(ctx: Context, quote_id: str, state: str):
 @click.argument("state")
 @click.pass_context
 def update_melt_quote(ctx: Context, quote_id: str, state: str):
-    allowed_states = ["PENDING", "UNPAID", "PAID", "ISSUED"]
+    allowed_states = ["PENDING", "UNPAID", "PAID"]
     if state not in allowed_states:
         click.echo(f"State must be one of: {allowed_states}", err=True)
         ctx.exit(1)
