@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from ..core.base import (
     Amount,
     MeltQuote,
+    PaymentQuoteKind,
     Unit,
 )
 from ..core.models import PostMeltQuoteRequest
@@ -26,6 +27,7 @@ class PaymentQuoteResponse(BaseModel):
     checking_id: str
     amount: Amount
     fee: Amount
+    kind: PaymentQuoteKind = PaymentQuoteKind.REGULAR
 
 
 class InvoiceResponse(BaseModel):
@@ -110,6 +112,7 @@ class PaymentStatus(BaseModel):
 
 class LightningBackend(ABC):
     supports_mpp: bool = False
+    supports_amountless: bool = False
     supports_incoming_payment_stream: bool = False
     supported_units: set[Unit]
     supports_description: bool = False
