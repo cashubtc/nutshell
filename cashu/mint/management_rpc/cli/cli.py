@@ -115,7 +115,7 @@ def update(ctx: Context):
 def update_motd(ctx: Context, motd: str):
     stub = ctx.obj['STUB']
     try:
-        stub.UpdateMotd(management_pb2.UpdateMotdRequest(motd))
+        stub.UpdateMotd(management_pb2.UpdateMotdRequest(motd=motd))
         click.echo("Motd successfully updated!")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
@@ -126,7 +126,7 @@ def update_motd(ctx: Context, motd: str):
 def update_short_description(ctx: Context, description: str):
     stub = ctx.obj['STUB']
     try:
-        stub.UpdateShortDescription(management_pb2.UpdateDescriptionRequest(description))
+        stub.UpdateShortDescription(management_pb2.UpdateDescriptionRequest(description=description))
         click.echo("Short description successfully updated!")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
@@ -137,7 +137,7 @@ def update_short_description(ctx: Context, description: str):
 def update_long_description(ctx: Context, description: str):
     stub = ctx.obj['STUB']
     try:
-        stub.UpdateLongDescription(management_pb2.UpdateDescriptionRequest(description))
+        stub.UpdateLongDescription(management_pb2.UpdateDescriptionRequest(description=description))
         click.echo("Long description successfully updated!")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
@@ -159,7 +159,7 @@ def update_icon_url(ctx: Context, url: str):
 def update_name(ctx: Context, name: str):
     stub = ctx.obj['STUB']
     try:
-        stub.UpdateName(management_pb2.UpdateNameRequest(name))
+        stub.UpdateName(management_pb2.UpdateNameRequest(name=name))
         click.echo("Name successfully updated!")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
@@ -175,7 +175,7 @@ def url(ctx: Context):
 def add_mint_url(ctx: Context, url: str):
     stub = ctx.obj['STUB']
     try:
-        stub.AddUrl(management_pb2.UpdateUrlRequest(url))
+        stub.AddUrl(management_pb2.UpdateUrlRequest(url=url))
         click.echo("Url successfully added!")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
@@ -186,7 +186,94 @@ def add_mint_url(ctx: Context, url: str):
 def remove_mint_url(ctx: Context, url: str):
     stub = ctx.obj['STUB']
     try:
-        stub.RemoveUrl(management_pb2.UpdateUrlRequest(url))
+        stub.RemoveUrl(management_pb2.UpdateUrlRequest(url=url))
         click.echo("Url successfully removed!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.group()
+@click.pass_context
+def contact(context: Context):
+    pass
+
+@contact.command("add", help="Add contact information.")
+@click.argument("method")
+@click.argument("info")
+@click.pass_context
+def add_contact(ctx: Context, method: str, info: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.AddContact(management_pb2.UpdateContactRequest(method=method, info=info))
+        click.echo("Contact successfully added!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@contact.command("remove", help="Remove contact information.")
+@click.argument("method")
+@click.pass_context
+def remove_contact(ctx: Context, method: str):
+    stub = ctx.obj['STUB']
+    try:
+        stub.RemoveContact(management_pb2.UpdateContactRequest(method=method, info=""))
+        click.echo("Contact successfully removed!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.command("mint-quote", help="Set the state for a specific mint quote")
+@click.argument("quote_id")
+@click.argument("state")
+@click.pass_context
+def update_mint_quote(ctx: Context, quote_id: str, state: str):
+    allowed_states = ["PENDING", "UNPAID", "PAID", "ISSUED"]
+    if state not in allowed_states:
+        click.echo(f"state must be one of: {allowed_states}", err=True)
+        ctx.exit(1)
+    stub = ctx.obj['STUB']
+    try:
+        stub.UpdateNut04Quote(management_pb2.UpdateQuoteRequest(quote_id=quote_id, state=state))
+        click.echo("Successfully updated!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.command("melt-quote", help="Set the state for a specific melt quote")
+@click.argument("quote_id")
+@click.argument("state")
+@click.pass_context
+def update_melt_quote(ctx: Context, quote_id: str, state: str):
+    allowed_states = ["PENDING", "UNPAID", "PAID", "ISSUED"]
+    if state not in allowed_states:
+        click.echo(f"State must be one of: {allowed_states}", err=True)
+        ctx.exit(1)
+    stub = ctx.obj['STUB']
+    try:
+        stub.UpdateNut05Quote(management_pb2.UpdateQuoteRequest(quote_id=quote_id, state=state))
+        click.echo("Successfully updated!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)  
+
+@cli.group()
+@click.pass_context
+def get(ctx: Context):
+    pass
+
+@get.command("mint-quote", help="Get a mint quote by id.")
+@click.argument("quote_id")
+@click.pass_context
+def get_mint_quote(ctx: Context, quote_id: str):
+    stub = ctx.obj['STUB']
+    try:
+        mint_quote = stub.GetNut04Quote(management_pb2.GetNut04QuoteRequest(quote_id=quote_id))
+        click.echo(f"mint quote:\n{mint_quote}")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@get.command("melt-quote", help="Get a melt quote by id.")
+@click.argument("quote_id")
+@click.pass_context
+def get_melt_quote(ctx: Context, quote_id: str):
+    stub = ctx.obj['STUB']
+    try:
+        melt_quote = stub.GetNut05Quote(management_pb2.GetNut05QuoteRequest(quote_id=quote_id))
+        click.echo(f"mint quote:\n{melt_quote}")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)

@@ -555,7 +555,7 @@ class GetNut05QuoteResponse(google.protobuf.message.Message):
 global___GetNut05QuoteResponse = GetNut05QuoteResponse
 
 @typing.final
-class UpdateNut04QuoteRequest(google.protobuf.message.Message):
+class UpdateQuoteRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     QUOTE_ID_FIELD_NUMBER: builtins.int
@@ -570,7 +570,7 @@ class UpdateNut04QuoteRequest(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["quote_id", b"quote_id", "state", b"state"]) -> None: ...
 
-global___UpdateNut04QuoteRequest = UpdateNut04QuoteRequest
+global___UpdateQuoteRequest = UpdateQuoteRequest
 
 @typing.final
 class RotateNextKeysetRequest(google.protobuf.message.Message):

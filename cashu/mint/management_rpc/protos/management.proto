@@ -18,7 +18,8 @@ service Mint {
     rpc UpdateNut04(UpdateNut04Request) returns (UpdateResponse) {}
     rpc UpdateNut05(UpdateNut05Request) returns (UpdateResponse) {}
     rpc UpdateQuoteTtl(UpdateQuoteTtlRequest) returns (UpdateResponse) {}
-    rpc UpdateNut04Quote(UpdateNut04QuoteRequest) returns (UpdateNut04QuoteRequest) {}
+    rpc UpdateNut04Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
+    rpc UpdateNut05Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
     rpc RotateNextKeyset(RotateNextKeysetRequest) returns (RotateNextKeysetResponse) {}
 }
 
@@ -162,7 +163,7 @@ message GetNut05QuoteResponse {
     Nut05Quote quote = 1;
 }
 
-message UpdateNut04QuoteRequest {
+message UpdateQuoteRequest {
     string quote_id = 1;
     string state = 2;
 }

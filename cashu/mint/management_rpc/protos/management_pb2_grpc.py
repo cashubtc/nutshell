@@ -111,8 +111,13 @@ class MintStub(object):
                 _registered_method=True)
         self.UpdateNut04Quote = channel.unary_unary(
                 '/management.Mint/UpdateNut04Quote',
-                request_serializer=management__pb2.UpdateNut04QuoteRequest.SerializeToString,
-                response_deserializer=management__pb2.UpdateNut04QuoteRequest.FromString,
+                request_serializer=management__pb2.UpdateQuoteRequest.SerializeToString,
+                response_deserializer=management__pb2.UpdateResponse.FromString,
+                _registered_method=True)
+        self.UpdateNut05Quote = channel.unary_unary(
+                '/management.Mint/UpdateNut05Quote',
+                request_serializer=management__pb2.UpdateQuoteRequest.SerializeToString,
+                response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.RotateNextKeyset = channel.unary_unary(
                 '/management.Mint/RotateNextKeyset',
@@ -220,6 +225,12 @@ class MintServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def UpdateNut05Quote(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def RotateNextKeyset(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -306,8 +317,13 @@ def add_MintServicer_to_server(servicer, server):
             ),
             'UpdateNut04Quote': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateNut04Quote,
-                    request_deserializer=management__pb2.UpdateNut04QuoteRequest.FromString,
-                    response_serializer=management__pb2.UpdateNut04QuoteRequest.SerializeToString,
+                    request_deserializer=management__pb2.UpdateQuoteRequest.FromString,
+                    response_serializer=management__pb2.UpdateResponse.SerializeToString,
+            ),
+            'UpdateNut05Quote': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateNut05Quote,
+                    request_deserializer=management__pb2.UpdateQuoteRequest.FromString,
+                    response_serializer=management__pb2.UpdateResponse.SerializeToString,
             ),
             'RotateNextKeyset': grpc.unary_unary_rpc_method_handler(
                     servicer.RotateNextKeyset,
@@ -745,8 +761,35 @@ class Mint(object):
             request,
             target,
             '/management.Mint/UpdateNut04Quote',
-            management__pb2.UpdateNut04QuoteRequest.SerializeToString,
-            management__pb2.UpdateNut04QuoteRequest.FromString,
+            management__pb2.UpdateQuoteRequest.SerializeToString,
+            management__pb2.UpdateResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateNut05Quote(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/management.Mint/UpdateNut05Quote',
+            management__pb2.UpdateQuoteRequest.SerializeToString,
+            management__pb2.UpdateResponse.FromString,
             options,
             channel_credentials,
             insecure,
