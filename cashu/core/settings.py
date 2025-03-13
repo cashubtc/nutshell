@@ -158,13 +158,13 @@ class MintInformation(CashuSettings):
     mint_info_urls: List[str] = Field(default=None)
 
 class MintManagementRPCSettings(MintSettings):
-    mint_rpc_enable: bool = Field(default=False)
-    mint_rpc_ca: str = Field(default=None)
-    mint_rpc_cert: str = Field(default=None)
-    mint_rpc_key: str = Field(default=None)
-    mint_rpc_addr: str = Field(default="localhost")
-    mint_rpc_port: int = Field(default=8086)
-    mint_rpc_mutual_tls: bool = Field(default=True)
+    mint_rpc_server_enable: bool = Field(default=False)
+    mint_rpc_server_ca: str = Field(default=None)
+    mint_rpc_server_cert: str = Field(default=None)
+    mint_rpc_server_key: str = Field(default=None)
+    mint_rpc_server_addr: str = Field(default="localhost")
+    mint_rpc_server_port: int = Field(default=8086)
+    mint_rpc_server_mutual_tls: bool = Field(default=True)
 
 class WalletSettings(CashuSettings):
     tor: bool = Field(default=False)

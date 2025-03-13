@@ -144,18 +144,17 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-# Can you write code to verify the existance of the paths `mint_rpc_key` `mint_rpc_ca` and `mint_rpc_cert`
 async def serve(ledger: Ledger):
-    host = settings.mint_rpc_addr
-    port = settings.mint_rpc_port
+    host = settings.mint_rpc_server_addr
+    port = settings.mint_rpc_server_port
     server = grpc.aio.server()
     management_pb2_grpc.add_MintServicer_to_server(MintManagementRPC(ledger=ledger), server)
 
-    if settings.mint_rpc_mutual_tls:
+    if settings.mint_rpc_server_mutual_tls:
         # Verify the existence of the required paths
-        mint_rpc_key_path = settings.mint_rpc_key
-        mint_rpc_ca_path = settings.mint_rpc_ca
-        mint_rpc_cert_path = settings.mint_rpc_cert
+        mint_rpc_key_path = settings.mint_rpc_server_key
+        mint_rpc_ca_path = settings.mint_rpc_server_ca
+        mint_rpc_cert_path = settings.mint_rpc_server_cert
 
         if not all(os.path.exists(path) if path else False for path in [mint_rpc_key_path, mint_rpc_ca_path, mint_rpc_cert_path]):
             logger.error("One or more required files for mTLS are missing:")

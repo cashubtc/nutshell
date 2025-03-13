@@ -38,7 +38,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await start_mint()
     if settings.mint_require_auth:
         await start_auth()
-    if settings.mint_rpc_enable:
+    if settings.mint_rpc_server_enable:
         await start_management_rpc()
     try:
         yield
