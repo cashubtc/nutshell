@@ -1,6 +1,7 @@
 
-import grpc
 import os
+
+import grpc
 from loguru import logger
 
 import cashu.mint.management_rpc.protos.management_pb2 as management_pb2
