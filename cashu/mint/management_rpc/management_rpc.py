@@ -1,5 +1,6 @@
 
 import grpc
+import os
 from loguru import logger
 
 import cashu.mint.management_rpc.protos.management_pb2 as management_pb2
@@ -142,15 +143,40 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-
+# Can you write code to verify the existance of the paths `mint_rpc_key` `mint_rpc_ca` and `mint_rpc_cert`
 async def serve(ledger: Ledger):
     host = settings.mint_rpc_addr
     port = settings.mint_rpc_port
-
-    logger.info(f"Starting Management RPC service on {host}:{port}")
     server = grpc.aio.server()
     management_pb2_grpc.add_MintServicer_to_server(MintManagementRPC(ledger=ledger), server)
-    server.add_insecure_port(f"{host}:{port}")
+
+    if settings.mint_rpc_mutual_tls:
+        # Verify the existence of the required paths
+        mint_rpc_key_path = settings.mint_rpc_key
+        mint_rpc_ca_path = settings.mint_rpc_ca
+        mint_rpc_cert_path = settings.mint_rpc_cert
+
+        if not all(os.path.exists(path) if path else False for path in [mint_rpc_key_path, mint_rpc_ca_path, mint_rpc_cert_path]):
+            logger.error("One or more required files for mTLS are missing:")
+            if not mint_rpc_key_path or not os.path.exists(mint_rpc_key_path):
+                logger.error(f"Missing key file: {mint_rpc_key_path}")
+            if not mint_rpc_ca_path or not os.path.exists(mint_rpc_ca_path):
+                logger.error(f"Missing CA file: {mint_rpc_ca_path}")
+            if not mint_rpc_cert_path or not os.path.exists(mint_rpc_cert_path):
+                logger.error(f"Missing cert file: {mint_rpc_cert_path}")
+            raise FileNotFoundError("Required mTLS files are missing. Please check the paths.")
+
+        logger.info(f"Starting mTLS Management RPC service on {host}:{port}")
+        # Load server credentials
+        server_credentials = grpc.ssl_server_credentials(
+            ((open(mint_rpc_key_path, 'rb').read(), open(mint_rpc_cert_path, 'rb').read()),),
+            root_certificates=open(mint_rpc_ca_path, 'rb').read(),
+            require_client_auth=True,
+        )
+        server.add_secure_port(f"{host}:{port}", server_credentials)
+    else:
+        logger.info(f"Starting INSECURE Management RPC service on {host}:{port}")
+        server.add_insecure_port(f"{host}:{port}")
     
     await server.start()
     return server
