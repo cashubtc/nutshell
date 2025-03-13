@@ -3,8 +3,9 @@
 
 import asyncio
 import importlib
-from typing import Dict
 from copy import copy
+from typing import Dict
+
 from loguru import logger
 
 import cashu.mint.management_rpc.management_rpc as management_rpc
