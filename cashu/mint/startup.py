@@ -4,7 +4,7 @@
 import asyncio
 import importlib
 from typing import Dict
-
+from copy import copy
 from loguru import logger
 
 import cashu.mint.management_rpc.management_rpc as management_rpc
@@ -128,10 +128,9 @@ async def shutdown_mint():
     logger.remove()
 
 rpc_server = None
-
 async def start_management_rpc():
     global rpc_server
-    rpc_server = await management_rpc.serve(ledger)
+    rpc_server = await management_rpc.serve(copy(ledger))
 
 async def shutdown_management_rpc():
     if rpc_server:
