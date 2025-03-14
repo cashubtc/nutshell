@@ -67,14 +67,24 @@ from .events.events import LedgerEventManager
 from .features import LedgerFeatures
 from .tasks import LedgerTasks
 from .verification import LedgerVerification
+from .watchdog import LedgerWatchdog
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures):
+class Ledger(
+    LedgerVerification,
+    LedgerSpendingConditions,
+    LedgerTasks,
+    LedgerFeatures,
+    LedgerWatchdog,
+):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
+    db: Database
     db_read: DbReadHelper
+    db_write: DbWriteHelper
     invoice_listener_tasks: List[asyncio.Task] = []
+    watchdog_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
     pubkey: PublicKey
 
@@ -95,6 +105,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.db_read: DbReadHelper
         self.locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
         self.invoice_listener_tasks: List[asyncio.Task] = []
+        self.watchdog_tasks: List[asyncio.Task] = []
 
         if not seed:
             raise Exception("seed not set")
@@ -127,6 +138,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.db_read = DbReadHelper(self.db, self.crud)
         self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
 
+        LedgerWatchdog.__init__(self)
+
     # ------- STARTUP -------
 
     async def startup_ledger(self) -> None:
@@ -134,6 +147,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         await self._check_backends()
         await self._check_pending_proofs_and_melt_quotes()
         self.invoice_listener_tasks = await self.dispatch_listeners()
+        if settings.mint_watchdog_enabled:
+            self.watchdog_tasks = await self.dispatch_watchdogs()
 
     async def _startup_keysets(self) -> None:
         await self.init_keysets()
@@ -155,13 +170,15 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         f" working properly: '{status.error_message}'"
                     )
                     exit(1)
-                logger.info(f"Backend balance: {status.balance} {unit.name}")
+                logger.info(f"Backend balance: {status.balance}")
 
         logger.info(f"Data dir: {settings.cashu_dir}")
 
     async def shutdown_ledger(self) -> None:
         await self.db.engine.dispose()
         for task in self.invoice_listener_tasks:
+            task.cancel()
+        for task in self.watchdog_tasks:
             task.cancel()
 
     async def _check_pending_proofs_and_melt_quotes(self):
@@ -323,9 +340,9 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             raise KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
-    async def get_balance(self, keyset: MintKeyset) -> int:
-        """Returns the balance of the mint."""
-        return await self.crud.get_balance(keyset=keyset, db=self.db)
+    async def get_balance(self, unit: Unit) -> Amount:
+        """Returns the balance of the mint for this unit."""
+        return await self.crud.get_unit_balance(unit=unit, db=self.db)
 
     # ------- ECASH -------
 
@@ -342,6 +359,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
+        sum_proofs = sum([p.amount for p in proofs])
+        fees_proofs = self.get_fees_for_proofs(proofs)
         async with self.db.get_connection(conn) as conn:
             # store in db
             for p in proofs:
@@ -354,6 +373,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                         Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
                     )
                 )
+            await self.crud.bump_keyset_balance(
+                keyset=self.keyset, amount=-sum_proofs, db=self.db, conn=conn
+            )
+            await self.crud.bump_keyset_fees_paid(
+                keyset=self.keyset, amount=fees_proofs, db=self.db, conn=conn
+            )
 
     async def _generate_change_promises(
         self,
@@ -452,13 +477,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         ):
             raise NotAllowedError("Backend does not support descriptions.")
 
-        # MINT_MAX_BALANCE refers to sat (for now)
-        if settings.mint_max_balance and unit == Unit.sat:
-            # get next active keyset for unit
-            active_keyset: MintKeyset = next(
-                filter(lambda k: k.active and k.unit == unit, self.keysets.values())
-            )
-            balance = await self.get_balance(active_keyset)
+        # Check maximum balance.
+        # TODO: Allow setting MINT_MAX_BALANCE per unit
+        if settings.mint_max_balance:
+            balance = await self.get_balance(unit)
             if balance + quote_request.amount > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
 
@@ -1212,6 +1234,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             promises.append((keyset_id, B_, output.amount, C_, e, s))
 
         keyset = keyset or self.keyset
+        sum_outputs = sum([output.amount for output in outputs])
 
         signatures = []
         async with self.db.get_connection(conn) as conn:
@@ -1236,4 +1259,10 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                     dleq=DLEQ(e=e.serialize(), s=s.serialize()),
                 )
                 signatures.append(signature)
+
+            # bump keyset balance
+            await self.crud.bump_keyset_balance(
+                db=self.db, keyset=keyset, amount=sum_outputs, conn=conn
+            )
+
             return signatures

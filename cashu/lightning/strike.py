@@ -128,7 +128,7 @@ class StrikeWallet(LightningBackend):
         except Exception as exc:
             return StatusResponse(
                 error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
 
         try:
@@ -138,16 +138,14 @@ class StrikeWallet(LightningBackend):
                 error_message=(
                     f"Failed to connect to {self.endpoint}, got: '{r.text[:200]}...'"
                 ),
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
 
         for balance in data:
             if balance["currency"] == self.currency:
                 return StatusResponse(
                     error_message=None,
-                    balance=Amount.from_float(
-                        float(balance["total"]), self.unit
-                    ).amount,
+                    balance=Amount.from_float(float(balance["total"]), self.unit),
                 )
 
         # if no the unit is USD but no USD balance was found, we try USDT
@@ -157,14 +155,12 @@ class StrikeWallet(LightningBackend):
                     self.currency = USDT
                     return StatusResponse(
                         error_message=None,
-                        balance=Amount.from_float(
-                            float(balance["total"]), self.unit
-                        ).amount,
+                        balance=Amount.from_float(float(balance["total"]), self.unit),
                     )
 
         return StatusResponse(
             error_message=f"Could not find balance for currency {self.currency}",
-            balance=0,
+            balance=Amount(self.unit, 0),
         )
 
     async def create_invoice(

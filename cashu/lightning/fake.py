@@ -59,7 +59,31 @@ class FakeWallet(LightningBackend):
         self.unit = unit
 
     async def status(self) -> StatusResponse:
-        return StatusResponse(error_message=None, balance=1337)
+        match self.unit:
+            case Unit.sat:
+                return StatusResponse(
+                    error_message=None,
+                    balance=Amount(self.unit, settings.fakewallet_balance_sat),
+                )
+            case Unit.msat:
+                return StatusResponse(
+                    error_message=None,
+                    balance=Amount(self.unit, settings.fakewallet_balance_sat * 1000),
+                )
+            case Unit.usd:
+                return StatusResponse(
+                    error_message=None,
+                    balance=Amount(self.unit, settings.fakewallet_balance_usd),
+                )
+            case Unit.eur:
+                return StatusResponse(
+                    error_message=None,
+                    balance=Amount(self.unit, settings.fakewallet_balance_eur),
+                )
+            case _:
+                return StatusResponse(
+                    error_message=None, balance=Amount(self.unit, 1337)
+                )
 
     async def mark_invoice_paid(self, invoice: Bolt11, delay=True) -> None:
         if invoice in self.paid_invoices_incoming:
