@@ -358,6 +358,8 @@ class Ledger(
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
+        sum_proofs = sum([p.amount for p in proofs])
+        fees_proofs = self.get_fees_for_proofs(proofs)
         async with self.db.get_connection(conn) as conn:
             # store in db
             for p in proofs:
@@ -370,6 +372,12 @@ class Ledger(
                         Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
                     )
                 )
+            await self.crud.bump_keyset_balance(
+                keyset=self.keyset, amount=-sum_proofs, db=self.db, conn=conn
+            )
+            await self.crud.bump_keyset_fees_paid(
+                keyset=self.keyset, amount=fees_proofs, db=self.db, conn=conn
+            )
 
     async def _generate_change_promises(
         self,
@@ -1223,6 +1231,7 @@ class Ledger(
             promises.append((keyset_id, B_, output.amount, C_, e, s))
 
         keyset = keyset or self.keyset
+        sum_outputs = sum([output.amount for output in outputs])
 
         signatures = []
         async with self.db.get_connection(conn) as conn:
@@ -1247,4 +1256,10 @@ class Ledger(
                     dleq=DLEQ(e=e.serialize(), s=s.serialize()),
                 )
                 signatures.append(signature)
+
+            # bump keyset balance
+            await self.crud.bump_keyset_balance(
+                db=self.db, keyset=keyset, amount=sum_outputs, conn=conn
+            )
+
             return signatures

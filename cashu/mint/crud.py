@@ -120,6 +120,26 @@ class LedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
+    async def bump_keyset_balance(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def bump_keyset_fees_paid(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
     async def get_balance(
         self,
         keyset: MintKeyset,
@@ -672,8 +692,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('keysets')}
-            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk, amounts)
-            VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk, :amounts)
+            (id, seed, encrypted_seed, seed_encryption_method, derivation_path, valid_from, valid_to, first_seen, active, version, unit, input_fee_ppk, amounts, balance)
+            VALUES (:id, :seed, :encrypted_seed, :seed_encryption_method, :derivation_path, :valid_from, :valid_to, :first_seen, :active, :version, :unit, :input_fee_ppk, :amounts, :balance)
             """,
             {
                 "id": keyset.id,
@@ -693,7 +713,42 @@ class LedgerCrudSqlite(LedgerCrud):
                 "unit": keyset.unit.name,
                 "input_fee_ppk": keyset.input_fee_ppk,
                 "amounts": json.dumps(keyset.amounts),
+                "balance": keyset.balance,
             },
+        )
+
+    async def bump_keyset_balance(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('keysets')}
+            SET balance = balance + :amount
+            WHERE id = :id
+            """,
+            {"amount": amount, "id": keyset.id},
+        )
+
+    async def bump_keyset_fees_paid(
+        self,
+        *,
+        db: Database,
+        keyset: MintKeyset,
+        amount: int,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            UPDATE {db.table_with_schema('keysets')}
+            SET fees_paid = fees_paid + :amount
+            WHERE id = :id
+            """,
+            {"amount": amount, "id": keyset.id},
         )
 
     async def get_balance(
@@ -704,11 +759,11 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> Amount:
         row = await (conn or db).fetchone(
             f"""
-            SELECT balance FROM {db.table_with_schema('balance')}
-            WHERE keyset = :keyset
+            SELECT balance FROM {db.table_with_schema('keysets')}
+            WHERE id = :id
             """,
             {
-                "keyset": keyset.id,
+                "id": keyset.id,
             },
         )
 
@@ -803,6 +858,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 "version": keyset.version,
                 "unit": keyset.unit.name,
                 "input_fee_ppk": keyset.input_fee_ppk,
+                "balance": keyset.balance,
             },
         )
 

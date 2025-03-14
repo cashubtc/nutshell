@@ -789,6 +789,7 @@ class MintKeyset:
     first_seen: Optional[str] = None
     version: Optional[str] = None
     amounts: List[int]
+    balance: int
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -808,6 +809,8 @@ class MintKeyset:
         version: Optional[str] = None,
         input_fee_ppk: Optional[int] = None,
         id: str = "",
+        balance: int = 0,
+        fees_paid: int = 0,
     ):
         DEFAULT_SEED = "supersecretprivatekey"
         if seed == DEFAULT_SEED:
@@ -840,6 +843,8 @@ class MintKeyset:
         self.first_seen = first_seen
         self.active = bool(active) if active is not None else False
         self.version = version or settings.version
+        self.balance = balance
+        self.fees_paid = fees_paid
         self.input_fee_ppk = input_fee_ppk or 0
 
         if self.input_fee_ppk < 0:
@@ -893,6 +898,8 @@ class MintKeyset:
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],
             amounts=json.loads(row["amounts"]),
+            balance=row["balance"],
+            fees_paid=row["fees_paid"],
         )
 
     @property
