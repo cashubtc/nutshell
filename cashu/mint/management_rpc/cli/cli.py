@@ -1,9 +1,9 @@
 import os
+from typing import Optional
 
 import click
 import grpc
 from click import Context
-from typing import Optional
 
 from cashu.mint.management_rpc.protos import management_pb2, management_pb2_grpc
 
@@ -265,6 +265,23 @@ def update_lightning_fee(ctx: Context, fee_percent: Optional[float], min_fee_res
             )
         )
         click.echo("Lightning fee successfully updated!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.command("auth", help="Set the limits for auth requests")
+@click.argument("rate_limit_per_minute")
+@click.argument("max_tokens_per_request")
+@click.pass_context
+def update_auth_limits(ctx: Context, rate_limit_per_minute: int, max_tokens_per_request: int):
+    stub = ctx.obj['STUB']
+    try:
+        stub.UpdateAuthLimits(
+            management_pb2.UpdateAuthLimitsRequest(
+                auth_rate_limit_per_minute=rate_limit_per_minute,
+                auth_max_blind_tokens=max_tokens_per_request,
+            )
+        )
+        click.echo("Rate limit per minute successfully updated!")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
 
