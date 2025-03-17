@@ -109,8 +109,8 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         mint_quote = await self.ledger.get_mint_quote(request.quote_id)
         mint_quote_dict = mint_quote.dict()
         mint_quote_dict['state'] = str(mint_quote_dict['state'])
-        del mint_quote_dict['mint']
-        del mint_quote_dict['privkey']
+        del mint_quote_dict['mint'] # unused
+        del mint_quote_dict['privkey'] # unused
         return management_pb2.GetNut04QuoteResponse(
             quote=management_pb2.Nut04Quote(**mint_quote_dict)
         )
