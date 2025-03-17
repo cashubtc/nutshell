@@ -21,6 +21,7 @@ service Mint {
     rpc UpdateNut04Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
     rpc UpdateNut05Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
     rpc RotateNextKeyset(RotateNextKeysetRequest) returns (RotateNextKeysetResponse) {}
+    rpc UpdateLightningFee(UpdateLightningFeeRequest) returns (UpdateResponse) {}
 }
 
 message GetInfoRequest {
@@ -180,4 +181,10 @@ message RotateNextKeysetResponse {
     string unit = 2;
     uint32 max_order = 3;
     uint64 input_fee_ppk = 4;
+}
+
+
+message UpdateLightningFeeRequest {
+    optional double fee_percent = 1;
+    optional uint64 fee_min_reserve = 2;
 }

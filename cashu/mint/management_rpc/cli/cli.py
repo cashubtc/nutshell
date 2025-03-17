@@ -3,6 +3,7 @@ import os
 import click
 import grpc
 from click import Context
+from typing import Optional
 
 from cashu.mint.management_rpc.protos import management_pb2, management_pb2_grpc
 
@@ -235,7 +236,7 @@ def update_mint_quote(ctx: Context, quote_id: str, state: str):
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
 
-@update.command("melt-quote", help="Set the state for a specific melt quote")
+@update.command("melt-quote", help="Set the state for a specific melt quote.")
 @click.argument("quote_id")
 @click.argument("state")
 @click.pass_context
@@ -249,7 +250,23 @@ def update_melt_quote(ctx: Context, quote_id: str, state: str):
         stub.UpdateNut05Quote(management_pb2.UpdateQuoteRequest(quote_id=quote_id, state=state))
         click.echo("Successfully updated!")
     except grpc.RpcError as e:
-        click.echo(f"Error: {e.details()}", err=True)  
+        click.echo(f"Error: {e.details()}", err=True)
+
+@update.command("lightning-fee", help="Set new lightning fees.")
+@click.argument("fee_percent")
+@click.argument("min_fee_reserve")
+@click.pass_context
+def update_lightning_fee(ctx: Context, fee_percent: Optional[float], min_fee_reserve: Optional[int]):
+    stub = ctx.obj['STUB']
+    try:
+        stub.UpdateLightningFee(management_pb2.UpdateLightningFeeRequest(
+                fee_percent=fee_percent,
+                fee_min_reserve=min_fee_reserve,
+            )
+        )
+        click.echo("Lightning fee successfully updated!")
+    except grpc.RpcError as e:
+        click.echo(f"Error: {e.details()}", err=True)
 
 @cli.group()
 @click.pass_context

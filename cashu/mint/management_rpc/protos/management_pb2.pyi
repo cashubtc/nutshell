@@ -5,11 +5,10 @@ isort:skip_file
 
 import builtins
 import collections.abc
-import typing
-
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+import typing
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
@@ -621,3 +620,26 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal["id", b"id", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
 
 global___RotateNextKeysetResponse = RotateNextKeysetResponse
+
+@typing.final
+class UpdateLightningFeeRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    FEE_PERCENT_FIELD_NUMBER: builtins.int
+    FEE_MIN_RESERVE_FIELD_NUMBER: builtins.int
+    fee_percent: builtins.float
+    fee_min_reserve: builtins.int
+    def __init__(
+        self,
+        *,
+        fee_percent: builtins.float | None = ...,
+        fee_min_reserve: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_fee_min_reserve", b"_fee_min_reserve", "_fee_percent", b"_fee_percent", "fee_min_reserve", b"fee_min_reserve", "fee_percent", b"fee_percent"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_fee_min_reserve", b"_fee_min_reserve", "_fee_percent", b"_fee_percent", "fee_min_reserve", b"fee_min_reserve", "fee_percent", b"fee_percent"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_fee_min_reserve", b"_fee_min_reserve"]) -> typing.Literal["fee_min_reserve"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_fee_percent", b"_fee_percent"]) -> typing.Literal["fee_percent"] | None: ...
+
+global___UpdateLightningFeeRequest = UpdateLightningFeeRequest

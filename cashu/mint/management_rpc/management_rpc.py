@@ -121,7 +121,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         await self.ledger.db_write._update_mint_quote_state(request.quote_id, state)
         return management_pb2.UpdateResponse()
 
-    async def GetNut05Quote(self, request, context):
+    async def GetNut05Quote(self, request, _):
         logger.debug("gRPC GetNut05Quote has been called")
         melt_quote = await self.ledger.get_melt_quote(request.quote_id)
         melt_quote_dict = melt_quote.dict()
@@ -143,6 +143,16 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
+
+    async def UpdateLightningFee(self, request, _):
+        logger.debug("gRPC UpdateLightningFee has been called")
+        if request.fee_percent:
+            settings.lightning_fee_percent = request.fee_percent
+        elif request.fee_min_reserve:
+            settings.lightning_reserve_fee_min = request.fee_min_reserve
+        else:
+            raise Exception("No fee specified")
+        return management_pb2.UpdateResponse()
 
 async def serve(ledger: Ledger):
     host = settings.mint_rpc_server_addr
