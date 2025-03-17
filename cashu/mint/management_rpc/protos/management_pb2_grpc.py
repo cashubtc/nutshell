@@ -129,6 +129,11 @@ class MintStub(object):
                 request_serializer=management__pb2.UpdateLightningFeeRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
+        self.UpdateAuthLimits = channel.unary_unary(
+                '/management.Mint/UpdateAuthLimits',
+                request_serializer=management__pb2.UpdateAuthLimitsRequest.SerializeToString,
+                response_deserializer=management__pb2.UpdateResponse.FromString,
+                _registered_method=True)
 
 
 class MintServicer(object):
@@ -248,6 +253,12 @@ class MintServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def UpdateAuthLimits(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_MintServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -344,6 +355,11 @@ def add_MintServicer_to_server(servicer, server):
             'UpdateLightningFee': grpc.unary_unary_rpc_method_handler(
                     servicer.UpdateLightningFee,
                     request_deserializer=management__pb2.UpdateLightningFeeRequest.FromString,
+                    response_serializer=management__pb2.UpdateResponse.SerializeToString,
+            ),
+            'UpdateAuthLimits': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateAuthLimits,
+                    request_deserializer=management__pb2.UpdateAuthLimitsRequest.FromString,
                     response_serializer=management__pb2.UpdateResponse.SerializeToString,
             ),
     }
@@ -859,6 +875,33 @@ class Mint(object):
             target,
             '/management.Mint/UpdateLightningFee',
             management__pb2.UpdateLightningFeeRequest.SerializeToString,
+            management__pb2.UpdateResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateAuthLimits(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/management.Mint/UpdateAuthLimits',
+            management__pb2.UpdateAuthLimitsRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
             channel_credentials,

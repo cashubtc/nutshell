@@ -153,6 +153,16 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         else:
             raise Exception("No fee specified")
         return management_pb2.UpdateResponse()
+    
+    async def UpdateAuthLimits(self, request, _):
+        logger.debug("gRPC UpdateAuthLimits has been called")
+        if request.auth_rate_limit_per_minute:
+            settings.mint_auth_rate_limit_per_minute = request.auth_rate_limit_per_minute
+        elif request.auth_max_blind_tokens:
+            settings.mint_auth_max_blind_tokens = request.auth_max_blind_tokens
+        else:
+            raise Exception("No auth limit was specified")
+        return management_pb2.UpdateResponse()
 
 async def serve(ledger: Ledger):
     host = settings.mint_rpc_server_addr

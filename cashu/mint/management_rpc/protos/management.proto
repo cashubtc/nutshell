@@ -22,6 +22,7 @@ service Mint {
     rpc UpdateNut05Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
     rpc RotateNextKeyset(RotateNextKeysetRequest) returns (RotateNextKeysetResponse) {}
     rpc UpdateLightningFee(UpdateLightningFeeRequest) returns (UpdateResponse) {}
+    rpc UpdateAuthLimits(UpdateAuthLimitsRequest) returns (UpdateResponse) {}
 }
 
 message GetInfoRequest {
@@ -187,4 +188,9 @@ message RotateNextKeysetResponse {
 message UpdateLightningFeeRequest {
     optional double fee_percent = 1;
     optional uint64 fee_min_reserve = 2;
+}
+
+message UpdateAuthLimitsRequest {
+    optional uint64 auth_rate_limit_per_minute = 1;
+    optional uint64 auth_max_blind_tokens = 2;
 }

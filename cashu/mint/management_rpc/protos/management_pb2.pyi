@@ -643,3 +643,26 @@ class UpdateLightningFeeRequest(google.protobuf.message.Message):
     def WhichOneof(self, oneof_group: typing.Literal["_fee_percent", b"_fee_percent"]) -> typing.Literal["fee_percent"] | None: ...
 
 global___UpdateLightningFeeRequest = UpdateLightningFeeRequest
+
+@typing.final
+class UpdateAuthLimitsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AUTH_RATE_LIMIT_PER_MINUTE_FIELD_NUMBER: builtins.int
+    AUTH_MAX_BLIND_TOKENS_FIELD_NUMBER: builtins.int
+    auth_rate_limit_per_minute: builtins.int
+    auth_max_blind_tokens: builtins.int
+    def __init__(
+        self,
+        *,
+        auth_rate_limit_per_minute: builtins.int | None = ...,
+        auth_max_blind_tokens: builtins.int | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing.Literal["_auth_max_blind_tokens", b"_auth_max_blind_tokens", "_auth_rate_limit_per_minute", b"_auth_rate_limit_per_minute", "auth_max_blind_tokens", b"auth_max_blind_tokens", "auth_rate_limit_per_minute", b"auth_rate_limit_per_minute"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_auth_max_blind_tokens", b"_auth_max_blind_tokens", "_auth_rate_limit_per_minute", b"_auth_rate_limit_per_minute", "auth_max_blind_tokens", b"auth_max_blind_tokens", "auth_rate_limit_per_minute", b"auth_rate_limit_per_minute"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_auth_max_blind_tokens", b"_auth_max_blind_tokens"]) -> typing.Literal["auth_max_blind_tokens"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_auth_rate_limit_per_minute", b"_auth_rate_limit_per_minute"]) -> typing.Literal["auth_rate_limit_per_minute"] | None: ...
+
+global___UpdateAuthLimitsRequest = UpdateAuthLimitsRequest
