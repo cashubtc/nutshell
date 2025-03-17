@@ -75,9 +75,9 @@ def cli(
     ctx.ensure_object(dict)
     if not insecure:
         # Verify the existence of the paths
-        for path in [ca_cert_path, client_key_path, client_cert_path]:
+        for (what, path) in [("CA certificate", ca_cert_path), ("client key", client_key_path), ("client certificate", client_cert_path)]:
             if not path or not os.path.exists(path):
-                click.echo(f"Error: The path '{path}' does not exist.", err=True)
+                click.echo(f"Error: Couldn't get {what}. The path '{path}' does not exist.", err=True)
                 ctx.exit(1)
 
         with open(client_key_path, "rb") as key_file, open(client_cert_path, "rb") as cert_file, open(ca_cert_path, "rb") as ca_file:
