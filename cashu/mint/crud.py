@@ -1,6 +1,6 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..core.base import (
     Amount,
@@ -32,6 +32,7 @@ class LedgerCrud(ABC):
         *,
         db: Database,
         id: str = "",
+        unit: str = "",
         derivation_path: str = "",
         seed: str = "",
         conn: Optional[Connection] = None,
@@ -145,15 +146,7 @@ class LedgerCrud(ABC):
         keyset: MintKeyset,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Amount: ...
-
-    @abstractmethod
-    async def get_unit_balance(
-        self,
-        unit: Unit,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> Amount: ...
+    ) -> Tuple[Amount, Amount]: ...
 
     @abstractmethod
     async def store_promise(
@@ -267,7 +260,8 @@ class LedgerCrud(ABC):
     async def store_balance_log(
         self,
         backend_balance: Amount,
-        mint_balance: Amount,
+        keyset_balance: Amount,
+        keyset_fees_paid: Amount,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None: ...
@@ -756,10 +750,10 @@ class LedgerCrudSqlite(LedgerCrud):
         keyset: MintKeyset,
         db: Database,
         conn: Optional[Connection] = None,
-    ) -> Amount:
+    ) -> Tuple[Amount, Amount]:
         row = await (conn or db).fetchone(
             f"""
-            SELECT balance FROM {db.table_with_schema('keysets')}
+            SELECT balance, fees_paid FROM {db.table_with_schema('keysets')}
             WHERE id = :id
             """,
             {
@@ -768,24 +762,11 @@ class LedgerCrudSqlite(LedgerCrud):
         )
 
         if row is None:
-            return Amount(keyset.unit, 0)
+            return Amount(keyset.unit, 0), Amount(keyset.unit, 0)
 
-        # sqlalchemy index of first element
-        key = next(iter(row))
-        return Amount(keyset.unit, int(row[key]))
-
-    async def get_unit_balance(
-        self,
-        unit: Unit,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> Amount:
-        keysets = await self.get_keyset(db=db, unit=unit.name, conn=conn)
-        balance = Amount(unit, 0)
-        for keyset in keysets:
-            balance += await self.get_balance(keyset, db=db, conn=conn)
-
-        return balance
+        return Amount(keyset.unit, int(row["balance"])), Amount(
+            keyset.unit, int(row["fees_paid"])
+        )
 
     async def get_keyset(
         self,
@@ -880,23 +861,25 @@ class LedgerCrudSqlite(LedgerCrud):
     async def store_balance_log(
         self,
         backend_balance: Amount,
-        mint_balance: Amount,
+        keyset_balance: Amount,
+        keyset_fees_paid: Amount,
         db: Database,
         conn: Optional[Connection] = None,
     ):
-        if backend_balance.unit != mint_balance.unit:
+        if backend_balance.unit != keyset_balance.unit:
             raise ValueError("Units do not match")
 
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('balance_log')}
-            (unit, backend_balance, mint_balance, time)
-            VALUES (:unit, :backend_balance, :mint_balance, :time)
+            (unit, backend_balance, keyset_balance, keyset_fees_paid, time)
+            VALUES (:unit, :backend_balance, :keyset_balance, :keyset_fees_paid, :time)
             """,
             {
                 "unit": backend_balance.unit.name,
                 "backend_balance": backend_balance.amount,
-                "mint_balance": mint_balance.amount,
+                "keyset_balance": keyset_balance.amount,
+                "keyset_fees_paid": keyset_fees_paid.amount,
                 "time": db.to_timestamp(db.timestamp_now_str()),
             },
         )

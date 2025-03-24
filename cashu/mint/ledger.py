@@ -339,9 +339,9 @@ class Ledger(
             raise KeysetError("no public keys for this keyset")
         return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
-    async def get_balance(self, unit: Unit) -> Amount:
+    async def get_balance(self, unit: Unit) -> Tuple[Amount, Amount]:
         """Returns the balance of the mint for this unit."""
-        return await self.crud.get_unit_balance(unit=unit, db=self.db)
+        return await self.get_unit_balance_and_fees(unit=unit, db=self.db)
 
     # ------- ECASH -------
 
@@ -479,7 +479,7 @@ class Ledger(
         # Check maximum balance.
         # TODO: Allow setting MINT_MAX_BALANCE per unit
         if settings.mint_max_balance:
-            balance = await self.get_balance(unit)
+            balance, fees_paid = await self.get_unit_balance_and_fees(unit, db=self.db)
             if balance + quote_request.amount > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
 

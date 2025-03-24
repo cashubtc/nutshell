@@ -219,8 +219,9 @@ async def test_generate_change_promises_returns_empty_if_no_outputs(ledger: Ledg
 @pytest.mark.asyncio
 async def test_get_balance(ledger: Ledger):
     unit = Unit["sat"]
-    balance = await ledger.get_balance(unit)
+    balance, fees_paid = await ledger.get_balance(unit)
     assert balance == 0
+    assert fees_paid == 0
 
 
 @pytest.mark.asyncio

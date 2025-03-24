@@ -1405,7 +1405,8 @@ class WalletMint(BaseModel):
 class MintBalanceLogEntry(BaseModel):
     unit: Unit
     backend_balance: Amount
-    mint_balance: Amount
+    keyset_balance: Amount
+    keyset_fees_paid: Amount
     time: datetime.datetime
 
     @classmethod
@@ -1416,6 +1417,7 @@ class MintBalanceLogEntry(BaseModel):
                 Unit[row["unit"]],
                 row["backend_balance"],
             ),
-            mint_balance=Amount(Unit[row["unit"]], row["mint_balance"]),
+            keyset_balance=Amount(Unit[row["unit"]], row["keyset_balance"]),
+            keyset_fees_paid=Amount(Unit[row["unit"]], row["keyset_fees_paid"]),
             time=row["time"],
         )

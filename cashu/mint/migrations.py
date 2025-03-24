@@ -939,7 +939,8 @@ async def m027_add_balance_to_keysets_and_log_table(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {db.table_with_schema('balance_log')} (
                     unit TEXT NOT NULL,
-                    mint_balance INTEGER NOT NULL,
+                    keyset_balance INTEGER NOT NULL,
+                    keyset_fees_paid INTEGER NOT NULL,
                     backend_balance INTEGER NOT NULL,
                     time TIMESTAMP DEFAULT {db.timestamp_now}
                 );

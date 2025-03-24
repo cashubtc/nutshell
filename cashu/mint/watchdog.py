@@ -1,9 +1,9 @@
 import asyncio
-from typing import List
+from typing import List, Optional, Tuple
 
 from loguru import logger
 
-from cashu.core.db import Database
+from cashu.core.db import Connection, Database
 
 from ..core.base import Amount, MintBalanceLogEntry, Unit
 from ..core.settings import settings
@@ -18,6 +18,22 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
     def __init__(self) -> None:
         self.watcher_db = Database(self.db.name, self.db.db_location)
         return
+
+    async def get_unit_balance_and_fees(
+        self,
+        unit: Unit,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Tuple[Amount, Amount]:
+        keysets = await self.crud.get_keyset(db=db, unit=unit.name, conn=conn)
+        balance = Amount(unit, 0)
+        fees_paid = Amount(unit, 0)
+        for keyset in keysets:
+            balance_update = await self.crud.get_balance(keyset, db=db, conn=conn)
+            balance += balance_update[0]
+            fees_paid += balance_update[1]
+
+        return balance, fees_paid
 
     async def dispatch_watchdogs(self) -> List[asyncio.Task]:
         tasks = []
@@ -56,24 +72,35 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
                 last_balance_log_entry = await self.crud.get_last_balance_log_entry(
                     unit=unit, db=self.watcher_db
                 )
-                keyset_balance = await self.crud.get_unit_balance(
+                keyset_balance, keyset_fees_paid = await self.get_unit_balance_and_fees(
                     unit, db=self.watcher_db, conn=conn
                 )
 
-            logger.trace(f"Last balance log entry: {last_balance_log_entry}")
-            logger.trace(
-                f"Backend balance {backend.__class__.__name__}: {backend_balance}"
-            )
-            logger.trace(f"Unit balance {unit.name}: {keyset_balance}")
-
-            ok = await self.check_balances_and_abort(
-                unit, backend, last_balance_log_entry, backend_balance, keyset_balance
-            )
-
-            if ok or settings.mint_watchdog_ignore_mismatch:
-                await self.crud.store_balance_log(
-                    backend_balance, keyset_balance, db=self.db
+                logger.trace(f"Last balance log entry: {last_balance_log_entry}")
+                logger.trace(
+                    f"Backend balance {backend.__class__.__name__}: {backend_balance}"
                 )
+                logger.trace(
+                    f"Unit balance {unit.name}: {keyset_balance}, fees paid: {keyset_fees_paid}"
+                )
+
+                ok = await self.check_balances_and_abort(
+                    unit,
+                    backend,
+                    last_balance_log_entry,
+                    backend_balance,
+                    keyset_balance,
+                    keyset_fees_paid,
+                )
+
+                if ok or settings.mint_watchdog_ignore_mismatch:
+                    await self.crud.store_balance_log(
+                        backend_balance,
+                        keyset_balance,
+                        keyset_fees_paid,
+                        db=self.db,
+                        conn=conn,
+                    )
 
             await asyncio.sleep(settings.mint_watchdog_balance_check_interval_seconds)
 
@@ -84,6 +111,7 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         last_balance_log_entry: MintBalanceLogEntry | None,
         backend_balance: Amount,
         keyset_balance: Amount,
+        keyset_fees_paid: Amount,
     ) -> bool:
         """Check if the backend balance and the mint balance match.
         If they don't match, log a warning and raise an exception that will shut down the mint.
@@ -99,7 +127,7 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         Returns:
             bool: True if the balances check succeeded, False otherwise
         """
-        if keyset_balance > backend_balance:
+        if keyset_balance + keyset_fees_paid > backend_balance:
             logger.warning(
                 f"Backend balance {backend.__class__.__name__}: {backend_balance} is smaller than issued unit balance {unit.name}: {keyset_balance}"
             )
@@ -109,9 +137,9 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         if last_balance_log_entry:
             last_balance_delta = (
                 last_balance_log_entry.backend_balance
-                - last_balance_log_entry.mint_balance
+                - last_balance_log_entry.keyset_balance
             )
-            current_balance_delta = backend_balance - keyset_balance
+            current_balance_delta = backend_balance - keyset_balance - keyset_fees_paid
             if last_balance_delta != current_balance_delta:
                 logger.warning(
                     f"Balance delta mismatch: {last_balance_delta} != {current_balance_delta}"
