@@ -225,7 +225,7 @@ class FakeWallet(LightningBackend):
         ) or self.create_dummy_bolt11(checking_id)
 
         paid_chceking_ids = [i.payment_hash for i in self.paid_invoices_incoming]
-        if checking_id in paid_chceking_ids:
+        if checking_id in paid_chceking_ids or settings.fakewallet_brr:
             await self.mark_invoice_paid(invoice, delay=False)
             return PaymentStatus(result=PaymentResult.SETTLED)
         else:
