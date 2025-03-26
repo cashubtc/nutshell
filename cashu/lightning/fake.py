@@ -220,11 +220,9 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        invoices = [i for i in self.created_invoices if i.payment_hash == checking_id]
-        if invoices:
-            invoice = invoices[0]
-        else:
-            invoice = self.create_dummy_bolt11(checking_id)
+        invoice = next(
+            (i for i in self.created_invoices if i.payment_hash == checking_id), None
+        ) or self.create_dummy_bolt11(checking_id)
 
         paid_chceking_ids = [i.payment_hash for i in self.paid_invoices_incoming]
         if checking_id in paid_chceking_ids:
