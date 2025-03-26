@@ -881,7 +881,7 @@ async def m026_keyset_specific_balance_views(db: Database):
                 FROM {db.table_with_schema('promises')}
                 WHERE amount > 0
                 GROUP BY id
-            );
+            ) as sub;
             """
         )
         await conn.execute(
@@ -892,7 +892,7 @@ async def m026_keyset_specific_balance_views(db: Database):
                 FROM {db.table_with_schema('proofs_used')}
                 WHERE amount > 0
                 GROUP BY id
-            );
+            ) as sub;
             """
         )
         await conn.execute(
@@ -905,7 +905,7 @@ async def m026_keyset_specific_balance_views(db: Database):
                 FROM {db.table_with_schema('balance_issued')} bi
                 LEFT OUTER JOIN {db.table_with_schema('balance_redeemed')} bu
                 ON bi.keyset = bu.keyset
-            );
+            ) as sub;
             """
         )
 
