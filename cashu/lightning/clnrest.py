@@ -289,7 +289,15 @@ class CLNRestWallet(LightningBackend):
         data = r.json()
         if r.is_error or "message" in data:
             raise Exception("error in cln response")
-        self.last_pay_index = data["invoices"][-1]["pay_index"]
+        last_invoice_paid_invoice = next(
+            (i for i in reversed(data["invoices"]) if i["status"] == "paid"), None
+        )
+        last_pay_index = (
+            last_invoice_paid_invoice.get("pay_index")
+            if last_invoice_paid_invoice
+            else 0
+        )
+        self.last_pay_index = last_pay_index
         while True:
             try:
                 url = "/v1/waitanyinvoice"
@@ -308,9 +316,13 @@ class CLNRestWallet(LightningBackend):
                             raise Exception(inv["message"])
                         try:
                             paid = inv["status"] == "paid"
-                            self.last_pay_index = inv["pay_index"]
                             if not paid:
                                 continue
+                            last_pay_index = inv.get("pay_index")
+                            if not last_pay_index:
+                                logger.error(f"missing pay_index in invoice: {inv}")
+                                raise Exception("missing pay_index in invoice")
+                            self.last_pay_index = last_pay_index
                         except Exception as e:
                             logger.error(f"Error in paid_invoices_stream: {e}")
                             continue

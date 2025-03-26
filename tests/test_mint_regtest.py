@@ -82,6 +82,9 @@ async def test_lightning_create_invoice_balance_change(ledger: Ledger):
     # settle the invoice
     await pay_if_regtest(invoice.payment_request)
 
+    # cln takes some time to update the balance
+    await asyncio.sleep(SLEEP_TIME)
+
     # TEST 3: check the invoice status
     status = await ledger.backends[Method.bolt11][Unit.sat].get_invoice_status(
         invoice.checking_id
