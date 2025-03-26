@@ -62,6 +62,9 @@ class AuthLedger(Ledger):
         logger.info(f"Initialized OpenID Connect: {self.issuer}")
 
     def _get_oicd_discovery_json(self) -> dict:
+        logger.debug(
+            f"Getting OpenID Connect discovery JSON from: {self.oicd_discovery_url}"
+        )
         resp = httpx.get(self.oicd_discovery_url)
         resp.raise_for_status()
         return resp.json()
