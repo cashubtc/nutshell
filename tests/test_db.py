@@ -75,9 +75,12 @@ async def test_db_tables(ledger: Ledger):
             "mint_quotes",
             "mint_pubkeys",
             "promises",
+            "balance_log",
         ]
-        for table in tables_expected:
-            assert table in tables
+
+        tables.sort()
+        tables_expected.sort()
+        assert tables == tables_expected
 
 
 @pytest.mark.asyncio

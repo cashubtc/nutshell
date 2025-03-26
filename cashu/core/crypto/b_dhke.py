@@ -120,6 +120,7 @@ def hash_e(*publickeys: PublicKey) -> bytes:
     e_ = ""
     for p in publickeys:
         _p = p.serialize(compressed=False).hex()
+        print(f"p: {_p}, len: {len(_p)}")
         e_ += str(_p)
     e = hashlib.sha256(e_.encode("utf-8")).digest()
     return e

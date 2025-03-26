@@ -138,11 +138,12 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
             last_balance_delta = (
                 last_balance_log_entry.backend_balance
                 - last_balance_log_entry.keyset_balance
+                - last_balance_log_entry.keyset_fees_paid
             )
             current_balance_delta = backend_balance - keyset_balance - keyset_fees_paid
-            if last_balance_delta != current_balance_delta:
+            if last_balance_delta < current_balance_delta:
                 logger.warning(
-                    f"Balance delta mismatch: {last_balance_delta} != {current_balance_delta}"
+                    f"Balance delta mismatch: past: {last_balance_delta} != current: {current_balance_delta}"
                 )
                 await self.abort_queue.put(True)
                 return False

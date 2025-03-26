@@ -262,20 +262,25 @@ async def pay(
         )
     # we need to include fees so we can use the proofs for melting the `total_amount`
     send_proofs, _ = await wallet.select_to_send(
-        wallet.proofs, total_amount, include_fees=True, set_reserved=True
+        wallet.proofs, total_amount, include_fees=True, set_reserved=False
     )
     print("Paying Lightning invoice ...", end="", flush=True)
     assert total_amount > 0, "amount is not positive"
+    logger.debug(
+        f"Total amount: {total_amount} available balance: {wallet.available_balance}"
+    )
     if wallet.available_balance < total_amount:
         print(" Error: Balance too low.")
         return
 
     try:
+        await wallet.set_reserved(send_proofs, reserved=True)
         melt_response = await wallet.melt(
             send_proofs, invoice, quote.fee_reserve, quote.quote
         )
     except Exception as e:
         print(f" Error paying invoice: {e}")
+        await wallet.set_reserved(send_proofs, reserved=False)
         return
     if (
         melt_response.state
@@ -294,8 +299,10 @@ async def pay(
     elif MintQuoteState(melt_response.state) == MintQuoteState.pending:
         print(" Invoice pending.")
     elif MintQuoteState(melt_response.state) == MintQuoteState.unpaid:
+        await wallet.set_reserved(send_proofs, reserved=False)
         print(" Invoice unpaid.")
     else:
+        await wallet.set_reserved(send_proofs, reserved=False)
         print(" Error paying invoice.")
 
     await print_balance(ctx)

@@ -50,6 +50,12 @@ class FakeWallet(LightningBackend):
     ).hex()
 
     supported_units = {Unit.sat, Unit.msat, Unit.usd, Unit.eur}
+    balance: Dict[Unit, Amount] = {
+        Unit.sat: Amount(Unit.sat, settings.fakewallet_balance_sat),
+        Unit.msat: Amount(Unit.msat, settings.fakewallet_balance_sat * 1000),
+        Unit.usd: Amount(Unit.usd, settings.fakewallet_balance_usd),
+        Unit.eur: Amount(Unit.eur, settings.fakewallet_balance_eur),
+    }
 
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
@@ -59,31 +65,10 @@ class FakeWallet(LightningBackend):
         self.unit = unit
 
     async def status(self) -> StatusResponse:
-        match self.unit:
-            case Unit.sat:
-                return StatusResponse(
-                    error_message=None,
-                    balance=Amount(self.unit, settings.fakewallet_balance_sat),
-                )
-            case Unit.msat:
-                return StatusResponse(
-                    error_message=None,
-                    balance=Amount(self.unit, settings.fakewallet_balance_sat * 1000),
-                )
-            case Unit.usd:
-                return StatusResponse(
-                    error_message=None,
-                    balance=Amount(self.unit, settings.fakewallet_balance_usd),
-                )
-            case Unit.eur:
-                return StatusResponse(
-                    error_message=None,
-                    balance=Amount(self.unit, settings.fakewallet_balance_eur),
-                )
-            case _:
-                return StatusResponse(
-                    error_message=None, balance=Amount(self.unit, 1337)
-                )
+        return StatusResponse(
+            error_message=None,
+            balance=Amount(self.unit, self.balance[self.unit].amount),
+        )
 
     async def mark_invoice_paid(self, invoice: Bolt11, delay=True) -> None:
         if invoice in self.paid_invoices_incoming:
@@ -94,6 +79,25 @@ class FakeWallet(LightningBackend):
             await asyncio.sleep(settings.fakewallet_delay_incoming_payment)
         self.paid_invoices_incoming.append(invoice)
         await self.paid_invoices_queue.put(invoice)
+        self.update_balance(invoice, incoming=True)
+
+    def update_balance(self, invoice: Bolt11, incoming: bool) -> None:
+        amount_bolt11 = invoice.amount_msat
+        assert amount_bolt11, "invoice has no amount."
+        amount = int(amount_bolt11)
+        if self.unit == Unit.sat:
+            amount = amount // 1000
+        elif self.unit == Unit.usd or self.unit == Unit.eur:
+            amount = math.ceil(amount / 1e9 * self.fake_btc_price)
+        elif self.unit == Unit.msat:
+            amount = amount
+        else:
+            raise NotImplementedError()
+
+        if incoming:
+            self.balance[self.unit] += Amount(self.unit, amount)
+        else:
+            self.balance[self.unit] -= Amount(self.unit, amount)
 
     def create_dummy_bolt11(self, payment_hash: str) -> Bolt11:
         tags = Tags()
@@ -202,6 +206,7 @@ class FakeWallet(LightningBackend):
             else:
                 raise ValueError("Invoice already paid")
 
+            self.update_balance(invoice, incoming=False)
             return PaymentResponse(
                 result=PaymentResult.SETTLED,
                 checking_id=invoice.payment_hash,
@@ -215,9 +220,15 @@ class FakeWallet(LightningBackend):
             )
 
     async def get_invoice_status(self, checking_id: str) -> PaymentStatus:
-        await self.mark_invoice_paid(self.create_dummy_bolt11(checking_id), delay=False)
+        invoices = [i for i in self.created_invoices if i.payment_hash == checking_id]
+        if invoices:
+            invoice = invoices[0]
+        else:
+            invoice = self.create_dummy_bolt11(checking_id)
+
         paid_chceking_ids = [i.payment_hash for i in self.paid_invoices_incoming]
         if checking_id in paid_chceking_ids:
+            await self.mark_invoice_paid(invoice, delay=False)
             return PaymentStatus(result=PaymentResult.SETTLED)
         else:
             return PaymentStatus(
