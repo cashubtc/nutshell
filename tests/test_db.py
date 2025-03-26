@@ -76,10 +76,18 @@ async def test_db_tables(ledger: Ledger):
             "mint_pubkeys",
             "promises",
             "balance_log",
+            "balance",
+            "balance_issued",
+            "balance_redeemed",
         ]
 
         tables.sort()
         tables_expected.sort()
+        if ledger.db.type == db.SQLITE:
+            # SQLite does not return views
+            tables_expected.remove("balance")
+            tables_expected.remove("balance_issued")
+            tables_expected.remove("balance_redeemed")
         assert tables == tables_expected
 
 
