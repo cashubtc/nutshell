@@ -95,6 +95,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.db_read: DbReadHelper
         self.locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
         self.invoice_listener_tasks: List[asyncio.Task] = []
+        self.regular_tasks: List[asyncio.Task] = []
 
         if not seed:
             raise Exception("seed not set")
@@ -132,13 +133,21 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     async def startup_ledger(self) -> None:
         await self._startup_keysets()
         await self._check_backends()
-        await self._check_pending_proofs_and_melt_quotes()
+        self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
 
     async def _startup_keysets(self) -> None:
         await self.init_keysets()
         for derivation_path in settings.mint_derivation_path_list:
             await self.activate_keyset(derivation_path=derivation_path)
+
+    async def _run_regular_tasks(self) -> None:
+        try:
+            await self._check_pending_proofs_and_melt_quotes()
+            await asyncio.sleep(settings.mint_regular_tasks_interval_seconds)
+        except Exception as e:
+            logger.error(f"Ledger regular task failed: {e}")
+            await asyncio.sleep(60)
 
     async def _check_backends(self) -> None:
         for method in self.backends:
@@ -160,8 +169,13 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         logger.info(f"Data dir: {settings.cashu_dir}")
 
     async def shutdown_ledger(self) -> None:
+        logger.debug("Disconnecting from database")
         await self.db.engine.dispose()
+        logger.debug("Shutting down invoice listeners")
         for task in self.invoice_listener_tasks:
+            task.cancel()
+        logger.debug("Shutting down regular tasks")
+        for task in self.regular_tasks:
             task.cancel()
 
     async def _check_pending_proofs_and_melt_quotes(self):
