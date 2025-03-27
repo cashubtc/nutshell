@@ -968,7 +968,7 @@ class Ledger(
             e: Lightning payment unsuccessful
 
         Returns:
-            Tuple[str, List[BlindedMessage]]: Proof of payment and signed outputs for returning overpaid fees to wallet.
+            PostMeltQuoteResponse: Melt quote response.
         """
         # make sure we're allowed to melt
         if self.disable_melt and settings.mint_disable_melt_on_error:

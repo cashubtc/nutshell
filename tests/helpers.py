@@ -220,4 +220,4 @@ async def pay_if_regtest(bolt11: str):
         pay_real_invoice(bolt11)
     if is_fake:
         await asyncio.sleep(settings.fakewallet_delay_incoming_payment or 0)
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.5)

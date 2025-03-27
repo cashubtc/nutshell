@@ -949,11 +949,12 @@ async def m027_add_balance_to_keysets_and_log_table(db: Database):
         await conn.execute(
             f"""
                 UPDATE {db.table_with_schema('keysets')}
-                SET balance = (
-                    SELECT balance
+                SET balance = COALESCE(b.balance, 0)
+                FROM (
+                    SELECT keyset, balance
                     FROM {db.table_with_schema('balance')}
-                    WHERE keyset = id
-                )
+                ) AS b
+                WHERE {db.table_with_schema('keysets')}.id = b.keyset
             """
         )
         await conn.execute(
