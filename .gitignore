@@ -137,3 +137,6 @@ tor.pid
 
 # MacOS
 .DS_Store
+
+# PEM certs
+*.pem

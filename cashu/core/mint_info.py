@@ -18,6 +18,7 @@ class MintInfo(BaseModel):
     contact: Optional[List[MintInfoContact]]
     motd: Optional[str]
     icon_url: Optional[str]
+    urls: Optional[List[str]]
     time: Optional[int]
     nuts: Dict[int, Any]
 
