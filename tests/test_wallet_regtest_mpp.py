@@ -52,7 +52,7 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
 
     async def _mint_pay_mpp(invoice: str, amount: int, proofs: List[Proof]):
         # wallet pays 32 sat of the invoice
-        quote = await wallet.melt_quote(invoice, amount=amount)
+        quote = await wallet.melt_quote(invoice, amount_msat=amount*1000)
         assert quote.amount == amount
         await wallet.melt(
             proofs,
@@ -118,7 +118,7 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     async def pay_mpp(amount: int, proofs: List[Proof], delay: float = 0.0):
         await asyncio.sleep(delay)
         # wallet pays 32 sat of the invoice
-        quote = await wallet.melt_quote(invoice_payment_request, amount=amount)
+        quote = await wallet.melt_quote(invoice_payment_request, amount_msat=amount*1000)
         assert quote.amount == amount
         await wallet.melt(
             proofs,
@@ -154,5 +154,5 @@ async def test_regtest_internal_mpp_melt_quotes(wallet: Wallet, ledger: Ledger):
 
     # try and create a multi-part melt quote
     await assert_err(
-        wallet.melt_quote(mint_quote.request, 100), "internal mpp not allowed"
+        wallet.melt_quote(mint_quote.request, 100*1000), "internal mpp not allowed"
     )

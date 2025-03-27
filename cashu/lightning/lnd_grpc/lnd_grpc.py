@@ -245,21 +245,29 @@ class LndRPCWallet(LightningBackend):
                 )
                 """
                 # modify the mpp_record in the last hop
-                route_nr = 0
-                r.routes[route_nr].hops[-1].mpp_record.payment_addr = bytes.fromhex(  # type: ignore
-                    payer_addr
-                )
-                r.routes[route_nr].hops[  # type: ignore
-                    -1
-                ].mpp_record.total_amt_msat = total_amount_msat
-
-                # Send to route request
-                r = await router_stub.SendToRouteV2(
-                    routerrpc.SendToRouteRequest(
-                        payment_hash=bytes.fromhex(invoice.payment_hash),
-                        route=r.routes[route_nr],  # type: ignore
+                for route_nr in range(len(r.routes)):
+                    r.routes[route_nr].hops[-1].mpp_record.payment_addr = bytes.fromhex(  # type: ignore
+                        payer_addr
                     )
-                )
+                    r.routes[route_nr].hops[  # type: ignore
+                        -1
+                    ].mpp_record.total_amt_msat = total_amount_msat
+
+                    # Send to route request
+                    r = await router_stub.SendToRouteV2(
+                        routerrpc.SendToRouteRequest(
+                            payment_hash=bytes.fromhex(invoice.payment_hash),
+                            route=r.routes[route_nr],  # type: ignore
+                        )
+                    )
+                    if r.status == lnrpc.HTLCAttempt.HTLCStatus.FAILED:
+                        if (
+                            r.failure.code
+                            == lnrpc.Failure.FailureCode.TEMPORARY_CHANNEL_FAILURE
+                        ):
+                            # Try a different route
+                            continue
+                    break
         except AioRpcError as e:
             logger.error(f"QueryRoute or SendToRouteV2 failed: {e}")
             return PaymentResponse(
@@ -371,18 +379,12 @@ class LndRPCWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         # get amount from melt_quote or from bolt11
-        amount = (
-            Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
-            if melt_quote.is_mpp
-            else None
-        )
+        amount_msat = melt_quote.mpp_amount if melt_quote.is_mpp else None
 
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
-        if amount:
-            amount_msat = amount.to(Unit.msat).amount
-        else:
+        if amount_msat is None:
             amount_msat = int(invoice_obj.amount_msat)
 
         fees_msat = fee_reserve(amount_msat)

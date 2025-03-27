@@ -2,6 +2,7 @@
 
 import asyncio
 import getpass
+import json
 import os
 import time
 from datetime import datetime, timezone
@@ -243,7 +244,10 @@ async def pay(
     await wallet.load_mint()
     await print_balance(ctx)
     payment_hash = bolt11.decode(invoice).payment_hash
-    quote = await wallet.melt_quote(invoice, amount)
+    if amount:
+        # we assume `amount` to be in sats
+        amount_mpp_msat = amount * 1000
+    quote = await wallet.melt_quote(invoice, amount_mpp_msat)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
     # estimate ecash fee for the coinselected proofs
@@ -747,6 +751,32 @@ async def receive_cli(
         print("Error: enter token or use either flag --nostr or --all.")
         return
     await print_balance(ctx)
+
+
+@cli.command("decode", help="Decode a cashu token and print in JSON format.")
+@click.option(
+    "--no-dleq", default=False, is_flag=True, help="Do not include DLEQ proofs."
+)
+@click.option(
+    "--indent",
+    "-i",
+    default=2,
+    is_flag=False,
+    help="Number of spaces to indent JSON with.",
+)
+@click.argument("token", type=str, default="")
+def decode_to_json(token: str, no_dleq: bool, indent: int):
+    include_dleq = not no_dleq
+    if token:
+        token_obj = deserialize_token_from_string(token)
+        token_json = json.dumps(
+            token_obj.serialize_to_dict(include_dleq),
+            default=lambda obj: obj.hex() if isinstance(obj, bytes) else obj,
+            indent=indent,
+        )
+        print(token_json)
+    else:
+        print("Error: enter a token")
 
 
 @cli.command("burn", help="Burn spent tokens.")

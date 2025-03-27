@@ -263,22 +263,31 @@ class LndRestWallet(LightningBackend):
         }
 
         # add the mpp_record to the last hop
-        rout_nr = 0
-        data["routes"][rout_nr]["hops"][-1].update(mpp_record)
+        r = None  # type: ignore
+        for route_nr in range(len(data["routes"])):
+            logger.debug(f"Trying to pay partial amount with route number {route_nr+1}")
+            data["routes"][route_nr]["hops"][-1].update(mpp_record)
 
-        # send to route
-        r = await self.client.post(
-            url="/v2/router/route/send",
-            json={
-                "payment_hash": base64.b64encode(
-                    bytes.fromhex(invoice.payment_hash)
-                ).decode(),
-                "route": data["routes"][rout_nr],
-            },
-            timeout=None,
-        )
+            # send to route
+            r = await self.client.post(
+                url="/v2/router/route/send",
+                json={
+                    "payment_hash": base64.b64encode(
+                        bytes.fromhex(invoice.payment_hash)
+                    ).decode(),
+                    "route": data["routes"][route_nr],
+                },
+                timeout=None,
+            )
 
-        data = r.json()
+            data = r.json()
+            failure = data.get("failure")
+            if failure:
+                if failure["code"] == 15:
+                    # Try with a different route
+                    continue
+            break
+
         if r.is_error or data.get("message"):
             error_message = data.get("message") or r.text
             return PaymentResponse(
@@ -398,19 +407,12 @@ class LndRestWallet(LightningBackend):
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
-        # get amount from melt_quote or from bolt11
-        amount = (
-            Amount(Unit[melt_quote.unit], melt_quote.mpp_amount)
-            if melt_quote.is_mpp
-            else None
-        )
+        amount_msat = melt_quote.mpp_amount if melt_quote.is_mpp else None
 
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
-        if amount:
-            amount_msat = amount.to(Unit.msat).amount
-        else:
+        if amount_msat is None:
             amount_msat = int(invoice_obj.amount_msat)
 
         fees_msat = fee_reserve(amount_msat)

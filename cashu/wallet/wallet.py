@@ -401,12 +401,12 @@ class Wallet(
                 Defaults to False.
         """
         logger.trace(f"Loading mint {self.url}")
-        await self.load_mint_keysets(force_old_keysets)
-        await self.activate_keyset(keyset_id)
         try:
+            await self.load_mint_keysets(force_old_keysets)
+            await self.activate_keyset(keyset_id)
             await self.load_mint_info(reload=True)
         except Exception as e:
-            logger.debug(f"Could not load mint info: {e}")
+            logger.error(f"Could not load mint info: {e}")
             pass
 
     async def load_proofs(self, reload: bool = False, all_keysets=False) -> None:
@@ -530,7 +530,7 @@ class Wallet(
 
         Args:
             amount (int): Total amount of tokens to be minted
-            id (str): Id for looking up the paid Lightning invoice.
+            quote_id (str): Id for looking up the paid Lightning invoice.
             split (Optional[List[str]], optional): List of desired amount splits to be minted. Total must sum to `amount`.
 
         Raises:
@@ -544,11 +544,13 @@ class Wallet(
         if split:
             logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
-            allowed_amounts = [2**i for i in range(settings.max_order)]
+            allowed_amounts = (
+                self.get_allowed_amounts()
+            )  # Get allowed amounts from the mint
             for a in split:
                 if a not in allowed_amounts:
                     raise Exception(
-                        f"Can only mint amounts with 2^n up to {2**settings.max_order}."
+                        f"Can only mint amounts supported by the mint: {allowed_amounts}"
                     )
 
         # split based on our wallet state
@@ -702,14 +704,14 @@ class Wallet(
         return keep_proofs, send_proofs
 
     async def melt_quote(
-        self, invoice: str, amount: Optional[int] = None
+        self, invoice: str, amount_msat: Optional[int] = None
     ) -> PostMeltQuoteResponse:
         """
         Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
         """
-        if amount and not self.mint_info.supports_mpp("bolt11", self.unit):
+        if amount_msat and not self.mint_info.supports_mpp("bolt11", self.unit):
             raise Exception("Mint does not support MPP, cannot specify amount.")
-        melt_quote_resp = await super().melt_quote(invoice, self.unit, amount)
+        melt_quote_resp = await super().melt_quote(invoice, self.unit, amount_msat)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote_resp.fee_reserve)} as fee reserve."
         )
