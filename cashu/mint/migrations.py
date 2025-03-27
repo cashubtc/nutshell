@@ -889,9 +889,7 @@ async def m026_keyset_specific_balance_views(db: Database):
             f"SELECT * FROM {db.table_with_schema('keysets')} WHERE id LIKE '00%' ORDER BY first_seen LIMIT 1"
         )
         if not keyset:
-            raise Exception(
-                "No keyset found for migration m026_keyset_specific_balance_views"
-            )
+            return
         keyset_id = keyset["id"]
         # get all promises where id is NULL
         promises = await conn.fetchall(
