@@ -888,33 +888,34 @@ async def m026_keyset_specific_balance_views(db: Database):
         keyset = await conn.fetchone(
             f"SELECT * FROM {db.table_with_schema('keysets')} WHERE id LIKE '00%' ORDER BY first_seen LIMIT 1"
         )
-        if not keyset:
-            return
-        keyset_id = keyset["id"]
         # get all promises where id is NULL
         promises = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('promises')} WHERE id IS NULL"
         )
-        if promises:
-            # set id to keyset_id
-            await conn.execute(
-                f"UPDATE {db.table_with_schema('promises')} SET id = '{keyset_id}' WHERE id IS NULL"
-            )
-        # get all proofs_used where id is NULL
         proofs_used = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('proofs_used')} WHERE id IS NULL"
         )
-        if proofs_used:
-            # set id to keyset_id
-            await conn.execute(
-                f"UPDATE {db.table_with_schema('proofs_used')} SET id = '{keyset_id}' WHERE id IS NULL"
-            )
-        # get all proofs_pending where id is NULL
         proofs_pending = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('proofs_pending')} WHERE id IS NULL"
         )
+        if not keyset and (promises or proofs_used or proofs_pending):
+            raise Exception(
+                "Migration failed: No keyset found, but there are promises or proofs without id. Please report this issue."
+            )
+        if not keyset or not (promises or proofs_used or proofs_pending):
+            # no migration needed
+            return
+
+        keyset_id = keyset["id"]
+        if promises:
+            await conn.execute(
+                f"UPDATE {db.table_with_schema('promises')} SET id = '{keyset_id}' WHERE id IS NULL"
+            )
+        if proofs_used:
+            await conn.execute(
+                f"UPDATE {db.table_with_schema('proofs_used')} SET id = '{keyset_id}' WHERE id IS NULL"
+            )
         if proofs_pending:
-            # set id to keyset_id
             await conn.execute(
                 f"UPDATE {db.table_with_schema('proofs_pending')} SET id = '{keyset_id}' WHERE id IS NULL"
             )
