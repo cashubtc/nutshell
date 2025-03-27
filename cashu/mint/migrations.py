@@ -110,8 +110,10 @@ async def create_balance_views(db: Database, conn: Connection):
 
 
 async def m002_add_balance_views(db: Database):
-    async with db.connect() as conn:
-        await create_balance_views(db, conn)
+    # NOTE: We move the creation of balance views after m007_proofs_and_promises_store_id
+    # async with db.connect() as conn:
+    # await create_balance_views(db, conn)
+    pass
 
 
 async def m003_mint_keysets(db: Database):
@@ -207,6 +209,9 @@ async def m007_proofs_and_promises_store_id(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN id TEXT"
         )
+
+        # create balance views
+        await create_balance_views(db, conn)
 
 
 async def m008_promises_dleq(db: Database):
