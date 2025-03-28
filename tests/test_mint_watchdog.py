@@ -28,7 +28,6 @@ async def wallet():
 @pytest.mark.asyncio
 async def test_check_balances_and_abort(ledger: Ledger):
     ok = await ledger.check_balances_and_abort(
-        Unit.sat,
         ledger.backends[Method.bolt11][Unit.sat],
         None,
         Amount(Unit.sat, 0),

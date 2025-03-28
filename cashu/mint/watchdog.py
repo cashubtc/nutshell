@@ -76,16 +76,15 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
                     unit, db=self.watcher_db, conn=conn
                 )
 
-                logger.trace(f"Last balance log entry: {last_balance_log_entry}")
-                logger.trace(
+                logger.debug(f"Last balance log entry: {last_balance_log_entry}")
+                logger.debug(
                     f"Backend balance {backend.__class__.__name__}: {backend_balance}"
                 )
-                logger.trace(
+                logger.debug(
                     f"Unit balance {unit.name}: {keyset_balance}, fees paid: {keyset_fees_paid}"
                 )
 
                 ok = await self.check_balances_and_abort(
-                    unit,
                     backend,
                     last_balance_log_entry,
                     backend_balance,
@@ -106,7 +105,6 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
 
     async def check_balances_and_abort(
         self,
-        unit: Unit,
         backend: LightningBackend,
         last_balance_log_entry: MintBalanceLogEntry | None,
         backend_balance: Amount,
@@ -118,7 +116,6 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         Returns True if the balances check succeeded, False otherwise.
 
         Args:
-            unit (Unit): Unit of the balance to check
             backend (LightningBackend): Backend to check the balance against
             last_balance_log_entry (MintBalanceLogEntry | None): Last balance log entry in the database
             backend_balance (Amount): Balance of the backend
@@ -129,21 +126,28 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
         """
         if keyset_balance + keyset_fees_paid > backend_balance:
             logger.warning(
-                f"Backend balance {backend.__class__.__name__}: {backend_balance} is smaller than issued unit balance {unit.name}: {keyset_balance}"
+                f"Backend balance {backend.__class__.__name__}: {backend_balance} is smaller than issued unit balance {keyset_balance.unit}: {keyset_balance}"
             )
             await self.abort_queue.put(True)
             return False
 
         if last_balance_log_entry:
-            last_balance_delta = (
-                last_balance_log_entry.backend_balance
-                - last_balance_log_entry.keyset_balance
-                - last_balance_log_entry.keyset_fees_paid
+            last_balance_delta = last_balance_log_entry.backend_balance - (
+                last_balance_log_entry.keyset_balance
+                + last_balance_log_entry.keyset_fees_paid
             )
-            current_balance_delta = backend_balance - keyset_balance - keyset_fees_paid
+            current_balance_delta = backend_balance - (
+                keyset_balance + keyset_fees_paid
+            )
             if last_balance_delta < current_balance_delta:
                 logger.warning(
-                    f"Balance delta mismatch: past: {last_balance_delta} != current: {current_balance_delta}"
+                    f"Balance delta mismatch: current: {current_balance_delta}> past: {last_balance_delta}"
+                )
+                logger.warning(
+                    f"Balances before: backend: {last_balance_log_entry.backend_balance}, issued ecash: {last_balance_log_entry.keyset_balance}, fees earned: {last_balance_log_entry.keyset_fees_paid}"
+                )
+                logger.warning(
+                    f"Balances now: backend: {backend_balance}, issued ecash: {keyset_balance}, fees earned: {keyset_fees_paid}"
                 )
                 await self.abort_queue.put(True)
                 return False

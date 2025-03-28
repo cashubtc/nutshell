@@ -359,7 +359,7 @@ class Ledger(
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        sum_proofs = sum([p.amount for p in proofs])
+        # sum_proofs = sum([p.amount for p in proofs])
         fees_proofs = self.get_fees_for_proofs(proofs)
         async with self.db.get_connection(conn) as conn:
             # store in db
@@ -368,14 +368,14 @@ class Ledger(
                 await self.crud.invalidate_proof(
                     proof=p, db=self.db, quote_id=quote_id, conn=conn
                 )
+                await self.crud.bump_keyset_balance(
+                    keyset=self.keysets[p.id], amount=-p.amount, db=self.db, conn=conn
+                )
                 await self.events.submit(
                     ProofState(
                         Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
                     )
                 )
-            await self.crud.bump_keyset_balance(
-                keyset=self.keyset, amount=-sum_proofs, db=self.db, conn=conn
-            )
             await self.crud.bump_keyset_fees_paid(
                 keyset=self.keyset, amount=fees_proofs, db=self.db, conn=conn
             )
@@ -844,8 +844,13 @@ class Ledger(
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
-                await self._invalidate_proofs(proofs=pending_proofs, quote_id=quote_id)
-                await self.db_write._unset_proofs_pending(pending_proofs)
+                async with self.db.get_connection() as conn:
+                    await self._invalidate_proofs(
+                        proofs=pending_proofs, quote_id=quote_id, conn=conn
+                    )
+                    await self.db_write._unset_proofs_pending(
+                        pending_proofs, keysets=self.keysets, conn=conn
+                    )
                 # change to compensate wallet for overpaid fees
                 if melt_quote.outputs:
                     total_provided = sum_proofs(pending_proofs)
@@ -870,7 +875,9 @@ class Ledger(
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
-                await self.db_write._unset_proofs_pending(pending_proofs)
+                await self.db_write._unset_proofs_pending(
+                    pending_proofs, keysets=self.keysets
+                )
 
         return melt_quote
 
@@ -1021,7 +1028,7 @@ class Ledger(
 
         # set proofs to pending to avoid race conditions
         await self.db_write._verify_spent_proofs_and_set_pending(
-            proofs, quote_id=melt_quote.quote
+            proofs, keysets=self.keysets, quote_id=melt_quote.quote
         )
         previous_state = melt_quote.state
         melt_quote = await self.db_write._set_melt_quote_pending(melt_quote, outputs)
@@ -1077,7 +1084,9 @@ class Ledger(
                     match status.result:
                         case PaymentResult.FAILED | PaymentResult.UNKNOWN:
                             # Everything as expected. Payment AND a status check both agree on a failure. We roll back the transaction.
-                            await self.db_write._unset_proofs_pending(proofs)
+                            await self.db_write._unset_proofs_pending(
+                                proofs, keysets=self.keysets
+                            )
                             await self.db_write._unset_melt_quote_pending(
                                 quote=melt_quote, state=previous_state
                             )
@@ -1117,7 +1126,7 @@ class Ledger(
 
         # melt was successful (either internal or via backend), invalidate proofs
         await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
-        await self.db_write._unset_proofs_pending(proofs)
+        await self.db_write._unset_proofs_pending(proofs, keysets=self.keysets)
 
         # prepare change to compensate wallet for overpaid fees
         return_promises: List[BlindedSignature] = []
@@ -1160,7 +1169,9 @@ class Ledger(
         logger.trace("swap called")
         # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
-        await self.db_write._verify_spent_proofs_and_set_pending(proofs)
+        await self.db_write._verify_spent_proofs_and_set_pending(
+            proofs, keysets=self.keysets
+        )
         try:
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
@@ -1170,7 +1181,7 @@ class Ledger(
             raise e
         finally:
             # delete proofs from pending list
-            await self.db_write._unset_proofs_pending(proofs)
+            await self.db_write._unset_proofs_pending(proofs, keysets=self.keysets)
 
         logger.trace("swap successful")
         return promises
@@ -1234,7 +1245,6 @@ class Ledger(
             promises.append((keyset_id, B_, output.amount, C_, e, s))
 
         keyset = keyset or self.keyset
-        sum_outputs = sum([output.amount for output in outputs])
 
         signatures = []
         async with self.db.get_connection(conn) as conn:
@@ -1260,9 +1270,9 @@ class Ledger(
                 )
                 signatures.append(signature)
 
-            # bump keyset balance
-            await self.crud.bump_keyset_balance(
-                db=self.db, keyset=keyset, amount=sum_outputs, conn=conn
-            )
+                # bump keyset balance
+                await self.crud.bump_keyset_balance(
+                    db=self.db, keyset=self.keysets[keyset_id], amount=amount, conn=conn
+                )
 
             return signatures
