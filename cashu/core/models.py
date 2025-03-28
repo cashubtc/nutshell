@@ -52,6 +52,7 @@ class GetInfoResponse(BaseModel):
     contact: Optional[List[MintInfoContact]] = None
     motd: Optional[str] = None
     icon_url: Optional[str] = None
+    tos_url: Optional[str] = None
     urls: Optional[List[str]] = None
     time: Optional[int] = None
     nuts: Optional[Dict[int, Any]] = None
