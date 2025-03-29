@@ -44,6 +44,7 @@ from . import migrations
 from .compat import WalletCompat
 from .crud import (
     bump_secret_derivation,
+    get_bolt11_melt_quote,
     get_bolt11_mint_quote,
     get_keysets,
     get_mint_by_url,
@@ -519,8 +520,6 @@ class Wallet(
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
 
-
-
     async def mint(
         self,
         amount: int,
@@ -545,7 +544,9 @@ class Wallet(
         if split:
             logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
-            allowed_amounts = self.get_allowed_amounts()  # Get allowed amounts from the mint
+            allowed_amounts = (
+                self.get_allowed_amounts()
+            )  # Get allowed amounts from the mint
             for a in split:
                 if a not in allowed_amounts:
                     raise Exception(
@@ -681,7 +682,7 @@ class Wallet(
         original_indices, sorted_outputs = zip(*sorted_outputs_with_indices)
 
         # Call swap API
-        sorted_promises = await super().split(proofs, sorted_outputs)
+        sorted_promises = await super().split(proofs, sorted_outputs)  # type: ignore
 
         # sort promises back to original order
         promises = [
@@ -723,6 +724,66 @@ class Wallet(
         )
         await store_bolt11_melt_quote(db=self.db, quote=melt_quote)
         return melt_quote_resp
+
+    async def get_melt_quote(self, quote: str) -> Optional[MeltQuote]:
+        """Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
+
+        Args:
+            quote (str): Quote ID to fetch.
+
+        Returns:
+            Optional[MeltQuote]: MeltQuote object.
+        """
+        melt_quote_resp = await super().get_melt_quote(quote)
+        melt_quote_local = await get_bolt11_melt_quote(db=self.db, quote=quote)
+        melt_quote = MeltQuote.from_resp_wallet(
+            melt_quote_resp,
+            self.url,
+            amount=melt_quote_resp.amount,
+            unit=(
+                melt_quote_resp.unit or melt_quote_local.unit
+                if melt_quote_local
+                else self.unit.name
+            ),
+            request=(
+                melt_quote_resp.request or melt_quote_local.request
+                if (melt_quote_local and melt_quote_local.request)
+                else "None"
+            ),
+        )
+
+        # update database
+        if not melt_quote_local:
+            await store_bolt11_melt_quote(db=self.db, quote=melt_quote)
+        else:
+            proofs = await get_proofs(db=self.db, melt_id=quote)
+            if (
+                melt_quote.state == MeltQuoteState.paid
+                and melt_quote_local.state != MeltQuoteState.paid
+            ):
+                logger.debug("Updating paid status of melt quote.")
+                await update_bolt11_melt_quote(
+                    db=self.db,
+                    quote=quote,
+                    state=melt_quote.state,
+                    paid_time=int(time.time()),
+                    payment_preimage=melt_quote.payment_preimage or "",
+                    fee_paid=melt_quote.fee_paid,
+                )
+                # invalidate proofs
+                if sum_proofs(proofs) == melt_quote.amount + melt_quote.fee_reserve:
+                    await self.invalidate(proofs)
+            if melt_quote.state == MeltQuoteState.unpaid:
+                logger.debug("Updating unpaid status of melt quote.")
+                # set proofs as not reserved
+                async with self.db.connect() as conn:
+                    for p in proofs:
+                        p.reserved = False
+                        p.melt_id = None
+                        await update_proof(
+                            p, reserved=False, melt_id="", db=self.db, conn=conn
+                        )
+        return melt_quote
 
     async def melt(
         self, proofs: List[Proof], invoice: str, fee_reserve_sat: int, quote_id: str
@@ -769,10 +830,11 @@ class Wallet(
         # if payment fails
         if melt_quote.state == MeltQuoteState.unpaid:
             # remove the melt_id in proofs and set reserved to False
-            for p in proofs:
-                p.melt_id = None
-                p.reserved = False
-                await update_proof(p, melt_id="", db=self.db)
+            async with self.db.connect() as conn:
+                for p in proofs:
+                    p.melt_id = None
+                    p.reserved = False
+                    await update_proof(p, melt_id="", db=self.db, conn=conn)
             raise Exception("could not pay invoice.")
         elif melt_quote.state == MeltQuoteState.pending:
             # payment is still pending
@@ -997,6 +1059,27 @@ class Wallet(
             logger.error(proofs)
             raise e
 
+    async def get_spent_proofs_check_states_batched(
+        self, proofs: List[Proof]
+    ) -> List[Proof]:
+        """Checks the state of proofs in batches.
+
+        Args:
+            proofs (List[Proof]): List of proofs to check.
+
+        Returns:
+            List[Proof]: List of proofs that are spent.
+        """
+        batch_size = settings.proofs_batch_size
+        spent_proofs = []
+        for i in range(0, len(proofs), batch_size):
+            batch = proofs[i : i + batch_size]
+            proof_states = await self.check_proof_state(batch)
+            for j, state in enumerate(proof_states.states):
+                if state.spent:
+                    spent_proofs.append(batch[j])
+        return spent_proofs
+
     async def invalidate(
         self, proofs: List[Proof], check_spendable=False
     ) -> List[Proof]:
@@ -1011,15 +1094,9 @@ class Wallet(
         """
         invalidated_proofs: List[Proof] = []
         if check_spendable:
-            # checks proofs in batches
-            for _proofs in [
-                proofs[i : i + settings.proofs_batch_size]
-                for i in range(0, len(proofs), settings.proofs_batch_size)
-            ]:
-                proof_states = await self.check_proof_state(proofs)
-                for i, state in enumerate(proof_states.states):
-                    if state.spent:
-                        invalidated_proofs.append(proofs[i])
+            invalidated_proofs = await self.get_spent_proofs_check_states_batched(
+                proofs
+            )
         else:
             invalidated_proofs = proofs
 
