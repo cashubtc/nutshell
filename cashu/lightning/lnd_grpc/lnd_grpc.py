@@ -101,10 +101,10 @@ class LndRPCWallet(LightningBackend):
                 r = await lnstub.ChannelBalance(lnrpc.ChannelBalanceRequest())
         except AioRpcError as e:
             return StatusResponse(
-                error_message=f"Error calling Lnd gRPC: {e}", balance=0
+                error_message=f"Error calling Lnd gRPC: {e}",
+                balance=Amount(self.unit, 0),
             )
-        # NOTE: `balance` field is deprecated. Change this.
-        return StatusResponse(error_message=None, balance=r.balance * 1000)
+        return StatusResponse(error_message=None, balance=Amount(self.unit, r.balance))
 
     async def create_invoice(
         self,
@@ -261,7 +261,10 @@ class LndRPCWallet(LightningBackend):
                         )
                     )
                     if r.status == lnrpc.HTLCAttempt.HTLCStatus.FAILED:
-                        if r.failure.code == lnrpc.Failure.FailureCode.TEMPORARY_CHANNEL_FAILURE:
+                        if (
+                            r.failure.code
+                            == lnrpc.Failure.FailureCode.TEMPORARY_CHANNEL_FAILURE
+                        ):
                             # Try a different route
                             continue
                     break
@@ -376,11 +379,7 @@ class LndRPCWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         # get amount from melt_quote or from bolt11
-        amount_msat = (
-            melt_quote.mpp_amount
-            if melt_quote.is_mpp
-            else None
-        )
+        amount_msat = melt_quote.mpp_amount if melt_quote.is_mpp else None
 
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."

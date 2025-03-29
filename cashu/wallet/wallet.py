@@ -8,6 +8,7 @@ from bip32 import BIP32
 from loguru import logger
 
 from ..core.base import (
+    Amount,
     BlindedMessage,
     BlindedSignature,
     DLEQWallet,
@@ -519,8 +520,6 @@ class Wallet(
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
 
-
-
     async def mint(
         self,
         amount: int,
@@ -545,7 +544,9 @@ class Wallet(
         if split:
             logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
-            allowed_amounts = self.get_allowed_amounts()  # Get allowed amounts from the mint
+            allowed_amounts = (
+                self.get_allowed_amounts()
+            )  # Get allowed amounts from the mint
             for a in split:
                 if a not in allowed_amounts:
                     raise Exception(
@@ -681,7 +682,7 @@ class Wallet(
         original_indices, sorted_outputs = zip(*sorted_outputs_with_indices)
 
         # Call swap API
-        sorted_promises = await super().split(proofs, sorted_outputs)
+        sorted_promises = await super().split(proofs, sorted_outputs)  # type: ignore
 
         # sort promises back to original order
         promises = [
@@ -1160,12 +1161,12 @@ class Wallet(
     # ---------- BALANCE CHECKS ----------
 
     @property
-    def balance(self):
-        return sum_proofs(self.proofs)
+    def balance(self) -> Amount:
+        return Amount(self.unit, sum_proofs(self.proofs))
 
     @property
-    def available_balance(self):
-        return sum_proofs([p for p in self.proofs if not p.reserved])
+    def available_balance(self) -> Amount:
+        return Amount(self.unit, sum_proofs([p for p in self.proofs if not p.reserved]))
 
     @property
     def proof_amounts(self):

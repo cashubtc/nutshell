@@ -96,14 +96,16 @@ class CoreLightningRestWallet(LightningBackend):
                 error_message=(
                     f"Failed to connect to {self.url}, got: '{error_message}...'"
                 ),
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
 
         data = r.json()
         if len(data) == 0:
-            return StatusResponse(error_message="no data", balance=0)
+            return StatusResponse(error_message="no data", balance=Amount(self.unit, 0))
         balance_msat = int(sum([c["our_amount_msat"] for c in data["channels"]]))
-        return StatusResponse(error_message=None, balance=balance_msat)
+        return StatusResponse(
+            error_message=None, balance=Amount(self.unit, balance_msat // 1000)
+        )
 
     async def create_invoice(
         self,
@@ -271,9 +273,15 @@ class CoreLightningRestWallet(LightningBackend):
         data = r.json()
         if r.is_error or "error" in data:
             raise Exception("error in cln response")
-        if data.get("invoices"):
-            self.last_pay_index = data["invoices"][-1]["pay_index"]
-
+        last_invoice_paid_invoice = next(
+            (i for i in reversed(data["invoices"]) if i["status"] == "paid"), None
+        )
+        last_pay_index = (
+            last_invoice_paid_invoice.get("pay_index")
+            if last_invoice_paid_invoice
+            else 0
+        )
+        self.last_pay_index = last_pay_index
         while True:
             try:
                 url = f"/v1/invoice/waitAnyInvoice/{self.last_pay_index}"
@@ -285,9 +293,9 @@ class CoreLightningRestWallet(LightningBackend):
                             raise Exception(inv["error"]["message"])
                         try:
                             paid = inv["status"] == "paid"
-                            self.last_pay_index = inv["pay_index"]
                             if not paid:
                                 continue
+                            self.last_pay_index = inv["pay_index"]
                         except Exception:
                             continue
                         logger.trace(f"paid invoice: {inv}")

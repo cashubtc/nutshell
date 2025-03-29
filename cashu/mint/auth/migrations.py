@@ -98,3 +98,19 @@ async def m001_initial(db: Database):
                 );
             """
         )
+
+
+async def m002_add_balance_to_keysets_and_log_table(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('keysets')}
+                ADD COLUMN balance INTEGER NOT NULL DEFAULT 0
+            """
+        )
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('keysets')}
+                ADD COLUMN fees_paid INTEGER NOT NULL DEFAULT 0
+            """
+        )

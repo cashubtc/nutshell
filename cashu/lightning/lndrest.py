@@ -109,7 +109,7 @@ class LndRestWallet(LightningBackend):
         except (httpx.ConnectError, httpx.RequestError) as exc:
             return StatusResponse(
                 error_message=f"Unable to connect to {self.endpoint}. {exc}",
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
 
         try:
@@ -117,9 +117,13 @@ class LndRestWallet(LightningBackend):
             if r.is_error:
                 raise Exception
         except Exception:
-            return StatusResponse(error_message=r.text[:200], balance=0)
+            return StatusResponse(
+                error_message=r.text[:200], balance=Amount(self.unit, 0)
+            )
 
-        return StatusResponse(error_message=None, balance=int(data["balance"]) * 1000)
+        return StatusResponse(
+            error_message=None, balance=Amount(self.unit, int(data["balance"]))
+        )
 
     async def create_invoice(
         self,
@@ -259,7 +263,7 @@ class LndRestWallet(LightningBackend):
         }
 
         # add the mpp_record to the last hop
-        r = None    # type: ignore
+        r = None  # type: ignore
         for route_nr in range(len(data["routes"])):
             logger.debug(f"Trying to pay partial amount with route number {route_nr+1}")
             data["routes"][route_nr]["hops"][-1].update(mpp_record)

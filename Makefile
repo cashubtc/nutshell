@@ -61,3 +61,6 @@ docker-build:
 	cd docker-build
 	docker buildx build -f Dockerfile -t cashubtc/nutshell:0.15.0 --platform linux/amd64 .
 	# docker push cashubtc/nutshell:0.15.0
+
+clear-postgres:
+	psql cashu -c "DROP SCHEMA public CASCADE;" -c "CREATE SCHEMA public;" -c "GRANT ALL PRIVILEGES ON SCHEMA public TO cashu;"
