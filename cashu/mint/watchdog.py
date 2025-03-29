@@ -139,9 +139,9 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
             current_balance_delta = backend_balance - (
                 keyset_balance + keyset_fees_paid
             )
-            if last_balance_delta < current_balance_delta:
+            if last_balance_delta > current_balance_delta:
                 logger.warning(
-                    f"Balance delta mismatch: current: {current_balance_delta}> past: {last_balance_delta}"
+                    f"Balance delta mismatch: before: {last_balance_delta} - now: {current_balance_delta}"
                 )
                 logger.warning(
                     f"Balances before: backend: {last_balance_log_entry.backend_balance}, issued ecash: {last_balance_log_entry.keyset_balance}, fees earned: {last_balance_log_entry.keyset_fees_paid}"

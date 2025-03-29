@@ -56,7 +56,7 @@ async def test_balance_update_on_mint(wallet: Wallet, ledger: Ledger):
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only works with Regtest")
-async def test_melt_internal(wallet: Wallet, ledger: Ledger):
+async def test_balance_update_on_test_melt_internal(wallet: Wallet, ledger: Ledger):
     settings.fakewallet_brr = False
     # mint twice so we have enough to pay the second invoice back
     mint_quote = await wallet.request_mint(128)
@@ -88,7 +88,7 @@ async def test_melt_internal(wallet: Wallet, ledger: Ledger):
     assert not melt_quote_pre_payment.paid, "melt quote should not be paid"
     assert melt_quote_pre_payment.unpaid
 
-    keep_proofs, send_proofs = await wallet.swap_to_send(wallet.proofs, payment_amount)
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, payment_amount)
     await ledger.melt(proofs=send_proofs, quote=melt_quote.quote)
     await wallet.invalidate(send_proofs, check_spendable=True)
     assert wallet.balance == 64
@@ -103,7 +103,6 @@ async def test_melt_internal(wallet: Wallet, ledger: Ledger):
     # balance should have dropped
     assert balance_after == balance_before - payment_amount
     assert fees_paid_after == fees_paid_before
-
     # now mint
     await wallet.mint(payment_amount, quote_id=mint_quote_to_pay.quote)
     assert wallet.balance == 128
@@ -136,7 +135,7 @@ async def test_balance_update_on_melt_external(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.melt_quote(invoice_payment_request)
 
     total_amount = mint_quote.amount + mint_quote.fee_reserve
-    keep_proofs, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
+    _, send_proofs = await wallet.swap_to_send(wallet.proofs, total_amount)
     melt_quote = await ledger.melt_quote(
         PostMeltQuoteRequest(request=invoice_payment_request, unit="sat")
     )
