@@ -754,7 +754,6 @@ class Wallet(
         melt_quote = MeltQuote.from_resp_wallet(
             melt_quote_resp,
             self.url,
-            amount=melt_quote_resp.amount,
             unit=self.unit.name,
             request=invoice,
         )
@@ -762,9 +761,10 @@ class Wallet(
         melt_quote = MeltQuote.from_resp_wallet(
             melt_quote_resp,
             self.url,
-            amount=melt_quote_resp.amount,
-            unit=melt_quote_resp.unit or self.unit.name,
-            request=melt_quote_resp.request or invoice,
+            unit=melt_quote_resp.unit
+            or self.unit.name,  # BACKWARD COMPATIBILITY mint response < 0.16.6
+            request=melt_quote_resp.request
+            or invoice,  # BACKWARD COMPATIBILITY mint response < 0.16.6
         )
         return melt_quote
 
@@ -782,7 +782,6 @@ class Wallet(
         melt_quote = MeltQuote.from_resp_wallet(
             melt_quote_resp,
             self.url,
-            amount=melt_quote_resp.amount,
             unit=(
                 melt_quote_resp.unit or melt_quote_local.unit
                 if melt_quote_local
@@ -848,7 +847,6 @@ class Wallet(
 
         # Make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
-        amount = sum_proofs(proofs)
 
         # Generate a number of blank outputs for any overpaid fees. As described in
         # NUT-08, the mint will imprint these outputs with a value depending on the
@@ -875,7 +873,6 @@ class Wallet(
         melt_quote = MeltQuote.from_resp_wallet(
             melt_quote_resp,
             self.url,
-            amount=amount,
             unit=self.unit.name,
             request=invoice,
         )

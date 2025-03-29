@@ -389,7 +389,6 @@ async def test_get_melt_quote_state(wallet1: Wallet):
     melt_quote_wallet = MeltQuote.from_resp_wallet(
         melt_response,
         mint="test",
-        amount=quote.amount,
         unit=quote.unit or "sat",
         request=quote.request or invoice_payment_request,
     )

@@ -337,9 +337,7 @@ class MeltQuote(LedgerEvent):
         )
 
     @classmethod
-    def from_resp_wallet(
-        cls, melt_quote_resp, mint: str, amount: int, unit: str, request: str
-    ):
+    def from_resp_wallet(cls, melt_quote_resp, mint: str, unit: str, request: str):
         # BEGIN: BACKWARDS COMPATIBILITY < 0.16.0: "paid" field to "state"
         if melt_quote_resp.state is None:
             if melt_quote_resp.paid is True:
@@ -350,10 +348,12 @@ class MeltQuote(LedgerEvent):
         return cls(
             quote=melt_quote_resp.quote,
             method="bolt11",
-            request=request,
+            request=melt_quote_resp.request
+            or request,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
             checking_id="",
-            unit=unit,
-            amount=amount,
+            unit=melt_quote_resp.unit
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            amount=melt_quote_resp.amount,
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
             mint=mint,
@@ -465,8 +465,10 @@ class MintQuote(LedgerEvent):
             method="bolt11",
             request=mint_quote_resp.request,
             checking_id="",
-            unit=unit,
-            amount=amount,
+            unit=mint_quote_resp.unit
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            amount=mint_quote_resp.amount
+            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
             state=MintQuoteState(mint_quote_resp.state),
             mint=mint,
             expiry=mint_quote_resp.expiry,
