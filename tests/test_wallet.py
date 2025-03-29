@@ -174,9 +174,9 @@ async def test_mint(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     if not settings.debug_mint_only_deprecated:
-        quote_resp = await wallet1.get_mint_quote(mint_quote.quote)
-        assert quote_resp.request == mint_quote.request
-        assert quote_resp.state == MintQuoteState.paid.value
+        mint_quote = await wallet1.get_mint_quote(mint_quote.quote)
+        assert mint_quote.request == mint_quote.request
+        assert mint_quote.state == MintQuoteState.paid
 
     expected_proof_amounts = wallet1.split_wallet_state(64)
     await wallet1.mint(64, quote_id=mint_quote.quote)

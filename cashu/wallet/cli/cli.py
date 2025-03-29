@@ -456,8 +456,8 @@ async def invoice(
         while time.time() < check_until and not paid:
             await asyncio.sleep(5)
             try:
-                mint_quote_resp = await wallet.get_mint_quote(mint_quote.quote)
-                if mint_quote_resp.state == MintQuoteState.paid.value:
+                mint_quote = await wallet.get_mint_quote(mint_quote.quote)
+                if mint_quote.state == MintQuoteState.paid:
                     await wallet.mint(
                         amount,
                         split=optional_split,

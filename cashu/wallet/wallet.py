@@ -520,6 +520,42 @@ class Wallet(
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
 
+    async def get_mint_quote(
+        self,
+        quote_id: str,
+    ) -> MintQuote:
+        """Get a mint quote from mint.
+
+        Args:
+            quote_id (str): Id of the mint quote.
+
+        Returns:
+            MintQuote: Mint quote.
+        """
+        mint_quote_response = await super().get_mint_quote(quote_id)
+        mint_quote_local = await get_bolt11_mint_quote(db=self.db, quote=quote_id)
+        mint_quote = MintQuote.from_resp_wallet(
+            mint_quote_response,
+            mint=self.url,
+            amount=(
+                mint_quote_response.amount or mint_quote_local.amount
+                if mint_quote_local
+                else 0  # BACKWARD COMPATIBILITY mint response < 0.16.6
+            ),
+            unit=(
+                mint_quote_response.unit or mint_quote_local.unit
+                if mint_quote_local
+                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.16.6
+            ),
+        )
+        if mint_quote_local and mint_quote_local.privkey:
+            mint_quote.privkey = mint_quote_local.privkey
+
+        if not mint_quote_local:
+            await store_bolt11_mint_quote(db=self.db, quote=mint_quote)
+
+        return mint_quote
+
     async def mint(
         self,
         amount: int,
@@ -750,12 +786,12 @@ class Wallet(
             unit=(
                 melt_quote_resp.unit or melt_quote_local.unit
                 if melt_quote_local
-                else self.unit.name
+                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.16.6
             ),
             request=(
                 melt_quote_resp.request or melt_quote_local.request
                 if (melt_quote_local and melt_quote_local.request)
-                else "None"
+                else "None"  # BACKWARD COMPATIBILITY mint response < 0.16.6
             ),
         )
 
@@ -780,6 +816,12 @@ class Wallet(
                 # invalidate proofs
                 if sum_proofs(proofs) == melt_quote.amount + melt_quote.fee_reserve:
                     await self.invalidate(proofs)
+
+                if melt_quote.change:
+                    logger.warning(
+                        "Melt quote contains change but change is not supported yet."
+                    )
+
             if melt_quote.state == MeltQuoteState.unpaid:
                 logger.debug("Updating unpaid status of melt quote.")
                 # set proofs as not reserved
