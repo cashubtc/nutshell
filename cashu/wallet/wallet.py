@@ -705,7 +705,7 @@ class Wallet(
 
     async def melt_quote(
         self, invoice: str, amount_msat: Optional[int] = None
-    ) -> PostMeltQuoteResponse:
+    ) -> MeltQuote:
         """
         Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
         """
@@ -723,10 +723,17 @@ class Wallet(
             request=invoice,
         )
         await store_bolt11_melt_quote(db=self.db, quote=melt_quote)
-        return melt_quote_resp
+        melt_quote = MeltQuote.from_resp_wallet(
+            melt_quote_resp,
+            self.url,
+            amount=melt_quote_resp.amount,
+            unit=melt_quote_resp.unit or self.unit.name,
+            request=melt_quote_resp.request or invoice,
+        )
+        return melt_quote
 
     async def get_melt_quote(self, quote: str) -> Optional[MeltQuote]:
-        """Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
+        """Fetches a melt quote from the mint and updates proofs in the database.
 
         Args:
             quote (str): Quote ID to fetch.

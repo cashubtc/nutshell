@@ -376,7 +376,7 @@ async def test_get_melt_quote_state(wallet1: Wallet):
         mint_quote = await wallet1.request_mint(64)
         invoice_payment_request = mint_quote.request
     quote = await wallet1.melt_quote(invoice_payment_request)
-    assert quote.state == MintQuoteState.unpaid.value
+    assert quote.state == MintQuoteState.unpaid
     assert quote.request == invoice_payment_request
     total_amount = quote.amount + quote.fee_reserve
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, total_amount)
