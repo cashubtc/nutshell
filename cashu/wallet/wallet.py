@@ -796,6 +796,7 @@ class Wallet(
             fee_reserve_sat (int): Amount of fees to be reserved for the payment.
 
         """
+
         # Make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
         amount = sum_proofs(proofs)
@@ -813,13 +814,15 @@ class Wallet(
             n_change_outputs * [1], change_secrets, change_rs
         )
 
-        # store the melt_id in proofs db
-        async with self.db.connect() as conn:
-            for p in proofs:
-                p.melt_id = quote_id
-                await update_proof(p, melt_id=quote_id, conn=conn)
+        await self.set_reserved_for_melt(proofs, reserved=True, quote_id=quote_id)
+        try:
+            melt_quote_resp = await super().melt(quote_id, proofs, change_outputs)
+        except Exception as e:
+            logger.error(f"Mint error: {e}")
+            # remove the melt_id in proofs and set reserved to False
+            await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
+            raise e
 
-        melt_quote_resp = await super().melt(quote_id, proofs, change_outputs)
         melt_quote = MeltQuote.from_resp_wallet(
             melt_quote_resp,
             self.url,
@@ -830,11 +833,7 @@ class Wallet(
         # if payment fails
         if melt_quote.state == MeltQuoteState.unpaid:
             # remove the melt_id in proofs and set reserved to False
-            async with self.db.connect() as conn:
-                for p in proofs:
-                    p.melt_id = None
-                    p.reserved = False
-                    await update_proof(p, melt_id="", db=self.db, conn=conn)
+            await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
             raise Exception("could not pay invoice.")
         elif melt_quote.state == MeltQuoteState.pending:
             # payment is still pending
@@ -1178,7 +1177,7 @@ class Wallet(
                     + amount_summary(proofs, self.unit)
                 )
         if set_reserved:
-            await self.set_reserved(send_proofs, reserved=True)
+            await self.set_reserved_for_send(send_proofs, reserved=True)
         return send_proofs, fees
 
     async def swap_to_send(
@@ -1231,7 +1230,7 @@ class Wallet(
             swap_proofs, amount, secret_lock, include_fees=include_fees
         )
         if set_reserved:
-            await self.set_reserved(send_proofs, reserved=True)
+            await self.set_reserved_for_send(send_proofs, reserved=True)
         return keep_proofs, send_proofs
 
     # ---------- BALANCE CHECKS ----------
