@@ -367,8 +367,14 @@ async def test_get_melt_quote_state(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(128)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(128, quote_id=mint_quote.quote)
-    invoice_dict = get_real_invoice(64)
-    invoice_payment_request = invoice_dict["payment_request"]
+    invoice_payment_request = ""
+    if is_regtest:
+        invoice_dict = get_real_invoice(64)
+        invoice_payment_request = invoice_dict["payment_request"]
+
+    if is_fake:
+        mint_quote = await wallet1.request_mint(64)
+        invoice_payment_request = mint_quote.request
     quote = await wallet1.melt_quote(invoice_payment_request)
     assert quote.state == MintQuoteState.unpaid.value
     assert quote.request == invoice_payment_request
