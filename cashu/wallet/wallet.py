@@ -823,14 +823,7 @@ class Wallet(
 
             if melt_quote.state == MeltQuoteState.unpaid:
                 logger.debug("Updating unpaid status of melt quote.")
-                # set proofs as not reserved
-                async with self.db.connect() as conn:
-                    for p in proofs:
-                        p.reserved = False
-                        p.melt_id = None
-                        await update_proof(
-                            p, reserved=False, melt_id="", db=self.db, conn=conn
-                        )
+                await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
         return melt_quote
 
     async def melt(
@@ -865,10 +858,10 @@ class Wallet(
         try:
             melt_quote_resp = await super().melt(quote_id, proofs, change_outputs)
         except Exception as e:
-            logger.error(f"Mint error: {e}")
+            logger.debug(f"Mint error: {e}")
             # remove the melt_id in proofs and set reserved to False
             await self.set_reserved_for_melt(proofs, reserved=False, quote_id=None)
-            raise e
+            raise Exception(f"could not pay invoice: {e}")
 
         melt_quote = MeltQuote.from_resp_wallet(
             melt_quote_resp,
