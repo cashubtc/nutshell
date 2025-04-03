@@ -19,6 +19,7 @@ class MintInfo(BaseModel):
     motd: Optional[str]
     icon_url: Optional[str]
     urls: Optional[List[str]]
+    tos_url: Optional[str]
     time: Optional[int]
     nuts: Dict[int, Any]
 
