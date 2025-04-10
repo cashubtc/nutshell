@@ -171,7 +171,7 @@ async def send(
 
     print(token)
 
-    await wallet.set_reserved(send_proofs, reserved=True)
+    await wallet.set_reserved_for_send(send_proofs, reserved=True)
     return wallet.available_balance, token
 
 

@@ -223,7 +223,23 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
 
         return keep_amounts, send_amounts
 
-    async def set_reserved(self, proofs: List[Proof], reserved: bool) -> None:
+    async def set_reserved_for_melt(
+        self, proofs: List[Proof], reserved: bool, quote_id: str | None
+    ):
+        """Sets the proofs as pending for a melt operation (reserved=True) or as not pending (reserved=False) anymore.
+
+        Args:
+            proofs (List[Proof]): _description_
+            reserved (bool): _description_
+            quote_id (str | None): _description_
+        """
+        async with self.db.connect() as conn:
+            for p in proofs:
+                p.melt_id = quote_id
+                p.reserved = reserved
+                await update_proof(p, reserved=reserved, melt_id=quote_id, conn=conn)
+
+    async def set_reserved_for_send(self, proofs: List[Proof], reserved: bool) -> None:
         """Mark a proof as reserved or reset it in the wallet db to avoid reuse when it is sent.
 
         Args:
