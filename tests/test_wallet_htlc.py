@@ -416,3 +416,49 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
         wallet1.redeem(send_proofs),
         "Mint Error: no valid signature provided for input.",
     )
+
+
+@pytest.mark.asyncio
+async def test_htlc_redeem_timelock_2_of_2_signatures(wallet1: Wallet, wallet2: Wallet):
+    """Testing the 2-of-2 timelock (refund) signature case."""
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+    preimage = "00000000000000000000000000000000"
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
+    secret = await wallet1.create_htlc_lock(
+        preimage=preimage,
+        hashlock_pubkeys=[pubkey_wallet2],
+        locktime_seconds=2,
+        locktime_pubkeys=[pubkey_wallet1, pubkey_wallet2],
+        locktime_n_sigs=2,
+    )
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
+    send_proofs_copy = send_proofs.copy()
+
+    signatures = wallet1.sign_proofs(send_proofs)
+    for p, s in zip(send_proofs, signatures):
+        p.witness = HTLCWitness(preimage=preimage, signatures=[s]).json()
+
+    # should error because we used wallet2 signatures for the hash lock
+    await assert_err(
+        wallet1.redeem(send_proofs),
+        "Mint Error: no valid signature provided for input.",
+    )
+
+    await asyncio.sleep(2)
+    # locktime has passed
+
+    # should fail. lock time has passed but we provided only wallet1 signature for timelock, we need 2 though
+    await assert_err(
+        wallet1.redeem(send_proofs),
+        "Mint Error: not enough signatures provided: 1 < 2.",
+    )
+
+    # let's add the second signature
+    send_proofs_copy = wallet2.add_signature_witnesses_to_proofs(send_proofs_copy)
+
+    # now we can redeem it
+    await wallet1.redeem(send_proofs_copy)

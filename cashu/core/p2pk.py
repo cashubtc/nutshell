@@ -36,6 +36,11 @@ class P2PKSecret(Secret):
         n_sigs = self.tags.get_tag("n_sigs")
         return int(n_sigs) if n_sigs else None
 
+    @property
+    def n_sigs_refund(self) -> Union[None, int]:
+        n_sigs_refund = self.tags.get_tag_int("n_sigs_refund")
+        return n_sigs_refund
+
 
 def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
     signature = private_key.schnorr_sign(

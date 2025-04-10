@@ -39,6 +39,15 @@ class Tags(BaseModel):
                 return tag[1]
         return None
 
+    def get_tag_int(self, tag_name: str) -> Union[int, None]:
+        tag = self.get_tag(tag_name)
+        if tag is not None:
+            try:
+                return int(tag)
+            except ValueError:
+                logger.warning(f"Tag {tag_name} is not an integer")
+        return None
+
     def get_tag_all(self, tag_name: str) -> List[str]:
         all_tags = []
         for tag in self.__root__:

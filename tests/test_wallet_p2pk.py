@@ -251,6 +251,53 @@ async def test_p2pk_locktime_with_second_refund_pubkey(
 
 
 @pytest.mark.asyncio
+async def test_p2pk_locktime_with_2_of_2_refund_pubkeys(
+    wallet1: Wallet, wallet2: Wallet
+):
+    """Testing the case where we expect a 2-of-2 signature from the refund pubkeys"""
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()  # receiver side
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()  # receiver side
+    # sender side
+    garbage_pubkey = PrivateKey().pubkey
+    assert garbage_pubkey
+    secret_lock = await wallet1.create_p2pk_lock(
+        garbage_pubkey.serialize().hex(),  # create lock to unspendable pubkey
+        locktime_seconds=2,  # locktime
+        tags=Tags(
+            [["refund", pubkey_wallet2, pubkey_wallet1], ["n_sigs_refund", "2"]],
+        ),  # multiple refund pubkeys
+    )  # sender side
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 8, secret_lock=secret_lock
+    )
+    # we need to copy the send_proofs because the redeem function
+    # modifies the send_proofs in place by adding the signatures
+    send_proofs_copy = copy.deepcopy(send_proofs)
+    send_proofs_copy2 = copy.deepcopy(send_proofs)
+    # receiver side: can't redeem since we used a garbage pubkey
+    # and locktime has not passed
+    await assert_err(
+        wallet1.redeem(send_proofs),
+        "Mint Error: no valid signature provided for input.",
+    )
+    await asyncio.sleep(2)
+
+    # now is the refund time, but we can't redeem it because we need 2 signatures
+    await assert_err(
+        wallet1.redeem(send_proofs_copy), "not enough signatures provided: 1 < 2."
+    )
+
+    # let's add the second signature
+    send_proofs_copy2 = wallet2.add_signature_witnesses_to_proofs(send_proofs_copy2)
+
+    # now we can redeem it
+    await wallet1.redeem(send_proofs_copy2)
+
+
+@pytest.mark.asyncio
 async def test_p2pk_multisig_2_of_2(wallet1: Wallet, wallet2: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)

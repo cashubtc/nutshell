@@ -57,6 +57,7 @@ class LedgerSpendingConditions:
             logger.trace(f"p2pk locktime ran out ({p2pk_secret.locktime}<{now}).")
             # If a refund pubkey is present, we demand the signature to be from it
             refund_pubkeys = p2pk_secret.tags.get_tag_all("refund")
+            n_sigs_refund = p2pk_secret.n_sigs_refund or 1
             if not refund_pubkeys:
                 # no refund pubkey is present, anyone can spend
                 return True
@@ -64,11 +65,11 @@ class LedgerSpendingConditions:
                 proof,
                 refund_pubkeys,
                 proof.p2pksigs,
-                1,  # only 1 sig required for refund
+                n_sigs_refund,
             )
 
         return self._verify_secret_signatures(
-            proof, pubkeys, proof.p2pksigs, p2pk_secret.n_sigs
+            proof, pubkeys, proof.p2pksigs, p2pk_secret.n_sigs or 1
         )
 
     def _verify_htlc_spending_conditions(self, proof: Proof, secret: Secret) -> bool:
@@ -112,12 +113,13 @@ class LedgerSpendingConditions:
         # check if locktime is in the past
         if htlc_secret.locktime and htlc_secret.locktime < time.time():
             refund_pubkeys = htlc_secret.tags.get_tag_all("refund")
+            n_sigs_refund = htlc_secret.n_sigs_refund or 1
             if refund_pubkeys:
                 return self._verify_secret_signatures(
                     proof,
                     refund_pubkeys,
                     proof.p2pksigs,
-                    1,  # only one refund signature required
+                    n_sigs_refund,
                 )
             # no pubkeys given in secret, anyone can spend
             return True
@@ -138,7 +140,7 @@ class LedgerSpendingConditions:
             return True
 
         return self._verify_secret_signatures(
-            proof, hashlock_pubkeys, proof.htlcsigs or [], htlc_secret.n_sigs
+            proof, hashlock_pubkeys, proof.htlcsigs or [], htlc_secret.n_sigs or 1
         )
 
     def _verify_secret_signatures(
@@ -146,7 +148,7 @@ class LedgerSpendingConditions:
         proof: Proof,
         pubkeys: List[str],
         signatures: List[str],
-        n_sigs_required: int | None = 1,
+        n_sigs_required: int,
     ) -> bool:
         assert len(set(pubkeys)) == len(pubkeys), "pubkeys must be unique."
         logger.trace(f"pubkeys: {pubkeys}")
@@ -233,15 +235,16 @@ class LedgerSpendingConditions:
         self, proofs: List[Proof], outputs: List[BlindedMessage]
     ) -> bool:
         """
-        If sigflag==SIG_ALL in proof.secret, check if outputs
-        contain valid signatures for pubkeys in proof.secret.
+        If sigflag==SIG_ALL in any proof.secret, perform a signature check on all
+        inputs (proofs) and outputs (outputs) together.
 
-        We return True
-        - if not all proof.secret are Secret spending condition
-        - if not all secrets are P2PKSecret spending condition
-        - if not all signature.sigflag are SIG_ALL
+        # We return True
+        # - if not all proof.secret are Secret spending condition
+        # - if not all secrets are P2PKSecret spending condition
+        # - if not all signature.sigflag are SIG_ALL
 
         We raise an exception:
+        - if one input is SIG_ALL but not all inputs are SIG_ALL
         - if not all pubkeys in all secrets are the same
         - if not all n_sigs in all secrets are the same
         - if not all signatures in all outputs are unique
@@ -252,28 +255,47 @@ class LedgerSpendingConditions:
         We return True if we successfully validated the spending condition.
         """
 
+        # check if any input is P2PK with SIG_ALL and enforce it if so
+        is_sigall = False
+        for proof in proofs:
+            try:
+                secret_generic = Secret.deserialize(proof.secret)
+                p2pk_secret = P2PKSecret.from_secret(secret_generic)
+                if p2pk_secret.sigflag == SigFlags.SIG_ALL:
+                    is_sigall = True
+                    break
+            except Exception:
+                # we ignore exceptions here, because we want to check all inputs
+                pass
+
+        if not is_sigall:
+            # no P2PK with SIG_ALL found, we don't need to check anything
+            return True
+
+        # now we can enforce that all inputs are P2PK with SIG_ALL
+
         try:
             secrets_generic = [Secret.deserialize(p.secret) for p in proofs]
             p2pk_secrets = [
                 P2PKSecret.from_secret(secret) for secret in secrets_generic
             ]
         except Exception:
-            # secret is not a spending condition so we treat is a normal secret
-            return True
+            # at least one input is not a P2PK secret
+            return False
 
-        # check if all secrets are P2PK
+        # verify that all secrets are P2PK
         # NOTE: This is redundant, because P2PKSecret.from_secret() already checks for the kind
         # Leaving it in for explicitness
         if not all(
             [SecretKind(secret.kind) == SecretKind.P2PK for secret in p2pk_secrets]
         ):
             # not all secrets are P2PK
-            return True
+            return False
 
-        # check if all secrets are sigflag==SIG_ALL
+        # verify that all secrets are sigflag==SIG_ALL
         if not all([secret.sigflag == SigFlags.SIG_ALL for secret in p2pk_secrets]):
             # not all secrets have sigflag==SIG_ALL
-            return True
+            return False
 
         # extract all pubkeys and n_sigs from secrets
         pubkeys_per_proof = [
@@ -289,6 +311,7 @@ class LedgerSpendingConditions:
                 refund_pubkeys = p2pk_secret.tags.get_tag_all("refund")
                 if refund_pubkeys:
                     pubkeys_per_proof.append(refund_pubkeys)
+                    # TODO: Add n_sigs_refund
                     n_sigs_per_proof.append(1)  # only 1 sig required for refund
 
         # if no pubkeys are present, anyone can spend
