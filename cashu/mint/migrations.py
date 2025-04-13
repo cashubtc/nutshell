@@ -1,5 +1,7 @@
 import copy
-from typing import Dict, List
+from typing import List
+
+from sqlalchemy import RowMapping
 
 from ..core.base import (
     MeltQuoteState,
@@ -79,40 +81,45 @@ async def create_balance_views(db: Database, conn: Connection):
     await conn.execute(
         f"""
         CREATE VIEW {db.table_with_schema('balance_issued')} AS
-        SELECT COALESCE(SUM(s), 0) AS balance FROM (
-            SELECT SUM(amount) AS s
+        SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
+            SELECT id, SUM(amount) AS s
             FROM {db.table_with_schema('promises')}
             WHERE amount > 0
+            GROUP BY id
         ) AS balance_issued;
-    """
+        """
     )
-
     await conn.execute(
         f"""
         CREATE VIEW {db.table_with_schema('balance_redeemed')} AS
-        SELECT COALESCE(SUM(s), 0) AS balance FROM (
-            SELECT SUM(amount) AS s
+        SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
+            SELECT id, SUM(amount) AS s
             FROM {db.table_with_schema('proofs_used')}
             WHERE amount > 0
+            GROUP BY id
         ) AS balance_redeemed;
-    """
+        """
     )
-
     await conn.execute(
         f"""
         CREATE VIEW {db.table_with_schema('balance')} AS
-        SELECT s_issued - s_used FROM (
-            SELECT bi.balance AS s_issued, bu.balance AS s_used
+        SELECT keyset, s_issued - s_used AS balance FROM (
+            SELECT bi.keyset AS keyset,
+                bi.balance AS s_issued,
+                COALESCE(bu.balance, 0) AS s_used
             FROM {db.table_with_schema('balance_issued')} bi
-            CROSS JOIN {db.table_with_schema('balance_redeemed')} bu
+            LEFT OUTER JOIN {db.table_with_schema('balance_redeemed')} bu
+            ON bi.keyset = bu.keyset
         ) AS balance;
-    """
+        """
     )
 
 
 async def m002_add_balance_views(db: Database):
-    async with db.connect() as conn:
-        await create_balance_views(db, conn)
+    # NOTE: We move the creation of balance views after m007_proofs_and_promises_store_id
+    # async with db.connect() as conn:
+    # await create_balance_views(db, conn)
+    pass
 
 
 async def m003_mint_keysets(db: Database):
@@ -208,6 +215,9 @@ async def m007_proofs_and_promises_store_id(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN id TEXT"
         )
+
+        # create balance views
+        await create_balance_views(db, conn)
 
 
 async def m008_promises_dleq(db: Database):
@@ -795,7 +805,7 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
     # and the `paid` and `issued` column respectively
     # mint quotes:
     async with db.connect() as conn:
-        rows: List[Dict] = await conn.fetchall(
+        rows: List[RowMapping] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('mint_quotes')}"
         )
         for row in rows:
@@ -811,7 +821,7 @@ async def m020_add_state_to_mint_and_melt_quotes(db: Database):
 
     # melt quotes:
     async with db.connect() as conn:
-        rows2: List[Dict] = await conn.fetchall(
+        rows2: List[RowMapping] = await conn.fetchall(
             f"SELECT * FROM {db.table_with_schema('melt_quotes')}"
         )
         for row in rows2:
@@ -877,43 +887,54 @@ async def m025_add_amounts_to_keysets(db: Database):
 
 
 async def m026_keyset_specific_balance_views(db: Database):
+    async def add_missing_id_to_proofs_and_promises(db: Database, conn: Connection):
+        """
+        Balance views now show the balance for each keyset. Some old proofs may not have
+        an id set.
+
+        We fix some of the old proofs and promises that did not have an id
+        set by selecting the oldest (hex) keyset we can find and fill in the id.
+        """
+        # get keyset with smallest first_seen that starts with "00"
+        keyset = await conn.fetchone(
+            f"SELECT * FROM {db.table_with_schema('keysets')} WHERE id LIKE '00%' ORDER BY first_seen LIMIT 1"
+        )
+        # get all promises where id is NULL
+        promises = await conn.fetchall(
+            f"SELECT * FROM {db.table_with_schema('promises')} WHERE id IS NULL"
+        )
+        proofs_used = await conn.fetchall(
+            f"SELECT * FROM {db.table_with_schema('proofs_used')} WHERE id IS NULL"
+        )
+        proofs_pending = await conn.fetchall(
+            f"SELECT * FROM {db.table_with_schema('proofs_pending')} WHERE id IS NULL"
+        )
+        if not keyset and (promises or proofs_used or proofs_pending):
+            raise Exception(
+                "Migration failed: No keyset found, but there are promises or proofs without id. Please report this issue."
+            )
+        if not keyset or not (promises or proofs_used or proofs_pending):
+            # no migration needed
+            return
+
+        keyset_id = keyset["id"]
+        if promises:
+            await conn.execute(
+                f"UPDATE {db.table_with_schema('promises')} SET id = '{keyset_id}' WHERE id IS NULL"
+            )
+        if proofs_used:
+            await conn.execute(
+                f"UPDATE {db.table_with_schema('proofs_used')} SET id = '{keyset_id}' WHERE id IS NULL"
+            )
+        if proofs_pending:
+            await conn.execute(
+                f"UPDATE {db.table_with_schema('proofs_pending')} SET id = '{keyset_id}' WHERE id IS NULL"
+            )
+
     async with db.connect() as conn:
+        await add_missing_id_to_proofs_and_promises(db, conn)
         await drop_balance_views(db, conn)
-        await conn.execute(
-            f"""
-            CREATE VIEW {db.table_with_schema('balance_issued')} AS
-            SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
-                SELECT id, SUM(amount) AS s
-                FROM {db.table_with_schema('promises')}
-                WHERE amount > 0
-                GROUP BY id
-            );
-            """
-        )
-        await conn.execute(
-            f"""
-            CREATE VIEW {db.table_with_schema('balance_redeemed')} AS
-            SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
-                SELECT id, SUM(amount) AS s
-                FROM {db.table_with_schema('proofs_used')}
-                WHERE amount > 0
-                GROUP BY id
-            );
-            """
-        )
-        await conn.execute(
-            f"""
-            CREATE VIEW {db.table_with_schema('balance')} AS
-            SELECT keyset, s_issued - s_used AS balance FROM (
-                SELECT bi.keyset AS keyset,
-                    bi.balance AS s_issued,
-                    COALESCE(bu.balance, 0) AS s_used
-                FROM {db.table_with_schema('balance_issued')} bi
-                LEFT OUTER JOIN {db.table_with_schema('balance_redeemed')} bu
-                ON bi.keyset = bu.keyset
-            );
-            """
-        )
+        await create_balance_views(db, conn)
 
 async def m027_add_payment_quote_kind(db: Database):
     async with db.connect() as conn:
