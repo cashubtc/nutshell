@@ -151,7 +151,7 @@ async def test_htlc_redeem_with_wrong_signature(wallet1: Wallet, wallet2: Wallet
 
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
 
 
@@ -371,7 +371,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
     # should error because we used wallet2 signatures for the hash lock
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
 
     await asyncio.sleep(2)
@@ -407,14 +407,14 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
     # should error because we used wallet2 signatures for the hash lock
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
 
     await asyncio.sleep(2)
     # should fail since lock time has passed and we provided a wrong signature for timelock
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
 
 
@@ -445,7 +445,7 @@ async def test_htlc_redeem_timelock_2_of_2_signatures(wallet1: Wallet, wallet2: 
     # should error because we used wallet2 signatures for the hash lock
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
 
     await asyncio.sleep(2)

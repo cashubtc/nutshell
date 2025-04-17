@@ -33,7 +33,7 @@ class P2PKSecret(Secret):
 
     @property
     def n_sigs(self) -> Union[None, int]:
-        n_sigs = self.tags.get_tag("n_sigs")
+        n_sigs = self.tags.get_tag_int("n_sigs")
         return int(n_sigs) if n_sigs else None
 
     @property

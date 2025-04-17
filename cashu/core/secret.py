@@ -86,3 +86,18 @@ class Secret(BaseModel):
         tags = Tags(tags=tags_list)
         logger.debug(f"Deserialized Secret: {kind}, {data}, {nonce}, {tags}")
         return cls(kind=kind, data=data, nonce=nonce, tags=tags)
+
+    def __eq__(self, value: object) -> bool:
+        # two secrets are equal if they have the same kind, data and tags (ignoring nonce)
+        if not isinstance(value, Secret):
+            return False
+        return (
+            self.kind == value.kind
+            and self.data == value.data
+            and self.tags.__root__ == value.tags.__root__
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            (self.kind, self.data, tuple([s for xs in self.tags.__root__ for s in xs]))
+        )

@@ -104,7 +104,9 @@ class LedgerVerification(
             raise TransactionError("input and output keysets have different units.")
 
         # Verify output spending conditions
-        if outputs and not self._verify_output_spending_conditions(proofs, outputs):
+        if outputs and not self._verify_input_output_spending_conditions(
+            proofs, outputs
+        ):
             raise TransactionError("validation of output spending conditions failed.")
 
     async def _verify_outputs(

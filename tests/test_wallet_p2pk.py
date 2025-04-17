@@ -1,13 +1,15 @@
 import asyncio
 import copy
+import hashlib
 import json
 import secrets
 from typing import List
 
 import pytest
 import pytest_asyncio
+from coincurve import PrivateKey as CoincurvePrivateKey
 
-from cashu.core.base import Proof
+from cashu.core.base import P2PKWitness, Proof
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.migrations import migrate_databases
 from cashu.core.p2pk import SigFlags
@@ -121,7 +123,7 @@ async def test_p2pk_receive_with_wrong_private_key(wallet1: Wallet, wallet2: Wal
     wallet2.private_key = PrivateKey()  # wrong private key
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "signature threshold not met",
     )
 
 
@@ -145,7 +147,7 @@ async def test_p2pk_short_locktime_receive_with_wrong_private_key(
     send_proofs_copy = copy.deepcopy(send_proofs)
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
     await asyncio.sleep(2)
     # should succeed because even with the wrong private key we
@@ -175,7 +177,7 @@ async def test_p2pk_locktime_with_refund_pubkey(wallet1: Wallet, wallet2: Wallet
     # and locktime has not passed
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
     await asyncio.sleep(2)
     # we can now redeem because of the refund locktime
@@ -206,13 +208,13 @@ async def test_p2pk_locktime_with_wrong_refund_pubkey(wallet1: Wallet, wallet2: 
     # and locktime has not passed
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
     await asyncio.sleep(2)
     # we still can't redeem it because we used garbage_pubkey_2 as a refund pubkey
     await assert_err(
         wallet2.redeem(send_proofs_copy),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
 
 
@@ -243,7 +245,7 @@ async def test_p2pk_locktime_with_second_refund_pubkey(
     # and locktime has not passed
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
     await asyncio.sleep(2)
     # we can now redeem because of the refund locktime
@@ -281,13 +283,14 @@ async def test_p2pk_locktime_with_2_of_2_refund_pubkeys(
     # and locktime has not passed
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: no valid signature provided for input.",
+        "Mint Error: signature threshold not met",
     )
     await asyncio.sleep(2)
 
     # now is the refund time, but we can't redeem it because we need 2 signatures
     await assert_err(
-        wallet1.redeem(send_proofs_copy), "not enough signatures provided: 1 < 2."
+        wallet1.redeem(send_proofs_copy),
+        "not enough pubkeys (2) or signatures (1) present for n_sigs (2)",
     )
 
     # let's add the second signature
@@ -344,6 +347,59 @@ async def test_p2pk_multisig_duplicate_signature(wallet1: Wallet, wallet2: Walle
 
 
 @pytest.mark.asyncio
+async def test_p2pk_multisig_two_signatures_same_pubkey(
+    wallet1: Wallet, wallet2: Wallet
+):
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+    pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    assert pubkey_wallet1 != pubkey_wallet2
+    # p2pk test
+    secret_lock = await wallet1.create_p2pk_lock(
+        pubkey_wallet2, tags=Tags([["pubkeys", pubkey_wallet1]]), n_sigs=2
+    )
+
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 1, secret_lock=secret_lock
+    )
+    assert len(send_proofs) == 1
+    proof = send_proofs[0]
+    # create coincurve private key so we can sign the message
+    coincurve_privatekey2 = CoincurvePrivateKey(
+        bytes.fromhex(wallet2.private_key.serialize())
+    )
+    # check if private keys are the same
+    assert coincurve_privatekey2.to_hex() == wallet2.private_key.serialize()
+
+    msg = hashlib.sha256(proof.secret.encode("utf-8")).digest()
+    coincurve_signature = coincurve_privatekey2.sign_schnorr(msg)
+
+    # add signatures of wallet2 – this is a duplicate signature
+    send_proofs = wallet2.add_signature_witnesses_to_proofs(send_proofs)
+
+    # the signatures from coincurve are not the same as the ones from wallet2
+    assert coincurve_signature.hex() != proof.p2pksigs[0]
+
+    # verify both signatures:
+    assert PublicKey(bytes.fromhex(pubkey_wallet2), raw=True).schnorr_verify(
+        msg, bytes.fromhex(proof.p2pksigs[0]), None, raw=True
+    )
+    assert PublicKey(bytes.fromhex(pubkey_wallet2), raw=True).schnorr_verify(
+        msg, coincurve_signature, None, raw=True
+    )
+
+    # add coincurve signature, and the wallet2 signature will be added during .redeem
+    send_proofs[0].witness = P2PKWitness(signatures=[coincurve_signature.hex()]).json()
+
+    # here we add the signatures of wallet2
+    await assert_err(
+        wallet2.redeem(send_proofs), "Mint Error: signature threshold not met. 1 < 2."
+    )
+
+
+@pytest.mark.asyncio
 async def test_p2pk_multisig_quorum_not_met_1_of_2(wallet1: Wallet, wallet2: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
@@ -360,7 +416,7 @@ async def test_p2pk_multisig_quorum_not_met_1_of_2(wallet1: Wallet, wallet2: Wal
     )
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: not enough signatures provided: 1 < 2.",
+        "Mint Error: not enough pubkeys (2) or signatures (1) present for n_sigs (2)",
     )
 
 
@@ -385,7 +441,7 @@ async def test_p2pk_multisig_quorum_not_met_2_of_3(wallet1: Wallet, wallet2: Wal
     # here we add the signatures of wallet2
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: not enough signatures provided: 2 < 3.",
+        "Mint Error: not enough pubkeys (2) or signatures (2) present for n_sigs (3)",
     )
 
 
