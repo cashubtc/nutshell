@@ -132,8 +132,9 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         if not self._inputs_require_sigall(proofs):
             return proofs
         try:
+            logger.debug("Input requires SIG_ALL")
             proofs_to_sign = self.filter_proofs_locked_to_our_pubkey(proofs)
-            if len(proofs_to_sign) != proofs:
+            if len(proofs_to_sign) != len(proofs):
                 raise Exception("Proofs not locked to our pubkey")
             secrets = set([Secret.deserialize(p.secret) for p in proofs])
             if not len(secrets) == 1:
@@ -145,7 +146,9 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             # add witness to only the first proof
             signed_proofs = self.add_signatures_to_proofs([proofs[0]], [signature])
             proofs[0].witness = signed_proofs[0].witness
-
+            logger.debug(
+                f"SIGALL Adding witness to proof: {proofs[0].secret} with signature: {signature}"
+            )
         except Exception:
             logger.error("not all secrets are the same, skipping SIG_ALL signature")
             return proofs

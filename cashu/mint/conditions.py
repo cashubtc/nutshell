@@ -43,6 +43,10 @@ class LedgerSpendingConditions:
             return True
 
         p2pk_secret = P2PKSecret.from_secret(secret)
+        if p2pk_secret.sigflag != SigFlags.SIG_INPUTS:
+            # not a SIG_INPUTS secret
+            return True
+
         message_to_sign = message_to_sign or proof.secret
 
         # extract pubkeys that we require signatures from depending on whether the
