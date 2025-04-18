@@ -1,4 +1,4 @@
-from ..core.base import MintKeyset
+from ..core.base import MintKeyset, Unit, Amount
 from ..core.settings import settings
 from ..core.errors import KeysetError, KeysetNotFoundError
 from ..core.crypto.keys import derive_keyset_id
@@ -29,7 +29,71 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                     keyset_derivation_path[:-1] == derivation[:-1]
                     and keyset_derivation_counter > keyset_derivation_counter
                 ):
-                    self.derivation_path = keyset.derivation_path  
+                    self.derivation_path = keyset.derivation_path
+
+    async def rotate_next_keyset(
+        self,
+        unit: Unit,
+        max_order: Optional[int],
+        input_fee_ppk: Optional[int]
+    ) -> MintKeyset:
+        """
+        This function:
+            1. finds the highest counter keyset for `unit`
+            2. creates a new derivation path from the old one, increasing the counter by one
+            3. creates a new active keyset for the new derivation path
+            4. de-activates the old keyset
+            5. stores the new keyset to DB
+        
+        Args:
+            unit (Unit): Unit of the keyset.
+            max_order (Optional[int], optional): The number of keys to generate, which correspond to powers of 2.
+            input_fee_ppk (Optional[int], optional):  The new keyset's fee
+        Returns:
+            MintKeyset: Resulting keyset of the rotation
+        """
+
+        logger.info(f"Attempting keyset rotation for unit {str(Unit)}")
+
+        # Select keyset with the greatest counter
+        selected_keyset = None
+        selected_keyset_counter = -1
+        for keyset in self.keysets.values():
+            if keyset.active and keyset.unit == unit:
+                keyset_derivation_path = keyset.derivation_path.split("/")
+                keyset_derivation_counter = int(keyset_derivation_path[-1].replace("'", ""))
+                if keyset_derivation_counter > selected_keyset_counter:
+                    selected_keyset = keyset
+
+        # If no selected keyset, then there is no keyset for this unit
+        if not selected_keyset:
+            logger.error(f"Couldn't find suitable keyset for rotation with unit {str(unit)}")
+            raise Exception(f"Couldn't find suitable keyset for rotation with unit {str(unit)}")
+
+        logger.info(f"Rotating keyset {selected_keyset.id}")
+
+        # New derivation path is just old derivation path with increased counter
+        new_derivation_path = selected_keyset.derivation_path.split("/")
+        new_derivation_path[-1] = str(int(new_derivation_path[-1].replace("'", "")) + 1) + "'"
+        
+        # keys amounts for this keyset: if amounts is None we use `self.amounts`
+        amounts = [2**i for i in range(max_order)] if max_order else self.amounts
+
+        # Generate the keyset
+        new_keyset = MintKeyset(
+            "/".join(new_derivation_path),
+            seed=self.seed,
+            amounts=amounts,
+        )
+
+        logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
+        await self.crud.store_keyset(keyset=new_keyset, db=self.db)
+
+        logger.debug(f"De-activating keyset {keyset.id}...")
+        keyset.active = False
+        await self.crud.update_keyset(keyset=keyset, db=self.db)
+
+        return new_keyset
 
     async def activate_keyset(
         self,
