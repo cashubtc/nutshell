@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -62,9 +61,9 @@ from .db.read import DbReadHelper
 from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
 from .features import LedgerFeatures
+from .keysets import LedgerKeysets
 from .tasks import LedgerTasks
 from .verification import LedgerVerification
-from .keysets import LedgerKeysets
 
 
 class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures, LedgerKeysets):

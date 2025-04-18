@@ -1,4 +1,4 @@
-from typing import Dict, Mapping, Protocol, List
+from typing import Dict, List, Mapping, Protocol
 
 from ..core.base import Method, MintKeyset, Unit
 from ..core.crypto.secp import PublicKey

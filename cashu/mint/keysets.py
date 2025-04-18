@@ -1,13 +1,14 @@
-from ..core.base import MintKeyset, Unit, Amount
-from ..core.settings import settings
-from ..core.errors import KeysetError, KeysetNotFoundError
-from ..core.crypto.keys import derive_keyset_id
+import base64
+from typing import Dict, List, Optional
 
+from loguru import logger
+
+from ..core.base import MintKeyset, Unit
+from ..core.crypto.keys import derive_keyset_id
+from ..core.errors import KeysetError, KeysetNotFoundError
+from ..core.settings import settings
 from .protocols import SupportsDb, SupportsKeysets, SupportsSeed
 
-from typing import Optional, List, Dict
-from loguru import logger
-import base64
 
 class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
     
