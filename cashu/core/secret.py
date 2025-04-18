@@ -98,6 +98,7 @@ class Secret(BaseModel):
         )
 
     def __hash__(self) -> int:
+        # everything except nonce
         return hash(
-            (self.kind, self.data, tuple([s for xs in self.tags.__root__ for s in xs]))
+            (self.kind, self.data, tuple(s for xs in self.tags.__root__ for s in xs))
         )

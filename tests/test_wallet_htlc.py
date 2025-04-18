@@ -143,7 +143,7 @@ async def test_htlc_redeem_with_wrong_signature(wallet1: Wallet, wallet2: Wallet
         preimage=preimage, hashlock_pubkeys=[pubkey_wallet1]
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
-    signatures = wallet1.sign_proofs(send_proofs)
+    signatures = wallet1.signatures_proofs_sig_inputs(send_proofs)
     for p, s in zip(send_proofs, signatures):
         p.witness = HTLCWitness(
             preimage=preimage, signatures=[f"{s[:-5]}11111"]
@@ -168,7 +168,7 @@ async def test_htlc_redeem_with_correct_signature(wallet1: Wallet, wallet2: Wall
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures = wallet1.sign_proofs(send_proofs)
+    signatures = wallet1.signatures_proofs_sig_inputs(send_proofs)
     for p, s in zip(send_proofs, signatures):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s]).json()
 
@@ -191,8 +191,8 @@ async def test_htlc_redeem_with_2_of_1_signatures(wallet1: Wallet, wallet2: Wall
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures1 = wallet1.sign_proofs(send_proofs)
-    signatures2 = wallet2.sign_proofs(send_proofs)
+    signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
+    signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).json()
 
@@ -215,8 +215,8 @@ async def test_htlc_redeem_with_2_of_2_signatures(wallet1: Wallet, wallet2: Wall
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures1 = wallet1.sign_proofs(send_proofs)
-    signatures2 = wallet2.sign_proofs(send_proofs)
+    signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
+    signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).json()
 
@@ -241,8 +241,8 @@ async def test_htlc_redeem_with_2_of_2_signatures_with_duplicate_pubkeys(
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures1 = wallet1.sign_proofs(send_proofs)
-    signatures2 = wallet2.sign_proofs(send_proofs)
+    signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
+    signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).json()
 
@@ -270,8 +270,8 @@ async def test_htlc_redeem_with_3_of_3_signatures_but_only_2_provided(
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures1 = wallet1.sign_proofs(send_proofs)
-    signatures2 = wallet2.sign_proofs(send_proofs)
+    signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
+    signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     for p, s1, s2 in zip(send_proofs, signatures1, signatures2):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2]).json()
 
@@ -303,8 +303,8 @@ async def test_htlc_redeem_with_2_of_3_signatures_with_2_valid_and_1_invalid_pro
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures1 = wallet1.sign_proofs(send_proofs)
-    signatures2 = wallet2.sign_proofs(send_proofs)
+    signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
+    signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     signatures3 = [f"{s[:-5]}11111" for s in signatures1]  # wrong signature
     for p, s1, s2, s3 in zip(send_proofs, signatures1, signatures2, signatures3):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2, s3]).json()
@@ -334,8 +334,8 @@ async def test_htlc_redeem_with_3_of_3_signatures_with_2_valid_and_1_invalid_pro
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures1 = wallet1.sign_proofs(send_proofs)
-    signatures2 = wallet2.sign_proofs(send_proofs)
+    signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs)
+    signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs)
     signatures3 = [f"{s[:-5]}11111" for s in signatures1]  # wrong signature
     for p, s1, s2, s3 in zip(send_proofs, signatures1, signatures2, signatures3):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s1, s2, s3]).json()
@@ -364,7 +364,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures = wallet1.sign_proofs(send_proofs)
+    signatures = wallet1.signatures_proofs_sig_inputs(send_proofs)
     for p, s in zip(send_proofs, signatures):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s]).json()
 
@@ -398,7 +398,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    signatures = wallet1.sign_proofs(send_proofs)
+    signatures = wallet1.signatures_proofs_sig_inputs(send_proofs)
     for p, s in zip(send_proofs, signatures):
         p.witness = HTLCWitness(
             preimage=preimage, signatures=[f"{s[:-5]}11111"]
@@ -438,7 +438,7 @@ async def test_htlc_redeem_timelock_2_of_2_signatures(wallet1: Wallet, wallet2: 
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
     send_proofs_copy = send_proofs.copy()
 
-    signatures = wallet1.sign_proofs(send_proofs)
+    signatures = wallet1.signatures_proofs_sig_inputs(send_proofs)
     for p, s in zip(send_proofs, signatures):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s]).json()
 
@@ -458,7 +458,7 @@ async def test_htlc_redeem_timelock_2_of_2_signatures(wallet1: Wallet, wallet2: 
     )
 
     # let's add the second signature
-    send_proofs_copy = wallet2.add_signature_witnesses_to_proofs(send_proofs_copy)
+    send_proofs_copy = wallet2.sign_p2pk_sig_inputs(send_proofs_copy)
 
     # now we can redeem it
     await wallet1.redeem(send_proofs_copy)

@@ -294,7 +294,7 @@ async def test_p2pk_locktime_with_2_of_2_refund_pubkeys(
     )
 
     # let's add the second signature
-    send_proofs_copy2 = wallet2.add_signature_witnesses_to_proofs(send_proofs_copy2)
+    send_proofs_copy2 = wallet2.sign_p2pk_sig_inputs(send_proofs_copy2)
 
     # now we can redeem it
     await wallet1.redeem(send_proofs_copy2)
@@ -317,7 +317,7 @@ async def test_p2pk_multisig_2_of_2(wallet1: Wallet, wallet2: Wallet):
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # add signatures of wallet1
-    send_proofs = wallet1.add_signature_witnesses_to_proofs(send_proofs)
+    send_proofs = wallet1.sign_p2pk_sig_inputs(send_proofs)
     # here we add the signatures of wallet2
     await wallet2.redeem(send_proofs)
 
@@ -339,7 +339,7 @@ async def test_p2pk_multisig_duplicate_signature(wallet1: Wallet, wallet2: Walle
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # add signatures of wallet2 – this is a duplicate signature
-    send_proofs = wallet2.add_signature_witnesses_to_proofs(send_proofs)
+    send_proofs = wallet2.sign_p2pk_sig_inputs(send_proofs)
     # here we add the signatures of wallet2
     await assert_err(
         wallet2.redeem(send_proofs), "Mint Error: signatures must be unique."
@@ -350,9 +350,10 @@ async def test_p2pk_multisig_duplicate_signature(wallet1: Wallet, wallet2: Walle
 async def test_p2pk_multisig_two_signatures_same_pubkey(
     wallet1: Wallet, wallet2: Wallet
 ):
-    mint_quote = await wallet1.request_mint(64)
+    # we generate two different signatures from the same private key
+    mint_quote = await wallet2.request_mint(64)
     await pay_if_regtest(mint_quote.request)
-    await wallet1.mint(64, quote_id=mint_quote.quote)
+    await wallet2.mint(64, quote_id=mint_quote.quote)
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     assert pubkey_wallet1 != pubkey_wallet2
@@ -361,8 +362,8 @@ async def test_p2pk_multisig_two_signatures_same_pubkey(
         pubkey_wallet2, tags=Tags([["pubkeys", pubkey_wallet1]]), n_sigs=2
     )
 
-    _, send_proofs = await wallet1.swap_to_send(
-        wallet1.proofs, 1, secret_lock=secret_lock
+    _, send_proofs = await wallet2.swap_to_send(
+        wallet2.proofs, 1, secret_lock=secret_lock
     )
     assert len(send_proofs) == 1
     proof = send_proofs[0]
@@ -377,7 +378,7 @@ async def test_p2pk_multisig_two_signatures_same_pubkey(
     coincurve_signature = coincurve_privatekey2.sign_schnorr(msg)
 
     # add signatures of wallet2 – this is a duplicate signature
-    send_proofs = wallet2.add_signature_witnesses_to_proofs(send_proofs)
+    send_proofs = wallet2.sign_p2pk_sig_inputs(send_proofs)
 
     # the signatures from coincurve are not the same as the ones from wallet2
     assert coincurve_signature.hex() != proof.p2pksigs[0]
@@ -437,7 +438,7 @@ async def test_p2pk_multisig_quorum_not_met_2_of_3(wallet1: Wallet, wallet2: Wal
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # add signatures of wallet1
-    send_proofs = wallet1.add_signature_witnesses_to_proofs(send_proofs)
+    send_proofs = wallet1.sign_p2pk_sig_inputs(send_proofs)
     # here we add the signatures of wallet2
     await assert_err(
         wallet2.redeem(send_proofs),
@@ -484,7 +485,7 @@ async def test_p2pk_multisig_with_wrong_first_private_key(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
     # add signatures of wallet1
-    send_proofs = wallet1.add_signature_witnesses_to_proofs(send_proofs)
+    send_proofs = wallet1.sign_p2pk_sig_inputs(send_proofs)
     await assert_err(
         wallet2.redeem(send_proofs), "Mint Error: signature threshold not met. 1 < 2."
     )

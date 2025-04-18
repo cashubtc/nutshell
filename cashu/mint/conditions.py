@@ -4,7 +4,7 @@ from typing import List, Union
 
 from loguru import logger
 
-from ..core.base import BlindedMessage, Proof
+from ..core.base import BlindedMessage, P2PKWitness, Proof
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
     TransactionError,
@@ -326,15 +326,13 @@ class LedgerSpendingConditions:
             return False
 
         pubkeys = [secret_lock.data] + secret_lock.tags.get_tag_all("pubkeys")
-        # n_sigs = secret_lock.n_sigs or 1
+        n_sigs = secret_lock.n_sigs or 1
 
         now = time.time()
         if secret_lock.locktime and secret_lock.locktime < now:
             # locktime has passed, we only require the refund pubkeys and n_sigs_refund
-            refund_pubkeys = secret_lock.tags.get_tag_all("refund")
-            if refund_pubkeys:
-                pubkeys = refund_pubkeys
-                # n_sigs = secret_lock.n_sigs_refund or 1
+            pubkeys = secret_lock.tags.get_tag_all("refund")
+            n_sigs = secret_lock.n_sigs_refund or 1
 
         # if no pubkeys are present, anyone can spend
         if not pubkeys:
@@ -342,41 +340,24 @@ class LedgerSpendingConditions:
 
         logger.trace(f"pubkeys: {pubkeys}")
 
-        # message_to_sign = " ".join([p.secret for p in proofs] + [o.B_ for o in outputs])
-        # signatures = proofs[0].p2pksigs
-
-        # # loop over all outputs and check if the signatures are valid for pubkeys with a threshold of n_sig
-        # for output in outputs:
-        #     # we expect the signature to be on the pubkey (=message) itself
-        #     p2pksigs = output.p2pksigs
-        #     assert p2pksigs, "no signatures in output."
-        #     # TODO: add limit for maximum number of signatures
-
-        #     # we check whether any signature is duplicate
-        #     assert len(set(p2pksigs)) == len(
-        #         p2pksigs
-        #     ), "duplicate signatures in output."
-
-        #     n_valid_sigs_per_output = 0
-        #     # loop over all signatures in output
-        #     for sig in p2pksigs:
-        #         for pubkey in pubkeys:
-        #             if verify_schnorr_signature(
-        #                 message=bytes.fromhex(output.B_),
-        #                 pubkey=PublicKey(bytes.fromhex(pubkey), raw=True),
-        #                 signature=bytes.fromhex(sig),
-        #             ):
-        #                 n_valid_sigs_per_output += 1
-        #     assert n_valid_sigs_per_output, "no valid signature provided for output."
-        #     assert (
-        #         n_valid_sigs_per_output >= n_sigs
-        #     ), f"signature threshold not met. {n_valid_sigs_per_output} < {n_sigs}."
-
-        #     logger.trace(
-        #         f"{n_valid_sigs_per_output} of {n_sigs} valid signatures found."
-        #     )
-        #     logger.trace(p2pksigs)
-        #     logger.trace("p2pk signatures on output is valid.")
+        message_to_sign = "".join([p.secret for p in proofs] + [o.B_ for o in outputs])
+        first_proof = proofs[0]
+        assert first_proof.witness
+        signatures = P2PKWitness.from_witness(first_proof.witness).signatures
+        n_valid_sigs = 0
+        for p in pubkeys:
+            for s in signatures:
+                if verify_schnorr_signature(
+                    message=message_to_sign.encode("utf-8"),
+                    pubkey=PublicKey(bytes.fromhex(p), raw=True),
+                    signature=bytes.fromhex(s),
+                ):
+                    n_valid_sigs += 1
+                    break
+        if n_valid_sigs < n_sigs:
+            raise TransactionError(
+                f"signature threshold not met. {n_valid_sigs} < {n_sigs}."
+            )
         return True
 
     def _verify_input_output_spending_conditions(
