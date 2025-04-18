@@ -27,7 +27,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 keyset_derivation_counter = int(keyset_derivation_path[-1].replace("'", ""))
                 if (
                     keyset_derivation_path[:-1] == derivation[:-1]
-                    and keyset_derivation_counter > keyset_derivation_counter
+                    and keyset_derivation_counter > counter
                 ):
                     self.derivation_path = keyset.derivation_path
 
