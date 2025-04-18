@@ -20,7 +20,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         upon initialization. The superseding derivation must have a greater count (last portion of the derivation path).
         If this condition is true, update `self.derivation_path` to match the highest count derivation.
         """
-        derivation = self.derivation_path.split("/")
+        derivation: List[str] = self.derivation_path.split("/") # type: ignore
         counter = int(derivation[-1].replace("'", ""))
         for keyset in self.keysets.values():
             if keyset.active:
@@ -82,7 +82,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
 
         # Generate the keyset
         new_keyset = MintKeyset(
-            "/".join(new_derivation_path),
+            derivation_path="/".join(new_derivation_path),
             seed=self.seed,
             amounts=amounts,
         )
