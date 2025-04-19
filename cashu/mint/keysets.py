@@ -14,13 +14,13 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
     
     # ------- KEYS -------
 
-    def maybe_update_derivation_path(self):
+    def maybe_update_derivation_path(self, derivation_path: str):
         """
         Check whether `self.derivation_path` was superseded by any of the active keysets loaded into this instance
         upon initialization. The superseding derivation must have a greater count (last portion of the derivation path).
         If this condition is true, update `self.derivation_path` to match the highest count derivation.
         """
-        derivation: List[str] = self.derivation_path.split("/") # type: ignore
+        derivation: List[str] = derivation_path.split("/") # type: ignore
         counter = int(derivation[-1].replace("'", ""))
         for keyset in self.keysets.values():
             if keyset.active:
@@ -30,7 +30,8 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                     keyset_derivation_path[:-1] == derivation[:-1]
                     and keyset_derivation_counter > counter
                 ):
-                    self.derivation_path = keyset.derivation_path
+                    derivation_path = keyset.derivation_path
+        return derivation_path
 
     async def rotate_next_keyset(
         self,
@@ -190,7 +191,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         # Check if any of the loaded keysets marked as active
         # do supersede the one specified in the derivation settings.
         # If this is the case update to latest count derivation.
-        self.maybe_update_derivation_path()
+        self.derivation_path = self.maybe_update_derivation_path(self.derivation_path)
 
         # activate the current keyset set by self.derivation_path
         # and self.derivation_path is not superseded by any other

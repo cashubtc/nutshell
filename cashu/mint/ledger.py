@@ -136,6 +136,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     async def _startup_keysets(self) -> None:
         await self.init_keysets()
         for derivation_path in settings.mint_derivation_path_list:
+            derivation_path = self.maybe_update_derivation_path(derivation_path)
             await self.activate_keyset(derivation_path=derivation_path)
 
     async def _run_regular_tasks(self) -> None:
