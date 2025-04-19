@@ -1,4 +1,5 @@
 import pytest
+
 from cashu.core.base import MintKeyset, Unit
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -87,4 +88,4 @@ async def test_keyset_rotation(ledger: Ledger):
     assert len(new_keyset_sat.private_keys.values()) == 20
 
     old_keyset = (await ledger.crud.get_keyset(db=ledger.db, id=keyset_sat.id))[0]
-    assert old_keyset.active == False, "old keyset is still active"
+    assert not old_keyset.active, "old keyset is still active"
