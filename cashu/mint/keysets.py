@@ -14,7 +14,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
     
     # ------- KEYS -------
 
-    def maybe_update_derivation_path(self, derivation_path: str):
+    def maybe_update_derivation_path(self, derivation_path: str) -> str:
         """
         Check whether `self.derivation_path` was superseded by any of the active keysets loaded into this instance
         upon initialization. The superseding derivation must have a greater count (last portion of the derivation path).
@@ -191,7 +191,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         # Check if any of the loaded keysets marked as active
         # do supersede the one specified in the derivation settings.
         # If this is the case update to latest count derivation.
-        self.derivation_path = self.maybe_update_derivation_path(self.derivation_path)
+        self.derivation_path = self.maybe_update_derivation_path(self.derivation_path) # type: ignore
 
         # activate the current keyset set by self.derivation_path
         # and self.derivation_path is not superseded by any other
