@@ -27,14 +27,19 @@ class P2PKSecret(Secret):
         return int(locktime) if locktime else None
 
     @property
-    def sigflag(self) -> Union[None, SigFlags]:
+    def sigflag(self) -> SigFlags:
         sigflag = self.tags.get_tag("sigflag")
-        return SigFlags(sigflag) if sigflag else None
+        return SigFlags(sigflag) if sigflag else SigFlags.SIG_INPUTS
 
     @property
-    def n_sigs(self) -> Union[None, int]:
-        n_sigs = self.tags.get_tag("n_sigs")
-        return int(n_sigs) if n_sigs else None
+    def n_sigs(self) -> int:
+        n_sigs = self.tags.get_tag_int("n_sigs")
+        return int(n_sigs) if n_sigs else 1
+
+    @property
+    def n_sigs_refund(self) -> Union[None, int]:
+        n_sigs_refund = self.tags.get_tag_int("n_sigs_refund")
+        return n_sigs_refund
 
 
 def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:

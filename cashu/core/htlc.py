@@ -7,6 +7,8 @@ from .secret import Secret, SecretKind
 class SigFlags(Enum):
     # require signatures only on the inputs (default signature flag)
     SIG_INPUTS = "SIG_INPUTS"
+    # require signatures on inputs and outputs
+    SIG_ALL = "SIG_ALL"
 
 
 class HTLCSecret(Secret):
@@ -29,5 +31,10 @@ class HTLCSecret(Secret):
 
     @property
     def n_sigs(self) -> Union[None, int]:
-        n_sigs = self.tags.get_tag("n_sigs")
+        n_sigs = self.tags.get_tag_int("n_sigs")
         return int(n_sigs) if n_sigs else None
+
+    @property
+    def n_sigs_refund(self) -> Union[None, int]:
+        n_sigs_refund = self.tags.get_tag_int("n_sigs_refund")
+        return n_sigs_refund

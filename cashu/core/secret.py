@@ -39,6 +39,15 @@ class Tags(BaseModel):
                 return tag[1]
         return None
 
+    def get_tag_int(self, tag_name: str) -> Union[int, None]:
+        tag = self.get_tag(tag_name)
+        if tag is not None:
+            try:
+                return int(tag)
+            except ValueError:
+                logger.warning(f"Tag {tag_name} is not an integer")
+        return None
+
     def get_tag_all(self, tag_name: str) -> List[str]:
         all_tags = []
         for tag in self.__root__:
@@ -77,3 +86,19 @@ class Secret(BaseModel):
         tags = Tags(tags=tags_list)
         logger.debug(f"Deserialized Secret: {kind}, {data}, {nonce}, {tags}")
         return cls(kind=kind, data=data, nonce=nonce, tags=tags)
+
+    def __eq__(self, value: object) -> bool:
+        # two secrets are equal if they have the same kind, data and tags (ignoring nonce)
+        if not isinstance(value, Secret):
+            return False
+        return (
+            self.kind == value.kind
+            and self.data == value.data
+            and self.tags.__root__ == value.tags.__root__
+        )
+
+    def __hash__(self) -> int:
+        # everything except nonce
+        return hash(
+            (self.kind, self.data, tuple(s for xs in self.tags.__root__ for s in xs))
+        )
