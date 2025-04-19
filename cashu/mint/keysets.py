@@ -54,7 +54,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             MintKeyset: Resulting keyset of the rotation
         """
 
-        logger.info(f"Attempting keyset rotation for unit {str(Unit)}")
+        logger.info(f"Attempting keyset rotation for unit {str(unit)}")
 
         # Select keyset with the greatest counter
         selected_keyset = None
@@ -85,15 +85,19 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             derivation_path="/".join(new_derivation_path),
             seed=self.seed,
             amounts=amounts,
+            input_fee_ppk=input_fee_ppk
         )
 
         logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
         await self.crud.store_keyset(keyset=new_keyset, db=self.db)
+        self.keysets[new_keyset.id] = new_keyset
 
-        logger.debug(f"De-activating keyset {keyset.id}...")
-        keyset.active = False
-        await self.crud.update_keyset(keyset=keyset, db=self.db)
+        logger.debug(f"De-activating keyset {selected_keyset.id}...")
+        selected_keyset.active = False
+        await self.crud.update_keyset(keyset=selected_keyset, db=self.db)
+        self.keysets[selected_keyset.id] = selected_keyset
 
+        logger.debug(f"Keyset {keyset.id} was de-activated")
         return new_keyset
 
     async def activate_keyset(

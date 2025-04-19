@@ -830,7 +830,7 @@ class MintKeyset:
             valid_from=row["valid_from"],
             valid_to=row["valid_to"],
             first_seen=row["first_seen"],
-            active=row["active"],
+            active=bool(row["active"]),
             unit=row["unit"],
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],
