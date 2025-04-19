@@ -194,9 +194,12 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         our_pubkey = self.private_key.pubkey.serialize().hex()
         our_pubkey_proofs = []
         for p in proofs:
-            pubkeys = [P2PKSecret.deserialize(p.secret).data] + P2PKSecret.deserialize(
-                p.secret
-            ).tags.get_tag_all("pubkeys")
+            secret = P2PKSecret.deserialize(p.secret)
+            pubkeys = (
+                [secret.data]
+                + secret.tags.get_tag_all("pubkeys")
+                + secret.tags.get_tag_all("refund")
+            )
             if our_pubkey in pubkeys:
                 # we are one of the signers
                 our_pubkey_proofs.append(p)
@@ -206,7 +209,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         return our_pubkey_proofs
 
     def sign_p2pk_sig_inputs(self, proofs: List[Proof]) -> List[Proof]:
-        """Signs P2PK SIG_INPUTS proofs with the private key of the wallet.
+        """Signs P2PK SIG_INPUTS proofs with the private key of the wallet. Ignores proofs that
+           aren't locked to our public key (filters them out before returning).
         Args:
             proofs (List[Proof]): Proofs to sign
         Returns:

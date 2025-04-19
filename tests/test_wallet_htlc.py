@@ -277,7 +277,7 @@ async def test_htlc_redeem_with_3_of_3_signatures_but_only_2_provided(
 
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: not enough signatures provided: 2 < 3.",
+        "Mint Error: not enough pubkeys (2) or signatures (2) present for n_sigs (3).",
     )
 
 
@@ -454,7 +454,7 @@ async def test_htlc_redeem_timelock_2_of_2_signatures(wallet1: Wallet, wallet2: 
     # should fail. lock time has passed but we provided only wallet1 signature for timelock, we need 2 though
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: not enough signatures provided: 1 < 2.",
+        "Mint Error: not enough pubkeys (2) or signatures (1) present for n_sigs (2).",
     )
 
     # let's add the second signature
