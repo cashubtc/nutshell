@@ -12,8 +12,8 @@ from coincurve import PrivateKey as CoincurvePrivateKey
 from cashu.core.base import P2PKWitness, Proof
 from cashu.core.crypto.secp import PrivateKey, PublicKey
 from cashu.core.migrations import migrate_databases
-from cashu.core.p2pk import SigFlags
-from cashu.core.secret import Tags
+from cashu.core.p2pk import P2PKSecret, SigFlags
+from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -539,3 +539,82 @@ async def test_secret_initialized_with_arguments(wallet1: Wallet):
     assert secret.locktime > 1689000000
     assert secret.n_sigs == 3
     assert secret.sigflag == SigFlags.SIG_ALL
+
+
+@pytest.mark.asyncio
+async def test_wallet_verify_is_p2pk_input(wallet1: Wallet1):
+    """Test the wallet correctly identifies P2PK inputs."""
+    # Mint tokens to the wallet
+    mint_quote = await wallet1.request_mint(64)
+    await wallet1.get_mint_quote(mint_quote.quote)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    # Create a p2pk lock with wallet's own public key
+    pubkey = await wallet1.create_p2pk_pubkey()
+    secret_lock = await wallet1.create_p2pk_lock(pubkey)
+
+    # Use swap_to_send to create p2pk locked proofs
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 32, secret_lock=secret_lock
+    )
+
+    # Now get a proof and check if it's detected as P2PK
+    proof = send_proofs[0]
+
+    # This tests the internal method that recognizes a P2PK input
+    secret = Secret.deserialize(proof.secret)
+    assert secret.kind == SecretKind.P2PK.value, "Secret should be of kind P2PK"
+
+    # We can verify that we can convert it to a P2PKSecret
+    p2pk_secret = P2PKSecret.from_secret(secret)
+    assert p2pk_secret.data == pubkey, "P2PK secret data should contain the pubkey"
+
+
+@pytest.mark.asyncio
+async def test_wallet_verify_p2pk_sigflag_is_sig_inputs(wallet1: Wallet1):
+    """Test the wallet correctly identifies the SIG_INPUTS flag."""
+    # Mint tokens to the wallet
+    mint_quote = await wallet1.request_mint(64)
+    await wallet1.get_mint_quote(mint_quote.quote)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    # Create a p2pk lock with SIG_INPUTS (default)
+    pubkey = await wallet1.create_p2pk_pubkey()
+    secret_lock = await wallet1.create_p2pk_lock(pubkey, sig_all=False)
+
+    # Use swap_to_send to create p2pk locked proofs
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 32, secret_lock=secret_lock
+    )
+
+    # Check if sigflag is correctly identified as SIG_INPUTS
+    proof = send_proofs[0]
+    secret = Secret.deserialize(proof.secret)
+    p2pk_secret = P2PKSecret.from_secret(secret)
+
+    assert p2pk_secret.sigflag == SigFlags.SIG_INPUTS, "Sigflag should be SIG_INPUTS"
+
+
+@pytest.mark.asyncio
+async def test_wallet_verify_p2pk_sigflag_is_sig_all(wallet1: Wallet1):
+    """Test the wallet correctly identifies the SIG_ALL flag."""
+    # Mint tokens to the wallet
+    mint_quote = await wallet1.request_mint(64)
+    await wallet1.get_mint_quote(mint_quote.quote)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    # Create a p2pk lock with SIG_ALL
+    pubkey = await wallet1.create_p2pk_pubkey()
+    secret_lock = await wallet1.create_p2pk_lock(pubkey, sig_all=True)
+
+    # Use swap_to_send to create p2pk locked proofs
+    _, send_proofs = await wallet1.swap_to_send(
+        wallet1.proofs, 32, secret_lock=secret_lock
+    )
+
+    # Check if sigflag is correctly identified as SIG_ALL
+    proof = send_proofs[0]
+    secret = Secret.deserialize(proof.secret)
+    p2pk_secret = P2PKSecret.from_secret(secret)
+
+    assert p2pk_secret.sigflag == SigFlags.SIG_ALL, "Sigflag should be SIG_ALL"
