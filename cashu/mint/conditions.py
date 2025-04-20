@@ -136,7 +136,8 @@ class LedgerSpendingConditions:
             return True
 
         # hash lock
-        assert proof.htlcpreimage, TransactionError("no HTLC preimage provided")
+        if not proof.htlcpreimage:
+            raise TransactionError("no HTLC preimage provided")
 
         # verify correct preimage (the hashlock)
         if not hashlib.sha256(
@@ -164,8 +165,10 @@ class LedgerSpendingConditions:
         signatures: List[str],
         n_sigs_required: int,
     ) -> bool:
-        assert len(set(pubkeys)) == len(pubkeys), "pubkeys must be unique."
+        if len(set(pubkeys)) != len(pubkeys):
+            raise TransactionError("pubkeys must be unique.")
         logger.trace(f"pubkeys: {pubkeys}")
+        unique_pubkeys = set(pubkeys)
 
         # verify that signatures are present
         if not signatures:
@@ -189,8 +192,8 @@ class LedgerSpendingConditions:
             )
 
         n_pubkeys_with_valid_sigs = 0
-        # loop over all pubkeys in input
-        for pubkey in pubkeys:
+        # loop over all unique pubkeys in input
+        for pubkey in unique_pubkeys:
             for input_sig in signatures:
                 logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
                 logger.trace(f"Message: {message_to_sign}")
@@ -206,10 +209,11 @@ class LedgerSpendingConditions:
                     break
 
         # check if we have enough valid signatures
-        assert n_pubkeys_with_valid_sigs >= n_sigs_required, (
-            f"signature threshold not met. {n_pubkeys_with_valid_sigs} <"
-            f" {n_sigs_required}."
-        )
+        if not n_pubkeys_with_valid_sigs >= n_sigs_required:
+            raise TransactionError(
+                f"signature threshold not met. {n_pubkeys_with_valid_sigs} <"
+                f" {n_sigs_required}."
+            )
 
         logger.trace(
             f"{n_pubkeys_with_valid_sigs} of {n_sigs_required} valid signatures found."
@@ -346,7 +350,8 @@ class LedgerSpendingConditions:
 
         message_to_sign = "".join([p.secret for p in proofs] + [o.B_ for o in outputs])
         first_proof = proofs[0]
-        assert first_proof.witness
+        if not first_proof.witness:
+            raise TransactionError("no witness in proof.")
         signatures = P2PKWitness.from_witness(first_proof.witness).signatures
         n_valid_sigs = 0
         for p in pubkeys:
