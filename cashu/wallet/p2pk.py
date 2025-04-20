@@ -223,6 +223,11 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 secret = Secret.deserialize(p.secret)
                 if secret.kind == SecretKind.P2PK.value:
                     p2pk_proofs.append(p)
+                if secret.kind == SecretKind.HTLC.value and secret.tags.get_tag(
+                    "pubkeys"
+                ):
+                    # HTLC secret with pubkeys tag is a P2PK secret
+                    p2pk_proofs.append(p)
             except Exception:
                 pass
 

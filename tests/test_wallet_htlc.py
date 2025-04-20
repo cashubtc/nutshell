@@ -445,7 +445,7 @@ async def test_htlc_redeem_timelock_2_of_2_signatures(wallet1: Wallet, wallet2: 
     # should error because we used wallet2 signatures for the hash lock
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: signature threshold not met",
+        "Mint Error: signature threshold not met. 0 < 1.",
     )
 
     await asyncio.sleep(2)
