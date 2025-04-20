@@ -7,6 +7,7 @@ from cashu.core.htlc import HTLCSecret
 
 from ..core.base import (
     BlindedMessage,
+    HTLCWitness,
     P2PKWitness,
     Proof,
 )
@@ -178,13 +179,36 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         # attach unlock signatures to proofs
         assert len(proofs) == len(signatures), "wrong number of signatures"
         for p, s in zip(proofs, signatures):
-            # if there are already signatures, append
-            if p.witness and P2PKWitness.from_witness(p.witness).signatures:
-                signatures = P2PKWitness.from_witness(p.witness).signatures
-                if s not in signatures:
-                    p.witness = P2PKWitness(signatures=signatures + [s]).json()
+            if Secret.deserialize(p.secret).kind == SecretKind.P2PK.value:
+                # if there are already signatures, append
+                if p.witness and P2PKWitness.from_witness(p.witness).signatures:
+                    proof_signatures = P2PKWitness.from_witness(p.witness).signatures
+                    if proof_signatures and s not in proof_signatures:
+                        p.witness = P2PKWitness(
+                            signatures=proof_signatures + [s]
+                        ).json()
+                else:
+                    p.witness = P2PKWitness(signatures=[s]).json()
+            elif Secret.deserialize(p.secret).kind == SecretKind.HTLC.value:
+                # if there are already signatures, append
+                if p.witness and HTLCWitness.from_witness(p.witness).signatures:
+                    witness = HTLCWitness.from_witness(p.witness)
+                    proof_signatures = witness.signatures
+                    if proof_signatures and s not in proof_signatures:
+                        p.witness = HTLCWitness(
+                            preimage=witness.preimage, signatures=proof_signatures + [s]
+                        ).json()
+                else:
+                    if p.witness:
+                        witness = HTLCWitness.from_witness(p.witness)
+                        p.witness = HTLCWitness(
+                            preimage=witness.preimage, signatures=[s]
+                        ).json()
+                    else:
+                        p.witness = HTLCWitness(signatures=[s]).json()
             else:
-                p.witness = P2PKWitness(signatures=[s]).json()
+                raise Exception("Secret kind not supported")
+
         return proofs
 
     def filter_proofs_locked_to_our_pubkey(self, proofs: List[Proof]) -> List[Proof]:
@@ -223,8 +247,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 secret = Secret.deserialize(p.secret)
                 if secret.kind == SecretKind.P2PK.value:
                     p2pk_proofs.append(p)
-                if secret.kind == SecretKind.HTLC.value and secret.tags.get_tag(
-                    "pubkeys"
+                if secret.kind == SecretKind.HTLC.value and (
+                    secret.tags.get_tag("pubkeys") or secret.tags.get_tag("refund")
                 ):
                     # HTLC secret with pubkeys tag is a P2PK secret
                     p2pk_proofs.append(p)

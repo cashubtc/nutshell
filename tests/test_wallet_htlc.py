@@ -394,7 +394,8 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
         preimage=preimage,
         hashlock_pubkeys=[pubkey_wallet2],
         locktime_seconds=2,
-        locktime_pubkeys=[pubkey_wallet1],
+        locktime_pubkeys=[pubkey_wallet1, pubkey_wallet2],
+        locktime_n_sigs=2,
     )
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
@@ -407,14 +408,14 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
     # should error because we used wallet2 signatures for the hash lock
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: signature threshold not met",
+        "Mint Error: signature threshold not met. 0 < 1.",
     )
 
     await asyncio.sleep(2)
-    # should fail since lock time has passed and we provided a wrong signature for timelock
+    # should fail since lock time has passed and we provided not enough signatures for the timelock locktime_n_sigs
     await assert_err(
         wallet1.redeem(send_proofs),
-        "Mint Error: signature threshold not met",
+        "Mint Error: signature threshold not met. 1 < 2.",
     )
 
 
