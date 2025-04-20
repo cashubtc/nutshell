@@ -555,6 +555,7 @@ async def test_wallet_verify_is_p2pk_input(wallet1: Wallet1):
     """Test the wallet correctly identifies P2PK inputs."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await wallet1.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
 
@@ -584,6 +585,7 @@ async def test_wallet_verify_p2pk_sigflag_is_sig_inputs(wallet1: Wallet1):
     """Test the wallet correctly identifies the SIG_INPUTS flag."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await wallet1.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
 
@@ -609,6 +611,7 @@ async def test_wallet_verify_p2pk_sigflag_is_sig_all(wallet1: Wallet1):
     """Test the wallet correctly identifies the SIG_ALL flag."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await wallet1.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
 

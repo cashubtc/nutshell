@@ -5,6 +5,7 @@ from cashu.core.base import P2PKWitness
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet as Wallet1
 from tests.conftest import SERVER_ENDPOINT
+from tests.helpers import pay_if_regtest
 
 
 async def assert_err(f, msg):
@@ -34,6 +35,7 @@ async def test_ledger_inputs_require_sigall_detection(wallet1: Wallet1, ledger: 
     """Test the ledger function that detects if any inputs require SIG_ALL."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await ledger.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
 
@@ -48,6 +50,7 @@ async def test_ledger_inputs_require_sigall_detection(wallet1: Wallet1, ledger: 
 
     # Create a new mint quote for the second mint operation
     mint_quote_2 = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote_2.request)
     await ledger.get_mint_quote(mint_quote_2.quote)
     await wallet1.mint(64, quote_id=mint_quote_2.quote)
 
@@ -77,6 +80,7 @@ async def test_ledger_verify_p2pk_signature_validation(
     """Test the signature validation for P2PK inputs."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await ledger.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
 
@@ -130,6 +134,7 @@ async def test_ledger_verify_incorrect_signature(wallet1: Wallet1, ledger: Ledge
     """Test rejection of incorrect signatures for P2PK inputs."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await ledger.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
 
@@ -166,6 +171,7 @@ async def test_ledger_verify_sigall_validation(wallet1: Wallet1, ledger: Ledger)
     """Test validation of SIG_ALL signature that covers both inputs and outputs."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await ledger.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
 
@@ -208,6 +214,7 @@ async def test_ledger_verify_incorrect_sigall_signature(
     """Test rejection of incorrect SIG_ALL signatures."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await ledger.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
 
@@ -243,6 +250,7 @@ async def test_ledger_swap_p2pk_without_signature(wallet1: Wallet1, ledger: Ledg
     """Test ledger swap with p2pk locked tokens without providing signatures."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await ledger.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
     assert wallet1.balance == 64
@@ -275,6 +283,7 @@ async def test_ledger_swap_p2pk_with_signature(wallet1: Wallet1, ledger: Ledger)
     """Test ledger swap with p2pk locked tokens with proper signatures."""
     # Mint tokens to the wallet
     mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
     await ledger.get_mint_quote(mint_quote.quote)
     await wallet1.mint(64, quote_id=mint_quote.quote)
     assert wallet1.balance == 64
