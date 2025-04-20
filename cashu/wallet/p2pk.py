@@ -37,7 +37,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
 
     async def create_p2pk_lock(
         self,
-        pubkey: str,
+        data: str,
         locktime_seconds: Optional[int] = None,
         tags: Optional[Tags] = None,
         sig_all: bool = False,
@@ -59,7 +59,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         logger.debug(f"After tags: {tags}")
         return P2PKSecret(
             kind=SecretKind.P2PK.value,
-            data=pubkey,
+            data=data,
             tags=tags,
         )
 

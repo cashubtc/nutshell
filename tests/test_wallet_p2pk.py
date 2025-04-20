@@ -430,12 +430,16 @@ async def test_p2pk_multisig_quorum_not_met_2_of_3(wallet1: Wallet, wallet2: Wal
     await wallet1.mint(64, quote_id=mint_quote.quote)
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+    garbage_pubkey = PrivateKey().pubkey
+    assert garbage_pubkey
     assert pubkey_wallet1 != pubkey_wallet2
     # p2pk test
     secret_lock = await wallet1.create_p2pk_lock(
-        pubkey_wallet2, tags=Tags([["pubkeys", pubkey_wallet1]]), n_sigs=3
+        pubkey_wallet2,
+        tags=Tags([["pubkeys", pubkey_wallet1, garbage_pubkey.serialize().hex()]]),
+        n_sigs=3,
     )
-
+    # create locked proofs
     _, send_proofs = await wallet1.swap_to_send(
         wallet1.proofs, 8, secret_lock=secret_lock
     )
@@ -444,7 +448,7 @@ async def test_p2pk_multisig_quorum_not_met_2_of_3(wallet1: Wallet, wallet2: Wal
     # here we add the signatures of wallet2
     await assert_err(
         wallet2.redeem(send_proofs),
-        "Mint Error: not enough pubkeys (2) or signatures (2) present for n_sigs (3)",
+        "Mint Error: not enough pubkeys (3) or signatures (2) present for n_sigs (3)",
     )
 
 
@@ -517,7 +521,7 @@ async def test_secret_initialized_with_tags(wallet1: Wallet):
     pubkey = PrivateKey().pubkey
     assert pubkey
     secret = await wallet1.create_p2pk_lock(
-        pubkey=pubkey.serialize().hex(),
+        data=pubkey.serialize().hex(),
         tags=tags,
     )
     assert secret.locktime == 100
@@ -530,7 +534,7 @@ async def test_secret_initialized_with_arguments(wallet1: Wallet):
     pubkey = PrivateKey().pubkey
     assert pubkey
     secret = await wallet1.create_p2pk_lock(
-        pubkey=pubkey.serialize().hex(),
+        data=pubkey.serialize().hex(),
         locktime_seconds=100,
         n_sigs=3,
         sig_all=True,
