@@ -52,30 +52,21 @@ class LedgerSpendingConditions:
         pubkeys: List[str] = []
         if isinstance(p2pk_secret, P2PKSecret):
             pubkeys = [p2pk_secret.data]
-
         # get all additional pubkeys from tags for multisig
         pubkeys += p2pk_secret.tags.get_tag_all("pubkeys")
-
+        n_sigs = p2pk_secret.n_sigs or 1
         # check if locktime is passed and if so, only consider refund pubkeys
         now = time.time()
         if p2pk_secret.locktime and p2pk_secret.locktime < now:
             logger.trace(f"p2pk locktime ran out ({p2pk_secret.locktime}<{now}).")
-            # If a refund pubkey is present, we demand the signature to be from it
-            refund_pubkeys = p2pk_secret.tags.get_tag_all("refund")
-            n_sigs_refund = p2pk_secret.n_sigs_refund or 1
-            if not refund_pubkeys:
-                # no refund pubkey is present, anyone can spend
-                return True
-            return self._verify_p2pk_signatures(
-                message_to_sign,
-                refund_pubkeys,
-                proof.p2pksigs,
-                n_sigs_refund,
-            )
-
+            pubkeys = p2pk_secret.tags.get_tag_all("refund")
+            n_sigs = p2pk_secret.n_sigs_refund or 1
+        if not pubkeys:
+            # no pubkeys are present, anyone can spend
+            return True
         # require signatures from pubkeys
         return self._verify_p2pk_signatures(
-            message_to_sign, pubkeys, proof.p2pksigs, p2pk_secret.n_sigs or 1
+            message_to_sign, pubkeys, proof.p2pksigs, n_sigs
         )
 
     def _verify_htlc_spending_conditions(
@@ -117,7 +108,8 @@ class LedgerSpendingConditions:
         if not proof.htlcpreimage:
             raise TransactionError("no HTLC preimage provided")
         # verify correct preimage (the hashlock) if the locktime hasn't passed
-        if not htlc_secret.locktime or htlc_secret.locktime < time.time():
+        now = time.time()
+        if not htlc_secret.locktime or htlc_secret.locktime > now:
             if not hashlib.sha256(
                 bytes.fromhex(proof.htlcpreimage)
             ).digest() == bytes.fromhex(htlc_secret.data):
