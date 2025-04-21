@@ -75,7 +75,7 @@ class LedgerVerification(
         # Verify ecash signatures
         if not all([self._verify_proof_bdhke(p) for p in proofs]):
             raise InvalidProofsError()
-        # Verify input spending conditions
+        # Verify SIG_INPUTS spending conditions
         if not all([self._verify_input_spending_conditions(p) for p in proofs]):
             raise TransactionError("validation of input spending conditions failed.")
 
@@ -103,11 +103,8 @@ class LedgerVerification(
         ):
             raise TransactionError("input and output keysets have different units.")
 
-        # Verify output spending conditions
-        if outputs and not self._verify_input_output_spending_conditions(
-            proofs, outputs
-        ):
-            raise TransactionError("validation of output spending conditions failed.")
+        # Verify SIG_ALL spending conditions
+        self._verify_input_output_spending_conditions(proofs, outputs)
 
     async def _verify_outputs(
         self,

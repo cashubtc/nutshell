@@ -27,12 +27,12 @@ class HTLCSecret(Secret):
     @property
     def sigflag(self) -> Union[None, SigFlags]:
         sigflag = self.tags.get_tag("sigflag")
-        return SigFlags(sigflag) if sigflag else None
+        return SigFlags(sigflag) if sigflag else SigFlags.SIG_INPUTS
 
     @property
     def n_sigs(self) -> Union[None, int]:
         n_sigs = self.tags.get_tag_int("n_sigs")
-        return int(n_sigs) if n_sigs else None
+        return int(n_sigs) if n_sigs else 1
 
     @property
     def n_sigs_refund(self) -> Union[None, int]:

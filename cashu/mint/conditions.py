@@ -20,7 +20,10 @@ from ..core.secret import Secret, SecretKind
 
 class LedgerSpendingConditions:
     def _verify_p2pk_spending_conditions(
-        self, proof: Proof, secret: Secret, message_to_sign: str | None = None
+        self,
+        proof: Proof,
+        secret: P2PKSecret | HTLCSecret,
+        message_to_sign: str | None = None,
     ) -> bool:
         """
         Verify P2PK spending condition for a single input.
@@ -38,22 +41,17 @@ class LedgerSpendingConditions:
         - if no valid signatures are present
         - if the signature threshold is not met
         """
-        if SecretKind(secret.kind) != SecretKind.P2PK:
-            # not a P2PK secret
-            return True
 
-        p2pk_secret = P2PKSecret.from_secret(secret)
-        if p2pk_secret.sigflag != SigFlags.SIG_INPUTS:
-            # not a SIG_INPUTS secret
-            return True
-
+        p2pk_secret = secret
         message_to_sign = message_to_sign or proof.secret
 
         # extract pubkeys that we require signatures from depending on whether the
         # locktime has passed (refund) or not (pubkeys in secret.data and in tags)
 
         # the pubkey in the data field is the pubkey to use for P2PK
-        pubkeys: List[str] = [p2pk_secret.data]
+        pubkeys: List[str] = []
+        if isinstance(p2pk_secret, P2PKSecret):
+            pubkeys = [p2pk_secret.data]
 
         # get all additional pubkeys from tags for multisig
         pubkeys += p2pk_secret.tags.get_tag_all("pubkeys")
@@ -81,7 +79,7 @@ class LedgerSpendingConditions:
         )
 
     def _verify_htlc_spending_conditions(
-        self, proof: Proof, secret: Secret, message_to_sign: str | None = None
+        self, proof: Proof, secret: HTLCSecret, message_to_sign: str | None = None
     ) -> bool:
         """
         Verify HTLC spending condition for a single input.
@@ -114,48 +112,20 @@ class LedgerSpendingConditions:
         - if 'pubkeys' are present but no valid signature is provided
         """
 
-        if SecretKind(secret.kind) != SecretKind.HTLC:
-            # not a P2PK secret
-            return True
-        htlc_secret = HTLCSecret.from_secret(secret)
-        message_to_sign = message_to_sign or proof.secret
-
-        # time lock
-        # check if locktime is in the past
-        if htlc_secret.locktime and htlc_secret.locktime < time.time():
-            refund_pubkeys = htlc_secret.tags.get_tag_all("refund")
-            n_sigs_refund = htlc_secret.n_sigs_refund or 1
-            if refund_pubkeys:
-                return self._verify_p2pk_signatures(
-                    message_to_sign,
-                    refund_pubkeys,
-                    proof.p2pksigs,
-                    n_sigs_refund,
-                )
-            # no pubkeys given in secret, anyone can spend
-            return True
-
+        htlc_secret = secret
         # hash lock
         if not proof.htlcpreimage:
             raise TransactionError("no HTLC preimage provided")
+        # verify correct preimage (the hashlock) if the locktime hasn't passed
+        if not htlc_secret.locktime or htlc_secret.locktime < time.time():
+            if not hashlib.sha256(
+                bytes.fromhex(proof.htlcpreimage)
+            ).digest() == bytes.fromhex(htlc_secret.data):
+                raise TransactionError("HTLC preimage does not match.")
 
-        # verify correct preimage (the hashlock)
-        if not hashlib.sha256(
-            bytes.fromhex(proof.htlcpreimage)
-        ).digest() == bytes.fromhex(htlc_secret.data):
-            raise TransactionError("HTLC preimage does not match.")
-
-        # check whether signatures are required
-        hashlock_pubkeys = htlc_secret.tags.get_tag_all("pubkeys")
-        if hashlock_pubkeys:
-            return self._verify_p2pk_signatures(
-                message_to_sign,
-                hashlock_pubkeys,
-                proof.htlcsigs or [],
-                htlc_secret.n_sigs or 1,
-            )
-
-        # no pubkeys given in secret, anyone can spend
+        # verify signatures
+        if not self._verify_p2pk_spending_conditions(proof, htlc_secret):
+            raise TransactionError("HTLC signature verification not met.")
         return True
 
     def _verify_p2pk_signatures(
@@ -239,11 +209,22 @@ class LedgerSpendingConditions:
 
         # P2PK
         if SecretKind(secret.kind) == SecretKind.P2PK:
-            return self._verify_p2pk_spending_conditions(proof, secret)
+            p2pk_secret = P2PKSecret.from_secret(secret)
+            if p2pk_secret.sigflag.value != SigFlags.SIG_INPUTS.value:
+                # not a SIG_INPUTS secret
+                return True
+            return self._verify_p2pk_spending_conditions(proof, p2pk_secret)
 
         # HTLC
         if SecretKind(secret.kind) == SecretKind.HTLC:
-            return self._verify_htlc_spending_conditions(proof, secret)
+            htlc_secret = HTLCSecret.from_secret(secret)
+            if (
+                htlc_secret.sigflag
+                and htlc_secret.sigflag.value != SigFlags.SIG_INPUTS.value
+            ):
+                # not a SIG_INPUTS secret
+                return True
+            return self._verify_htlc_spending_conditions(proof, htlc_secret)
 
         # no spending condition present
         return True
@@ -312,10 +293,6 @@ class LedgerSpendingConditions:
         We return True if we successfully validated the spending condition.
         """
 
-        if not self._inputs_require_sigall(proofs):
-            # no input requires sigall spending condition
-            return True
-
         # verify that all secrets are of the same kind
         try:
             secret = self._verify_all_secrets_equal_and_return(proofs)
@@ -380,5 +357,26 @@ class LedgerSpendingConditions:
             Implicitly enforces many other conditions such as all input Secrets
             being the same except for the nonce (see verify_same_kinds_and_return()).
         """
+        if not self._inputs_require_sigall(proofs):
+            # no input requires sigall spending condition
+            return True
+
+        # verify that all secrets are of the same kind, raise an error if not
+        secret = self._verify_all_secrets_equal_and_return(proofs)
+
+        # # P2PK
+        # if SecretKind(secret.kind) == SecretKind.P2PK:
+        #     return self._verify_p2pk_spending_conditions(proofs, secret)
+
+        # HTLC
+        if SecretKind(secret.kind) == SecretKind.HTLC:
+            htlc_secret = HTLCSecret.from_secret(secret)
+            if not all(
+                [
+                    self._verify_htlc_spending_conditions(proof, htlc_secret)
+                    for proof in proofs
+                ]
+            ):
+                return False
 
         return self._verify_sigall_spending_conditions(proofs, outputs)

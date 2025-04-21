@@ -193,17 +193,26 @@ class Proof(BaseModel):
     @property
     def p2pksigs(self) -> List[str]:
         assert self.witness, "Witness is missing for p2pk signature"
-        return P2PKWitness.from_witness(self.witness).signatures
+        try:
+            return P2PKWitness.from_witness(self.witness).signatures
+        except Exception:
+            return []
 
     @property
     def htlcpreimage(self) -> str | None:
         assert self.witness, "Witness is missing for htlc preimage"
-        return HTLCWitness.from_witness(self.witness).preimage
+        try:
+            return HTLCWitness.from_witness(self.witness).preimage
+        except Exception:
+            return None
 
     @property
     def htlcsigs(self) -> List[str] | None:
         assert self.witness, "Witness is missing for htlc signatures"
-        return HTLCWitness.from_witness(self.witness).signatures
+        try:
+            return HTLCWitness.from_witness(self.witness).signatures
+        except Exception:
+            return None
 
 
 class Proofs(BaseModel):
