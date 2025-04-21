@@ -28,6 +28,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
     # ---------- P2PK ----------
 
     async def create_p2pk_pubkey(self):
+        """Create a P2PK public key from the private key."""
         assert (
             self.private_key
         ), "No private key set in settings. Set NOSTR_PRIVATE_KEY in .env"
@@ -44,6 +45,18 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         sig_all: bool = False,
         n_sigs: int = 1,
     ) -> P2PKSecret:
+        """Generate a P2PK secret with the given pubkeys, locktime, tags, and signature flag.
+
+        Args:
+            data (str): Public key to lock to.
+            locktime_seconds (Optional[int], optional): Locktime in seconds. Defaults to None.
+            tags (Optional[Tags], optional): Tags to add to the secret. Defaults to None.
+            sig_all (bool, optional): Whether to use SIG_ALL spending condition. Defaults to False.
+            n_sigs (int, optional): Number of signatures required. Defaults to 1.
+
+        Returns:
+            P2PKSecret: P2PK secret with the given pubkeys, locktime, tags, and signature flag.
+        """
         logger.debug(f"Provided tags: {tags}")
         if not tags:
             tags = Tags()
@@ -95,6 +108,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         return signatures
 
     def schnorr_sign_message(self, message: str) -> str:
+        """Sign a message with the private key of the wallet."""
         private_key = self.private_key
         assert private_key.pubkey
         return schnorr_sign(
@@ -176,6 +190,16 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
     def add_signatures_to_proofs(
         self, proofs: List[Proof], signatures: List[str]
     ) -> List[Proof]:
+        """Add signatures to proofs. Signatures are added as witnesses to the proofs in place.
+
+        Args:
+            proofs (List[Proof]): Proofs to add signatures to.
+            signatures (List[str]): Signatures to add to the proofs.
+
+        Returns:
+            List[Proof]: Proofs with signatures added.
+        """
+
         # attach unlock signatures to proofs
         assert len(proofs) == len(signatures), "wrong number of signatures"
         for p, s in zip(proofs, signatures):
