@@ -22,6 +22,12 @@ from tests.helpers import (
     pay_if_regtest,
 )
 
+payment_request = (
+    "lnbc10u1pjap7phpp50s9lzr3477j0tvacpfy2ucrs4q0q6cvn232ex7nt2zqxxxj8gxrsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsss"
+    "p575z0n39w2j7zgnpqtdlrgz9rycner4eptjm3lz363dzylnrm3h4s9qyyssqfz8jglcshnlcf0zkw4qu8fyr564lg59x5al724kms3h6gpuhx9xrfv27tgx3l3u3cyf6"
+    "3r52u0xmac6max8mdupghfzh84t4hfsvrfsqwnuszf"
+) 
+
 
 @pytest_asyncio.fixture(scope="function")
 async def wallet(ledger: Ledger):
@@ -289,3 +295,21 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
 
     # remove subscription
     client.remove_subscription("subId")
+
+async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
+    mint_quote = await wallet.request_mint(128)
+    await ledger.db_write._update_mint_quote_state(mint_quote.quote, MintQuoteState.paid)
+
+    mint_quote_db = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote)
+    assert mint_quote_db.state == MintQuoteState.issued
+
+    assert_err(ledger.db_write._update_mint_quote_state(mint_quote_db, MintQuoteState.unpaid), "Cannot change state of an issued mint quote.")
+
+async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
+    melt_quote = await wallet.melt_quote(payment_request)
+    await ledger.db_write._update_melt_quote_state(melt_quote.quote, MeltQuoteState.paid)
+
+    melt_quote_db = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote)
+    assert melt_quote_db.state == MeltQuoteState.paid
+
+    assert_err(ledger.db_write._update_melt_quote_state(melt_quote.quote, MeltQuoteState.unpaid), "Cannot change state of a paid melt quote.")
