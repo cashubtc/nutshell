@@ -125,13 +125,13 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
                 secret = Secret.deserialize(proof.secret)
                 try:
                     p2pk_secret = P2PKSecret.from_secret(secret)
-                    if p2pk_secret.sigflag == SigFlags.SIG_ALL:
+                    if p2pk_secret.sigflag is SigFlags.SIG_ALL:
                         return True
                 except Exception:
                     pass
                 try:
                     htlc_secret = HTLCSecret.from_secret(secret)
-                    if htlc_secret.sigflag == SigFlags.SIG_ALL:
+                    if htlc_secret.sigflag is SigFlags.SIG_ALL:
                         return True
                 except Exception:
                     pass

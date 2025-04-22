@@ -11,6 +11,8 @@ from cashu.core.base import HTLCWitness, Proof
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.htlc import HTLCSecret
 from cashu.core.migrations import migrate_databases
+from cashu.core.p2pk import SigFlags
+from cashu.core.secret import SecretKind
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -454,24 +456,25 @@ async def test_htlc_sigall_behavior(wallet1: Wallet, wallet2: Wallet):
     )
 
     # Modify the secret to use SIG_ALL
-    secret.tags["sigflag"] = "SIG_ALL"
+    secret.tags["sigflag"] = SigFlags.SIG_ALL.value
 
     # Send tokens with this HTLC lock
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
 
-    # Attempt to redeem with preimage but without proper signatures
+    # verify sigflag is SIG_ALL
+    assert HTLCSecret.from_secret(secret).kind == SecretKind.HTLC.value
+    assert HTLCSecret.from_secret(secret).sigflag == SigFlags.SIG_ALL
+
+    # first redeem fails because no preimage
+    await assert_err(
+        wallet2.redeem(send_proofs), "Mint Error: no HTLC preimage provided"
+    )
+
+    # we add the preimage to the proof
     for p in send_proofs:
         p.witness = HTLCWitness(preimage=preimage).json()
 
-    # Should fail because SIG_ALL requires signatures
-    await assert_err(wallet2.redeem(send_proofs), "Mint Error: no signatures in proof")
-
-    # Now add proper signatures (wallet2's signatures)
-    signatures = wallet2.signatures_proofs_sig_inputs(send_proofs)
-    for p, sig in zip(send_proofs, signatures):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[sig]).json()
-
-    # Should succeed now with both preimage and signatures
+    # Should succeed, redeem adds signatures to the proof
     await wallet2.redeem(send_proofs)
 
 
