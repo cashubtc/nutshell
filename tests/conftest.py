@@ -53,6 +53,9 @@ settings.mint_input_fee_ppk = 0
 settings.db_connection_pool = True
 # settings.mint_require_auth = False
 
+settings.mint_rpc_server_enable = True
+settings.mint_rpc_server_mutual_tls = False
+
 assert "test" in settings.cashu_dir
 shutil.rmtree(settings.cashu_dir, ignore_errors=True)
 Path(settings.cashu_dir).mkdir(parents=True, exist_ok=True)
