@@ -44,6 +44,7 @@ message GetInfoResponse {
     optional string icon_url = 8;
     repeated string urls = 9;
     optional int64 time = 10;
+    optional string tos_url = 11;
 }
 
 message UpdateResponse{

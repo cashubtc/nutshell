@@ -5,11 +5,10 @@ isort:skip_file
 
 import builtins
 import collections.abc
-import typing
-
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+import typing
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
@@ -55,6 +54,7 @@ class GetInfoResponse(google.protobuf.message.Message):
     ICON_URL_FIELD_NUMBER: builtins.int
     URLS_FIELD_NUMBER: builtins.int
     TIME_FIELD_NUMBER: builtins.int
+    TOS_URL_FIELD_NUMBER: builtins.int
     name: builtins.str
     pubkey: builtins.str
     version: builtins.str
@@ -63,6 +63,7 @@ class GetInfoResponse(google.protobuf.message.Message):
     motd: builtins.str
     icon_url: builtins.str
     time: builtins.int
+    tos_url: builtins.str
     @property
     def contact(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MintInfoContact]: ...
     @property
@@ -80,9 +81,10 @@ class GetInfoResponse(google.protobuf.message.Message):
         icon_url: builtins.str | None = ...,
         urls: collections.abc.Iterable[builtins.str] | None = ...,
         time: builtins.int | None = ...,
+        tos_url: builtins.str | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_description", b"_description", "_description_long", b"_description_long", "_icon_url", b"_icon_url", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_version", b"_version", "description", b"description", "description_long", b"description_long", "icon_url", b"icon_url", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "version", b"version"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_description", b"_description", "_description_long", b"_description_long", "_icon_url", b"_icon_url", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_version", b"_version", "contact", b"contact", "description", b"description", "description_long", b"description_long", "icon_url", b"icon_url", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "urls", b"urls", "version", b"version"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_description", b"_description", "_description_long", b"_description_long", "_icon_url", b"_icon_url", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_tos_url", b"_tos_url", "_version", b"_version", "description", b"description", "description_long", b"description_long", "icon_url", b"icon_url", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "tos_url", b"tos_url", "version", b"version"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_description", b"_description", "_description_long", b"_description_long", "_icon_url", b"_icon_url", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_tos_url", b"_tos_url", "_version", b"_version", "contact", b"contact", "description", b"description", "description_long", b"description_long", "icon_url", b"icon_url", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "tos_url", b"tos_url", "urls", b"urls", "version", b"version"]) -> None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_description", b"_description"]) -> typing.Literal["description"] | None: ...
     @typing.overload
@@ -97,6 +99,8 @@ class GetInfoResponse(google.protobuf.message.Message):
     def WhichOneof(self, oneof_group: typing.Literal["_pubkey", b"_pubkey"]) -> typing.Literal["pubkey"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_time", b"_time"]) -> typing.Literal["time"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_tos_url", b"_tos_url"]) -> typing.Literal["tos_url"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_version", b"_version"]) -> typing.Literal["version"] | None: ...
 
