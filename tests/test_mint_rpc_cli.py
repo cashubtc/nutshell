@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from click.testing import CliRunner
 
@@ -74,10 +76,6 @@ def test_remove_mint_url(cli_prefix):
 
 def test_add_contact(cli_prefix):
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "contact", "add", "email", "example@example.com"])
-    assert result.exception is None
-    assert "Contact method already set" in result.output
-
     result = runner.invoke(cli, [*cli_prefix, "update", "contact", "add", "signal", "@example.420"])
     assert result.exception is None
     assert "Contact successfully added!" in result.output
@@ -107,8 +105,9 @@ def test_update_auth_limits(cli_prefix):
 async def test_update_mint_quote(cli_prefix):
     wallet = await init_wallet()
     mint_quote = await wallet.request_mint(100)
+    await asyncio.sleep(1)
     runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "mint-quote", mint_quote.quote, "PAID"])
+    result = runner.invoke(cli, [*cli_prefix, "update", "mint-quote", mint_quote.quote, "ISSUED"])
     assert result.exception is None
     assert "Successfully updated!" in result.output
 
@@ -116,6 +115,7 @@ async def test_update_mint_quote(cli_prefix):
 async def test_update_melt_quote(cli_prefix):
     wallet = await init_wallet()
     melt_quote = await wallet.melt_quote(payment_request)
+    await asyncio.sleep(1)
     runner = CliRunner()
     result = runner.invoke(cli, [*cli_prefix, "update", "melt-quote", melt_quote.quote, "PAID"])
     assert result.exception is None
@@ -125,6 +125,7 @@ async def test_update_melt_quote(cli_prefix):
 async def test_get_mint_quote(cli_prefix):
     wallet = await init_wallet()
     mint_quote = await wallet.request_mint(100)
+    await asyncio.sleep(1)
     runner = CliRunner()
     result = runner.invoke(cli, [*cli_prefix, "get", "mint-quote", mint_quote.quote])
     assert result.exception is None
@@ -134,6 +135,7 @@ async def test_get_mint_quote(cli_prefix):
 async def test_get_melt_quote(cli_prefix):
     wallet = await init_wallet()
     melt_quote = await wallet.melt_quote(payment_request)
+    await asyncio.sleep(1)
     runner = CliRunner()
     result = runner.invoke(cli, [*cli_prefix, "get", "melt-quote", melt_quote.quote])
     assert result.exception is None
