@@ -309,6 +309,6 @@ def get_melt_quote(ctx: Context, quote_id: str):
     stub = ctx.obj['STUB']
     try:
         melt_quote = stub.GetNut05Quote(management_pb2.GetNut05QuoteRequest(quote_id=quote_id))
-        click.echo(f"mint quote:\n{melt_quote}")
+        click.echo(f"melt quote:\n{melt_quote}")
     except grpc.RpcError as e:
         click.echo(f"Error: {e.details()}", err=True)
