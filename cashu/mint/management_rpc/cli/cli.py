@@ -253,8 +253,8 @@ def update_melt_quote(ctx: Context, quote_id: str, state: str):
         click.echo(f"Error: {e.details()}", err=True)
 
 @update.command("lightning-fee", help="Set new lightning fees.")
-@click.argument("fee_percent", required=False)
-@click.argument("min_fee_reserve", required=False)
+@click.argument("fee_percent", required=False, type=float)
+@click.argument("min_fee_reserve", required=False, type=int)
 @click.pass_context
 def update_lightning_fee(ctx: Context, fee_percent: Optional[float], min_fee_reserve: Optional[int]):
     stub = ctx.obj['STUB']
@@ -269,8 +269,8 @@ def update_lightning_fee(ctx: Context, fee_percent: Optional[float], min_fee_res
         click.echo(f"Error: {e.details()}", err=True)
 
 @update.command("auth", help="Set the limits for auth requests")
-@click.argument("rate_limit_per_minute", required=False)
-@click.argument("max_tokens_per_request", required=False)
+@click.argument("rate_limit_per_minute", required=False, type=int)
+@click.argument("max_tokens_per_request", required=False, type=int)
 @click.pass_context
 def update_auth_limits(ctx: Context, rate_limit_per_minute: Optional[int], max_tokens_per_request: Optional[int]):
     stub = ctx.obj['STUB']
