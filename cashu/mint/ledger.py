@@ -987,6 +987,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             # we don't need to set it here, _set_melt_quote_pending will set it in the db
             melt_quote.outputs = outputs
 
+        # verify SIG_ALL signatures
+        message_to_sign = (
+            "".join([p.secret for p in proofs] + [o.B_ for o in outputs or []]) + quote
+        )
+        self._verify_sigall_spending_conditions(proofs, outputs or [], message_to_sign)
+
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
         input_fees = self.get_fees_for_proofs(proofs)

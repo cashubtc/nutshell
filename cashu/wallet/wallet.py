@@ -618,7 +618,7 @@ class Wallet(
         and the promises to send (send_outputs). If secret_lock is provided, the wallet will create
         blinded secrets with those to attach a predefined spending condition to the tokens they want to send.
 
-        Calls `add_witnesses_sig_inputs` which parses all proofs and checks whether their
+        Calls `sign_proofs_inplace_swap` which parses all proofs and checks whether their
         secrets corresponds to any locks that we have the unlock conditions for. If so,
         it adds the unlock conditions to the proofs.
 
@@ -638,9 +638,6 @@ class Wallet(
         assert amount >= 0, "amount can't be negative."
         # make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
-
-        # potentially add witnesses to unlock provided proofs (if they indicate one)
-        # proofs = self.add_witnesses_sig_inputs(proofs)
 
         input_fees = self.get_fees_for_proofs(proofs)
         logger.trace(f"Input fees: {input_fees}")
@@ -751,6 +748,8 @@ class Wallet(
         change_outputs, change_rs = self._construct_outputs(
             n_change_outputs * [1], change_secrets, change_rs
         )
+
+        proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
 
         # store the melt_id in proofs db
         async with self.db.connect() as conn:

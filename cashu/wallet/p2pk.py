@@ -141,7 +141,10 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         return False
 
     def add_witness_swap_sig_all(
-        self, proofs: List[Proof], outputs: List[BlindedMessage]
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        message_to_sign: Optional[str] = None,
     ) -> List[Proof]:
         """Determine whether the first input's sig flag is SIG_ALL ()"""
         if not self._inputs_require_sigall(proofs):
@@ -154,7 +157,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             secrets = set([Secret.deserialize(p.secret) for p in proofs])
             if not len(secrets) == 1:
                 raise Exception("Secrets not identical")
-            message_to_sign = "".join(
+            message_to_sign = message_to_sign or "".join(
                 [p.secret for p in proofs] + [o.B_ for o in outputs]
             )
             signature = self.schnorr_sign_message(message_to_sign)
@@ -186,6 +189,17 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
         proofs = self.add_witness_swap_sig_all(proofs, outputs)
 
         return proofs
+
+    def sign_proofs_inplace_melt(
+        self, proofs: List[Proof], outputs: List[BlindedMessage], quote_id: str
+    ) -> List[Proof]:
+        # sign proofs if they are P2PK SIG_INPUTS
+        proofs = self.add_witnesses_sig_inputs(proofs)
+        message_to_sign = (
+            "".join([p.secret for p in proofs] + [o.B_ for o in outputs]) + quote_id
+        )
+        # sign first proof if swap is SIG_ALL
+        return self.add_witness_swap_sig_all(proofs, outputs, message_to_sign)
 
     def add_signatures_to_proofs(
         self, proofs: List[Proof], signatures: List[str]

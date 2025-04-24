@@ -1,6 +1,6 @@
 import hashlib
 import time
-from typing import List, Union
+from typing import List, Optional, Union
 
 from loguru import logger
 
@@ -23,7 +23,7 @@ class LedgerSpendingConditions:
         self,
         proof: Proof,
         secret: P2PKSecret | HTLCSecret,
-        message_to_sign: str | None = None,
+        message_to_sign: Optional[str] = None,
     ) -> bool:
         """
         Verify P2PK spending condition for a single input.
@@ -76,7 +76,10 @@ class LedgerSpendingConditions:
         )
 
     def _verify_htlc_spending_conditions(
-        self, proof: Proof, secret: HTLCSecret, message_to_sign: str | None = None
+        self,
+        proof: Proof,
+        secret: HTLCSecret,
+        message_to_sign: Optional[str] = None,
     ) -> bool:
         """
         Verify HTLC spending condition for a single input.
@@ -255,7 +258,10 @@ class LedgerSpendingConditions:
         return secrets.pop()
 
     def _verify_sigall_spending_conditions(
-        self, proofs: List[Proof], outputs: List[BlindedMessage]
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        message_to_sign: Optional[str] = None,
     ) -> bool:
         """
         If sigflag==SIG_ALL in any proof.secret, perform a signature check on all
@@ -311,7 +317,9 @@ class LedgerSpendingConditions:
 
         logger.trace(f"pubkeys: {pubkeys}")
 
-        message_to_sign = "".join([p.secret for p in proofs] + [o.B_ for o in outputs])
+        message_to_sign = message_to_sign or "".join(
+            [p.secret for p in proofs] + [o.B_ for o in outputs]
+        )
         first_proof = proofs[0]
         if not first_proof.witness:
             raise TransactionError("no witness in proof.")
@@ -333,7 +341,10 @@ class LedgerSpendingConditions:
         return True
 
     def _verify_input_output_spending_conditions(
-        self, proofs: List[Proof], outputs: List[BlindedMessage]
+        self,
+        proofs: List[Proof],
+        outputs: List[BlindedMessage],
+        message_to_sign: Optional[str] = None,
     ) -> bool:
         """
         Verify spending conditions:
@@ -350,4 +361,4 @@ class LedgerSpendingConditions:
         # verify that all secrets are of the same kind, raise an error if not
         _ = self._verify_all_secrets_equal_and_return(proofs)
 
-        return self._verify_sigall_spending_conditions(proofs, outputs)
+        return self._verify_sigall_spending_conditions(proofs, outputs, message_to_sign)
