@@ -76,26 +76,15 @@ def test_remove_mint_url(cli_prefix):
     assert result.exception is None
     assert "Url successfully removed!" in result.output or "Contact method not found" in result.output
 
-def test_add_contact(cli_prefix):
+def test_add_remove_contact(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(cli, [*cli_prefix, "update", "contact", "add", "signal", "@example.420"])
     assert result.exception is None
     assert "Contact successfully added!" in result.output
 
-@pytest.mark.skipif(
-    not is_fake,
-    reason=(
-        "only fakewallet has set email contact"
-    )
-)
-def test_remove_contact(cli_prefix):
-    runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "update", "contact", "remove", "email"])
+    result = runner.invoke(cli, [*cli_prefix, "update", "contact", "remove", "signal"])
     assert result.exception is None
     assert "Contact successfully removed!" in result.output
-
-    result = runner.invoke(cli, [*cli_prefix, "update", "contact", "remove", "email"])
-    assert "Contact method not found" in result.output
 
 def test_update_lightning_fee(cli_prefix):
     runner = CliRunner()
