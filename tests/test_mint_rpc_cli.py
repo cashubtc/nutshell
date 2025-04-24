@@ -82,6 +82,12 @@ def test_add_contact(cli_prefix):
     assert result.exception is None
     assert "Contact successfully added!" in result.output
 
+@pytest.mark.skipif(
+    not is_fake,
+    reason=(
+        "only fakewallet has set email contact"
+    )
+)
 def test_remove_contact(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(cli, [*cli_prefix, "update", "contact", "remove", "email"])
