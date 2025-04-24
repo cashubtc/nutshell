@@ -110,7 +110,7 @@ async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet)
     for p in send_proofs:
         p.witness = HTLCWitness(preimage=preimage).json()
     await assert_err(
-        wallet2.redeem(send_proofs), "Mint Error: HTLC preimage does not match"
+        wallet1.redeem(send_proofs), "Mint Error: HTLC preimage does not match"
     )
 
 
@@ -175,7 +175,7 @@ async def test_htlc_redeem_with_correct_signature(wallet1: Wallet, wallet2: Wall
     for p, s in zip(send_proofs, signatures):
         p.witness = HTLCWitness(preimage=preimage, signatures=[s]).json()
 
-    await wallet2.redeem(send_proofs)
+    await wallet1.redeem(send_proofs)
 
 
 @pytest.mark.asyncio

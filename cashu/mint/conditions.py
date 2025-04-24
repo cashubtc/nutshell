@@ -54,9 +54,9 @@ class LedgerSpendingConditions:
 
         # extract pubkeys that we require signatures from depending on whether the
         # locktime has passed (refund) or not (pubkeys in secret.data and in tags)
-        # the pubkey in the data field is the pubkey to use for P2PK
+        # for P2PK, we use the data field as a pubkey
         pubkeys: List[str] = []
-        if isinstance(p2pk_secret, P2PKSecret):
+        if SecretKind(p2pk_secret.kind) == SecretKind.P2PK:
             pubkeys = [p2pk_secret.data]
         # get all additional pubkeys from tags for multisig
         pubkeys += p2pk_secret.tags.get_tag_all("pubkeys")
