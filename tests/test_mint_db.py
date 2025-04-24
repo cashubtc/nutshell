@@ -296,6 +296,7 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     # remove subscription
     client.remove_subscription("subId")
 
+@pytest.mark.asyncio
 async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(128)
     await ledger.db_write._update_mint_quote_state(mint_quote.quote, MintQuoteState.paid)
@@ -305,6 +306,7 @@ async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
 
     assert_err(ledger.db_write._update_mint_quote_state(mint_quote_db, MintQuoteState.unpaid), "Cannot change state of an issued mint quote.")
 
+@pytest.mark.asyncio
 async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
     melt_quote = await wallet.melt_quote(payment_request)
     await ledger.db_write._update_melt_quote_state(melt_quote.quote, MeltQuoteState.paid)
