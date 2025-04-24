@@ -304,7 +304,7 @@ async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
     mint_quote_db = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert mint_quote_db.state == MintQuoteState.issued
 
-    assert_err(ledger.db_write._update_mint_quote_state(mint_quote_db, MintQuoteState.unpaid), "Cannot change state of an issued mint quote.")
+    await assert_err(ledger.db_write._update_mint_quote_state(mint_quote_db, MintQuoteState.unpaid), "Cannot change state of an issued mint quote.")
 
 @pytest.mark.asyncio
 async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
@@ -314,4 +314,4 @@ async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
     melt_quote_db = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
     assert melt_quote_db.state == MeltQuoteState.paid
 
-    assert_err(ledger.db_write._update_melt_quote_state(melt_quote.quote, MeltQuoteState.unpaid), "Cannot change state of a paid melt quote.")
+    await assert_err(ledger.db_write._update_melt_quote_state(melt_quote.quote, MeltQuoteState.unpaid), "Cannot change state of a paid melt quote.")
