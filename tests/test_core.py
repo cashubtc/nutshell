@@ -2,6 +2,7 @@ import pytest
 
 from cashu.core.base import TokenV3, TokenV4, Unit
 from cashu.core.helpers import calculate_number_of_blank_outputs
+from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.core.split import amount_split
 from cashu.wallet.helpers import deserialize_token_from_string
 
@@ -262,3 +263,52 @@ def test_parse_token_v3_v4_base64_keyset_id():
     # this token can not be serialized to V4
     token = deserialize_token_from_string(token_v3_base64_keyset_serialized)
     assert isinstance(token, TokenV3)
+
+
+def test_secret_equality():
+    assert Secret(
+        kind=SecretKind.P2PK.value, data="asd", tags=Tags([["asd", "wasd"], ["mew"]])
+    ) == Secret(
+        kind=SecretKind.P2PK.value, data="asd", tags=Tags([["asd", "wasd"], ["mew"]])
+    )
+
+
+def test_secret_set_dict():
+    d = dict()
+    s = Secret(
+        kind=SecretKind.P2PK.value,
+        data="asd",
+        tags=Tags([["asd", "wasd"], ["mew"]]),
+        nonce="abcd",
+    )
+    s2 = Secret(
+        kind=SecretKind.P2PK.value,
+        data="asd",
+        tags=Tags([["asd", "wasd"], ["mew"]]),
+        nonce="efgh",
+    )
+    # test set
+    assert len(set([s, s2])) == 1
+    # test dict
+    d[s] = "test"
+    assert d[s] == "test"
+    assert (
+        d[
+            Secret(
+                kind=SecretKind.P2PK.value,
+                data="asd",
+                tags=Tags([["asd", "wasd"], ["mew"]]),
+            )
+        ]
+        == "test"
+    )
+    assert (
+        d[
+            Secret(
+                kind=SecretKind.P2PK.value,
+                data="asd",
+                tags=Tags([["asd", "wasd"], ["mew"]]),
+            )
+        ]
+        == "test"
+    )

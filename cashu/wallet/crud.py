@@ -14,6 +14,13 @@ from ..core.base import (
 from ..core.db import Connection, Database
 
 
+class _UnsetType:
+    pass
+
+
+_UNSET = _UnsetType()
+
+
 async def store_proof(
     proof: Proof,
     db: Database,
@@ -121,31 +128,31 @@ async def invalidate_proof(
 async def update_proof(
     proof: Proof,
     *,
-    reserved: Optional[bool] = None,
-    send_id: Optional[str] = None,
-    mint_id: Optional[str] = None,
-    melt_id: Optional[str] = None,
+    reserved: bool | _UnsetType = _UNSET,
+    send_id: str | None | _UnsetType = _UNSET,
+    mint_id: str | None | _UnsetType = _UNSET,
+    melt_id: str | None | _UnsetType = _UNSET,
     db: Optional[Database] = None,
     conn: Optional[Connection] = None,
 ) -> None:
     clauses = []
     values: Dict[str, Any] = {}
 
-    if reserved is not None:
+    if reserved is not _UNSET:
         clauses.append("reserved = :reserved")
         values["reserved"] = reserved
         clauses.append("time_reserved = :time_reserved")
         values["time_reserved"] = int(time.time())
 
-    if send_id is not None:
+    if send_id is not _UNSET:
         clauses.append("send_id = :send_id")
         values["send_id"] = send_id
 
-    if mint_id is not None:
+    if mint_id is not _UNSET:
         clauses.append("mint_id = :mint_id")
         values["mint_id"] = mint_id
 
-    if melt_id is not None:
+    if melt_id is not _UNSET:
         clauses.append("melt_id = :melt_id")
         values["melt_id"] = melt_id
 
