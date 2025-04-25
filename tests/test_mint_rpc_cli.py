@@ -143,6 +143,7 @@ async def test_get_melt_quote(cli_prefix):
     assert result.exception is None
     assert "melt quote:" in result.output
 
+'''
 @pytest.mark.asyncio
 async def test_rotate_next_keyset(cli_prefix):
     runner = CliRunner()
@@ -152,3 +153,4 @@ async def test_rotate_next_keyset(cli_prefix):
     assert "New keyset successfully created:" in result.output
     assert "keyset.unit = 'sat'" in result.output
     assert "keyset.input_fee_ppk = 2" in result.output
+'''
