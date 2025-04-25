@@ -326,7 +326,15 @@ class LedgerSpendingConditions:
         signatures = P2PKWitness.from_witness(first_proof.witness).signatures
         n_valid_sigs = 0
         for p in pubkeys:
-            for s in signatures:
+            for i, s in enumerate(signatures):
+                if verify_schnorr_signature(
+                    message=message_to_sign.encode("utf-8"),
+                    pubkey=PublicKey(bytes.fromhex(p), raw=True),
+                    signature=bytes.fromhex(s),
+                ):
+                    n_valid_sigs += 1
+                    signatures.pop(i) 
+                    break
                 if verify_schnorr_signature(
                     message=message_to_sign.encode("utf-8"),
                     pubkey=PublicKey(bytes.fromhex(p), raw=True),
