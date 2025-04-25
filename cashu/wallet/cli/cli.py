@@ -456,8 +456,8 @@ async def invoice(
         while time.time() < check_until and not paid:
             await asyncio.sleep(5)
             try:
-                mint_quote_resp = await wallet.get_mint_quote(mint_quote.quote)
-                if mint_quote_resp.state == MintQuoteState.paid.value:
+                mint_quote = await wallet.get_mint_quote(mint_quote.quote)
+                if mint_quote.state == MintQuoteState.paid:
                     await wallet.mint(
                         amount,
                         split=optional_split,
@@ -527,8 +527,8 @@ async def swap(ctx: Context):
     mint_quote = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
-    melt_quote_resp = await outgoing_wallet.melt_quote(mint_quote.request)
-    total_amount = melt_quote_resp.amount + melt_quote_resp.fee_reserve
+    melt_quote = await outgoing_wallet.melt_quote(mint_quote.request)
+    total_amount = melt_quote.amount + melt_quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     send_proofs, fees = await outgoing_wallet.select_to_send(
@@ -537,8 +537,8 @@ async def swap(ctx: Context):
     await outgoing_wallet.melt(
         send_proofs,
         mint_quote.request,
-        melt_quote_resp.fee_reserve,
-        melt_quote_resp.quote,
+        melt_quote.fee_reserve,
+        melt_quote.quote,
     )
 
     # mint token in incoming mint
