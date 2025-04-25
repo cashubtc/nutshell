@@ -20,6 +20,7 @@ from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
+    is_deprecated_api_only,
     is_fake,
     is_github_actions,
     is_regtest,
@@ -341,14 +342,15 @@ async def test_melt(wallet1: Wallet):
     assert melt_quote_db, "No melt quote in db"
 
     # compare melt quote from API against db
-    melt_quote_api_resp = await wallet1.get_melt_quote(melt_quote_db.quote)
-    assert melt_quote_api_resp, "No melt quote from API"
-    assert melt_quote_api_resp.quote == melt_quote_db.quote, "Wrong quote ID"
-    assert melt_quote_api_resp.amount == melt_quote_db.amount, "Wrong amount"
-    assert melt_quote_api_resp.fee_reserve == melt_quote_db.fee_reserve, "Wrong fee"
-    assert melt_quote_api_resp.request == melt_quote_db.request, "Wrong request"
-    assert melt_quote_api_resp.state == melt_quote_db.state, "Wrong state"
-    assert melt_quote_api_resp.unit == melt_quote_db.unit, "Wrong unit"
+    if not settings.debug_mint_only_deprecated:
+        melt_quote_api_resp = await wallet1.get_melt_quote(melt_quote_db.quote)
+        assert melt_quote_api_resp, "No melt quote from API"
+        assert melt_quote_api_resp.quote == melt_quote_db.quote, "Wrong quote ID"
+        assert melt_quote_api_resp.amount == melt_quote_db.amount, "Wrong amount"
+        assert melt_quote_api_resp.fee_reserve == melt_quote_db.fee_reserve, "Wrong fee"
+        assert melt_quote_api_resp.request == melt_quote_db.request, "Wrong request"
+        assert melt_quote_api_resp.state == melt_quote_db.state, "Wrong state"
+        assert melt_quote_api_resp.unit == melt_quote_db.unit, "Wrong unit"
 
     proofs_used = await get_proofs(
         db=wallet1.db, melt_id=melt_quote_db.quote, table="proofs_used"
@@ -363,6 +365,7 @@ async def test_melt(wallet1: Wallet):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(is_deprecated_api_only, reason="Deprecated API only")
 async def test_get_melt_quote_state(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(128)
     await pay_if_regtest(mint_quote.request)
