@@ -283,16 +283,16 @@ async def pay(
             abort=True,
             default=True,
         )
+
+    if wallet.available_balance < total_amount + ecash_fees:
+        print(" Error: Balance too low.")
+        return
+    assert total_amount > 0, "amount is not positive"
     # we need to include fees so we can use the proofs for melting the `total_amount`
     send_proofs, _ = await wallet.select_to_send(
         wallet.proofs, total_amount, include_fees=True, set_reserved=True
     )
     print("Paying Lightning invoice ...", end="", flush=True)
-    assert total_amount > 0, "amount is not positive"
-    if wallet.available_balance < total_amount:
-        print(" Error: Balance too low.")
-        return
-
     try:
         melt_response = await wallet.melt(
             send_proofs, invoice, quote.fee_reserve, quote.quote

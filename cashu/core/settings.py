@@ -59,10 +59,17 @@ class MintSettings(CashuSettings):
 
     mint_database: str = Field(default="data/mint")
     mint_test_database: str = Field(default="test_data/test_mint")
-    mint_max_secret_length: int = Field(default=512)
+    mint_max_secret_length: int = Field(default=1024)
 
     mint_input_fee_ppk: int = Field(default=0)
     mint_disable_melt_on_error: bool = Field(default=False)
+
+    mint_regular_tasks_interval_seconds: int = Field(
+        default=3600,
+        gt=0,
+        title="Regular tasks interval",
+        description="Interval (in seconds) for running regular tasks like the invoice checker.",
+    )
 
 
 class MintDeprecationFlags(MintSettings):

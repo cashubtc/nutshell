@@ -23,6 +23,7 @@ class WalletHTLC(SupportsDb):
         hashlock_n_sigs: int | None = None,
         locktime_seconds: int | None = None,
         locktime_pubkeys: List[str] | None = None,
+        locktime_n_sigs: int | None = None,
     ) -> HTLCSecret:
         tags = Tags()
         if locktime_seconds:
@@ -31,6 +32,9 @@ class WalletHTLC(SupportsDb):
             )
         if locktime_pubkeys:
             tags["refund"] = locktime_pubkeys
+
+        if locktime_n_sigs:
+            tags["n_sigs_refund"] = str(locktime_n_sigs)
 
         if not preimage_hash and preimage:
             preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
