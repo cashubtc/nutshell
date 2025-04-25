@@ -9,6 +9,7 @@ import cashu.mint.management_rpc.protos.management_pb2_grpc as management_pb2_gr
 from cashu.core.base import (
     MeltQuoteState,
     MintQuoteState,
+    Unit,
 )
 from cashu.core.settings import settings
 
@@ -139,10 +140,18 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
 
     async def RotateNextKeyset(self, request, context):
         logger.debug("gRPC RotateNextKeyset has been called")
-        """Cannot implement this yet"""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
+        # TODO: Fix this. Currently, we do not allow setting a max_order because
+        # it influences the keyset ID and -in turn- the Mint behaviour when activating keysets
+        # upon a restar (it will activate a new keyset with the standard max order)
+        if request.max_order:
+            logger.warn(f"Ignoring custom max_order of 2**{request.max_order}. This functionality is restricted.")
+        new_keyset = await self.ledger.rotate_next_keyset(Unit[request.unit], input_fee_ppk=request.input_fee_ppk)
+        return management_pb2.RotateNextKeysetResponse(
+            id=new_keyset.id,
+            unit=str(new_keyset.unit),
+            max_order=new_keyset.amounts[-1].bit_length(), # Neat trick to get log_2(last_amount) + 1
+            input_fee_ppk=new_keyset.input_fee_ppk
+        )
 
     async def UpdateLightningFee(self, request, _):
         logger.debug("gRPC UpdateLightningFee has been called")
