@@ -186,10 +186,7 @@ async def test_regtest_get_melt_quote_wallet_crash_melt_fail_restore_pending_bat
     _, send_proofs = await wallet.swap_to_send(
         wallet.proofs, total_amount, set_reserved=True
     )
-
-    # verify that the proofs are reserved
-    proofs_db = await get_proofs(db=wallet.db, melt_id=quote.quote)
-    assert all([p.reserved for p in proofs_db])
+    assert len(send_proofs) == 2
 
     task = asyncio.create_task(
         wallet.melt(
@@ -200,6 +197,11 @@ async def test_regtest_get_melt_quote_wallet_crash_melt_fail_restore_pending_bat
         )
     )
     await asyncio.sleep(SLEEP_TIME)
+
+    # verify that the proofs are reserved
+    proofs_db = await get_proofs(db=wallet.db, melt_id=quote.quote)
+    assert len(proofs_db) == 2
+    assert all([p.reserved for p in proofs_db])
 
     # simulate a and kill the task
     task.cancel()
@@ -214,7 +216,7 @@ async def test_regtest_get_melt_quote_wallet_crash_melt_fail_restore_pending_bat
 
     await asyncio.sleep(SLEEP_TIME)
 
-    # get the melt quote
+    # get the melt quote, this should restore the state of the proofs
     melt_quote = await wallet.get_melt_quote(quote.quote)
     assert melt_quote
     assert melt_quote.unpaid
