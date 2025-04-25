@@ -161,7 +161,7 @@ class LedgerSpendingConditions:
         n_pubkeys_with_valid_sigs = 0
         # loop over all unique pubkeys in input
         for pubkey in unique_pubkeys:
-            for input_sig in signatures:
+            for i, input_sig in enumerate(signatures):
                 logger.trace(f"verifying signature {input_sig} by pubkey {pubkey}.")
                 logger.trace(f"Message: {message_to_sign}")
                 if verify_schnorr_signature(
@@ -173,6 +173,7 @@ class LedgerSpendingConditions:
                     logger.trace(
                         f"signature on input is valid: {input_sig} on {pubkey}."
                     )
+                    signatures.pop(i)
                     break
 
         # check if we have enough valid signatures
@@ -297,35 +298,62 @@ class LedgerSpendingConditions:
         if SecretKind(secret.kind) == SecretKind.P2PK:
             secret_lock = P2PKSecret.from_secret(secret)
             pubkeys = [secret_lock.data] + secret_lock.tags.get_tag_all("pubkeys")
+            n_sigs_required = secret_lock.n_sigs or 1
         elif SecretKind(secret.kind) == SecretKind.HTLC:
             secret_lock = HTLCSecret.from_secret(secret)
             pubkeys = secret_lock.tags.get_tag_all("pubkeys")
+            n_sigs_required = secret_lock.n_sigs or 1
         else:
             # not a P2PK or HTLC secret
             return False
 
-        n_sigs = secret_lock.n_sigs or 1
         now = time.time()
         if secret_lock.locktime and secret_lock.locktime < now:
             # locktime has passed, we only require the refund pubkeys and n_sigs_refund
             pubkeys = secret_lock.tags.get_tag_all("refund")
-            n_sigs = secret_lock.n_sigs_refund or 1
+            n_sigs_required = secret_lock.n_sigs_refund or 1
 
         # if no pubkeys are present, anyone can spend
         if not pubkeys:
             return True
 
-        logger.trace(f"pubkeys: {pubkeys}")
-
         message_to_sign = message_to_sign or "".join(
             [p.secret for p in proofs] + [o.B_ for o in outputs]
         )
+
+        # validation
+        if len(set(pubkeys)) != len(pubkeys):
+            raise TransactionError("pubkeys must be unique.")
+        logger.trace(f"pubkeys: {pubkeys}")
+        unique_pubkeys = set(pubkeys)
+
+        if not n_sigs_required > 0:
+            raise TransactionError("n_sigs must be positive.")
+
         first_proof = proofs[0]
         if not first_proof.witness:
             raise TransactionError("no witness in proof.")
         signatures = P2PKWitness.from_witness(first_proof.witness).signatures
+
+        # verify that signatures are present
+        if not signatures:
+            # no signature present although secret indicates one
+            raise TransactionError("no signatures in proof.")
+
+        # we make sure that there are no duplicate signatures
+        if len(set(signatures)) != len(signatures):
+            raise TransactionError("signatures must be unique.")
+
+        # check if enough pubkeys or signatures are present
+        if len(pubkeys) < n_sigs_required or len(signatures) < n_sigs_required:
+            raise TransactionError(
+                f"not enough pubkeys ({len(pubkeys)}) or signatures ({len(signatures)}) present for n_sigs ({n_sigs_required})."
+            )
+
+        logger.trace(f"pubkeys: {pubkeys}")
+
         n_valid_sigs = 0
-        for p in pubkeys:
+        for p in unique_pubkeys:
             for i, s in enumerate(signatures):
                 if verify_schnorr_signature(
                     message=message_to_sign.encode("utf-8"),
@@ -333,18 +361,11 @@ class LedgerSpendingConditions:
                     signature=bytes.fromhex(s),
                 ):
                     n_valid_sigs += 1
-                    signatures.pop(i) 
+                    signatures.pop(i)
                     break
-                if verify_schnorr_signature(
-                    message=message_to_sign.encode("utf-8"),
-                    pubkey=PublicKey(bytes.fromhex(p), raw=True),
-                    signature=bytes.fromhex(s),
-                ):
-                    n_valid_sigs += 1
-                    break
-        if n_valid_sigs < n_sigs:
+        if n_valid_sigs < n_sigs_required:
             raise TransactionError(
-                f"signature threshold not met. {n_valid_sigs} < {n_sigs}."
+                f"signature threshold not met. {n_valid_sigs} < {n_sigs_required}."
             )
         return True
 
