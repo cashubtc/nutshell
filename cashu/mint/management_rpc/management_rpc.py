@@ -144,7 +144,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         # it influences the keyset ID and -in turn- the Mint behaviour when activating keysets
         # upon a restar (it will activate a new keyset with the standard max order)
         if request.max_order:
-            logger.warn(f"Ignoring custom max_order of 2**{request.max_order}. This functionality is restricted.")
+            logger.warning(f"Ignoring custom max_order of 2**{request.max_order}. This functionality is restricted.")
         new_keyset = await self.ledger.rotate_next_keyset(Unit[request.unit], input_fee_ppk=request.input_fee_ppk)
         return management_pb2.RotateNextKeysetResponse(
             id=new_keyset.id,
