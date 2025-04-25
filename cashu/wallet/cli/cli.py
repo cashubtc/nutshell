@@ -283,16 +283,16 @@ async def pay(
             abort=True,
             default=True,
         )
+
+    if wallet.available_balance < total_amount + ecash_fees:
+        print(" Error: Balance too low.")
+        return
+    assert total_amount > 0, "amount is not positive"
     # we need to include fees so we can use the proofs for melting the `total_amount`
     send_proofs, _ = await wallet.select_to_send(
         wallet.proofs, total_amount, include_fees=True, set_reserved=True
     )
     print("Paying Lightning invoice ...", end="", flush=True)
-    assert total_amount > 0, "amount is not positive"
-    if wallet.available_balance < total_amount:
-        print(" Error: Balance too low.")
-        return
-
     try:
         melt_response = await wallet.melt(
             send_proofs, invoice, quote.fee_reserve, quote.quote
@@ -764,12 +764,17 @@ async def receive_cli(
         return
     await print_balance(ctx)
 
+
 @cli.command("decode", help="Decode a cashu token and print in JSON format.")
 @click.option(
     "--no-dleq", default=False, is_flag=True, help="Do not include DLEQ proofs."
 )
 @click.option(
-    "--indent", "-i", default=2, is_flag=False, help="Number of spaces to indent JSON with."
+    "--indent",
+    "-i",
+    default=2,
+    is_flag=False,
+    help="Number of spaces to indent JSON with.",
 )
 @click.argument("token", type=str, default="")
 def decode_to_json(token: str, no_dleq: bool, indent: int):
@@ -784,6 +789,7 @@ def decode_to_json(token: str, no_dleq: bool, indent: int):
         print(token_json)
     else:
         print("Error: enter a token")
+
 
 @cli.command("burn", help="Burn spent tokens.")
 @click.argument("token", required=False, type=str)

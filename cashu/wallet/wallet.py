@@ -519,8 +519,6 @@ class Wallet(
         await store_bolt11_mint_quote(db=self.db, quote=quote)
         return quote
 
-
-
     async def mint(
         self,
         amount: int,
@@ -545,7 +543,9 @@ class Wallet(
         if split:
             logger.trace(f"Mint with split: {split}")
             assert sum(split) == amount, "split must sum to amount"
-            allowed_amounts = self.get_allowed_amounts()  # Get allowed amounts from the mint
+            allowed_amounts = (
+                self.get_allowed_amounts()
+            )  # Get allowed amounts from the mint
             for a in split:
                 if a not in allowed_amounts:
                     raise Exception(
@@ -618,7 +618,7 @@ class Wallet(
         and the promises to send (send_outputs). If secret_lock is provided, the wallet will create
         blinded secrets with those to attach a predefined spending condition to the tokens they want to send.
 
-        Calls `add_witnesses_to_proofs` which parses all proofs and checks whether their
+        Calls `sign_proofs_inplace_swap` which parses all proofs and checks whether their
         secrets corresponds to any locks that we have the unlock conditions for. If so,
         it adds the unlock conditions to the proofs.
 
@@ -638,9 +638,6 @@ class Wallet(
         assert amount >= 0, "amount can't be negative."
         # make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
-
-        # potentially add witnesses to unlock provided proofs (if they indicate one)
-        proofs = self.add_witnesses_to_proofs(proofs)
 
         input_fees = self.get_fees_for_proofs(proofs)
         logger.trace(f"Input fees: {input_fees}")
@@ -672,7 +669,7 @@ class Wallet(
         outputs, rs = self._construct_outputs(amounts, secrets, rs, self.keyset_id)
 
         # potentially add witnesses to outputs based on what requirement the proofs indicate
-        outputs = self.add_witnesses_to_outputs(proofs, outputs)
+        proofs = self.sign_proofs_inplace_swap(proofs, outputs)
 
         # sort outputs by amount, remember original order
         sorted_outputs_with_indices = sorted(
@@ -681,7 +678,7 @@ class Wallet(
         original_indices, sorted_outputs = zip(*sorted_outputs_with_indices)
 
         # Call swap API
-        sorted_promises = await super().split(proofs, sorted_outputs)
+        sorted_promises = await super().split(proofs, list(sorted_outputs))
 
         # sort promises back to original order
         promises = [
@@ -751,6 +748,8 @@ class Wallet(
         change_outputs, change_rs = self._construct_outputs(
             n_change_outputs * [1], change_secrets, change_rs
         )
+
+        proofs = self.sign_proofs_inplace_melt(proofs, change_outputs, quote_id)
 
         # store the melt_id in proofs db
         async with self.db.connect() as conn:
