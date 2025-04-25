@@ -305,10 +305,10 @@ async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
     assert mint_quote_db.state == MintQuoteState.paid
 
     # Update it to issued
-    await ledger.db_write._update_mint_quote_state(mint_quote_db, MintQuoteState.issued)
+    await ledger.db_write._update_mint_quote_state(mint_quote_db.quote, MintQuoteState.issued)
 
     # Try and revert it back to unpaid
-    await assert_err(ledger.db_write._update_mint_quote_state(mint_quote_db, MintQuoteState.unpaid), "Cannot change state of an issued mint quote.")
+    await assert_err(ledger.db_write._update_mint_quote_state(mint_quote_db.quote, MintQuoteState.unpaid), "Cannot change state of an issued mint quote.")
 
 @pytest.mark.asyncio
 async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
