@@ -7,7 +7,7 @@ from cashu.core.settings import settings
 from cashu.mint.management_rpc.cli.cli import cli
 from cashu.wallet.wallet import Wallet
 
-from .helpers import is_fake
+from .helpers import is_fake, is_postgres
 
 payment_request = (
     "lnbc10u1pjap7phpp50s9lzr3477j0tvacpfy2ucrs4q0q6cvn232ex7nt2zqxxxj8gxrsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsss"
