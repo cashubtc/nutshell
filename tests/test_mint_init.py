@@ -4,10 +4,12 @@ from typing import List, Tuple
 import bolt11
 import pytest
 import pytest_asyncio
+from unittest.mock import AsyncMock, patch
 
 from cashu.core.base import MeltQuote, MeltQuoteState, Proof
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
+from cashu.core.errors import BackendConnectionError
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
 from cashu.mint.crud import LedgerCrudSqlite
@@ -480,3 +482,38 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
 
     # clean up
     cancel_invoice(preimage_hash=preimage_hash)
+
+
+@pytest.mark.asyncio
+async def test_backend_connection_error():
+    """Test that a backend connection error is properly handled."""
+    from cashu.lightning.base import StatusResponse
+    from cashu.mint.ledger import Ledger
+
+    # Create a mock backend that raises an error during status check
+    mock_backend = AsyncMock()
+    mock_backend.status.return_value = StatusResponse(
+        error_message="Connection refused", balance=None
+    )
+
+    # Create a mock ledger with the mock backend
+    with patch.object(Ledger, '_check_backends', side_effect=BackendConnectionError(
+        backend_name="MockBackend",
+        error_message="Connection refused"
+    )):
+        # Create a ledger instance
+        ledger = Ledger(
+            db=Database("mint", settings.mint_database),
+            seed="test_seed",
+            derivation_path="m/0'/0'/0'",
+            backends={},
+            crud=AsyncMock(),
+        )
+        
+        # Test that startup_ledger raises BackendConnectionError
+        with pytest.raises(BackendConnectionError) as excinfo:
+            await ledger.startup_ledger()
+        
+        # Verify the error message
+        assert "Connection refused" in str(excinfo.value)
+        assert "MockBackend" in str(excinfo.value)

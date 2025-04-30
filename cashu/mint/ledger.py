@@ -30,6 +30,7 @@ from ..core.crypto.keys import (
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
+    BackendConnectionError,
     CashuError,
     LightningError,
     LightningPaymentFailedError,
@@ -150,19 +151,32 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     async def _check_backends(self) -> None:
         for method in self.backends:
             for unit in self.backends[method]:
+                backend_name = self.backends[method][unit].__class__.__name__
                 logger.info(
-                    f"Using {self.backends[method][unit].__class__.__name__} backend for"
+                    f"Using {backend_name} backend for"
                     f" method: '{method.name}' and unit: '{unit.name}'"
                 )
-                status = await self.backends[method][unit].status()
-                if status.error_message:
-                    logger.error(
-                        "The backend for"
-                        f" {self.backends[method][unit].__class__.__name__} isn't"
-                        f" working properly: '{status.error_message}'"
-                    )
-                    exit(1)
-                logger.info(f"Backend balance: {status.balance} {unit.name}")
+                try:
+                    status = await self.backends[method][unit].status()
+                    if status.error_message:
+                        logger.error(
+                            "The backend for"
+                            f" {backend_name} isn't"
+                            f" working properly: '{status.error_message}'"
+                        )
+                        raise BackendConnectionError(
+                            backend_name=backend_name,
+                            error_message=status.error_message
+                        )
+                    logger.info(f"Backend balance: {status.balance} {unit.name}")
+                except Exception as e:
+                    if not isinstance(e, BackendConnectionError):
+                        logger.error(f"Failed to connect to {backend_name}: {str(e)}")
+                        raise BackendConnectionError(
+                            backend_name=backend_name,
+                            error_message=str(e)
+                        )
+                    raise
 
         logger.info(f"Data dir: {settings.cashu_dir}")
 
