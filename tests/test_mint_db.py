@@ -298,7 +298,7 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
 async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
     mint_quote = await wallet.request_mint(128)
     await ledger.db_write._update_mint_quote_state(mint_quote.quote, MintQuoteState.paid)
-
+    
     mint_quote_db = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
     assert mint_quote_db.state == MintQuoteState.paid
 
@@ -311,6 +311,7 @@ async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
 @pytest.mark.asyncio
 async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
     melt_quote = await wallet.melt_quote(payment_request)
+    await asyncio.sleep(0.2)
     await ledger.db_write._update_melt_quote_state(melt_quote.quote, MeltQuoteState.paid)
 
     melt_quote_db = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
