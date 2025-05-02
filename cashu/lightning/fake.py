@@ -5,8 +5,6 @@ from datetime import datetime
 from os import urandom
 from typing import AsyncGenerator, Dict, List, Optional
 
-from loguru import logger
-
 from bolt11 import (
     Bolt11,
     Feature,
@@ -222,8 +220,6 @@ class FakeWallet(LightningBackend):
 
         # Payment quote is determined and saved in the response
         kind = PaymentQuoteKind.REGULAR
-
-        logger.debug(f"Received melt quote request with {melt_quote.is_amountless = } and {melt_quote.is_mpp = }")
 
         # Detect and handle amountless/partial/normal request
         amount_msat = 0
