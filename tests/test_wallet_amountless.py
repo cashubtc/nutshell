@@ -65,28 +65,15 @@ async def test_amountless_bolt11_invoice(wallet: Wallet):
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
-async def test_cheating_attempt_amountless_bolt11_invoice(wallet: Wallet):
+async def test_pay_amountless_invoice_without_specified_amount(wallet: Wallet):
     # make sure wallet knows the backend supports mpp
     assert wallet.mint_info.supports_amountless("bolt11", wallet.unit)
 
-    # We get an invoice for 1000 sats
-    invoice = normal_invoice if is_fake else get_real_invoice(1000)['payment_request']
+    # We get an amountless invoice
+    invoice = invoice_no_amount if is_fake else get_real_invoice(0)['payment_request']
 
-    # We try and get a quote for 1 sat.
     # This should not succeed.
-    assert_err(
-        lambda x : httpx.post(
-            SERVER_ENDPOINT+"/v1/melt/quote/bolt11",
-            json={
-                "unit": "sat",
-                "request": invoice,
-                "options": {
-                    "amountless": "1000",
-                },
-            },
-        ),
-        "Amount in request does not equal invoice"
-    )
+    assert_err(wallet.melt_quote(invoice), "No amount found. Either the invoice has an amount or the amount must be specified.")
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(

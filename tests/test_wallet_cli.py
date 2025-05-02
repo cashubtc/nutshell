@@ -9,7 +9,7 @@ from cashu.core.base import TokenV4
 from cashu.core.settings import settings
 from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
-from tests.helpers import is_deprecated_api_only, is_fake, is_regtest, pay_if_regtest
+from tests.helpers import is_deprecated_api_only, is_fake, is_regtest, pay_if_regtest, get_real_invoice
 
 invoice_no_amount = "lnbcrt1pnusdsqpp5fcxhgur2eewvsfy52q8xwanrjdglnf7htacp0ldeeakz6j62rj8sdqqcqzzsxqyz5vqsp5qk6l5dwhldy3gqjnr4806mtg22e25ekud4vdlf3p0hk89ud93lxs9qxpqysgq72fmgd460q04mvr5jetw7wys0vnt6ydl58gcg4jdy5jwx5d7epx8tr04et7a5yskwg4le54wrn6u6k0jjfehkc8n5spxkwxum239zxcqpuzakn"
 
@@ -575,5 +575,8 @@ def test_pay_amountless_invoice(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "pay", invoice_no_amount, "1000"]
+        [*cli_prefix, "pay", invoice_no_amount if is_fake else get_real_invoice(0)["payment_request"], "1000"]
     )
+    assert result.exception is None
+    print("test_pay_amountless_invoice ", result.output)
+    assert "Invoice paid" in result.output
