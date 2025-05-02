@@ -2,6 +2,8 @@ import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from loguru import logger
+
 from ..core.base import (
     BlindedSignature,
     MeltQuote,
@@ -739,6 +741,7 @@ class LedgerCrudSqlite(LedgerCrud):
         keyset: MintKeyset,
         conn: Optional[Connection] = None,
     ) -> None:
+        logger.debug(f"Updating keyset {keyset.id}, which has {keyset.active = }")
         await (conn or db).execute(
             f"""
             UPDATE {db.table_with_schema('keysets')}

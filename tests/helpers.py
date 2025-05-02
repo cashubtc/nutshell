@@ -217,7 +217,7 @@ def pay_onchain(address: str, sats: int) -> str:
     return run_cmd(cmd)
 
 
-async def pay_if_regtest(bolt11: str):
+async def pay_if_regtest(bolt11: str) -> None:
     if is_regtest:
         pay_real_invoice(bolt11)
     if is_fake:
