@@ -5,6 +5,8 @@ from datetime import datetime
 from os import urandom
 from typing import AsyncGenerator, Dict, List, Optional
 
+from loguru import logger
+
 from bolt11 import (
     Bolt11,
     Feature,
@@ -221,23 +223,26 @@ class FakeWallet(LightningBackend):
         # Payment quote is determined and saved in the response
         kind = PaymentQuoteKind.REGULAR
 
+        logger.debug(f"Received melt quote request with {melt_quote.is_amountless = } and {melt_quote.is_mpp = }")
+
         # Detect and handle amountless/partial/normal request
         amount_msat = 0
         if melt_quote.is_amountless:
             # Check that the user isn't doing something cheeky
-            if (invoice_obj.amount_msat
-                and melt_quote.options.amountless.amount_msat != invoice_obj.amount_msat    # type: ignore
-            ):
+            if invoice_obj.amount_msat:
                 raise IncorrectRequestAmountError()
             amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
             kind = PaymentQuoteKind.AMOUNTLESS
         elif melt_quote.is_mpp:
+            # Check that the user isn't doing something cheeky
+            if not invoice_obj.amount_msat:
+                raise IncorrectRequestAmountError()
             amount_msat = melt_quote.options.mpp.amount                 # type: ignore
             kind = PaymentQuoteKind.PARTIAL
-        elif invoice_obj.amount_msat:
-            amount_msat = int(invoice_obj.amount_msat)
         else:
-            raise Exception("request has no amount and is not specified as amountless")
+            if not invoice_obj.amount_msat:
+                raise Exception("request has no amount and is not specified as amountless")
+            amount_msat = int(invoice_obj.amount_msat)
 
         if self.unit == Unit.sat:
             fees_msat = fee_reserve(amount_msat)
