@@ -577,6 +577,10 @@ pytest.mark.skipif(
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
+pytest.mark.skipif(
+    not (is_fake or is_cln or is_lnd),
+    reason="Only run where amountless is supported",
+)
 def test_pay_amountless_invoice(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
