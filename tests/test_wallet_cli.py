@@ -11,10 +11,11 @@ from cashu.wallet.cli.cli import cli
 from cashu.wallet.wallet import Wallet
 from tests.helpers import (
     get_real_invoice,
+    is_cln,
     is_deprecated_api_only,
     is_fake,
+    is_lnd,
     is_regtest,
-    is_cln,
     pay_if_regtest,
 )
 
