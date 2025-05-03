@@ -56,7 +56,7 @@ async def test_amountless_bolt11_invoice(wallet: Wallet):
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     not (is_cln or is_lnd or is_fake),
-    reason="only run this test on fake, lnd or cln"
+    reason="only run for backends where amountless is supported"
 )
 @pytest.mark.skipif(
     settings.debug_mint_only_deprecated,
