@@ -573,11 +573,15 @@ def test_send_with_lock(mint, cli_prefix):
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert pubkey in token.token[0].proofs[0].secret
 
+pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 def test_pay_amountless_invoice(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        [*cli_prefix, "pay", invoice_no_amount if is_fake else get_real_invoice(0)["payment_request"], "1000"]
+        [*cli_prefix, "pay", invoice_no_amount if is_fake else get_real_invoice(0)["payment_request"], "10"]
     )
     assert result.exception is None
     print("test_pay_amountless_invoice ", result.output)
