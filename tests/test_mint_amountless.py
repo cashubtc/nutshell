@@ -1,14 +1,12 @@
 import pytest
-import pytest_asyncio
 
-from cashu.core.base import Unit
 from cashu.core.models import (
     PostMeltQuoteRequest,
-    PostMeltRequestOptions,
     PostMeltRequestOptionAmountless,
+    PostMeltRequestOptions,
 )
-from .conftest import wallet, ledger
-from .helpers import is_fake, get_real_invoice, assert_err
+
+from .helpers import assert_err, get_real_invoice, is_fake
 
 invoice_no_amount = "lnbcrt1pnusdsqpp5fcxhgur2eewvsfy52q8xwanrjdglnf7htacp0ldeeakz6j62rj8sdqqcqzzsxqyz5vqsp5qk6l5dwhldy3gqjnr4806mtg22e25ekud4vdlf3p0hk89ud93lxs9qxpqysgq72fmgd460q04mvr5jetw7wys0vnt6ydl58gcg4jdy5jwx5d7epx8tr04et7a5yskwg4le54wrn6u6k0jjfehkc8n5spxkwxum239zxcqpuzakn"
 normal_invoice = "lnbcrt10u1pnuakkapp5sgc2whvdcsl53cpmyvpvslrlgc3h9al42xpayw86ykl8nhp2j69sdqqcqzzsxqyz5vqsp52w4vs63hx264tqu3pq2dtkwg6c8eummmjsel8r46adp3ascthgvs9qxpqysgqdjjexqh6acf77gpvkf3usjs0t30w0ru8e2v6pv42j7tcdy5tjxtrkqak8wp6mnrslnrkxqfv4pxjapylnn37m367zsqx4uvzsa79dkqpzdg2ex"
