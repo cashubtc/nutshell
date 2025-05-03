@@ -745,6 +745,7 @@ class Wallet(
         """
         if amount_msat:
             invoice_obj = bolt11.decode(invoice)
+            logger.debug(self.mint_info.supports_amountless("bolt11", self.unit))
             if not invoice_obj.amount_msat and not self.mint_info.supports_amountless("bolt11", self.unit):
                 raise Exception("Mint does not support amountless invoices, cannot pay this invoice.")
             if invoice_obj.amount_msat and not self.mint_info.supports_mpp("bolt11", self.unit):
