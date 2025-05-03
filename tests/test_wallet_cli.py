@@ -14,6 +14,7 @@ from tests.helpers import (
     is_deprecated_api_only,
     is_fake,
     is_regtest,
+    is_cln,
     pay_if_regtest,
 )
 
