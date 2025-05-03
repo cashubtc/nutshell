@@ -16,7 +16,7 @@ normal_invoice = "lnbcrt10u1pnuakkapp5sgc2whvdcsl53cpmyvpvslrlgc3h9al42xpayw86yk
 @pytest.mark.asyncio
 async def test_get_quote_for_amountless_invoice(wallet, ledger):
     # Get an amountless invoice
-    invoice = invoice_no_amount if is_fake else get_real_invoice(0)
+    invoice = invoice_no_amount if is_fake else get_real_invoice(0)['payment_request']
 
     request = PostMeltQuoteRequest(
         unit='sat',
@@ -35,7 +35,7 @@ async def test_get_quote_for_amountless_invoice(wallet, ledger):
 @pytest.mark.asyncio
 async def test_get_amountless_quote_for_non_amountless_invoice(wallet, ledger):
     # Get normal invoice
-    invoice = normal_invoice if is_fake else get_real_invoice(1000)
+    invoice = normal_invoice if is_fake else get_real_invoice(1000)['payment_request']
 
     request = PostMeltQuoteRequest(
         unit='sat',

@@ -573,10 +573,6 @@ def test_send_with_lock(mint, cli_prefix):
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert pubkey in token.token[0].proofs[0].secret
 
-@pytest.mark.skipif(
-    not is_fake,
-    reason="Cannot really pay fake invoices"
-)
 def test_pay_amountless_invoice(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
