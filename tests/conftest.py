@@ -18,6 +18,7 @@ from cashu.core.settings import settings
 from cashu.mint import migrations as migrations_mint
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
+from cashu.wallet.wallet import Wallet
 
 SERVER_PORT = 3337
 SERVER_ENDPOINT = f"http://localhost:{SERVER_PORT}"
@@ -146,3 +147,14 @@ def mint():
 
     yield server
     server.stop()
+
+@pytest_asyncio.fixture(scope="function")
+async def wallet():
+    wallet = await Wallet.with_db(
+        url=SERVER_ENDPOINT,
+        db="test_data/wallet",
+        name="wallet",
+    )
+    await wallet.load_mint()
+    yield wallet
+    await wallet.db.engine.dispose()

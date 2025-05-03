@@ -31,6 +31,7 @@ class MeltMethodSetting(BaseModel):
     unit: str
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
+    amountless: Optional[bool] = None
 
 
 class MintInfoContact(BaseModel):
@@ -199,9 +200,12 @@ class PostMintResponse_deprecated(BaseModel):
 class PostMeltRequestOptionMpp(BaseModel):
     amount: int = Field(gt=0)  # input amount
 
+class PostMeltRequestOptionAmountless(BaseModel):
+    amount_msat: int = Field(gt=0) # amount to pay to the amountless request
 
 class PostMeltRequestOptions(BaseModel):
-    mpp: Optional[PostMeltRequestOptionMpp]
+    mpp: Optional[PostMeltRequestOptionMpp] = None
+    amountless: Optional[PostMeltRequestOptionAmountless] = None
 
 
 class PostMeltQuoteRequest(BaseModel):
@@ -214,6 +218,13 @@ class PostMeltQuoteRequest(BaseModel):
     @property
     def is_mpp(self) -> bool:
         if self.options and self.options.mpp:
+            return True
+        else:
+            return False
+
+    @property
+    def is_amountless(self) -> bool:
+        if self.options and self.options.amountless:
             return True
         else:
             return False
