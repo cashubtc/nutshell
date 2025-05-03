@@ -50,8 +50,6 @@ async def test_amountless_bolt11_invoice(wallet: Wallet):
     melt_quote = await wallet.melt_quote(amountless_invoice, 100*1000)
     assert melt_quote.amount == 100
 
-    await pay_if_regtest(amountless_invoice)
-
     result = await wallet.melt(proofs, amountless_invoice, melt_quote.fee_reserve, melt_quote.quote)
     assert result.state == "PAID"
 
