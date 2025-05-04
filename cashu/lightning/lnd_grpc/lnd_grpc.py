@@ -2,7 +2,7 @@ import asyncio
 import codecs
 import hashlib
 import os
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, List, Optional
 
 import bolt11
 import grpc
@@ -227,8 +227,8 @@ class LndRPCWallet(LightningBackend):
         payer_addr = str(payer_addr_tag.data)
 
         # get the route
-        response = None
-        route = None
+        response: Optional[lnrpc.HTLCAttempt] = None # type: ignore
+        route: Optional[lnrpc.Rou]= None    # type: ignore
         try:
             async with grpc.aio.secure_channel(
                 self.endpoint, self.combined_creds
@@ -237,7 +237,7 @@ class LndRPCWallet(LightningBackend):
                 router_stub = routerstub.RouterStub(channel)
 
                 # Channels we exclude from the query
-                ignored_pairs = []
+                ignored_pairs: List[lnrpc.NodePair] = []
 
                 for attempt in range(MAX_ROUTE_RETRIES):
                     total_attempts += 1
@@ -265,6 +265,7 @@ class LndRPCWallet(LightningBackend):
                             route=route.routes[0],  # type: ignore
                         )
                     )
+                    assert route and response
                     if response.status == lnrpc.HTLCAttempt.HTLCStatus.FAILED:
                         if response.failure.code == lnrpc.Failure.FailureCode.TEMPORARY_CHANNEL_FAILURE:
                             # Add the channels that failed to the excluded channels
@@ -288,6 +289,7 @@ class LndRPCWallet(LightningBackend):
                 error_message=str(e),
             )
 
+        assert route and response
         if response.status == lnrpc.HTLCAttempt.HTLCStatus.FAILED:
             error_message = f"Sending to route failed with code {response.failure.code} after {total_attempts} different tries."
             logger.error(error_message)

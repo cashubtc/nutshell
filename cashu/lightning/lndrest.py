@@ -2,7 +2,7 @@ import asyncio
 import base64
 import hashlib
 import json
-from typing import AsyncGenerator, Dict, Optional
+from typing import AsyncGenerator, Dict, List, Optional
 
 import bolt11
 import httpx
@@ -41,6 +41,7 @@ INVOICE_RESULT_MAP = {
     "ACCEPTED": PaymentResult.PENDING,
 }
 
+MAX_ROUTE_RETRIES = 50
 
 class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
@@ -239,20 +240,24 @@ class LndRestWallet(LightningBackend):
         payer_addr = str(payer_addr_tag.data)
 
         # add the mpp_record to the last hop
-        response = None    # type: ignore
-        route = None    # type: ignore
-        ignored_pairs = []
+        response: Optional[httpx.Response] = None
+        route: Optional[httpx.Response] = None
+        ignored_pairs: List[dict] = []
 
         for attempt in range(MAX_ROUTE_RETRIES):
             attempts += 1
             # get the route
             route = await self.client.post(
                 url=f"/v1/graph/routes/{pubkey}/{amount.to(Unit.sat).amount}",
-                json={"fee_limit": lnrpcFeeLimit},
-                use_mission_control=True,
-                ignored_pairs=ignored_pairs,
+                json={
+                    "fee_limit": lnrpcFeeLimit,
+                    "use_mission_control": True,
+                    "ignored_pairs": ignored_pairs
+                },
                 timeout=None,
             )
+
+            assert route
 
             route_data = route.json()
             if route.is_error or route_data.get("message"):
@@ -282,6 +287,8 @@ class LndRestWallet(LightningBackend):
                 timeout=None,
             )
 
+            assert response
+
             response_data = response.json()
             if response_data["status"] == "FAILED":
                 if response_data["failure"]["code"] == "TEMPORARY_CHANNEL_FAILURE":
@@ -297,6 +304,8 @@ class LndRestWallet(LightningBackend):
                     ignored_pairs.append(failed_channel)
                     continue
             break
+
+        assert response and route
 
         data = response.json()
         if response.is_error or data.get("message") or data.get("status") == "FAILED":
