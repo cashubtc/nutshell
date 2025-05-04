@@ -309,9 +309,9 @@ class LndRestWallet(LightningBackend):
 
         data = response.json()
         if response.is_error or data.get("message") or data.get("status") == "FAILED":
-            error_message = f"Sending to route failed with code {data.get("failure").get("code")} after {attempts} different tries."
+            error_message = f"Sending to route failed with code {data.get('failure').get('code')} after {attempts} different tries."
             logger.error(error_message)
-            logger.debug(f"The last partial payment route length was {len(route.json().get("routes"))} hops.")
+            logger.debug(f"The last partial payment route length was {len(route.json().get('routes'))} hops.")
             return PaymentResponse(
                 result=PaymentResult.FAILED, error_message=error_message
             )
@@ -324,7 +324,7 @@ class LndRestWallet(LightningBackend):
         )
 
         logger.debug(f"Partial payment succeeded after {attempts} different tries!")
-        logger.debug(f"Partial payment route length was {len(data.get("routes"))} hops.")
+        logger.debug(f"Partial payment route length was {len(data.get('routes'))} hops.")
         return PaymentResponse(
             result=result,
             checking_id=checking_id,
