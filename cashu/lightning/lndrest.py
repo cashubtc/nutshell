@@ -324,7 +324,7 @@ class LndRestWallet(LightningBackend):
         )
 
         logger.debug(f"Partial payment succeeded after {attempts} different tries!")
-        logger.debug(f"Partial payment route length was {len(data.get('routes'))} hops.")
+        logger.debug(f"Partial payment route length was {len(route.json().get('routes'))} hops.")
         return PaymentResponse(
             result=result,
             checking_id=checking_id,
