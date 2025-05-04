@@ -312,7 +312,7 @@ class LndRPCWallet(LightningBackend):
         preimage = response.preimage.hex()
 
         logger.debug(f"Partial payment succeeded after {total_attempts} different tries!")
-        logger.debug(f"Partial payment route length was {len(route.routes)} hops.")
+        logger.debug(f"Partial payment route length was {len(route.routes[0].hops)} hops.")
         return PaymentResponse(
             result=result,
             checking_id=checking_id,
