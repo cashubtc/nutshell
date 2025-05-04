@@ -219,6 +219,8 @@ class LndRestWallet(LightningBackend):
     async def pay_partial_invoice(
         self, quote: MeltQuote, amount: Amount, fee_limit_msat: int
     ) -> PaymentResponse:
+        attempts = 0
+
         # set the fee limit for the payment
         lnrpcFeeLimit = dict()
         lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
@@ -236,56 +238,71 @@ class LndRestWallet(LightningBackend):
         assert payer_addr_tag
         payer_addr = str(payer_addr_tag.data)
 
-        # get the route
-        r = await self.client.post(
-            url=f"/v1/graph/routes/{pubkey}/{amount.to(Unit.sat).amount}",
-            json={"fee_limit": lnrpcFeeLimit},
-            timeout=None,
-        )
+        # add the mpp_record to the last hop
+        response = None    # type: ignore
+        route = None    # type: ignore
+        ignored_pairs = []
 
-        data = r.json()
-        if r.is_error or data.get("message"):
-            error_message = data.get("message") or r.text
-            return PaymentResponse(
-                result=PaymentResult.FAILED, error_message=error_message
+        for attempt in range(MAX_ROUTE_RETRIES):
+            attempts += 1
+            # get the route
+            route = await self.client.post(
+                url=f"/v1/graph/routes/{pubkey}/{amount.to(Unit.sat).amount}",
+                json={"fee_limit": lnrpcFeeLimit},
+                use_mission_control=True,
+                ignored_pairs=ignored_pairs,
+                timeout=None,
             )
 
-        # We need to set the mpp_record for a partial payment
-        mpp_record = {
-            "mpp_record": {
-                "payment_addr": base64.b64encode(bytes.fromhex(payer_addr)).decode(),
-                "total_amt_msat": total_amount_msat,
-            }
-        }
+            route_data = route.json()
+            if route.is_error or route_data.get("message"):
+                error_message = route_data.get("message") or route.text
+                return PaymentResponse(
+                    result=PaymentResult.FAILED, error_message=error_message
+                )
 
-        # add the mpp_record to the last hop
-        r = None    # type: ignore
-        for route_nr in range(len(data["routes"])):
-            logger.debug(f"Trying to pay partial amount with route number {route_nr+1}")
-            data["routes"][route_nr]["hops"][-1].update(mpp_record)
+            # We need to set the mpp_record for a partial payment
+            mpp_record = {
+                "mpp_record": {
+                    "payment_addr": base64.b64encode(bytes.fromhex(payer_addr)).decode(),
+                    "total_amt_msat": total_amount_msat,
+                }
+            }
+            route_data["routes"][0]["hops"][-1].update(mpp_record)
 
             # send to route
-            r = await self.client.post(
+            response = await self.client.post(
                 url="/v2/router/route/send",
                 json={
                     "payment_hash": base64.b64encode(
                         bytes.fromhex(invoice.payment_hash)
                     ).decode(),
-                    "route": data["routes"][route_nr],
+                    "route": route_data["routes"][0],
                 },
                 timeout=None,
             )
 
-            data = r.json()
-            failure = data.get("failure")
-            if failure:
-                if failure["code"] == 15:
-                    # Try with a different route
+            response_data = response.json()
+            if response_data["status"] == "FAILED":
+                if response_data["failure"]["code"] == "TEMPORARY_CHANNEL_FAILURE":
+                    # Add the channels that failed to the excluded channels
+                    failure_index = response_data["failure"]["failure_source_index"]
+                    failed_source = route_data["routes"][0]["hops"][failure_index-1]["pub_key"]
+                    failed_dest = route_data["routes"][0]["hops"][failure_index]["pub_key"]
+                    logger.error(f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route")
+                    failed_channel = {
+                        "from": base64.b64encode(bytes.fromhex(failed_source)).decode(),
+                        "to": base64.b64encode(bytes.fromhex(failed_dest)).decode(),
+                    }
+                    ignored_pairs.append(failed_channel)
                     continue
             break
 
-        if r.is_error or data.get("message"):
-            error_message = data.get("message") or r.text
+        data = response.json()
+        if response.is_error or data.get("message") or data.get("status") == "FAILED":
+            error_message = f"Sending to route failed with code {data.get("failure").get("code")} after {attempts} different tries."
+            logger.error(error_message)
+            logger.debug(f"The last partial payment route length was {len(route.json().get("routes"))} hops.")
             return PaymentResponse(
                 result=PaymentResult.FAILED, error_message=error_message
             )
@@ -296,6 +313,9 @@ class LndRestWallet(LightningBackend):
         preimage = (
             base64.b64decode(data["preimage"]).hex() if data.get("preimage") else None
         )
+
+        logger.debug(f"Partial payment succeeded after {attempts} different tries!")
+        logger.debug(f"Partial payment route length was {len(data.get("routes"))} hops.")
         return PaymentResponse(
             result=result,
             checking_id=checking_id,
