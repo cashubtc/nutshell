@@ -685,6 +685,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             melt_quote.is_mpp
             and melt_quote.mpp_amount != payment_quote.amount.to(Unit.msat).amount
         ):
+            logger.error(f"expected {payment_quote.amount.to(Unit.msat).amount} msat but got {melt_quote.mpp_amount}")
             raise TransactionError("quote amount not as requested")
         # make sure the backend returned the amount with a correct unit
         if not payment_quote.amount.unit == unit:
