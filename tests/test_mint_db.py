@@ -18,9 +18,9 @@ from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     assert_err,
+    is_deprecated_api_only,
     is_github_actions,
     pay_if_regtest,
-    is_deprecated_api_only,
 )
 
 payment_request = (
