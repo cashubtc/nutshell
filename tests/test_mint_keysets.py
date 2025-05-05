@@ -1,7 +1,8 @@
 import pytest
 
-from cashu.core.base import MintKeyset
+from cashu.core.base import MintKeyset, Unit
 from cashu.core.settings import settings
+from cashu.mint.ledger import Ledger
 from tests.test_mint_init import DECRYPTON_KEY, DERIVATION_PATH, ENCRYPTED_SEED, SEED
 
 
@@ -71,3 +72,20 @@ async def test_keyset_0_15_0_encrypted():
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
     assert keyset.id == "009a1f293253e41e"
+
+@pytest.mark.asyncio
+async def test_keyset_rotation(ledger: Ledger):
+    keyset_sat = next(filter(lambda k: k.unit == Unit["sat"] and k.active, ledger.keysets.values()))
+    new_keyset_sat = await ledger.rotate_next_keyset(unit=Unit["sat"], max_order=20, input_fee_ppk=1)
+
+    keyset_sat_derivation = keyset_sat.derivation_path.split("/")
+    new_keyset_sat_derivation = keyset_sat.derivation_path.split("/")
+
+    assert keyset_sat_derivation[:-1] == new_keyset_sat_derivation[:-1], "keyset derivation does not match up to the counter branch"
+    assert int(new_keyset_sat_derivation[-1].replace("'", "")) - int(keyset_sat_derivation[-1].replace("'", "")) == 0, "counters should differ by exactly 1"
+
+    assert new_keyset_sat.input_fee_ppk == 1
+    assert len(new_keyset_sat.private_keys.values()) == 20
+
+    old_keyset = (await ledger.crud.get_keyset(db=ledger.db, id=keyset_sat.id))[0]
+    assert not old_keyset.active, "old keyset is still active"

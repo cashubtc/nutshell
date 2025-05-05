@@ -334,7 +334,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
 
         def _meltrequest_include_fields(proofs: List[Proof]):
             """strips away fields from the model that aren't necessary for the /melt"""
-            proofs_include = {"id", "amount", "secret", "C", "script"}
+            proofs_include = {"id", "amount", "secret", "C", "witness"}
             return {
                 "proofs": {i: proofs_include for i in range(len(proofs))},
                 "pr": ...,

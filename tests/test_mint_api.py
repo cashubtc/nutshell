@@ -159,7 +159,7 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
-async def test_split(ledger: Ledger, wallet: Wallet):
+async def test_swap(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet.mint(64, quote_id=mint_quote.quote)
