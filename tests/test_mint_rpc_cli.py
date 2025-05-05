@@ -7,7 +7,7 @@ from cashu.core.settings import settings
 from cashu.mint.management_rpc.cli.cli import cli
 from cashu.wallet.wallet import Wallet
 
-from .helpers import is_fake, is_postgres
+from .helpers import is_fake, is_deprecated_api_only
 
 payment_request = (
     "lnbc10u1pjap7phpp50s9lzr3477j0tvacpfy2ucrs4q0q6cvn232ex7nt2zqxxxj8gxrsdpv2phhwetjv4jzqcneypqyc6t8dp6xu6twva2xjuzzda6qcqzzsxqrrsss"
@@ -114,6 +114,10 @@ async def test_update_mint_quote(cli_prefix):
     assert "Successfully updated!" in result.output
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_deprecated_api_only,
+    reason=("Deprecated API"),
+)
 async def test_update_melt_quote(cli_prefix):
     wallet = await init_wallet()
     melt_quote = await wallet.melt_quote("lnbc1u1p5qefdgsp5xj5cl559ks226f3vf3d7x2ev2qadplmkswp4649h755cfekdufsspp5sxenacdev78ssuwn5vehycs7ch2ds23hhzytut4ncm27gywtv6rqdqqcqpjrzjqdgp5ar48c8k4cns58jw9lamcdlh57trvrn9psgjrsvwz94j9tqsvrqsvcqqvqsqqqqqqqlgqqqzwyqq2q9qxpqysgqzg8e75zkcxazmd0wqmre6xgkumt7sl4ftsw0q4c6zvz8hn6zjxwz9fmdmwpupw7tw79f7gmukyeeh8vusvt03pgwfud9shj849rvrnqpgcpusw")
@@ -135,8 +139,10 @@ async def test_get_mint_quote(cli_prefix):
     assert "mint quote:" in result.output
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(is_postgres,
-    reason=("Fails with Postgres"),)
+@pytest.mark.skipif(
+    is_deprecated_api_only,
+    reason=("Deprecated API"),
+)
 async def test_get_melt_quote(cli_prefix):
     wallet = await init_wallet()
     melt_quote = await wallet.melt_quote("lnbc1u1p5qefd7sp55l6kmcrnqz5rejy4lghmgf9de0ucmmn2s3lvkvtkrr0qkwk5r0espp5da4x63rspz5rcfretdh6573c6qlpnzpxc8yq26cyqjc4sk0srfwsdqqcqpjrzjqv3dpepm8kfdxrk3sl6wzqdf49s9c0h9ljtjrek6c08r6aejlwcnur2z3sqqrrgqqyqqqqqqqqqqfcsqjq9qxpqysgq4l5rfjd4h84w7prmtgzjvq79ddy266svuz0d7dg44jmnwjpxg0zxef6hn4j8nzfp4c67qjpe0c9aw63ghu7rtcdg6n4zka9hym69euqq8w5wmj")

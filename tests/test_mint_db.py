@@ -20,6 +20,7 @@ from tests.helpers import (
     assert_err,
     is_github_actions,
     pay_if_regtest,
+    is_deprecated_api_only,
 )
 
 payment_request = (
@@ -309,9 +310,12 @@ async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
     await assert_err(ledger.db_write._update_mint_quote_state(mint_quote_db.quote, MintQuoteState.unpaid), "Cannot change state of an issued mint quote.")
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_deprecated_api_only,
+    reason=("Deprecated API")
+)
 async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
     melt_quote = await wallet.melt_quote(payment_request)
-    await asyncio.sleep(0.2)
     await ledger.db_write._update_melt_quote_state(melt_quote.quote, MeltQuoteState.paid)
 
     melt_quote_db = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
