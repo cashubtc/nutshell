@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import time
 from typing import Dict, List, Mapping, Optional, Tuple
 
@@ -25,7 +24,6 @@ from ..core.base import (
 from ..core.crypto import b_dhke
 from ..core.crypto.aes import AESCipher
 from ..core.crypto.keys import (
-    derive_keyset_id,
     derive_pubkey,
     random_hash,
 )
@@ -33,8 +31,6 @@ from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
     CashuError,
-    KeysetError,
-    KeysetNotFoundError,
     LightningError,
     LightningPaymentFailedError,
     NotAllowedError,
@@ -65,11 +61,12 @@ from .db.read import DbReadHelper
 from .db.write import DbWriteHelper
 from .events.events import LedgerEventManager
 from .features import LedgerFeatures
+from .keysets import LedgerKeysets
 from .tasks import LedgerTasks
 from .verification import LedgerVerification
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures):
+class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures, LedgerKeysets):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
@@ -139,6 +136,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     async def _startup_keysets(self) -> None:
         await self.init_keysets()
         for derivation_path in settings.mint_derivation_path_list:
+            derivation_path = self.maybe_update_derivation_path(derivation_path)
             await self.activate_keyset(derivation_path=derivation_path)
 
     async def _run_regular_tasks(self) -> None:
@@ -192,150 +190,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         for quote in pending_melt_quotes:
             quote = await self.get_melt_quote(quote_id=quote.quote)
             logger.info(f"Melt quote {quote.quote} state: {quote.state}")
-
-    # ------- KEYS -------
-
-    async def activate_keyset(
-        self,
-        *,
-        derivation_path: str,
-        seed: Optional[str] = None,
-        version: Optional[str] = None,
-        autosave=True,
-    ) -> MintKeyset:
-        """
-        Load an existing keyset for the specified derivation path or generate a new one if it doesn't exist.
-        Optionally store the newly created keyset in the database.
-
-        Args:
-            derivation_path (str): Derivation path for keyset generation.
-            seed (Optional[str], optional): Seed value. Defaults to None.
-            version (Optional[str], optional): Version identifier. Defaults to None.
-            autosave (bool, optional): Whether to store the keyset if newly created. Defaults to True.
-
-        Returns:
-            MintKeyset: The activated keyset.
-        """
-        if not derivation_path:
-            raise ValueError("Derivation path must be provided.")
-
-        seed = seed or self.seed
-        version = version or settings.version
-        # Initialize a temporary keyset to derive the ID
-        temp_keyset = MintKeyset(
-            seed=seed,
-            derivation_path=derivation_path,
-            version=version,
-            amounts=self.amounts,
-        )
-        logger.debug(
-            f"Activating keyset for derivation path '{derivation_path}' with ID '{temp_keyset.id}'."
-        )
-
-        # Attempt to retrieve existing keysets from the database
-        existing_keysets: List[MintKeyset] = await self.crud.get_keyset(
-            id=temp_keyset.id, db=self.db
-        )
-        logger.trace(
-            f"Retrieved {len(existing_keysets)} keyset(s) for derivation path '{derivation_path}'."
-        )
-
-        if existing_keysets:
-            keyset = existing_keysets[0]
-        else:
-            # Create a new keyset if none exists
-            keyset = MintKeyset(
-                seed=seed,
-                derivation_path=derivation_path,
-                amounts=self.amounts,
-                version=version,
-                input_fee_ppk=settings.mint_input_fee_ppk,
-            )
-            logger.debug(f"Generated new keyset with ID '{keyset.id}'.")
-
-            if autosave:
-                logger.debug(f"Storing new keyset with ID '{keyset.id}'.")
-                await self.crud.store_keyset(keyset=keyset, db=self.db)
-
-        # Activate the keyset
-        keyset.active = True
-        self.keysets[keyset.id] = keyset
-        logger.debug(f"Keyset with ID '{keyset.id}' is now active.")
-
-        return keyset
-
-    async def init_keysets(self, autosave: bool = True) -> None:
-        """Initializes all keysets of the mint from the db. Loads all past keysets from db
-        and generate their keys. Then activate the current keyset set by self.derivation_path.
-
-        Args:
-            autosave (bool, optional): Whether the current keyset should be saved if it is
-                not in the database yet. Will be passed to `self.activate_keyset` where it is
-                generated from `self.derivation_path`. Defaults to True.
-        """
-        # load all past keysets from db, the keys will be generated at instantiation
-        tmp_keysets: List[MintKeyset] = await self.crud.get_keyset(db=self.db)
-
-        # add keysets from db to memory
-        for k in tmp_keysets:
-            self.keysets[k.id] = k
-
-        logger.info(f"Loaded {len(self.keysets)} keysets from database.")
-
-        # activate the current keyset set by self.derivation_path
-        if self.derivation_path:
-            self.keyset = await self.activate_keyset(
-                derivation_path=self.derivation_path, autosave=autosave
-            )
-            logger.info(f"Current keyset: {self.keyset.id}")
-
-        # check that we have a least one active keyset
-        if not any([k.active for k in self.keysets.values()]):
-            raise KeysetError("No active keyset found.")
-
-        # DEPRECATION 0.16.1 – disable base64 keysets if hex equivalent exists
-        if settings.mint_inactivate_base64_keysets:
-            await self.inactivate_base64_keysets()
-
-    async def inactivate_base64_keysets(self) -> None:
-        """Inactivates all base64 keysets that have a hex equivalent."""
-        for keyset in self.keysets.values():
-            if not keyset.active or not keyset.public_keys:
-                continue
-            # test if the keyset id is a hex string, if not it's base64
-            try:
-                int(keyset.id, 16)
-            except ValueError:
-                # verify that it's base64
-                try:
-                    _ = base64.b64decode(keyset.id)
-                except ValueError:
-                    logger.error("Unexpected: keyset id is neither hex nor base64.")
-                    continue
-
-                # verify that we have a hex version of the same keyset by comparing public keys
-                hex_keyset_id = derive_keyset_id(keys=keyset.public_keys)
-                if hex_keyset_id not in [k.id for k in self.keysets.values()]:
-                    logger.warning(
-                        f"Keyset {keyset.id} is base64 but we don't have a hex version. Ignoring."
-                    )
-                    continue
-
-                logger.warning(
-                    f"Keyset {keyset.id} is base64 and has a hex counterpart, setting inactive."
-                )
-                keyset.active = False
-                self.keysets[keyset.id] = keyset
-                await self.crud.update_keyset(keyset=keyset, db=self.db)
-
-    def get_keyset(self, keyset_id: Optional[str] = None) -> Dict[int, str]:
-        """Returns a dictionary of hex public keys of a specific keyset for each supported amount"""
-        if keyset_id and keyset_id not in self.keysets:
-            raise KeysetNotFoundError()
-        keyset = self.keysets[keyset_id] if keyset_id else self.keyset
-        if not keyset.public_keys:
-            raise KeysetError("no public keys for this keyset")
-        return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
 
     async def get_balance(self, keyset: MintKeyset) -> int:
         """Returns the balance of the mint."""
@@ -986,6 +840,12 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
                 )
             # we don't need to set it here, _set_melt_quote_pending will set it in the db
             melt_quote.outputs = outputs
+
+        # verify SIG_ALL signatures
+        message_to_sign = (
+            "".join([p.secret for p in proofs] + [o.B_ for o in outputs or []]) + quote
+        )
+        self._verify_sigall_spending_conditions(proofs, outputs or [], message_to_sign)
 
         # verify that the amount of the input proofs is equal to the amount of the quote
         total_provided = sum_proofs(proofs)
