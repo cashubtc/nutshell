@@ -2,7 +2,7 @@ import asyncio
 import codecs
 import hashlib
 import os
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Optional
 
 import bolt11
 import grpc
@@ -236,9 +236,6 @@ class LndRPCWallet(LightningBackend):
                 lnstub = lightningstub.LightningStub(channel)
                 router_stub = routerstub.RouterStub(channel)
 
-                # Channels we exclude from the query
-                ignored_pairs: List[lnrpc.NodePair] = []
-
                 for attempt in range(MAX_ROUTE_RETRIES):
                     total_attempts += 1
                     route = await lnstub.QueryRoutes(
@@ -246,7 +243,6 @@ class LndRPCWallet(LightningBackend):
                             pub_key=pubkey,
                             amt=amount.to(Unit.sat).amount,
                             fee_limit=feelimit,
-                            ignored_pairs=ignored_pairs,
                             use_mission_control=True,
                         )
                     )
@@ -273,13 +269,6 @@ class LndRPCWallet(LightningBackend):
                             failed_source = route.routes[0].hops[failure_index-1].pub_key
                             failed_dest = route.routes[0].hops[failure_index].pub_key
                             logger.error(f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route")
-                            failed_channel = lnrpc.NodePair(
-                                **{
-                                    "from": bytes.fromhex(failed_source),
-                                    "to": bytes.fromhex(failed_dest)
-                                }
-                            )
-                            ignored_pairs.append(failed_channel)
                             continue
                     break
         except AioRpcError as e:

@@ -2,7 +2,7 @@ import asyncio
 import base64
 import hashlib
 import json
-from typing import AsyncGenerator, Dict, List, Optional
+from typing import AsyncGenerator, Dict, Optional
 
 import bolt11
 import httpx
@@ -242,7 +242,6 @@ class LndRestWallet(LightningBackend):
         # add the mpp_record to the last hop
         response: Optional[httpx.Response] = None
         route: Optional[httpx.Response] = None
-        ignored_pairs: List[dict] = []
 
         for attempt in range(MAX_ROUTE_RETRIES):
             attempts += 1
@@ -252,7 +251,7 @@ class LndRestWallet(LightningBackend):
                 json={
                     "fee_limit": lnrpcFeeLimit,
                     "use_mission_control": True,
-                    "ignored_pairs": ignored_pairs
+                    #"ignored_pairs": ignored_pairs
                 },
                 timeout=None,
             )
@@ -297,11 +296,6 @@ class LndRestWallet(LightningBackend):
                     failed_source = route_data["routes"][0]["hops"][failure_index-1]["pub_key"]
                     failed_dest = route_data["routes"][0]["hops"][failure_index]["pub_key"]
                     logger.error(f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route")
-                    failed_channel = {
-                        "from": base64.b64encode(bytes.fromhex(failed_source)).decode(),
-                        "to": base64.b64encode(bytes.fromhex(failed_dest)).decode(),
-                    }
-                    ignored_pairs.append(failed_channel)
                     continue
             break
 
