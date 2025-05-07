@@ -118,24 +118,88 @@ class MintLimits(MintSettings):
         title="Peg-out only",
         description="Mint allows no mint operations.",
     )
+    # DEPRECATED v0.16.5
     mint_max_peg_in: int = Field(
         default=None,
         gt=0,
         title="Maximum peg-in",
         description="Maximum amount for a mint operation.",
     )
+    # DEPRECATED v0.16.5
     mint_max_peg_out: int = Field(
         default=None,
         gt=0,
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
+    # DEPRECATED v0.16.5
     mint_max_balance: int = Field(
         default=None,
         gt=0,
         title="Maximum mint balance",
         description="Maximum mint balance.",
     )
+    # Unit-specific maximum mint balance settings
+    mint_max_sat_balance: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint balance (sats)",
+        description="Maximum mint balance in satoshis.",
+    )
+    mint_max_msat_balance: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint balance (msats)",
+        description="Maximum mint balance in millisatoshis.",
+    )
+    mint_max_usd_balance: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint balance (USD)",
+        description="Maximum mint balance in US dollars.",
+    )
+
+    # Unit-specific maximum peg-in settings
+    mint_max_sat_peg_in: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-in (sats)",
+        description="Maximum amount for a mint operation in satoshis.",
+    )
+    mint_max_msat_peg_in: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-in (msats)",
+        description="Maximum amount for a mint operation in millisatoshis.",
+    )
+    mint_max_usd_peg_in: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-in (USD)",
+        description="Maximum amount for a mint operation in US dollars.",
+    )
+
+    # Unit-specific maximum peg-out settings
+    mint_max_sat_peg_out: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-out (sats)",
+        description="Maximum amount for a melt operation in satoshis.",
+    )
+    mint_max_msat_peg_out: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-out (msats)",
+        description="Maximum amount for a melt operation in millisatoshis.",
+    )
+    mint_max_usd_peg_out: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-out (USD)",
+        description="Maximum amount for a melt operation in US dollars.",
+    )
+
+    # Websockets
     mint_websocket_read_timeout: int = Field(
         default=10 * 60,
         gt=0,
