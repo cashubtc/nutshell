@@ -158,6 +158,12 @@ class MintLimits(MintSettings):
         title="Maximum mint balance (USD)",
         description="Maximum mint balance in US dollars.",
     )
+    mint_max_eur_balance: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint balance (EUR)",
+        description="Maximum mint balance in Euros.",
+    )
 
     # Unit-specific maximum peg-in settings
     mint_max_sat_peg_in: int = Field(
@@ -178,6 +184,12 @@ class MintLimits(MintSettings):
         title="Maximum peg-in (USD)",
         description="Maximum amount for a mint operation in US dollars.",
     )
+    mint_max_eur_peg_in: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-in (EUR)",
+        description="Maximum amount for a mint operation in Euros.",
+    )
 
     # Unit-specific maximum peg-out settings
     mint_max_sat_peg_out: int = Field(
@@ -197,6 +209,12 @@ class MintLimits(MintSettings):
         gt=0,
         title="Maximum peg-out (USD)",
         description="Maximum amount for a melt operation in US dollars.",
+    )
+    mint_max_eur_peg_out: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-out (EUR)",
+        description="Maximum amount for a melt operation in Euros.",
     )
 
     # Websockets
