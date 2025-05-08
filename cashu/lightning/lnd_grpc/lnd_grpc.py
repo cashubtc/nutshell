@@ -268,7 +268,7 @@ class LndRPCWallet(LightningBackend):
                             failure_index = response.failure.failure_source_index
                             failed_source = route.routes[0].hops[failure_index-1].pub_key
                             failed_dest = route.routes[0].hops[failure_index].pub_key
-                            logger.error(f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route")
+                            logger.debug(f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route")
                             continue
                     break
         except AioRpcError as e:
