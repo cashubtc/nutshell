@@ -449,10 +449,6 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         logger.trace("called request_mint")
         if not quote_request.amount > 0:
             raise TransactionError("amount must be positive")
-        if settings.mint_max_peg_in and quote_request.amount > settings.mint_max_peg_in:
-            raise TransactionAmountExceedsLimitError(
-                f"Maximum mint amount is {settings.mint_max_peg_in} sat."
-            )
         if settings.mint_peg_out_only:
             raise NotAllowedError("Mint does not allow minting new tokens.")
 
@@ -460,21 +456,14 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
             quote_request.unit, Method.bolt11.name
         )
 
+        # Check peg-in and max balance limits
+        await self._verify_mint_limits(unit, quote_request.amount)
+
         if (
             quote_request.description
             and not self.backends[method][unit].supports_description
         ):
             raise NotAllowedError("Backend does not support descriptions.")
-
-        # MINT_MAX_BALANCE refers to sat (for now)
-        if settings.mint_max_balance and unit == Unit.sat:
-            # get next active keyset for unit
-            active_keyset: MintKeyset = next(
-                filter(lambda k: k.active and k.unit == unit, self.keysets.values())
-            )
-            balance = await self.get_balance(active_keyset)
-            if balance + quote_request.amount > settings.mint_max_balance:
-                raise NotAllowedError("Mint has reached maximum balance.")
 
         logger.trace(f"requesting invoice for {unit.str(quote_request.amount)}")
         invoice_response: InvoiceResponse = await self.backends[method][
@@ -740,13 +729,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.validate_payment_quote(melt_quote, payment_quote)
 
         # verify that the amount of the proofs is not larger than the maximum allowed
-        if (
-            settings.mint_max_peg_out
-            and payment_quote.amount.to(unit).amount > settings.mint_max_peg_out
-        ):
-            raise NotAllowedError(
-                f"Maximum melt amount is {settings.mint_max_peg_out} sat."
-            )
+        self._verify_melt_limits(unit, payment_quote.amount)
 
         # We assume that the request is a bolt11 invoice, this works since we
         # support only the bol11 method for now.
