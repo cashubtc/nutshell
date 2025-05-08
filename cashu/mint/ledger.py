@@ -457,7 +457,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         )
 
         # Check peg-in and max balance limits
-        await self._verify_mint_limits(unit, quote_request.amount)
+        await self._verify_mint_limits(Amount(unit=unit, amount=quote_request.amount))
 
         if (
             quote_request.description
@@ -729,7 +729,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
         self.validate_payment_quote(melt_quote, payment_quote)
 
         # verify that the amount of the proofs is not larger than the maximum allowed
-        self._verify_melt_limits(unit, payment_quote.amount)
+        self._verify_melt_limits(payment_quote.amount)
 
         # We assume that the request is a bolt11 invoice, this works since we
         # support only the bol11 method for now.
