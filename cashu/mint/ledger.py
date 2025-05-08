@@ -40,7 +40,6 @@ from ..core.errors import (
     NotAllowedError,
     QuoteNotPaidError,
     QuoteSignatureInvalidError,
-    TransactionAmountExceedsLimitError,
     TransactionError,
 )
 from ..core.helpers import sum_proofs

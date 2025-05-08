@@ -1,16 +1,16 @@
-from typing import List, Literal, Optional, Tuple, Union, Dict
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
 
 from ..core.base import (
+    Amount,
     BlindedMessage,
     BlindedSignature,
     Method,
+    MintKeyset,
     MintQuote,
     Proof,
     Unit,
-    Amount,
-    MintKeyset,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PublicKey
@@ -333,7 +333,7 @@ class LedgerVerification(
         if MAX_BALANCE_MAP[unit]:
             balance_unit = await get_active_unit_balance(unit=unit)
             if amount.amount + balance_unit > MAX_BALANCE_MAP[unit].amount:     # type: ignore
-                raise NotAllowedError(f"Mint has reached maximum balance.")
+                raise NotAllowedError("Mint has reached maximum balance.")
             
         # --- DEPRECATED ---
         if settings.mint_max_peg_in and unit == Unit.sat:
@@ -345,7 +345,7 @@ class LedgerVerification(
             logger.warning("Mint is using DEPRECATED limits settings")
             balance_sat = await get_active_unit_balance(unit=unit)
             if amount.amount + balance_sat > settings.mint_max_balance:
-                raise NotAllowedError(f"Mint has reached maximum balance.")
+                raise NotAllowedError("Mint has reached maximum balance.")
         # --- END DEPRECATED ---
 
     
