@@ -263,6 +263,7 @@ async def pay(
     await wallet.load_mint()
     await print_balance(ctx)
     payment_hash = bolt11.decode(invoice).payment_hash
+    amount_mpp_msat = None
     if amount:
         # we assume `amount` to be in sats
         amount_mpp_msat = amount * 1000
