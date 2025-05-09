@@ -263,6 +263,7 @@ async def pay(
     await wallet.load_mint()
     await print_balance(ctx)
     payment_hash = bolt11.decode(invoice).payment_hash
+    amount_mpp_msat = None
     if amount:
         # we assume `amount` to be in sats
         amount_mpp_msat = amount * 1000
@@ -283,16 +284,16 @@ async def pay(
             abort=True,
             default=True,
         )
+
+    if wallet.available_balance < total_amount + ecash_fees:
+        print(" Error: Balance too low.")
+        return
+    assert total_amount > 0, "amount is not positive"
     # we need to include fees so we can use the proofs for melting the `total_amount`
     send_proofs, _ = await wallet.select_to_send(
         wallet.proofs, total_amount, include_fees=True, set_reserved=True
     )
     print("Paying Lightning invoice ...", end="", flush=True)
-    assert total_amount > 0, "amount is not positive"
-    if wallet.available_balance < total_amount:
-        print(" Error: Balance too low.")
-        return
-
     try:
         melt_response = await wallet.melt(
             send_proofs, invoice, quote.fee_reserve, quote.quote
@@ -456,8 +457,8 @@ async def invoice(
         while time.time() < check_until and not paid:
             await asyncio.sleep(5)
             try:
-                mint_quote_resp = await wallet.get_mint_quote(mint_quote.quote)
-                if mint_quote_resp.state == MintQuoteState.paid.value:
+                mint_quote = await wallet.get_mint_quote(mint_quote.quote)
+                if mint_quote.state == MintQuoteState.paid:
                     await wallet.mint(
                         amount,
                         split=optional_split,
@@ -527,8 +528,8 @@ async def swap(ctx: Context):
     mint_quote = await incoming_wallet.request_mint(amount)
 
     # pay invoice from outgoing mint
-    melt_quote_resp = await outgoing_wallet.melt_quote(mint_quote.request)
-    total_amount = melt_quote_resp.amount + melt_quote_resp.fee_reserve
+    melt_quote = await outgoing_wallet.melt_quote(mint_quote.request)
+    total_amount = melt_quote.amount + melt_quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
     send_proofs, fees = await outgoing_wallet.select_to_send(
@@ -537,8 +538,8 @@ async def swap(ctx: Context):
     await outgoing_wallet.melt(
         send_proofs,
         mint_quote.request,
-        melt_quote_resp.fee_reserve,
-        melt_quote_resp.quote,
+        melt_quote.fee_reserve,
+        melt_quote.quote,
     )
 
     # mint token in incoming mint
@@ -764,12 +765,17 @@ async def receive_cli(
         return
     await print_balance(ctx)
 
+
 @cli.command("decode", help="Decode a cashu token and print in JSON format.")
 @click.option(
     "--no-dleq", default=False, is_flag=True, help="Do not include DLEQ proofs."
 )
 @click.option(
-    "--indent", "-i", default=2, is_flag=False, help="Number of spaces to indent JSON with."
+    "--indent",
+    "-i",
+    default=2,
+    is_flag=False,
+    help="Number of spaces to indent JSON with.",
 )
 @click.argument("token", type=str, default="")
 def decode_to_json(token: str, no_dleq: bool, indent: int):
@@ -784,6 +790,7 @@ def decode_to_json(token: str, no_dleq: bool, indent: int):
         print(token_json)
     else:
         print("Error: enter a token")
+
 
 @cli.command("burn", help="Burn spent tokens.")
 @click.argument("token", required=False, type=str)
