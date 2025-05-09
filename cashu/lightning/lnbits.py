@@ -228,17 +228,18 @@ class LNbitsWallet(LightningBackend):
         try:
             async with connect(self.ws_url) as ws:
                 logger.info("connected to LNbits fundingsource websocket.")
-                message = await ws.recv()
-                message_dict = json.loads(message)
-                if (
-                    message_dict
-                    and message_dict.get("payment")
-                    and message_dict["payment"].get("payment_hash")
-                    and message_dict["payment"].get("amount") > 0
-                ):
-                    payment_hash = message_dict["payment"]["payment_hash"]
-                    logger.info(f"payment-received: {payment_hash}")
-                    yield payment_hash
+                while True:
+                    message = await ws.recv()
+                    message_dict = json.loads(message)
+                    if (
+                        message_dict
+                        and message_dict.get("payment")
+                        and message_dict["payment"].get("payment_hash")
+                        and message_dict["payment"].get("amount") > 0
+                    ):
+                        payment_hash = message_dict["payment"]["payment_hash"]
+                        logger.info(f"payment-received: {payment_hash}")
+                        yield payment_hash
         except Exception as exc:
             logger.error(
                 f"lost connection to LNbits fundingsource websocket: '{exc}'"
