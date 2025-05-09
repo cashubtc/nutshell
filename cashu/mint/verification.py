@@ -33,30 +33,36 @@ from ..core.settings import settings
 from .conditions import LedgerSpendingConditions
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
-MAX_PEG_IN_MAP: Dict[Unit, Optional[Amount]] = {
-    Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_peg_in) if settings.mint_max_sat_peg_in is not None else None,
-    Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_peg_in) if settings.mint_max_msat_peg_in is not None else None,
-    Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_peg_in) if settings.mint_max_eur_peg_in is not None else None,
-    Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_peg_in) if settings.mint_max_usd_peg_in is not None else None,
-}
-
-MAX_PEG_OUT_MAP: Dict[Unit, Optional[Amount]] = {
-    Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_peg_out) if settings.mint_max_sat_peg_out is not None else None,
-    Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_peg_out) if settings.mint_max_msat_peg_out is not None else None,
-    Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_peg_out) if settings.mint_max_eur_peg_out is not None else None,
-    Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_peg_out) if settings.mint_max_usd_peg_out is not None else None,
-}
-
-MAX_BALANCE_MAP: Dict[Unit, Optional[Amount]] = {
-    Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_balance) if settings.mint_max_sat_balance is not None else None,
-    Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_balance) if settings.mint_max_msat_balance is not None else None,
-    Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_balance) if settings.mint_max_eur_balance is not None else None,
-    Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_balance) if settings.mint_max_usd_balance is not None else None,
-}
 
 class LedgerVerification(
     LedgerSpendingConditions, SupportsKeysets, SupportsDb, SupportsBackends
 ):
+
+    @property
+    def limits(self):
+        max_peg_in_map: Dict[Unit, Optional[Amount]] = {
+            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_peg_in) if settings.mint_max_sat_peg_in is not None else None,
+            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_peg_in) if settings.mint_max_msat_peg_in is not None else None,
+            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_peg_in) if settings.mint_max_eur_peg_in is not None else None,
+            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_peg_in) if settings.mint_max_usd_peg_in is not None else None,
+        }
+
+        max_peg_out_map: Dict[Unit, Optional[Amount]] = {
+            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_peg_out) if settings.mint_max_sat_peg_out is not None else None,
+            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_peg_out) if settings.mint_max_msat_peg_out is not None else None,
+            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_peg_out) if settings.mint_max_eur_peg_out is not None else None,
+            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_peg_out) if settings.mint_max_usd_peg_out is not None else None,
+        }
+
+        max_balance_map: Dict[Unit, Optional[Amount]] = {
+            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_balance) if settings.mint_max_sat_balance is not None else None,
+            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_balance) if settings.mint_max_msat_balance is not None else None,
+            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_balance) if settings.mint_max_eur_balance is not None else None,
+            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_balance) if settings.mint_max_usd_balance is not None else None,
+        }
+
+        return (max_peg_in_map, max_peg_out_map, max_balance_map)
+
     """Verification functions for the ledger."""
 
     async def verify_inputs_and_outputs(
@@ -322,24 +328,25 @@ class LedgerVerification(
             return await self.crud.get_balance(active_keyset, self.db)
 
         unit = amount.unit
+        (max_peg_in_map, _, max_balance_map) = self.limits
 
         # Check max peg-in
-        if (MAX_PEG_IN_MAP[unit]
-            and amount.amount > MAX_PEG_IN_MAP[unit].amount     # type: ignore
+        if (max_peg_in_map[unit]
+            and amount.amount > max_peg_in_map[unit].amount     # type: ignore
         ):
-            raise NotAllowedError(f"Cannot mint more than {MAX_PEG_IN_MAP[unit]}.")
+            raise NotAllowedError(f"Cannot mint more than {max_peg_in_map[unit]}.")
 
         # Check max balance
-        if MAX_BALANCE_MAP[unit]:
+        if max_balance_map[unit]:
             balance_unit = await get_active_unit_balance(unit=unit)
-            if amount.amount + balance_unit > MAX_BALANCE_MAP[unit].amount:     # type: ignore
+            if amount.amount + balance_unit > max_balance_map[unit].amount:     # type: ignore
                 raise NotAllowedError("Mint has reached maximum balance.")
             
         # --- DEPRECATED ---
         if settings.mint_max_peg_in and unit == Unit.sat:
             logger.warning("Mint is using DEPRECATED limits settings")
             if amount.amount > settings.mint_max_peg_in:
-                raise NotAllowedError(f"Cannot mint more than {settings.mint_max_peg_in}.")
+                raise NotAllowedError(f"Cannot mint more than {settings.mint_max_peg_in} sat.")
         
         if settings.mint_max_balance and unit == Unit.sat:
             logger.warning("Mint is using DEPRECATED limits settings")
@@ -355,16 +362,17 @@ class LedgerVerification(
     ) -> None:
 
         unit = amount.unit
+        (_, max_peg_out_map, _) = self.limits
 
         # Check max peg-out
-        if (MAX_PEG_OUT_MAP[unit]
-            and amount.amount > MAX_PEG_OUT_MAP[unit].amount    # type: ignore
+        if (max_peg_out_map[unit]
+            and amount.amount > max_peg_out_map[unit].amount    # type: ignore
         ):
-            raise NotAllowedError(f"Cannot melt more than {MAX_PEG_OUT_MAP[unit].amount}.") # type: ignore
+            raise NotAllowedError(f"Cannot melt more than {max_peg_out_map[unit]}.") # type: ignore
 
         # --- DEPRECATED ---
         if settings.mint_max_peg_out and unit == Unit.sat:
             logger.warning("Mint is using DEPRECATED limits settings")
             if amount.amount > settings.mint_max_peg_out:
-                raise NotAllowedError(f"Cannot melt more than {settings.mint_max_peg_out}.")
+                raise NotAllowedError(f"Cannot melt more than {settings.mint_max_peg_out} sat.")
         # --- END DEPRECATED ---

@@ -5,7 +5,7 @@ import pytest
 from cashu.core.base import BlindedMessage, MintKeyset, Proof, Unit
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.helpers import calculate_number_of_blank_outputs
-from cashu.core.models import PostMintQuoteRequest
+from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest
@@ -225,7 +225,7 @@ async def test_get_balance(ledger: Ledger):
     balance = await ledger.get_balance(active_keyset)
     assert balance == 0
 
-
+# DEPRECATED
 @pytest.mark.asyncio
 async def test_maximum_balance(ledger: Ledger):
     settings.mint_max_balance = 1000
@@ -234,4 +234,36 @@ async def test_maximum_balance(ledger: Ledger):
         ledger.mint_quote(PostMintQuoteRequest(amount=8000, unit="sat")),
         "Mint has reached maximum balance.",
     )
-    settings.mint_max_balance = 0
+    settings.mint_max_balance = None
+
+@pytest.mark.asyncio
+async def test_maximum_sat_balance(ledger: Ledger):
+    settings.mint_max_sat_balance = 1000
+    await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    await assert_err(
+        ledger.mint_quote(PostMintQuoteRequest(amount=8000, unit="sat")),
+        "Mint has reached maximum balance.",
+    )
+    settings.mint_max_sat_balance = None
+
+
+@pytest.mark.asyncio
+async def test_max_sat_peg_in(ledger: Ledger):
+    settings.mint_max_sat_peg_in = 1000
+    await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
+    await assert_err(
+        ledger.mint_quote(PostMintQuoteRequest(amount=8000, unit="sat")),
+        "Cannot mint more than 1000 sat.",   
+    )
+
+@pytest.mark.asyncio
+async def test_max_sat_peg_out(ledger: Ledger):
+    invoice_62_sat = "lnbcrt620n1p5pmdgypp5dxr77s7xg5myutwj38gu872vcrva9r5j9setqxkl0f6n4cpd7c9qdqqcqzzsxqyz5vqsp5uqshlwcesv65s8q3xk5emd46ndfjdaj2u6sm034w63juc9le8ars9qxpqysgqfleuv7zdtvp0qm7xvhpl47u0epcrje9sxp53n48d2cak8avj9qaqs093nqlfg5gfeqlmmwwxc09d8flf2lqqlgja82a66zjc5472zvcpmdrq5w"
+    invoice_1002_sat = "lnbcrt10020n1p5pmddnpp57nam0w72dhc9c7edda29dxhdwqzj6ej6ge7ax95cegqj6wpwlu6qdqqcqzzsxqyz5vqsp594rnh7qczeu70q83ely9ycx2z65key0urpr3unfmd23he24l0vfq9qxpqysgqe2v0lmlnx0mmcyt7qsx858yzvfh5vdppgdmx27rkenrygsksxlsjm5z8mcjpu9z6a33qtg68u64frjy2y8zrwxe4hl7u0p66uyzmxhgptmc9h9"
+    settings.mint_max_sat_peg_out = 1000
+    await ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice_62_sat))
+    await assert_err(
+        ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice_1002_sat)),
+        "Cannot melt more than 1000 sat."
+    )
+    
