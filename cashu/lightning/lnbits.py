@@ -158,7 +158,7 @@ class LNbitsWallet(LightningBackend):
 
         if data.get("paid", False):
             result = PaymentResult.SETTLED
-        elif status == "pending":
+        elif status == "pending" or data.get("details", {}).get("pending", False):
             result = PaymentResult.PENDING
         elif status == "failed":
             result = PaymentResult.FAILED
@@ -196,7 +196,7 @@ class LNbitsWallet(LightningBackend):
 
         if data.get("paid", False):
             result = PaymentResult.SETTLED
-        elif status == "pending":
+        elif status == "pending" or data.get("details", {}).get("pending", False):
             result = PaymentResult.PENDING
         elif status == "failed":
             result = PaymentResult.FAILED
