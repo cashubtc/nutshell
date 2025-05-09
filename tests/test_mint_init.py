@@ -5,11 +5,11 @@ import bolt11
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, Proof
+from cashu.core.base import MeltQuote, MeltQuoteState, Method, Proof, Unit
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult
+from cashu.lightning.base import PaymentResult, PaymentStatus
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -18,6 +18,7 @@ from tests.helpers import (
     SLEEP_TIME,
     cancel_invoice,
     get_hold_invoice,
+    get_real_invoice,
     is_fake,
     is_regtest,
     pay_if_regtest,
@@ -480,3 +481,60 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
 
     # clean up
     cancel_invoice(preimage_hash=preimage_hash)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledger):
+    invoice_obj = get_real_invoice(16)
+    invoice_payment_request = str(invoice_obj["payment_request"])
+    checking_id = invoice_obj["r_hash"]
+    quote = MeltQuote(
+        quote="nonexistingquote",
+        method="bolt11",
+        request=invoice_payment_request,
+        checking_id=checking_id,
+        unit="sat",
+        amount=64,
+        state=MeltQuoteState.pending,
+        fee_reserve=0,
+        created_time=0,
+    )
+    await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+
+    # assert that there is one pending melt quote
+    melt_quotes = await ledger.crud.get_melt_quote(
+        db=ledger.db, checking_id=quote.checking_id
+    )
+
+    assert melt_quotes
+    assert melt_quotes.state == MeltQuoteState.pending
+
+    # run startup routine
+    await ledger.startup_ledger()
+
+    status: PaymentStatus = await ledger.backends[Method.bolt11][
+        Unit.sat
+    ].get_payment_status(quote.checking_id)
+
+    assert status.unknown
+
+    # this should NOT remove the pending melt quote
+    await ledger.get_melt_quote(quote.quote, rollback_unknown=False)
+
+    # assert melt quote unpaid
+    melt_quotes = await ledger.crud.get_melt_quote(
+        db=ledger.db, checking_id=quote.checking_id
+    )
+    assert melt_quotes
+    assert melt_quotes.state == MeltQuoteState.pending
+
+    # this should remove the pending melt quote
+    await ledger.get_melt_quote(quote.quote, rollback_unknown=True)
+
+    # assert melt quote unpaid
+    melt_quotes = await ledger.crud.get_melt_quote(
+        db=ledger.db, checking_id=quote.checking_id
+    )
+    assert melt_quotes
+    assert melt_quotes.state == MeltQuoteState.unpaid
