@@ -248,6 +248,21 @@ async def test_mint_quote(ledger: Ledger):
     settings.debug_mint_only_deprecated,
     reason="settings.debug_mint_only_deprecated is set",
 )
+async def test_mint_quote_no_pubkey(ledger: Ledger):
+    response = httpx.post(
+        f"{BASE_URL}/v1/mint/quote/bolt11",
+        json={"unit": "sat", "amount": 100},
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    result = response.json()
+    assert "pubkey" not in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    settings.debug_mint_only_deprecated,
+    reason="settings.debug_mint_only_deprecated is set",
+)
 async def test_mint(ledger: Ledger, wallet: Wallet):
     mint_quote = await wallet.request_mint(64)
     await pay_if_regtest(mint_quote.request)
