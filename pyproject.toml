@@ -67,6 +67,7 @@ asyncio_default_fixture_loop_scope = "function"
 [tool.poetry.scripts]
 mint = "cashu.mint.main:main"
 cashu = "cashu.wallet.cli.cli:cli"
+mint-cli = "cashu.mint.management_rpc.cli.cli:cli"
 wallet-test = "tests.test_wallet:test"
 
 [tool.ruff]

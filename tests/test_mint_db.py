@@ -18,9 +18,14 @@ from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     assert_err,
+    is_deprecated_api_only,
     is_github_actions,
     pay_if_regtest,
 )
+
+payment_request = (
+    "lnbc1u1p5qeft3sp5jn5cqclnxvucfqtjm8qnlar2vhevcuudpccv7tsuglruj3qm579spp5ygdhy0t7xu53myke8z3z024xhz4kzgk9fcqk64sp0fyeqzhmaswqdqqcqpjrzjq0euzzxv65mts5ngg8c2t3vzz2aeuevy5845jvyqulqucd8c9kkhzrtp55qq63qqqqqqqqqqqqqzwyqqyg9qxpqysgqscprcpnk8whs3askqhgu6z5a4hupyn8du2aahdcf00s5pxrs4g94sv9f95xdn4tu0wec7kfyzj439wu9z27k6m6e3q4ysjquf5agx7gp0eeye4"
+) 
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -289,3 +294,31 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
 
     # remove subscription
     client.remove_subscription("subId")
+
+@pytest.mark.asyncio
+async def test_db_update_mint_quote_state(wallet: Wallet, ledger: Ledger):
+    mint_quote = await wallet.request_mint(128)
+    await ledger.db_write._update_mint_quote_state(mint_quote.quote, MintQuoteState.paid)
+    
+    mint_quote_db = await ledger.crud.get_mint_quote(quote_id=mint_quote.quote, db=ledger.db)
+    assert mint_quote_db.state == MintQuoteState.paid
+
+    # Update it to issued
+    await ledger.db_write._update_mint_quote_state(mint_quote_db.quote, MintQuoteState.issued)
+
+    # Try and revert it back to unpaid
+    await assert_err(ledger.db_write._update_mint_quote_state(mint_quote_db.quote, MintQuoteState.unpaid), "Cannot change state of an issued mint quote.")
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    is_deprecated_api_only,
+    reason=("Deprecated API")
+)
+async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
+    melt_quote = await wallet.melt_quote(payment_request)
+    await ledger.db_write._update_melt_quote_state(melt_quote.quote, MeltQuoteState.paid)
+
+    melt_quote_db = await ledger.crud.get_melt_quote(quote_id=melt_quote.quote, db=ledger.db)
+    assert melt_quote_db.state == MeltQuoteState.paid
+
+    await assert_err(ledger.db_write._update_melt_quote_state(melt_quote.quote, MeltQuoteState.unpaid), "Cannot change state of a paid melt quote.")
