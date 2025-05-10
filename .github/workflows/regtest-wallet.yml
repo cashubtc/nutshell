@@ -73,7 +73,7 @@ jobs:
           MINT_CLNREST_CERT: ./regtest/data/clightning-2/regtest/ca.pem
         run: |
           sudo chmod -R 777 .
-          make test
+          make test-wallet
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
