@@ -227,8 +227,8 @@ class LndRPCWallet(LightningBackend):
         payer_addr = str(payer_addr_tag.data)
 
         # get the route
-        response: Optional[lnrpc.HTLCAttempt] = None # type: ignore
-        route: Optional[lnrpc.Rou]= None    # type: ignore
+        response: Optional[lnrpc.HTLCAttempt] = None  # type: ignore
+        route: Optional[lnrpc.Rou] = None  # type: ignore
         try:
             async with grpc.aio.secure_channel(
                 self.endpoint, self.combined_creds
@@ -246,7 +246,10 @@ class LndRPCWallet(LightningBackend):
                             use_mission_control=True,
                         )
                     )
-                    logger.debug(f"QueryRoutes returned {len(route.routes)} available routes.")
+                    assert route
+                    logger.debug(
+                        f"QueryRoutes returned {len(route.routes)} available routes."
+                    )
                     route.routes[0].hops[-1].mpp_record.payment_addr = bytes.fromhex(  # type: ignore
                         payer_addr
                     )
@@ -263,12 +266,19 @@ class LndRPCWallet(LightningBackend):
                     )
                     assert route and response
                     if response.status == lnrpc.HTLCAttempt.HTLCStatus.FAILED:
-                        if response.failure.code == lnrpc.Failure.FailureCode.TEMPORARY_CHANNEL_FAILURE:
+                        if (
+                            response.failure.code
+                            == lnrpc.Failure.FailureCode.TEMPORARY_CHANNEL_FAILURE
+                        ):
                             # Add the channels that failed to the excluded channels
                             failure_index = response.failure.failure_source_index
-                            failed_source = route.routes[0].hops[failure_index-1].pub_key
+                            failed_source = (
+                                route.routes[0].hops[failure_index - 1].pub_key
+                            )
                             failed_dest = route.routes[0].hops[failure_index].pub_key
-                            logger.debug(f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route")
+                            logger.debug(
+                                f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route"
+                            )
                             continue
                     break
         except AioRpcError as e:
@@ -281,27 +291,26 @@ class LndRPCWallet(LightningBackend):
         assert route and response
         if response.status == lnrpc.HTLCAttempt.HTLCStatus.FAILED:
             error_message = f"Sending to route failed with code {response.failure.code} after {total_attempts} different tries."
-            logger.error(error_message)
-            logger.debug(f"The last partial payment route length was {len(route.routes)} hops.")
             return PaymentResponse(
                 result=PaymentResult.FAILED,
                 error_message=error_message,
             )
 
-        result = PaymentResult.UNKNOWN
         if response.status == lnrpc.HTLCAttempt.HTLCStatus.SUCCEEDED:
             result = PaymentResult.SETTLED
         elif response.status == lnrpc.HTLCAttempt.HTLCStatus.IN_FLIGHT:
             result = PaymentResult.PENDING
         else:
-            result = PaymentResult.FAILED
+            result = PaymentResult.UNKNOWN
 
         checking_id = invoice.payment_hash
         fee_msat = response.route.total_fees_msat
         preimage = response.preimage.hex()
 
-        logger.debug(f"Partial payment succeeded after {total_attempts} different tries!")
-        logger.debug(f"Partial payment route length was {len(route.routes[0].hops)} hops.")
+        logger.debug(f"Partial payment succeeded after {total_attempts} tries!")
+        logger.debug(
+            f"Partial payment route length was {len(route.routes[0].hops)} hops."
+        )
         return PaymentResponse(
             result=result,
             checking_id=checking_id,
@@ -387,11 +396,7 @@ class LndRPCWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         # get amount from melt_quote or from bolt11
-        amount_msat = (
-            melt_quote.mpp_amount
-            if melt_quote.is_mpp
-            else None
-        )
+        amount_msat = melt_quote.mpp_amount if melt_quote.is_mpp else None
 
         invoice_obj = bolt11.decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."

@@ -42,6 +42,8 @@ INVOICE_RESULT_MAP = {
 }
 
 MAX_ROUTE_RETRIES = 50
+TEMPORARY_CHANNEL_FAILURE_ERROR = "TEMPORARY_CHANNEL_FAILURE"
+
 
 class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
@@ -251,7 +253,6 @@ class LndRestWallet(LightningBackend):
                 json={
                     "fee_limit": lnrpcFeeLimit,
                     "use_mission_control": True,
-                    #"ignored_pairs": ignored_pairs
                 },
                 timeout=None,
             )
@@ -268,7 +269,9 @@ class LndRestWallet(LightningBackend):
             # We need to set the mpp_record for a partial payment
             mpp_record = {
                 "mpp_record": {
-                    "payment_addr": base64.b64encode(bytes.fromhex(payer_addr)).decode(),
+                    "payment_addr": base64.b64encode(
+                        bytes.fromhex(payer_addr)
+                    ).decode(),
                     "total_amt_msat": total_amount_msat,
                 }
             }
@@ -289,13 +292,19 @@ class LndRestWallet(LightningBackend):
             assert response
 
             response_data = response.json()
-            if response_data["status"] == "FAILED":
-                if response_data["failure"]["code"] == "TEMPORARY_CHANNEL_FAILURE":
+            if response_data.get("status") == "FAILED":
+                if response_data["failure"]["code"] == TEMPORARY_CHANNEL_FAILURE_ERROR:
                     # Add the channels that failed to the excluded channels
                     failure_index = response_data["failure"]["failure_source_index"]
-                    failed_source = route_data["routes"][0]["hops"][failure_index-1]["pub_key"]
-                    failed_dest = route_data["routes"][0]["hops"][failure_index]["pub_key"]
-                    logger.debug(f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route")
+                    failed_source = route_data["routes"][0]["hops"][failure_index - 1][
+                        "pub_key"
+                    ]
+                    failed_dest = route_data["routes"][0]["hops"][failure_index][
+                        "pub_key"
+                    ]
+                    logger.debug(
+                        f"Partial payment failed from {failed_source} to {failed_dest} at index {failure_index-1} of the route"
+                    )
                     continue
             break
 
@@ -303,9 +312,7 @@ class LndRestWallet(LightningBackend):
 
         data = response.json()
         if response.is_error or data.get("message") or data.get("status") == "FAILED":
-            error_message = f"Sending to route failed with code {data.get('failure').get('code')} after {attempts} different tries."
-            logger.error(error_message)
-            logger.debug(f"The last partial payment route length was {len(route.json().get('routes')[0].get('hops'))} hops.")
+            error_message = f"Sending to route failed with code {data.get('failure').get('code')} after {attempts} tries."
             return PaymentResponse(
                 result=PaymentResult.FAILED, error_message=error_message
             )
@@ -318,7 +325,9 @@ class LndRestWallet(LightningBackend):
         )
 
         logger.debug(f"Partial payment succeeded after {attempts} different tries!")
-        logger.debug(f"Partial payment route length was {len(route.json().get('routes'))} hops.")
+        logger.debug(
+            f"Partial payment route length was {len(route.json().get('routes'))} hops."
+        )
         return PaymentResponse(
             result=result,
             checking_id=checking_id,
