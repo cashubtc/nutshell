@@ -53,7 +53,7 @@ jobs:
           MINT_REDIS_CACHE_ENABLED: true
           MINT_REDIS_CACHE_URL: redis://localhost:6379
         run: |
-          poetry run pytest tests/test_mint_api_cache.py -v --cov=mint --cov-report=xml
+          poetry run pytest tests/mint/test_mint_api_cache.py -v --cov=mint --cov-report=xml
 
       - name: Stop and clean up Docker Compose
         run: |

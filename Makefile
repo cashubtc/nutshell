@@ -27,6 +27,16 @@ test:
 	DEBUG=true \
 	poetry run pytest tests --cov-report xml --cov cashu
 
+test-wallet:
+	PYTHONUNBUFFERED=1 \
+	DEBUG=true \
+	poetry run pytest tests/wallet --cov-report xml --cov cashu
+
+test-mint:
+	PYTHONUNBUFFERED=1 \
+	DEBUG=true \
+	poetry run pytest tests/mint --cov-report xml --cov cashu
+
 test-lndrest:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \

@@ -67,7 +67,7 @@ jobs:
           MINT_AUTH_OICD_DISCOVERY_URL: http://localhost:8080/realms/nutshell/.well-known/openid-configuration
           MINT_AUTH_OICD_CLIENT_ID: cashu-client
         run: |
-          poetry run pytest tests/test_wallet_auth.py -v --cov=mint --cov-report=xml
+          poetry run pytest tests/wallet/test_wallet_auth.py -v --cov=mint --cov-report=xml
 
       - name: Stop and clean up Docker Compose
         run: |

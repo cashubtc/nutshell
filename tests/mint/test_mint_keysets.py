@@ -3,7 +3,12 @@ import pytest
 from cashu.core.base import MintKeyset, Unit
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
-from tests.test_mint_init import DECRYPTON_KEY, DERIVATION_PATH, ENCRYPTED_SEED, SEED
+from tests.mint.test_mint_init import (
+    DECRYPTON_KEY,
+    DERIVATION_PATH,
+    ENCRYPTED_SEED,
+    SEED,
+)
 
 
 async def assert_err(f, msg):
@@ -73,16 +78,27 @@ async def test_keyset_0_15_0_encrypted():
     )
     assert keyset.id == "009a1f293253e41e"
 
+
 @pytest.mark.asyncio
 async def test_keyset_rotation(ledger: Ledger):
-    keyset_sat = next(filter(lambda k: k.unit == Unit["sat"] and k.active, ledger.keysets.values()))
-    new_keyset_sat = await ledger.rotate_next_keyset(unit=Unit["sat"], max_order=20, input_fee_ppk=1)
+    keyset_sat = next(
+        filter(lambda k: k.unit == Unit["sat"] and k.active, ledger.keysets.values())
+    )
+    new_keyset_sat = await ledger.rotate_next_keyset(
+        unit=Unit["sat"], max_order=20, input_fee_ppk=1
+    )
 
     keyset_sat_derivation = keyset_sat.derivation_path.split("/")
     new_keyset_sat_derivation = keyset_sat.derivation_path.split("/")
 
-    assert keyset_sat_derivation[:-1] == new_keyset_sat_derivation[:-1], "keyset derivation does not match up to the counter branch"
-    assert int(new_keyset_sat_derivation[-1].replace("'", "")) - int(keyset_sat_derivation[-1].replace("'", "")) == 0, "counters should differ by exactly 1"
+    assert (
+        keyset_sat_derivation[:-1] == new_keyset_sat_derivation[:-1]
+    ), "keyset derivation does not match up to the counter branch"
+    assert (
+        int(new_keyset_sat_derivation[-1].replace("'", ""))
+        - int(keyset_sat_derivation[-1].replace("'", ""))
+        == 0
+    ), "counters should differ by exactly 1"
 
     assert new_keyset_sat.input_fee_ppk == 1
     assert len(new_keyset_sat.private_keys.values()) == 20
