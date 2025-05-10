@@ -66,7 +66,13 @@ from .tasks import LedgerTasks
 from .verification import LedgerVerification
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures, LedgerKeysets):
+class Ledger(
+    LedgerVerification,
+    LedgerSpendingConditions,
+    LedgerTasks,
+    LedgerFeatures,
+    LedgerKeysets,
+):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
@@ -130,6 +136,7 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
     async def startup_ledger(self) -> None:
         await self._startup_keysets()
         await self._check_backends()
+        await self._check_pending_proofs_and_melt_quotes()
         self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
 
@@ -141,8 +148,8 @@ class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFe
 
     async def _run_regular_tasks(self) -> None:
         try:
-            await self._check_pending_proofs_and_melt_quotes()
             await asyncio.sleep(settings.mint_regular_tasks_interval_seconds)
+            await self._check_pending_proofs_and_melt_quotes()
         except Exception as e:
             logger.error(f"Ledger regular task failed: {e}")
             await asyncio.sleep(60)
