@@ -177,10 +177,7 @@ async def test_startup_fakewallet_pending_quote_success(ledger: Ledger):
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
     # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no pending tokens are in db anymore
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -206,10 +203,7 @@ async def test_startup_fakewallet_pending_quote_failure(ledger: Ledger):
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.FAILED.name
     # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no pending tokens are in db anymore
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -230,10 +224,7 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.PENDING.name
     # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -255,10 +246,7 @@ async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
     # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -300,10 +288,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     await asyncio.sleep(SLEEP_TIME)
 
     # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -353,10 +338,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     await asyncio.sleep(SLEEP_TIME)
 
     # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -407,10 +389,7 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     await asyncio.sleep(SLEEP_TIME)
 
     # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -475,10 +454,7 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
     await asyncio.sleep(SLEEP_TIME)
 
     # run startup routine
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -523,10 +499,7 @@ async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledg
     assert melt_quotes.state == MeltQuoteState.pending
 
     # run startup routine
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     status: PaymentStatus = await ledger.backends[Method.bolt11][
         Unit.sat
