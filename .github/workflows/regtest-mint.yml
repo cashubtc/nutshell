@@ -1,4 +1,4 @@
-name: regtest
+name: regtest-mint
 
 on:
   workflow_call:
@@ -20,7 +20,7 @@ on:
         type: string
 
 jobs:
-  regtest:
+  regtest-mint:
     runs-on: ${{ inputs.os-version }}
     timeout-minutes: 10
     steps:
