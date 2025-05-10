@@ -66,7 +66,13 @@ from .tasks import LedgerTasks
 from .verification import LedgerVerification
 
 
-class Ledger(LedgerVerification, LedgerSpendingConditions, LedgerTasks, LedgerFeatures, LedgerKeysets):
+class Ledger(
+    LedgerVerification,
+    LedgerSpendingConditions,
+    LedgerTasks,
+    LedgerFeatures,
+    LedgerKeysets,
+):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()

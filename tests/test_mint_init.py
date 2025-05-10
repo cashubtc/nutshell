@@ -5,11 +5,11 @@ import bolt11
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, Proof
+from cashu.core.base import MeltQuote, MeltQuoteState, Method, Proof, Unit
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
 from cashu.core.settings import settings
-from cashu.lightning.base import PaymentResult
+from cashu.lightning.base import PaymentResult, PaymentStatus
 from cashu.mint.crud import LedgerCrudSqlite
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -18,6 +18,7 @@ from tests.helpers import (
     SLEEP_TIME,
     cancel_invoice,
     get_hold_invoice,
+    get_real_invoice,
     is_fake,
     is_regtest,
     pay_if_regtest,
@@ -175,11 +176,8 @@ async def test_startup_fakewallet_pending_quote_success(ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
-    # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    # run startup routine
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no pending tokens are in db anymore
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -204,11 +202,8 @@ async def test_startup_fakewallet_pending_quote_failure(ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.FAILED.name
-    # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    # run startup routine
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no pending tokens are in db anymore
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -228,11 +223,8 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.PENDING.name
-    # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    # run startup routine
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -253,11 +245,8 @@ async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
-    # run startup routinge
-    await ledger.startup_ledger()
-
-    # we need to sleep because the startup routine for checking the invoices is async
-    await asyncio.sleep(1)
+    # run startup routine
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -298,8 +287,8 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     )
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routinge
-    await ledger.startup_ledger()
+    # run startup routine
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -348,8 +337,8 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     settle_invoice(preimage=preimage)
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routinge
-    await ledger.startup_ledger()
+    # run startup routine
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -399,8 +388,8 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     cancel_invoice(preimage_hash=preimage_hash)
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routinge
-    await ledger.startup_ledger()
+    # run startup routine
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -465,7 +454,7 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
     await asyncio.sleep(SLEEP_TIME)
 
     # run startup routine
-    await ledger.startup_ledger()
+    await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
     melt_quotes = await ledger.crud.get_all_melt_quotes_from_pending_proofs(
@@ -480,3 +469,60 @@ async def test_startup_regtest_pending_quote_unknown(wallet: Wallet, ledger: Led
 
     # clean up
     cancel_invoice(preimage_hash=preimage_hash)
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledger):
+    invoice_obj = get_real_invoice(16)
+    invoice_payment_request = str(invoice_obj["payment_request"])
+    checking_id = invoice_obj["r_hash"]
+    quote = MeltQuote(
+        quote="nonexistingquote",
+        method="bolt11",
+        request=invoice_payment_request,
+        checking_id=checking_id,
+        unit="sat",
+        amount=64,
+        state=MeltQuoteState.pending,
+        fee_reserve=0,
+        created_time=0,
+    )
+    await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+
+    # assert that there is one pending melt quote
+    melt_quotes = await ledger.crud.get_melt_quote(
+        db=ledger.db, checking_id=quote.checking_id
+    )
+
+    assert melt_quotes
+    assert melt_quotes.state == MeltQuoteState.pending
+
+    # run startup routine
+    await ledger._check_pending_proofs_and_melt_quotes()
+
+    status: PaymentStatus = await ledger.backends[Method.bolt11][
+        Unit.sat
+    ].get_payment_status(quote.checking_id)
+
+    assert status.unknown
+
+    # this should NOT remove the pending melt quote
+    await ledger.get_melt_quote(quote.quote, rollback_unknown=False)
+
+    # assert melt quote unpaid
+    melt_quotes = await ledger.crud.get_melt_quote(
+        db=ledger.db, checking_id=quote.checking_id
+    )
+    assert melt_quotes
+    assert melt_quotes.state == MeltQuoteState.pending
+
+    # this should remove the pending melt quote
+    await ledger.get_melt_quote(quote.quote, rollback_unknown=True)
+
+    # assert melt quote unpaid
+    melt_quotes = await ledger.crud.get_melt_quote(
+        db=ledger.db, checking_id=quote.checking_id
+    )
+    assert melt_quotes
+    assert melt_quotes.state == MeltQuoteState.unpaid
