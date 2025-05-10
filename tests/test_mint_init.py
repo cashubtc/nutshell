@@ -176,7 +176,7 @@ async def test_startup_fakewallet_pending_quote_success(ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
-    # run startup routinge
+    # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no pending tokens are in db anymore
@@ -202,7 +202,7 @@ async def test_startup_fakewallet_pending_quote_failure(ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.FAILED.name
-    # run startup routinge
+    # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no pending tokens are in db anymore
@@ -223,7 +223,7 @@ async def test_startup_fakewallet_pending_quote_pending(ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.PENDING.name
-    # run startup routinge
+    # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
@@ -245,7 +245,7 @@ async def test_startup_fakewallet_pending_quote_unknown(ledger: Ledger):
     states = await ledger.db_read.get_proofs_states([pending_proof.Y])
     assert states[0].pending
     settings.fakewallet_payment_state = PaymentResult.UNKNOWN.name
-    # run startup routinge
+    # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
@@ -287,7 +287,7 @@ async def test_startup_regtest_pending_quote_pending(wallet: Wallet, ledger: Led
     )
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routinge
+    # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that melt quote is still pending
@@ -337,7 +337,7 @@ async def test_startup_regtest_pending_quote_success(wallet: Wallet, ledger: Led
     settle_invoice(preimage=preimage)
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routinge
+    # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
@@ -388,7 +388,7 @@ async def test_startup_regtest_pending_quote_failure(wallet: Wallet, ledger: Led
     cancel_invoice(preimage_hash=preimage_hash)
     await asyncio.sleep(SLEEP_TIME)
 
-    # run startup routinge
+    # run startup routine
     await ledger._check_pending_proofs_and_melt_quotes()
 
     # expect that no melt quote is pending
