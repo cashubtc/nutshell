@@ -17,6 +17,7 @@ from tests.helpers import (
     assert_err,
     cancel_invoice,
     get_hold_invoice,
+    get_real_invoice,
     is_fake,
     partial_pay_real_invoice,
     pay_if_regtest,
@@ -51,7 +52,7 @@ async def test_regtest_pay_mpp(wallet: Wallet, ledger: Ledger):
     assert wallet.balance == 128
 
     # this is the invoice we want to pay in two parts
-    preimage, invoice_dict = get_hold_invoice(64)
+    invoice_dict = get_real_invoice(64)
     invoice_payment_request = str(invoice_dict["payment_request"])
 
     async def _mint_pay_mpp(invoice: str, amount: int, proofs: List[Proof]):
@@ -116,7 +117,7 @@ async def test_regtest_pay_mpp_incomplete_payment(wallet: Wallet, ledger: Ledger
     assert wallet.balance == 384
 
     # this is the invoice we want to pay in two parts
-    preimage, invoice_dict = get_hold_invoice(64)
+    invoice_dict = get_real_invoice(64)
     invoice_payment_request = str(invoice_dict["payment_request"])
 
     async def pay_mpp(amount: int, proofs: List[Proof], delay: float = 0.0):
