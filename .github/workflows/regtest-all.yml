@@ -17,7 +17,7 @@ jobs:
 
     services:
       regtest:
-        image: ghcr.io/callebtc/cashu-regtest-environment:sha-4c1657b4d7a0281334cde80d718a6e00e66b1bf6
+        image: docker pull ghcr.io/callebtc/cashu-regtest-environment:sha-bde3931fe27e32b8f83b2adbb65a8460c2f32ef5
         ports:
           # Map all needed ports to make them accessible
           - 5001:5001  # LNbits
