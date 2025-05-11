@@ -66,7 +66,7 @@ jobs:
 
     services:
       regtest:
-        image: ghcr.io/callebtc/cashu-regtest-environment:sha-e4a2558968828f130e8668c88334435f5a67987d
+        image: ghcr.io/callebtc/cashu-regtest-environment:sha-eb42c76855b8ac9cb9e3d017c6681790283950ae
         ports:
           # Map all needed ports to make them accessible
           - 5001:5001  # LNbits
