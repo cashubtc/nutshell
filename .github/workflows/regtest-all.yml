@@ -33,6 +33,7 @@ jobs:
           --health-start-period 20s
           --name regtest-environment
           --volume regtest-data:/regtest/data
+          --volume /var/run/docker.sock:/var/run/docker.sock
 
     steps:
       - uses: actions/checkout@v3
