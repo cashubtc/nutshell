@@ -60,7 +60,7 @@ jobs:
   # Setup regtest environment for all tests
   setup-regtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     outputs:
       regtest-ready: true
 
@@ -77,9 +77,9 @@ jobs:
         options: >-
           --health-cmd "curl -f http://localhost:8081 || exit 1"
           --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-start-period 20s
+          --health-timeout 30s
+          --health-retries 30
+          --health-start-period 60s
           --name regtest-environment
           --volume regtest-data:/regtest/data
           --volume /var/run/docker.sock:/var/run/docker.sock
@@ -91,7 +91,7 @@ jobs:
         run: |
           # Wait for the regtest environment to be fully up
           echo "Waiting for regtest environment to be ready..."
-          timeout 300 bash -c 'until curl -s http://localhost:5001 > /dev/null; do sleep 5; echo "Waiting..."; done'
+          timeout 600 bash -c 'until curl -s http://localhost:5001 > /dev/null; do sleep 5; echo "Waiting..."; done'
           echo "Regtest environment is ready"
 
       - name: Export regtest data to shared location
