@@ -52,7 +52,7 @@ jobs:
           chmod -R 777 /tmp/regtest-data
 
       - name: Upload regtest data as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: regtest-data
           path: /tmp/regtest-data/data
@@ -98,7 +98,7 @@ jobs:
           poetry install --with dev
 
       - name: Download regtest data
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: regtest-data
           path: ./regtest/data
@@ -182,7 +182,7 @@ jobs:
           poetry install --with dev
 
       - name: Download regtest data
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: regtest-data
           path: ./regtest/data
