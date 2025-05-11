@@ -153,7 +153,7 @@ async def create_pending_melts(
         quote=quote,
         db=ledger.db,
     )
-    pending_proof = Proof(amount=123, C="asdasd", secret="asdasd", id=quote_id)
+    pending_proof = Proof(amount=123, C="asdasd", secret="asdasd", id=ledger.keyset.id)
     await ledger.crud.set_proof_pending(
         db=ledger.db,
         proof=pending_proof,

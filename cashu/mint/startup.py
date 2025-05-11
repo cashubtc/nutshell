@@ -80,7 +80,7 @@ ledger = Ledger(
 
 # start auth ledger
 auth_ledger = AuthLedger(
-    db=Database("auth", settings.auth_database),
+    db=Database("auth", settings.mint_auth_database),
     seed="auth seed here",
     amounts=[1],
     derivation_path="m/0'/999'/0'",

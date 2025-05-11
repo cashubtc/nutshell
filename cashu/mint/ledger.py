@@ -64,6 +64,7 @@ from .features import LedgerFeatures
 from .keysets import LedgerKeysets
 from .tasks import LedgerTasks
 from .verification import LedgerVerification
+from .watchdog import LedgerWatchdog
 
 
 class Ledger(
@@ -71,13 +72,17 @@ class Ledger(
     LedgerSpendingConditions,
     LedgerTasks,
     LedgerFeatures,
+    LedgerWatchdog,
     LedgerKeysets,
 ):
     backends: Mapping[Method, Mapping[Unit, LightningBackend]] = {}
     keysets: Dict[str, MintKeyset] = {}
     events = LedgerEventManager()
+    db: Database
     db_read: DbReadHelper
+    db_write: DbWriteHelper
     invoice_listener_tasks: List[asyncio.Task] = []
+    watchdog_tasks: List[asyncio.Task] = []
     disable_melt: bool = False
     pubkey: PublicKey
 
@@ -98,6 +103,7 @@ class Ledger(
         self.db_read: DbReadHelper
         self.locks: Dict[str, asyncio.Lock] = {}  # holds multiprocessing locks
         self.invoice_listener_tasks: List[asyncio.Task] = []
+        self.watchdog_tasks: List[asyncio.Task] = []
         self.regular_tasks: List[asyncio.Task] = []
 
         if not seed:
@@ -131,6 +137,8 @@ class Ledger(
         self.db_read = DbReadHelper(self.db, self.crud)
         self.db_write = DbWriteHelper(self.db, self.crud, self.events, self.db_read)
 
+        LedgerWatchdog.__init__(self)
+
     # ------- STARTUP -------
 
     async def startup_ledger(self) -> None:
@@ -138,6 +146,8 @@ class Ledger(
         await self._check_backends()
         self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
+        if settings.mint_watchdog_enabled:
+            self.watchdog_tasks = await self.dispatch_watchdogs()
 
     async def _startup_keysets(self) -> None:
         await self.init_keysets()
@@ -168,7 +178,7 @@ class Ledger(
                         f" working properly: '{status.error_message}'"
                     )
                     exit(1)
-                logger.info(f"Backend balance: {status.balance} {unit.name}")
+                logger.info(f"Backend balance: {status.balance}")
 
         logger.info(f"Data dir: {settings.cashu_dir}")
 
@@ -177,6 +187,8 @@ class Ledger(
         await self.db.engine.dispose()
         logger.debug("Shutting down invoice listeners")
         for task in self.invoice_listener_tasks:
+            task.cancel()
+        for task in self.watchdog_tasks:
             task.cancel()
         logger.debug("Shutting down regular tasks")
         for task in self.regular_tasks:
@@ -197,10 +209,6 @@ class Ledger(
             quote = await self.get_melt_quote(quote_id=quote.quote)
             logger.info(f"Melt quote {quote.quote} state: {quote.state}")
 
-    async def get_balance(self, keyset: MintKeyset) -> int:
-        """Returns the balance of the mint."""
-        return await self.crud.get_balance(keyset=keyset, db=self.db)
-
     # ------- ECASH -------
 
     async def _invalidate_proofs(
@@ -216,6 +224,8 @@ class Ledger(
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
+        # sum_proofs = sum([p.amount for p in proofs])
+        fees_proofs = self.get_fees_for_proofs(proofs)
         async with self.db.get_connection(conn) as conn:
             # store in db
             for p in proofs:
@@ -223,11 +233,17 @@ class Ledger(
                 await self.crud.invalidate_proof(
                     proof=p, db=self.db, quote_id=quote_id, conn=conn
                 )
+                await self.crud.bump_keyset_balance(
+                    keyset=self.keysets[p.id], amount=-p.amount, db=self.db, conn=conn
+                )
                 await self.events.submit(
                     ProofState(
                         Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
                     )
                 )
+            await self.crud.bump_keyset_fees_paid(
+                keyset=self.keyset, amount=fees_proofs, db=self.db, conn=conn
+            )
 
     async def _generate_change_promises(
         self,
@@ -326,13 +342,10 @@ class Ledger(
         ):
             raise NotAllowedError("Backend does not support descriptions.")
 
-        # MINT_MAX_BALANCE refers to sat (for now)
-        if settings.mint_max_balance and unit == Unit.sat:
-            # get next active keyset for unit
-            active_keyset: MintKeyset = next(
-                filter(lambda k: k.active and k.unit == unit, self.keysets.values())
-            )
-            balance = await self.get_balance(active_keyset)
+        # Check maximum balance.
+        # TODO: Allow setting MINT_MAX_BALANCE per unit
+        if settings.mint_max_balance:
+            balance, fees_paid = await self.get_unit_balance_and_fees(unit, db=self.db)
             if balance + quote_request.amount > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
 
@@ -545,7 +558,9 @@ class Ledger(
             melt_quote.is_mpp
             and melt_quote.mpp_amount != payment_quote.amount.to(Unit.msat).amount
         ):
-            logger.error(f"expected {payment_quote.amount.to(Unit.msat).amount} msat but got {melt_quote.mpp_amount}")
+            logger.error(
+                f"expected {payment_quote.amount.to(Unit.msat).amount} msat but got {melt_quote.mpp_amount}"
+            )
             raise TransactionError("quote amount not as requested")
         # make sure the backend returned the amount with a correct unit
         if not payment_quote.amount.unit == unit:
@@ -697,8 +712,13 @@ class Ledger(
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
-                await self._invalidate_proofs(proofs=pending_proofs, quote_id=quote_id)
-                await self.db_write._unset_proofs_pending(pending_proofs)
+                async with self.db.get_connection() as conn:
+                    await self._invalidate_proofs(
+                        proofs=pending_proofs, quote_id=quote_id, conn=conn
+                    )
+                    await self.db_write._unset_proofs_pending(
+                        pending_proofs, keysets=self.keysets, conn=conn
+                    )
                 # change to compensate wallet for overpaid fees
                 if melt_quote.outputs:
                     total_provided = sum_proofs(pending_proofs)
@@ -723,7 +743,9 @@ class Ledger(
                 pending_proofs = await self.crud.get_pending_proofs_for_quote(
                     quote_id=quote_id, db=self.db
                 )
-                await self.db_write._unset_proofs_pending(pending_proofs)
+                await self.db_write._unset_proofs_pending(
+                    pending_proofs, keysets=self.keysets
+                )
 
         return melt_quote
 
@@ -821,7 +843,7 @@ class Ledger(
             e: Lightning payment unsuccessful
 
         Returns:
-            Tuple[str, List[BlindedMessage]]: Proof of payment and signed outputs for returning overpaid fees to wallet.
+            PostMeltQuoteResponse: Melt quote response.
         """
         # make sure we're allowed to melt
         if self.disable_melt and settings.mint_disable_melt_on_error:
@@ -880,7 +902,7 @@ class Ledger(
 
         # set proofs to pending to avoid race conditions
         await self.db_write._verify_spent_proofs_and_set_pending(
-            proofs, quote_id=melt_quote.quote
+            proofs, keysets=self.keysets, quote_id=melt_quote.quote
         )
         previous_state = melt_quote.state
         melt_quote = await self.db_write._set_melt_quote_pending(melt_quote, outputs)
@@ -936,7 +958,9 @@ class Ledger(
                     match status.result:
                         case PaymentResult.FAILED | PaymentResult.UNKNOWN:
                             # Everything as expected. Payment AND a status check both agree on a failure. We roll back the transaction.
-                            await self.db_write._unset_proofs_pending(proofs)
+                            await self.db_write._unset_proofs_pending(
+                                proofs, keysets=self.keysets
+                            )
                             await self.db_write._unset_melt_quote_pending(
                                 quote=melt_quote, state=previous_state
                             )
@@ -976,7 +1000,7 @@ class Ledger(
 
         # melt was successful (either internal or via backend), invalidate proofs
         await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
-        await self.db_write._unset_proofs_pending(proofs)
+        await self.db_write._unset_proofs_pending(proofs, keysets=self.keysets)
 
         # prepare change to compensate wallet for overpaid fees
         return_promises: List[BlindedSignature] = []
@@ -1019,7 +1043,9 @@ class Ledger(
         logger.trace("swap called")
         # verify spending inputs, outputs, and spending conditions
         await self.verify_inputs_and_outputs(proofs=proofs, outputs=outputs)
-        await self.db_write._verify_spent_proofs_and_set_pending(proofs)
+        await self.db_write._verify_spent_proofs_and_set_pending(
+            proofs, keysets=self.keysets
+        )
         try:
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
@@ -1029,7 +1055,7 @@ class Ledger(
             raise e
         finally:
             # delete proofs from pending list
-            await self.db_write._unset_proofs_pending(proofs)
+            await self.db_write._unset_proofs_pending(proofs, keysets=self.keysets)
 
         logger.trace("swap successful")
         return promises
@@ -1117,4 +1143,10 @@ class Ledger(
                     dleq=DLEQ(e=e.serialize(), s=s.serialize()),
                 )
                 signatures.append(signature)
+
+                # bump keyset balance
+                await self.crud.bump_keyset_balance(
+                    db=self.db, keyset=self.keysets[keyset_id], amount=amount, conn=conn
+                )
+
             return signatures
