@@ -60,13 +60,13 @@ jobs:
   # Setup regtest environment for all tests
   setup-regtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     outputs:
       regtest-ready: true
 
     services:
       regtest:
-        image: ghcr.io/callebtc/cashu-regtest-environment:sha-0fb55b3fed30e640f12b5511ce01ba4839046fd7
+        image: ghcr.io/callebtc/cashu-regtest-environment:sha-6160cb1214afb03e5f89c104f8e5f29c4637cf00
         ports:
           # Map all needed ports to make them accessible
           - 5001:5001  # LNbits
