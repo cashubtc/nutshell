@@ -195,17 +195,26 @@ class Proof(BaseModel):
     @property
     def p2pksigs(self) -> List[str]:
         assert self.witness, "Witness is missing for p2pk signature"
-        return P2PKWitness.from_witness(self.witness).signatures
+        try:
+            return P2PKWitness.from_witness(self.witness).signatures
+        except Exception:
+            return []
 
     @property
     def htlcpreimage(self) -> str | None:
         assert self.witness, "Witness is missing for htlc preimage"
-        return HTLCWitness.from_witness(self.witness).preimage
+        try:
+            return HTLCWitness.from_witness(self.witness).preimage
+        except Exception:
+            return None
 
     @property
     def htlcsigs(self) -> List[str] | None:
         assert self.witness, "Witness is missing for htlc signatures"
-        return HTLCWitness.from_witness(self.witness).signatures
+        try:
+            return HTLCWitness.from_witness(self.witness).signatures
+        except Exception:
+            return None
 
 
 class Proofs(BaseModel):
@@ -221,12 +230,6 @@ class BlindedMessage(BaseModel):
     amount: int
     id: str  # Keyset id
     B_: str  # Hex-encoded blinded message
-    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
-
-    @property
-    def p2pksigs(self) -> List[str]:
-        assert self.witness, "Witness missing in output"
-        return P2PKWitness.from_witness(self.witness).signatures
 
 
 class BlindedMessage_Deprecated(BaseModel):
@@ -339,9 +342,7 @@ class MeltQuote(LedgerEvent):
         )
 
     @classmethod
-    def from_resp_wallet(
-        cls, melt_quote_resp, mint: str, amount: int, unit: str, request: str
-    ):
+    def from_resp_wallet(cls, melt_quote_resp, mint: str, unit: str, request: str):
         # BEGIN: BACKWARDS COMPATIBILITY < 0.16.0: "paid" field to "state"
         if melt_quote_resp.state is None:
             if melt_quote_resp.paid is True:
@@ -352,10 +353,12 @@ class MeltQuote(LedgerEvent):
         return cls(
             quote=melt_quote_resp.quote,
             method="bolt11",
-            request=request,
+            request=melt_quote_resp.request
+            or request,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
             checking_id="",
-            unit=unit,
-            amount=amount,
+            unit=melt_quote_resp.unit
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            amount=melt_quote_resp.amount,
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
             mint=mint,
@@ -467,8 +470,10 @@ class MintQuote(LedgerEvent):
             method="bolt11",
             request=mint_quote_resp.request,
             checking_id="",
-            unit=unit,
-            amount=amount,
+            unit=mint_quote_resp.unit
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            amount=mint_quote_resp.amount
+            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
             state=MintQuoteState(mint_quote_resp.state),
             mint=mint,
             expiry=mint_quote_resp.expiry,
@@ -893,7 +898,7 @@ class MintKeyset:
             valid_from=row["valid_from"],
             valid_to=row["valid_to"],
             first_seen=row["first_seen"],
-            active=row["active"],
+            active=bool(row["active"]),
             unit=row["unit"],
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],

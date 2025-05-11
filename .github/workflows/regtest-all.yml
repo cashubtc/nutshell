@@ -1,63 +1,14 @@
-name: CI
+name: Regtest Tests
+
 on:
+  workflow_call:
   push:
     branches:
       - main
   pull_request:
 
 jobs:
-  checks:
-    uses: ./.github/workflows/checks.yml
-
-  tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.10"]
-        poetry-version: ["1.8.5"]
-        mint-only-deprecated: ["false", "true"]
-        mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
-        backend-wallet-class: ["FakeWallet"]
-    uses: ./.github/workflows/tests.yml
-    with:
-      os: ${{ matrix.os }}
-      python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
-      mint-only-deprecated: ${{ matrix.mint-only-deprecated }}
-      mint-database: ${{ matrix.mint-database }}
-
-  tests_redis_cache:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.10"]
-        poetry-version: ["1.8.5"]
-        mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
-    uses: ./.github/workflows/tests_redis_cache.yml
-    with:
-      os: ${{ matrix.os }}
-      python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
-      mint-database: ${{ matrix.mint-database }}
-
-  tests_keycloak_auth:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        python-version: ["3.10"]
-        poetry-version: ["1.8.5"]
-        mint-database: ["./test_data/test_mint", "postgres://cashu:cashu@localhost:5432/cashu"]
-    uses: ./.github/workflows/tests_keycloak_auth.yml
-    with:
-      os: ${{ matrix.os }}
-      python-version: ${{ matrix.python-version }}
-      poetry-version: ${{ matrix.poetry-version }}
-      mint-database: ${{ matrix.mint-database }}
-
-  # Setup regtest environment for all tests
+  # Setup regtest environment once for all tests
   setup-regtest:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -107,10 +58,11 @@ jobs:
           path: /tmp/regtest-data/data
           retention-days: 1
 
-  # Run mint tests using the shared regtest environment
+  # Run all mint tests with different wallet backends and databases
   regtest-mint:
     needs: setup-regtest
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
@@ -190,10 +142,11 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
 
-  # Run wallet tests using the shared regtest environment
+  # Run all wallet tests with different wallet backends and databases
   regtest-wallet:
     needs: setup-regtest
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:

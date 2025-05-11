@@ -58,6 +58,10 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
             )
             raise SystemExit
 
+    async def get_balance(self, unit: Unit) -> Tuple[Amount, Amount]:
+        """Returns the balance of the mint for this unit."""
+        return await self.get_unit_balance_and_fees(unit=unit, db=self.db)
+
     async def dispatch_backend_checker(
         self, unit: Unit, backend: LightningBackend
     ) -> None:

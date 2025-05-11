@@ -91,7 +91,8 @@ class LNbitsWallet(LightningBackend):
         if data.get("detail"):
             return InvoiceResponse(ok=False, error_message=data["detail"])
 
-        checking_id, payment_request = data["checking_id"], data["payment_request"]
+        checking_id = data["checking_id"]
+        payment_request = data.get("bolt11") or data.get("payment_request")
 
         return InvoiceResponse(
             ok=True,

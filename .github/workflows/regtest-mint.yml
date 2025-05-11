@@ -1,0 +1,83 @@
+name: regtest-mint
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        default: "3.10.4"
+        type: string
+      poetry-version:
+        default: "1.5.1"
+        type: string
+      os-version:
+        default: "ubuntu-latest"
+        type: string
+      mint-database:
+        default: ""
+        type: string
+      backend-wallet-class:
+        required: true
+        type: string
+
+jobs:
+  regtest-mint:
+    runs-on: ${{ inputs.os-version }}
+    timeout-minutes: 10
+    steps:
+      - name: Start PostgreSQL service
+        if: contains(inputs.mint-database, 'postgres')
+        run: |
+          docker run -d --name postgres -e POSTGRES_USER=cashu -e POSTGRES_PASSWORD=cashu -e POSTGRES_DB=cashu -p 5432:5432 postgres:latest
+          until docker exec postgres pg_isready; do sleep 1; done
+
+      - uses: actions/checkout@v3
+
+      - uses: ./.github/actions/prepare
+        with:
+          python-version: ${{ inputs.python-version }}
+          poetry-version: ${{ inputs.poetry-version }}
+
+      - name: Download regtest data
+        uses: actions/download-artifact@v3
+        with:
+          name: regtest-data
+          path: ./regtest/data
+
+      - name: Prepare regtest data
+        run: |
+          mkdir -p regtest
+          chmod -R 777 regtest
+
+      - name: Run Tests
+        env:
+          WALLET_NAME: test_wallet
+          MINT_HOST: localhost
+          MINT_PORT: 3337
+          MINT_TEST_DATABASE: ${{ inputs.mint-database }}
+          TOR: false
+          MINT_BACKEND_BOLT11_SAT: ${{ inputs.backend-wallet-class }}
+          # LNbits wallet
+          MINT_LNBITS_ENDPOINT: http://localhost:5001
+          MINT_LNBITS_KEY: d08a3313322a4514af75d488bcc27eee
+          # LndRestWallet
+          MINT_LND_REST_ENDPOINT: https://localhost:8081/
+          MINT_LND_REST_CERT: ./regtest/data/lnd-3/tls.cert
+          MINT_LND_REST_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          # LndRPCWallet
+          MINT_LND_RPC_ENDPOINT: localhost:10009
+          MINT_LND_RPC_CERT: ./regtest/data/lnd-3/tls.cert
+          MINT_LND_RPC_MACAROON: ./regtest/data/lnd-3/data/chain/bitcoin/regtest/admin.macaroon
+          # CoreLightningRestWallet
+          MINT_CORELIGHTNING_REST_URL: https://localhost:3001
+          MINT_CORELIGHTNING_REST_MACAROON: ./regtest/data/clightning-2-rest/access.macaroon
+          MINT_CORELIGHTNING_REST_CERT: ./regtest/data/clightning-2-rest/certificate.pem
+          # CLNRestWallet
+          MINT_CLNREST_URL: https://localhost:3010
+          MINT_CLNREST_RUNE: ./regtest/data/clightning-2/rune
+          MINT_CLNREST_CERT: ./regtest/data/clightning-2/regtest/ca.pem
+        run: |
+          sudo chmod -R 777 .
+          make test-mint
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
