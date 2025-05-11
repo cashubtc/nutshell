@@ -144,7 +144,7 @@ async def test_lightning_pay_invoice_failure(ledger: Ledger):
         checking_id
     )
 
-    assert status.failed or status.unknown
+    assert status.failed
     assert not status.preimage
 
 
@@ -263,9 +263,7 @@ async def test_lightning_pay_invoice_pending_failure(ledger: Ledger):
     status = await ledger.backends[Method.bolt11][Unit.sat].get_payment_status(
         quote.checking_id
     )
-    assert (
-        status.failed or status.unknown
-    )  # some backends send unknown instead of failed if they can't find the payment
+    assert status.failed
     assert not status.preimage
     # assert status.error_message
 
