@@ -75,11 +75,6 @@ jobs:
           - 3001:3001  # CoreLightning REST
           - 3010:3010  # CLN REST
         options: >-
-          --health-cmd "curl -f http://localhost:5001 || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --health-start-period 20s
           --name regtest-environment
           --volume regtest-data:/regtest/data
           --volume /var/run/docker.sock:/var/run/docker.sock
