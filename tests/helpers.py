@@ -215,9 +215,9 @@ def pay_onchain(address: str, sats: int) -> str:
     return run_cmd(cmd)
 
 
-async def pay_if_regtest(bolt11: str):
+async def pay_if_regtest(bolt11: str) -> None:
     if is_regtest:
         pay_real_invoice(bolt11)
     if is_fake:
         await asyncio.sleep(settings.fakewallet_delay_incoming_payment or 0)
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.5)

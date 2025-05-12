@@ -2,10 +2,10 @@ from typing import List
 
 import pytest
 
-from cashu.core.base import BlindedMessage, MintKeyset, Proof, Unit
+from cashu.core.base import BlindedMessage, Proof, Unit
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.helpers import calculate_number_of_blank_outputs
-from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
+from cashu.core.models import PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest
@@ -219,11 +219,9 @@ async def test_generate_change_promises_returns_empty_if_no_outputs(ledger: Ledg
 @pytest.mark.asyncio
 async def test_get_balance(ledger: Ledger):
     unit = Unit["sat"]
-    active_keyset: MintKeyset = next(
-        filter(lambda k: k.active and k.unit == unit, ledger.keysets.values())
-    )
-    balance = await ledger.get_balance(active_keyset)
+    balance, fees_paid = await ledger.get_balance(unit)
     assert balance == 0
+    assert fees_paid == 0
 
 # DEPRECATED
 @pytest.mark.asyncio
@@ -266,4 +264,3 @@ async def test_max_sat_melt(ledger: Ledger):
         ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice_1002_sat)),
         "Cannot melt more than 1000 sat."
     )
-    

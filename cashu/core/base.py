@@ -1,4 +1,5 @@
 import base64
+import datetime
 import json
 import math
 import time
@@ -11,6 +12,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 import cbor2
 from loguru import logger
 from pydantic import BaseModel, root_validator
+from sqlalchemy import RowMapping
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
@@ -193,17 +195,26 @@ class Proof(BaseModel):
     @property
     def p2pksigs(self) -> List[str]:
         assert self.witness, "Witness is missing for p2pk signature"
-        return P2PKWitness.from_witness(self.witness).signatures
+        try:
+            return P2PKWitness.from_witness(self.witness).signatures
+        except Exception:
+            return []
 
     @property
     def htlcpreimage(self) -> str | None:
         assert self.witness, "Witness is missing for htlc preimage"
-        return HTLCWitness.from_witness(self.witness).preimage
+        try:
+            return HTLCWitness.from_witness(self.witness).preimage
+        except Exception:
+            return None
 
     @property
     def htlcsigs(self) -> List[str] | None:
         assert self.witness, "Witness is missing for htlc signatures"
-        return HTLCWitness.from_witness(self.witness).signatures
+        try:
+            return HTLCWitness.from_witness(self.witness).signatures
+        except Exception:
+            return None
 
 
 class Proofs(BaseModel):
@@ -219,12 +230,6 @@ class BlindedMessage(BaseModel):
     amount: int
     id: str  # Keyset id
     B_: str  # Hex-encoded blinded message
-    witness: Union[str, None] = None  # witnesses (used for P2PK with SIG_ALL)
-
-    @property
-    def p2pksigs(self) -> List[str]:
-        assert self.witness, "Witness missing in output"
-        return P2PKWitness.from_witness(self.witness).signatures
 
 
 class BlindedMessage_Deprecated(BaseModel):
@@ -337,9 +342,7 @@ class MeltQuote(LedgerEvent):
         )
 
     @classmethod
-    def from_resp_wallet(
-        cls, melt_quote_resp, mint: str, amount: int, unit: str, request: str
-    ):
+    def from_resp_wallet(cls, melt_quote_resp, mint: str, unit: str, request: str):
         # BEGIN: BACKWARDS COMPATIBILITY < 0.16.0: "paid" field to "state"
         if melt_quote_resp.state is None:
             if melt_quote_resp.paid is True:
@@ -350,10 +353,12 @@ class MeltQuote(LedgerEvent):
         return cls(
             quote=melt_quote_resp.quote,
             method="bolt11",
-            request=request,
+            request=melt_quote_resp.request
+            or request,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
             checking_id="",
-            unit=unit,
-            amount=amount,
+            unit=melt_quote_resp.unit
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            amount=melt_quote_resp.amount,
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
             mint=mint,
@@ -465,8 +470,10 @@ class MintQuote(LedgerEvent):
             method="bolt11",
             request=mint_quote_resp.request,
             checking_id="",
-            unit=unit,
-            amount=amount,
+            unit=mint_quote_resp.unit
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            amount=mint_quote_resp.amount
+            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
             state=MintQuoteState(mint_quote_resp.state),
             mint=mint,
             expiry=mint_quote_resp.expiry,
@@ -546,7 +553,7 @@ class Unit(Enum):
     btc = 4
     auth = 999
 
-    def str(self, amount: int) -> str:
+    def str(self, amount: int | float) -> str:
         if self == Unit.sat:
             return f"{amount} sat"
         elif self == Unit.msat:
@@ -625,6 +632,62 @@ class Amount:
 
     def __repr__(self):
         return self.unit.str(self.amount)
+
+    def __add__(self, other: "Amount | int") -> "Amount":
+        if isinstance(other, int):
+            return Amount(self.unit, self.amount + other)
+
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return Amount(self.unit, self.amount + other.amount)
+
+    def __sub__(self, other: "Amount | int") -> "Amount":
+        if isinstance(other, int):
+            return Amount(self.unit, self.amount - other)
+
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return Amount(self.unit, self.amount - other.amount)
+
+    def __mul__(self, other: int) -> "Amount":
+        return Amount(self.unit, self.amount * other)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, int):
+            return self.amount == other
+        if isinstance(other, Amount):
+            if self.unit != other.unit:
+                raise Exception("Units must be the same")
+            return self.amount == other.amount
+        return False
+
+    def __lt__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount < other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount < other.amount
+
+    def __le__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount <= other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount <= other.amount
+
+    def __gt__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount > other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount > other.amount
+
+    def __ge__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount >= other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount >= other.amount
 
 
 class Method(Enum):
@@ -731,6 +794,7 @@ class MintKeyset:
     first_seen: Optional[str] = None
     version: Optional[str] = None
     amounts: List[int]
+    balance: int
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -750,6 +814,8 @@ class MintKeyset:
         version: Optional[str] = None,
         input_fee_ppk: Optional[int] = None,
         id: str = "",
+        balance: int = 0,
+        fees_paid: int = 0,
     ):
         DEFAULT_SEED = "supersecretprivatekey"
         if seed == DEFAULT_SEED:
@@ -782,6 +848,8 @@ class MintKeyset:
         self.first_seen = first_seen
         self.active = bool(active) if active is not None else False
         self.version = version or settings.version
+        self.balance = balance
+        self.fees_paid = fees_paid
         self.input_fee_ppk = input_fee_ppk or 0
 
         if self.input_fee_ppk < 0:
@@ -830,11 +898,13 @@ class MintKeyset:
             valid_from=row["valid_from"],
             valid_to=row["valid_to"],
             first_seen=row["first_seen"],
-            active=row["active"],
+            active=bool(row["active"]),
             unit=row["unit"],
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],
             amounts=json.loads(row["amounts"]),
+            balance=row["balance"],
+            fees_paid=row["fees_paid"],
         )
 
     @property
@@ -1338,3 +1408,24 @@ class WalletMint(BaseModel):
     refresh_token: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = None
+
+
+class MintBalanceLogEntry(BaseModel):
+    unit: Unit
+    backend_balance: Amount
+    keyset_balance: Amount
+    keyset_fees_paid: Amount
+    time: datetime.datetime
+
+    @classmethod
+    def from_row(cls, row: RowMapping):
+        return cls(
+            unit=Unit[row["unit"]],
+            backend_balance=Amount(
+                Unit[row["unit"]],
+                row["backend_balance"],
+            ),
+            keyset_balance=Amount(Unit[row["unit"]], row["keyset_balance"]),
+            keyset_fees_paid=Amount(Unit[row["unit"]], row["keyset_fees_paid"]),
+            time=row["time"],
+        )
