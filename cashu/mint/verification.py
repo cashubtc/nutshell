@@ -33,36 +33,34 @@ from ..core.settings import settings
 from .conditions import LedgerSpendingConditions
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
+def get_mint_limits(self):
+    max_mint_map: Dict[Unit, Optional[Amount]] = {
+        Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_mint) if settings.mint_max_sat_mint is not None else None,
+        Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_mint) if settings.mint_max_msat_mint is not None else None,
+        Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_mint) if settings.mint_max_eur_mint is not None else None,
+        Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_mint) if settings.mint_max_usd_mint is not None else None,
+    }
+
+    max_melt_map: Dict[Unit, Optional[Amount]] = {
+        Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_melt) if settings.mint_max_sat_melt is not None else None,
+        Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_melt) if settings.mint_max_msat_melt is not None else None,
+        Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_melt) if settings.mint_max_eur_melt is not None else None,
+        Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_melt) if settings.mint_max_usd_melt is not None else None,
+    }
+
+    max_balance_map: Dict[Unit, Optional[Amount]] = {
+        Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_balance) if settings.mint_max_sat_balance is not None else None,
+        Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_balance) if settings.mint_max_msat_balance is not None else None,
+        Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_balance) if settings.mint_max_eur_balance is not None else None,
+        Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_balance) if settings.mint_max_usd_balance is not None else None,
+    }
+
+    return (max_mint_map, max_melt_map, max_balance_map)
+
 
 class LedgerVerification(
     LedgerSpendingConditions, SupportsKeysets, SupportsDb, SupportsBackends
 ):
-
-    @property
-    def limits(self):
-        max_mint_map: Dict[Unit, Optional[Amount]] = {
-            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_mint) if settings.mint_max_sat_mint is not None else None,
-            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_mint) if settings.mint_max_msat_mint is not None else None,
-            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_mint) if settings.mint_max_eur_mint is not None else None,
-            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_mint) if settings.mint_max_usd_mint is not None else None,
-        }
-
-        max_melt_map: Dict[Unit, Optional[Amount]] = {
-            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_melt) if settings.mint_max_sat_melt is not None else None,
-            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_melt) if settings.mint_max_msat_melt is not None else None,
-            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_melt) if settings.mint_max_eur_melt is not None else None,
-            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_melt) if settings.mint_max_usd_melt is not None else None,
-        }
-
-        max_balance_map: Dict[Unit, Optional[Amount]] = {
-            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_balance) if settings.mint_max_sat_balance is not None else None,
-            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_balance) if settings.mint_max_msat_balance is not None else None,
-            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_balance) if settings.mint_max_eur_balance is not None else None,
-            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_balance) if settings.mint_max_usd_balance is not None else None,
-        }
-
-        return (max_mint_map, max_melt_map, max_balance_map)
-
     """Verification functions for the ledger."""
 
     async def verify_inputs_and_outputs(
@@ -327,7 +325,7 @@ class LedgerVerification(
             return active_keyset.balance
 
         unit = amount.unit
-        (max_mint_map, _, max_balance_map) = self.limits
+        (max_mint_map, _, max_balance_map) = get_mint_limits()
 
         # Check max peg-in
         if (max_mint_map[unit]
@@ -361,7 +359,7 @@ class LedgerVerification(
     ) -> None:
 
         unit = amount.unit
-        (_, max_melt_map, _) = self.limits
+        (_, max_melt_map, _) = get_mint_limits()
 
         # Check max peg-out
         if (max_melt_map[unit]

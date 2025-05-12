@@ -27,6 +27,7 @@ from ..core.nuts.nuts import (
 )
 from ..core.settings import settings
 from ..mint.protocols import SupportsBackends, SupportsPubkey
+from ..mint.verification import get_mint_limits
 
 _VERSION_PREFIX = "Nutshell"
 _SUPPORTED = "supported"
@@ -77,22 +78,33 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         return mint_features
 
     def create_mint_features(self) -> Dict[int, Union[List[Any], Dict[str, Any]]]:
+        (max_mint_map, max_melt_map, _) = get_mint_limits()
         mint_method_settings: List[MintMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
                 mint_setting = MintMethodSetting(method=method.name, unit=unit.name)
+                if max_mint_map[unit]:
+                    mint_setting.max_amount = max_mint_map[unit].amount
+                    mint_setting.min_amount = 0
+                # --- DEPRECATED ---
                 if settings.mint_max_peg_in:
                     mint_setting.max_amount = settings.mint_max_peg_in
                     mint_setting.min_amount = 0
+                # --- END DEPRECATED ---
                 mint_method_settings.append(mint_setting)
                 mint_setting.description = unit_dict[unit].supports_description
         melt_method_settings: List[MeltMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
                 melt_setting = MeltMethodSetting(method=method.name, unit=unit.name)
+                if max_melt_map[unit]:
+                    melt_setting.max_amount = max_melt_map[unit].amount
+                    melt_setting.min_amount = 0
+                # --- DEPRECATED ---
                 if settings.mint_max_peg_out:
                     melt_setting.max_amount = settings.mint_max_peg_out
                     melt_setting.min_amount = 0
+                # --- END DEPRECATED ---
                 melt_method_settings.append(melt_setting)
 
         mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {
