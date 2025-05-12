@@ -31,25 +31,25 @@ from .middleware import add_middlewares, request_validation_exception_handler
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         await start_mint()
-        if settings.mint_require_auth:
-            await start_auth()
-        try:
-            yield
-        except asyncio.CancelledError:
-            # Handle the cancellation gracefully
-            logger.info("Shutdown process interrupted by CancelledError")
-        finally:
-            try:
-                await redis.disconnect()
-                await shutdown_mint()
-            except asyncio.CancelledError:
-                logger.info("CancelledError during shutdown, shutting down forcefully")
     except BackendConnectionError as e:
         logger.error(f"Failed to start mint: {e}")
         # We still need to yield to allow FastAPI to continue
         # but the app will return errors for all endpoints
         yield
         # We don't need to shut down anything as startup failed
+    if settings.mint_require_auth:
+        await start_auth()
+    try:
+        yield
+    except asyncio.CancelledError:
+        # Handle the cancellation gracefully
+        logger.info("Shutdown process interrupted by CancelledError")
+    finally:
+        try:
+            await redis.disconnect()
+            await shutdown_mint()
+        except asyncio.CancelledError:
+            logger.info("CancelledError during shutdown, shutting down forcefully")
 
 
 def create_app(config_object="core.settings") -> FastAPI:
@@ -99,11 +99,13 @@ async def catch_exceptions(request: Request, call_next):
                 content={
                     "detail": "Failed to connect to the Lightning backend. Please check your configuration or try again later.",
                     "code": e.code,
-                    "error": err_message
+                    "error": err_message,
                 },
                 headers=CORS_HEADERS,
             )
-        elif isinstance(e, CashuError) or (hasattr(e, 'args') and e.args and isinstance(e.args[0], CashuError)):
+        elif isinstance(e, CashuError) or (
+            hasattr(e, "args") and e.args and isinstance(e.args[0], CashuError)
+        ):
             logger.error(f"CashuError: {err_message}")
             code = e.code if isinstance(e, CashuError) else e.args[0].code
             # return with cors headers
