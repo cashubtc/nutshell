@@ -41,17 +41,17 @@ class LedgerVerification(
     @property
     def limits(self):
         max_peg_in_map: Dict[Unit, Optional[Amount]] = {
-            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_peg_in) if settings.mint_max_sat_peg_in is not None else None,
-            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_peg_in) if settings.mint_max_msat_peg_in is not None else None,
-            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_peg_in) if settings.mint_max_eur_peg_in is not None else None,
-            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_peg_in) if settings.mint_max_usd_peg_in is not None else None,
+            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_mint) if settings.mint_max_sat_mint is not None else None,
+            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_mint) if settings.mint_max_msat_mint is not None else None,
+            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_mint) if settings.mint_max_eur_mint is not None else None,
+            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_mint) if settings.mint_max_usd_mint is not None else None,
         }
 
         max_peg_out_map: Dict[Unit, Optional[Amount]] = {
-            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_peg_out) if settings.mint_max_sat_peg_out is not None else None,
-            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_peg_out) if settings.mint_max_msat_peg_out is not None else None,
-            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_peg_out) if settings.mint_max_eur_peg_out is not None else None,
-            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_peg_out) if settings.mint_max_usd_peg_out is not None else None,
+            Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_melt) if settings.mint_max_sat_melt is not None else None,
+            Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_melt) if settings.mint_max_msat_melt is not None else None,
+            Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_melt) if settings.mint_max_eur_melt is not None else None,
+            Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_melt) if settings.mint_max_usd_melt is not None else None,
         }
 
         max_balance_map: Dict[Unit, Optional[Amount]] = {
@@ -328,11 +328,11 @@ class LedgerVerification(
             return await self.crud.get_balance(active_keyset, self.db)
 
         unit = amount.unit
-        (max_peg_in_map, _, max_balance_map) = self.limits
+        (max_mint_map, _, max_balance_map) = self.limits
 
         # Check max peg-in
-        if (max_peg_in_map[unit]
-            and amount.amount > max_peg_in_map[unit].amount     # type: ignore
+        if (max_mint_map[unit]
+            and amount.amount > max_mint_map[unit].amount     # type: ignore
         ):
             raise NotAllowedError(f"Cannot mint more than {max_peg_in_map[unit]}.")
 
@@ -362,11 +362,11 @@ class LedgerVerification(
     ) -> None:
 
         unit = amount.unit
-        (_, max_peg_out_map, _) = self.limits
+        (_, max_melt_map, _) = self.limits
 
         # Check max peg-out
-        if (max_peg_out_map[unit]
-            and amount.amount > max_peg_out_map[unit].amount    # type: ignore
+        if (max_melt_map[unit]
+            and amount.amount > max_melt_map[unit].amount    # type: ignore
         ):
             raise NotAllowedError(f"Cannot melt more than {max_peg_out_map[unit]}.") # type: ignore
 

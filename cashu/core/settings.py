@@ -166,54 +166,54 @@ class MintLimits(MintSettings):
     )
 
     # Unit-specific maximum peg-in settings
-    mint_max_sat_peg_in: int = Field(
+    mint_max_sat_mint: int = Field(
         default=None,
         gt=0,
-        title="Maximum peg-in (sats)",
+        title="Maximum mint (sats)",
         description="Maximum amount for a mint operation in satoshis.",
     )
-    mint_max_msat_peg_in: int = Field(
+    mint_max_msat_mint: int = Field(
         default=None,
         gt=0,
-        title="Maximum peg-in (msats)",
+        title="Maximum mint (msats)",
         description="Maximum amount for a mint operation in millisatoshis.",
     )
-    mint_max_usd_peg_in: float = Field(
+    mint_max_usd_mint: float = Field(
         default=None,
         gt=0,
-        title="Maximum peg-in (USD)",
+        title="Maximum mint (USD)",
         description="Maximum amount for a mint operation in US dollars.",
     )
-    mint_max_eur_peg_in: float = Field(
+    mint_max_eur_mint: float = Field(
         default=None,
         gt=0,
-        title="Maximum peg-in (EUR)",
+        title="Maximum mint (EUR)",
         description="Maximum amount for a mint operation in Euros.",
     )
 
-    # Unit-specific maximum peg-out settings
-    mint_max_sat_peg_out: int = Field(
+    # Unit-specific maximum melt settings
+    mint_max_sat_melt: int = Field(
         default=None,
         gt=0,
-        title="Maximum peg-out (sats)",
+        title="Maximum melt (sats)",
         description="Maximum amount for a melt operation in satoshis.",
     )
-    mint_max_msat_peg_out: int = Field(
+    mint_max_msat_melt: int = Field(
         default=None,
         gt=0,
-        title="Maximum peg-out (msats)",
+        title="Maximum melt (msats)",
         description="Maximum amount for a melt operation in millisatoshis.",
     )
-    mint_max_usd_peg_out: float = Field(
+    mint_max_usd_melt: float = Field(
         default=None,
         gt=0,
-        title="Maximum peg-out (USD)",
+        title="Maximum melt (USD)",
         description="Maximum amount for a melt operation in US dollars.",
     )
-    mint_max_eur_peg_out: float = Field(
+    mint_max_eur_melt: float = Field(
         default=None,
         gt=0,
-        title="Maximum peg-out (EUR)",
+        title="Maximum melt (EUR)",
         description="Maximum amount for a melt operation in Euros.",
     )
 
