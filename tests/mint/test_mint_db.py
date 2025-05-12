@@ -50,13 +50,13 @@ async def test_mint_proofs_pending(wallet: Wallet, ledger: Ledger):
     proofs_states_before_split = await wallet.check_proof_state(proofs)
     assert all([s.unspent for s in proofs_states_before_split.states])
 
-    await ledger.db_write._verify_spent_proofs_and_set_pending(proofs)
+    await ledger.db_write._verify_spent_proofs_and_set_pending(proofs, ledger.keysets)
 
     proof_states = await wallet.check_proof_state(proofs)
     assert all([s.pending for s in proof_states.states])
     await assert_err(wallet.split(wallet.proofs, 20), "proofs are pending.")
 
-    await ledger.db_write._unset_proofs_pending(proofs)
+    await ledger.db_write._unset_proofs_pending(proofs, ledger.keysets)
 
     await wallet.split(proofs, 20)
 

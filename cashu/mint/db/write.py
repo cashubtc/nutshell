@@ -1,4 +1,4 @@
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from loguru import logger
 
@@ -6,6 +6,7 @@ from ...core.base import (
     BlindedMessage,
     MeltQuote,
     MeltQuoteState,
+    MintKeyset,
     MintQuote,
     MintQuoteState,
     Proof,
@@ -40,13 +41,17 @@ class DbWriteHelper:
         self.db_read = db_read
 
     async def _verify_spent_proofs_and_set_pending(
-        self, proofs: List[Proof], quote_id: Optional[str] = None
+        self,
+        proofs: List[Proof],
+        keysets: Dict[str, MintKeyset],
+        quote_id: Optional[str] = None,
     ) -> None:
         """
         Method to check if proofs are already spent. If they are not spent, we check if they are pending.
         If they are not pending, we set them as pending.
         Args:
             proofs (List[Proof]): Proofs to add to pending table.
+            keysets (Dict[str, MintKeyset]): Keysets of the mint (needed to update keyset balances)
             quote_id (Optional[str]): Melt quote ID. If it is not set, we assume the pending tokens to be from a swap.
         Raises:
             TransactionError: If any one of the proofs is already spent or pending.
@@ -67,6 +72,12 @@ class DbWriteHelper:
                     await self.crud.set_proof_pending(
                         proof=p, db=self.db, quote_id=quote_id, conn=conn
                     )
+                    await self.crud.bump_keyset_balance(
+                        db=self.db,
+                        keyset=keysets[p.id],
+                        amount=-p.amount,
+                        conn=conn,
+                    )
                     logger.trace(f"crud: set proof {p.Y} as PENDING")
             logger.trace("_verify_spent_proofs_and_set_pending released lock")
         except Exception as e:
@@ -75,20 +86,34 @@ class DbWriteHelper:
         for p in proofs:
             await self.events.submit(ProofState(Y=p.Y, state=ProofSpentState.pending))
 
-    async def _unset_proofs_pending(self, proofs: List[Proof], spent=True) -> None:
+    async def _unset_proofs_pending(
+        self,
+        proofs: List[Proof],
+        keysets: Dict[str, MintKeyset],
+        spent=True,
+        conn: Optional[Connection] = None,
+    ) -> None:
         """Deletes proofs from pending table.
 
         Args:
             proofs (List[Proof]): Proofs to delete.
+            keysets (Dict[str, MintKeyset]): Keysets of the mint (needed to update keyset balances)
             spent (bool): Whether the proofs have been spent or not. Defaults to True.
                 This should be False if the proofs were NOT invalidated before calling this function.
                 It is used to emit the unspent state for the proofs (otherwise the spent state is emitted
                 by the _invalidate_proofs function when the proofs are spent).
+            conn (Optional[Connection]): Connection to use. If not set, a new connection will be created.
         """
-        async with self.db.get_connection() as conn:
+        async with self.db.get_connection(conn) as conn:
             for p in proofs:
                 logger.trace(f"crud: un-setting proof {p.Y} as PENDING")
                 await self.crud.unset_proof_pending(proof=p, db=self.db, conn=conn)
+                await self.crud.bump_keyset_balance(
+                    db=self.db,
+                    keyset=keysets[p.id],
+                    amount=p.amount,
+                    conn=conn,
+                )
 
         if not spent:
             for p in proofs:

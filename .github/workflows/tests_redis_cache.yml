@@ -40,7 +40,7 @@ jobs:
 
       - name: Start Redis service
         run: |
-          docker compose -f docker/docker-compose.yml up -d redis
+          docker compose -f docker/redis/docker-compose.yml up -d redis
 
       - name: Run tests
         env:
@@ -53,11 +53,11 @@ jobs:
           MINT_REDIS_CACHE_ENABLED: true
           MINT_REDIS_CACHE_URL: redis://localhost:6379
         run: |
-          poetry run pytest tests/test_mint_api_cache.py -v --cov=mint --cov-report=xml
+          poetry run pytest tests/mint/test_mint_api_cache.py -v --cov=mint --cov-report=xml
 
       - name: Stop and clean up Docker Compose
         run: |
-          docker compose -f docker/docker-compose.yml down
+          docker compose -f docker/redis/docker-compose.yml down
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3

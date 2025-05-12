@@ -11,7 +11,6 @@ from .protocols import SupportsDb, SupportsKeysets, SupportsSeed
 
 
 class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
-    
     # ------- KEYS -------
 
     def maybe_update_derivation_path(self, derivation_path: str) -> str:
@@ -20,12 +19,14 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         upon initialization. The superseding derivation must have a greater count (last portion of the derivation path).
         If this condition is true, update `self.derivation_path` to match the highest count derivation.
         """
-        derivation: List[str] = derivation_path.split("/") # type: ignore
+        derivation: List[str] = derivation_path.split("/")  # type: ignore
         counter = int(derivation[-1].replace("'", ""))
         for keyset in self.keysets.values():
             if keyset.active:
                 keyset_derivation_path = keyset.derivation_path.split("/")
-                keyset_derivation_counter = int(keyset_derivation_path[-1].replace("'", ""))
+                keyset_derivation_counter = int(
+                    keyset_derivation_path[-1].replace("'", "")
+                )
                 if (
                     keyset_derivation_path[:-1] == derivation[:-1]
                     and keyset_derivation_counter > counter
@@ -46,7 +47,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             3. creates a new active keyset for the new derivation path
             4. de-activates the old keyset
             5. stores the new keyset to DB
-        
+
         Args:
             unit (Unit): Unit of the keyset.
             max_order (Optional[int], optional): The number of keys to generate, which correspond to powers of 2.
@@ -63,21 +64,29 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         for keyset in self.keysets.values():
             if keyset.active and keyset.unit == unit:
                 keyset_derivation_path = keyset.derivation_path.split("/")
-                keyset_derivation_counter = int(keyset_derivation_path[-1].replace("'", ""))
+                keyset_derivation_counter = int(
+                    keyset_derivation_path[-1].replace("'", "")
+                )
                 if keyset_derivation_counter > selected_keyset_counter:
                     selected_keyset = keyset
 
         # If no selected keyset, then there is no keyset for this unit
         if not selected_keyset:
-            logger.error(f"Couldn't find suitable keyset for rotation with unit {str(unit)}")
-            raise Exception(f"Couldn't find suitable keyset for rotation with unit {str(unit)}")
+            logger.error(
+                f"Couldn't find suitable keyset for rotation with unit {str(unit)}"
+            )
+            raise Exception(
+                f"Couldn't find suitable keyset for rotation with unit {str(unit)}"
+            )
 
         logger.info(f"Rotating keyset {selected_keyset.id}")
 
         # New derivation path is just old derivation path with increased counter
         new_derivation_path = selected_keyset.derivation_path.split("/")
-        new_derivation_path[-1] = str(int(new_derivation_path[-1].replace("'", "")) + 1) + "'"
-        
+        new_derivation_path[-1] = (
+            str(int(new_derivation_path[-1].replace("'", "")) + 1) + "'"
+        )
+
         # keys amounts for this keyset: if amounts is None we use `self.amounts`
         amounts = [2**i for i in range(max_order)] if max_order else self.amounts
 
@@ -192,7 +201,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         # Check if any of the loaded keysets marked as active
         # do supersede the one specified in the derivation settings.
         # If this is the case update to latest count derivation.
-        self.derivation_path = self.maybe_update_derivation_path(self.derivation_path) # type: ignore
+        self.derivation_path = self.maybe_update_derivation_path(self.derivation_path)  # type: ignore
 
         # activate the current keyset set by self.derivation_path
         # and self.derivation_path is not superseded by any other

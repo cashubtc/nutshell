@@ -1,4 +1,5 @@
 import base64
+import datetime
 import json
 import math
 import time
@@ -11,6 +12,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 import cbor2
 from loguru import logger
 from pydantic import BaseModel, root_validator
+from sqlalchemy import RowMapping
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
@@ -551,7 +553,7 @@ class Unit(Enum):
     btc = 4
     auth = 999
 
-    def str(self, amount: int) -> str:
+    def str(self, amount: int | float) -> str:
         if self == Unit.sat:
             return f"{amount} sat"
         elif self == Unit.msat:
@@ -630,6 +632,62 @@ class Amount:
 
     def __repr__(self):
         return self.unit.str(self.amount)
+
+    def __add__(self, other: "Amount | int") -> "Amount":
+        if isinstance(other, int):
+            return Amount(self.unit, self.amount + other)
+
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return Amount(self.unit, self.amount + other.amount)
+
+    def __sub__(self, other: "Amount | int") -> "Amount":
+        if isinstance(other, int):
+            return Amount(self.unit, self.amount - other)
+
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return Amount(self.unit, self.amount - other.amount)
+
+    def __mul__(self, other: int) -> "Amount":
+        return Amount(self.unit, self.amount * other)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, int):
+            return self.amount == other
+        if isinstance(other, Amount):
+            if self.unit != other.unit:
+                raise Exception("Units must be the same")
+            return self.amount == other.amount
+        return False
+
+    def __lt__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount < other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount < other.amount
+
+    def __le__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount <= other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount <= other.amount
+
+    def __gt__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount > other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount > other.amount
+
+    def __ge__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount >= other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount >= other.amount
 
 
 class Method(Enum):
@@ -736,6 +794,7 @@ class MintKeyset:
     first_seen: Optional[str] = None
     version: Optional[str] = None
     amounts: List[int]
+    balance: int
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -755,6 +814,8 @@ class MintKeyset:
         version: Optional[str] = None,
         input_fee_ppk: Optional[int] = None,
         id: str = "",
+        balance: int = 0,
+        fees_paid: int = 0,
     ):
         DEFAULT_SEED = "supersecretprivatekey"
         if seed == DEFAULT_SEED:
@@ -787,6 +848,8 @@ class MintKeyset:
         self.first_seen = first_seen
         self.active = bool(active) if active is not None else False
         self.version = version or settings.version
+        self.balance = balance
+        self.fees_paid = fees_paid
         self.input_fee_ppk = input_fee_ppk or 0
 
         if self.input_fee_ppk < 0:
@@ -840,6 +903,8 @@ class MintKeyset:
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],
             amounts=json.loads(row["amounts"]),
+            balance=row["balance"],
+            fees_paid=row["fees_paid"],
         )
 
     @property
@@ -1343,3 +1408,24 @@ class WalletMint(BaseModel):
     refresh_token: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = None
+
+
+class MintBalanceLogEntry(BaseModel):
+    unit: Unit
+    backend_balance: Amount
+    keyset_balance: Amount
+    keyset_fees_paid: Amount
+    time: datetime.datetime
+
+    @classmethod
+    def from_row(cls, row: RowMapping):
+        return cls(
+            unit=Unit[row["unit"]],
+            backend_balance=Amount(
+                Unit[row["unit"]],
+                row["backend_balance"],
+            ),
+            keyset_balance=Amount(Unit[row["unit"]], row["keyset_balance"]),
+            keyset_fees_paid=Amount(Unit[row["unit"]], row["keyset_fees_paid"]),
+            time=row["time"],
+        )

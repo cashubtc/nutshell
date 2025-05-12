@@ -90,7 +90,7 @@ class BlinkWallet(LightningBackend):
             logger.error(f"Blink API error: {exc}")
             return StatusResponse(
                 error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
 
         try:
@@ -100,7 +100,7 @@ class BlinkWallet(LightningBackend):
                 error_message=(
                     f"Received invalid response from {self.endpoint}: {r.text}"
                 ),
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
 
         balance = 0
@@ -113,7 +113,7 @@ class BlinkWallet(LightningBackend):
                 self.wallet_ids[Unit.sat] = wallet_dict["id"]  # type: ignore
                 balance = wallet_dict["balance"]  # type: ignore
 
-        return StatusResponse(error_message=None, balance=balance)
+        return StatusResponse(error_message=None, balance=Amount(self.unit, balance))
 
     async def create_invoice(
         self,
