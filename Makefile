@@ -27,6 +27,16 @@ test:
 	DEBUG=true \
 	poetry run pytest tests --cov-report xml --cov cashu
 
+test-wallet:
+	PYTHONUNBUFFERED=1 \
+	DEBUG=true \
+	poetry run pytest tests/wallet --cov-report xml --cov cashu
+
+test-mint:
+	PYTHONUNBUFFERED=1 \
+	DEBUG=true \
+	poetry run pytest tests/mint --cov-report xml --cov cashu
+
 test-lndrest:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \
@@ -61,3 +71,6 @@ docker-build:
 	cd docker-build
 	docker buildx build -f Dockerfile -t cashubtc/nutshell:0.15.0 --platform linux/amd64 .
 	# docker push cashubtc/nutshell:0.15.0
+
+clear-postgres:
+	psql cashu -c "DROP SCHEMA public CASCADE;" -c "CREATE SCHEMA public;" -c "GRANT ALL PRIVILEGES ON SCHEMA public TO cashu;"

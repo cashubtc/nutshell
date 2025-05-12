@@ -23,7 +23,7 @@ from ..helpers import (
 async def print_balance(ctx: Context):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_proofs(reload=True)
-    print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
+    print(f"Balance: {wallet.available_balance}")
 
 
 async def get_unit_wallet(ctx: Context, force_select: bool = False):

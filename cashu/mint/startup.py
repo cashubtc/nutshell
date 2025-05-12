@@ -81,7 +81,7 @@ ledger = Ledger(
 
 # start auth ledger
 auth_ledger = AuthLedger(
-    db=Database("auth", settings.auth_database),
+    db=Database("auth", settings.mint_auth_database),
     seed="auth seed here",
     amounts=[1],
     derivation_path="m/0'/999'/0'",
@@ -129,7 +129,7 @@ async def start_mint():
         # Wrap other exceptions in BackendConnectionError for consistent handling
         raise BackendConnectionError(
             backend_name="Unknown",
-            error_message=f"Unexpected error during mint startup: {str(e)}"
+            error_message=f"Unexpected error during mint startup: {str(e)}",
         )
 
 
