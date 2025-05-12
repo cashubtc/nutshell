@@ -332,7 +332,7 @@ class Ledger(
         )
 
         # Check peg-in and max balance limits
-        await self._verify_mint_limits(Amount(unit=unit, amount=quote_request.amount))
+        self._verify_mint_limits(Amount(unit=unit, amount=quote_request.amount))
 
         if (
             quote_request.description

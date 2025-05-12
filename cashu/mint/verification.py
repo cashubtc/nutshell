@@ -315,16 +315,16 @@ class LedgerVerification(
             return False
         return nut20.verify_mint_quote(quote.quote, outputs, quote.pubkey, signature)
 
-    async def _verify_mint_limits(
+    def _verify_mint_limits(
         self,
         amount: Amount,
     ) -> None:
 
-        async def get_active_unit_balance(unit: Unit):
+        def get_active_unit_balance(unit: Unit):
             active_keyset: MintKeyset = next(
                 filter(lambda k: k.active and k.unit == unit, self.keysets.values())
             )
-            return await self.crud.get_balance(active_keyset, self.db)
+            return active_keyset.balance
 
         unit = amount.unit
         (max_mint_map, _, max_balance_map) = self.limits
@@ -337,7 +337,7 @@ class LedgerVerification(
 
         # Check max balance
         if max_balance_map[unit]:
-            balance_unit = await get_active_unit_balance(unit=unit)
+            balance_unit = get_active_unit_balance(unit=unit)
             if amount.amount + balance_unit > max_balance_map[unit].amount:     # type: ignore
                 raise NotAllowedError("Mint has reached maximum balance.")
             
@@ -349,7 +349,7 @@ class LedgerVerification(
         
         if settings.mint_max_balance and unit == Unit.sat:
             logger.warning("Mint is using DEPRECATED limits settings")
-            balance_sat = await get_active_unit_balance(unit=unit)
+            balance_sat = get_active_unit_balance(unit=unit)
             if amount.amount + balance_sat > settings.mint_max_balance:
                 raise NotAllowedError("Mint has reached maximum balance.")
         # --- END DEPRECATED ---
