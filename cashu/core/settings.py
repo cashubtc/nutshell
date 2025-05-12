@@ -165,7 +165,21 @@ class MintLimits(MintSettings):
         description="Maximum mint balance in Euros.",
     )
 
-    # Unit-specific maximum peg-in settings
+    # DEPRECATED v0.16.5
+    mint_max_peg_in: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-in",
+        description="Maximum amount for a mint operation.",
+    )
+    # DEPRECATED v0.16.5
+    mint_max_peg_out: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum peg-out",
+        description="Maximum amount for a melt operation.",
+    )
+    # Unit-specific maximum mint settings
     mint_max_sat_mint: int = Field(
         default=None,
         gt=0,

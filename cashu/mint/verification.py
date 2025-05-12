@@ -40,14 +40,14 @@ class LedgerVerification(
 
     @property
     def limits(self):
-        max_peg_in_map: Dict[Unit, Optional[Amount]] = {
+        max_mint_map: Dict[Unit, Optional[Amount]] = {
             Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_mint) if settings.mint_max_sat_mint is not None else None,
             Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_mint) if settings.mint_max_msat_mint is not None else None,
             Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_mint) if settings.mint_max_eur_mint is not None else None,
             Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_mint) if settings.mint_max_usd_mint is not None else None,
         }
 
-        max_peg_out_map: Dict[Unit, Optional[Amount]] = {
+        max_melt_map: Dict[Unit, Optional[Amount]] = {
             Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_melt) if settings.mint_max_sat_melt is not None else None,
             Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_melt) if settings.mint_max_msat_melt is not None else None,
             Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_melt) if settings.mint_max_eur_melt is not None else None,
@@ -61,7 +61,7 @@ class LedgerVerification(
             Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_balance) if settings.mint_max_usd_balance is not None else None,
         }
 
-        return (max_peg_in_map, max_peg_out_map, max_balance_map)
+        return (max_mint_map, max_melt_map, max_balance_map)
 
     """Verification functions for the ledger."""
 
