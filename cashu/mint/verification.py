@@ -334,7 +334,7 @@ class LedgerVerification(
         if (max_mint_map[unit]
             and amount.amount > max_mint_map[unit].amount     # type: ignore
         ):
-            raise NotAllowedError(f"Cannot mint more than {max_peg_in_map[unit]}.")
+            raise NotAllowedError(f"Cannot mint more than {max_mint_map[unit]}.")
 
         # Check max balance
         if max_balance_map[unit]:
@@ -368,7 +368,7 @@ class LedgerVerification(
         if (max_melt_map[unit]
             and amount.amount > max_melt_map[unit].amount    # type: ignore
         ):
-            raise NotAllowedError(f"Cannot melt more than {max_peg_out_map[unit]}.") # type: ignore
+            raise NotAllowedError(f"Cannot melt more than {max_melt_map[unit]}.") # type: ignore
 
         # --- DEPRECATED ---
         if settings.mint_max_peg_out and unit == Unit.sat:
