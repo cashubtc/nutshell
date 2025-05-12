@@ -33,7 +33,8 @@ from ..core.settings import settings
 from .conditions import LedgerSpendingConditions
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
-def get_mint_limits(self):
+
+def get_mint_limits():
     max_mint_map: Dict[Unit, Optional[Amount]] = {
         Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_mint) if settings.mint_max_sat_mint is not None else None,
         Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_mint) if settings.mint_max_msat_mint is not None else None,
