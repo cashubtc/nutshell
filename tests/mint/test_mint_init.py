@@ -6,7 +6,7 @@ import bolt11
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, Method, Proof, Unit
+from cashu.core.base import Amount, MeltQuote, MeltQuoteState, Method, Proof, Unit
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
 from cashu.core.errors import BackendConnectionError
@@ -538,7 +538,7 @@ async def test_backend_connection_error():
     # Create a mock backend that raises an error during status check
     mock_backend = AsyncMock()
     mock_backend.status.return_value = StatusResponse(
-        error_message="Connection refused", balance=None
+        error_message="Connection refused", balance=Amount(Unit.sat, 0)
     )
 
     # Create a mock ledger with the mock backend
