@@ -248,8 +248,8 @@ async def test_maximum_sat_balance(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_max_sat_peg_in(ledger: Ledger):
-    settings.mint_max_sat_peg_in = 1000
+async def test_max_sat_mint(ledger: Ledger):
+    settings.mint_max_sat_mint = 1000
     await ledger.mint_quote(PostMintQuoteRequest(amount=8, unit="sat"))
     await assert_err(
         ledger.mint_quote(PostMintQuoteRequest(amount=8000, unit="sat")),
@@ -257,10 +257,10 @@ async def test_max_sat_peg_in(ledger: Ledger):
     )
 
 @pytest.mark.asyncio
-async def test_max_sat_peg_out(ledger: Ledger):
+async def test_max_sat_melt(ledger: Ledger):
     invoice_62_sat = "lnbcrt620n1p5pmdgypp5dxr77s7xg5myutwj38gu872vcrva9r5j9setqxkl0f6n4cpd7c9qdqqcqzzsxqyz5vqsp5uqshlwcesv65s8q3xk5emd46ndfjdaj2u6sm034w63juc9le8ars9qxpqysgqfleuv7zdtvp0qm7xvhpl47u0epcrje9sxp53n48d2cak8avj9qaqs093nqlfg5gfeqlmmwwxc09d8flf2lqqlgja82a66zjc5472zvcpmdrq5w"
     invoice_1002_sat = "lnbcrt10020n1p5pmddnpp57nam0w72dhc9c7edda29dxhdwqzj6ej6ge7ax95cegqj6wpwlu6qdqqcqzzsxqyz5vqsp594rnh7qczeu70q83ely9ycx2z65key0urpr3unfmd23he24l0vfq9qxpqysgqe2v0lmlnx0mmcyt7qsx858yzvfh5vdppgdmx27rkenrygsksxlsjm5z8mcjpu9z6a33qtg68u64frjy2y8zrwxe4hl7u0p66uyzmxhgptmc9h9"
-    settings.mint_max_sat_peg_out = 1000
+    settings.mint_max_sat_melt = 1000
     await ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice_62_sat))
     await assert_err(
         ledger.melt_quote(PostMeltQuoteRequest(unit="sat", request=invoice_1002_sat)),
