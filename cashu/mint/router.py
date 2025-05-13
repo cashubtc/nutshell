@@ -158,7 +158,7 @@ async def get_filter(keyset_id: str) -> GetFilterResponse:
     """
     logger.trace(f"> GET /v1/filter/{keyset_id}")
     filter_response = await ledger.get_filter_by_keyset(keyset_id)
-    logger.trace(f"< GET /v1/filter/{keyset_id}: {filter_response}")
+    logger.trace(f"< GET /v1/filter/{keyset_id}")
     return filter_response
 
 @router.post(
