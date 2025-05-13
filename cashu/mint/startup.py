@@ -96,11 +96,35 @@ async def rotate_keys(n_seconds=60):
     while True:
         i += 1
         logger.info("Rotating keys.")
-        incremented_derivation_path = (
-            f"{'/'.join(ledger.derivation_path.split('/')[:-1])}/{i}"
+        latest_derivation_path = ledger.maybe_update_derivation_path(
+            ledger.derivation_path
         )
-        await ledger.activate_keyset(derivation_path=incremented_derivation_path)
+        incremented_derivation_path = (
+            f"{'/'.join(latest_derivation_path.split('/')[:-1])}/{i}"
+        )
+        ledger.keyset = await ledger.activate_keyset(
+            derivation_path=incremented_derivation_path
+        )
+        ledger.derivation_path = incremented_derivation_path
         logger.info(f"Current keyset: {ledger.keyset.id}")
+        # choose the ledger.keyset with keyset.derivation_path == latest_derivation_path using next()
+        inactive_keyset = next(
+            (
+                keyset
+                for keyset in ledger.keysets.values()
+                if keyset.derivation_path == latest_derivation_path
+            ),
+            None,
+        )
+        if inactive_keyset:
+            inactive_keyset.active = False
+            logger.info(f"Deactivating keyset: {inactive_keyset.id}")
+            await ledger.crud.update_keyset(keyset=inactive_keyset, db=ledger.db)
+            ledger.keysets[inactive_keyset.id] = inactive_keyset
+        else:
+            logger.warning(
+                f"Keyset with derivation path {latest_derivation_path} not found."
+            )
         await asyncio.sleep(n_seconds)
 
 
@@ -117,7 +141,7 @@ async def start_mint():
     logger.info("Starting mint ledger.")
     await ledger.startup_ledger()
     logger.info("Mint started.")
-    # asyncio.create_task(rotate_keys())
+    asyncio.create_task(rotate_keys())
 
 
 async def shutdown_mint():
