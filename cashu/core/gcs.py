@@ -33,7 +33,7 @@ def golomb_encode(stream: bitarray, x: int, P: int) -> None:
 
     # Append the remainder in binary coding
     for i in range(P):
-        stream.append(int((r >> (P-1-i)) & 1))
+        stream.append((r >> (P-1-i)) & 1)
 
 # Decodes the first occurrence of a delta hash in `stream` starting from `offset`.
 # Returns the decoded delta and the new offset.
