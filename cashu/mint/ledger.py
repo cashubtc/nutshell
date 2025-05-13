@@ -1155,7 +1155,7 @@ class Ledger(
             return signatures
 
 
-    async def get_filter_by_keyset(self, keyset_id: str) -> GetFilterResponse:
+    async def get_spent_filter_by_keyset(self, keyset_id: str) -> GetFilterResponse:
         """Generates a Golomb-Coded Set filter for the given keyset id.
         Args:
             keyset_id (str): The keyset id to generate the filter for.
