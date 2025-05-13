@@ -171,8 +171,6 @@ class GCSFilter:
         input_stream = bitarray()
         input_stream.frombytes(compressed_set)
 
-        print(input_stream)
-
         value = 0
         offset = 0
         for i in range(n):
@@ -199,8 +197,6 @@ gcs_filter = GCSFilter.create(items)
 
 # Test set membership
 results = GCSFilter.match_many(gcs_filter, items, num_items)
-
-print(results.values())
 
 # Assert all items are found in the filter
 assert all(results.values()), "Not all items were found in the GCS filter"
