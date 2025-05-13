@@ -2211,6 +2211,52 @@ test = ["build[virtualenv] (>=1.0.3)", "filelock (>=3.4.0)", "ini2toml[lite] (>=
 type = ["importlib_metadata (>=7.0.2) ; python_version < \"3.10\"", "jaraco.develop (>=7.21) ; sys_platform != \"cygwin\"", "mypy (==1.14.*)", "pytest-mypy"]
 
 [[package]]
+name = "siphash24"
+version = "1.7"
+description = "Streaming-capable SipHash-1-3 and SipHash-2-4 Implementation"
+optional = false
+python-versions = ">=3.7"
+groups = ["main"]
+files = [
+    {file = "siphash24-1.7-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:ac574867427640d531e7d034e974986ca3ab612699d7c989757e411ef75ec13a"},
+    {file = "siphash24-1.7-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:69f50254c7aa6e4c749b7003d70a146e4d24dffa8393a54d288862944b180c83"},
+    {file = "siphash24-1.7-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:5cd17d38233a7a1db1f9e8e5043b6035ed1000477ceda30dc3d1a6c5d13e92ed"},
+    {file = "siphash24-1.7-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:db372dc1b242f7fa08c42cdf4e5257a9ac416e6ad42c6d7ee96862be36f59f1b"},
+    {file = "siphash24-1.7-cp310-cp310-win32.whl", hash = "sha256:e72b218d949e954b4e4bae6d8b58fa687ba81f844c9ff5edaef1a3facafc6b46"},
+    {file = "siphash24-1.7-cp310-cp310-win_amd64.whl", hash = "sha256:b6cadb06d4a4d305ff8c5f95cab03ed611ae19fe292c77371ee8b852f6075458"},
+    {file = "siphash24-1.7-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:de75488e93f1cd12c8d5004efd1ebd958c0265205a9d73e8dd8b071900838841"},
+    {file = "siphash24-1.7-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:ffca9908450f9f346e97a223185fcd16217d67d84c6f246f3080c4224f41a514"},
+    {file = "siphash24-1.7-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b8ff44ce166452993fea267ea1b2fd089d8e7f103b13d360da441f12b0df121d"},
+    {file = "siphash24-1.7-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4062548dcb1eef13bbe0356d6f8675bfe4571ef38d7103445daa82ba167240d1"},
+    {file = "siphash24-1.7-cp311-cp311-win32.whl", hash = "sha256:7b4ea29376b688fbcc3d25707c15a9dfe7b4ebbc4322878d75bb77e199210a39"},
+    {file = "siphash24-1.7-cp311-cp311-win_amd64.whl", hash = "sha256:ec06104e6ef1e512ee30f1b8aeae2b83c0f55f12a94042f0df5a87d43a1f4c52"},
+    {file = "siphash24-1.7-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:76a64ff0cdd192e4d0a391956d9b121c56ed56e773c5ab7eb7c3e035fd16e8cb"},
+    {file = "siphash24-1.7-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:49ca649bc7437d614f758891deade3b187832792a853269219e77f10509f82fe"},
+    {file = "siphash24-1.7-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:bc37dd0aed23f76bd257fbd2953fd5d954b329d7463c6ff57263a2699c52dde6"},
+    {file = "siphash24-1.7-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:eea490a200891905856b6ad0f9c56d4ec787876220bcb34c49441b2566b97887"},
+    {file = "siphash24-1.7-cp312-cp312-win32.whl", hash = "sha256:69eb8c2c112a738875bb283cd53ef5e86874bc5aed17f3020b38e9174208fb79"},
+    {file = "siphash24-1.7-cp312-cp312-win_amd64.whl", hash = "sha256:7459569ea4669b6feeaf7d299fc5157cc5c69ca1231dc0decb7a7da2397c782e"},
+    {file = "siphash24-1.7-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:cc3fc35f56e472380549880e4c8b699b95932fc4517806748634eb3db5e55f06"},
+    {file = "siphash24-1.7-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:0ab640f5b9c5502170ac303abc3219ba6357d72d790278dd7d1e19e1da4de7ad"},
+    {file = "siphash24-1.7-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:274bb60e52447f4b8072d7214fa52862d5441f04f3e5f764ef26afc4ce4315bb"},
+    {file = "siphash24-1.7-cp37-cp37m-win32.whl", hash = "sha256:8b1e08115097213708d14e951bb1714173574771e61a6855c4757e1b9158a1b1"},
+    {file = "siphash24-1.7-cp37-cp37m-win_amd64.whl", hash = "sha256:d3d4d14ca9c05b470fba8147765e14af953e7956b7da54a0bc1bd5f7c666d1c2"},
+    {file = "siphash24-1.7-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:bc21a7fffb9959a8163dd46f611e07d45c35c7a9fa04c2f37e3e196452769497"},
+    {file = "siphash24-1.7-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:1c861b3c4f41b1b82f2db35d44d45ba84fca4b6452b20922a175e77748410c64"},
+    {file = "siphash24-1.7-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:01694d69a27cecdc0ebbedbf4592b9f084f6a3259d163b929ce1f7a6c9080dca"},
+    {file = "siphash24-1.7-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:550f7582239258ef6743a4033ea6c6407f572860d360f7220a48ee4434ebfe94"},
+    {file = "siphash24-1.7-cp38-cp38-win32.whl", hash = "sha256:68d23947604db79ebde177a7706012d3f66e5892c27d0d4f172e9f8f93c70275"},
+    {file = "siphash24-1.7-cp38-cp38-win_amd64.whl", hash = "sha256:43161acef3dbdff667f59290173554f9785cb4838646058a23b2231c1f5cab58"},
+    {file = "siphash24-1.7-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:a84b83c267c16da04ca20266430f4ee8df142eb49e8ff63154a298c1446f3e1e"},
+    {file = "siphash24-1.7-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:261788a9fd0b89a2761c395f0e0a261112d30699fe80750d7917429bc6954735"},
+    {file = "siphash24-1.7-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b6abbda084a5f6ea448fb03cd08354dd88b4ec850762f05f8a29a3283df092f1"},
+    {file = "siphash24-1.7-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:c750c14c2215b6aeb21b7708b48233c56a919708a1548ee383df4dabb8f6be06"},
+    {file = "siphash24-1.7-cp39-cp39-win32.whl", hash = "sha256:2d1e4b91520af38c58871185260f200bd9fd14935571ec82e894897837c2904f"},
+    {file = "siphash24-1.7-cp39-cp39-win_amd64.whl", hash = "sha256:838c3a47c1a362fc07be76f04fd29faa9d0d147a137b72409ef0f2d6e005345b"},
+    {file = "siphash24-1.7.tar.gz", hash = "sha256:6e90fee5f199ea25b4e7303646b31872a437174fe885a93dbd4cf7784eb48164"},
+]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 description = "Python 2 and 3 compatibility utilities"
@@ -2900,4 +2946,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "2e6c5b764a37b5f5353004dc3a8e63ec7c6903c52e02269ac516ccb72e44a1a8"
+content-hash = "a4c1890e61fa97a99b33f34265a8de1d4c6c83d34238f587d53865b244bf08d3"

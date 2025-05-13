@@ -1,5 +1,4 @@
-
-from hashlib import md5
+from siphash24 import siphash24
 from typing import Dict, List, Tuple
 
 from bitarray import bitarray
@@ -7,7 +6,7 @@ from bitarray import bitarray
 
 def hash_to_range(item: bytes, f: int, key: bytes) -> int:
     """
-    Hashes an item to a range using a key and rejection sampling.
+    Hashes an item to a range using SipHash.
 
     Args:
         item (bytes): The item to hash.
@@ -17,9 +16,7 @@ def hash_to_range(item: bytes, f: int, key: bytes) -> int:
     Returns:
         int: The hashed value within the specified range.
     """
-    result = (f * int.from_bytes(md5(key + item).digest()[:8], 'big')) >> 64
-    assert result < f
-    return result
+    return (f * int.from_bytes(siphash24(item, key=key).digest(), 'big')) >> 64
 
 def create_hashed_set(items: List[bytes], key: bytes, m: int) -> List[int]:
     """
@@ -99,7 +96,7 @@ class GCSFilter:
         items: List[bytes],
         p: int = 19,
         m: int = 784931,
-        key: bytes = b'\x00\x00\x00\x00'
+        key: bytes = 16 * b'\x00'
     ) -> bytes:
         """
         Turns a list of entries into a Golomb-Coded Set of hashes.
