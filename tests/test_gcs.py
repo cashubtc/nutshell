@@ -1,6 +1,7 @@
 import os
-import random
+
 from cashu.core.gcs import GCSFilter
+
 
 def test_gcs_filter():
     # Generate random data for testing

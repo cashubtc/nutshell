@@ -1,7 +1,9 @@
 
-from bitarray import bitarray
 from hashlib import md5
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
+
+from bitarray import bitarray
+
 
 def hash_to_range(item: bytes, f: int, key: bytes) -> int:
     """
@@ -46,7 +48,7 @@ def golomb_encode(stream: bitarray, x: int, P: int) -> None:
         x (int): The value to encode.
         P (int): The number of bits for the remainder.
     """
-    assert x > 0
+    assert x >= 0
 
     q = x >> P
     r = x & (2**P - 1)
@@ -186,15 +188,16 @@ class GCSFilter:
 
 '''
 import os
-import random
 
 # Generate random data for testing
-num_items = 100
+num_items = 1000000
 item_size = 33  # 33 bytes
 items = [os.urandom(item_size) for _ in range(num_items)]
 
 # Create a GCS filter
 gcs_filter = GCSFilter.create(items)
+
+print(f"{num_items = }, {item_size = }, {len(gcs_filter) = }")
 
 # Test set membership
 results = GCSFilter.match_many(gcs_filter, items, num_items)
