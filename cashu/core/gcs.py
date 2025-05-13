@@ -4,6 +4,17 @@ from hashlib import md5
 from typing import List, Tuple
 
 def hash_to_range(item: bytes, f: int, key: bytes) -> int:
+    """
+    Hashes an item to a range using a key and rejection sampling.
+
+    Args:
+        item (bytes): The item to hash.
+        f (int): The maximum range value.
+        key (bytes): The key used for hashing.
+
+    Returns:
+        int: The hashed value within the specified range.
+    """
     # Rejection sampling
     i = 0
     result = f+1
@@ -13,6 +24,17 @@ def hash_to_range(item: bytes, f: int, key: bytes) -> int:
     return result
 
 def create_hashed_set(items: List[bytes], key: bytes, m: int) -> List[int]:
+    """
+    Creates a hashed set of items using a key and a multiplier.
+
+    Args:
+        items (List[bytes]): The list of items to hash.
+        key (bytes): The key used for hashing.
+        m (int): The multiplier for the allowed range.
+
+    Returns:
+        List[int]: A list of hashed values.
+    """
     n = len(entries)
     allowed_range = n * m
 
@@ -20,6 +42,14 @@ def create_hashed_set(items: List[bytes], key: bytes, m: int) -> List[int]:
 
 # Golomb-encodes `x` into `stream` with remainder of `P` bits 
 def golomb_encode(stream: bitarray, x: int, P: int) -> None:
+    """
+    Golomb-encodes a value into a bitarray stream.
+
+    Args:
+        stream (bitarray): The bitarray to encode into.
+        x (int): The value to encode.
+        P (int): The number of bits for the remainder.
+    """
     assert x > 0
 
     q = x >> P
@@ -38,6 +68,17 @@ def golomb_encode(stream: bitarray, x: int, P: int) -> None:
 # Decodes the first occurrence of a delta hash in `stream` starting from `offset`.
 # Returns the decoded delta and the new offset.
 def golomb_decode(stream: bitarray, offset: int, P: int) -> Tuple[int, int]:
+    """
+    Decodes a Golomb-encoded value from a bitarray stream.
+
+    Args:
+        stream (bitarray): The bitarray to decode from.
+        offset (int): The starting offset in the bitarray.
+        P (int): The number of bits for the remainder.
+
+    Returns:
+        Tuple[int, int]: The decoded value and the new offset.
+    """
     q = 0
     while bitarray[offset] == 1:
         q += 1
@@ -55,6 +96,47 @@ def golomb_decode(stream: bitarray, offset: int, P: int) -> Tuple[int, int]:
 class GCSFilter:
 
     @classmethod
+    def match_many(
+        cls,
+        compressed_set: bytes,
+        targets: List[bytes],
+        n: int,
+        p: int = 19,
+        m: int = 784931,
+        key: bytes = b'\x00\x00\x00\x00',
+    ) -> Dict[bytes, bool]:
+        """
+        Matches multiple target items against a Golomb-Coded Set.
+
+        Args:
+            compressed_set (bytes): The Golomb-Coded Set as a byte array.
+            targets (List[bytes]): The list of target items to match.
+            n (int): The number of items in the set.
+            p (int): The number of bits for the remainder.
+            m (int): The multiplier for the allowed range.
+            key (bytes): The key used for hashing.
+
+        Returns:
+            Dict[bytes, bool]: A dictionary indicating which targets are in the set.
+        """
+    def create(cls,
+        items: List[bytes],
+        p: int = 19,
+        m: int = 784931,
+        key: bytes = b'\x00\x00\x00\x00'
+    ) -> bytes:
+        """
+        Turns a list of entries into a Golomb-Coded Set of hashes.
+
+        Args:
+            items (List[bytes]): The list of items to encode.
+            p (int): The number of bits for the remainder.
+            m (int): The multiplier for the allowed range.
+            key (bytes): The key used for hashing.
+
+        Returns:
+            bytes: The Golomb-Coded Set as a byte array.
+        """
     def create(cls,
         items: List[bytes],
         p: int = 19,
