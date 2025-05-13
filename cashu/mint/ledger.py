@@ -1,5 +1,6 @@
 import asyncio
 import time
+from base64 import b64encode
 from typing import Dict, List, Mapping, Optional, Tuple
 
 import bolt11
@@ -39,8 +40,10 @@ from ..core.errors import (
     TransactionAmountExceedsLimitError,
     TransactionError,
 )
+from ..core.gcs import GCSFilter
 from ..core.helpers import sum_proofs
 from ..core.models import (
+    GetFilterResponse,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
@@ -1150,3 +1153,22 @@ class Ledger(
                 )
 
             return signatures
+
+
+    async def get_filter_by_keyset(self, keyset_id: str) -> GetFilterResponse:
+        """Generates a Golomb-Coded Set filter for the given keyset id.
+        Args:
+            keyset_id (str): The keyset id to generate the filter for.
+        Returns:
+            PostGetFilterResponse: The response containing the filter.
+        """
+        # Retrieve all Y nullifiers for the given keyset id
+        Ys = await self.crud.get_Ys_by_keyset(keyset_id=keyset_id, db=self.db)
+
+        if not Ys:
+            raise Exception("No Y nullifiers found for the given keyset id.")
+
+        # Create a GCS filter using the Y nullifiers
+        filter_bytes = GCSFilter.create(items=[bytes.fromhex(y) for y in Ys])
+
+        return GetFilterResponse(n_items=len(Ys), filter_content=b64encode(filter_bytes).decode())
