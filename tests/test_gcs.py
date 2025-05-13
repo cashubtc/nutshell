@@ -1,7 +1,7 @@
-from base64 import b64encode
-from cashu.core.gcs import GCSFilter
 import os
+from base64 import b64encode
 
+from cashu.core.gcs import GCSFilter
 
 items = [
     bytes.fromhex('c2735796c1d45c68e7f03d3ea3bfcf5d6f10e6eb480e57fc3dccaf8ce66990dfc5'),
@@ -19,14 +19,8 @@ items = [
 target_filter = '5Ud5NvCtCqXvPaQZe9e6VWmfgAgUdgvVh/A='
 
 def test_gcs_filter():
-    # Generate random data for testing
-    num_items = len(items)
-
     # Create a GCS filter
     gcs_filter = GCSFilter.create(items)
-
-    # Test set membership
-    results = GCSFilter.match_many(gcs_filter, items, num_items)
 
     assert b64encode(gcs_filter).decode() == target_filter
 

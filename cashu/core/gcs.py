@@ -1,7 +1,7 @@
-from siphash24 import siphash24
 from typing import Dict, List, Tuple
 
 from bitarray import bitarray
+from siphash24 import siphash24
 
 
 def hash_to_range(item: bytes, f: int, key: bytes) -> int:
