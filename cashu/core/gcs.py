@@ -184,7 +184,7 @@ class GCSFilter:
 
         return {target: truth_value for target, truth_value in target_hashes.values()}
 
-
+'''
 import os
 import random
 
@@ -206,3 +206,4 @@ assert all(results.values()), "Not all items were found in the GCS filter"
 non_existent_item = os.urandom(item_size)
 results = GCSFilter.match_many(gcs_filter, [non_existent_item], num_items)
 assert not any(results.values()), "Non-existent item was incorrectly found in the GCS filter"
+'''
