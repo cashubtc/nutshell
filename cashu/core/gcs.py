@@ -15,12 +15,8 @@ def hash_to_range(item: bytes, f: int, key: bytes) -> int:
     Returns:
         int: The hashed value within the specified range.
     """
-    # Rejection sampling
-    i = 0
-    result = f+1
-    while result > f:
-        result = int.from_bytes(md5(key + item + i.to_bytes(1, 'big')).digest()[:8], 'big')
-        i += 1
+    result = (f * int.from_bytes(md5(key + item).digest()[:8], 'big')) >> 64
+    assert result < f
     return result
 
 def create_hashed_set(items: List[bytes], key: bytes, m: int) -> List[int]:
@@ -35,10 +31,10 @@ def create_hashed_set(items: List[bytes], key: bytes, m: int) -> List[int]:
     Returns:
         List[int]: A list of hashed values.
     """
-    n = len(entries)
-    allowed_range = n * m
+    n = len(items)
+    f = n * m
 
-    return [hash_to_range(e, allowed_range, key) for e in items]
+    return [hash_to_range(e, f, key) for e in items]
 
 # Golomb-encodes `x` into `stream` with remainder of `P` bits 
 def golomb_encode(stream: bitarray, x: int, P: int) -> None:
@@ -80,17 +76,17 @@ def golomb_decode(stream: bitarray, offset: int, P: int) -> Tuple[int, int]:
         Tuple[int, int]: The decoded value and the new offset.
     """
     q = 0
-    while bitarray[offset] == 1:
+    while stream[offset] == 1:
         q += 1
         offset += 1
+
+    offset += 1
     
     # Create a byte array from the bitarray slice
     byte_array = stream[offset:offset + P].tobytes()
-    
-    # Use numpy.frombuffer to create a uint64 from the byte array
-    r = np.frombuffer(byte_array, dtype=np.uint64)[0]
+    r = int.from_bytes(byte_array, 'big')
 
-    x = (q << P) + r
+    x = (q << P) | r
     return x, offset + P
 
 class GCSFilter:
@@ -114,9 +110,9 @@ class GCSFilter:
         Returns:
             bytes: The Golomb-Coded Set as a byte array.
         """
-        if m.bit_length > 32:
+        if m.bit_length() > 32:
             raise Exception("GCS Error: m parameter must be smaller than 2^32")
-        if len(items).bit_length > 32:
+        if len(items).bit_length() > 32:
             raise Exception("GCS Error: number of elements must be smaller than 2^32")
         
         set_items = create_hashed_set(items, key, m)
@@ -159,9 +155,9 @@ class GCSFilter:
         Returns:
             Dict[bytes, bool]: A dictionary indicating which targets are in the set.
         """
-        if m.bit_length > 32:
+        if m.bit_length() > 32:
             raise Exception("GCS Error: m parameter must be smaller than 2^32")
-        if n.bit_length > 32:
+        if n.bit_length() > 32:
             raise Exception("GCS Error: number of elements must be smaller than 2^32")
 
         f = n * m
@@ -170,9 +166,12 @@ class GCSFilter:
             raise Exception("GCS Error: match targets are not unique entries")
 
         # Map targets to the same range as the set hashes.
-        target_hashes = {hash_to_range(target, f, k): False for target in targets}
-        
-        input_stream = bitarray(compressed_set)
+        target_hashes: Dict[int, Tuple[bytes, bool]] = {hash_to_range(target, f, key): (target, False) for target in targets}
+         
+        input_stream = bitarray()
+        input_stream.frombytes(compressed_set)
+
+        print(input_stream)
 
         value = 0
         offset = 0
@@ -181,6 +180,32 @@ class GCSFilter:
             value += delta
 
             if value in target_hashes:
-                target_hashes[value] = True
+                target, _ = target_hashes[value]
+                target_hashes[value] = (target, True)
 
-        return target_hashes
+        return {target: truth_value for target, truth_value in target_hashes.values()}
+
+
+import os
+import random
+
+# Generate random data for testing
+num_items = 100
+item_size = 33  # 33 bytes
+items = [os.urandom(item_size) for _ in range(num_items)]
+
+# Create a GCS filter
+gcs_filter = GCSFilter.create(items)
+
+# Test set membership
+results = GCSFilter.match_many(gcs_filter, items, num_items)
+
+print(results.values())
+
+# Assert all items are found in the filter
+assert all(results.values()), "Not all items were found in the GCS filter"
+
+# Test with a non-existent item
+non_existent_item = os.urandom(item_size)
+results = GCSFilter.match_many(gcs_filter, [non_existent_item], num_items)
+assert not any(results.values()), "Non-existent item was incorrectly found in the GCS filter"
