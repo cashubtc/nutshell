@@ -354,10 +354,10 @@ class MeltQuote(LedgerEvent):
             quote=melt_quote_resp.quote,
             method="bolt11",
             request=melt_quote_resp.request
-            or request,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or request,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             checking_id="",
             unit=melt_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             amount=melt_quote_resp.amount,
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
@@ -471,9 +471,9 @@ class MintQuote(LedgerEvent):
             request=mint_quote_resp.request,
             checking_id="",
             unit=mint_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             amount=mint_quote_resp.amount
-            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             state=MintQuoteState(mint_quote_resp.state),
             mint=mint,
             expiry=mint_quote_resp.expiry,
