@@ -1,7 +1,7 @@
 
 from bitarray import bitarray
 from hashlib import md5
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 def hash_to_range(item: bytes, f: int, key: bytes) -> int:
     """
@@ -94,31 +94,8 @@ def golomb_decode(stream: bitarray, offset: int, P: int) -> Tuple[int, int]:
     return x, offset + P
 
 class GCSFilter:
-
+        
     @classmethod
-    def match_many(
-        cls,
-        compressed_set: bytes,
-        targets: List[bytes],
-        n: int,
-        p: int = 19,
-        m: int = 784931,
-        key: bytes = b'\x00\x00\x00\x00',
-    ) -> Dict[bytes, bool]:
-        """
-        Matches multiple target items against a Golomb-Coded Set.
-
-        Args:
-            compressed_set (bytes): The Golomb-Coded Set as a byte array.
-            targets (List[bytes]): The list of target items to match.
-            n (int): The number of items in the set.
-            p (int): The number of bits for the remainder.
-            m (int): The multiplier for the allowed range.
-            key (bytes): The key used for hashing.
-
-        Returns:
-            Dict[bytes, bool]: A dictionary indicating which targets are in the set.
-        """
     def create(cls,
         items: List[bytes],
         p: int = 19,
@@ -137,20 +114,6 @@ class GCSFilter:
         Returns:
             bytes: The Golomb-Coded Set as a byte array.
         """
-    def create(cls,
-        items: List[bytes],
-        p: int = 19,
-        m: int = 784931,
-        key: bytes = b'\x00\x00\x00\x00'
-    ) -> bytes:
-        '''
-            Turns a list of entries into a Golomb-Coded Set of hashes.
-
-            Arguments:
-
-            Returns:
-
-        '''
         if m.bit_length > 32:
             raise Exception("GCS Error: m parameter must be smaller than 2^32")
         if len(items).bit_length > 32:
@@ -182,6 +145,20 @@ class GCSFilter:
         m: int = 784931,
         key: bytes = b'\x00\x00\x00\x00',
     ) -> Dict[bytes, bool]:
+        """
+        Matches multiple target items against a Golomb-Coded Set.
+
+        Args:
+            compressed_set (bytes): The Golomb-Coded Set as a byte array.
+            targets (List[bytes]): The list of target items to match.
+            n (int): The number of items in the set.
+            p (int): The number of bits for the remainder.
+            m (int): The multiplier for the allowed range.
+            key (bytes): The key used for hashing.
+
+        Returns:
+            Dict[bytes, bool]: A dictionary indicating which targets are in the set.
+        """
         if m.bit_length > 32:
             raise Exception("GCS Error: m parameter must be smaller than 2^32")
         if n.bit_length > 32:

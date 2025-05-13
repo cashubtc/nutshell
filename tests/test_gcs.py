@@ -21,7 +21,3 @@ def test_gcs_filter():
     non_existent_item = os.urandom(item_size)
     results = GCSFilter.match_many(gcs_filter, [non_existent_item], num_items)
     assert not any(results.values()), "Non-existent item was incorrectly found in the GCS filter"
-
-if __name__ == "__main__":
-    test_gcs_filter()
-    print("All tests passed.")
