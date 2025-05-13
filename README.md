@@ -11,7 +11,7 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 
 <p align="center">
 <a href="#the-cashu-protocol">Cashu protocol</a> ·
-<a href="#easy-install">Quick Install</a> ·
+<a href="#easy-install-nutshell-wallet">Quick Install</a> ·
 <a href="#manual-install-poetry">Manual install</a> ·
 <a href="#configuration">Configuration</a> ·
 <a href="#using-cashu">Using Cashu</a> ·
@@ -63,10 +63,10 @@ You can build the image yourself by running the following command. Make sure to 
 docker compose up mint
 ```
 
-Alternatively, you can use the pre-built Docker images, see [Running a mint](#docker).
+Alternatively, you can use the pre-built Docker images, see [Running a mint](#running-a-mint).
 
 ## Manual install: Poetry
-These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Install Cashu](#poetry-install-cashu).
+These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Poetry: Install Cashu Nutshell](#poetry-install-cashu-nutshell).
 
 #### Poetry: Prerequisites
 
@@ -170,14 +170,6 @@ To receive tokens, another user enters:
 ```bash
 cashu receive cashuAeyJwcm9vZnMiOiBbey...
 ```
-
-# Starting the wallet API daemon
-Nutshell wallet can be used in daemon mode that can be controlled through a REST API:
-```bash
-cashu -d
-```
-
-You can find the API docs at [http://localhost:4448/docs](http://localhost:4448/docs).
 
 # Running a mint
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
