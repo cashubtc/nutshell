@@ -82,9 +82,10 @@ def golomb_decode(stream: bitarray, offset: int, P: int) -> Tuple[int, int]:
 
     offset += 1
     
-    # Create a byte array from the bitarray slice
-    byte_array = stream[offset:offset + P].tobytes()
-    r = int.from_bytes(byte_array, 'big')
+    # Calculate the remainder directly from the bitarray slice
+    r = 0
+    for i in range(P):
+        r = (r << 1) | stream[offset + i]
 
     x = (q << P) | r
     return x, offset + P
