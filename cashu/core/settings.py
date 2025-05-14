@@ -78,7 +78,7 @@ class MintWatchdogSettings(MintSettings):
         title="Balance watchdog",
         description="The watchdog shuts down the mint if the balance of the mint and the backend do not match.",
     )
-    mint_watchdog_balance_check_interval_seconds: float = Field(default=0.1)
+    mint_watchdog_balance_check_interval_seconds: float = Field(default=60)
     mint_watchdog_ignore_mismatch: bool = Field(
         default=False,
         description="Ignore watchdog errors and continue running. Use this to recover from a watchdog error.",
