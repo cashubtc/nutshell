@@ -1171,4 +1171,4 @@ class Ledger(
         # Create a GCS filter using the Y nullifiers
         filter_bytes = GCSFilter.create(items=[bytes.fromhex(y) for y in Ys])
 
-        return GetFilterResponse(n_items=len(Ys), filter_content=b64encode(filter_bytes).decode())
+        return GetFilterResponse(n=len(Ys), content=b64encode(filter_bytes).decode(), timestamp=int(time.time()))
