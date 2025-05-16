@@ -1,30 +1,29 @@
 from typing import Dict, List, Tuple
 
 from bitarray import bitarray
-from siphash24 import siphash24
+import mmh3
 
 
-def hash_to_range(item: bytes, f: int, key: bytes) -> int:
+def hash_to_range(item: bytes, f: int) -> int:
     """
-    Hashes an item to a range using SipHash.
+    Hashes an item to a range using Murmurhash.
 
     Args:
         item (bytes): The item to hash.
         f (int): The maximum range value.
-        key (bytes): The key used for hashing.
 
     Returns:
         int: The hashed value within the specified range.
     """
-    return (f * int.from_bytes(siphash24(item, key=key).digest(), 'big')) >> 64
+    h = mmh3.hash128(item) & (2**64 - 1)
+    return (f * h) >> 64
 
-def create_hashed_set(items: List[bytes], key: bytes, m: int) -> List[int]:
+def create_hashed_set(items: List[bytes], m: int) -> List[int]:
     """
     Creates a hashed set of items using a key and a multiplier.
 
     Args:
         items (List[bytes]): The list of items to hash.
-        key (bytes): The key used for hashing.
         m (int): The multiplier for the allowed range.
 
     Returns:
@@ -33,7 +32,7 @@ def create_hashed_set(items: List[bytes], key: bytes, m: int) -> List[int]:
     n = len(items)
     f = n * m
 
-    return [hash_to_range(e, f, key) for e in items]
+    return [hash_to_range(e, f) for e in items]
 
 # Golomb-encodes `x` into `stream` with remainder of `P` bits 
 def golomb_encode(stream: bitarray, x: int, P: int) -> None:
@@ -95,8 +94,7 @@ class GCSFilter:
     def create(cls,
         items: List[bytes],
         p: int = 19,
-        m: int = 784931,
-        key: bytes = 16 * b'\x00'
+        m: int = 784931
     ) -> bytes:
         """
         Turns a list of entries into a Golomb-Coded Set of hashes.
@@ -105,7 +103,6 @@ class GCSFilter:
             items (List[bytes]): The list of items to encode.
             p (int): The number of bits for the remainder.
             m (int): The multiplier for the allowed range.
-            key (bytes): The key used for hashing.
 
         Returns:
             bytes: The Golomb-Coded Set as a byte array.
@@ -115,7 +112,7 @@ class GCSFilter:
         if len(items).bit_length() > 32:
             raise Exception("GCS Error: number of elements must be smaller than 2^32")
         
-        set_items = create_hashed_set(items, key, m)
+        set_items = create_hashed_set(items, m)
 
         # Sort the items
         sorted_set_items = sorted(set_items)
@@ -139,7 +136,6 @@ class GCSFilter:
         n: int,
         p: int = 19,
         m: int = 784931,
-        key: bytes = b'\x00\x00\x00\x00',
     ) -> Dict[bytes, bool]:
         """
         Matches multiple target items against a Golomb-Coded Set.
@@ -150,7 +146,6 @@ class GCSFilter:
             n (int): The number of items in the set.
             p (int): The number of bits for the remainder.
             m (int): The multiplier for the allowed range.
-            key (bytes): The key used for hashing.
 
         Returns:
             Dict[bytes, bool]: A dictionary indicating which targets are in the set.
@@ -166,7 +161,7 @@ class GCSFilter:
             raise Exception("GCS Error: match targets are not unique entries")
 
         # Map targets to the same range as the set hashes.
-        target_hashes: Dict[int, Tuple[bytes, bool]] = {hash_to_range(target, f, key): (target, False) for target in targets}
+        target_hashes: Dict[int, Tuple[bytes, bool]] = {hash_to_range(target, f): (target, False) for target in targets}
          
         input_stream = bitarray()
         input_stream.frombytes(compressed_set)

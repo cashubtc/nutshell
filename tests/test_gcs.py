@@ -1,7 +1,6 @@
 import os
 from base64 import b64encode
-
-from cashu.core.gcs import GCSFilter
+from cashu.core.gcs import GCSFilter, hash_to_range
 
 items = [
     bytes.fromhex('c2735796c1d45c68e7f03d3ea3bfcf5d6f10e6eb480e57fc3dccaf8ce66990dfc5'),
@@ -16,12 +15,12 @@ items = [
     bytes.fromhex('5a21aa11ccd643042f3fe3f0fcc02ccfb51c72419c5eab64a3565aa8499aa64cdf')
 ]
 
-target_filter = '5Ud5NvCtCqXvPaQZe9e6VWmfgAgUdgvVh/A='
+target_filter = 'z4fUCDVqdnxWR7Y9+YdT5o0IC9GxiSA2BGyg'
 
 def test_gcs_filter():
     # Create a GCS filter
     gcs_filter = GCSFilter.create(items)
-
+    print(f"{b64encode(gcs_filter).decode() = }")
     assert b64encode(gcs_filter).decode() == target_filter
 
 def test_gcs_filter_membership():
@@ -41,3 +40,9 @@ def test_gcs_filter_membership():
     non_existent_item = os.urandom(33)
     results = GCSFilter.match_many(gcs_filter, [non_existent_item], num_items)
     assert not any(results.values()), "Non-existent item was incorrectly found in the GCS filter"
+
+def test_hash_to_range():
+    test_item = bytes.fromhex('00000000')
+    test_range = 784931 * 1000
+    hashed = hash_to_range(test_item, test_range)
+    assert hashed == 636618232
