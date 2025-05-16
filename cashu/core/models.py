@@ -373,7 +373,6 @@ class GetFilterResponse(BaseModel):
     n: int
     p: int = 19
     m: int = 784931
-    k: Optional[str] = '00000000000000000000000000000000'
 
 # ------- API: BLIND AUTH -------
 class PostAuthBlindMintRequest(BaseModel):
