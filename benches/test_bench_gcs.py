@@ -24,10 +24,6 @@ def test_gcs_filter_creation_benchmark_1000000(benchmark):
     items = [os.urandom(item_size) for _ in range(num_items_arr[4])]
     benchmark(GCSFilter.create, items)
 
-def test_gcs_filter_creation_benchmark_1000000_parallel(benchmark):
-    items = [os.urandom(item_size) for _ in range(num_items_arr[4])]
-    benchmark(GCSFilter.create_parallel, items)
-
 '''
 def test_hash_to_range_benchmark_100(benchmark):
     items = [os.urandom(item_size) for _ in range(num_items_arr[0])]

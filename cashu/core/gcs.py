@@ -99,14 +99,6 @@ def golomb_decode(stream: bitarray, offset: int, P: int) -> Tuple[int, int]:
     x = (q << P) | r
     return x, offset + P
 
-# Function to encode a chunk of deltas
-def encode_chunk(deltas, start, end, p):
-    local_stream = bitarray(len(deltas) * (p+3))
-    offset = 0
-    for delta in deltas[start:end]:
-        offset = golomb_encode(local_stream, offset, delta, p)
-    return local_stream
-
 class GCSFilter:
         
     @classmethod
@@ -146,53 +138,7 @@ class GCSFilter:
             last_value = item
 
         # Pads to the right with zero up to the byte boundary
-        return output_stream.tobytes()
-
-    @classmethod
-    def create_parallel(
-        cls,
-        items: List[bytes],
-        p: int = 19,
-        m: int = 784931
-    ) -> bytes:
-        if m.bit_length() > 32:
-            raise Exception("GCS Error: m parameter must be smaller than 2^32")
-        if len(items).bit_length() > 32:
-            raise Exception("GCS Error: number of elements must be smaller than 2^32")
-
-        set_items = create_hashed_set(items, m)
-
-        # Sort the items
-        sorted_set_items = sorted(set_items)
-
-        # Calculate all the deltas first
-        deltas = len(sorted_set_items) * [0]
-        last_value = 0
-        i = 0
-        for item in sorted_set_items:
-            delta = item - last_value
-            deltas[i] = delta
-            last_value = item
-            i += 1
-
-        # Parallelize the encoding of deltas
-        num_cores = multiprocessing.cpu_count()
-        chunk_size = len(deltas) // num_cores
-        chunk_size_rem = len(deltas) % num_cores
-        
-        # Process each chunk of deltas in parallel
-        output_stream = bitarray()
-        with ProcessPoolExecutor(max_workers=num_cores) as executor:
-            futures = []
-            for i in range(num_cores):
-                start = i*chunk_size
-                end = (i+1)*chunk_size + (chunk_size_rem if i == num_cores-1 else 0)
-                futures.append(executor.submit(encode_chunk, deltas, start, end, p))
-            
-            # Collect results
-            [output_stream.extend(future.result()) for future in futures]
-        
-        return output_stream.tobytes()
+        return output_stream[:offset].tobytes()
 
     @classmethod
     def match_many(
