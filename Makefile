@@ -22,6 +22,9 @@ package:
 	make clean
 	python setup.py sdist bdist_wheel
 
+bench:
+	poetry run pytest benches
+
 test:
 	PYTHONUNBUFFERED=1 \
 	DEBUG=true \

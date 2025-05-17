@@ -6,6 +6,7 @@ from loguru import logger
 
 from ..core.errors import KeysetNotFoundError
 from ..core.models import (
+    GetFilterResponse,
     GetInfoResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
@@ -143,6 +144,22 @@ async def keysets() -> KeysetsResponse:
         )
     return KeysetsResponse(keysets=keysets)
 
+
+@router.get(
+    "/v1/filter/spent/{keyset_id}",
+    name="Get GCS Filter",
+    summary="Get a Golomb-Coded Set filter for a specific keyset",
+    response_model=GetFilterResponse,
+    response_description="The GCS filter for the specified keyset.",
+)
+async def get_filter(keyset_id: str) -> GetFilterResponse:
+    """
+    Get a Golomb-Coded Set filter for the specified keyset id.
+    """
+    logger.trace(f"> GET /v1/filter/spent/{keyset_id}")
+    filter_response = await ledger.get_spent_filter_by_keyset(keyset_id)
+    logger.trace(f"< GET /v1/filter/spent/{keyset_id}")
+    return filter_response
 
 @router.post(
     "/v1/mint/quote/bolt11",

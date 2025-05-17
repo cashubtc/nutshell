@@ -861,6 +861,21 @@ class LedgerCrudSqlite(LedgerCrud):
         rows = await (conn or db).fetchall(query, values)
         return [Proof(**r) for r in rows] if rows else []
 
+    async def get_Ys_by_keyset(
+        self,
+        *,
+        keyset_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[Proof]:
+        query = f"""
+        SELECT y from {db.table_with_schema('proofs_used')}
+        WHERE id = :id
+        """
+        values = {"id": keyset_id}
+        rows = await (conn or db).fetchall(query, values)
+        return [r["y"] for r in rows] if rows else []
+
     async def store_balance_log(
         self,
         backend_balance: Amount,
