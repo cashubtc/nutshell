@@ -53,6 +53,11 @@ if settings.mint_backend_bolt11_sat:
         unit=Unit.sat
     )
     backends.setdefault(Method.bolt11, {})[Unit.sat] = backend_bolt11_sat
+if settings.mint_backend_bolt11_msat:
+    backend_bolt11_msat = getattr(wallets_module, settings.mint_backend_bolt11_msat)(
+        unit=Unit.msat
+    )
+    backends.setdefault(Method.bolt11, {})[Unit.msat] = backend_bolt11_msat
 if settings.mint_backend_bolt11_usd:
     backend_bolt11_usd = getattr(wallets_module, settings.mint_backend_bolt11_usd)(
         unit=Unit.usd

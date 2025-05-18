@@ -605,15 +605,19 @@ class Amount:
             return self.cents_to_usd()
         elif self.unit == Unit.sat:
             return self.sat_to_btc()
+        elif self.unit == Unit.msat:
+            return self.msat_to_btc()
         else:
             raise Exception("Amount must be in satoshis or cents")
 
     @classmethod
     def from_float(cls, amount: float, unit: Unit) -> "Amount":
         if unit == Unit.usd or unit == Unit.eur:
-            return cls(unit, int(amount * 100))
+            return cls(unit, int(round(amount * 100)))
         elif unit == Unit.sat:
-            return cls(unit, int(amount * 1e8))
+            return cls(unit, int(round(amount * 1e8)))
+        elif unit == Unit.msat:
+            return cls(unit, int(round(amount * 1e11)))
         else:
             raise Exception("Amount must be in satoshis or cents")
 
@@ -621,6 +625,12 @@ class Amount:
         if self.unit != Unit.sat:
             raise Exception("Amount must be in satoshis")
         return f"{self.amount/1e8:.8f}"
+
+    def msat_to_btc(self) -> str:
+        if self.unit != Unit.msat:
+            raise Exception("Amount must be in msat")
+        sat_amount = Amount(Unit.msat, self.amount).to(Unit.sat, round="up")
+        return f"{sat_amount.amount/1e8:.8f}"
 
     def cents_to_usd(self) -> str:
         if self.unit != Unit.usd and self.unit != Unit.eur:
