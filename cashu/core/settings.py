@@ -132,19 +132,19 @@ class MintLimits(MintSettings):
     )
     mint_max_peg_in: int = Field(
         default=None,
-        gt=0,
+        ge=0,
         title="Maximum peg-in",
         description="Maximum amount for a mint operation.",
     )
     mint_max_peg_out: int = Field(
         default=None,
-        gt=0,
+        ge=0,
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
     mint_max_balance: int = Field(
         default=None,
-        gt=0,
+        ge=0,
         title="Maximum mint balance",
         description="Maximum mint balance.",
     )
