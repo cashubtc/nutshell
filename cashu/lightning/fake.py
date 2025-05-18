@@ -155,6 +155,8 @@ class FakeWallet(LightningBackend):
         amount_msat = 0
         if self.unit == Unit.sat:
             amount_msat = MilliSatoshi(amount.to(Unit.msat, round="up").amount)
+        elif self.unit == Unit.msat:
+            amount_msat = MilliSatoshi(amount.amount)
         elif self.unit == Unit.usd or self.unit == Unit.eur:
             amount_msat = MilliSatoshi(
                 math.ceil(amount.amount / self.fake_btc_price * 1e9)
@@ -250,7 +252,7 @@ class FakeWallet(LightningBackend):
         invoice_obj = decode(melt_quote.request)
         assert invoice_obj.amount_msat, "invoice has no amount."
 
-        if self.unit == Unit.sat:
+        if self.unit == Unit.sat or self.unit == Unit.msat:
             amount_msat = int(invoice_obj.amount_msat)
             fees_msat = fee_reserve(amount_msat)
             fees = Amount(unit=Unit.msat, amount=fees_msat)

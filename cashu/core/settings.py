@@ -92,6 +92,7 @@ class MintDeprecationFlags(MintSettings):
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
     mint_backend_bolt11_sat: str = Field(default="")
+    mint_backend_bolt11_msat: str = Field(default="")
     mint_backend_bolt11_usd: str = Field(default="")
     mint_backend_bolt11_eur: str = Field(default="")
 
