@@ -148,9 +148,16 @@ def init_auth_wallet(func):
     default=False,
     help="Run in test mode (don't ask for CLI inputs)",
 )
+@click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    default=False,
+    help="Enable verbose mode to show all requests to the mint",
+)
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
+async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool):
     if settings.debug:
         configure_logger()
     if settings.tor and not TorProxy().check_platform():
@@ -184,6 +191,8 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool):
     unit = ctx.obj["UNIT"]
     ctx.obj["WALLET_NAME"] = walletname
     settings.wallet_name = walletname
+    settings.wallet_verbose_requests = verbose
+    ctx.obj["VERBOSE"] = verbose
 
     db_path = os.path.join(settings.cashu_dir, walletname)
     # if the command is "restore" we don't want to ask the user for a mnemonic
