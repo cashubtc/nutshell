@@ -193,6 +193,7 @@ class WalletSettings(CashuSettings):
     wallet_name: str = Field(default="wallet")
     wallet_unit: str = Field(default="sat")
     wallet_use_deprecated_h2c: bool = Field(default=False)
+    wallet_verbose_requests: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
 

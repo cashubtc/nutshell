@@ -188,7 +188,26 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 }
             )
 
-        return await self.httpx.request(method, path, **kwargs)
+        # Verbose logging of requests when enabled
+        if settings.wallet_verbose_requests:
+            request_info = f"{method} {self.url.rstrip('/')}/{path}"
+            if "json" in kwargs:
+                request_info += f"\nPayload: {json.dumps(kwargs['json'], indent=2)}"
+            print(f"Request: {request_info}")
+            
+        resp = await self.httpx.request(method, path, **kwargs)
+        
+        # Verbose logging of responses when enabled
+        if settings.wallet_verbose_requests:
+            response_info = f"Response: {resp.status_code}"
+            try:
+                json_response = resp.json()
+                response_info += f"\n{json.dumps(json_response, indent=2)}"
+            except json.JSONDecodeError:
+                response_info += f"\n{resp.text}"
+            print(response_info)
+            
+        return resp
 
     """
     ENDPOINTS
