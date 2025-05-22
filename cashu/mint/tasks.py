@@ -4,11 +4,13 @@ from typing import List
 from loguru import logger
 
 from ..core.base import MintQuoteState
+from ..core.gcs import GCSFilter
+from ..core.settings import settings
 from ..lightning.base import LightningBackend
-from .protocols import SupportsBackends, SupportsDb, SupportsEvents
+from .protocols import SupportsBackends, SupportsDb, SupportsEvents, SupportsKeysets
 
 
-class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
+class LedgerTasks(SupportsKeysets, SupportsDb, SupportsBackends, SupportsEvents):
     async def dispatch_listeners(self) -> List[asyncio.Task]:
         tasks = []
         for method, unitbackends in self.backends.items():
@@ -56,3 +58,69 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
                 )
 
         await self.events.submit(quote)
+
+    # TODO: marker for keysets with updates so that
+    # we avoid recomputing identical filters.
+    async def recompute_gcs(self) -> None:
+        while True:
+            logger.trace("Recompute GCS task is awake.")
+            async with self.db.get_connection() as conn:
+                for keyset in self.keysets.keys():
+                    logger.trace(f"Recomputing spent ecash GCS for keyset {keyset}")
+                    Ys = await self.crud.get_Ys_by_keyset(keyset_id=keyset, db=self.db, conn=conn)
+                    res = await self.crud.get_filter(filters_table="spent_filters", keyset_id=keyset, db=self.db, conn=conn)
+                    
+                    ys_bytes = [bytes.fromhex(y) for y in Ys]
+                    if len(Ys) > 0:
+                        new_filter = GCSFilter.create(
+                            items=ys_bytes,
+                            p=settings.mint_gcs_remainder_bitlength,
+                            m=settings.mint_gcs_false_positive_rate,
+                        )
+                        if not res:
+                            await self.crud.store_filter(
+                                filters_table="spent_filters",
+                                keyset_id=keyset,
+                                gcs_filter=new_filter,
+                                db=self.db,
+                                conn=conn,
+                            )
+                        else:
+                            await self.crud.update_filter(
+                                filters_table="spent_filters",
+                                keyset_id=keyset,
+                                gcs_filter=new_filter,
+                                db=self.db,
+                                conn=conn,
+                            )
+
+                for keyset in self.keysets.keys():
+                    logger.trace(f"Recomputing blinded messages GCS for keyset {keyset}")
+                    B_s = await self.crud.get_blinded_messages_by_keyset_id(keyset_id=keyset, db=self.db, conn=conn)
+                    res = await self.crud.get_filter(filters_table="issued_filters", keyset_id=keyset, db=self.db, conn=conn)
+                    
+                    bs_bytes = [bytes.fromhex(b_) for b_ in B_s]
+                    if len(B_s) > 0:
+                        new_filter = GCSFilter.create(
+                            items=bs_bytes,
+                            p=settings.mint_gcs_remainder_bitlength,
+                            m=settings.mint_gcs_false_positive_rate,
+                        )
+                        if not res:
+                            await self.crud.store_filter(
+                                filters_table="issued_filters",
+                                keyset_id=keyset,
+                                gcs_filter=new_filter,
+                                db=self.db,
+                                conn=conn,
+                            )
+                        else:
+                            await self.crud.update_filter(
+                                filters_table="issued_filters",
+                                keyset_id=keyset,
+                                gcs_filter=new_filter,
+                                db=self.db,
+                                conn=conn,
+                            )
+            # Sleep for `gcs_recompute_timeout` amount of seconds
+            await asyncio.sleep(settings.mint_gcs_recompute_timeout)
