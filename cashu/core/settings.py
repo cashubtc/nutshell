@@ -101,6 +101,10 @@ class MintBackends(MintSettings):
     mint_strike_key: str = Field(default=None)
     mint_blink_key: str = Field(default=None)
 
+class MintGCSFilter(MintSettings):
+    mint_gcs_recompute_timeout: int = Field(default=3600)
+    mint_gcs_remainder_bitlength: int = Field(default=19)
+    mint_gcs_false_positive_rate: int = Field(default=784931)
 
 class MintLimits(MintSettings):
     mint_rate_limit: bool = Field(
@@ -323,6 +327,7 @@ class Settings(
     CoreLightningRestFundingSource,
     CLNRestFundingSource,
     FakeWalletSettings,
+    MintGCSFilter,
     MintLimits,
     MintBackends,
     AuthSettings,

@@ -62,6 +62,17 @@ class Compat:
             return "BIGINT"
         return "INT"
 
+    @property
+    def blob(self) -> str:
+        if self.type == POSTGRES:
+            return "BYTEA"
+        elif self.type == SQLITE:
+            return "BLOB"
+        elif self.type == COCKROACH:
+            return "BYTES"
+        else:
+            return "<nothing>"
+
     def table_with_schema(self, table: str):
         return f"{self.references_schema if self.schema else ''}{table}"
 

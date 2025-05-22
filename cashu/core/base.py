@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from sqlite3 import Row
-from typing import Any, ClassVar, Dict, List, Optional, Union
+from typing import Any, ClassVar, Dict, List, Optional, Tuple, Union
 
 import cbor2
 from loguru import logger
@@ -231,6 +231,10 @@ class BlindedMessage(BaseModel):
     id: str  # Keyset id
     B_: str  # Hex-encoded blinded message
 
+SecretTriplet = Tuple[str, PublicKey, str]
+"""
+Encapsulates deterministic secret information: secret, blinding_factor, derivation path
+"""
 
 class BlindedMessage_Deprecated(BaseModel):
     """

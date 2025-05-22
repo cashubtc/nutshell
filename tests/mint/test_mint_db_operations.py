@@ -68,6 +68,7 @@ async def test_db_tables(ledger: Ledger):
         tables = [t[0] for t in tables_all]
         tables_expected = [
             "dbversions",
+            "filters",
             "keysets",
             "proofs_used",
             "proofs_pending",
