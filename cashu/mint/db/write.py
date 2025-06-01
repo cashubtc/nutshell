@@ -256,3 +256,23 @@ class DbWriteHelper:
 
         await self.events.submit(quote_copy)
         return quote_copy
+
+    async def _update_mint_quote_state(
+        self, quote_id: str, state: MintQuoteState
+    ):
+        async with self.db.get_connection(lock_table="mint_quotes") as conn:
+            mint_quote = await self.crud.get_mint_quote(quote_id=quote_id, db=self.db, conn=conn)
+            if not mint_quote:
+                raise TransactionError("Mint quote not found.")
+            mint_quote.state = state
+            await self.crud.update_mint_quote(quote=mint_quote, db=self.db, conn=conn)
+    
+    async def _update_melt_quote_state(
+        self, quote_id: str, state: MeltQuoteState,
+    ):
+        async with self.db.get_connection(lock_table="melt_quotes") as conn:
+            melt_quote = await self.crud.get_melt_quote(quote_id=quote_id, db=self.db, conn=conn)
+            if not melt_quote:
+                raise TransactionError("Melt quote not found.")
+            melt_quote.state = state
+            await self.crud.update_melt_quote(quote=melt_quote, db=self.db, conn=conn)
