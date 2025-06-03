@@ -9,6 +9,7 @@ from bip32 import BIP32
 from loguru import logger
 
 from ..core.base import (
+    Amount,
     BlindedMessage,
     BlindedSignature,
     DLEQWallet,
@@ -541,12 +542,12 @@ class Wallet(
             amount=(
                 mint_quote_response.amount or mint_quote_local.amount
                 if mint_quote_local
-                else 0  # BACKWARD COMPATIBILITY mint response < 0.16.6
+                else 0  # BACKWARD COMPATIBILITY mint response < 0.17.0
             ),
             unit=(
                 mint_quote_response.unit or mint_quote_local.unit
                 if mint_quote_local
-                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.16.6
+                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.17.0
             ),
         )
         if mint_quote_local and mint_quote_local.privkey:
@@ -765,9 +766,9 @@ class Wallet(
             melt_quote_resp,
             self.url,
             unit=melt_quote_resp.unit
-            or self.unit.name,  # BACKWARD COMPATIBILITY mint response < 0.16.6
+            or self.unit.name,  # BACKWARD COMPATIBILITY mint response < 0.17.0
             request=melt_quote_resp.request
-            or invoice,  # BACKWARD COMPATIBILITY mint response < 0.16.6
+            or invoice,  # BACKWARD COMPATIBILITY mint response < 0.17.0
         )
         return melt_quote
 
@@ -788,12 +789,12 @@ class Wallet(
             unit=(
                 melt_quote_resp.unit or melt_quote_local.unit
                 if melt_quote_local
-                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.16.6
+                else self.unit.name  # BACKWARD COMPATIBILITY mint response < 0.17.0
             ),
             request=(
                 melt_quote_resp.request or melt_quote_local.request
                 if (melt_quote_local and melt_quote_local.request)
-                else "None"  # BACKWARD COMPATIBILITY mint response < 0.16.6
+                else "None"  # BACKWARD COMPATIBILITY mint response < 0.17.0
             ),
         )
 
@@ -1280,12 +1281,12 @@ class Wallet(
     # ---------- BALANCE CHECKS ----------
 
     @property
-    def balance(self):
-        return sum_proofs(self.proofs)
+    def balance(self) -> Amount:
+        return Amount(self.unit, sum_proofs(self.proofs))
 
     @property
-    def available_balance(self):
-        return sum_proofs([p for p in self.proofs if not p.reserved])
+    def available_balance(self) -> Amount:
+        return Amount(self.unit, sum_proofs([p for p in self.proofs if not p.reserved]))
 
     @property
     def proof_amounts(self):

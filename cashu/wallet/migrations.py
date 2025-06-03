@@ -289,6 +289,15 @@ async def m013_add_mint_and_melt_quote_tables(db: Database):
 
 async def m014_add_key_to_mint_quote_table(db: Database):
     async with db.connect() as conn:
+        # get column names in bolt11_mint_quotes first
+        columns = await conn.fetchall(
+            """
+                SELECT name FROM pragma_table_info('bolt11_mint_quotes');
+            """
+        )
+        # check if privkey column already exists
+        if any(col["name"] == "privkey" for col in columns):
+            return
         await conn.execute(
             """
                 ALTER TABLE bolt11_mint_quotes

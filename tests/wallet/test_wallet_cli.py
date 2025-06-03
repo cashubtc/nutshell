@@ -15,6 +15,8 @@ from tests.helpers import (
     is_deprecated_api_only,
     is_fake,
     is_lnd,
+    is_deprecated_api_only,
+    is_fake,
     is_regtest,
     pay_if_regtest,
 )
@@ -118,8 +120,22 @@ def test_balance(cli_prefix):
     print("------ BALANCE ------")
     print(result.output)
     w = asyncio.run(init_wallet())
-    assert f"Balance: {w.available_balance} sat" in result.output
+    assert f"Balance: {w.available_balance}" in result.output
     assert result.exit_code == 0
+
+
+@pytest.mark.skipif(is_fake, reason="only works with FakeWallet")
+def test_pay_invoice_regtest(mint, cli_prefix):
+    invoice_dict = get_real_invoice(10)
+    invoice_payment_request = invoice_dict["payment_request"]
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "pay", invoice_payment_request, "-y"],
+    )
+    assert result.exception is None
+    print("PAY INVOICE")
+    print(result.output)
 
 
 @pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")

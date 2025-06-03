@@ -62,6 +62,9 @@ class AuthLedger(Ledger):
         logger.info(f"Initialized OpenID Connect: {self.issuer}")
 
     def _get_oicd_discovery_json(self) -> dict:
+        logger.debug(
+            f"Getting OpenID Connect discovery JSON from: {self.oicd_discovery_url}"
+        )
         resp = httpx.get(self.oicd_discovery_url)
         resp.raise_for_status()
         return resp.json()
@@ -220,7 +223,9 @@ class AuthLedger(Ledger):
         try:
             proof = AuthProof.from_base64(blind_auth_token).to_proof()
             await self.verify_inputs_and_outputs(proofs=[proof])
-            await self.db_write._verify_spent_proofs_and_set_pending([proof])
+            await self.db_write._verify_spent_proofs_and_set_pending(
+                [proof], self.keysets
+            )
         except Exception as e:
             logger.error(f"Blind auth error: {e}")
             raise BlindAuthFailedError()
@@ -232,4 +237,4 @@ class AuthLedger(Ledger):
             logger.error(f"Blind auth error: {e}")
             raise BlindAuthFailedError()
         finally:
-            await self.db_write._unset_proofs_pending([proof])
+            await self.db_write._unset_proofs_pending([proof], self.keysets)

@@ -89,16 +89,21 @@ INVOICE_RESULT_MAP = {
 class StrikeWallet(LightningBackend):
     """https://docs.strike.me/api/"""
 
-    supported_units = {Unit.sat, Unit.usd, Unit.eur}
+    supported_units = {Unit.sat, Unit.msat, Unit.usd, Unit.eur}
     supports_description: bool = False
-    currency_map = {Unit.sat: "BTC", Unit.usd: "USD", Unit.eur: "EUR"}
+    currency_map = {Unit.sat: "BTC", Unit.msat: "BTC", Unit.usd: "USD", Unit.eur: "EUR"}
 
     def fee_int(
-        self, strike_quote: Union[StrikePaymentQuoteResponse, StrikePaymentResponse]
+        self,
+        strike_quote: Union[StrikePaymentQuoteResponse, StrikePaymentResponse],
+        unit: Unit,
     ) -> int:
         fee_str = strike_quote.totalFee.amount
         if strike_quote.totalFee.currency == self.currency_map[Unit.sat]:
-            fee = int(float(fee_str) * 1e8)
+            if unit == Unit.sat:
+                fee = int(float(fee_str) * 1e8)
+            elif unit == Unit.msat:
+                fee = int(float(fee_str) * 1e11)
         elif strike_quote.totalFee.currency in [
             self.currency_map[Unit.usd],
             self.currency_map[Unit.eur],
@@ -128,7 +133,7 @@ class StrikeWallet(LightningBackend):
         except Exception as exc:
             return StatusResponse(
                 error_message=f"Failed to connect to {self.endpoint} due to: {exc}",
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
 
         try:
@@ -138,16 +143,14 @@ class StrikeWallet(LightningBackend):
                 error_message=(
                     f"Failed to connect to {self.endpoint}, got: '{r.text[:200]}...'"
                 ),
-                balance=0,
+                balance=Amount(self.unit, 0),
             )
 
         for balance in data:
             if balance["currency"] == self.currency:
                 return StatusResponse(
                     error_message=None,
-                    balance=Amount.from_float(
-                        float(balance["total"]), self.unit
-                    ).amount,
+                    balance=Amount.from_float(float(balance["total"]), self.unit),
                 )
 
         # if no the unit is USD but no USD balance was found, we try USDT
@@ -157,14 +160,12 @@ class StrikeWallet(LightningBackend):
                     self.currency = USDT
                     return StatusResponse(
                         error_message=None,
-                        balance=Amount.from_float(
-                            float(balance["total"]), self.unit
-                        ).amount,
+                        balance=Amount.from_float(float(balance["total"]), self.unit),
                     )
 
         return StatusResponse(
             error_message=f"Could not find balance for currency {self.currency}",
-            balance=0,
+            balance=Amount(self.unit, 0),
         )
 
     async def create_invoice(
@@ -223,7 +224,7 @@ class StrikeWallet(LightningBackend):
                 f"Expected currency {self.currency_map[self.unit]}, got {strike_quote.amount.currency}"
             )
         amount = Amount.from_float(float(strike_quote.amount.amount), self.unit)
-        fee = self.fee_int(strike_quote)
+        fee = self.fee_int(strike_quote, self.unit)
 
         quote = PaymentQuoteResponse(
             amount=amount,
@@ -249,7 +250,7 @@ class StrikeWallet(LightningBackend):
             )
 
         payment = StrikePaymentResponse.parse_obj(r.json())
-        fee = self.fee_int(payment)
+        fee = self.fee_int(payment, self.unit)
         return PaymentResponse(
             result=PAYMENT_RESULT_MAP[payment.state],
             checking_id=payment.paymentId,
@@ -270,7 +271,7 @@ class StrikeWallet(LightningBackend):
             r = await self.client.get(url=f"{self.endpoint}/v1/payments/{checking_id}")
             r.raise_for_status()
             payment = StrikePaymentResponse.parse_obj(r.json())
-            fee = self.fee_int(payment)
+            fee = self.fee_int(payment, self.unit)
             return PaymentStatus(
                 result=PAYMENT_RESULT_MAP[payment.state],
                 fee=Amount(self.unit, fee),

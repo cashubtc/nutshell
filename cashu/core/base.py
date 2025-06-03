@@ -1,4 +1,5 @@
 import base64
+import datetime
 import json
 import math
 import time
@@ -11,6 +12,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 import cbor2
 from loguru import logger
 from pydantic import BaseModel, root_validator
+from sqlalchemy import RowMapping
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
 
@@ -365,10 +367,10 @@ class MeltQuote(LedgerEvent):
             quote=melt_quote_resp.quote,
             method="bolt11",
             request=melt_quote_resp.request
-            or request,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or request,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             checking_id="",
             unit=melt_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             amount=melt_quote_resp.amount,
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
@@ -482,9 +484,9 @@ class MintQuote(LedgerEvent):
             request=mint_quote_resp.request,
             checking_id="",
             unit=mint_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             amount=mint_quote_resp.amount
-            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             state=MintQuoteState(mint_quote_resp.state),
             mint=mint,
             expiry=mint_quote_resp.expiry,
@@ -564,7 +566,7 @@ class Unit(Enum):
     btc = 4
     auth = 999
 
-    def str(self, amount: int) -> str:
+    def str(self, amount: int | float) -> str:
         if self == Unit.sat:
             return f"{amount} sat"
         elif self == Unit.msat:
@@ -616,15 +618,19 @@ class Amount:
             return self.cents_to_usd()
         elif self.unit == Unit.sat:
             return self.sat_to_btc()
+        elif self.unit == Unit.msat:
+            return self.msat_to_btc()
         else:
             raise Exception("Amount must be in satoshis or cents")
 
     @classmethod
     def from_float(cls, amount: float, unit: Unit) -> "Amount":
         if unit == Unit.usd or unit == Unit.eur:
-            return cls(unit, int(amount * 100))
+            return cls(unit, int(round(amount * 100)))
         elif unit == Unit.sat:
-            return cls(unit, int(amount * 1e8))
+            return cls(unit, int(round(amount * 1e8)))
+        elif unit == Unit.msat:
+            return cls(unit, int(round(amount * 1e11)))
         else:
             raise Exception("Amount must be in satoshis or cents")
 
@@ -632,6 +638,12 @@ class Amount:
         if self.unit != Unit.sat:
             raise Exception("Amount must be in satoshis")
         return f"{self.amount/1e8:.8f}"
+
+    def msat_to_btc(self) -> str:
+        if self.unit != Unit.msat:
+            raise Exception("Amount must be in msat")
+        sat_amount = Amount(Unit.msat, self.amount).to(Unit.sat, round="up")
+        return f"{sat_amount.amount/1e8:.8f}"
 
     def cents_to_usd(self) -> str:
         if self.unit != Unit.usd and self.unit != Unit.eur:
@@ -643,6 +655,62 @@ class Amount:
 
     def __repr__(self):
         return self.unit.str(self.amount)
+
+    def __add__(self, other: "Amount | int") -> "Amount":
+        if isinstance(other, int):
+            return Amount(self.unit, self.amount + other)
+
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return Amount(self.unit, self.amount + other.amount)
+
+    def __sub__(self, other: "Amount | int") -> "Amount":
+        if isinstance(other, int):
+            return Amount(self.unit, self.amount - other)
+
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return Amount(self.unit, self.amount - other.amount)
+
+    def __mul__(self, other: int) -> "Amount":
+        return Amount(self.unit, self.amount * other)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, int):
+            return self.amount == other
+        if isinstance(other, Amount):
+            if self.unit != other.unit:
+                raise Exception("Units must be the same")
+            return self.amount == other.amount
+        return False
+
+    def __lt__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount < other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount < other.amount
+
+    def __le__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount <= other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount <= other.amount
+
+    def __gt__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount > other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount > other.amount
+
+    def __ge__(self, other: "Amount | int") -> bool:
+        if isinstance(other, int):
+            return self.amount >= other
+        if self.unit != other.unit:
+            raise Exception("Units must be the same")
+        return self.amount >= other.amount
 
 
 class Method(Enum):
@@ -749,6 +817,7 @@ class MintKeyset:
     first_seen: Optional[str] = None
     version: Optional[str] = None
     amounts: List[int]
+    balance: int
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -768,6 +837,8 @@ class MintKeyset:
         version: Optional[str] = None,
         input_fee_ppk: Optional[int] = None,
         id: str = "",
+        balance: int = 0,
+        fees_paid: int = 0,
     ):
         DEFAULT_SEED = "supersecretprivatekey"
         if seed == DEFAULT_SEED:
@@ -800,6 +871,8 @@ class MintKeyset:
         self.first_seen = first_seen
         self.active = bool(active) if active is not None else False
         self.version = version or settings.version
+        self.balance = balance
+        self.fees_paid = fees_paid
         self.input_fee_ppk = input_fee_ppk or 0
 
         if self.input_fee_ppk < 0:
@@ -853,6 +926,8 @@ class MintKeyset:
             version=row["version"],
             input_fee_ppk=row["input_fee_ppk"],
             amounts=json.loads(row["amounts"]),
+            balance=row["balance"],
+            fees_paid=row["fees_paid"],
         )
 
     @property
@@ -1356,3 +1431,24 @@ class WalletMint(BaseModel):
     refresh_token: Optional[str] = None
     username: Optional[str] = None
     password: Optional[str] = None
+
+
+class MintBalanceLogEntry(BaseModel):
+    unit: Unit
+    backend_balance: Amount
+    keyset_balance: Amount
+    keyset_fees_paid: Amount
+    time: datetime.datetime
+
+    @classmethod
+    def from_row(cls, row: RowMapping):
+        return cls(
+            unit=Unit[row["unit"]],
+            backend_balance=Amount(
+                Unit[row["unit"]],
+                row["backend_balance"],
+            ),
+            keyset_balance=Amount(Unit[row["unit"]], row["keyset_balance"]),
+            keyset_fees_paid=Amount(Unit[row["unit"]], row["keyset_fees_paid"]),
+            time=row["time"],
+        )

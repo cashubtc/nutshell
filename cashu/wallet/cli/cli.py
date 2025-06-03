@@ -42,7 +42,6 @@ from ...wallet.crud import (
     get_seed_and_mnemonic,
 )
 from ...wallet.wallet import Wallet as Wallet
-from ..api.api_server import start_api_server
 from ..auth.auth import WalletAuth
 from ..cli.cli_helpers import (
     get_mint_wallet,
@@ -69,13 +68,6 @@ class NaturalOrderGroup(click.Group):
 
     def list_commands(self, ctx):
         return self.commands.keys()
-
-
-def run_api_server(ctx, param, daemon):
-    if not daemon:
-        return
-    start_api_server()
-    ctx.exit()
 
 
 # https://github.com/pallets/click/issues/85#issuecomment-503464628
@@ -121,9 +113,7 @@ def init_auth_wallet(func):
 
         if settings.debug:
             await auth_wallet.load_proofs(reload=True)
-            logger.debug(
-                f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}"
-            )
+            logger.debug(f"Auth balance: {auth_wallet.available_balance}")
 
         return ret
 
@@ -150,15 +140,6 @@ def init_auth_wallet(func):
     "unit",
     default=None,
     help=f"Wallet unit (default: {settings.wallet_unit}).",
-)
-@click.option(
-    "--daemon",
-    "-d",
-    is_flag=True,
-    is_eager=True,
-    expose_value=False,
-    callback=run_api_server,
-    help="Start server for wallet REST API",
 )
 @click.option(
     "--tests",
@@ -263,7 +244,9 @@ async def pay(
     await wallet.load_mint()
     await print_balance(ctx)
     payment_hash = bolt11.decode(invoice).payment_hash
-    quote = await wallet.melt_quote(invoice, amount * 1000 if amount else None)
+    # we assume `amount` to be in sats
+    amount_mpp_msat = amount * 1000 if amount else None
+    quote = await wallet.melt_quote(invoice, amount_mpp_msat)
     logger.debug(f"Quote: {quote}")
     total_amount = quote.amount + quote.fee_reserve
     # estimate ecash fee for the coinselected proofs
@@ -287,9 +270,17 @@ async def pay(
     assert total_amount > 0, "amount is not positive"
     # we need to include fees so we can use the proofs for melting the `total_amount`
     send_proofs, _ = await wallet.select_to_send(
-        wallet.proofs, total_amount, include_fees=True, set_reserved=True
+        wallet.proofs, total_amount, include_fees=True, set_reserved=False
     )
     print("Paying Lightning invoice ...", end="", flush=True)
+    assert total_amount > 0, "amount is not positive"
+    logger.debug(
+        f"Total amount: {total_amount} available balance: {wallet.available_balance}"
+    )
+    if wallet.available_balance < total_amount:
+        print(" Error: Balance too low.")
+        return
+
     try:
         melt_response = await wallet.melt(
             send_proofs, invoice, quote.fee_reserve, quote.quote
@@ -596,12 +587,12 @@ async def balance(ctx: Context, verbose):
 
     if verbose:
         print(
-            f"Balance: {wallet.unit.str(wallet.available_balance)} (pending:"
-            f" {wallet.unit.str(wallet.balance-wallet.available_balance)}) in"
+            f"Balance: {wallet.available_balance} (pending:"
+            f" {wallet.balance-wallet.available_balance}) in"
             f" {len([p for p in wallet.proofs if not p.reserved])} tokens"
         )
     else:
-        print(f"Balance: {wallet.unit.str(wallet.available_balance)}")
+        print(f"Balance: {wallet.available_balance}")
 
 
 @cli.command("send", help="Send tokens.")
@@ -1315,4 +1306,4 @@ async def auth(ctx: Context, mint: bool, force: bool, password: bool):
         new_proofs = await auth_wallet.mint_blind_auth()
         print(f"Minted {auth_wallet.unit.str(sum_proofs(new_proofs))} auth tokens.")
 
-    print(f"Auth balance: {auth_wallet.unit.str(auth_wallet.available_balance)}")
+    print(f"Auth balance: {auth_wallet.available_balance}")

@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.16.5"
+VERSION = "0.17.0"
 
 
 def find_env_file():
@@ -72,15 +72,27 @@ class MintSettings(CashuSettings):
     )
 
 
+class MintWatchdogSettings(MintSettings):
+    mint_watchdog_enabled: bool = Field(
+        default=False,
+        title="Balance watchdog",
+        description="The watchdog shuts down the mint if the balance of the mint and the backend do not match.",
+    )
+    mint_watchdog_balance_check_interval_seconds: float = Field(default=60)
+    mint_watchdog_ignore_mismatch: bool = Field(
+        default=False,
+        description="Ignore watchdog errors and continue running. Use this to recover from a watchdog error.",
+    )
+
+
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
-
-    auth_database: str = Field(default="data/mint")
 
 
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
     mint_backend_bolt11_sat: str = Field(default="")
+    mint_backend_bolt11_msat: str = Field(default="")
     mint_backend_bolt11_usd: str = Field(default="")
     mint_backend_bolt11_eur: str = Field(default="")
 
@@ -113,26 +125,49 @@ class MintLimits(MintSettings):
         description="Maximum length of REST API request arrays.",
     )
 
-    mint_peg_out_only: bool = Field(
+    mint_peg_out_only: bool = Field(  # deprecated for mint_bolt11_disable_mint
         default=False,
-        title="Peg-out only",
-        description="Mint allows no mint operations.",
+        title="Disable minting tokens with bolt11",
+        description="Mint allows no bolt11 minting operations.",
     )
-    mint_max_peg_in: int = Field(
+    mint_bolt11_disable_mint: bool = Field(
+        default=False,
+        title="Disable minting tokens with bolt11",
+        description="Mint allows no bolt11 minting operations.",
+    )
+    mint_bolt11_disable_melt: bool = Field(
+        default=False,
+        title="Disable melting tokens with bolt11",
+        description="Mint allows no bolt11 melting operations.",
+    )
+
+    mint_max_peg_in: int = Field(  # deprecated for mint_max_mint_bolt11_sat
         default=None,
-        gt=0,
+        ge=0,
         title="Maximum peg-in",
         description="Maximum amount for a mint operation.",
     )
-    mint_max_peg_out: int = Field(
+    mint_max_peg_out: int = Field(  # deprecated for mint_max_melt_bolt11_sat
         default=None,
-        gt=0,
+        ge=0,
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
+    mint_max_mint_bolt11_sat: int = Field(
+        default=None,
+        ge=0,
+        title="Maximum mint amount for bolt11 in satoshis",
+        description="Maximum amount for a bolt11 mint operation in satoshis.",
+    )
+    mint_max_melt_bolt11_sat: int = Field(
+        default=None,
+        ge=0,
+        title="Maximum melt amount for bolt11 in satoshis",
+        description="Maximum amount for a bolt11 melt operation in satoshis.",
+    )
     mint_max_balance: int = Field(
         default=None,
-        gt=0,
+        ge=0,
         title="Maximum mint balance",
         description="Maximum mint balance.",
     )
@@ -153,6 +188,9 @@ class FakeWalletSettings(MintSettings):
     fakewallet_payment_state_exception: Optional[bool] = Field(default=False)
     fakewallet_pay_invoice_state: Optional[str] = Field(default="SETTLED")
     fakewallet_pay_invoice_state_exception: Optional[bool] = Field(default=False)
+    fakewallet_balance_sat: int = Field(default=1337)
+    fakewallet_balance_usd: int = Field(default=1337)
+    fakewallet_balance_eur: int = Field(default=1337)
 
 
 class MintInformation(CashuSettings):
@@ -242,6 +280,7 @@ class CoreLightningRestFundingSource(MintSettings):
 
 
 class AuthSettings(MintSettings):
+    mint_auth_database: str = Field(default="data/mint")
     mint_require_auth: bool = Field(default=False)
     mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
     mint_auth_oicd_client_id: str = Field(default="cashu-client")
@@ -280,6 +319,7 @@ class Settings(
     AuthSettings,
     MintRedisCache,
     MintDeprecationFlags,
+    MintWatchdogSettings,
     MintSettings,
     MintInformation,
     WalletSettings,
@@ -321,6 +361,16 @@ def startup_settings_tasks():
     # backwards compatibility: set mint_backend_bolt11_sat from mint_lightning_backend
     if settings.mint_lightning_backend:
         settings.mint_backend_bolt11_sat = settings.mint_lightning_backend
+
+    # backwards compatibility: mint_max_peg_in and mint_max_peg_out to mint_max_mint_bolt11_sat and mint_max_melt_bolt11_sat
+    if settings.mint_max_peg_in:
+        settings.mint_max_mint_bolt11_sat = settings.mint_max_peg_in
+    if settings.mint_max_peg_out:
+        settings.mint_max_melt_bolt11_sat = settings.mint_max_peg_out
+
+    # backwards compatibility: set mint_bolt11_disable_mint from mint_peg_out_only
+    if settings.mint_peg_out_only:
+        settings.mint_bolt11_disable_mint = True
 
 
 startup_settings_tasks()

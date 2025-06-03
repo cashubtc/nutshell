@@ -81,8 +81,8 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
                 mint_setting = MintMethodSetting(method=method.name, unit=unit.name)
-                if settings.mint_max_peg_in:
-                    mint_setting.max_amount = settings.mint_max_peg_in
+                if settings.mint_max_mint_bolt11_sat:
+                    mint_setting.max_amount = settings.mint_max_mint_bolt11_sat
                     mint_setting.min_amount = 0
                 mint_method_settings.append(mint_setting)
                 mint_setting.description = unit_dict[unit].supports_description
@@ -90,8 +90,8 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
                 melt_setting = MeltMethodSetting(method=method.name, unit=unit.name)
-                if settings.mint_max_peg_out:
-                    melt_setting.max_amount = settings.mint_max_peg_out
+                if settings.mint_max_melt_bolt11_sat:
+                    melt_setting.max_amount = settings.mint_max_melt_bolt11_sat
                     melt_setting.min_amount = 0
                 melt_setting.amountless = unit_dict[unit].supports_amountless
                 melt_method_settings.append(melt_setting)
@@ -99,11 +99,11 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {
             MINT_NUT: dict(
                 methods=mint_method_settings,
-                disabled=settings.mint_peg_out_only,
+                disabled=settings.mint_bolt11_disable_mint,
             ),
             MELT_NUT: dict(
                 methods=melt_method_settings,
-                disabled=False,
+                disabled=settings.mint_bolt11_disable_melt,
             ),
         }
         return mint_features
