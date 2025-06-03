@@ -31,6 +31,7 @@ async def test_get_quote_for_amountless_invoice(wallet, ledger):
     )
 
     response = await ledger.melt_quote(request)
+    print(f"amountless quote: {response = }")
     assert response.unit == 'sat'
     assert response.amount == 1
 

@@ -199,6 +199,7 @@ class FakeWallet(LightningBackend):
             await asyncio.sleep(settings.fakewallet_delay_outgoing_payment)
 
         if settings.fakewallet_pay_invoice_state:
+            print(settings.fakewallet_pay_invoice_state)
             if settings.fakewallet_pay_invoice_state == "SETTLED":
                 self.update_balance(invoice, incoming=False)
             return PaymentResponse(
@@ -278,8 +279,6 @@ class FakeWallet(LightningBackend):
             amount_msat = int(invoice_obj.amount_msat)
 
         if self.unit == Unit.sat or self.unit == Unit.msat:
-            assert invoice_obj.amount_msat
-            amount_msat = int(invoice_obj.amount_msat)
             fees_msat = fee_reserve(amount_msat)
             fees = Amount(unit=Unit.msat, amount=fees_msat)
             amount = Amount(unit=Unit.msat, amount=amount_msat)

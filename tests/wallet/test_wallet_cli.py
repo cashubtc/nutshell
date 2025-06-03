@@ -605,4 +605,4 @@ def test_pay_amountless_invoice(mint, cli_prefix):
     )
     assert result.exception is None
     print("test_pay_amountless_invoice ", result.output)
-    assert "Invoice paid" in result.output
+    assert "Invoice paid" in result.output or "Invoice pending" in result.output

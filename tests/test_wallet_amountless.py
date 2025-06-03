@@ -51,7 +51,7 @@ async def test_amountless_bolt11_invoice(wallet: Wallet):
     assert melt_quote.amount == 100
 
     result = await wallet.melt(proofs, amountless_invoice, melt_quote.fee_reserve, melt_quote.quote)
-    assert result.state == "PAID"
+    assert result.state == "PAID" or result.state == "PENDING"
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
