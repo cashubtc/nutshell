@@ -54,5 +54,5 @@ async def test_get_amountless_quote_for_non_amountless_invoice(wallet, ledger):
         ),
     )
 
-    assert_err(ledger.melt_quote(request), "Amount in request does not equal invoice")
+    await assert_err(ledger.melt_quote(request), "Amount in request does not equal invoice")
     
