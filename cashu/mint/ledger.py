@@ -30,6 +30,7 @@ from ..core.crypto.keys import (
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Connection, Database
 from ..core.errors import (
+    AmountlessInvoiceNotSupportedError,
     CashuError,
     LightningError,
     LightningPaymentFailedError,
@@ -529,8 +530,12 @@ class Ledger(
 
         if not mint_quote.checking_id:
             raise TransactionError("mint quote has no checking id")
+        
+        # Kind of payment quote: REGULAR, PARTIAL, AMOUNTLESS
         if melt_quote.is_mpp:
             raise TransactionError("internal payments do not support mpp")
+        elif melt_quote.is_amountless:
+            raise TransactionError("internal payments cannot have amountless request strings")           
 
         internal_fee = Amount(unit, 0)  # no internal fees
         amount = Amount(unit, mint_quote.amount)
@@ -604,16 +609,15 @@ class Ledger(
         # and therefore respond with internal transaction fees (0 for now)
         mint_quote = await self.crud.get_mint_quote(request=request, db=self.db)
         if mint_quote and mint_quote.unit == melt_quote.unit:
-            # check if the melt quote is partial and error if it is.
-            # it's just not possible to handle this case
-            if melt_quote.is_mpp:
-                raise TransactionError("internal mpp not allowed.")
             payment_quote = self.create_internal_melt_quote(mint_quote, melt_quote)
         else:
             # not internal
             # verify that the backend supports mpp if the quote request has an amount
             if melt_quote.is_mpp and not self.backends[method][unit].supports_mpp:
                 raise TransactionError("backend does not support mpp.")
+            # verify that the backend supports amountless if the payment string does not have an amount
+            if melt_quote.is_amountless and not self.backends[method][unit].supports_amountless:
+                raise AmountlessInvoiceNotSupportedError()
             # get payment quote by backend
             payment_quote = await self.backends[method][unit].get_payment_quote(
                 melt_quote=melt_quote
@@ -633,8 +637,7 @@ class Ledger(
         # We assume that the request is a bolt11 invoice, this works since we
         # support only the bol11 method for now.
         invoice_obj = bolt11.decode(melt_quote.request)
-        if not invoice_obj.amount_msat:
-            raise TransactionError("invoice has no amount.")
+        
         # we set the expiry of this quote to the expiry of the bolt11 invoice
         expiry = None
         if invoice_obj.expiry is not None:
@@ -651,6 +654,7 @@ class Ledger(
             fee_reserve=payment_quote.fee.to(unit).amount,
             created_time=int(time.time()),
             expiry=expiry,
+            quote_kind=payment_quote.kind,
         )
         await self.crud.store_melt_quote(quote=quote, db=self.db)
         await self.events.submit(quote)
@@ -791,10 +795,7 @@ class Ledger(
 
         # verify amounts from bolt11 invoice
         bolt11_request = melt_quote.request
-        invoice_obj = bolt11.decode(bolt11_request)
 
-        if not invoice_obj.amount_msat:
-            raise TransactionError("invoice has no amount.")
         if not mint_quote.amount == melt_quote.amount:
             raise TransactionError("amounts do not match")
         if not bolt11_request == mint_quote.request:

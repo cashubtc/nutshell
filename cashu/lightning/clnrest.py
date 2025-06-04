@@ -11,7 +11,8 @@ from bolt11 import (
 )
 from loguru import logger
 
-from ..core.base import Amount, MeltQuote, Unit
+from ..core.base import Amount, MeltQuote, PaymentQuoteKind, Unit
+from ..core.errors import IncorrectRequestAmountError
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -45,6 +46,7 @@ class CLNRestWallet(LightningBackend):
     supported_units = {Unit.sat, Unit.msat}
     unit = Unit.sat
     supports_mpp = settings.mint_clnrest_enable_mpp
+    supports_amountless: bool = True
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
 
@@ -179,13 +181,6 @@ class CLNRestWallet(LightningBackend):
                 error_message=str(exc),
             )
 
-        if not invoice.amount_msat or invoice.amount_msat <= 0:
-            error_message = "0 amount invoices are not allowed"
-            return PaymentResponse(
-                result=PaymentResult.FAILED,
-                error_message=error_message,
-            )
-
         quote_amount_msat = Amount(Unit[quote.unit], quote.amount).to(Unit.msat).amount
         fee_limit_percent = fee_limit_msat / quote_amount_msat * 100
         post_data = {
@@ -195,18 +190,40 @@ class CLNRestWallet(LightningBackend):
             # with fee < 5000 millisatoshi (which is default value of exemptfee)
         }
 
-        # Handle Multi-Mint payout where we must only pay part of the invoice amount
         logger.trace(f"{quote_amount_msat = }, {invoice.amount_msat = }")
-        if quote_amount_msat != invoice.amount_msat:
-            logger.trace("Detected Multi-Nut payment")
-            if self.supports_mpp:
-                post_data["partial_msat"] = quote_amount_msat
-            else:
-                error_message = "mint does not support MPP"
-                logger.error(error_message)
-                return PaymentResponse(
-                    result=PaymentResult.FAILED, error_message=error_message
-                )
+
+        # Handle AMOUNTLESS, PARTIAL and REGULAR payment quotes
+        match quote.quote_kind:
+            case PaymentQuoteKind.REGULAR:
+                logger.debug("Paying REGULAR quote")
+                if not invoice.amount_msat:
+                    error_message = "amountless invoices are not allowed"
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED,
+                        error_message=error_message,
+                    )
+            case PaymentQuoteKind.AMOUNTLESS:
+                logger.debug("Paying AMOUNTLESS quote")
+                if self.supports_amountless:
+                    post_data["amount_msat"] = quote_amount_msat
+                else:
+                    error_message = "mint does not support amountless invoices"
+                    logger.error(error_message)
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=error_message
+                    )
+            case PaymentQuoteKind.PARTIAL:
+                logger.debug("Paying PARTIAL/MPP quote")
+                # Handle Multi-Mint payout where we must only pay part of the invoice amount
+                if self.supports_mpp:
+                    post_data["partial_msat"] = quote_amount_msat
+                else:
+                    error_message = "mint does not support MPP"
+                    logger.error(error_message)
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=error_message
+                    )
+            
         r = await self.client.post("/v1/pay", data=post_data, timeout=None)
 
         if r.is_error or "message" in r.json():
@@ -341,12 +358,29 @@ class CLNRestWallet(LightningBackend):
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
+
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
-        assert invoice_obj.amount_msat > 0, "invoice has 0 amount."
-        amount_msat = (
-            melt_quote.mpp_amount if melt_quote.is_mpp else (invoice_obj.amount_msat)
-        )
+
+        kind = PaymentQuoteKind.REGULAR
+        # Detect and handle amountless/partial/normal request
+        amount_msat = 0
+        if melt_quote.is_amountless:
+            # Check that the user isn't doing something cheeky
+            if invoice_obj.amount_msat:
+                raise IncorrectRequestAmountError()
+            amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
+            kind = PaymentQuoteKind.AMOUNTLESS
+        elif melt_quote.is_mpp:
+            # Check that the user isn't doing something cheeky
+            if not invoice_obj.amount_msat:
+                raise IncorrectRequestAmountError()
+            amount_msat = melt_quote.options.mpp.amount                 # type: ignore
+            kind = PaymentQuoteKind.PARTIAL
+        else:
+            if not invoice_obj.amount_msat:
+                raise Exception("request has no amount and is not specified as amountless")
+            amount_msat = int(invoice_obj.amount_msat)
+
         fees_msat = fee_reserve(amount_msat)
         fees = Amount(unit=Unit.msat, amount=fees_msat)
         amount = Amount(unit=Unit.msat, amount=amount_msat)
@@ -354,4 +388,5 @@ class CLNRestWallet(LightningBackend):
             checking_id=invoice_obj.payment_hash,
             fee=fees.to(self.unit, round="up"),
             amount=amount.to(self.unit, round="up"),
+            kind=kind
         )

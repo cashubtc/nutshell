@@ -280,6 +280,17 @@ class MeltQuoteState(Enum):
     def __str__(self):
         return self.name
 
+class PaymentQuoteKind(Enum):
+    # Regular payments
+    REGULAR = "REGULAR"
+    # Payments for which the request string did not specify an amount
+    AMOUNTLESS = "AMOUNTLESS"
+    # Payments for which this Mint is expect to pay only a part of the total amount
+    # of the request string
+    PARTIAL = "PARTIAL"
+
+    def __str__(self) -> str:
+        return self.name
 
 class MeltQuote(LedgerEvent):
     quote: str
@@ -298,6 +309,7 @@ class MeltQuote(LedgerEvent):
     outputs: Optional[List[BlindedMessage]] = None
     change: Optional[List[BlindedSignature]] = None
     mint: Optional[str] = None
+    quote_kind: PaymentQuoteKind = PaymentQuoteKind.REGULAR
 
     @classmethod
     def from_row(cls, row: Row):
@@ -339,6 +351,7 @@ class MeltQuote(LedgerEvent):
             change=change,
             expiry=expiry,
             payment_preimage=payment_preimage,
+            quote_kind=PaymentQuoteKind(row.get("kind", "REGULAR")),    # type: ignore
         )
 
     @classmethod

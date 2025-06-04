@@ -17,6 +17,7 @@ from tests.helpers import (
     pay_if_regtest,
 )
 
+invoice_no_amount = "lnbcrt1pnusdsqpp5fcxhgur2eewvsfy52q8xwanrjdglnf7htacp0ldeeakz6j62rj8sdqqcqzzsxqyz5vqsp5qk6l5dwhldy3gqjnr4806mtg22e25ekud4vdlf3p0hk89ud93lxs9qxpqysgq72fmgd460q04mvr5jetw7wys0vnt6ydl58gcg4jdy5jwx5d7epx8tr04et7a5yskwg4le54wrn6u6k0jjfehkc8n5spxkwxum239zxcqpuzakn"
 
 @pytest.fixture(autouse=True, scope="session")
 def cli_prefix():
@@ -585,3 +586,14 @@ def test_send_with_lock(mint, cli_prefix):
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert pubkey in token.token[0].proofs[0].secret
+
+def test_pay_amountless_invoice(mint, cli_prefix):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "pay", invoice_no_amount if is_fake else get_real_invoice(0)["payment_request"], "10"]
+    )
+    if result.exception:
+        assert str(result.exception) == "Mint does not support amountless invoices, cannot pay this invoice."
+    else:
+        assert "Invoice paid" in result.output or "Invoice pending" in result.output

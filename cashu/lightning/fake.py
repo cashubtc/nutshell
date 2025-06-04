@@ -17,7 +17,10 @@ from bolt11 import (
     encode,
 )
 
-from ..core.base import Amount, MeltQuote, Unit
+from ..core.base import Amount, MeltQuote, PaymentQuoteKind, Unit
+from ..core.errors import (
+    IncorrectRequestAmountError,
+)
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -59,6 +62,7 @@ class FakeWallet(LightningBackend):
 
     supports_incoming_payment_stream: bool = True
     supports_description: bool = True
+    supports_amountless: bool = True
 
     def __init__(self, unit: Unit = Unit.sat, **kwargs):
         self.assert_unit_supported(unit)
@@ -195,6 +199,7 @@ class FakeWallet(LightningBackend):
             await asyncio.sleep(settings.fakewallet_delay_outgoing_payment)
 
         if settings.fakewallet_pay_invoice_state:
+            print(settings.fakewallet_pay_invoice_state)
             if settings.fakewallet_pay_invoice_state == "SETTLED":
                 self.update_balance(invoice, incoming=False)
             return PaymentResponse(
@@ -250,15 +255,35 @@ class FakeWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
+
+        # Payment quote is determined and saved in the response
+        kind = PaymentQuoteKind.REGULAR
+
+        # Detect and handle amountless/partial/normal request
+        amount_msat = 0
+        if melt_quote.is_amountless:
+            # Check that the user isn't doing something cheeky
+            if invoice_obj.amount_msat:
+                raise IncorrectRequestAmountError()
+            amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
+            kind = PaymentQuoteKind.AMOUNTLESS
+        elif melt_quote.is_mpp:
+            # Check that the user isn't doing something cheeky
+            if not invoice_obj.amount_msat:
+                raise IncorrectRequestAmountError()
+            amount_msat = melt_quote.options.mpp.amount                 # type: ignore
+            kind = PaymentQuoteKind.PARTIAL
+        else:
+            if not invoice_obj.amount_msat:
+                raise Exception("request has no amount and is not specified as amountless")
+            amount_msat = int(invoice_obj.amount_msat)
 
         if self.unit == Unit.sat or self.unit == Unit.msat:
-            amount_msat = int(invoice_obj.amount_msat)
             fees_msat = fee_reserve(amount_msat)
             fees = Amount(unit=Unit.msat, amount=fees_msat)
             amount = Amount(unit=Unit.msat, amount=amount_msat)
         elif self.unit == Unit.usd or self.unit == Unit.eur:
-            amount_usd = math.ceil(invoice_obj.amount_msat / 1e9 * self.fake_btc_price)
+            amount_usd = math.ceil(amount_msat / 1e9 * self.fake_btc_price)
             amount = Amount(unit=self.unit, amount=amount_usd)
             fees = Amount(unit=self.unit, amount=2)
         else:
@@ -268,6 +293,7 @@ class FakeWallet(LightningBackend):
             checking_id=invoice_obj.payment_hash,
             fee=fees.to(self.unit, round="up"),
             amount=amount.to(self.unit, round="up"),
+            kind=kind,
         )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:

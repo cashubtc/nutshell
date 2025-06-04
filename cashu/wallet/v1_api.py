@@ -37,6 +37,7 @@ from ..core.models import (
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMeltRequest,
+    PostMeltRequestOptionAmountless,
     PostMeltRequestOptionMpp,
     PostMeltRequestOptions,
     PostMeltResponse_deprecated,
@@ -438,14 +439,23 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
     ) -> PostMeltQuoteResponse:
         """Checks whether the Lightning payment is internal."""
         invoice_obj = bolt11.decode(payment_request)
-        assert invoice_obj.amount_msat, "invoice must have amount"
+        
+        assert amount_msat or invoice_obj.amount_msat, (
+            "No amount found. Either the invoice has an amount or the amount must be specified."
+        )
 
-        # add mpp amount for partial melts
+        # Add melt options: detect whether this should be an amountless option
+        # or a MPP option
         melt_options = None
         if amount_msat:
-            melt_options = PostMeltRequestOptions(
-                mpp=PostMeltRequestOptionMpp(amount=amount_msat)
-            )
+            if invoice_obj.amount_msat:
+                melt_options = PostMeltRequestOptions(
+                    mpp=PostMeltRequestOptionMpp(amount=amount_msat)
+                )
+            else:
+                melt_options = PostMeltRequestOptions(
+                    amountless=PostMeltRequestOptionAmountless(amount_msat=amount_msat)
+                )
 
         payload = PostMeltQuoteRequest(
             unit=unit.name, request=payment_request, options=melt_options
@@ -464,7 +474,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
             )
             quote_id = f"deprecated_{uuid.uuid4()}"
             amount_sat = (
-                amount_msat // 1000 if amount_msat else invoice_obj.amount_msat // 1000
+                amount_msat // 1000 if amount_msat else (invoice_obj.amount_msat or 0) // 1000
             )
             return PostMeltQuoteResponse(
                 quote=quote_id,

@@ -161,7 +161,7 @@ async def test_regtest_internal_mpp_melt_quotes(wallet: Wallet, ledger: Ledger):
 
     # try and create a multi-part melt quote
     await assert_err(
-        wallet.melt_quote(mint_quote.request, 100 * 1000), "internal mpp not allowed"
+        wallet.melt_quote(mint_quote.request, 100*1000), "internal payments do not support mpp"
     )
 
 

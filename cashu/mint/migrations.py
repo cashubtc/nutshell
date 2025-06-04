@@ -3,7 +3,13 @@ from typing import List
 
 from sqlalchemy import RowMapping
 
-from ..core.base import MeltQuoteState, MintKeyset, MintQuoteState, Proof
+from ..core.base import (
+    MeltQuoteState,
+    MintKeyset,
+    MintQuoteState,
+    PaymentQuoteKind,
+    Proof,
+)
 from ..core.crypto.keys import derive_keyset_id, derive_keyset_id_deprecated
 from ..core.db import Connection, Database
 from ..core.settings import settings
@@ -930,7 +936,6 @@ async def m026_keyset_specific_balance_views(db: Database):
         await drop_balance_views(db, conn)
         await create_balance_views(db, conn)
 
-
 async def m027_add_balance_to_keysets_and_log_table(db: Database):
     async with db.connect() as conn:
         await conn.execute(
@@ -966,5 +971,14 @@ async def m027_add_balance_to_keysets_and_log_table(db: Database):
                     backend_balance INTEGER NOT NULL,
                     time TIMESTAMP DEFAULT {db.timestamp_now}
                 );
+            """
+        )
+
+async def m028_add_payment_quote_kind(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+            ALTER TABLE {db.table_with_schema('melt_quotes')}
+            ADD COLUMN kind TEXT NOT NULL DEFAULT '{str(PaymentQuoteKind.REGULAR)}'
             """
         )

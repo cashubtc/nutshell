@@ -93,6 +93,7 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                 if settings.mint_max_melt_bolt11_sat:
                     melt_setting.max_amount = settings.mint_max_melt_bolt11_sat
                     melt_setting.min_amount = 0
+                melt_setting.amountless = unit_dict[unit].supports_amountless
                 melt_method_settings.append(melt_setting)
 
         mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {

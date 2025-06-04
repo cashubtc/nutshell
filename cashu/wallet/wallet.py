@@ -4,6 +4,7 @@ import threading
 import time
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
+import bolt11
 from bip32 import BIP32
 from loguru import logger
 
@@ -743,8 +744,13 @@ class Wallet(
         """
         Fetches a melt quote from the mint and either uses the amount in the invoice or the amount provided.
         """
-        if amount_msat and not self.mint_info.supports_mpp("bolt11", self.unit):
-            raise Exception("Mint does not support MPP, cannot specify amount.")
+        if amount_msat:
+            invoice_obj = bolt11.decode(invoice)
+            logger.debug(self.mint_info.supports_amountless("bolt11", self.unit))
+            if not invoice_obj.amount_msat and not self.mint_info.supports_amountless("bolt11", self.unit):
+                raise Exception("Mint does not support amountless invoices, cannot pay this invoice.")
+            if invoice_obj.amount_msat and not self.mint_info.supports_mpp("bolt11", self.unit):
+                raise Exception("Mint does not support MPP, cannot specify amount.")
         melt_quote_resp = await super().melt_quote(invoice, self.unit, amount_msat)
         logger.debug(
             f"Mint wants {self.unit.str(melt_quote_resp.fee_reserve)} as fee reserve."
@@ -833,7 +839,8 @@ class Wallet(
             proofs (List[Proof]): List of proofs to be spent.
             invoice (str): Lightning invoice to be paid.
             fee_reserve_sat (int): Amount of fees to be reserved for the payment.
-
+            quote_id (str): ID of the melt quote to pay.
+            
         """
 
         # Make sure we're operating on an independent copy of proofs

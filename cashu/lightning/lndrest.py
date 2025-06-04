@@ -12,7 +12,10 @@ from bolt11 import (
 )
 from loguru import logger
 
-from ..core.base import Amount, MeltQuote, Unit
+from ..core.base import Amount, MeltQuote, PaymentQuoteKind, Unit
+from ..core.errors import (
+    IncorrectRequestAmountError,
+)
 from ..core.helpers import fee_reserve
 from ..core.models import PostMeltQuoteRequest
 from ..core.settings import settings
@@ -49,6 +52,7 @@ class LndRestWallet(LightningBackend):
     """https://api.lightning.community/rest/index.html#lnd-rest-api-reference"""
 
     supports_mpp = settings.mint_lnd_enable_mpp
+    supports_amountless: bool = True
     supports_incoming_payment_stream = True
     supported_units = {Unit.sat, Unit.msat}
     supports_description: bool = True
@@ -186,23 +190,42 @@ class LndRestWallet(LightningBackend):
     async def pay_invoice(
         self, quote: MeltQuote, fee_limit_msat: int
     ) -> PaymentResponse:
-        # if the amount of the melt quote is different from the request
-        # call pay_partial_invoice instead
-        invoice = bolt11.decode(quote.request)
-        if invoice.amount_msat:
-            amount_msat = int(invoice.amount_msat)
-            if amount_msat != quote.amount * 1000 and self.supports_mpp:
-                return await self.pay_partial_invoice(
-                    quote, Amount(Unit.sat, quote.amount), fee_limit_msat
-                )
 
         # set the fee limit for the payment
-        lnrpcFeeLimit = dict()
-        lnrpcFeeLimit["fixed_msat"] = f"{fee_limit_msat}"
+        fee_limit_dict = dict()
+        fee_limit_dict["fixed_msat"] = f"{fee_limit_msat}"
 
+        post_data = {"payment_request": quote.request, "fee_limit": fee_limit_dict}
+        #invoice = bolt11.decode(quote.request)
+
+        match quote.quote_kind:
+            case PaymentQuoteKind.PARTIAL:
+                if self.supports_mpp:
+                    return await self.pay_partial_invoice(
+                        quote, Amount(Unit.sat, quote.amount), fee_limit_msat
+                    )
+                else:
+                    error_message = "MPP Payments are not enabled"
+                    logger.error(error_message)
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=error_message
+                    )
+            case PaymentQuoteKind.AMOUNTLESS:
+                if self.supports_amountless:
+                    # amount of the quote converted to msat
+                    post_data["amt_msat"] = Amount(Unit[quote.unit], quote.amount).to(Unit.msat, round="up").amount
+                else:
+                    error_message = "Amountless payments are not enabled"
+                    logger.error(error_message)
+                    return PaymentResponse(
+                        result=PaymentResult.FAILED, error_message=error_message
+                    )
+            case _:
+                pass
+        
         r = await self.client.post(
             url="/v1/channels/transactions",
-            json={"payment_request": quote.request, "fee_limit": lnrpcFeeLimit},
+            json=post_data,
             timeout=None,
         )
 
@@ -439,12 +462,26 @@ class LndRestWallet(LightningBackend):
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
-        amount_msat = melt_quote.mpp_amount if melt_quote.is_mpp else None
-
         invoice_obj = decode(melt_quote.request)
-        assert invoice_obj.amount_msat, "invoice has no amount."
 
-        if amount_msat is None:
+        kind = PaymentQuoteKind.REGULAR
+        # Detect and handle amountless/partial/normal request
+        amount_msat = 0
+        if melt_quote.is_amountless:
+            # Check that the user isn't doing something cheeky
+            if invoice_obj.amount_msat:
+                raise IncorrectRequestAmountError()
+            amount_msat = melt_quote.options.amountless.amount_msat     # type: ignore
+            kind = PaymentQuoteKind.AMOUNTLESS
+        elif melt_quote.is_mpp:
+            # Check that the user isn't doing something cheeky
+            if not invoice_obj.amount_msat:
+                raise IncorrectRequestAmountError()
+            amount_msat = melt_quote.options.mpp.amount                 # type: ignore
+            kind = PaymentQuoteKind.PARTIAL
+        else:
+            if not invoice_obj.amount_msat:
+                raise Exception("request has no amount and is not specified as amountless")
             amount_msat = int(invoice_obj.amount_msat)
 
         fees_msat = fee_reserve(amount_msat)
@@ -456,4 +493,5 @@ class LndRestWallet(LightningBackend):
             checking_id=invoice_obj.payment_hash,
             fee=fees.to(self.unit, round="up"),
             amount=amount.to(self.unit, round="up"),
+            kind=kind,
         )
