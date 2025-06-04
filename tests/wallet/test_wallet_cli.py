@@ -593,6 +593,7 @@ def test_pay_amountless_invoice(mint, cli_prefix):
         cli,
         [*cli_prefix, "pay", invoice_no_amount if is_fake else get_real_invoice(0)["payment_request"], "10"]
     )
-    assert result.exception is None or str(result.exception) == "Mint does not support amountless invoices, cannot pay this invoice."
-    print("test_pay_amountless_invoice ", result.output)
-    assert "Invoice paid" in result.output or "Invoice pending" in result.output
+    if result.exception:
+        assert str(result.exception) == "Mint does not support amountless invoices, cannot pay this invoice."
+    else:
+        assert "Invoice paid" in result.output or "Invoice pending" in result.output
