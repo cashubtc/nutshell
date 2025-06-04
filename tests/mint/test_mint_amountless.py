@@ -5,7 +5,6 @@ from cashu.core.models import (
     PostMeltRequestOptionAmountless,
     PostMeltRequestOptions,
 )
-
 from tests.helpers import assert_err, get_real_invoice, is_cln, is_fake, is_lnd
 
 invoice_no_amount = "lnbcrt1pnusdsqpp5fcxhgur2eewvsfy52q8xwanrjdglnf7htacp0ldeeakz6j62rj8sdqqcqzzsxqyz5vqsp5qk6l5dwhldy3gqjnr4806mtg22e25ekud4vdlf3p0hk89ud93lxs9qxpqysgq72fmgd460q04mvr5jetw7wys0vnt6ydl58gcg4jdy5jwx5d7epx8tr04et7a5yskwg4le54wrn6u6k0jjfehkc8n5spxkwxum239zxcqpuzakn"
