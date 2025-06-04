@@ -590,11 +590,7 @@ def test_send_with_lock(mint, cli_prefix):
     assert pubkey in token.token[0].proofs[0].secret
 
 pytest.mark.skipif(
-    settings.debug_mint_only_deprecated,
-    reason="settings.debug_mint_only_deprecated is set",
-)
-pytest.mark.skipif(
-    not (is_fake or is_cln or is_lnd),
+    not (is_fake or is_cln or is_lnd) or settings.debug_mint_only_deprecated,
     reason="Only run where amountless is supported",
 )
 def test_pay_amountless_invoice(mint, cli_prefix):
