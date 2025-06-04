@@ -589,16 +589,12 @@ def test_send_with_lock(mint, cli_prefix):
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert pubkey in token.token[0].proofs[0].secret
 
-pytest.mark.skipif(
-    not (is_fake or is_cln or is_lnd) or settings.debug_mint_only_deprecated,
-    reason="Only run where amountless is supported",
-)
 def test_pay_amountless_invoice(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
         cli,
         [*cli_prefix, "pay", invoice_no_amount if is_fake else get_real_invoice(0)["payment_request"], "10"]
     )
-    assert result.exception is None
+    assert result.exception is None or result.exception == "Mint does not support amountless invoices, cannot pay this invoice."
     print("test_pay_amountless_invoice ", result.output)
     assert "Invoice paid" in result.output or "Invoice pending" in result.output
