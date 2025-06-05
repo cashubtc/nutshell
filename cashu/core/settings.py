@@ -430,9 +430,9 @@ def startup_settings_tasks():
 
     # backwards compatibility: mint_max_peg_in and mint_max_peg_out to mint_max_mint_bolt11_sat and mint_max_melt_bolt11_sat
     if settings.mint_max_peg_in:
-        settings.mint_max_mint_bolt11_sat = settings.mint_max_peg_in
+        settings.mint_max_sat_mint = settings.mint_max_peg_in
     if settings.mint_max_peg_out:
-        settings.mint_max_melt_bolt11_sat = settings.mint_max_peg_out
+        settings.mint_max_sat_melt = settings.mint_max_peg_out
 
     # backwards compatibility: set mint_bolt11_disable_mint from mint_peg_out_only
     if settings.mint_peg_out_only:
