@@ -110,11 +110,11 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
         mint_features: Dict[int, Union[List[Any], Dict[str, Any]]] = {
             MINT_NUT: dict(
                 methods=mint_method_settings,
-                disabled=settings.mint_peg_out_only,
+                disabled=settings.mint_bolt11_disable_mint,
             ),
             MELT_NUT: dict(
                 methods=melt_method_settings,
-                disabled=False,
+                disabled=settings.mint_bolt11_disable_melt,
             ),
         }
         return mint_features

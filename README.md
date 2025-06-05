@@ -5,13 +5,13 @@
 <a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a> <a href="https://pepy.tech/project/cashu"> <img alt="Downloads" src="https://pepy.tech/badge/cashu"></a> <a href="https://app.codecov.io/gh/cashubtc/nutshell"><img alt="Coverage" src="https://img.shields.io/codecov/c/gh/cashubtc/nutshell"></a>
 
 
-*Disclaimer: The author is NOT a cryptographer and this work has not been reviewed. This means that there is very likely a fatal flaw somewhere. Cashu is still experimental and not production-ready.*
+
 
 Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nuts) based on David Wagner's variant of Chaumian blinding called [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406).
 
 <p align="center">
 <a href="#the-cashu-protocol">Cashu protocol</a> ·
-<a href="#easy-install">Quick Install</a> ·
+<a href="#easy-install-nutshell-wallet">Quick Install</a> ·
 <a href="#manual-install-poetry">Manual install</a> ·
 <a href="#configuration">Configuration</a> ·
 <a href="#using-cashu">Using Cashu</a> ·
@@ -22,7 +22,7 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 
 - Bitcoin Lightning support (LND, CLN, et al.)
 - Full support for the Cashu protocol [specifications](https://github.com/cashubtc/nuts)
-- Standalone CLI  wallet and mint server
+- Standalone CLI wallet and mint server
 - Wallet and mint library you can include in other Python projects
 - PostgreSQL and SQLite
 - Wallet with builtin Tor
@@ -63,10 +63,10 @@ You can build the image yourself by running the following command. Make sure to 
 docker compose up mint
 ```
 
-Alternatively, you can use the pre-built Docker images, see [Running a mint](#docker).
+Alternatively, you can use the pre-built Docker images, see [Running a mint](#running-a-mint).
 
 ## Manual install: Poetry
-These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Install Cashu](#poetry-install-cashu).
+These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Poetry: Install Cashu Nutshell](#poetry-install-cashu-nutshell).
 
 #### Poetry: Prerequisites
 
@@ -162,22 +162,14 @@ cashu send 69
 ```
 You should see the encoded token. Copy the token and send it to another user such as via email or a messenger. The token looks like this:
 ```bash
-cashuAeyJwcm9vZnMiOiBbey...
+cashuBo2F0gaJhaUgA2...
 ```
 
 #### Receive tokens
 To receive tokens, another user enters:
 ```bash
-cashu receive cashuAeyJwcm9vZnMiOiBbey...
+cashu receive cashuBo2F0gaJhaUgA2...
 ```
-
-# Starting the wallet API daemon
-Nutshell wallet can be used in daemon mode that can be controlled through a REST API:
-```bash
-cashu -d
-```
-
-You can find the API docs at [http://localhost:4448/docs](http://localhost:4448/docs).
 
 # Running a mint
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
@@ -185,7 +177,7 @@ This command runs the mint on your local computer. Skip this step if you want to
 ## Docker
 
 ```
-docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.16.6 poetry run mint
+docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.17.0 poetry run mint
 ```
 
 ## From this repository
@@ -197,13 +189,15 @@ poetry run mint
 For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
 
 ### NUT-19 Caching with Redis
-To cache HTTP responses, you can either install Redis manually or use the docker compose file in `docker/docker-compose.yaml` to start Redis in a container.
+To cache HTTP responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)), you can either install Redis manually or use the docker compose file in `docker/redis/docker-compose.yaml` to start Redis in a container.
 
 Edit the `.env` file and uncomment the Redis lines:
 ```
 MINT_REDIS_CACHE_ENABLED=TRUE
 MINT_REDIS_CACHE_URL=redis://localhost:6379
 ```
+### NUT-21 Authentication with Keycloak
+Cashu supports clear and blind authentication as defined in [NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md) and [NUT-22](https://github.com/cashubtc/nuts/blob/main/22.md) to limit the use of a mint to a registered set of users. Clear authentication is supported via a OICD provider such as Keycloak. You can set up and run Keycloak instance using the docker compose file `docker/keycloak/docker-compose.yml` in this repository.
 
 # Running tests
 To run the tests in this repository, first install the dev dependencies with

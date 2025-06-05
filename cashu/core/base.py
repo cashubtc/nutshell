@@ -354,10 +354,10 @@ class MeltQuote(LedgerEvent):
             quote=melt_quote_resp.quote,
             method="bolt11",
             request=melt_quote_resp.request
-            or request,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or request,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             checking_id="",
             unit=melt_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             amount=melt_quote_resp.amount,
             fee_reserve=melt_quote_resp.fee_reserve,
             state=MeltQuoteState(melt_quote_resp.state),
@@ -471,9 +471,9 @@ class MintQuote(LedgerEvent):
             request=mint_quote_resp.request,
             checking_id="",
             unit=mint_quote_resp.unit
-            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or unit,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             amount=mint_quote_resp.amount
-            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.16.6
+            or amount,  # BACKWARDS COMPATIBILITY mint response < 0.17.0
             state=MintQuoteState(mint_quote_resp.state),
             mint=mint,
             expiry=mint_quote_resp.expiry,
@@ -605,15 +605,19 @@ class Amount:
             return self.cents_to_usd()
         elif self.unit == Unit.sat:
             return self.sat_to_btc()
+        elif self.unit == Unit.msat:
+            return self.msat_to_btc()
         else:
             raise Exception("Amount must be in satoshis or cents")
 
     @classmethod
     def from_float(cls, amount: float, unit: Unit) -> "Amount":
         if unit == Unit.usd or unit == Unit.eur:
-            return cls(unit, int(amount * 100))
+            return cls(unit, int(round(amount * 100)))
         elif unit == Unit.sat:
-            return cls(unit, int(amount * 1e8))
+            return cls(unit, int(round(amount * 1e8)))
+        elif unit == Unit.msat:
+            return cls(unit, int(round(amount * 1e11)))
         else:
             raise Exception("Amount must be in satoshis or cents")
 
@@ -621,6 +625,12 @@ class Amount:
         if self.unit != Unit.sat:
             raise Exception("Amount must be in satoshis")
         return f"{self.amount/1e8:.8f}"
+
+    def msat_to_btc(self) -> str:
+        if self.unit != Unit.msat:
+            raise Exception("Amount must be in msat")
+        sat_amount = Amount(Unit.msat, self.amount).to(Unit.sat, round="up")
+        return f"{sat_amount.amount/1e8:.8f}"
 
     def cents_to_usd(self) -> str:
         if self.unit != Unit.usd and self.unit != Unit.eur:

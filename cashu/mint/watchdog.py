@@ -42,7 +42,8 @@ class LedgerWatchdog(SupportsDb, SupportsBackends):
                 tasks.append(
                     asyncio.create_task(self.dispatch_backend_checker(unit, backend))
                 )
-        tasks.append(asyncio.create_task(self.monitor_abort_queue()))
+        # We disable the abort queue for now
+        # tasks.append(asyncio.create_task(self.monitor_abort_queue()))
         return tasks
 
     async def monitor_abort_queue(self):

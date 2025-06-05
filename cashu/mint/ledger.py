@@ -324,8 +324,8 @@ class Ledger(
         logger.trace("called request_mint")
         if not quote_request.amount > 0:
             raise TransactionError("amount must be positive")
-        if settings.mint_peg_out_only:
-            raise NotAllowedError("Mint does not allow minting new tokens.")
+        if settings.mint_bolt11_disable_mint:
+            raise NotAllowedError("Minting with bol11 is disabled.")
 
         unit, method = self._verify_and_get_unit_method(
             quote_request.unit, Method.bolt11.name
@@ -576,6 +576,9 @@ class Ledger(
         Returns:
             PostMeltQuoteResponse: Melt quote response.
         """
+        if settings.mint_bolt11_disable_melt:
+            raise NotAllowedError("Melting with bol11 is disabled.")
+
         unit, method = self._verify_and_get_unit_method(
             melt_quote.unit, Method.bolt11.name
         )
@@ -875,11 +878,7 @@ class Ledger(
             raise TransactionError(
                 f"not enough fee reserve provided for melt. Provided fee reserve: {fee_reserve_provided}, needed: {melt_quote.fee_reserve}"
             )
-        # verify that the amount of the proofs is not larger than the maximum allowed
-        if settings.mint_max_peg_out and total_provided > settings.mint_max_peg_out:
-            raise NotAllowedError(
-                f"Maximum melt amount is {settings.mint_max_peg_out} sat."
-            )
+
         # verify inputs and their spending conditions
         # note, we do not verify outputs here, as they are only used for returning overpaid fees
         # We must have called _verify_outputs here already! (see above)
