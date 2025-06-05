@@ -153,24 +153,90 @@ class MintLimits(MintSettings):
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
-    mint_max_mint_bolt11_sat: int = Field(
-        default=None,
-        ge=0,
-        title="Maximum mint amount for bolt11 in satoshis",
-        description="Maximum amount for a bolt11 mint operation in satoshis.",
-    )
-    mint_max_melt_bolt11_sat: int = Field(
-        default=None,
-        ge=0,
-        title="Maximum melt amount for bolt11 in satoshis",
-        description="Maximum amount for a bolt11 melt operation in satoshis.",
-    )
     mint_max_balance: int = Field(
         default=None,
         ge=0,
         title="Maximum mint balance",
         description="Maximum mint balance.",
     )
+    # Unit-specific maximum mint balance settings
+    mint_max_sat_balance: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint balance (sats)",
+        description="Maximum mint balance in satoshis.",
+    )
+    mint_max_msat_balance: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint balance (msats)",
+        description="Maximum mint balance in millisatoshis.",
+    )
+    mint_max_usd_balance: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint balance (USD)",
+        description="Maximum mint balance in US dollars.",
+    )
+    mint_max_eur_balance: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint balance (EUR)",
+        description="Maximum mint balance in Euros.",
+    )
+    # Unit-specific maximum mint settings
+    mint_max_sat_mint: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint (sats)",
+        description="Maximum amount for a mint operation in satoshis.",
+    )
+    mint_max_msat_mint: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint (msats)",
+        description="Maximum amount for a mint operation in millisatoshis.",
+    )
+    mint_max_usd_mint: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint (USD)",
+        description="Maximum amount for a mint operation in US dollars.",
+    )
+    mint_max_eur_mint: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum mint (EUR)",
+        description="Maximum amount for a mint operation in Euros.",
+    )
+
+    # Unit-specific maximum melt settings
+    mint_max_sat_melt: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum melt (sats)",
+        description="Maximum amount for a melt operation in satoshis.",
+    )
+    mint_max_msat_melt: int = Field(
+        default=None,
+        gt=0,
+        title="Maximum melt (msats)",
+        description="Maximum amount for a melt operation in millisatoshis.",
+    )
+    mint_max_usd_melt: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum melt (USD)",
+        description="Maximum amount for a melt operation in US dollars.",
+    )
+    mint_max_eur_melt: float = Field(
+        default=None,
+        gt=0,
+        title="Maximum melt (EUR)",
+        description="Maximum amount for a melt operation in Euros.",
+    )
+
+    # Websockets
     mint_websocket_read_timeout: int = Field(
         default=10 * 60,
         gt=0,
@@ -364,9 +430,9 @@ def startup_settings_tasks():
 
     # backwards compatibility: mint_max_peg_in and mint_max_peg_out to mint_max_mint_bolt11_sat and mint_max_melt_bolt11_sat
     if settings.mint_max_peg_in:
-        settings.mint_max_mint_bolt11_sat = settings.mint_max_peg_in
+        settings.mint_max_sat_mint = settings.mint_max_peg_in
     if settings.mint_max_peg_out:
-        settings.mint_max_melt_bolt11_sat = settings.mint_max_peg_out
+        settings.mint_max_sat_melt = settings.mint_max_peg_out
 
     # backwards compatibility: set mint_bolt11_disable_mint from mint_peg_out_only
     if settings.mint_peg_out_only:
