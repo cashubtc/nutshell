@@ -1383,6 +1383,13 @@ class Wallet(
             spendable_proofs: List[Proof] = []
             if spent_filter:
                 spendable_proofs, maybe_spent_proofs = self.gcs_test_proofs(spent_filter, restored_proofs)
+                '''
+                # UNSAFE MODE: directly invalidate `maybe_unpent_proofs`.
+                # This works almost all the time, but doesn't guarantee a full recovery.
+                await self.invalidate(maybe_spent_proofs)
+                '''
+                # SAFE MODE: check `maybe_unspent_proofs` with the mint before invalidating
+                # Catches all eventual errors
                 unspent_proofs_mistakes = await self.invalidate(
                     maybe_spent_proofs, check_spendable=True
                 )
@@ -1573,7 +1580,7 @@ class Wallet(
                 - The first list contains proofs that are determined to be unspent.                                                                          
                 - The second list contains proofs that are maybe spent.           
         """     
-        targets = [bytes.fromhex(p.C) for p in proofs]
+        targets = [bytes.fromhex(p.Y) for p in proofs]
         results = spent_filter.match_many(targets)
         maybe_spent = [p for t, p in zip(targets, proofs) if results[t]]
         unspent = [p for t, p in zip(targets, proofs) if not results[t]]
