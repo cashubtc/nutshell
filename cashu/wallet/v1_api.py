@@ -26,6 +26,7 @@ from ..core.crypto.secp import PublicKey
 from ..core.db import Database
 from ..core.models import (
     CheckFeesResponse_deprecated,
+    GetFilterResponse,
     GetInfoResponse,
     KeysetsResponse,
     KeysetsResponseKeyset,
@@ -47,7 +48,6 @@ from ..core.models import (
     PostRestoreResponse,
     PostSwapRequest,
     PostSwapResponse,
-    GetFilterResponse,
 )
 from ..core.settings import settings
 from ..tor.tor import TorProxy

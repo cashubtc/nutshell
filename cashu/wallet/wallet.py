@@ -3,7 +3,7 @@ import copy
 import json
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Tuple, Union, Set
+from typing import Callable, Dict, List, Optional, Set, Tuple, Union
 
 from bip32 import BIP32
 from loguru import logger
@@ -26,6 +26,7 @@ from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
 from ..core.db import Database
 from ..core.errors import KeysetNotFoundError
+from ..core.gcs import GCSFilter
 from ..core.helpers import (
     amount_summary,
     calculate_number_of_blank_outputs,
@@ -38,9 +39,7 @@ from ..core.mint_info import MintInfo
 from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
-    GetFilterResponse,
 )
-from ..core.gcs import GCSFilter
 from ..core.nuts import nut20
 from ..core.p2pk import Secret
 from ..core.settings import settings
@@ -1576,6 +1575,6 @@ class Wallet(
         """     
         targets = [bytes.fromhex(p.C) for p in proofs]
         results = spent_filter.match_many(targets)
-        maybe_spent = [p for t, p in zip(targets, proofs) if results[t] == True]
-        unspent = [p for t, p in zip(targets, proofs) if results[t] == False]
+        maybe_spent = [p for t, p in zip(targets, proofs) if results[t]]
+        unspent = [p for t, p in zip(targets, proofs) if not results[t]]
         return unspent, maybe_spent
