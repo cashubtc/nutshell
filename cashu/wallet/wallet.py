@@ -1362,7 +1362,6 @@ class Wallet(
         """
         empty_batches = 0
         # we get the current secret counter and restore from there on
-        spendable_proofs = []
         counter_before = await bump_secret_derivation(
             db=self.db, keyset_id=keyset_id, by=0
         )
@@ -1551,10 +1550,10 @@ class Wallet(
         """
         async def do_get_spent_filter(wallet_instance, keyset_id) -> Tuple[str, Optional[GCSFilter]]:
             try:
-                return [keyset_id, GCSFilter.from_resp_wallet(await wallet_instance._get_spent_filter(keyset_id))]
+                return (keyset_id, GCSFilter.from_resp_wallet(await wallet_instance._get_spent_filter(keyset_id)))
             except Exception as e:
                 print(f"Error getting the filter for keyset {keyset_id}: {str(e)}")
-                return [keyset_id, None]
+                return (keyset_id, None)
 
         tasks = [do_get_spent_filter(self, keyset_id) for keyset_id in keyset_ids]
         result = await asyncio.gather(*tasks)
