@@ -52,11 +52,6 @@ async def info() -> GetInfoResponse_deprecated:
         contact=settings.mint_info_contact,
         nuts=["NUT-07", "NUT-08", "NUT-09"],
         motd=settings.mint_info_motd,
-        parameter={
-            "max_peg_in": settings.mint_max_peg_in,
-            "max_peg_out": settings.mint_max_peg_out,
-            "peg_out_only": settings.mint_peg_out_only,
-        },
     )
 
 
@@ -143,7 +138,7 @@ async def request_mint_deprecated(
     logger.trace(f"> GET /mint: amount={amount}")
     if amount > 21_000_000 * 100_000_000 or amount <= 0:
         raise CashuError(code=0, detail="Amount must be a valid amount of sat.")
-    if settings.mint_peg_out_only:
+    if settings.mint_bolt11_disable_mint:
         raise CashuError(code=0, detail="Mint does not allow minting new tokens.")
     quote = await ledger.mint_quote(PostMintQuoteRequest(amount=amount, unit="sat"))
     resp = GetMintResponse_deprecated(pr=quote.request, hash=quote.quote)
