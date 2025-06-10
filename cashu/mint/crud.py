@@ -1026,7 +1026,7 @@ class LedgerCrudSqlite(LedgerCrud):
             }
         )
 
-        return (GCSFilter.from_row(row), row["time"].timestamp()) if row else None
+        return (GCSFilter.from_row(row), row["time"]) if row else None
 
     async def update_filter(
         self,

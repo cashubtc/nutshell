@@ -1,8 +1,9 @@
+import asyncio
 import copy
 import json
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union, Set
 
 from bip32 import BIP32
 from loguru import logger
@@ -37,7 +38,9 @@ from ..core.mint_info import MintInfo
 from ..core.models import (
     PostCheckStateResponse,
     PostMeltQuoteResponse,
+    GetFilterResponse,
 )
+from ..core.gcs import GCSFilter
 from ..core.nuts import nut20
 from ..core.p2pk import Secret
 from ..core.settings import settings
@@ -1343,7 +1346,11 @@ class Wallet(
     # ---------- RESTORE WALLET ----------
 
     async def restore_tokens_for_keyset(
-        self, keyset_id: str, to: int = 2, batch: int = 25
+        self,
+        keyset_id: str,
+        spent_filter: Optional[GCSFilter],
+        to: int = 2,
+        batch: int = 25,
     ) -> None:
         """
         Restores tokens for a given keyset_id.
@@ -1374,9 +1381,21 @@ class Wallet(
             if len(restored_proofs) == 0:
                 empty_batches += 1
                 continue
-            spendable_proofs = await self.invalidate(
-                restored_proofs, check_spendable=True
-            )
+            # Use GCS filter to determine SURELY unspent notes and MAYBE spent notes
+            spendable_proofs: List[Proof] = []
+            if spent_filter:
+                spendable_proofs, maybe_spent_proofs = self.gcs_test_proofs(spent_filter, restored_proofs)
+                unspent_proofs_mistakes = await self.invalidate(
+                    maybe_spent_proofs, check_spendable=True
+                )
+                spendable_proofs += unspent_proofs_mistakes
+                logger.debug(
+                    f"GCS filter test errors: {len(unspent_proofs_mistakes)}/{len(spendable_proofs)}"
+                )
+            else:
+                spendable_proofs = await self.invalidate(
+                    restored_proofs, check_spendable=True
+                )
             if len(spendable_proofs):
                 print(
                     f"Restored {sum_proofs(spendable_proofs)} sat for keyset {keyset_id}."
@@ -1414,9 +1433,16 @@ class Wallet(
         """
         await self._init_private_key(mnemonic)
         await self.load_mint(force_old_keysets=False)
+        print("Getting the spent ecash GCS filters...")
+        spent_filters = await self.get_spent_filters_for_keysets(set(self.keysets.keys()))
         print("Restoring tokens...")
         for keyset_id in self.keysets.keys():
-            await self.restore_tokens_for_keyset(keyset_id, to, batch)
+            await self.restore_tokens_for_keyset(
+                keyset_id,
+                spent_filters[keyset_id],
+                to=to,
+                batch=batch
+            )
 
     async def restore_promises_from_to(
         self, keyset_id: str, from_counter: int, to_counter: int
@@ -1506,3 +1532,51 @@ class Wallet(
         )
         logger.debug(f"Restored {len(restored_promises)} promises")
         return next_restored_output_index, proofs
+
+    async def get_spent_filters_for_keysets(
+        self,
+        keyset_ids: Set[str]
+    ) -> Dict[str, Optional[GCSFilter]]:
+        """Fetches spent filters for a set of keyset IDs.                         
+                                                                                  
+        This method retrieves the Golomb-Coded Set (GCS) filters for each keyset ID provided.                                                                      
+        These filters are used to determine which proofs have been spent.         
+                                                                                  
+        Args:                                                                     
+            keyset_ids (Set[str]): A set of keyset IDs for which to fetch the spent filters.                                                                    
+                                                                                  
+        Returns:                                                                  
+            Dict[str, Optional[GCSFilter]]: A dictionary mapping each keyset ID to its corresponding GCS filter,                                                     
+            or None if the filter could not be retrieved.
+        """
+        async def do_get_spent_filter(wallet_instance, keyset_id) -> Tuple[str, Optional[GCSFilter]]:
+            try:
+                return [keyset_id, GCSFilter.from_resp_wallet(await wallet_instance._get_spent_filter(keyset_id))]
+            except Exception as e:
+                print(f"Error getting the filter for keyset {keyset_id}: {str(e)}")
+                return [keyset_id, None]
+
+        tasks = [do_get_spent_filter(self, keyset_id) for keyset_id in keyset_ids]
+        result = await asyncio.gather(*tasks)
+        return {keyset_id: filter_response for keyset_id, filter_response in result}
+
+    def gcs_test_proofs(self, spent_filter: GCSFilter, proofs: List[Proof]) -> Tuple[List[Proof], List[Proof]]:
+        """Tests proofs against a GCS filter to determine their spend status.     
+                                                                                  
+        This method uses a GCS filter to test a list of proofs and categorizes them into                                                                         
+        unspent and maybe spent based on the filter results.                      
+                                                                                  
+        Args:                                                                     
+            spent_filter (GCSFilter): The GCS filter used to test the proofs.     
+            proofs (List[Proof]): A list of proofs to be tested against the filter.                                                                           
+                                                                                  
+        Returns:                                                                  
+            Tuple[List[Proof], List[Proof]]: A tuple containing two lists:        
+                - The first list contains proofs that are determined to be unspent.                                                                          
+                - The second list contains proofs that are maybe spent.           
+        """     
+        targets = [bytes.fromhex(p.C) for p in proofs]
+        results = spent_filter.match_many(targets)
+        maybe_spent = [p for t, p in zip(targets, proofs) if results[t] == True]
+        unspent = [p for t, p in zip(targets, proofs) if results[t] == False]
+        return unspent, maybe_spent

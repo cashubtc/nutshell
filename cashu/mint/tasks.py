@@ -63,15 +63,15 @@ class LedgerTasks(SupportsKeysets, SupportsDb, SupportsBackends, SupportsEvents)
     # we avoid recomputing identical filters.
     async def recompute_gcs(self) -> None:
         while True:
-            logger.trace("Recompute GCS task is awake.")
-            async with self.db.get_connection() as conn:
-                for keyset in self.keysets.keys():
-                    logger.trace(f"Recomputing spent ecash GCS for keyset {keyset}")
-                    Ys = await self.crud.get_Ys_by_keyset(keyset_id=keyset, db=self.db, conn=conn)
-                    res = await self.crud.get_filter(keyset_id=keyset, db=self.db, conn=conn)
-                    
-                    ys_bytes = [bytes.fromhex(y) for y in Ys]
-                    if len(Ys) > 0:
+            try:
+                logger.debug("[GCS Task] Recompute GCS task is awake.")
+                async with self.db.get_connection() as conn:
+                    for keyset in self.keysets.keys():
+                        logger.debug(f"[GCS Task] Recomputing spent ecash GCS for keyset {keyset}")
+                        Ys = await self.crud.get_Ys_by_keyset(keyset_id=keyset, db=self.db, conn=conn)
+                        res = await self.crud.get_filter(keyset_id=keyset, db=self.db, conn=conn)
+                        
+                        ys_bytes = [bytes.fromhex(y) for y in Ys]
                         new_filter = GCSFilter.create(
                             items=ys_bytes,
                             p=settings.mint_gcs_remainder_bitlength,
@@ -91,5 +91,8 @@ class LedgerTasks(SupportsKeysets, SupportsDb, SupportsBackends, SupportsEvents)
                                 db=self.db,
                                 conn=conn,
                             )
+                        logger.info(f"[GCS task]: Successfully recomputed filter for {keyset}")
+            except Exception as e:
+                logger.error(f"[GCS task]: {str(e)}")
             # Sleep for `gcs_recompute_timeout` amount of seconds
             await asyncio.sleep(settings.mint_gcs_recompute_timeout)
