@@ -366,6 +366,14 @@ class PostRestoreResponse(BaseModel):
         self.promises = self.signatures
 
 
+# ------- API: FILTER -------
+class GetFilterResponse(BaseModel):
+    content: str
+    timestamp: int
+    n: int
+    p: int = 19
+    m: int = 784931
+
 # ------- API: BLIND AUTH -------
 class PostAuthBlindMintRequest(BaseModel):
     outputs: List[BlindedMessage] = Field(
