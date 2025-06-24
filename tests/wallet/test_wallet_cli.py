@@ -149,6 +149,23 @@ def test_invoice(mint, cli_prefix):
     assert result.exit_code == 0
 
 
+@pytest.mark.skipif(is_regtest, reason="only works with FakeWallet")
+def test_invoice_verbose(mint, cli_prefix):
+    if settings.debug_mint_only_deprecated:
+        pytest.skip("only works with v1 API")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "-v", "invoice", "1000"],
+    )
+
+    wallet = asyncio.run(init_wallet())
+    assert wallet.available_balance >= 1000
+    assert "Request: POST" in result.output
+    assert "Response: 200" in result.output
+
+
 def test_invoice_return_immediately(mint, cli_prefix):
     runner = CliRunner()
     result = runner.invoke(
