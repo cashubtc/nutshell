@@ -47,19 +47,19 @@ def coro(f):
 @click.option(
     "--ca-cert-path",
     "-ca",
-    default=None,
+    default="./ca_cert.pem",
     help="path to the Certificate Authority (CA) certificate file."
 )
 @click.option(
     "--client-key-path",
     "-k",
-    default=None,
+    default="./client_private.pem",
     help="path to the client's TLS key file."
 )
 @click.option(
     "--client-cert-path",
     "-c",
-    default=None,
+    default="./client_cert.pem",
     help="path to the client's TLS certificate file."
 )
 @click.pass_context
