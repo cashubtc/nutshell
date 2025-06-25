@@ -1,0 +1,197 @@
+syntax = "proto3";
+
+package management;
+
+service Mint {
+    rpc GetInfo(GetInfoRequest) returns (GetInfoResponse) {}
+    rpc UpdateMotd(UpdateMotdRequest) returns (UpdateResponse) {}
+    rpc UpdateShortDescription(UpdateDescriptionRequest) returns (UpdateResponse) {}
+    rpc UpdateLongDescription(UpdateDescriptionRequest) returns (UpdateResponse) {}
+    rpc UpdateIconUrl(UpdateIconUrlRequest) returns (UpdateResponse) {}
+    rpc UpdateName(UpdateNameRequest) returns (UpdateResponse) {}
+    rpc AddUrl(UpdateUrlRequest) returns (UpdateResponse) {}
+    rpc RemoveUrl(UpdateUrlRequest) returns (UpdateResponse) {}
+    rpc AddContact(UpdateContactRequest) returns (UpdateResponse) {}
+    rpc RemoveContact(UpdateContactRequest) returns (UpdateResponse) {}
+    rpc GetNut04Quote(GetNut04QuoteRequest) returns (GetNut04QuoteResponse) {}
+    rpc GetNut05Quote(GetNut05QuoteRequest) returns (GetNut05QuoteResponse) {}
+    rpc UpdateNut04(UpdateNut04Request) returns (UpdateResponse) {}
+    rpc UpdateNut05(UpdateNut05Request) returns (UpdateResponse) {}
+    rpc UpdateQuoteTtl(UpdateQuoteTtlRequest) returns (UpdateResponse) {}
+    rpc UpdateNut04Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
+    rpc UpdateNut05Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
+    rpc RotateNextKeyset(RotateNextKeysetRequest) returns (RotateNextKeysetResponse) {}
+    rpc UpdateLightningFee(UpdateLightningFeeRequest) returns (UpdateResponse) {}
+    rpc UpdateAuthLimits(UpdateAuthLimitsRequest) returns (UpdateResponse) {}
+}
+
+message GetInfoRequest {
+}
+
+message MintInfoContact {
+    string method = 1;
+    string info = 2;
+}
+
+message GetInfoResponse {
+    optional string name = 1;
+    optional string pubkey = 2;
+    optional string version = 3;
+    optional string description = 4;
+    optional string description_long = 5;
+    repeated MintInfoContact contact = 6;
+    optional string motd = 7;
+    optional string icon_url = 8;
+    repeated string urls = 9;
+    optional int64 time = 10;
+    optional string tos_url = 11;
+}
+
+message UpdateResponse{
+}
+
+message UpdateMotdRequest {
+    string motd = 1;
+}
+
+message UpdateDescriptionRequest {
+    string description = 1;
+}
+
+
+message UpdateIconUrlRequest {
+    string icon_url = 1;
+}
+
+message UpdateNameRequest {
+    string name = 1;
+}
+
+
+message UpdateUrlRequest {
+    string url = 1;
+}
+
+message UpdateContactRequest {
+    string method = 1;
+    string info = 2;
+}
+
+message UpdateNut04Request {
+    string unit = 1;
+    string method = 2;
+    optional bool disabled = 3;
+    optional uint64 min = 4;
+    optional uint64 max = 5;
+    optional bool description = 6;
+}
+
+
+message UpdateNut05Request {
+    string unit = 1;
+    string method = 2;
+    optional bool disabled = 3;
+    optional uint64 min = 4;
+    optional uint64 max = 5;
+}
+
+message UpdateQuoteTtlRequest {
+    optional uint64 ttl = 1;
+}
+
+message Nut04Quote {
+    string quote = 1;
+    string method = 2;
+    string request = 3;
+    string checking_id = 4;
+    string unit = 5;
+    uint64 amount = 6;
+    optional string state = 7;
+    optional int64 created_time = 8;
+    optional int64 paid_time = 9;
+    optional int64 expiry = 10;
+    optional string pubkey = 13;
+}
+
+message BlindedMessage {
+    int32 amount = 1;
+    string id = 2;
+    string B_ = 3;
+    optional string witness = 4;
+}
+
+message DLEQ {
+    string e = 1;
+    string s = 2;
+}
+
+message BlindedSignature {
+    string id = 1;
+    int32 amount = 2;
+    string C_ = 3;
+    optional DLEQ dleq = 4;
+}
+
+message Nut05Quote {
+    string quote = 1;
+    string method = 2;
+    string request = 3;
+    string checking_id = 4;
+    string unit = 5;
+    int32 amount = 6;
+    int32 fee_reserve = 7;
+    string state = 8;
+    optional int64 created_time = 9;
+    optional int64 paid_time = 10;  
+    int32 fee_paid = 11;   
+    optional string payment_preimage = 12;
+    optional int64 expiry = 13;  
+    repeated BlindedMessage outputs = 14;
+    repeated BlindedSignature change = 15;
+}
+
+message GetNut04QuoteRequest {
+    string quote_id = 1;
+}
+
+message GetNut04QuoteResponse {
+    Nut04Quote quote = 1;
+}
+
+message GetNut05QuoteRequest {
+    string quote_id = 1;
+}
+
+message GetNut05QuoteResponse {
+    Nut05Quote quote = 1;
+}
+
+message UpdateQuoteRequest {
+    string quote_id = 1;
+    string state = 2;
+}
+
+message RotateNextKeysetRequest {
+    string unit = 1;
+    optional uint32 max_order = 2;
+    optional uint64 input_fee_ppk = 3;
+}
+
+
+message RotateNextKeysetResponse {
+    string id = 1;
+    string unit = 2;
+    uint32 max_order = 3;
+    uint64 input_fee_ppk = 4;
+}
+
+
+message UpdateLightningFeeRequest {
+    optional double fee_percent = 1;
+    optional uint64 fee_min_reserve = 2;
+}
+
+message UpdateAuthLimitsRequest {
+    optional uint64 auth_rate_limit_per_minute = 1;
+    optional uint64 auth_max_blind_tokens = 2;
+}
