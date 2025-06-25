@@ -177,7 +177,7 @@ class LedgerSpendingConditions:
                     break
 
         # check if we have enough valid signatures
-        if not n_pubkeys_with_valid_sigs >= n_sigs_required:
+        if n_pubkeys_with_valid_sigs < n_sigs_required:
             raise TransactionError(
                 f"signature threshold not met. {n_pubkeys_with_valid_sigs} <"
                 f" {n_sigs_required}."
