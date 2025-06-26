@@ -302,7 +302,7 @@ class LedgerCrud(ABC):
         self,
         *,
         keyset_id: str,
-        which: "SPENT" | "ISSUED",
+        which: str,
         gcs_filter: GCSFilter,
         db: Database,
         conn: Optional[Connection] = None,
@@ -313,7 +313,7 @@ class LedgerCrud(ABC):
         self,
         *,
         keyset_id: str,
-        which: "SPENT" | "ISSUED",
+        which: str,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[Tuple[GCSFilter, int]]: ...
@@ -323,7 +323,7 @@ class LedgerCrud(ABC):
         self,
         *,
         keyset_id: str,
-        which: "SPENT" | "ISSUED",
+        which: str,
         gcs_filter: GCSFilter,
         db: Database,
         conn: Optional[Connection] = None,
@@ -992,14 +992,14 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         keyset_id: str,
-        which: "SPENT" | "ISSUED",
+        which: str,
         gcs_filter: GCSFilter,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
             f"""
-                INSERT INTO {db.table_with_schema('spent_filters')}
+                INSERT INTO {db.table_with_schema('filters')}
                 (keyset_id, content, num_items, inv_fpr, remainder_bitlength, time, kind)
                 VALUES (:keyset_id, :content, :num_items, :inv_fpr, :remainder_bitlength, :time, :kind)
             """,
@@ -1018,13 +1018,13 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         keyset_id: str,
-        which: "SPENT" | "ISSUED",
+        which: str,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[Tuple[GCSFilter, int]]:
         row = await (conn or db).fetchone(
             f"""
-                SELECT * FROM {db.table_with_schema('spent_filters')}
+                SELECT * FROM {db.table_with_schema('filters')}
                 WHERE keyset_id = :keyset_id AND kind = :kind
             """,
             {
@@ -1039,14 +1039,14 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         keyset_id: str,
-        which: "SPENT" | "ISSUED",
+        which: str,
         gcs_filter: GCSFilter,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
             f"""
-                UPDATE {db.table_with_schema(filters_table)} SET
+                UPDATE {db.table_with_schema('filters')} SET
                 content = :content, num_items = :num_items, inv_fpr = :inv_fpr, remainder_bitlength = :remainder_bitlength, time = :time
                 WHERE keyset_id = :keyset_id AND kind = :kind
             """,
