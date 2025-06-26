@@ -147,18 +147,34 @@ async def keysets() -> KeysetsResponse:
 
 @router.get(
     "/v1/filter/spent/{keyset_id}",
-    name="Get GCS Filter",
-    summary="Get a Golomb-Coded Set filter for a specific keyset",
+    name="Get spent GCS Filter",
+    summary="Get the spent ecash notes Golomb-Coded Set filter for a specific keyset",
     response_model=GetFilterResponse,
     response_description="The GCS filter for the specified keyset.",
 )
-async def get_filter(keyset_id: str) -> GetFilterResponse:
+async def get_spent_filter(keyset_id: str) -> GetFilterResponse:
     """
     Get a Golomb-Coded Set filter for the specified keyset id.
     """
     logger.trace(f"> GET /v1/filter/spent/{keyset_id}")
-    filter_response = await ledger.get_spent_filter_by_keyset(keyset_id)
+    filter_response = await ledger.get_filter_by_keyset(keyset_id, which="SPENT")
     logger.trace(f"< GET /v1/filter/spent/{keyset_id}")
+    return filter_response
+
+@router.get(
+    "/v1/filter/issued/{keyset_id}",
+    name="Get issued GCS Filter",
+    summary="Get the issued blind signatures Golomb-Coded Set filter for a specific keyset",
+    response_model=GetFilterResponse,
+    response_description="The GCS filter for the specified keyset.",
+)
+async def get_issued_filter(keyset_id: str) -> GetFilterResponse:
+    """
+    Get a Golomb-Coded Set filter for the specified keyset id.
+    """
+    logger.trace(f"> GET /v1/filter/issued/{keyset_id}")
+    filter_response = await ledger.get_filter_by_keyset(keyset_id, which="ISSUED")
+    logger.trace(f"< GET /v1/filter/issued/{keyset_id}")
     return filter_response
 
 @router.post(

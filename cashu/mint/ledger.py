@@ -1159,15 +1159,16 @@ class Ledger(
             return signatures
 
 
-    async def get_spent_filter_by_keyset(self, keyset_id: str) -> GetFilterResponse:
+    async def get_filter_by_keyset(self, which: str, keyset_id: str) -> GetFilterResponse:
         """Retrieves a Golomb-Coded Set filter for the given keyset id.
         Args:
+            which (str): "SPENT" or "ISSUED" for either the spent filter or the issued filter for the specified keyset.
             keyset_id (str): The keyset id of the filter.
         Returns:
             PostGetFilterResponse: The response containing the filter.
         """
         # Retrieve the spent ecash filter for the desired filter
-        gcs_and_timestamp = await self.crud.get_filter(keyset_id=keyset_id, db=self.db)
+        gcs_and_timestamp = await self.crud.get_filter(keyset_id=keyset_id, db=self.db, which=which)
 
         if not gcs_and_timestamp:
             raise Exception("No filter found for the given keyset id.")
