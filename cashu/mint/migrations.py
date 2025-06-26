@@ -975,7 +975,7 @@ async def m028_add_per_keyset_gcs_filters(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {db.table_with_schema('filters')} (
                     keyset_id TEXT PRIMARY KEY,
-                    kind TEXT NOT NULL,
+                    kind TEXT CHECK(kind IN ('ISSUED', 'SPENT')) NOT NULL,
                     content {db.blob} NOT NULL,
                     num_items INTEGER NOT NULL,
                     inv_fpr INTEGER NOT NULL,
