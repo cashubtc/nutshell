@@ -69,7 +69,7 @@ class LedgerTasks(SupportsKeysets, SupportsDb, SupportsBackends, SupportsEvents)
                     for keyset in self.keysets.keys():
                         logger.debug(f"[GCS Task] Recomputing spent ecash GCS for keyset {keyset}")
                         Ys = await self.crud.get_Ys_by_keyset(keyset_id=keyset, db=self.db, conn=conn)
-                        res = await self.crud.get_filter(keyset_id=keyset, db=self.db, conn=conn)
+                        res = await self.crud.get_filter(keyset_id=keyset, db=self.db, conn=conn, which="SPENT")
                         
                         ys_bytes = [bytes.fromhex(y) for y in Ys]
                         new_filter = GCSFilter.create(
@@ -83,6 +83,7 @@ class LedgerTasks(SupportsKeysets, SupportsDb, SupportsBackends, SupportsEvents)
                                 gcs_filter=new_filter,
                                 db=self.db,
                                 conn=conn,
+                                which="SPENT",
                             )
                         else:
                             await self.crud.update_filter(
@@ -90,8 +91,38 @@ class LedgerTasks(SupportsKeysets, SupportsDb, SupportsBackends, SupportsEvents)
                                 gcs_filter=new_filter,
                                 db=self.db,
                                 conn=conn,
+                                which="SPENT",
                             )
-                        logger.info(f"[GCS task]: Successfully recomputed filter for {keyset}")
+
+                        logger.info(f"[GCS task]: Successfully recomputed spent filter for {keyset}")
+
+                        Bs = await self.crud.get_blinded_messages_by_keyset_id(keyset_id=keyset, db=self.db, conn=conn)
+                        res = await self.crud.get_filter(keyset_id=keyset, db=self.db, conn=conn, which="ISSUED")
+                        bs_bytes = [bytes.fromhex(b_) for b_ in Bs]
+                        new_filter = GCSFilter.create(
+                            items=bs_bytes,
+                            p=settings.mint_gcs_remainder_bitlength,
+                            m=settings.mint_gcs_false_positive_rate,
+                        )
+
+                        if not res:
+                            await self.crud.store_filter(
+                                keyset_id=keyset,
+                                gcs_filter=new_filter,
+                                db=self.db,
+                                conn=conn,
+                                which="ISSUED",
+                            )
+                        else:
+                            await self.crud.update_filter(
+                                keyset_id=keyset,
+                                gcs_filter=new_filter,
+                                db=self.db,
+                                conn=conn,
+                                which="ISSUED",
+                            )
+
+                        logger.info(f"[GCS task]: Successfully recomputed issued filter for {keyset}")
             except Exception as e:
                 logger.error(f"[GCS task]: {str(e)}")
             # Sleep for `gcs_recompute_timeout` amount of seconds
