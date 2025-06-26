@@ -302,6 +302,7 @@ class LedgerCrud(ABC):
         self,
         *,
         keyset_id: str,
+        which: "spent" | "issued",
         gcs_filter: GCSFilter,
         db: Database,
         conn: Optional[Connection] = None,
@@ -312,6 +313,7 @@ class LedgerCrud(ABC):
         self,
         *,
         keyset_id: str,
+        which: "spent" | "issued",
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[Tuple[GCSFilter, int]]: ...
@@ -321,6 +323,7 @@ class LedgerCrud(ABC):
         self,
         *,
         keyset_id: str,
+        which: "spent" | "issued",
         gcs_filter: GCSFilter,
         db: Database,
         conn: Optional[Connection] = None,
@@ -989,6 +992,7 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         keyset_id: str,
+        which: "spent" | "issued",
         gcs_filter: GCSFilter,
         db: Database,
         conn: Optional[Connection] = None,
@@ -1013,6 +1017,7 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         keyset_id: str,
+        which: "spent" | "issued",
         db: Database,
         conn: Optional[Connection] = None,
     ) -> Optional[Tuple[GCSFilter, int]]:
@@ -1032,13 +1037,15 @@ class LedgerCrudSqlite(LedgerCrud):
         self,
         *,
         keyset_id: str,
+        which: "spent" | "issued",
         gcs_filter: GCSFilter,
         db: Database,
         conn: Optional[Connection] = None,
     ) -> None:
+        filters_table = "issued_filters" if which == "issued" else "spent_filters"
         await (conn or db).execute(
             f"""
-                UPDATE {db.table_with_schema('spent_filters')} SET
+                UPDATE {db.table_with_schema(filters_table)} SET
                 content = :content, num_items = :num_items, inv_fpr = :inv_fpr, remainder_bitlength = :remainder_bitlength, time = :time
                 WHERE keyset_id = :keyset_id
             """,
