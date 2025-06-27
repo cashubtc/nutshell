@@ -157,7 +157,7 @@ async def get_spent_filter(keyset_id: str) -> GetFilterResponse:
     Get a Golomb-Coded Set filter for the specified keyset id.
     """
     logger.trace(f"> GET /v1/filter/spent/{keyset_id}")
-    filter_response = await ledger.get_filter_by_keyset(keyset_id, which="SPENT")
+    filter_response = await ledger.get_filter_by_keyset(keyset_id=keyset_id, which="SPENT")
     logger.trace(f"< GET /v1/filter/spent/{keyset_id}")
     return filter_response
 
@@ -173,7 +173,7 @@ async def get_issued_filter(keyset_id: str) -> GetFilterResponse:
     Get a Golomb-Coded Set filter for the specified keyset id.
     """
     logger.trace(f"> GET /v1/filter/issued/{keyset_id}")
-    filter_response = await ledger.get_filter_by_keyset(keyset_id, which="ISSUED")
+    filter_response = await ledger.get_filter_by_keyset(keyset_id=keyset_id, which="ISSUED")
     logger.trace(f"< GET /v1/filter/issued/{keyset_id}")
     return filter_response
 
