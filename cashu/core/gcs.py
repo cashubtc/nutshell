@@ -174,12 +174,14 @@ class GCSFilter:
 
         f = self.num_items * self.inv_fpr
 
+        if (f == 0):
+            return {target: False for target in targets}
+
         if len(set(targets)) != len(targets):
             raise Exception("GCS Error: match targets are not unique entries")
 
         # Map targets to the same range as the set hashes.
         target_hashes: Dict[int, Tuple[bytes, bool]] = {hash_to_range(target, f): (target, False) for target in targets}
-         
         input_stream = bitarray()
         input_stream.frombytes(self.content)
 

@@ -1505,6 +1505,10 @@ class Wallet(
             )
             return next_restored_output_index, proofs
         else:
+            logger.debug(f"Avoided the leakage of {len(unissued)} future secrets")
+            await set_secret_derivation(
+                db=self.db, keyset_id=keyset_id, counter=to_counter + 1
+            )
             return 0, []
 
     async def restore_promises(
