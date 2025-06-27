@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from sqlite3 import Row
-from typing import Any, ClassVar, Dict, List, Optional, Union, Tuple
+from typing import Any, ClassVar, Dict, List, Optional, Tuple, Union
 
 import cbor2
 from loguru import logger

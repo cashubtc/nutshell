@@ -21,7 +21,6 @@ from ..core.base import (
     Unit,
     WalletKeyset,
     WalletMint,
-    SecretTriplet,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
