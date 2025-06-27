@@ -683,6 +683,25 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
 
     @async_set_httpx_client
     @async_ensure_mint_loaded
+    async def _get_issued_filter(self, keyset_id: str) -> GetFilterResponse:
+        """API that gets the issued filter for a specific keyset from the mint.
+
+        Args:
+            keyset_id (str): Keyset ID
+
+        Returns:
+            GetFilterResponse: Issued blind signatures filter data
+
+        Raises:
+            Exception: If the request fails
+        """
+        resp = await self._request(GET, f"filter/issued/{keyset_id}")
+        self.raise_on_error_request(resp)
+        response_dict = resp.json()
+        return GetFilterResponse.parse_obj(response_dict)
+
+    @async_set_httpx_client
+    @async_ensure_mint_loaded
     async def restore_promises(
         self, outputs: List[BlindedMessage]
     ) -> Tuple[List[BlindedMessage], List[BlindedSignature]]:

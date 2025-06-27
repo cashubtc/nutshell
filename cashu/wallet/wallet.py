@@ -21,6 +21,7 @@ from ..core.base import (
     Unit,
     WalletKeyset,
     WalletMint,
+    SecretTriplet,
 )
 from ..core.crypto import b_dhke
 from ..core.crypto.secp import PrivateKey, PublicKey
@@ -1348,6 +1349,7 @@ class Wallet(
         self,
         keyset_id: str,
         spent_filter: Optional[GCSFilter],
+        issued_filter: Optional[GCSFilter],
         to: int = 2,
         batch: int = 25,
     ) -> None:
@@ -1373,7 +1375,7 @@ class Wallet(
             (
                 next_restored_output_index,
                 restored_proofs,
-            ) = await self.restore_promises_from_to(keyset_id, i, i + batch - 1)
+            ) = await self.restore_promises_from_to(keyset_id, issued_filter, i, i + batch - 1)
             last_restore_count += next_restored_output_index
             i += batch
             if len(restored_proofs) == 0:
@@ -1438,23 +1440,29 @@ class Wallet(
         """
         await self._init_private_key(mnemonic)
         await self.load_mint(force_old_keysets=False)
+        unique_keysets = set(self.keysets.keys())
         print("Getting the spent ecash GCS filters...")
-        spent_filters = await self.get_spent_filters_for_keysets(set(self.keysets.keys()))
+        spent_filters = await self.get_spent_filters_for_keysets(unique_keysets)
+        print("Getting the issued blind signatures GCS filters...")
+        issued_filters = await self.get_issued_filters_for_keysets(unique_keysets)
         print("Restoring tokens...")
         for keyset_id in self.keysets.keys():
             await self.restore_tokens_for_keyset(
                 keyset_id,
                 spent_filters[keyset_id],
+                issued_filters[keyset_id],
                 to=to,
                 batch=batch
             )
 
     async def restore_promises_from_to(
-        self, keyset_id: str, from_counter: int, to_counter: int
+        self, keyset_id: str, issued_filter: Optional[GCSFilter], from_counter: int, to_counter: int
     ) -> Tuple[int, List[Proof]]:
         """Restores promises from a given range of counters. This is for restoring a wallet from a mnemonic.
 
         Args:
+            keyset_id (str): The ID of the keyset this promises were issued from
+            issued_filter (str): Compressed set (GCS) of the blind signatures that were issued from this keyset
             from_counter (int): Counter for the secret derivation to start from
             to_counter (int): Counter for the secret derivation to end at
 
@@ -1471,18 +1479,33 @@ class Wallet(
         regenerated_outputs, _ = self._construct_outputs(
             amounts_dummy, secrets, rs, keyset_id=keyset_id
         )
-        # we ask the mint to reissue the promises
-        next_restored_output_index, proofs = await self.restore_promises(
-            outputs=regenerated_outputs,
-            secrets=secrets,
-            rs=rs,
-            derivation_paths=derivation_paths,
-        )
+        
+        unissued: List[BlindedMessage] = []
+        maybe_issued: List[BlindedMessage] = []
 
-        await set_secret_derivation(
-            db=self.db, keyset_id=keyset_id, counter=to_counter + 1
-        )
-        return next_restored_output_index, proofs
+        if issued_filter:
+            unissued, maybe_issued = self.gcs_test_blind_messages(
+                issued_filter,
+                regenerated_outputs,
+            )
+        else:
+            unissued, maybe_issued = [], regenerated_outputs
+
+        if len(maybe_issued) > 0:
+            # we ask the mint to reissue the promises
+            next_restored_output_index, proofs = await self.restore_promises(
+                outputs=regenerated_outputs,
+                secrets=secrets,
+                rs=rs,
+                derivation_paths=derivation_paths,
+            )
+
+            await set_secret_derivation(
+                db=self.db, keyset_id=keyset_id, counter=to_counter + 1
+            )
+            return next_restored_output_index, proofs
+        else:
+            return 0, []
 
     async def restore_promises(
         self,
@@ -1565,6 +1588,34 @@ class Wallet(
         result = await asyncio.gather(*tasks)
         return {keyset_id: filter_response for keyset_id, filter_response in result}
 
+    async def get_issued_filters_for_keysets(
+        self,
+        keyset_ids: Set[str]
+    ) -> Dict[str, Optional[GCSFilter]]:
+        """Fetches issued filters for a set of keyset IDs.                         
+                                                                                  
+        This method retrieves the Golomb-Coded Set (GCS) filters for each keyset ID provided.                                                                      
+        These filters are used to determine which proofs have been spent.         
+                                                                                  
+        Args:                                                                     
+            keyset_ids (Set[str]): A set of keyset IDs for which to fetch the spent filters.                                                                    
+                                                                                  
+        Returns:                                                                  
+            Dict[str, Optional[GCSFilter]]: A dictionary mapping each keyset ID to its corresponding GCS filter,                                                     
+            or None if the filter could not be retrieved.
+        """
+        async def do_get_issued_filter(wallet_instance, keyset_id) -> Tuple[str, Optional[GCSFilter]]:
+            try:
+                return (keyset_id, GCSFilter.from_resp_wallet(await wallet_instance._get_issued_filter(keyset_id)))
+            except Exception as e:
+                print(f"Error getting the filter for keyset {keyset_id}: {str(e)}")
+                return (keyset_id, None)
+
+        tasks = [do_get_issued_filter(self, keyset_id) for keyset_id in keyset_ids]
+        result = await asyncio.gather(*tasks)
+        return {keyset_id: filter_response for keyset_id, filter_response in result}
+
+
     def gcs_test_proofs(self, spent_filter: GCSFilter, proofs: List[Proof]) -> Tuple[List[Proof], List[Proof]]:
         """Tests proofs against a GCS filter to determine their spend status.     
                                                                                   
@@ -1585,3 +1636,19 @@ class Wallet(
         maybe_spent = [p for t, p in zip(targets, proofs) if results[t]]
         unspent = [p for t, p in zip(targets, proofs) if not results[t]]
         return unspent, maybe_spent
+
+    def gcs_test_blind_messages(
+        self,
+        issued_filter: GCSFilter,
+        blinded_messages: List[BlindedMessage]
+    ) -> Tuple[List[BlindedMessage], List[BlindedMessage]]:
+        """Tests blind messages against a GCS filter to determine their issued status.     
+                                                                                  
+        This method uses a GCS filter to test a list of proofs and categorizes them into                                                                         
+        un-issued and maybe issued based on the filter results.                         
+        """
+        targets = [bytes.fromhex(b.B_) for b in blinded_messages]
+        results = issued_filter.match_many(targets)
+        maybe_issued = [b for t, b in zip(targets, blinded_messages) if results[t]]
+        unissued = [b for t, b in zip(targets, blinded_messages) if not results[t]]
+        return unissued, maybe_issued
