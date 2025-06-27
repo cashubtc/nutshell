@@ -253,6 +253,20 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         """
         logger.warning("Using deprecated API call: Requesting mint: GET /mint")
         resp = await self.httpx.get(f"{self.url}/mint", params={"amount": amount})
+        
+        # Verbose logging of requests and responses when enabled
+        if settings.wallet_verbose_requests:
+            request_info = f"Request: GET {self.url}/mint?amount={amount}"
+            print(request_info)
+            
+            response_info = f"Response: {resp.status_code}"
+            try:
+                json_response = resp.json()
+                response_info += f"\n{json.dumps(json_response, indent=2)}"
+            except json.JSONDecodeError:
+                response_info += f"\n{resp.text}"
+            print(response_info)
+            
         self.raise_on_error(resp)
         return_dict = resp.json()
         mint_response = GetMintResponse_deprecated.parse_obj(return_dict)
@@ -308,6 +322,22 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
                 "payment_hash": hash,  # backwards compatibility pre 0.12.0
             },
         )
+        
+        # Verbose logging of requests and responses when enabled
+        if settings.wallet_verbose_requests:
+            request_info = f"Request: POST {self.url}/mint?hash={hash}"
+            if payload:
+                request_info += f"\nPayload: {json.dumps(payload, indent=2)}"
+            print(request_info)
+            
+            response_info = f"Response: {resp.status_code}"
+            try:
+                json_response = resp.json()
+                response_info += f"\n{json.dumps(json_response, indent=2)}"
+            except json.JSONDecodeError:
+                response_info += f"\n{resp.text}"
+            print(response_info)
+            
         self.raise_on_error(resp)
         response_dict = resp.json()
         logger.trace("Lightning invoice checked. POST /mint")

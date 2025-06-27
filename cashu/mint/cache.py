@@ -14,7 +14,6 @@ from ..core.settings import settings
 
 class RedisCache:
     initialized = False
-    expiry = settings.mint_redis_cache_ttl
 
     def __init__(self):
         if settings.mint_redis_cache_enabled:
@@ -58,7 +57,7 @@ class RedisCache:
                     else:
                         raise Exception(f"Found no cached response for key {key}")
                 result = await func(request, payload)
-                await self.redis.set(name=key, value=result.json(), ex=self.expiry)
+                await self.redis.set(name=key, value=result.json(), ex=settings.mint_redis_cache_ttl)
                 return result
 
             return wrapper
