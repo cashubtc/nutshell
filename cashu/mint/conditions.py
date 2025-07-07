@@ -177,7 +177,7 @@ class LedgerSpendingConditions:
                     break
 
         # check if we have enough valid signatures
-        if not n_pubkeys_with_valid_sigs >= n_sigs_required:
+        if n_pubkeys_with_valid_sigs < n_sigs_required:
             raise TransactionError(
                 f"signature threshold not met. {n_pubkeys_with_valid_sigs} <"
                 f" {n_sigs_required}."
@@ -258,6 +258,20 @@ class LedgerSpendingConditions:
 
         return secrets.pop()
 
+    def _check_at_least_one_sig_all(self, proofs: List[Proof]) -> bool:
+        """
+        Verify that at least one secret has a SIG_ALL spending condition
+        """
+        for proof in proofs:
+            try:
+                secret = Secret.deserialize(proof.secret)
+                if secret.tags.get_tag("sigflag") == SigFlags.SIG_ALL.value:
+                    return True
+            except Exception:
+                pass
+
+        return False
+
     def _verify_sigall_spending_conditions(
         self,
         proofs: List[Proof],
@@ -268,10 +282,9 @@ class LedgerSpendingConditions:
         If sigflag==SIG_ALL in any proof.secret, perform a signature check on all
         inputs (proofs) and outputs (outputs) together.
 
-        # We return True
-        # - if not all proof.secret are Secret spending condition
-        # - if not all secrets are P2PKSecret spending condition
-        # - if not all signature.sigflag are SIG_ALL
+        We return True
+        - if we successfully validated the spending condition
+        - if all proof.secret are **NOT** SIG_ALL spending condition
 
         We raise an exception:
         - if one input is SIG_ALL but not all inputs are SIG_ALL
@@ -285,6 +298,11 @@ class LedgerSpendingConditions:
 
         We return True if we successfully validated the spending condition.
         """
+
+        # verify at least one secret is SIG_ALL
+        if not self._check_at_least_one_sig_all(proofs):
+            # it makes no sense to continue with a SIG_ALL check
+            return True
 
         # verify that all secrets are of the same kind
         try:
