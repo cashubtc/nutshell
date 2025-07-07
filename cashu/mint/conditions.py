@@ -263,9 +263,12 @@ class LedgerSpendingConditions:
         Verify that at least one secret has a SIG_ALL spending condition
         """
         for proof in proofs:
-            secret = Secret.deserialize(proof.secret)
-            if secret.tags.get_tag("sigflag") == SigFlags.SIG_ALL.value:
-                return True
+            try:
+                secret = Secret.deserialize(proof.secret)
+                if secret.tags.get_tag("sigflag") == SigFlags.SIG_ALL.value:
+                    return True
+            except Exception:
+                pass
 
         return False
 
