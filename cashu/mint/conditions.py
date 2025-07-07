@@ -258,7 +258,7 @@ class LedgerSpendingConditions:
 
         return secrets.pop()
 
-    def _check_at_least_one_sig_all(self, proofs: List[Proof]) -> Secret:
+    def _check_at_least_one_sig_all(self, proofs: List[Proof]) -> bool:
         """
         Verify that at least one secret has a SIG_ALL spending condition
         """
