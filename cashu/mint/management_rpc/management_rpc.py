@@ -107,7 +107,7 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         if request.mint_ttl:
             settings.mint_redis_cache_ttl = request.mint_ttl
         elif request.melt_ttl:
-            settings.melt_redis_cache_ttl = request.melt_ttl
+            settings.mint_redis_cache_ttl = request.melt_ttl
         else:
             raise Exception("No quote ttl was specified")
         return management_pb2.UpdateResponse()
