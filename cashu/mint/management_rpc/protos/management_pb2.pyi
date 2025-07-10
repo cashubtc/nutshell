@@ -5,16 +5,17 @@ isort:skip_file
 
 import builtins
 import collections.abc
-import typing
-
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+import typing
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
 @typing.final
 class GetInfoRequest(google.protobuf.message.Message):
+    """GetInfoRequest is an empty message used to request general mint information."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
@@ -24,13 +25,17 @@ class GetInfoRequest(google.protobuf.message.Message):
 global___GetInfoRequest = GetInfoRequest
 
 @typing.final
-class MintInfoContact(google.protobuf.message.Message):
+class InfoContact(google.protobuf.message.Message):
+    """InfoContact represents a contact method for the mint."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     METHOD_FIELD_NUMBER: builtins.int
     INFO_FIELD_NUMBER: builtins.int
     method: builtins.str
+    """The method of contact (e.g., "email", "telegram", "twitter")."""
     info: builtins.str
+    """The contact information itself (e.g., "info@example.com", "@mint_support")."""
     def __init__(
         self,
         *,
@@ -39,17 +44,19 @@ class MintInfoContact(google.protobuf.message.Message):
     ) -> None: ...
     def ClearField(self, field_name: typing.Literal["info", b"info", "method", b"method"]) -> None: ...
 
-global___MintInfoContact = MintInfoContact
+global___InfoContact = InfoContact
 
 @typing.final
 class GetInfoResponse(google.protobuf.message.Message):
+    """GetInfoResponse contains general information about the mint."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     NAME_FIELD_NUMBER: builtins.int
     PUBKEY_FIELD_NUMBER: builtins.int
     VERSION_FIELD_NUMBER: builtins.int
     DESCRIPTION_FIELD_NUMBER: builtins.int
-    DESCRIPTION_LONG_FIELD_NUMBER: builtins.int
+    LONG_DESCRIPTION_FIELD_NUMBER: builtins.int
     CONTACT_FIELD_NUMBER: builtins.int
     MOTD_FIELD_NUMBER: builtins.int
     ICON_URL_FIELD_NUMBER: builtins.int
@@ -57,18 +64,31 @@ class GetInfoResponse(google.protobuf.message.Message):
     TIME_FIELD_NUMBER: builtins.int
     TOS_URL_FIELD_NUMBER: builtins.int
     name: builtins.str
+    """The name of the mint."""
     pubkey: builtins.str
+    """The public key of the mint."""
     version: builtins.str
+    """The version of the mint software."""
     description: builtins.str
-    description_long: builtins.str
+    """A short description of the mint."""
+    long_description: builtins.str
+    """A longer, more detailed description of the mint."""
     motd: builtins.str
+    """The Message of the Day (MOTD) displayed by the mint."""
     icon_url: builtins.str
+    """The URL to the mint's icon."""
     time: builtins.int
+    """The current time on the mint server (Unix timestamp)."""
     tos_url: builtins.str
+    """The URL to the mint's Terms of Service."""
     @property
-    def contact(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___MintInfoContact]: ...
+    def contact(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___InfoContact]:
+        """A list of contact methods for the mint."""
+
     @property
-    def urls(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]: ...
+    def urls(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """A list of URLs associated with the mint."""
+
     def __init__(
         self,
         *,
@@ -76,22 +96,22 @@ class GetInfoResponse(google.protobuf.message.Message):
         pubkey: builtins.str | None = ...,
         version: builtins.str | None = ...,
         description: builtins.str | None = ...,
-        description_long: builtins.str | None = ...,
-        contact: collections.abc.Iterable[global___MintInfoContact] | None = ...,
+        long_description: builtins.str | None = ...,
+        contact: collections.abc.Iterable[global___InfoContact] | None = ...,
         motd: builtins.str | None = ...,
         icon_url: builtins.str | None = ...,
         urls: collections.abc.Iterable[builtins.str] | None = ...,
         time: builtins.int | None = ...,
         tos_url: builtins.str | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_description", b"_description", "_description_long", b"_description_long", "_icon_url", b"_icon_url", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_tos_url", b"_tos_url", "_version", b"_version", "description", b"description", "description_long", b"description_long", "icon_url", b"icon_url", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "tos_url", b"tos_url", "version", b"version"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_description", b"_description", "_description_long", b"_description_long", "_icon_url", b"_icon_url", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_tos_url", b"_tos_url", "_version", b"_version", "contact", b"contact", "description", b"description", "description_long", b"description_long", "icon_url", b"icon_url", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "tos_url", b"tos_url", "urls", b"urls", "version", b"version"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_description", b"_description", "_icon_url", b"_icon_url", "_long_description", b"_long_description", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_tos_url", b"_tos_url", "_version", b"_version", "description", b"description", "icon_url", b"icon_url", "long_description", b"long_description", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "tos_url", b"tos_url", "version", b"version"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_description", b"_description", "_icon_url", b"_icon_url", "_long_description", b"_long_description", "_motd", b"_motd", "_name", b"_name", "_pubkey", b"_pubkey", "_time", b"_time", "_tos_url", b"_tos_url", "_version", b"_version", "contact", b"contact", "description", b"description", "icon_url", b"icon_url", "long_description", b"long_description", "motd", b"motd", "name", b"name", "pubkey", b"pubkey", "time", b"time", "tos_url", b"tos_url", "urls", b"urls", "version", b"version"]) -> None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_description", b"_description"]) -> typing.Literal["description"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_description_long", b"_description_long"]) -> typing.Literal["description_long"] | None: ...
-    @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_icon_url", b"_icon_url"]) -> typing.Literal["icon_url"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_long_description", b"_long_description"]) -> typing.Literal["long_description"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_motd", b"_motd"]) -> typing.Literal["motd"] | None: ...
     @typing.overload
@@ -109,6 +129,8 @@ global___GetInfoResponse = GetInfoResponse
 
 @typing.final
 class UpdateResponse(google.protobuf.message.Message):
+    """UpdateResponse is a generic empty message returned for successful update operations."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(
@@ -119,10 +141,13 @@ global___UpdateResponse = UpdateResponse
 
 @typing.final
 class UpdateMotdRequest(google.protobuf.message.Message):
+    """UpdateMotdRequest is used to update the Message of the Day (MOTD)."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     MOTD_FIELD_NUMBER: builtins.int
     motd: builtins.str
+    """The new MOTD string."""
     def __init__(
         self,
         *,
@@ -134,10 +159,13 @@ global___UpdateMotdRequest = UpdateMotdRequest
 
 @typing.final
 class UpdateDescriptionRequest(google.protobuf.message.Message):
+    """UpdateDescriptionRequest is used to update either the short or long description."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     DESCRIPTION_FIELD_NUMBER: builtins.int
     description: builtins.str
+    """The new description string."""
     def __init__(
         self,
         *,
@@ -149,10 +177,13 @@ global___UpdateDescriptionRequest = UpdateDescriptionRequest
 
 @typing.final
 class UpdateIconUrlRequest(google.protobuf.message.Message):
+    """UpdateIconUrlRequest is used to update the mint's icon URL."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     ICON_URL_FIELD_NUMBER: builtins.int
     icon_url: builtins.str
+    """The new URL for the mint's icon."""
     def __init__(
         self,
         *,
@@ -164,10 +195,13 @@ global___UpdateIconUrlRequest = UpdateIconUrlRequest
 
 @typing.final
 class UpdateNameRequest(google.protobuf.message.Message):
+    """UpdateNameRequest is used to update the mint's name."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     NAME_FIELD_NUMBER: builtins.int
     name: builtins.str
+    """The new name for the mint."""
     def __init__(
         self,
         *,
@@ -179,10 +213,13 @@ global___UpdateNameRequest = UpdateNameRequest
 
 @typing.final
 class UpdateUrlRequest(google.protobuf.message.Message):
+    """UpdateUrlRequest is used to add or remove a URL associated with the mint."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     URL_FIELD_NUMBER: builtins.int
     url: builtins.str
+    """The URL to add or remove."""
     def __init__(
         self,
         *,
@@ -194,12 +231,16 @@ global___UpdateUrlRequest = UpdateUrlRequest
 
 @typing.final
 class UpdateContactRequest(google.protobuf.message.Message):
+    """UpdateContactRequest is used to add or remove a contact method for the mint."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     METHOD_FIELD_NUMBER: builtins.int
     INFO_FIELD_NUMBER: builtins.int
     method: builtins.str
+    """The method of contact (e.g., "email", "telegram")."""
     info: builtins.str
+    """The contact information (e.g., "info@example.com")."""
     def __init__(
         self,
         *,
@@ -211,97 +252,174 @@ class UpdateContactRequest(google.protobuf.message.Message):
 global___UpdateContactRequest = UpdateContactRequest
 
 @typing.final
+class MintMethodOptions(google.protobuf.message.Message):
+    """MintMethodOptions defines specific options for a NUT-04 (minting) method."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    DESCRIPTION_FIELD_NUMBER: builtins.int
+    description: builtins.bool
+    """Bolt11 options
+    Indicates if a description is required for Bolt11 invoices.
+    """
+    def __init__(
+        self,
+        *,
+        description: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["description", b"description"]) -> None: ...
+
+global___MintMethodOptions = MintMethodOptions
+
+@typing.final
 class UpdateNut04Request(google.protobuf.message.Message):
+    """UpdateNut04Request is used to configure a NUT-04 (minting) payment method."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     UNIT_FIELD_NUMBER: builtins.int
     METHOD_FIELD_NUMBER: builtins.int
     DISABLED_FIELD_NUMBER: builtins.int
-    MIN_FIELD_NUMBER: builtins.int
-    MAX_FIELD_NUMBER: builtins.int
-    DESCRIPTION_FIELD_NUMBER: builtins.int
+    MIN_AMOUNT_FIELD_NUMBER: builtins.int
+    MAX_AMOUNT_FIELD_NUMBER: builtins.int
+    OPTIONS_FIELD_NUMBER: builtins.int
     unit: builtins.str
+    """The unit of the payment method (e.g., "sat")."""
     method: builtins.str
+    """The method of payment (e.g., "bolt11")."""
     disabled: builtins.bool
-    min: builtins.int
-    max: builtins.int
-    description: builtins.bool
+    """Optional: If true, disables this payment method."""
+    min_amount: builtins.int
+    """Optional: The minimum amount allowed for this method."""
+    max_amount: builtins.int
+    """Optional: The maximum amount allowed for this method."""
+    @property
+    def options(self) -> global___MintMethodOptions:
+        """Optional: Specific options for this minting method."""
+
     def __init__(
         self,
         *,
         unit: builtins.str = ...,
         method: builtins.str = ...,
         disabled: builtins.bool | None = ...,
-        min: builtins.int | None = ...,
-        max: builtins.int | None = ...,
-        description: builtins.bool | None = ...,
+        min_amount: builtins.int | None = ...,
+        max_amount: builtins.int | None = ...,
+        options: global___MintMethodOptions | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_description", b"_description", "_disabled", b"_disabled", "_max", b"_max", "_min", b"_min", "description", b"description", "disabled", b"disabled", "max", b"max", "min", b"min"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_description", b"_description", "_disabled", b"_disabled", "_max", b"_max", "_min", b"_min", "description", b"description", "disabled", b"disabled", "max", b"max", "method", b"method", "min", b"min", "unit", b"unit"]) -> None: ...
-    @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_description", b"_description"]) -> typing.Literal["description"] | None: ...
+    def HasField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "min_amount", b"min_amount", "options", b"options"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "method", b"method", "min_amount", b"min_amount", "options", b"options", "unit", b"unit"]) -> None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_disabled", b"_disabled"]) -> typing.Literal["disabled"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_max", b"_max"]) -> typing.Literal["max"] | None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_max_amount", b"_max_amount"]) -> typing.Literal["max_amount"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_min", b"_min"]) -> typing.Literal["min"] | None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_min_amount", b"_min_amount"]) -> typing.Literal["min_amount"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_options", b"_options"]) -> typing.Literal["options"] | None: ...
 
 global___UpdateNut04Request = UpdateNut04Request
 
 @typing.final
+class MeltMethodOptions(google.protobuf.message.Message):
+    """MeltMethodOptions defines specific options for a NUT-05 (melting) method."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    AMOUNTLESS_FIELD_NUMBER: builtins.int
+    amountless: builtins.bool
+    """Bolt11 options
+    Indicates if the amount can be omitted for Bolt11 invoices.
+    """
+    def __init__(
+        self,
+        *,
+        amountless: builtins.bool = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing.Literal["amountless", b"amountless"]) -> None: ...
+
+global___MeltMethodOptions = MeltMethodOptions
+
+@typing.final
 class UpdateNut05Request(google.protobuf.message.Message):
+    """UpdateNut05Request is used to configure a NUT-05 (melting) payment method."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     UNIT_FIELD_NUMBER: builtins.int
     METHOD_FIELD_NUMBER: builtins.int
     DISABLED_FIELD_NUMBER: builtins.int
-    MIN_FIELD_NUMBER: builtins.int
-    MAX_FIELD_NUMBER: builtins.int
+    MIN_AMOUNT_FIELD_NUMBER: builtins.int
+    MAX_AMOUNT_FIELD_NUMBER: builtins.int
+    OPTIONS_FIELD_NUMBER: builtins.int
     unit: builtins.str
+    """The unit of the payment method (e.g., "sat")."""
     method: builtins.str
+    """The method of payment (e.g., "bolt11")."""
     disabled: builtins.bool
-    min: builtins.int
-    max: builtins.int
+    """Optional: If true, disables this payment method."""
+    min_amount: builtins.int
+    """Optional: The minimum amount allowed for this method."""
+    max_amount: builtins.int
+    """Optional: The maximum amount allowed for this method."""
+    @property
+    def options(self) -> global___MeltMethodOptions:
+        """Optional: Specific options for this melting method."""
+
     def __init__(
         self,
         *,
         unit: builtins.str = ...,
         method: builtins.str = ...,
         disabled: builtins.bool | None = ...,
-        min: builtins.int | None = ...,
-        max: builtins.int | None = ...,
+        min_amount: builtins.int | None = ...,
+        max_amount: builtins.int | None = ...,
+        options: global___MeltMethodOptions | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max", b"_max", "_min", b"_min", "disabled", b"disabled", "max", b"max", "min", b"min"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max", b"_max", "_min", b"_min", "disabled", b"disabled", "max", b"max", "method", b"method", "min", b"min", "unit", b"unit"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "min_amount", b"min_amount", "options", b"options"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_disabled", b"_disabled", "_max_amount", b"_max_amount", "_min_amount", b"_min_amount", "_options", b"_options", "disabled", b"disabled", "max_amount", b"max_amount", "method", b"method", "min_amount", b"min_amount", "options", b"options", "unit", b"unit"]) -> None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_disabled", b"_disabled"]) -> typing.Literal["disabled"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_max", b"_max"]) -> typing.Literal["max"] | None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_max_amount", b"_max_amount"]) -> typing.Literal["max_amount"] | None: ...
     @typing.overload
-    def WhichOneof(self, oneof_group: typing.Literal["_min", b"_min"]) -> typing.Literal["min"] | None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_min_amount", b"_min_amount"]) -> typing.Literal["min_amount"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_options", b"_options"]) -> typing.Literal["options"] | None: ...
 
 global___UpdateNut05Request = UpdateNut05Request
 
 @typing.final
 class UpdateQuoteTtlRequest(google.protobuf.message.Message):
+    """UpdateQuoteTtlRequest is used to update the Time-To-Live (TTL) for quotes."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
-    TTL_FIELD_NUMBER: builtins.int
-    ttl: builtins.int
+    MINT_TTL_FIELD_NUMBER: builtins.int
+    MELT_TTL_FIELD_NUMBER: builtins.int
+    mint_ttl: builtins.int
+    """Optional: The TTL in seconds for minting (NUT-04) quotes."""
+    melt_ttl: builtins.int
+    """Optional: The TTL in seconds for melting (NUT-05) quotes."""
     def __init__(
         self,
         *,
-        ttl: builtins.int | None = ...,
+        mint_ttl: builtins.int | None = ...,
+        melt_ttl: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_ttl", b"_ttl", "ttl", b"ttl"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_ttl", b"_ttl", "ttl", b"ttl"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing.Literal["_ttl", b"_ttl"]) -> typing.Literal["ttl"] | None: ...
+    def HasField(self, field_name: typing.Literal["_melt_ttl", b"_melt_ttl", "_mint_ttl", b"_mint_ttl", "melt_ttl", b"melt_ttl", "mint_ttl", b"mint_ttl"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_melt_ttl", b"_melt_ttl", "_mint_ttl", b"_mint_ttl", "melt_ttl", b"melt_ttl", "mint_ttl", b"mint_ttl"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_melt_ttl", b"_melt_ttl"]) -> typing.Literal["melt_ttl"] | None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_mint_ttl", b"_mint_ttl"]) -> typing.Literal["mint_ttl"] | None: ...
 
 global___UpdateQuoteTtlRequest = UpdateQuoteTtlRequest
 
 @typing.final
 class Nut04Quote(google.protobuf.message.Message):
+    """Nut04Quote represents a quote for minting (NUT-04)."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     QUOTE_FIELD_NUMBER: builtins.int
@@ -316,16 +434,27 @@ class Nut04Quote(google.protobuf.message.Message):
     EXPIRY_FIELD_NUMBER: builtins.int
     PUBKEY_FIELD_NUMBER: builtins.int
     quote: builtins.str
+    """The unique identifier for the quote."""
     method: builtins.str
+    """The payment method used for this quote (e.g., "bolt11")."""
     request: builtins.str
+    """The original request string (e.g., Bolt11 invoice)."""
     checking_id: builtins.str
+    """The ID used for checking the payment status."""
     unit: builtins.str
+    """The unit of the amount (e.g., "sat")."""
     amount: builtins.int
+    """The amount of tokens to be minted."""
     state: builtins.str
+    """Optional: The current state of the quote (e.g., "pending", "paid", "expired")."""
     created_time: builtins.int
+    """Optional: The Unix timestamp when the quote was created."""
     paid_time: builtins.int
+    """Optional: The Unix timestamp when the quote was paid."""
     expiry: builtins.int
+    """Optional: The Unix timestamp when the quote expires."""
     pubkey: builtins.str
+    """Optional: The public key associated with the quote, if applicable."""
     def __init__(
         self,
         *,
@@ -358,6 +487,8 @@ global___Nut04Quote = Nut04Quote
 
 @typing.final
 class BlindedMessage(google.protobuf.message.Message):
+    """BlindedMessage represents a blinded message used in Cashu."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     AMOUNT_FIELD_NUMBER: builtins.int
@@ -365,9 +496,13 @@ class BlindedMessage(google.protobuf.message.Message):
     B__FIELD_NUMBER: builtins.int
     WITNESS_FIELD_NUMBER: builtins.int
     amount: builtins.int
+    """The amount of the token."""
     id: builtins.str
+    """The ID of the keyset."""
     B_: builtins.str
+    """The blinded point B_."""
     witness: builtins.str
+    """Optional: The witness for the blinded message."""
     def __init__(
         self,
         *,
@@ -384,12 +519,16 @@ global___BlindedMessage = BlindedMessage
 
 @typing.final
 class DLEQ(google.protobuf.message.Message):
+    """DLEQ represents a Discrete Logarithm Equality Proof."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     E_FIELD_NUMBER: builtins.int
     S_FIELD_NUMBER: builtins.int
     e: builtins.str
+    """The 'e' value of the DLEQ proof."""
     s: builtins.str
+    """The 's' value of the DLEQ proof."""
     def __init__(
         self,
         *,
@@ -402,6 +541,8 @@ global___DLEQ = DLEQ
 
 @typing.final
 class BlindedSignature(google.protobuf.message.Message):
+    """BlindedSignature represents a blinded signature from the mint."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     ID_FIELD_NUMBER: builtins.int
@@ -409,10 +550,15 @@ class BlindedSignature(google.protobuf.message.Message):
     C__FIELD_NUMBER: builtins.int
     DLEQ_FIELD_NUMBER: builtins.int
     id: builtins.str
+    """The ID of the keyset."""
     amount: builtins.int
+    """The amount of the token."""
     C_: builtins.str
+    """The blinded signature C_."""
     @property
-    def dleq(self) -> global___DLEQ: ...
+    def dleq(self) -> global___DLEQ:
+        """Optional: The DLEQ proof for the signature."""
+
     def __init__(
         self,
         *,
@@ -429,6 +575,8 @@ global___BlindedSignature = BlindedSignature
 
 @typing.final
 class Nut05Quote(google.protobuf.message.Message):
+    """Nut05Quote represents a quote for melting (NUT-05)."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     QUOTE_FIELD_NUMBER: builtins.int
@@ -447,22 +595,39 @@ class Nut05Quote(google.protobuf.message.Message):
     OUTPUTS_FIELD_NUMBER: builtins.int
     CHANGE_FIELD_NUMBER: builtins.int
     quote: builtins.str
+    """The unique identifier for the quote."""
     method: builtins.str
+    """The payment method used for this quote (e.g., "bolt11")."""
     request: builtins.str
+    """The original request string (e.g., Bolt11 invoice)."""
     checking_id: builtins.str
+    """The ID used for checking the payment status."""
     unit: builtins.str
+    """The unit of the amount (e.g., "sat")."""
     amount: builtins.int
+    """The amount of tokens to be melted."""
     fee_reserve: builtins.int
+    """The fee reserve for the melting operation."""
     state: builtins.str
+    """The current state of the quote (e.g., "pending", "paid", "success", "failed")."""
     created_time: builtins.int
+    """Optional: The Unix timestamp when the quote was created."""
     paid_time: builtins.int
+    """Optional: The Unix timestamp when the quote was paid."""
     fee_paid: builtins.int
+    """The actual fee paid for the melting operation."""
     payment_preimage: builtins.str
+    """Optional: The payment preimage if the payment was successful."""
     expiry: builtins.int
+    """Optional: The Unix timestamp when the quote expires."""
     @property
-    def outputs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedMessage]: ...
+    def outputs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedMessage]:
+        """A list of blinded messages representing the outputs (e.g., change)."""
+
     @property
-    def change(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedSignature]: ...
+    def change(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BlindedSignature]:
+        """A list of blinded signatures representing the change."""
+
     def __init__(
         self,
         *,
@@ -497,10 +662,13 @@ global___Nut05Quote = Nut05Quote
 
 @typing.final
 class GetNut04QuoteRequest(google.protobuf.message.Message):
+    """GetNut04QuoteRequest is used to request a specific NUT-04 quote."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     QUOTE_ID_FIELD_NUMBER: builtins.int
     quote_id: builtins.str
+    """The ID of the NUT-04 quote to retrieve."""
     def __init__(
         self,
         *,
@@ -512,11 +680,15 @@ global___GetNut04QuoteRequest = GetNut04QuoteRequest
 
 @typing.final
 class GetNut04QuoteResponse(google.protobuf.message.Message):
+    """GetNut04QuoteResponse contains the requested NUT-04 quote."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     QUOTE_FIELD_NUMBER: builtins.int
     @property
-    def quote(self) -> global___Nut04Quote: ...
+    def quote(self) -> global___Nut04Quote:
+        """The NUT-04 quote object."""
+
     def __init__(
         self,
         *,
@@ -529,10 +701,13 @@ global___GetNut04QuoteResponse = GetNut04QuoteResponse
 
 @typing.final
 class GetNut05QuoteRequest(google.protobuf.message.Message):
+    """GetNut05QuoteRequest is used to request a specific NUT-05 quote."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     QUOTE_ID_FIELD_NUMBER: builtins.int
     quote_id: builtins.str
+    """The ID of the NUT-05 quote to retrieve."""
     def __init__(
         self,
         *,
@@ -544,11 +719,15 @@ global___GetNut05QuoteRequest = GetNut05QuoteRequest
 
 @typing.final
 class GetNut05QuoteResponse(google.protobuf.message.Message):
+    """GetNut05QuoteResponse contains the requested NUT-05 quote."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     QUOTE_FIELD_NUMBER: builtins.int
     @property
-    def quote(self) -> global___Nut05Quote: ...
+    def quote(self) -> global___Nut05Quote:
+        """The NUT-05 quote object."""
+
     def __init__(
         self,
         *,
@@ -561,12 +740,16 @@ global___GetNut05QuoteResponse = GetNut05QuoteResponse
 
 @typing.final
 class UpdateQuoteRequest(google.protobuf.message.Message):
+    """UpdateQuoteRequest is used to update the state of a minting or melting quote."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     QUOTE_ID_FIELD_NUMBER: builtins.int
     STATE_FIELD_NUMBER: builtins.int
     quote_id: builtins.str
+    """The ID of the quote to update."""
     state: builtins.str
+    """The new state for the quote (e.g., "paid", "expired", "success", "failed")."""
     def __init__(
         self,
         *,
@@ -579,14 +762,19 @@ global___UpdateQuoteRequest = UpdateQuoteRequest
 
 @typing.final
 class RotateNextKeysetRequest(google.protobuf.message.Message):
+    """RotateNextKeysetRequest is used to initiate a keyset rotation."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     UNIT_FIELD_NUMBER: builtins.int
     MAX_ORDER_FIELD_NUMBER: builtins.int
     INPUT_FEE_PPK_FIELD_NUMBER: builtins.int
     unit: builtins.str
+    """The unit for which to rotate the keyset (e.g., "sat")."""
     max_order: builtins.int
+    """Optional: The maximum order of the new keyset."""
     input_fee_ppk: builtins.int
+    """Optional: The input fee per kilobyte for the new keyset."""
     def __init__(
         self,
         *,
@@ -605,6 +793,8 @@ global___RotateNextKeysetRequest = RotateNextKeysetRequest
 
 @typing.final
 class RotateNextKeysetResponse(google.protobuf.message.Message):
+    """RotateNextKeysetResponse contains information about the newly rotated keyset."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     ID_FIELD_NUMBER: builtins.int
@@ -612,9 +802,13 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
     MAX_ORDER_FIELD_NUMBER: builtins.int
     INPUT_FEE_PPK_FIELD_NUMBER: builtins.int
     id: builtins.str
+    """The ID of the new keyset."""
     unit: builtins.str
+    """The unit of the new keyset."""
     max_order: builtins.int
+    """The maximum order of the new keyset."""
     input_fee_ppk: builtins.int
+    """The input fee per kilobyte for the new keyset."""
     def __init__(
         self,
         *,
@@ -629,12 +823,16 @@ global___RotateNextKeysetResponse = RotateNextKeysetResponse
 
 @typing.final
 class UpdateLightningFeeRequest(google.protobuf.message.Message):
+    """UpdateLightningFeeRequest is used to update the lightning network fee configuration."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     FEE_PERCENT_FIELD_NUMBER: builtins.int
     FEE_MIN_RESERVE_FIELD_NUMBER: builtins.int
     fee_percent: builtins.float
+    """Optional: The percentage of the fee."""
     fee_min_reserve: builtins.int
+    """Optional: The minimum reserve amount for the fee."""
     def __init__(
         self,
         *,
@@ -652,12 +850,16 @@ global___UpdateLightningFeeRequest = UpdateLightningFeeRequest
 
 @typing.final
 class UpdateAuthLimitsRequest(google.protobuf.message.Message):
+    """UpdateAuthLimitsRequest is used to update authentication rate limits."""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     AUTH_RATE_LIMIT_PER_MINUTE_FIELD_NUMBER: builtins.int
     AUTH_MAX_BLIND_TOKENS_FIELD_NUMBER: builtins.int
     auth_rate_limit_per_minute: builtins.int
+    """Optional: The maximum number of authentication requests allowed per minute."""
     auth_max_blind_tokens: builtins.int
+    """Optional: The maximum number of blind tokens allowed for authentication."""
     def __init__(
         self,
         *,
