@@ -14,10 +14,12 @@ from ..core.base import (
     Proof,
     Unit,
 )
+from ..core.crypto.secp import PublicKey
 from ..core.db import (
     Connection,
     Database,
 )
+from ..core.gcs import GCSFilter
 
 
 class LedgerCrud(ABC):
@@ -183,6 +185,24 @@ class LedgerCrud(ABC):
     ) -> List[BlindedSignature]: ...
 
     @abstractmethod
+    async def get_blinded_messages_by_keyset_id(
+        self,
+        *,
+        keyset_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[PublicKey]: ...
+
+    @abstractmethod
+    async def get_Ys_by_keyset(
+        self,
+        *,
+        keyset_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[PublicKey]: ...
+
+    @abstractmethod
     async def store_mint_quote(
         self,
         *,
@@ -277,6 +297,37 @@ class LedgerCrud(ABC):
         conn: Optional[Connection] = None,
     ) -> MintBalanceLogEntry | None: ...
 
+    @abstractmethod
+    async def store_filter(
+        self,
+        *,
+        keyset_id: str,
+        which: str,
+        gcs_filter: GCSFilter,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def get_filter(
+        self,
+        *,
+        keyset_id: str,
+        which: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Tuple[GCSFilter, int]]: ...
+
+    @abstractmethod
+    async def update_filter(
+        self,
+        *,
+        keyset_id: str,
+        which: str,
+        gcs_filter: GCSFilter,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Tuple[GCSFilter, int]]: ...
 
 class LedgerCrudSqlite(LedgerCrud):
     """Implementation of LedgerCrud for sqlite.
@@ -861,6 +912,36 @@ class LedgerCrudSqlite(LedgerCrud):
         rows = await (conn or db).fetchall(query, values)
         return [Proof(**r) for r in rows] if rows else []
 
+    async def get_Ys_by_keyset(
+        self,
+        *,
+        keyset_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[PublicKey]:
+        query = f"""
+        SELECT y from {db.table_with_schema('proofs_used')}
+        WHERE id = :id
+        """
+        values = {"id": keyset_id}
+        rows = await (conn or db).fetchall(query, values)
+        return [r["y"] for r in rows] if rows else []
+
+    async def get_blinded_messages_by_keyset_id(
+        self,
+        *,
+        keyset_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[PublicKey]:
+        query = f"""
+        SELECT b_ from {db.table_with_schema('promises')}
+        WHERE id = :id
+        """
+        values = {"id": keyset_id}
+        rows = await (conn or db).fetchall(query, values)
+        return [r["b_"] for r in rows] if rows else []
+
     async def store_balance_log(
         self,
         backend_balance: Amount,
@@ -905,3 +986,77 @@ class LedgerCrudSqlite(LedgerCrud):
         )
 
         return MintBalanceLogEntry.from_row(row) if row else None
+
+    
+    async def store_filter(
+        self,
+        *,
+        keyset_id: str,
+        which: str,
+        gcs_filter: GCSFilter,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+                INSERT INTO {db.table_with_schema('filters')}
+                (keyset_id, content, num_items, inv_fpr, remainder_bitlength, time, kind)
+                VALUES (:keyset_id, :content, :num_items, :inv_fpr, :remainder_bitlength, :time, :kind)
+            """,
+            {
+                "keyset_id": keyset_id,
+                "content": gcs_filter.content,
+                "num_items": gcs_filter.num_items,
+                "inv_fpr": gcs_filter.inv_fpr,
+                "remainder_bitlength": gcs_filter.rem_bitlength,
+                "time": db.to_timestamp(db.timestamp_now_str()),
+                "kind": which,
+            }
+        )
+    
+    async def get_filter(
+        self,
+        *,
+        keyset_id: str,
+        which: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> Optional[Tuple[GCSFilter, int]]:
+        row = await (conn or db).fetchone(
+            f"""
+                SELECT * FROM {db.table_with_schema('filters')}
+                WHERE keyset_id = :keyset_id AND kind = :kind
+            """,
+            {
+                "keyset_id": keyset_id,
+                "kind": which,
+            }
+        )
+
+        return (GCSFilter.from_row(row), row["time"]) if row else None
+
+    async def update_filter(
+        self,
+        *,
+        keyset_id: str,
+        which: str,
+        gcs_filter: GCSFilter,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+                UPDATE {db.table_with_schema('filters')} SET
+                content = :content, num_items = :num_items, inv_fpr = :inv_fpr, remainder_bitlength = :remainder_bitlength, time = :time
+                WHERE keyset_id = :keyset_id AND kind = :kind
+            """,
+            {
+                "keyset_id": keyset_id,
+                "content": gcs_filter.content,
+                "num_items": gcs_filter.num_items,
+                "inv_fpr": gcs_filter.inv_fpr,
+                "remainder_bitlength": gcs_filter.rem_bitlength,
+                "time": db.to_timestamp(db.timestamp_now_str()),
+                "kind": which
+            }
+        )
