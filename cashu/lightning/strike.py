@@ -219,9 +219,9 @@ class StrikeWallet(LightningBackend):
             error_message = r.json()["data"]["message"]
             raise Exception(error_message)
         strike_quote = StrikePaymentQuoteResponse.parse_obj(r.json())
-        if strike_quote.amount.currency != self.currency_map[self.unit]:
+        if strike_quote.amount.currency != self.currency:
             raise Exception(
-                f"Expected currency {self.currency_map[self.unit]}, got {strike_quote.amount.currency}"
+                f"Expected currency {self.currency}, got {strike_quote.amount.currency}"
             )
         amount = Amount.from_float(float(strike_quote.amount.amount), self.unit)
         fee = self.fee_int(strike_quote, self.unit)
