@@ -246,12 +246,18 @@ class PostMeltQuoteResponse(BaseModel):
 
     @classmethod
     def from_melt_quote(self, melt_quote: MeltQuote) -> "PostMeltQuoteResponse":
-        to_dict = melt_quote.dict()
-        # turn state into string
-        to_dict["state"] = melt_quote.state.value
-        # add deprecated "paid" field
-        to_dict["paid"] = melt_quote.paid
-        return PostMeltQuoteResponse.parse_obj(to_dict)
+        return PostMeltQuoteResponse(
+            quote=melt_quote.quote,
+            amount=melt_quote.amount,
+            unit=melt_quote.unit,
+            request=melt_quote.request,
+            fee_reserve=melt_quote.fee_reserve,
+            paid=melt_quote.paid,
+            state=melt_quote.state.value,
+            expiry=melt_quote.expiry,
+            payment_preimage=melt_quote.payment_preimage,
+            change=melt_quote.change,
+        )
 
 
 # ------- API: MELT -------
