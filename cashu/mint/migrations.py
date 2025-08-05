@@ -968,3 +968,22 @@ async def m027_add_balance_to_keysets_and_log_table(db: Database):
                 );
             """
         )
+
+async def m028_add_per_keyset_gcs_filters(db: Database):
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema('filters')} (
+                    id INTEGER PRIMARY KEY,
+                    keyset_id TEXT NOT NULL,
+                    kind TEXT CHECK(kind IN ('ISSUED', 'SPENT')) NOT NULL,
+                    content {db.blob} NOT NULL,
+                    num_items INTEGER NOT NULL,
+                    inv_fpr INTEGER NOT NULL,
+                    remainder_bitlength INTEGER NOT NULL,
+                    time TIMESTAMP DEFAULT {db.timestamp_now},
+                    UNIQUE (keyset_id, kind)
+                )
+            """
+        )
+            
