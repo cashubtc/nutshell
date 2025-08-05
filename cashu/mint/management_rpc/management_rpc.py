@@ -26,6 +26,8 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
         logger.debug("gRPC GetInfo has been called")
         mint_info_dict = self.ledger.mint_info.dict()
         del mint_info_dict["nuts"]
+        mint_info_dict["long_description"] = mint_info_dict["description_long"]
+        del mint_info_dict["description_long"]
         response = management_pb2.GetInfoResponse(**mint_info_dict)
         return response
     
@@ -102,7 +104,12 @@ class MintManagementRPC(management_pb2_grpc.MintServicer):
 
     async def UpdateQuoteTtl(self, request, context):
         logger.debug("gRPC UpdateQuoteTtl has been called")
-        settings.mint_redis_cache_ttl = request.ttl
+        if request.mint_ttl:
+            settings.mint_redis_cache_ttl = request.mint_ttl
+        elif request.melt_ttl:
+            settings.mint_redis_cache_ttl = request.melt_ttl
+        else:
+            raise Exception("No quote ttl was specified")
         return management_pb2.UpdateResponse()
 
     async def GetNut04Quote(self, request, _):

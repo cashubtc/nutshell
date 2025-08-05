@@ -26,7 +26,10 @@ if _version_not_supported:
 
 
 class MintStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """The Mint service provides a gRPC interface for managing a Cashu mint.
+    It allows for updating mint information, managing payment methods (NUT-04 and NUT-05),
+    handling quotes, rotating keysets, and configuring fees and authentication limits.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -35,226 +38,249 @@ class MintStub(object):
             channel: A grpc.Channel.
         """
         self.GetInfo = channel.unary_unary(
-                '/management.Mint/GetInfo',
+                '/cashu.Mint/GetInfo',
                 request_serializer=management__pb2.GetInfoRequest.SerializeToString,
                 response_deserializer=management__pb2.GetInfoResponse.FromString,
                 _registered_method=True)
         self.UpdateMotd = channel.unary_unary(
-                '/management.Mint/UpdateMotd',
+                '/cashu.Mint/UpdateMotd',
                 request_serializer=management__pb2.UpdateMotdRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.UpdateShortDescription = channel.unary_unary(
-                '/management.Mint/UpdateShortDescription',
+                '/cashu.Mint/UpdateShortDescription',
                 request_serializer=management__pb2.UpdateDescriptionRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.UpdateLongDescription = channel.unary_unary(
-                '/management.Mint/UpdateLongDescription',
+                '/cashu.Mint/UpdateLongDescription',
                 request_serializer=management__pb2.UpdateDescriptionRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.UpdateIconUrl = channel.unary_unary(
-                '/management.Mint/UpdateIconUrl',
+                '/cashu.Mint/UpdateIconUrl',
                 request_serializer=management__pb2.UpdateIconUrlRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.UpdateName = channel.unary_unary(
-                '/management.Mint/UpdateName',
+                '/cashu.Mint/UpdateName',
                 request_serializer=management__pb2.UpdateNameRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.AddUrl = channel.unary_unary(
-                '/management.Mint/AddUrl',
+                '/cashu.Mint/AddUrl',
                 request_serializer=management__pb2.UpdateUrlRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.RemoveUrl = channel.unary_unary(
-                '/management.Mint/RemoveUrl',
+                '/cashu.Mint/RemoveUrl',
                 request_serializer=management__pb2.UpdateUrlRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.AddContact = channel.unary_unary(
-                '/management.Mint/AddContact',
+                '/cashu.Mint/AddContact',
                 request_serializer=management__pb2.UpdateContactRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.RemoveContact = channel.unary_unary(
-                '/management.Mint/RemoveContact',
+                '/cashu.Mint/RemoveContact',
                 request_serializer=management__pb2.UpdateContactRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.GetNut04Quote = channel.unary_unary(
-                '/management.Mint/GetNut04Quote',
+                '/cashu.Mint/GetNut04Quote',
                 request_serializer=management__pb2.GetNut04QuoteRequest.SerializeToString,
                 response_deserializer=management__pb2.GetNut04QuoteResponse.FromString,
                 _registered_method=True)
         self.GetNut05Quote = channel.unary_unary(
-                '/management.Mint/GetNut05Quote',
+                '/cashu.Mint/GetNut05Quote',
                 request_serializer=management__pb2.GetNut05QuoteRequest.SerializeToString,
                 response_deserializer=management__pb2.GetNut05QuoteResponse.FromString,
                 _registered_method=True)
         self.UpdateNut04 = channel.unary_unary(
-                '/management.Mint/UpdateNut04',
+                '/cashu.Mint/UpdateNut04',
                 request_serializer=management__pb2.UpdateNut04Request.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.UpdateNut05 = channel.unary_unary(
-                '/management.Mint/UpdateNut05',
+                '/cashu.Mint/UpdateNut05',
                 request_serializer=management__pb2.UpdateNut05Request.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.UpdateQuoteTtl = channel.unary_unary(
-                '/management.Mint/UpdateQuoteTtl',
+                '/cashu.Mint/UpdateQuoteTtl',
                 request_serializer=management__pb2.UpdateQuoteTtlRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.UpdateNut04Quote = channel.unary_unary(
-                '/management.Mint/UpdateNut04Quote',
+                '/cashu.Mint/UpdateNut04Quote',
                 request_serializer=management__pb2.UpdateQuoteRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.UpdateNut05Quote = channel.unary_unary(
-                '/management.Mint/UpdateNut05Quote',
+                '/cashu.Mint/UpdateNut05Quote',
                 request_serializer=management__pb2.UpdateQuoteRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.RotateNextKeyset = channel.unary_unary(
-                '/management.Mint/RotateNextKeyset',
+                '/cashu.Mint/RotateNextKeyset',
                 request_serializer=management__pb2.RotateNextKeysetRequest.SerializeToString,
                 response_deserializer=management__pb2.RotateNextKeysetResponse.FromString,
                 _registered_method=True)
         self.UpdateLightningFee = channel.unary_unary(
-                '/management.Mint/UpdateLightningFee',
+                '/cashu.Mint/UpdateLightningFee',
                 request_serializer=management__pb2.UpdateLightningFeeRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
         self.UpdateAuthLimits = channel.unary_unary(
-                '/management.Mint/UpdateAuthLimits',
+                '/cashu.Mint/UpdateAuthLimits',
                 request_serializer=management__pb2.UpdateAuthLimitsRequest.SerializeToString,
                 response_deserializer=management__pb2.UpdateResponse.FromString,
                 _registered_method=True)
 
 
 class MintServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """The Mint service provides a gRPC interface for managing a Cashu mint.
+    It allows for updating mint information, managing payment methods (NUT-04 and NUT-05),
+    handling quotes, rotating keysets, and configuring fees and authentication limits.
+    """
 
     def GetInfo(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """GetInfo retrieves general information about the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateMotd(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateMotd updates the Message of the Day (MOTD) for the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateShortDescription(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateShortDescription updates the short description of the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateLongDescription(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateLongDescription updates the long description of the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateIconUrl(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateIconUrl updates the URL for the mint's icon.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateName(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateName updates the name of the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def AddUrl(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """AddUrl adds a new URL associated with the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RemoveUrl(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """RemoveUrl removes an existing URL associated with the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def AddContact(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """AddContact adds a new contact method for the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RemoveContact(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """RemoveContact removes an existing contact method for the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetNut04Quote(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """GetNut04Quote retrieves a specific NUT-04 (minting) quote by its ID.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetNut05Quote(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """GetNut05Quote retrieves a specific NUT-05 (melting) quote by its ID.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateNut04(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateNut04 configures a NUT-04 (minting) payment method.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateNut05(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateNut05 configures a NUT-05 (melting) payment method.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateQuoteTtl(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateQuoteTtl updates the Time-To-Live (TTL) for minting and melting quotes.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateNut04Quote(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateNut04Quote updates the state of a specific NUT-04 (minting) quote.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateNut05Quote(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateNut05Quote updates the state of a specific NUT-05 (melting) quote.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RotateNextKeyset(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """RotateNextKeyset initiates the rotation to a new keyset for a given unit.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateLightningFee(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateLightningFee updates the lightning network fee configuration for the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def UpdateAuthLimits(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """UpdateAuthLimits updates the authentication rate limits for the mint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -364,14 +390,17 @@ def add_MintServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'management.Mint', rpc_method_handlers)
+            'cashu.Mint', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('management.Mint', rpc_method_handlers)
+    server.add_registered_method_handlers('cashu.Mint', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
 class Mint(object):
-    """Missing associated documentation comment in .proto file."""
+    """The Mint service provides a gRPC interface for managing a Cashu mint.
+    It allows for updating mint information, managing payment methods (NUT-04 and NUT-05),
+    handling quotes, rotating keysets, and configuring fees and authentication limits.
+    """
 
     @staticmethod
     def GetInfo(request,
@@ -387,7 +416,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/GetInfo',
+            '/cashu.Mint/GetInfo',
             management__pb2.GetInfoRequest.SerializeToString,
             management__pb2.GetInfoResponse.FromString,
             options,
@@ -414,7 +443,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateMotd',
+            '/cashu.Mint/UpdateMotd',
             management__pb2.UpdateMotdRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -441,7 +470,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateShortDescription',
+            '/cashu.Mint/UpdateShortDescription',
             management__pb2.UpdateDescriptionRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -468,7 +497,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateLongDescription',
+            '/cashu.Mint/UpdateLongDescription',
             management__pb2.UpdateDescriptionRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -495,7 +524,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateIconUrl',
+            '/cashu.Mint/UpdateIconUrl',
             management__pb2.UpdateIconUrlRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -522,7 +551,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateName',
+            '/cashu.Mint/UpdateName',
             management__pb2.UpdateNameRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -549,7 +578,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/AddUrl',
+            '/cashu.Mint/AddUrl',
             management__pb2.UpdateUrlRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -576,7 +605,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/RemoveUrl',
+            '/cashu.Mint/RemoveUrl',
             management__pb2.UpdateUrlRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -603,7 +632,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/AddContact',
+            '/cashu.Mint/AddContact',
             management__pb2.UpdateContactRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -630,7 +659,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/RemoveContact',
+            '/cashu.Mint/RemoveContact',
             management__pb2.UpdateContactRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -657,7 +686,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/GetNut04Quote',
+            '/cashu.Mint/GetNut04Quote',
             management__pb2.GetNut04QuoteRequest.SerializeToString,
             management__pb2.GetNut04QuoteResponse.FromString,
             options,
@@ -684,7 +713,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/GetNut05Quote',
+            '/cashu.Mint/GetNut05Quote',
             management__pb2.GetNut05QuoteRequest.SerializeToString,
             management__pb2.GetNut05QuoteResponse.FromString,
             options,
@@ -711,7 +740,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateNut04',
+            '/cashu.Mint/UpdateNut04',
             management__pb2.UpdateNut04Request.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -738,7 +767,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateNut05',
+            '/cashu.Mint/UpdateNut05',
             management__pb2.UpdateNut05Request.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -765,7 +794,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateQuoteTtl',
+            '/cashu.Mint/UpdateQuoteTtl',
             management__pb2.UpdateQuoteTtlRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -792,7 +821,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateNut04Quote',
+            '/cashu.Mint/UpdateNut04Quote',
             management__pb2.UpdateQuoteRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -819,7 +848,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateNut05Quote',
+            '/cashu.Mint/UpdateNut05Quote',
             management__pb2.UpdateQuoteRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -846,7 +875,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/RotateNextKeyset',
+            '/cashu.Mint/RotateNextKeyset',
             management__pb2.RotateNextKeysetRequest.SerializeToString,
             management__pb2.RotateNextKeysetResponse.FromString,
             options,
@@ -873,7 +902,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateLightningFee',
+            '/cashu.Mint/UpdateLightningFee',
             management__pb2.UpdateLightningFeeRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
@@ -900,7 +929,7 @@ class Mint(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/management.Mint/UpdateAuthLimits',
+            '/cashu.Mint/UpdateAuthLimits',
             management__pb2.UpdateAuthLimitsRequest.SerializeToString,
             management__pb2.UpdateResponse.FromString,
             options,
