@@ -298,6 +298,10 @@ class CLNRestWallet(LightningBackend):
             else 0
         )
         self.last_pay_index = last_pay_index
+        
+        retry_delay = 1  # Start with 1 second delay
+        max_retry_delay = 300  # Maximum 5 minutes delay
+        
         while True:
             try:
                 url = "/v1/waitanyinvoice"
@@ -309,6 +313,8 @@ class CLNRestWallet(LightningBackend):
                     },
                     timeout=None,
                 ) as r:
+                    # Reset retry delay on successful connection
+                    retry_delay = 1
                     async for line in r.aiter_lines():
                         inv = json.loads(line)
                         if "code" in inv and "message" in inv:
@@ -332,11 +338,14 @@ class CLNRestWallet(LightningBackend):
                             yield payment_hash
 
             except Exception as exc:
-                logger.debug(
-                    f"lost connection to clnrest invoices stream: '{exc}', "
-                    "reconnecting..."
+                logger.error(
+                    f"lost connection to clnrest invoices stream: '{exc}', retrying in {retry_delay}"
+                    " seconds"
                 )
-                await asyncio.sleep(0.02)
+                await asyncio.sleep(retry_delay)
+                
+                # Exponential backoff
+                retry_delay = min(retry_delay * 2, max_retry_delay)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

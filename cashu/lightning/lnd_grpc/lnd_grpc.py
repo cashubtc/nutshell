@@ -375,12 +375,17 @@ class LndRPCWallet(LightningBackend):
         return PaymentStatus(result=PaymentResult.UNKNOWN)
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+        retry_delay = 1  # Start with 1 second delay
+        max_retry_delay = 300  # Maximum 5 minutes delay
+        
         while True:
             try:
                 async with grpc.aio.secure_channel(
                     self.endpoint, self.combined_creds
                 ) as channel:
                     lnstub = lightningstub.LightningStub(channel)
+                    # Reset retry delay on successful connection
+                    retry_delay = 1
                     async for invoice in lnstub.SubscribeInvoices(
                         lnrpc.InvoiceSubscription()
                     ):
@@ -389,8 +394,11 @@ class LndRPCWallet(LightningBackend):
                         payment_hash = invoice.r_hash.hex()
                         yield payment_hash
             except AioRpcError as exc:
-                logger.error(f"SubscribeInvoices failed: {exc}. Retrying in 1 sec...")
-                await asyncio.sleep(1)
+                logger.error(f"SubscribeInvoices failed: {exc}. Retrying in {retry_delay} sec...")
+                await asyncio.sleep(retry_delay)
+                
+                # Exponential backoff
+                retry_delay = min(retry_delay * 2, max_retry_delay)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

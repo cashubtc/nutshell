@@ -2,6 +2,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import random
 from typing import AsyncGenerator, Dict, Optional
 
 import bolt11
@@ -415,10 +416,15 @@ class LndRestWallet(LightningBackend):
         return PaymentStatus(result=PaymentResult.UNKNOWN, error_message="timeout")
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+        retry_delay = 1  # Start with 1 second delay
+        max_retry_delay = 300  # Maximum 5 minutes delay
+        
         while True:
             try:
                 url = "/v1/invoices/subscribe"
                 async with self.client.stream("GET", url, timeout=None) as r:
+                    # Reset retry delay on successful connection
+                    retry_delay = 1
                     async for line in r.aiter_lines():
                         try:
                             inv = json.loads(line)["result"]
@@ -431,10 +437,13 @@ class LndRestWallet(LightningBackend):
                         yield payment_hash
             except Exception as exc:
                 logger.error(
-                    f"lost connection to lnd invoices stream: '{exc}', retrying in 5"
+                    f"lost connection to lnd invoices stream: '{exc}', retrying in {retry_delay}"
                     " seconds"
                 )
-                await asyncio.sleep(5)
+                await asyncio.sleep(retry_delay)
+                
+                # Exponential backoff with jitter
+                retry_delay = min(retry_delay * 2, max_retry_delay)
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest
