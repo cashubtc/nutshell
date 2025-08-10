@@ -482,10 +482,4 @@ class BlinkWallet(LightningBackend):
         )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:  # type: ignore
-        # NOTE: If implementing this method, use exponential backoff retry logic:
-        # retry_delay = 1  # Start with 1 second delay
-        # max_retry_delay = 300  # Maximum 5 minutes delay
-        # On connection errors: await asyncio.sleep(retry_delay)
-        # Then: retry_delay = min(retry_delay * 2, max_retry_delay)
-        # Reset retry_delay = 1 on successful connection
         raise NotImplementedError("paid_invoices_stream not implemented")
