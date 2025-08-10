@@ -21,14 +21,22 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
 
     async def invoice_listener(self, backend: LightningBackend) -> None:
         if backend.supports_incoming_payment_stream:
+            retry_delay = 1  # Start with 1 second delay
+            max_retry_delay = 300  # Maximum 5 minutes delay
+            
             while True:
                 try:
+                    # Reset retry delay on successful connection to backend stream
+                    retry_delay = 1
                     async for checking_id in backend.paid_invoices_stream():
                         await self.invoice_callback_dispatcher(checking_id)
                 except Exception as e:
                     logger.error(f"Error in invoice listener: {e}")
-                    logger.info("Restarting invoice listener...")
-                    await asyncio.sleep(1)
+                    logger.info(f"Restarting invoice listener in {retry_delay} seconds...")
+                    await asyncio.sleep(retry_delay)
+                    
+                    # Exponential backoff
+                    retry_delay = min(retry_delay * 2, max_retry_delay)
 
     async def invoice_callback_dispatcher(self, checking_id: str) -> None:
         logger.debug(f"Invoice callback dispatcher: {checking_id}")

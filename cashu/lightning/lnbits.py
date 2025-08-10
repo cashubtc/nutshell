@@ -229,70 +229,83 @@ class LNbitsWallet(LightningBackend):
         )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
-        # --- LNBITS RETRO-COMPATIBILITY ---
-        if self.old_api:
-            url = f"{self.endpoint}/api/v1/payments/sse"
-
-            try:
-                sse_headers = self.client.headers.copy()
-                sse_headers.update(
-                    {
-                        "accept": "text/event-stream",
-                        "cache-control": "no-cache",
-                        "connection": "keep-alive",
-                    }
-                )
-                async with self.client.stream(
-                    "GET",
-                    url,
-                    content="text/event-stream",
-                    timeout=None,
-                    headers=sse_headers,
-                ) as r:
-                    sse_trigger = False
-                    async for line in r.aiter_lines():
-                        if "Payment does not exist." in line:
-                            logger.debug("New API detected. Setting old_api = False")
-                            self.old_api = False
-                        # The data we want to listen to is of this shape:
-                        # event: payment-received
-                        # data: {.., "payment_hash" : "asd"}
-                        if line.startswith("event: payment-received"):
-                            sse_trigger = True
-                            continue
-                        elif sse_trigger and line.startswith("data:"):
-                            data = json.loads(line[len("data:") :])
-                            sse_trigger = False
-                            yield data["payment_hash"]
-                        else:
-                            sse_trigger = False
-
-            except (OSError, httpx.ReadError, httpx.ConnectError, httpx.ReadTimeout):
-                pass
+        retry_delay = 1  # Start with 1 second delay
+        max_retry_delay = 300  # Maximum 5 minutes delay
         
-        if self.old_api:
-            await asyncio.sleep(1)
-            return 
-        # --- END LNBITS RETRO-COMPATIBILITY ---
+        while True:
+            try:
+                # --- LNBITS RETRO-COMPATIBILITY ---
+                if self.old_api:
+                    url = f"{self.endpoint}/api/v1/payments/sse"
 
-        try:
-            async with connect(self.ws_url) as ws:
-                logger.info("connected to LNbits fundingsource websocket.")
-                while True:
-                    message = await ws.recv()
-                    message_dict = json.loads(message)
-                    if (
-                        message_dict
-                        and message_dict.get("payment")
-                        and message_dict["payment"].get("payment_hash")
-                        and message_dict["payment"].get("amount") > 0
-                    ):
-                        payment_hash = message_dict["payment"]["payment_hash"]
-                        logger.info(f"payment-received: {payment_hash}")
-                        yield payment_hash
-        except Exception as exc:
-            logger.error(
-                f"lost connection to LNbits fundingsource websocket: '{exc}'"
-                "retrying in 5 seconds"
-            )
-            await asyncio.sleep(5)
+                    try:
+                        sse_headers = self.client.headers.copy()
+                        sse_headers.update(
+                            {
+                                "accept": "text/event-stream",
+                                "cache-control": "no-cache",
+                                "connection": "keep-alive",
+                            }
+                        )
+                        async with self.client.stream(
+                            "GET",
+                            url,
+                            content="text/event-stream",
+                            timeout=None,
+                            headers=sse_headers,
+                        ) as r:
+                            # Reset retry delay on successful connection
+                            retry_delay = 1
+                            sse_trigger = False
+                            async for line in r.aiter_lines():
+                                if "Payment does not exist." in line:
+                                    logger.debug("New API detected. Setting old_api = False")
+                                    self.old_api = False
+                                # The data we want to listen to is of this shape:
+                                # event: payment-received
+                                # data: {.., "payment_hash" : "asd"}
+                                if line.startswith("event: payment-received"):
+                                    sse_trigger = True
+                                    continue
+                                elif sse_trigger and line.startswith("data:"):
+                                    data = json.loads(line[len("data:") :])
+                                    sse_trigger = False
+                                    yield data["payment_hash"]
+                                else:
+                                    sse_trigger = False
+
+                    except (OSError, httpx.ReadError, httpx.ConnectError, httpx.ReadTimeout):
+                        pass
+                
+                if self.old_api:
+                    await asyncio.sleep(retry_delay)
+                    # Exponential backoff
+                    retry_delay = min(retry_delay * 2, max_retry_delay)
+                    continue
+                # --- END LNBITS RETRO-COMPATIBILITY ---
+
+                async with connect(self.ws_url) as ws:
+                    logger.info("connected to LNbits fundingsource websocket.")
+                    # Reset retry delay on successful connection
+                    retry_delay = 1
+                    while True:
+                        message = await ws.recv()
+                        message_dict = json.loads(message)
+                        if (
+                            message_dict
+                            and message_dict.get("payment")
+                            and message_dict["payment"].get("payment_hash")
+                            and message_dict["payment"].get("amount") > 0
+                        ):
+                            payment_hash = message_dict["payment"]["payment_hash"]
+                            logger.info(f"payment-received: {payment_hash}")
+                            yield payment_hash
+            except Exception as exc:
+                logger.error(
+                    f"lost connection to LNbits fundingsource websocket: '{exc}', retrying in {retry_delay}"
+                    " seconds"
+                )
+                await asyncio.sleep(retry_delay)
+                
+                # Exponential backoff
+                retry_delay = min(retry_delay * 2, max_retry_delay)
