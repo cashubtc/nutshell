@@ -71,6 +71,9 @@ class MintSettings(CashuSettings):
         description="Interval (in seconds) for running regular tasks like the invoice checker.",
     )
 
+    mint_retry_exponential_backoff_base_delay: int = Field(default=1)
+    mint_retry_exponential_backoff_max_delay: int = Field(default=10)
+
 
 class MintWatchdogSettings(MintSettings):
     mint_watchdog_enabled: bool = Field(
