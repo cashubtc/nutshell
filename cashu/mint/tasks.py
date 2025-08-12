@@ -4,6 +4,7 @@ from typing import List
 from loguru import logger
 
 from ..core.base import MintQuoteState
+from ..core.settings import settings
 from ..lightning.base import LightningBackend
 from .protocols import SupportsBackends, SupportsDb, SupportsEvents
 
@@ -21,13 +22,13 @@ class LedgerTasks(SupportsDb, SupportsBackends, SupportsEvents):
 
     async def invoice_listener(self, backend: LightningBackend) -> None:
         if backend.supports_incoming_payment_stream:
-            retry_delay = 1  # Start with 1 second delay
-            max_retry_delay = 300  # Maximum 5 minutes delay
+            retry_delay = settings.mint_retry_exponential_backoff_base_delay
+            max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
             
             while True:
                 try:
                     # Reset retry delay on successful connection to backend stream
-                    retry_delay = 1
+                    retry_delay = settings.mint_retry_exponential_backoff_base_delay
                     async for checking_id in backend.paid_invoices_stream():
                         await self.invoice_callback_dispatcher(checking_id)
                 except Exception as e:

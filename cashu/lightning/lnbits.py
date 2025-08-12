@@ -229,8 +229,8 @@ class LNbitsWallet(LightningBackend):
         )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
-        retry_delay = 1  # Start with 1 second delay
-        max_retry_delay = 300  # Maximum 5 minutes delay
+        retry_delay = settings.mint_retry_exponential_backoff_base_delay
+        max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
         
         while True:
             try:
@@ -255,7 +255,7 @@ class LNbitsWallet(LightningBackend):
                             headers=sse_headers,
                         ) as r:
                             # Reset retry delay on successful connection
-                            retry_delay = 1
+                            retry_delay = settings.mint_retry_exponential_backoff_base_delay
                             sse_trigger = False
                             async for line in r.aiter_lines():
                                 if "Payment does not exist." in line:
@@ -287,7 +287,7 @@ class LNbitsWallet(LightningBackend):
                 async with connect(self.ws_url) as ws:
                     logger.info("connected to LNbits fundingsource websocket.")
                     # Reset retry delay on successful connection
-                    retry_delay = 1
+                    retry_delay = settings.mint_retry_exponential_backoff_base_delay
                     while True:
                         message = await ws.recv()
                         message_dict = json.loads(message)

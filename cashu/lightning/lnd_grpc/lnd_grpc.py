@@ -375,8 +375,8 @@ class LndRPCWallet(LightningBackend):
         return PaymentStatus(result=PaymentResult.UNKNOWN)
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
-        retry_delay = 1  # Start with 1 second delay
-        max_retry_delay = 300  # Maximum 5 minutes delay
+        retry_delay = settings.mint_retry_exponential_backoff_base_delay
+        max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
         
         while True:
             try:
@@ -385,7 +385,7 @@ class LndRPCWallet(LightningBackend):
                 ) as channel:
                     lnstub = lightningstub.LightningStub(channel)
                     # Reset retry delay on successful connection
-                    retry_delay = 1
+                    retry_delay = settings.mint_retry_exponential_backoff_base_delay
                     async for invoice in lnstub.SubscribeInvoices(
                         lnrpc.InvoiceSubscription()
                     ):
