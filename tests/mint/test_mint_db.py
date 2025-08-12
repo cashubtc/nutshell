@@ -287,7 +287,7 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     notification = JSONRPCNotification(
         method=JSONRPCMethods.SUBSCRIBE.value,
         params=JSONRPCNotficationParams(
-            subId="subId", payload=quote_pending.dict()
+            subId="subId", payload=quote_pending
         ).dict(),
     )
     websocket_mock.send_text.assert_called_with(notification.json())

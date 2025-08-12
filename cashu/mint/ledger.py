@@ -1,5 +1,6 @@
 import asyncio
 import time
+from base64 import b64encode
 from typing import Dict, List, Mapping, Optional, Tuple
 
 import bolt11
@@ -41,6 +42,7 @@ from ..core.errors import (
 )
 from ..core.helpers import sum_proofs
 from ..core.models import (
+    GetFilterResponse,
     PostMeltQuoteRequest,
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
@@ -146,6 +148,7 @@ class Ledger(
         await self._check_backends()
         self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
+        self.update_gcs_task = asyncio.create_task(self.recompute_gcs())
         if settings.mint_watchdog_enabled:
             self.watchdog_tasks = await self.dispatch_watchdogs()
 
@@ -193,6 +196,8 @@ class Ledger(
         logger.debug("Shutting down regular tasks")
         for task in self.regular_tasks:
             task.cancel()
+        logger.debug("Shutting down GCS recompute task")
+        self.update_gcs_task.cancel()
 
     async def _check_pending_proofs_and_melt_quotes(self):
         """Startup routine that checks all pending melt quotes and either invalidates
@@ -1152,3 +1157,27 @@ class Ledger(
                 )
 
             return signatures
+
+
+    async def get_filter_by_keyset(self, which: str, keyset_id: str) -> GetFilterResponse:
+        """Retrieves a Golomb-Coded Set filter for the given keyset id.
+        Args:
+            which (str): "SPENT" or "ISSUED" for either the spent filter or the issued filter for the specified keyset.
+            keyset_id (str): The keyset id of the filter.
+        Returns:
+            PostGetFilterResponse: The response containing the filter.
+        """
+        # Retrieve the spent ecash filter for the desired filter
+        gcs_and_timestamp = await self.crud.get_filter(keyset_id=keyset_id, db=self.db, which=which)
+
+        if not gcs_and_timestamp:
+            raise Exception("No filter found for the given keyset id.")
+
+        (gcs, timestamp) = gcs_and_timestamp
+        return GetFilterResponse(
+            content=b64encode(gcs.content).decode(),
+            timestamp=timestamp,
+            n=gcs.num_items,
+            m=gcs.inv_fpr,
+            p=gcs.rem_bitlength,
+        )
