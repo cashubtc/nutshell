@@ -6,9 +6,9 @@ This script demonstrates how to use the new mint_limits configuration
 to set limits for multiple units in a single, unified way.
 """
 
+from cashu.core.base import Unit
 from cashu.core.settings import settings
 from cashu.mint.verification import get_mint_limits
-from cashu.core.base import Unit
 
 
 def demo_unified_limits():

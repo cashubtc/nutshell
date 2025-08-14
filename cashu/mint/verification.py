@@ -36,7 +36,7 @@ from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
 def get_mint_limits():
     """Parse mint limits from the unified configuration."""
-    from ..core.base import Unit, Amount
+    from ..core.base import Amount, Unit
     
     # Initialize default empty maps
     max_mint_map: Dict[Unit, Optional[Amount]] = {

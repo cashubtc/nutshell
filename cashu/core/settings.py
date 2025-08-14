@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from environs import Env  # type: ignore
 from pydantic import BaseSettings, Extra, Field
