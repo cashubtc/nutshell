@@ -35,26 +35,63 @@ from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
 
 
 def get_mint_limits():
+    """Parse mint limits from the unified configuration."""
+    from ..core.base import Unit, Amount
+    
+    # Initialize default empty maps
     max_mint_map: Dict[Unit, Optional[Amount]] = {
-        Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_mint) if settings.mint_max_sat_mint is not None else None,
-        Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_mint) if settings.mint_max_msat_mint is not None else None,
-        Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_mint) if settings.mint_max_eur_mint is not None else None,
-        Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_mint) if settings.mint_max_usd_mint is not None else None,
+        Unit.sat: None,
+        Unit.msat: None,
+        Unit.eur: None,
+        Unit.usd: None,
     }
-
     max_melt_map: Dict[Unit, Optional[Amount]] = {
-        Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_melt) if settings.mint_max_sat_melt is not None else None,
-        Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_melt) if settings.mint_max_msat_melt is not None else None,
-        Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_melt) if settings.mint_max_eur_melt is not None else None,
-        Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_melt) if settings.mint_max_usd_melt is not None else None,
+        Unit.sat: None,
+        Unit.msat: None,
+        Unit.eur: None,
+        Unit.usd: None,
     }
-
     max_balance_map: Dict[Unit, Optional[Amount]] = {
-        Unit.sat: Amount(unit=Unit.sat, amount=settings.mint_max_sat_balance) if settings.mint_max_sat_balance is not None else None,
-        Unit.msat: Amount(unit=Unit.msat, amount=settings.mint_max_msat_balance) if settings.mint_max_msat_balance is not None else None,
-        Unit.eur: Amount.from_float(unit=Unit.eur, amount=settings.mint_max_eur_balance) if settings.mint_max_eur_balance is not None else None,
-        Unit.usd: Amount.from_float(unit=Unit.usd, amount=settings.mint_max_usd_balance) if settings.mint_max_usd_balance is not None else None,
+        Unit.sat: None,
+        Unit.msat: None,
+        Unit.eur: None,
+        Unit.usd: None,
     }
+    
+    # Parse unified mint_limits configuration
+    if settings.mint_limits:
+        logger.info("Using unified mint_limits configuration")
+        for limit_config in settings.mint_limits:
+            if len(limit_config) != 4:
+                logger.warning(f"Invalid mint_limits entry: {limit_config}. Expected format: [unit, max_mint, max_melt, max_balance]")
+                continue
+            
+            unit_str, max_mint, max_melt, max_balance = limit_config
+            try:
+                unit = Unit[unit_str]
+                
+                # Create Amount objects for each limit (handle None values)
+                if max_mint is not None:
+                    if unit in [Unit.sat, Unit.msat]:
+                        max_mint_map[unit] = Amount(unit=unit, amount=int(max_mint))
+                    else:
+                        max_mint_map[unit] = Amount.from_float(unit=unit, amount=float(max_mint))
+                
+                if max_melt is not None:
+                    if unit in [Unit.sat, Unit.msat]:
+                        max_melt_map[unit] = Amount(unit=unit, amount=int(max_melt))
+                    else:
+                        max_melt_map[unit] = Amount.from_float(unit=unit, amount=float(max_melt))
+                
+                if max_balance is not None:
+                    if unit in [Unit.sat, Unit.msat]:
+                        max_balance_map[unit] = Amount(unit=unit, amount=int(max_balance))
+                    else:
+                        max_balance_map[unit] = Amount.from_float(unit=unit, amount=float(max_balance))
+                        
+            except (KeyError, ValueError, TypeError) as e:
+                logger.warning(f"Invalid unit or limit value in mint_limits: {limit_config}. Error: {e}")
+                continue
 
     return (max_mint_map, max_melt_map, max_balance_map)
 

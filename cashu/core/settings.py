@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from environs import Env  # type: ignore
 from pydantic import BaseSettings, Extra, Field
@@ -159,81 +159,13 @@ class MintLimits(MintSettings):
         title="Maximum mint balance",
         description="Maximum mint balance.",
     )
-    # Unit-specific maximum mint balance settings
-    mint_max_sat_balance: int = Field(
-        default=None,
-        gt=0,
-        title="Maximum mint balance (sats)",
-        description="Maximum mint balance in satoshis.",
-    )
-    mint_max_msat_balance: int = Field(
-        default=None,
-        gt=0,
-        title="Maximum mint balance (msats)",
-        description="Maximum mint balance in millisatoshis.",
-    )
-    mint_max_usd_balance: float = Field(
-        default=None,
-        gt=0,
-        title="Maximum mint balance (USD)",
-        description="Maximum mint balance in US dollars.",
-    )
-    mint_max_eur_balance: float = Field(
-        default=None,
-        gt=0,
-        title="Maximum mint balance (EUR)",
-        description="Maximum mint balance in Euros.",
-    )
-    # Unit-specific maximum mint settings
-    mint_max_sat_mint: int = Field(
-        default=None,
-        gt=0,
-        title="Maximum mint (sats)",
-        description="Maximum amount for a mint operation in satoshis.",
-    )
-    mint_max_msat_mint: int = Field(
-        default=None,
-        gt=0,
-        title="Maximum mint (msats)",
-        description="Maximum amount for a mint operation in millisatoshis.",
-    )
-    mint_max_usd_mint: float = Field(
-        default=None,
-        gt=0,
-        title="Maximum mint (USD)",
-        description="Maximum amount for a mint operation in US dollars.",
-    )
-    mint_max_eur_mint: float = Field(
-        default=None,
-        gt=0,
-        title="Maximum mint (EUR)",
-        description="Maximum amount for a mint operation in Euros.",
-    )
-
-    # Unit-specific maximum melt settings
-    mint_max_sat_melt: int = Field(
-        default=None,
-        gt=0,
-        title="Maximum melt (sats)",
-        description="Maximum amount for a melt operation in satoshis.",
-    )
-    mint_max_msat_melt: int = Field(
-        default=None,
-        gt=0,
-        title="Maximum melt (msats)",
-        description="Maximum amount for a melt operation in millisatoshis.",
-    )
-    mint_max_usd_melt: float = Field(
-        default=None,
-        gt=0,
-        title="Maximum melt (USD)",
-        description="Maximum amount for a melt operation in US dollars.",
-    )
-    mint_max_eur_melt: float = Field(
-        default=None,
-        gt=0,
-        title="Maximum melt (EUR)",
-        description="Maximum amount for a melt operation in Euros.",
+    # Unified mint limits configuration
+    # Format: [["unit", max_mint, max_melt, max_balance], ...]
+    # Example: [["sat", 10000, 5000, 100000], ["usd", 100.0, 50.0, 1000.0]]
+    mint_limits: List[List] = Field(
+        default=[],
+        title="Mint limits per unit",
+        description="List of limits per unit in format: [unit, max_mint, max_melt, max_balance]",
     )
 
     # Websockets
@@ -427,12 +359,6 @@ def startup_settings_tasks():
     # backwards compatibility: set mint_backend_bolt11_sat from mint_lightning_backend
     if settings.mint_lightning_backend:
         settings.mint_backend_bolt11_sat = settings.mint_lightning_backend
-
-    # backwards compatibility: mint_max_peg_in and mint_max_peg_out to mint_max_mint_bolt11_sat and mint_max_melt_bolt11_sat
-    if settings.mint_max_peg_in:
-        settings.mint_max_sat_mint = settings.mint_max_peg_in
-    if settings.mint_max_peg_out:
-        settings.mint_max_sat_melt = settings.mint_max_peg_out
 
     # backwards compatibility: set mint_bolt11_disable_mint from mint_peg_out_only
     if settings.mint_peg_out_only:
