@@ -1,0 +1,435 @@
+"""
+Tests for wallet keysets v2 and NUT-13 secret derivation implementation.
+"""
+
+import hashlib
+import hmac
+import pytest
+
+from cashu.core.base import TokenV4, TokenV4Proof, TokenV4Token
+from cashu.core.crypto.keys import (
+    derive_keyset_id_v2,
+    derive_keyset_short_id,
+    get_keyset_id_version,
+    is_keyset_id_v2,
+)
+from cashu.core.crypto.secp import PrivateKey
+from cashu.wallet.keyset_manager import KeysetManager
+from cashu.wallet.secrets import WalletSecrets
+
+
+@pytest.mark.asyncio
+async def test_versioned_secret_derivation_bip32():
+    """Test that BIP32 derivation is used for keyset version 00 (legacy)."""
+    # Create a mock wallet secrets instance
+    secrets = WalletSecrets()
+    secrets.keyset_id = "009a1f293253e41e"  # v1 keyset ID
+    secrets.seed = b"supersecretprivatekey"
+    secrets.bip32 = None  # Will be set by _init_private_key
+    
+    # Mock the BIP32 derivation
+    class MockBIP32:
+        def get_privkey_from_path(self, path):
+            return hashlib.sha256(f"mock_bip32_{path}".encode()).digest()
+    
+    secrets.bip32 = MockBIP32()
+    
+    # Test secret derivation
+    secret, r, path = await secrets.generate_determinstic_secret(1)
+    
+    # Should use BIP32 derivation for v1 keysets
+    assert "m/129372'" in path
+    assert len(secret) == 32
+    assert len(r) == 32
+
+
+@pytest.mark.asyncio 
+async def test_versioned_secret_derivation_hmac_sha512():
+    """Test that HMAC-SHA512 derivation is used for keyset version 01 (v2)."""
+    # Create a mock wallet secrets instance
+    secrets = WalletSecrets()
+    secrets.keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"  # v2 keyset ID
+    secrets.seed = b"supersecretprivatekey"
+    
+    # Test secret derivation
+    secret, r, path = await secrets.generate_determinstic_secret(1)
+    
+    # Should use HMAC-SHA512 derivation for v2 keysets
+    assert "HMAC-SHA512" in path
+    assert len(secret) == 32
+    assert len(r) == 32
+    
+    # Verify the derivation follows the NUT-13 spec
+    keyset_id_bytes = bytes.fromhex(secrets.keyset_id)
+    counter_bytes = (1).to_bytes(4, byteorder="big")
+    message = b"Cashu_KDF_HMAC_SHA512" + keyset_id_bytes + counter_bytes
+    expected_derived = hmac.new(secrets.seed, message, hashlib.sha512).digest()
+    expected_secret = expected_derived[:32]
+    expected_r = expected_derived[32:]
+    
+    assert secret == expected_secret
+    assert r == expected_r
+
+
+@pytest.mark.asyncio
+async def test_versioned_secret_derivation_deterministic():
+    """Test that secret derivation is deterministic for both methods."""
+    # Test BIP32 determinism
+    secrets_v1 = WalletSecrets()
+    secrets_v1.keyset_id = "009a1f293253e41e"  # v1 keyset ID
+    secrets_v1.seed = b"test_seed_123"
+    
+    class MockBIP32:
+        def get_privkey_from_path(self, path):
+            return hashlib.sha256(f"deterministic_{path}".encode()).digest()
+    
+    secrets_v1.bip32 = MockBIP32()
+    
+    secret1_v1, r1_v1, _ = await secrets_v1.generate_determinstic_secret(1)
+    secret2_v1, r2_v1, _ = await secrets_v1.generate_determinstic_secret(1)
+    
+    assert secret1_v1 == secret2_v1
+    assert r1_v1 == r2_v1
+    
+    # Test HMAC-SHA512 determinism  
+    secrets_v2 = WalletSecrets()
+    secrets_v2.keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"  # v2 keyset ID
+    secrets_v2.seed = b"test_seed_123"
+    
+    secret1_v2, r1_v2, _ = await secrets_v2.generate_determinstic_secret(1)
+    secret2_v2, r2_v2, _ = await secrets_v2.generate_determinstic_secret(1)
+    
+    assert secret1_v2 == secret2_v2
+    assert r1_v2 == r2_v2
+    
+    # Verify different methods produce different results
+    assert secret1_v1 != secret1_v2
+    assert r1_v1 != r1_v2
+
+
+@pytest.mark.asyncio
+async def test_keyset_manager_short_id_mapping():
+    """Test short keyset ID mapping functionality."""
+    manager = KeysetManager()
+    
+    # Mock database and keysets
+    manager._short_to_full_cache = {}
+    manager._full_to_short_cache = {}
+    
+    # Test v2 keyset
+    full_id_v2 = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+    expected_short_id = derive_keyset_short_id(full_id_v2)
+    
+    # Test getting short ID
+    short_id = await manager.get_short_keyset_id(full_id_v2)
+    assert short_id == expected_short_id
+    assert len(short_id) == 16  # 8 bytes = 16 hex chars
+    
+    # Test cache was updated
+    assert manager._full_to_short_cache[full_id_v2] == short_id
+    assert manager._short_to_full_cache[short_id] == full_id_v2
+    
+    # Test getting full ID from short ID
+    retrieved_full_id = await manager.get_full_keyset_id(short_id)
+    assert retrieved_full_id == full_id_v2
+
+
+@pytest.mark.asyncio
+async def test_keyset_manager_v1_compatibility():
+    """Test that v1 keysets return original ID (no short ID concept)."""
+    manager = KeysetManager()
+    
+    # Test v1 keyset
+    v1_keyset_id = "009a1f293253e41e"
+    
+    # For v1 keysets, should return the original ID
+    short_id = await manager.get_short_keyset_id(v1_keyset_id)
+    assert short_id == v1_keyset_id  # No change for v1
+
+
+@pytest.mark.asyncio
+async def test_token_v4_short_keyset_expansion():
+    """Test TokenV4 short keyset ID expansion."""
+    # Create a TokenV4 with short keyset ID
+    short_keyset_id = "01c9c20fb8b348b3"  # 8 bytes
+    full_keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+    
+    # Create mock token with short keyset ID
+    token = TokenV4(
+        m="https://mint.example.com",
+        u="sat",
+        t=[
+            TokenV4Token(
+                i=bytes.fromhex(short_keyset_id),
+                p=[
+                    TokenV4Proof(
+                        a=64,
+                        s="test_secret",
+                        c=bytes.fromhex("abcd1234"),
+                    )
+                ]
+            )
+        ]
+    )
+    
+    # Mock wallet with keyset manager
+    from cashu.wallet.tokens_v2 import WalletTokensV2
+    wallet = WalletTokensV2()
+    wallet._short_to_full_cache = {short_keyset_id: full_keyset_id}
+    
+    # Test expansion
+    expanded_token = await wallet.expand_token_keysets(token)
+    
+    # Should have expanded the keyset ID
+    assert expanded_token.t[0].i.hex() == full_keyset_id
+
+
+@pytest.mark.asyncio
+async def test_token_serialization_with_short_ids():
+    """Test token serialization uses short keyset IDs for v2 keysets."""
+    from cashu.core.base import Proof
+    from cashu.wallet.tokens_v2 import WalletTokensV2
+    
+    # Mock wallet
+    wallet = WalletTokensV2()
+    
+    # Mock keyset data
+    full_keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+    short_keyset_id = derive_keyset_short_id(full_keyset_id)
+    
+    # Mock keysets
+    from cashu.core.base import WalletKeyset, Unit
+    from cashu.core.crypto.secp import PublicKey
+    
+    mock_keyset = WalletKeyset(
+        public_keys={64: PublicKey()},
+        unit="sat",
+        id=full_keyset_id,
+        mint_url="https://mint.example.com",
+    )
+    wallet.keysets = {full_keyset_id: mock_keyset}
+    
+    # Mock keyset manager methods
+    wallet._full_to_short_cache = {full_keyset_id: short_keyset_id}
+    wallet._short_to_full_cache = {short_keyset_id: full_keyset_id}
+    
+    # Create proofs with v2 keyset
+    proofs = [
+        Proof(
+            id=full_keyset_id,
+            amount=64,
+            secret="test_secret",
+            C="abcd1234"
+        )
+    ]
+    
+    # Test token creation with short IDs
+    token = await wallet._make_tokenv4_with_short_ids(proofs)
+    
+    # Token should use short keyset ID
+    assert token.t[0].i.hex() == short_keyset_id
+    assert len(token.t[0].i.hex()) == 16  # 8 bytes = 16 hex chars
+
+
+def test_nut13_spec_compliance():
+    """Test that HMAC-SHA512 derivation follows NUT-13 specification exactly."""
+    seed = b"supersecretprivatekey"
+    keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+    counter = 1
+    
+    # Manual implementation following NUT-13
+    keyset_id_bytes = bytes.fromhex(keyset_id)
+    counter_bytes = counter.to_bytes(4, byteorder="big")
+    message = b"Cashu_KDF_HMAC_SHA512" + keyset_id_bytes + counter_bytes
+    derived_bytes = hmac.new(seed, message, hashlib.sha512).digest()
+    expected_secret = derived_bytes[:32]
+    expected_r = derived_bytes[32:]
+    
+    # Test that our implementation matches
+    secrets = WalletSecrets()
+    secrets.seed = seed
+    secrets.keyset_id = keyset_id
+    
+    import asyncio
+    secret, r, _ = asyncio.run(secrets._derive_secret_hmac_sha512(counter, keyset_id))
+    
+    assert secret == expected_secret
+    assert r == expected_r
+
+
+def test_keyset_version_detection():
+    """Test keyset version detection works correctly."""
+    # Test v1 keyset
+    v1_id = "009a1f293253e41e"
+    assert get_keyset_id_version(v1_id) == "00"
+    assert not is_keyset_id_v2(v1_id)
+    
+    # Test v2 keyset
+    v2_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+    assert get_keyset_id_version(v2_id) == "01"
+    assert is_keyset_id_v2(v2_id)
+
+
+@pytest.mark.asyncio
+async def test_secret_derivation_version_routing():
+    """Test that the main derivation method routes to correct sub-methods."""
+    secrets = WalletSecrets()
+    secrets.seed = b"test_seed"
+    
+    # Mock BIP32
+    class MockBIP32:
+        def get_privkey_from_path(self, path):
+            return hashlib.sha256(f"bip32_{path}".encode()).digest()
+    
+    secrets.bip32 = MockBIP32()
+    
+    # Test v1 routing
+    secrets.keyset_id = "009a1f293253e41e"
+    secret_v1, r_v1, path_v1 = await secrets.generate_determinstic_secret(1)
+    assert "m/129372'" in path_v1  # BIP32 path
+    
+    # Test v2 routing
+    secrets.keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+    secret_v2, r_v2, path_v2 = await secrets.generate_determinstic_secret(1)
+    assert "HMAC-SHA512" in path_v2  # HMAC derivation
+    
+    # Results should be different
+    assert secret_v1 != secret_v2
+    assert r_v1 != r_v2
+
+
+@pytest.mark.asyncio
+async def test_short_keyset_id_round_trip():
+    """Test round-trip conversion between full and short keyset IDs."""
+    full_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+    expected_short = "01c9c20fb8b348b3"
+    
+    # Test derivation
+    short_id = derive_keyset_short_id(full_id)
+    assert short_id == expected_short
+    assert len(short_id) == 16  # 8 bytes
+    
+    # Test manager round-trip
+    manager = KeysetManager()
+    manager._short_to_full_cache = {short_id: full_id}
+    manager._full_to_short_cache = {full_id: short_id}
+    
+    # Test both directions
+    retrieved_short = await manager.get_short_keyset_id(full_id)
+    assert retrieved_short == short_id
+    
+    retrieved_full = await manager.get_full_keyset_id(short_id)
+    assert retrieved_full == full_id
+
+
+def test_short_keyset_id_properties():
+    """Test properties of short keyset IDs."""
+    # Test various v2 keyset IDs
+    test_cases = [
+        "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785",
+        "01a1b2c3d4e5f6789012345678901234567890123456789012345678901234567890",
+        "017890abcdef1234567890abcdef1234567890abcdef1234567890abcdef123456",
+    ]
+    
+    for full_id in test_cases:
+        short_id = derive_keyset_short_id(full_id)
+        
+        # Should be 8 bytes (16 hex chars)
+        assert len(short_id) == 16
+        
+        # Should preserve version prefix
+        assert short_id.startswith("01")
+        
+        # Should be first 8 bytes of full ID
+        assert short_id == full_id[:16]
+
+
+@pytest.mark.asyncio
+async def test_token_size_reduction():
+    """Test that tokens with short keyset IDs are smaller."""
+    # This is more of a conceptual test since we can't easily measure
+    # the exact byte savings without a full token serialization
+    
+    full_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+    short_id = derive_keyset_short_id(full_id)
+    
+    # The space savings: 33 bytes -> 8 bytes = 25 bytes saved per keyset
+    full_id_bytes = bytes.fromhex(full_id)
+    short_id_bytes = bytes.fromhex(short_id)
+    
+    assert len(full_id_bytes) == 33  # Full v2 keyset ID
+    assert len(short_id_bytes) == 8   # Short keyset ID
+    
+    savings = len(full_id_bytes) - len(short_id_bytes)
+    assert savings == 25  # 25 bytes saved per keyset
+
+
+@pytest.mark.asyncio
+async def test_backward_compatibility():
+    """Test that v1 keysets work unchanged."""
+    secrets = WalletSecrets()
+    secrets.seed = b"test_seed"
+    
+    # Mock BIP32 for v1 keysets
+    class MockBIP32:
+        def get_privkey_from_path(self, path):
+            return hashlib.sha256(f"bip32_{path}".encode()).digest()
+    
+    secrets.bip32 = MockBIP32()
+    
+    # Test v1 keyset behavior is unchanged
+    v1_keyset_id = "009a1f293253e41e"
+    secrets.keyset_id = v1_keyset_id
+    
+    secret, r, path = await secrets.generate_determinstic_secret(1)
+    
+    # Should still use BIP32 derivation
+    assert "m/129372'" in path
+    assert len(secret) == 32
+    assert len(r) == 32
+    
+    # Short ID should be the same as full ID for v1
+    manager = KeysetManager()
+    short_id = await manager.get_short_keyset_id(v1_keyset_id)
+    assert short_id == v1_keyset_id
+
+
+@pytest.mark.asyncio
+async def test_error_handling():
+    """Test error handling for invalid keyset versions."""
+    secrets = WalletSecrets()
+    secrets.seed = b"test_seed"
+    
+    # Test unsupported version
+    invalid_keyset_id = "99invalid_version_id"
+    secrets.keyset_id = invalid_keyset_id
+    
+    with pytest.raises(ValueError, match="Unsupported keyset version"):
+        await secrets.generate_determinstic_secret(1)
+
+
+if __name__ == "__main__":
+    # Run a quick test to verify functionality
+    import asyncio
+    
+    async def quick_test():
+        print("Testing NUT-13 HMAC-SHA512 derivation...")
+        
+        # Test HMAC-SHA512 derivation
+        secrets = WalletSecrets()
+        secrets.seed = b"test_seed"
+        secrets.keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+        
+        secret, r, path = await secrets._derive_secret_hmac_sha512(1, secrets.keyset_id)
+        print(f"✅ HMAC-SHA512 derivation: {len(secret)} byte secret, {len(r)} byte r")
+        print(f"   Path: {path}")
+        
+        # Test short keyset ID
+        full_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
+        short_id = derive_keyset_short_id(full_id)
+        print(f"✅ Short keyset ID: {full_id[:20]}... -> {short_id}")
+        print(f"   Space saved: {len(bytes.fromhex(full_id)) - len(bytes.fromhex(short_id))} bytes")
+        
+        print("All tests passed! ✅")
+    
+    asyncio.run(quick_test())

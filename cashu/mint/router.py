@@ -139,6 +139,7 @@ async def keysets() -> KeysetsResponse:
                 unit=keyset.unit.name,
                 active=keyset.active,
                 input_fee_ppk=keyset.input_fee_ppk,
+                final_expiry=keyset.final_expiry,  # NEW: Include final expiry in response
             )
         )
     return KeysetsResponse(keysets=keysets)

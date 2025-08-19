@@ -89,6 +89,20 @@ class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
 
 
+class MintKeysetsV2Settings(MintSettings):
+    """Settings for keysets v2 support (NUT-02)."""
+    mint_use_keysets_v2: bool = Field(
+        default=False,
+        title="Enable keysets v2",
+        description="Enable keysets v2 with unit-specific IDs and final expiry support (disabled by default for safety)."
+    )
+    mint_keysets_v2_default_expiry: Optional[int] = Field(
+        default=None,
+        title="Default final expiry for new keysets",
+        description="Default Unix timestamp for final expiry of new keysets v2 (None = no expiry)."
+    )
+
+
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated
     mint_backend_bolt11_sat: str = Field(default="")
@@ -328,6 +342,7 @@ class Settings(
     AuthSettings,
     MintRedisCache,
     MintDeprecationFlags,
+    MintKeysetsV2Settings,
     MintManagementRPCSettings,
     MintWatchdogSettings,
     MintSettings,

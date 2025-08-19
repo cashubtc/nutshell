@@ -111,6 +111,7 @@ class KeysetsResponseKeyset(BaseModel):
     unit: str
     active: bool
     input_fee_ppk: Optional[int] = None
+    final_expiry: Optional[int] = None  # NEW: Final expiry timestamp for keyset v2
 
 
 class KeysetsResponse(BaseModel):

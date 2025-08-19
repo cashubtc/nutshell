@@ -968,3 +968,16 @@ async def m027_add_balance_to_keysets_and_log_table(db: Database):
                 );
             """
         )
+
+
+async def m028_add_final_expiry_to_keysets(db: Database):
+    """
+    Add final_expiry column to keysets table for keysets v2 support.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('keysets')}
+                ADD COLUMN final_expiry INTEGER NULL
+            """
+        )

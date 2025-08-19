@@ -24,7 +24,9 @@ from .crypto.keys import (
     derive_keys_deprecated_pre_0_15,
     derive_keyset_id,
     derive_keyset_id_deprecated,
+    derive_keyset_id_v2,
     derive_pubkeys,
+    is_keyset_id_v2,
 )
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
@@ -805,6 +807,7 @@ class MintKeyset:
     version: Optional[str] = None
     amounts: List[int]
     balance: int
+    final_expiry: Optional[int] = None  # NEW: Final expiry timestamp for keyset v2
 
     duplicate_keyset_id: Optional[str] = None  # BACKWARDS COMPATIBILITY < 0.15.0
 
@@ -826,6 +829,7 @@ class MintKeyset:
         id: str = "",
         balance: int = 0,
         fees_paid: int = 0,
+        final_expiry: Optional[int] = None,  # NEW: Final expiry timestamp
     ):
         DEFAULT_SEED = "supersecretprivatekey"
         if seed == DEFAULT_SEED:
@@ -861,6 +865,7 @@ class MintKeyset:
         self.balance = balance
         self.fees_paid = fees_paid
         self.input_fee_ppk = input_fee_ppk or 0
+        self.final_expiry = final_expiry  # NEW: Set final expiry
 
         if self.input_fee_ppk < 0:
             raise Exception("Input fee must be non-negative.")
@@ -915,6 +920,7 @@ class MintKeyset:
             amounts=json.loads(row["amounts"]),
             balance=row["balance"],
             fees_paid=row["fees_paid"],
+            final_expiry=row.get("final_expiry"),  # NEW: Include final_expiry
         )
 
     @property
@@ -963,7 +969,18 @@ class MintKeyset:
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
-            self.id = id_in_db or derive_keyset_id(self.public_keys)  # type: ignore
+            
+            # KEYSETS V2: Use new keyset ID derivation if configured or requested
+            if id_in_db:
+                # If loading from DB, preserve existing ID
+                self.id = id_in_db
+            elif hasattr(settings, 'mint_use_keysets_v2') and settings.mint_use_keysets_v2:
+                # Use keysets v2 if explicitly enabled
+                self.id = derive_keyset_id_v2(self.public_keys, self.unit, self.final_expiry)  # type: ignore
+                logger.info(f"Generated keyset v2 ID: {self.id}")
+            else:
+                # Default to v1 for backward compatibility
+                self.id = derive_keyset_id(self.public_keys)  # type: ignore
 
 
 # ------- TOKEN -------
