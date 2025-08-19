@@ -56,7 +56,7 @@ async def test_privatekeys(ledger: Ledger):
 async def test_keysets(ledger: Ledger):
     assert len(ledger.keysets)
     assert len(list(ledger.keysets.keys()))
-    assert ledger.keyset.id == "009a1f293253e41e"
+    assert ledger.keyset.id == "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1"
 
 
 @pytest.mark.asyncio
@@ -74,7 +74,7 @@ async def test_mint(ledger: Ledger):
         BlindedMessage(
             amount=8,
             B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="009a1f293253e41e",
+            id="016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
         )
     ]
     promises = await ledger.mint(outputs=blinded_messages_mock, quote_id=quote.quote)
@@ -110,7 +110,7 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
         BlindedMessage(
             amount=8,
             B_="02634a2c2b34bec9e8a4aba4361f6bff02d7fa2365379b0840afe249a7a9d71237",
-            id="009a1f293253e41e",
+            id="016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
         )
     ]
     await assert_err(
@@ -125,7 +125,7 @@ async def test_generate_promises(ledger: Ledger):
         BlindedMessage(
             amount=8,
             B_="02634a2c2b34bec9e8a4aba4361f6bf202d7fa2365379b0840afe249a7a9d71239",
-            id="009a1f293253e41e",
+            id="016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
         )
     ]
     await ledger._store_blinded_messages(blinded_messages_mock)
@@ -135,7 +135,7 @@ async def test_generate_promises(ledger: Ledger):
         == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
     )
     assert promises[0].amount == 8
-    assert promises[0].id == "009a1f293253e41e"
+    assert promises[0].id == "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1"
 
     # DLEQ proof present
     assert promises[0].dleq
@@ -161,7 +161,7 @@ async def test_generate_change_promises(ledger: Ledger):
         BlindedMessage(
             amount=1,
             B_=b.serialize().hex(),
-            id="009a1f293253e41e",
+            id="016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
         )
         for b, _ in blinded_msgs
     ]
@@ -192,7 +192,7 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
         BlindedMessage(
             amount=1,
             B_=b.serialize().hex(),
-            id="009a1f293253e41e",
+            id="016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
         )
         for b, _ in blinded_msgs
     ]

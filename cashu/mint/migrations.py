@@ -1137,3 +1137,16 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
 
         # recreate the balance views
         await create_balance_views(db, conn)
+
+
+async def m029_add_final_expiry_to_keysets(db: Database):
+    """
+    Add final_expiry column to keysets table for keysets v2 support.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+                ALTER TABLE {db.table_with_schema('keysets')}
+                ADD COLUMN final_expiry INTEGER NULL
+            """
+        )

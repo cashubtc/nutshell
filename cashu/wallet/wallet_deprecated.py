@@ -162,6 +162,21 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             Exception: If no keys are received from the mint
         """
         logger.warning(f"Using deprecated API call: {url}/keys")
+        
+        # First, get the list of keysets to find the active keyset ID
+        # This is needed since the /keys endpoint doesn't return the ID
+        keysets_resp = await self._get_keysets_deprecated(url)
+        # Find the first active keyset with unit "sat" (deprecated /keys only returns sat keysets)
+        active_keyset_id = None
+        for ks in keysets_resp:
+            if ks.active and ks.unit == "sat":
+                active_keyset_id = ks.id
+                break
+        
+        # If no active keyset found, just use the first one
+        if not active_keyset_id and keysets_resp:
+            active_keyset_id = keysets_resp[0].id
+        
         resp = await self.httpx.get(
             f"{url}/keys",
         )
@@ -172,7 +187,13 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
             int(amt): PublicKey(bytes.fromhex(val), raw=True)
             for amt, val in keys.items()
         }
-        keyset = WalletKeyset(unit="sat", public_keys=keyset_keys, mint_url=url)
+        # Pass the keyset ID from /keysets response to WalletKeyset
+        keyset = WalletKeyset(
+            unit="sat", 
+            public_keys=keyset_keys, 
+            mint_url=url,
+            id=active_keyset_id
+        )
         return keyset
 
     @async_set_httpx_client
