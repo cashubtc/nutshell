@@ -1,10 +1,16 @@
 import copy
 from typing import List, Union
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
+from cashu.core.base import (
+    MeltQuote,
+    MeltQuoteState,
+    MintQuoteState,
+    Proof,
+)
 from cashu.core.errors import CashuError, KeysetNotFoundError
 from cashu.core.helpers import sum_proofs
 from cashu.core.settings import settings
@@ -13,6 +19,7 @@ from cashu.wallet.crud import (
     get_bolt11_mint_quote,
     get_keysets,
     get_proofs,
+    store_keyset,
 )
 from cashu.wallet.wallet import Wallet
 from cashu.wallet.wallet import Wallet as Wallet1
@@ -553,3 +560,23 @@ async def testactivate_keyset_specific_keyset(wallet1: Wallet):
         wallet1.activate_keyset(keyset_id="nonexistent"),
         KeysetNotFoundError("nonexistent"),
     )
+
+
+@pytest.mark.asyncio
+async def test_wallet_marks_deleted_keyset(wallet1: Wallet, wallet2: Wallet):
+    keyset2 = (await wallet2._get_keys())[0]
+    keyset2.id = "009b1e236543eeee"
+    await store_keyset(keyset=keyset2, mint_url=wallet1.url, db=wallet1.db)
+
+    # Patch _get_keysets to simulate mint only returning wallet1's keyset
+    with patch.object(
+        wallet1,
+        "_get_keysets",
+        AsyncMock(return_value=[wallet1.keysets[wallet1.keyset_id]]),
+    ):
+        await wallet1.load_mint()
+
+    # Check that keyset2 is now marked as deleted/inactive using get_keysets
+    keysets_db = await get_keysets(db=wallet1.db, id=keyset2.id)
+    assert keysets_db
+    assert not keysets_db[0].active  # Should be inactive/deleted

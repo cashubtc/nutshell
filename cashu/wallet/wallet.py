@@ -297,7 +297,7 @@ class Wallet(
         logger.trace("Loading mint keysets.")
         mint_keysets_resp = await self._get_keysets()
         mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
-        # load all keysets of thisd mint from the db
+        # load all keysets of this mint from the db
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
 
         # db is empty, get all keys from the mint and store them
@@ -346,6 +346,20 @@ class Wallet(
                     await update_keyset(
                         keyset=keysets_in_db_dict[mint_keyset.id], db=self.db
                     )
+
+        for keyset in keysets_in_db:
+            # for all old keysets in the db that are not in the mint, they have been deleted,
+            # mark them as inactive in the db
+            if (
+                keyset.id not in mint_keysets_dict
+                and keyset.active
+                and not (force_old_keysets and keyset.is_base64())
+            ):
+                logger.debug(
+                    f"Marking keysets missing from mint as inactive: {keyset.id}"
+                )
+                keyset.active = False
+                await update_keyset(keyset=keyset, db=self.db)
 
         await self.inactivate_base64_keysets(force_old_keysets)
 
