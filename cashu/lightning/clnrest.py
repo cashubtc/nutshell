@@ -299,7 +299,7 @@ class CLNRestWallet(LightningBackend):
         )
         self.last_pay_index = last_pay_index
         
-        retry_delay = settings.mint_retry_exponential_backoff_base_delay
+        retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
         
         while True:
@@ -314,7 +314,7 @@ class CLNRestWallet(LightningBackend):
                     timeout=None,
                 ) as r:
                     # Reset retry delay on successful connection
-                    retry_delay = settings.mint_retry_exponential_backoff_base_delay
+                    retry_delay = 0
                     async for line in r.aiter_lines():
                         inv = json.loads(line)
                         if "code" in inv and "message" in inv:
@@ -345,7 +345,7 @@ class CLNRestWallet(LightningBackend):
                 await asyncio.sleep(retry_delay)
                 
                 # Exponential backoff
-                retry_delay = min(retry_delay * 2, max_retry_delay)
+                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

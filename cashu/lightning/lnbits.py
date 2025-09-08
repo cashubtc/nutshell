@@ -229,7 +229,7 @@ class LNbitsWallet(LightningBackend):
         )
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
-        retry_delay = settings.mint_retry_exponential_backoff_base_delay
+        retry_delay = 0
         max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
         
         while True:
@@ -255,7 +255,7 @@ class LNbitsWallet(LightningBackend):
                             headers=sse_headers,
                         ) as r:
                             # Reset retry delay on successful connection
-                            retry_delay = settings.mint_retry_exponential_backoff_base_delay
+                            retry_delay = 0
                             sse_trigger = False
                             async for line in r.aiter_lines():
                                 if "Payment does not exist." in line:
@@ -280,14 +280,14 @@ class LNbitsWallet(LightningBackend):
                 if self.old_api:
                     await asyncio.sleep(retry_delay)
                     # Exponential backoff
-                    retry_delay = min(retry_delay * 2, max_retry_delay)
+                    retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
                     continue
                 # --- END LNBITS RETRO-COMPATIBILITY ---
 
                 async with connect(self.ws_url) as ws:
                     logger.info("connected to LNbits fundingsource websocket.")
                     # Reset retry delay on successful connection
-                    retry_delay = settings.mint_retry_exponential_backoff_base_delay
+                    retry_delay = 0
                     while True:
                         message = await ws.recv()
                         message_dict = json.loads(message)
@@ -308,4 +308,4 @@ class LNbitsWallet(LightningBackend):
                 await asyncio.sleep(retry_delay)
                 
                 # Exponential backoff
-                retry_delay = min(retry_delay * 2, max_retry_delay)
+                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
