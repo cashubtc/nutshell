@@ -185,10 +185,8 @@ class LedgerEventClientManager:
             raise ValueError("Max subscriptions reached")
 
         for f in filters:
-            if f not in self.subscriptions[kind]:
-                self.subscriptions[kind][f] = []
             logger.debug(f"Adding subscription {subId} for filter {f}")
-            self.subscriptions[kind][f].append(subId)
+            self.subscriptions[kind].setdefault(f, []).append(subId)
             # Initialize the subscription
             asyncio.create_task(self._init_subscription(subId, f, kind))
 
