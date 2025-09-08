@@ -184,13 +184,11 @@ class LedgerEventClientManager:
         if len(self.subscriptions[kind]) >= self.max_subscriptions:
             raise ValueError("Max subscriptions reached")
 
-        for filter in filters:
-            if filter not in self.subscriptions:
-                self.subscriptions[kind][filter] = []
-            logger.debug(f"Adding subscription {subId} for filter {filter}")
-            self.subscriptions[kind][filter].append(subId)
+        for f in filters:
+            logger.debug(f"Adding subscription {subId} for filter {f}")
+            self.subscriptions[kind].setdefault(f, []).append(subId)
             # Initialize the subscription
-            asyncio.create_task(self._init_subscription(subId, filter, kind))
+            asyncio.create_task(self._init_subscription(subId, f, kind))
 
     def remove_subscription(self, subId: str) -> None:
         for kind, sub_filters in self.subscriptions.items():
