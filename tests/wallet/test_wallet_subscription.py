@@ -1,5 +1,4 @@
 import asyncio
-
 import threading
 
 import pytest
@@ -12,7 +11,6 @@ from cashu.core.settings import settings
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
-    is_fake,
     pay_if_regtest,
 )
 
