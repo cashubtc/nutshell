@@ -52,6 +52,8 @@ async def test_info(ledger: Ledger):
     setting = MintMethodSetting.parse_obj(info.nuts[MINT_NUT]["methods"][0])
     assert setting.method == "bolt11"
     assert setting.unit == "sat"
+    assert setting.options
+    assert setting.options.description is True
 
 
 @pytest.mark.asyncio
