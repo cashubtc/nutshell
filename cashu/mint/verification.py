@@ -1,11 +1,13 @@
-from typing import List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 from loguru import logger
 
 from ..core.base import (
+    Amount,
     BlindedMessage,
     BlindedSignature,
     Method,
+    MintKeyset,
     MintQuote,
     Proof,
     Unit,
@@ -30,6 +32,68 @@ from ..core.nuts import nut20
 from ..core.settings import settings
 from .conditions import LedgerSpendingConditions
 from .protocols import SupportsBackends, SupportsDb, SupportsKeysets
+
+
+def get_mint_limits():
+    """Parse mint limits from the unified configuration."""
+    from ..core.base import Amount, Unit
+    
+    # Initialize default empty maps
+    max_mint_map: Dict[Unit, Optional[Amount]] = {
+        Unit.sat: None,
+        Unit.msat: None,
+        Unit.eur: None,
+        Unit.usd: None,
+    }
+    max_melt_map: Dict[Unit, Optional[Amount]] = {
+        Unit.sat: None,
+        Unit.msat: None,
+        Unit.eur: None,
+        Unit.usd: None,
+    }
+    max_balance_map: Dict[Unit, Optional[Amount]] = {
+        Unit.sat: None,
+        Unit.msat: None,
+        Unit.eur: None,
+        Unit.usd: None,
+    }
+    
+    # Parse unified mint_limits configuration
+    if settings.mint_limits:
+        logger.info("Using unified mint_limits configuration")
+        for limit_config in settings.mint_limits:
+            if len(limit_config) != 4:
+                logger.warning(f"Invalid mint_limits entry: {limit_config}. Expected format: [unit, max_mint, max_melt, max_balance]")
+                continue
+            
+            unit_str, max_mint, max_melt, max_balance = limit_config
+            try:
+                unit = Unit[unit_str]
+                
+                # Create Amount objects for each limit (handle None values)
+                if max_mint is not None:
+                    if unit in [Unit.sat, Unit.msat]:
+                        max_mint_map[unit] = Amount(unit=unit, amount=int(max_mint))
+                    else:
+                        max_mint_map[unit] = Amount.from_float(unit=unit, amount=float(max_mint))
+                
+                if max_melt is not None:
+                    if unit in [Unit.sat, Unit.msat]:
+                        max_melt_map[unit] = Amount(unit=unit, amount=int(max_melt))
+                    else:
+                        max_melt_map[unit] = Amount.from_float(unit=unit, amount=float(max_melt))
+                
+                if max_balance is not None:
+                    if unit in [Unit.sat, Unit.msat]:
+                        max_balance_map[unit] = Amount(unit=unit, amount=int(max_balance))
+                    else:
+                        max_balance_map[unit] = Amount.from_float(unit=unit, amount=float(max_balance))
+                        
+            except (KeyError, ValueError, TypeError) as e:
+                logger.warning(f"Invalid unit or limit value in mint_limits: {limit_config}. Error: {e}")
+                continue
+
+    return (max_mint_map, max_melt_map, max_balance_map)
 
 
 class LedgerVerification(
@@ -286,3 +350,64 @@ class LedgerVerification(
         if not signature:
             return False
         return nut20.verify_mint_quote(quote.quote, outputs, quote.pubkey, signature)
+
+    def _verify_mint_limits(
+        self,
+        amount: Amount,
+    ) -> None:
+
+        def get_active_unit_balance(unit: Unit):
+            active_keyset: MintKeyset = next(
+                filter(lambda k: k.active and k.unit == unit, self.keysets.values())
+            )
+            return active_keyset.balance
+
+        unit = amount.unit
+        (max_mint_map, _, max_balance_map) = get_mint_limits()
+
+        # Check max peg-in
+        if (max_mint_map[unit]
+            and amount.amount > max_mint_map[unit].amount     # type: ignore
+        ):
+            raise NotAllowedError(f"Cannot mint more than {max_mint_map[unit]}.")
+
+        # Check max balance
+        if max_balance_map[unit]:
+            balance_unit = get_active_unit_balance(unit=unit)
+            if amount.amount + balance_unit > max_balance_map[unit].amount:     # type: ignore
+                raise NotAllowedError("Mint has reached maximum balance.")
+            
+        # --- DEPRECATED ---
+        if settings.mint_max_peg_in and unit == Unit.sat:
+            logger.warning("Mint is using DEPRECATED limits settings")
+            if amount.amount > settings.mint_max_peg_in:
+                raise NotAllowedError(f"Cannot mint more than {settings.mint_max_peg_in} sat.")
+        
+        if settings.mint_max_balance and unit == Unit.sat:
+            logger.warning("Mint is using DEPRECATED limits settings")
+            balance_sat = get_active_unit_balance(unit=unit)
+            if amount.amount + balance_sat > settings.mint_max_balance:
+                raise NotAllowedError("Mint has reached maximum balance.")
+        # --- END DEPRECATED ---
+
+    
+    def _verify_melt_limits(
+        self,
+        amount: Amount,
+    ) -> None:
+
+        unit = amount.unit
+        (_, max_melt_map, _) = get_mint_limits()
+
+        # Check max peg-out
+        if (max_melt_map[unit]
+            and amount.amount > max_melt_map[unit].amount    # type: ignore
+        ):
+            raise NotAllowedError(f"Cannot melt more than {max_melt_map[unit]}.") # type: ignore
+
+        # --- DEPRECATED ---
+        if settings.mint_max_peg_out and unit == Unit.sat:
+            logger.warning("Mint is using DEPRECATED limits settings")
+            if amount.amount > settings.mint_max_peg_out:
+                raise NotAllowedError(f"Cannot melt more than {settings.mint_max_peg_out} sat.")
+        # --- END DEPRECATED ---
