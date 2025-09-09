@@ -6,6 +6,7 @@ from ..core.models import (
     MeltMethodSetting,
     MintInfoContact,
     MintInfoProtectedEndpoint,
+    MintMethodBolt11OptionSetting,
     MintMethodSetting,
 )
 from ..core.nuts.nuts import (
@@ -85,8 +86,10 @@ class LedgerFeatures(SupportsBackends, SupportsPubkey):
                 if settings.mint_max_mint_bolt11_sat:
                     mint_setting.max_amount = settings.mint_max_mint_bolt11_sat
                     mint_setting.min_amount = 0
+                mint_setting.options = MintMethodBolt11OptionSetting(
+                    description=unit_dict[unit].supports_description
+                )
                 mint_method_settings.append(mint_setting)
-                mint_setting.description = unit_dict[unit].supports_description
         melt_method_settings: List[MeltMethodSetting] = []
         for method, unit_dict in self.backends.items():
             for unit in unit_dict.keys():
