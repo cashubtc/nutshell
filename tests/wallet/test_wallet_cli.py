@@ -602,3 +602,204 @@ def test_send_with_lock(mint, cli_prefix):
     assert "cashuB" in token_str, "output does not have a token"
     token = TokenV4.deserialize(token_str).to_tokenv3()
     assert pubkey in token.token[0].proofs[0].secret
+
+
+def test_proofs_basic(cli_prefix):
+    """Test basic proofs command functionality"""
+    runner = CliRunner()
+    result = runner.invoke(cli, [*cli_prefix, "proofs"])
+
+    assert result.exception is None
+    assert result.exit_code == 0
+
+    # Extract JSON output (ignore warnings)
+    output_lines = result.output.split('\n')
+    json_lines = []
+    for line in output_lines:
+        if not line.startswith("Warning:"):
+            json_lines.append(line)
+    json_output = '\n'.join(json_lines).strip()
+
+    # Should be valid JSON
+    import json
+    proofs = json.loads(json_output)
+    assert isinstance(proofs, list)
+    print(f"Found {len(proofs)} proofs")
+
+
+def test_proofs_json_structure(cli_prefix):
+    """Test that proofs have correct JSON structure"""
+    runner = CliRunner()
+    result = runner.invoke(cli, [*cli_prefix, "proofs"])
+
+    assert result.exception is None
+    assert result.exit_code == 0
+
+    # Extract and parse JSON
+    output_lines = result.output.split('\n')
+    json_lines = []
+    for line in output_lines:
+        if not line.startswith("Warning:"):
+            json_lines.append(line)
+    json_output = '\n'.join(json_lines).strip()
+
+    import json
+    proofs = json.loads(json_output)
+
+    if proofs:  # If wallet has proofs
+        for proof in proofs:
+            # Check required fields according to NUT-00 spec
+            assert "id" in proof, "proof missing 'id' field"
+            assert "amount" in proof, "proof missing 'amount' field"
+            assert "secret" in proof, "proof missing 'secret' field"
+            assert "C" in proof, "proof missing 'C' field"
+
+            # Check field types
+            assert isinstance(proof["id"], str), "'id' should be string"
+            assert isinstance(proof["amount"], int), "'amount' should be integer"
+            assert isinstance(proof["secret"], str), "'secret' should be string"
+            assert isinstance(proof["C"], str), "'C' should be string"
+
+
+def test_proofs_with_no_dleq_flag(cli_prefix):
+    """Test --no-dleq flag excludes DLEQ proofs"""
+    runner = CliRunner()
+
+    # Get proofs with DLEQ
+    result_with_dleq = runner.invoke(cli, [*cli_prefix, "proofs"])
+    assert result_with_dleq.exception is None
+
+    # Get proofs without DLEQ
+    result_no_dleq = runner.invoke(cli, [*cli_prefix, "proofs", "--no-dleq"])
+    assert result_no_dleq.exception is None
+    assert result_no_dleq.exit_code == 0
+
+    # Extract JSON from both
+    import json
+
+    def extract_json(output):
+        output_lines = output.split('\n')
+        json_lines = []
+        for line in output_lines:
+            if not line.startswith("Warning:"):
+                json_lines.append(line)
+        return json.loads('\n'.join(json_lines).strip())
+
+    proofs_with_dleq = extract_json(result_with_dleq.output)
+    proofs_no_dleq = extract_json(result_no_dleq.output)
+
+    if proofs_with_dleq and proofs_no_dleq:
+        # Should have same number of proofs
+        assert len(proofs_with_dleq) == len(proofs_no_dleq)
+
+        # No DLEQ version should not have dleq field
+        for proof in proofs_no_dleq:
+            assert "dleq" not in proof, "proof should not contain 'dleq' field with --no-dleq"
+
+
+def test_proofs_with_keyset_filter(cli_prefix):
+    """Test --keyset flag filters proofs by keyset ID"""
+    runner = CliRunner()
+
+    # First get all proofs to find a keyset ID
+    result_all = runner.invoke(cli, [*cli_prefix, "proofs", "--no-dleq"])
+    assert result_all.exception is None
+
+    import json
+    def extract_json(output):
+        output_lines = output.split('\n')
+        json_lines = []
+        for line in output_lines:
+            if not line.startswith("Warning:"):
+                json_lines.append(line)
+        return json.loads('\n'.join(json_lines).strip())
+
+    all_proofs = extract_json(result_all.output)
+
+    if all_proofs:
+        # Get a keyset ID from first proof
+        test_keyset = all_proofs[0]["id"]
+
+        # Filter by that keyset
+        result_filtered = runner.invoke(cli, [*cli_prefix, "proofs", "--keyset", test_keyset])
+        assert result_filtered.exception is None
+        assert result_filtered.exit_code == 0
+
+        filtered_proofs = extract_json(result_filtered.output)
+
+        # All filtered proofs should have the same keyset ID
+        for proof in filtered_proofs:
+            assert proof["id"] == test_keyset, f"proof has wrong keyset ID: {proof['id']} != {test_keyset}"
+
+
+def test_proofs_invalid_keyset(cli_prefix):
+    """Test --keyset with non-existent keyset ID"""
+    runner = CliRunner()
+    result = runner.invoke(cli, [*cli_prefix, "proofs", "--keyset", "nonexistent"])
+
+    assert result.exception is None
+    assert result.exit_code == 0
+    assert "No proofs found for keyset: nonexistent" in result.output
+
+
+def test_proofs_with_indent(cli_prefix):
+    """Test --indent flag controls JSON formatting"""
+    runner = CliRunner()
+
+    # Test compact format (indent 0)
+    result_compact = runner.invoke(cli, [*cli_prefix, "proofs", "--indent", "0"])
+    assert result_compact.exception is None
+    assert result_compact.exit_code == 0
+
+    # Test expanded format (indent 4)
+    result_expanded = runner.invoke(cli, [*cli_prefix, "proofs", "--indent", "4"])
+    assert result_expanded.exception is None
+    assert result_expanded.exit_code == 0
+
+    # Compact should be shorter (fewer newlines)
+    def extract_json_lines(output):
+        return [line for line in output.split('\n') if not line.startswith("Warning:")]
+
+    compact_lines = extract_json_lines(result_compact.output)
+    expanded_lines = extract_json_lines(result_expanded.output)
+
+    # Expanded format should have more lines due to indentation
+    if compact_lines and expanded_lines:
+        assert len(expanded_lines) >= len(compact_lines), "expanded format should have more lines"
+
+
+def test_proofs_with_all_flag(cli_prefix):
+    """Test --all flag includes reserved proofs"""
+    runner = CliRunner()
+
+    # Get available proofs (default)
+    result_available = runner.invoke(cli, [*cli_prefix, "proofs", "--no-dleq"])
+    assert result_available.exception is None
+
+    # Get all proofs (including reserved)
+    result_all = runner.invoke(cli, [*cli_prefix, "proofs", "--all", "--no-dleq"])
+    assert result_all.exception is None
+    assert result_all.exit_code == 0
+
+    import json
+    def extract_json(output):
+        output_lines = output.split('\n')
+        json_lines = []
+        for line in output_lines:
+            if not line.startswith("Warning:"):
+                json_lines.append(line)
+        return json.loads('\n'.join(json_lines).strip())
+
+    available_proofs = extract_json(result_available.output)
+    all_proofs = extract_json(result_all.output)
+
+    # All proofs should include at least the same number as available proofs
+    assert len(all_proofs) >= len(available_proofs), "--all should include at least as many proofs as default"
+
+    print(f"Available proofs: {len(available_proofs)}, All proofs: {len(all_proofs)}")
+
+    # All proofs in available should be in all_proofs
+    available_secrets = {proof["secret"] for proof in available_proofs}
+    all_secrets = {proof["secret"] for proof in all_proofs}
+
+    assert available_secrets.issubset(all_secrets), "all available proofs should be included in --all"
