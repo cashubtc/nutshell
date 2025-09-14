@@ -606,25 +606,34 @@ def test_send_with_lock(mint, cli_prefix):
 
 def test_proofs_basic(cli_prefix):
     """Test basic proofs command functionality"""
-    runner = CliRunner()
-    result = runner.invoke(cli, [*cli_prefix, "proofs"])
+    runner = CliRunner(mix_stderr=False)  # Separate stdout/stderr, as we want to verify only stdout
 
+    # First create some tokens like other tests do
+    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
+    assert result.exception is None
+
+    # Verify wallet has balance
+    wallet = asyncio.run(init_wallet())
+    assert wallet.available_balance >= 64
+
+    # Now test the proofs command
+    result = runner.invoke(cli, [*cli_prefix, "proofs"])
     assert result.exception is None
     assert result.exit_code == 0
 
-    # Extract JSON output (ignore warnings)
-    output_lines = result.output.split('\n')
-    json_lines = []
-    for line in output_lines:
-        if not line.startswith("Warning:"):
-            json_lines.append(line)
-    json_output = '\n'.join(json_lines).strip()
+    # JSON output should be clean in stdout (debug logs go to stderr)
+    json_output = result.stdout.strip()
 
     # Should be valid JSON
     import json
     proofs = json.loads(json_output)
     assert isinstance(proofs, list)
+    assert len(proofs) > 0, "Should have proofs after minting tokens"
     print(f"Found {len(proofs)} proofs")
+
+    # Each proof should have the expected fields
+    for proof in proofs:
+        assert sorted(proof.keys()) == ['C', 'amount', 'dleq', 'id', 'secret']
 
 
 def test_proofs_json_structure(cli_prefix):
