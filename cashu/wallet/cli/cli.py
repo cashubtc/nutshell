@@ -966,7 +966,6 @@ async def proofs_command(
             "id": proof.id,
             "amount": proof.amount,
             "secret": proof.secret,
-            "Y": proof.Y,
             "C": proof.C,
         }
 
