@@ -359,7 +359,7 @@ async def invoice(
     # in case the user wants a specific split, we create a list of amounts
     optional_split = None
     if split:
-        assert amount % split == 0, "split must be divisor or amount"
+        assert amount % split == 0, "split must be divisor of amount"
         assert amount >= split, "split must smaller or equal amount"
         n_splits = amount // split
         optional_split = [split] * n_splits
