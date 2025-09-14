@@ -711,17 +711,12 @@ def test_proofs_with_keyset_filter(cli_prefix):
         assert proof["id"] == test_keyset, f"proof has wrong keyset ID: {proof['id']} != {test_keyset}"
 
     # Filter with a non-existent keyset, to make sure nothing is returned
-    result_filtered = runner.invoke(cli, [*cli_prefix, "proofs", "--keyset", '009a1f293253e41e'])
-    assert result_filtered.exception is None
-    assert result_filtered.exit_code == 0
-
-    filtered_proofs = json.loads(result_filtered.stdout.strip())
-
-    assert len(filtered_proofs) > 0
-
-    # All filtered proofs should have the same keyset ID
-    for proof in filtered_proofs:
-        assert proof["id"] == test_keyset, f"proof has wrong keyset ID: {proof['id']} != {test_keyset}"
+    import secrets
+    nonexistent_keyset = '00' + secrets.token_hex(7)  # 16 hex chars (8 bytes)
+    result_filtered_again = runner.invoke(cli, [*cli_prefix, "proofs", "--keyset", nonexistent_keyset])
+    assert result_filtered_again.exception is None
+    assert result_filtered_again.exit_code == 0
+    assert "No proofs found for keyset:" in result_filtered_again.stdout
 
 
 def test_proofs_invalid_keyset(cli_prefix):
