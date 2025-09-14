@@ -60,7 +60,6 @@ The easiest way to get a mint running is through Docker.
 You can build the image yourself by running the following command. Make sure to adjust the environment variables in `docker-compose.yaml`.
 
 ```bash
-mkdir -p data/mint # for database, will be passed to the container for persistence 
 docker compose up mint
 ```
 
