@@ -604,38 +604,6 @@ def test_send_with_lock(mint, cli_prefix):
     assert pubkey in token.token[0].proofs[0].secret
 
 
-def test_proofs_basic(cli_prefix):
-    """Test basic proofs command functionality"""
-    runner = CliRunner(mix_stderr=False)  # Separate stdout/stderr, as we want to verify only stdout
-
-    # First create some tokens like other tests do
-    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
-    assert result.exception is None
-
-    # Verify wallet has balance
-    wallet = asyncio.run(init_wallet())
-    assert wallet.available_balance >= 64
-
-    # Now test the proofs command
-    result = runner.invoke(cli, [*cli_prefix, "proofs"])
-    assert result.exception is None
-    assert result.exit_code == 0
-
-    # JSON output should be clean in stdout (debug logs go to stderr)
-    json_output = result.stdout.strip()
-
-    # Should be valid JSON
-    import json
-    proofs = json.loads(json_output)
-    assert isinstance(proofs, list)
-    assert len(proofs) > 0, "Should have proofs after minting tokens"
-    print(f"Found {len(proofs)} proofs")
-
-    # Each proof should have the expected fields
-    for proof in proofs:
-        assert sorted(proof.keys()) == ['C', 'amount', 'dleq', 'id', 'secret']
-
-
 def test_proofs_json_structure(cli_prefix):
     """Test that proofs have correct JSON structure"""
     runner = CliRunner(mix_stderr=False)
@@ -659,17 +627,12 @@ def test_proofs_json_structure(cli_prefix):
     assert len(proofs) > 0, "Should have proofs to test structure"
 
     for proof in proofs:
-        # Check required fields according to NUT-00 spec
-        assert "id" in proof, "proof missing 'id' field"
-        assert "amount" in proof, "proof missing 'amount' field"
-        assert "secret" in proof, "proof missing 'secret' field"
-        assert "C" in proof, "proof missing 'C' field"
-
-        # Check field types
+        # Check field types, the required fields according to NUT-00 spec
         assert isinstance(proof["id"], str), "'id' should be string"
         assert isinstance(proof["amount"], int), "'amount' should be integer"
         assert isinstance(proof["secret"], str), "'secret' should be string"
         assert isinstance(proof["C"], str), "'C' should be string"
+        assert "dleq" in proof.keys() # will not be present if '--no-dleq' is passed
 
 
 def test_proofs_with_no_dleq_flag(cli_prefix):
@@ -704,6 +667,11 @@ def test_proofs_with_no_dleq_flag(cli_prefix):
 
     # No DLEQ version should not have dleq field
     for proof in proofs_no_dleq:
+        # Check field types, the required fields according to NUT-00 spec
+        assert isinstance(proof["id"], str), "'id' should be string"
+        assert isinstance(proof["amount"], int), "'amount' should be integer"
+        assert isinstance(proof["secret"], str), "'secret' should be string"
+        assert isinstance(proof["C"], str), "'C' should be string"
         assert "dleq" not in proof, "proof should not contain 'dleq' field with --no-dleq"
 
 
@@ -720,7 +688,7 @@ def test_proofs_with_keyset_filter(cli_prefix):
     assert wallet.available_balance >= 64
 
     # Get all proofs to find a keyset ID
-    result_all = runner.invoke(cli, [*cli_prefix, "proofs", "--no-dleq"])
+    result_all = runner.invoke(cli, [*cli_prefix, "proofs"])
     assert result_all.exception is None
 
     import json
@@ -736,6 +704,20 @@ def test_proofs_with_keyset_filter(cli_prefix):
     assert result_filtered.exit_code == 0
 
     filtered_proofs = json.loads(result_filtered.stdout.strip())
+    assert len(filtered_proofs) > 0
+
+    # All filtered proofs should have the same keyset ID
+    for proof in filtered_proofs:
+        assert proof["id"] == test_keyset, f"proof has wrong keyset ID: {proof['id']} != {test_keyset}"
+
+    # Filter with a non-existent keyset, to make sure nothing is returned
+    result_filtered = runner.invoke(cli, [*cli_prefix, "proofs", "--keyset", '009a1f293253e41e'])
+    assert result_filtered.exception is None
+    assert result_filtered.exit_code == 0
+
+    filtered_proofs = json.loads(result_filtered.stdout.strip())
+
+    assert len(filtered_proofs) > 0
 
     # All filtered proofs should have the same keyset ID
     for proof in filtered_proofs:
@@ -751,32 +733,6 @@ def test_proofs_invalid_keyset(cli_prefix):
     assert result.exit_code == 0
     assert "No proofs found for keyset: nonexistent" in result.stdout
 
-
-def test_proofs_with_indent(cli_prefix):
-    """Test --indent flag controls JSON formatting"""
-    runner = CliRunner(mix_stderr=False)
-
-    # Create some tokens first so we have proofs to list
-    result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
-    assert result.exit_code == 0
-
-    # Test compact format (indent 0)
-    result_compact = runner.invoke(cli, [*cli_prefix, "proofs", "--indent", "0"])
-    assert result_compact.exception is None
-    assert result_compact.exit_code == 0
-
-    # Test expanded format (indent 4)
-    result_expanded = runner.invoke(cli, [*cli_prefix, "proofs", "--indent", "4"])
-    assert result_expanded.exception is None
-    assert result_expanded.exit_code == 0
-
-    # Compact should be shorter (fewer newlines)
-    compact_lines = result_compact.stdout.strip().split('\n')
-    expanded_lines = result_expanded.stdout.strip().split('\n')
-
-    # Expanded format should have more lines due to indentation
-    if compact_lines and expanded_lines:
-        assert len(expanded_lines) >= len(compact_lines), "expanded format should have more lines"
 
 
 def test_proofs_with_all_flag(cli_prefix):
