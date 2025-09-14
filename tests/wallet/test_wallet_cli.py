@@ -737,6 +737,9 @@ def test_proofs_with_all_flag(cli_prefix):
     # Create some tokens first so we have proofs to list
     result = runner.invoke(cli, [*cli_prefix, "invoice", "64"])
     assert result.exit_code == 0
+    # Send some, in order to 'reserve' the tokens such that they are only included if --all is passed
+    result = runner.invoke(cli, [*cli_prefix, "send", "12"])
+    assert result.exit_code == 0
 
     # Get available proofs (default)
     result_available = runner.invoke(cli, [*cli_prefix, "proofs", "--no-dleq"])
@@ -753,7 +756,7 @@ def test_proofs_with_all_flag(cli_prefix):
     all_proofs = json.loads(result_all.stdout.strip())
 
     # All proofs should include at least the same number as available proofs
-    assert len(all_proofs) >= len(available_proofs), "--all should include at least as many proofs as default"
+    assert len(all_proofs) > len(available_proofs), "--all should have more proofs, as it includes the reserved proofs"
 
     print(f"Available proofs: {len(available_proofs)}, All proofs: {len(all_proofs)}")
 
