@@ -623,6 +623,7 @@ def test_proofs_json_structure(cli_prefix):
 
     # Parse JSON from stdout
     import json
+
     proofs = json.loads(result.stdout.strip())
     assert len(proofs) > 0, "Should have proofs to test structure"
 
@@ -632,7 +633,7 @@ def test_proofs_json_structure(cli_prefix):
         assert isinstance(proof["amount"], int), "'amount' should be integer"
         assert isinstance(proof["secret"], str), "'secret' should be string"
         assert isinstance(proof["C"], str), "'C' should be string"
-        assert "dleq" in proof.keys() # will not be present if '--no-dleq' is passed
+        assert "dleq" in proof.keys()  # will not be present if '--no-dleq' is passed
 
 
 def test_proofs_with_no_dleq_flag(cli_prefix):
@@ -658,6 +659,7 @@ def test_proofs_with_no_dleq_flag(cli_prefix):
 
     # Parse JSON from both outputs
     import json
+
     proofs_with_dleq = json.loads(result_with_dleq.stdout.strip())
     proofs_no_dleq = json.loads(result_no_dleq.stdout.strip())
 
@@ -672,7 +674,9 @@ def test_proofs_with_no_dleq_flag(cli_prefix):
         assert isinstance(proof["amount"], int), "'amount' should be integer"
         assert isinstance(proof["secret"], str), "'secret' should be string"
         assert isinstance(proof["C"], str), "'C' should be string"
-        assert "dleq" not in proof, "proof should not contain 'dleq' field with --no-dleq"
+        assert (
+            "dleq" not in proof
+        ), "proof should not contain 'dleq' field with --no-dleq"
 
 
 def test_proofs_with_keyset_filter(cli_prefix):
@@ -692,6 +696,7 @@ def test_proofs_with_keyset_filter(cli_prefix):
     assert result_all.exception is None
 
     import json
+
     all_proofs = json.loads(result_all.stdout.strip())
     assert len(all_proofs) > 0, "Should have proofs to test keyset filtering"
 
@@ -699,7 +704,9 @@ def test_proofs_with_keyset_filter(cli_prefix):
     test_keyset = all_proofs[0]["id"]
 
     # Filter by that keyset
-    result_filtered = runner.invoke(cli, [*cli_prefix, "proofs", "--keyset", test_keyset])
+    result_filtered = runner.invoke(
+        cli, [*cli_prefix, "proofs", "--keyset", test_keyset]
+    )
     assert result_filtered.exception is None
     assert result_filtered.exit_code == 0
 
@@ -708,12 +715,17 @@ def test_proofs_with_keyset_filter(cli_prefix):
 
     # All filtered proofs should have the same keyset ID
     for proof in filtered_proofs:
-        assert proof["id"] == test_keyset, f"proof has wrong keyset ID: {proof['id']} != {test_keyset}"
+        assert (
+            proof["id"] == test_keyset
+        ), f"proof has wrong keyset ID: {proof['id']} != {test_keyset}"
 
     # Filter with a non-existent keyset, to make sure nothing is returned
     import secrets
-    nonexistent_keyset = '00' + secrets.token_hex(7)  # 16 hex chars (8 bytes)
-    result_filtered_again = runner.invoke(cli, [*cli_prefix, "proofs", "--keyset", nonexistent_keyset])
+
+    nonexistent_keyset = "00" + secrets.token_hex(7)  # 16 hex chars (8 bytes)
+    result_filtered_again = runner.invoke(
+        cli, [*cli_prefix, "proofs", "--keyset", nonexistent_keyset]
+    )
     assert result_filtered_again.exception is None
     assert result_filtered_again.exit_code == 0
     assert "No proofs found for keyset:" in result_filtered_again.stdout
@@ -727,7 +739,6 @@ def test_proofs_invalid_keyset(cli_prefix):
     assert result.exception is None
     assert result.exit_code == 0
     assert "No proofs found for keyset: nonexistent" in result.stdout
-
 
 
 def test_proofs_with_all_flag(cli_prefix):
@@ -756,7 +767,9 @@ def test_proofs_with_all_flag(cli_prefix):
     all_proofs = json.loads(result_all.stdout.strip())
 
     # All proofs should include at least the same number as available proofs
-    assert len(all_proofs) > len(available_proofs), "--all should have more proofs, as it includes the reserved proofs"
+    assert len(all_proofs) > len(
+        available_proofs
+    ), "--all should have more proofs, as it includes the reserved proofs"
 
     print(f"Available proofs: {len(available_proofs)}, All proofs: {len(all_proofs)}")
 
@@ -764,4 +777,6 @@ def test_proofs_with_all_flag(cli_prefix):
     available_secrets = {proof["secret"] for proof in available_proofs}
     all_secrets = {proof["secret"] for proof in all_proofs}
 
-    assert available_secrets.issubset(all_secrets), "all available proofs should be included in --all"
+    assert available_secrets.issubset(
+        all_secrets
+    ), "all available proofs should be included in --all"

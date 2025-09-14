@@ -157,7 +157,9 @@ def init_auth_wallet(func):
 )
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool):
+async def cli(
+    ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool
+):
     if settings.debug:
         configure_logger()
     if settings.tor and not TorProxy().check_platform():
