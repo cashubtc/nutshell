@@ -514,6 +514,10 @@ def test_send_too_much(mint, cli_prefix):
     assert "Balance too low" in str(result.exception)
 
 
+@pytest.mark.skipif(
+    settings.mint_input_fee_ppk != 100,
+    reason="requires conftest.py to have settings.mint_input_fee_ppk=100",
+)
 def test_send_with_input_fee_limit_cli(mint, cli_prefix):
     """Test send command with input fee limit via CLI runner."""
     runner = CliRunner()
