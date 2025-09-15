@@ -38,6 +38,24 @@ class WalletTransactions(SupportsDb, SupportsKeysets):
     def get_fees_for_proofs_ppk(self, proofs: List[Proof]) -> int:
         return sum([self.keysets[p.id].input_fee_ppk for p in proofs])
 
+    def _check_input_fee_limit(self, proofs: List[Proof], max_input_fee_ppk: Optional[int]) -> None:
+        """Check if input fees exceed the specified limit.
+
+        Args:
+            proofs: List of proofs to check fees for
+            max_input_fee_ppk: Maximum allowed input fee in parts per kilosat, None for no limit
+
+        Raises:
+            InputFeeExceedsLimitError: If fees exceed the limit
+        """
+        if max_input_fee_ppk is None:
+            return
+
+        actual_fee_ppk = self.get_fees_for_proofs_ppk(proofs)
+        if actual_fee_ppk > max_input_fee_ppk:
+            from .errors import InputFeeExceedsLimitError
+            raise InputFeeExceedsLimitError(actual_fee_ppk, max_input_fee_ppk)
+
     def coinselect(
         self,
         proofs: List[Proof],
