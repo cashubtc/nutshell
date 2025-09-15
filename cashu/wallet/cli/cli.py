@@ -157,7 +157,9 @@ def init_auth_wallet(func):
 )
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool):
+async def cli(
+    ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool
+):
     if settings.debug:
         configure_logger()
     if settings.tor and not TorProxy().check_platform():
@@ -253,7 +255,11 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, 
 @coro
 @init_auth_wallet
 async def pay(
-    ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False, max_input_fee_ppk: Optional[int] = None
+    ctx: Context,
+    invoice: str,
+    amount: Optional[int] = None,
+    yes: bool = False,
+    max_input_fee_ppk: Optional[int] = None,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
@@ -288,11 +294,15 @@ async def pay(
     # we need to include fees so we can use the proofs for melting the `total_amount`
     try:
         send_proofs, _ = await wallet.select_to_send(
-            wallet.proofs, total_amount, include_fees=True, set_reserved=False, max_input_fee_ppk=max_input_fee_ppk
+            wallet.proofs,
+            total_amount,
+            include_fees=True,
+            set_reserved=False,
+            max_input_fee_ppk=max_input_fee_ppk,
         )
     except InputFeeExceedsLimitError as e:
         print(f" Error: {e}")
-        return
+        ctx.exit(1)
     print("Paying Lightning invoice ...", end="", flush=True)
     assert total_amount > 0, "amount is not positive"
     logger.debug(
@@ -727,10 +737,13 @@ async def send_command(
                 max_input_fee_ppk=max_input_fee_ppk,
             )
         else:
-            await send_nostr(wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes)
+            await send_nostr(
+                wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes
+            )
         await print_balance(ctx)
     except InputFeeExceedsLimitError as e:
         click.echo(f"Error: {e}", err=True)
+        ctx.exit(1)
 
 
 @cli.command("receive", help="Receive tokens.")

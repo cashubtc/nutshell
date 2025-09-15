@@ -1272,7 +1272,11 @@ class Wallet(
             f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
         )
         keep_proofs, send_proofs = await self.split(
-            swap_proofs, amount, secret_lock, include_fees=include_fees, max_input_fee_ppk=max_input_fee_ppk
+            swap_proofs,
+            amount,
+            secret_lock,
+            include_fees=include_fees,
+            max_input_fee_ppk=max_input_fee_ppk,
         )
         if set_reserved:
             await self.set_reserved_for_send(send_proofs, reserved=True)

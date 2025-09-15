@@ -514,6 +514,49 @@ def test_send_too_much(mint, cli_prefix):
     assert "Balance too low" in str(result.exception)
 
 
+def test_send_with_input_fee_limit_cli(mint, cli_prefix):
+    """Test send command with input fee limit via CLI runner."""
+    runner = CliRunner()
+
+    # Check initial balance is zero
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "balance"],
+    )
+    assert result.exception is None
+    assert "Balance: 0" in result.output
+    print(f"Initial balance: {result.output}")
+
+    # First, mint some tokens using split to get a single 64-sat token
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "invoice", "64", "--split", "64"],
+    )
+    assert result.exception is None
+    print(f"Invoice result: {result.output}")
+
+    # Test 1: Restrictive fee limit should fail
+    # We try to send 3 sats, as that forces a swap on the 64-sat token
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "3", "--max-input-fee-ppk", "0"],
+    )
+    print(f"Restrictive limit - Exit code: {result.exit_code}")
+    print(f"Restrictive limit - Output: {result.output}")
+    assert result.exit_code != 0
+    assert "Input fee" in result.output and "exceeds limit" in result.output
+
+    # Test 2: Generous fee limit should succeed
+    result = runner.invoke(
+        cli,
+        [*cli_prefix, "send", "3", "--max-input-fee-ppk", "200"],
+    )
+    print(f"Generous limit - Exit code: {result.exit_code}")
+    print(f"Generous limit - Output: {result.output}")
+    assert result.exception is None
+    assert "cashuB" in result.output
+
+
 def test_receive_tokenv3(mint, cli_prefix):
     runner = CliRunner()
     token = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICI0NzlkY2E0MzUzNzU4MTM4N2Q1ODllMDU1MGY0Y2Q2MjFmNjE0MDM1MGY5M2Q4ZmI1OTA2YjJlMGRiNmRjYmI3IiwgIkMiOiAiMDM1MGQ0ZmI0YzdiYTMzNDRjMWRjYWU1ZDExZjNlNTIzZGVkOThmNGY4ODdkNTQwZmYyMDRmNmVlOWJjMjkyZjQ1In0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogIjZjNjAzNDgwOGQyNDY5N2IyN2YxZTEyMDllNjdjNjVjNmE2MmM2Zjc3NGI4NWVjMGQ5Y2Y3MjE0M2U0NWZmMDEiLCAiQyI6ICIwMjZkNDlhYTE0MmFlNjM1NWViZTJjZGQzYjFhOTdmMjE1MDk2NTlkMDE3YWU0N2FjNDY3OGE4NWVkY2E4MGMxYmQifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzNyJ9XX0="  # noqa
