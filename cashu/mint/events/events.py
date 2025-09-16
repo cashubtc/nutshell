@@ -1,6 +1,4 @@
 import asyncio
-from ...core.models import PostMeltQuoteResponse, PostMintQuoteResponse
-
 
 from fastapi import WebSocket
 from loguru import logger
