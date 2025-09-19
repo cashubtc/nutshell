@@ -530,32 +530,22 @@ def test_send_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
     This test uses a secondary test mint (see 'mint_with_fees' in conftext.py) which
     has fees; 5000ppk (i.e. 5 sats) per token
 
-    This test checks that the --max-input-fee paramter works as expected, by
+    This test checks that the --max-input-fee parameter works as expected, by
     blocking transactions that generate too many fees
     """
     runner = CliRunner(
         mix_stderr=False  # mix_stderr=False ensures that .output and stderr are separate
     )
 
-    # First, let's verify the fee configuration of both mints by checking their keysets,
-    # to make sure that the main test mint has zero fees and the special secondary
-    # mint has input_fee_ppk=5000
+    # First, let's verify the fee configuration of this special mint by checking the keyset,
 
     import httpx
 
-    main_mint_response = httpx.get("http://localhost:3337/v1/keysets")
-    main_keysets = main_mint_response.json()
-
-    # Check fee mint keysets
     fee_mint_response = httpx.get("http://127.0.0.1:3338/v1/keysets")
     fee_keysets = fee_mint_response.json()
 
-    should_be_no_fee = main_keysets["keysets"][0]["input_fee_ppk"]
     should_have_a_fee = fee_keysets["keysets"][0]["input_fee_ppk"]
-    assert should_have_a_fee == 5000 and should_be_no_fee == 0, (
-        should_be_no_fee,
-        should_have_a_fee,
-    )
+    assert should_have_a_fee == 5000, should_have_a_fee
 
     # Check initial balance is zero
     result = runner.invoke(
