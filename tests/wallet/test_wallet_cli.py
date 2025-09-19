@@ -610,6 +610,81 @@ def test_send_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
     assert "cashuB" in result.output, (result.exit_code, result.output, result.stderr)
 
 
+def test_pay_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
+    """Test pay command with input fee limit via CLI runner using fee-enabled mint."""
+    runner = CliRunner(
+        mix_stderr=False  # mix_stderr=False ensures that .output and stderr are separate
+    )
+
+    # Verify the fee configuration of the fee mint
+    import httpx
+
+    fee_mint_response = httpx.get("http://127.0.0.1:3338/v1/keysets")
+    fee_keysets = fee_mint_response.json()
+    should_have_a_fee = fee_keysets["keysets"][0]["input_fee_ppk"]
+    assert should_have_a_fee == 5000, should_have_a_fee
+
+    # Check initial balance is zero
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exception is None
+    assert "Balance: 0 sat" in result.output
+
+    # Mint a token, using split to get a single 64-sat token
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "invoice", "64", "--split", "64"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+
+    # Check balance after minting
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+    assert "Balance: 64" in result.output
+
+    # Create a test Lightning invoice to pay (using FakeWallet backend)
+    # For testing, we'll create an invoice from the same mint
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "invoice", "10", "--no-check"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+
+    # Extract the invoice from the output using regex
+    import re
+
+    invoice_match = re.search(r"Invoice: (ln\w+)", result.output)
+    assert invoice_match, f"Could not find invoice in output: {result.output}"
+    invoice = invoice_match.group(1)
+
+    # Test 0: Restrictive fee limit should fail when paying invoice
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "pay", invoice, "--max-input-fee-ppk", "4999", "--yes"],
+    )
+    assert (
+        result.exit_code != 0
+        and "Input fee" in result.output
+        and "exceeds limit" in result.output
+    ), (result.exit_code, result.output, result.stderr)
+
+    # Test 0: Restrictive fee limit should fail when paying invoice
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "pay", invoice, "--max-input-fee-ppk", "5000", "--yes"],
+    )
+    assert result.exit_code == 0 and "Invoice paid" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+
 def test_receive_tokenv3(mint, cli_prefix):
     runner = CliRunner()
     token = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICI0NzlkY2E0MzUzNzU4MTM4N2Q1ODllMDU1MGY0Y2Q2MjFmNjE0MDM1MGY5M2Q4ZmI1OTA2YjJlMGRiNmRjYmI3IiwgIkMiOiAiMDM1MGQ0ZmI0YzdiYTMzNDRjMWRjYWU1ZDExZjNlNTIzZGVkOThmNGY4ODdkNTQwZmYyMDRmNmVlOWJjMjkyZjQ1In0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogIjZjNjAzNDgwOGQyNDY5N2IyN2YxZTEyMDllNjdjNjVjNmE2MmM2Zjc3NGI4NWVjMGQ5Y2Y3MjE0M2U0NWZmMDEiLCAiQyI6ICIwMjZkNDlhYTE0MmFlNjM1NWViZTJjZGQzYjFhOTdmMjE1MDk2NTlkMDE3YWU0N2FjNDY3OGE4NWVkY2E4MGMxYmQifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzNyJ9XX0="  # noqa
