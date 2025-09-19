@@ -1199,6 +1199,7 @@ class Wallet(
 
         # coin selection for potentially offline sending
         send_proofs = self.coinselect(proofs, amount, include_fees=include_fees)
+        self._check_input_fee_limit(send_proofs, max_input_fee_ppk)
         fees = self.get_fees_for_proofs(send_proofs)
         logger.trace(
             f"select_to_send: selected: {self.unit.str(sum_proofs(send_proofs))} (+ {self.unit.str(fees)} fees) – wanted: {self.unit.str(amount)}"

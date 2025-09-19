@@ -1301,10 +1301,18 @@ async def restore(ctx: Context, to: int, batch: int):
 
 @cli.command("selfpay", help="Refresh tokens.")
 # @click.option("--all", default=False, is_flag=True, help="Execute on all available mints.")
+@click.option(
+    "--max-input-fee-ppk",
+    default=None,
+    help="Maximum input fee in parts per kilosat. Rejects swaps exceeding this limit.",
+    type=int,
+)
 @click.pass_context
 @coro
 @init_auth_wallet
-async def selfpay(ctx: Context, all: bool = False):
+async def selfpay(
+    ctx: Context, max_input_fee_ppk: Optional[int] = None, all: bool = False
+):
     wallet = await get_mint_wallet(ctx, force_select=True)
     await wallet.load_mint()
 
@@ -1312,9 +1320,19 @@ async def selfpay(ctx: Context, all: bool = False):
     mint_balance_dict = await wallet.balance_per_minturl()
     mint_balance = int(mint_balance_dict[wallet.url]["available"])
     # send balance once to mark as reserved
-    await wallet.select_to_send(
-        wallet.proofs, mint_balance, set_reserved=True, include_fees=False
-    )
+    from ..errors import InputFeeExceedsLimitError
+
+    try:
+        await wallet.select_to_send(
+            wallet.proofs,
+            mint_balance,
+            set_reserved=True,
+            include_fees=False,
+            max_input_fee_ppk=max_input_fee_ppk,
+        )
+    except InputFeeExceedsLimitError as e:
+        click.echo(f"Error: {e}", err=True)
+        ctx.exit(1)
     # load all reserved proofs (including the one we just sent)
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if not len(reserved_proofs):

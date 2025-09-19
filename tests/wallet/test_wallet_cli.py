@@ -691,6 +691,66 @@ def test_pay_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
     )
 
 
+def test_selfpay_with_input_fee_limit_cli(
+    mint, mint_with_fees, cli_prefix, cli_prefix_fee_mint
+):
+    """Test selfpay command with input fee limit."""
+    runner = CliRunner(
+        mix_stderr=False  # mix_stderr=False ensures that .output and stderr are separate
+    )
+
+    # Set up some balance on the fee mint first
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "invoice", "64", "--split", "64"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+
+    # Check balance on fee mint
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exit_code == 0 and "Balance: 64" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Test 1: Restrictive fee limit should fail when doing selfpay
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "selfpay", "--max-input-fee-ppk", "4999"],
+    )
+    assert (
+        result.exit_code != 0
+        and "Input fee" in result.stderr
+        and "exceeds limit" in result.stderr
+    ), (result.exit_code, result.output, result.stderr)
+
+    # Test 2: Generous fee limit should succeed when doing selfpay
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "selfpay", "--max-input-fee-ppk", "5000"],
+    )
+    assert result.exit_code == 0 and "Selfpay token for mint" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # The final balance should be 64-5 = 59, as we paid 5 sats in fees
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exit_code == 0 and "Balance: 59" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+
 def test_receive_tokenv3(mint, cli_prefix):
     runner = CliRunner()
     token = "cashuAeyJ0b2tlbiI6IFt7InByb29mcyI6IFt7ImlkIjogIjAwOWExZjI5MzI1M2U0MWUiLCAiYW1vdW50IjogMiwgInNlY3JldCI6ICI0NzlkY2E0MzUzNzU4MTM4N2Q1ODllMDU1MGY0Y2Q2MjFmNjE0MDM1MGY5M2Q4ZmI1OTA2YjJlMGRiNmRjYmI3IiwgIkMiOiAiMDM1MGQ0ZmI0YzdiYTMzNDRjMWRjYWU1ZDExZjNlNTIzZGVkOThmNGY4ODdkNTQwZmYyMDRmNmVlOWJjMjkyZjQ1In0sIHsiaWQiOiAiMDA5YTFmMjkzMjUzZTQxZSIsICJhbW91bnQiOiA4LCAic2VjcmV0IjogIjZjNjAzNDgwOGQyNDY5N2IyN2YxZTEyMDllNjdjNjVjNmE2MmM2Zjc3NGI4NWVjMGQ5Y2Y3MjE0M2U0NWZmMDEiLCAiQyI6ICIwMjZkNDlhYTE0MmFlNjM1NWViZTJjZGQzYjFhOTdmMjE1MDk2NTlkMDE3YWU0N2FjNDY3OGE4NWVkY2E4MGMxYmQifV0sICJtaW50IjogImh0dHA6Ly9sb2NhbGhvc3Q6MzMzNyJ9XX0="  # noqa
