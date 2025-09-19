@@ -168,16 +168,19 @@ def mint_with_fees():
     env = os.environ.copy()
     env.update(
         {
-            "MINT_DATABASE": "test_data/mint_with_fees",
+            # An 'OVERRIDE_' system is implemented in 'find_env_file()' in order to ensure
+            # that we can set some variables via environment variables such that they
+            # take precendence over anything in the .env file.
             "OVERRIDE_MINT_INPUT_FEE_PPK": "5000",  # Use override to bypass .env file
-            "MINT_LISTEN_PORT": "3338",
-            "MINT_LISTEN_HOST": "127.0.0.1",
-            "MINT_BACKEND_BOLT11_SAT": "FakeWallet",
-            "MINT_PRIVATE_KEY": "TEST_PRIVATE_KEY_FEES",
-            "MINT_DERIVATION_PATH": "m/0'/0'/0'",
-            "CASHU_DIR": "./test_data/",
-            "DEBUG": "TRUE",
-            "LOG_LEVEL": "TRACE",
+            "OVERRIDE_MINT_PRIVATE_KEY": "TEST_PRIVATE_KEY_FEES",
+            # "MINT_DATABASE": "test_data/mint_with_fees",
+            # "MINT_LISTEN_PORT": "3338",
+            # "MINT_LISTEN_HOST": "127.0.0.1",
+            # "MINT_BACKEND_BOLT11_SAT": "FakeWallet",
+            # "MINT_DERIVATION_PATH": "m/0'/0'/0'",
+            # "CASHU_DIR": "./test_data/",
+            # "DEBUG": "TRUE",
+            # "LOG_LEVEL": "TRACE",
         }
     )
 
