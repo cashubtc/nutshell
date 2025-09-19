@@ -629,8 +629,11 @@ def test_pay_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
         cli,
         [*cli_prefix_fee_mint, "balance"],
     )
-    assert result.exception is None
-    assert "Balance: 0 sat" in result.output
+    assert result.exception is None and "Balance: 0 sat" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
 
     # Mint a token, using split to get a single 64-sat token
     result = runner.invoke(
@@ -644,8 +647,11 @@ def test_pay_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
         cli,
         [*cli_prefix_fee_mint, "balance"],
     )
-    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
-    assert "Balance: 64" in result.output
+    assert result.exit_code == 0 and "Balance: 64" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
 
     # Create a test Lightning invoice to pay (using FakeWallet backend)
     # For testing, we'll create an invoice from the same mint
