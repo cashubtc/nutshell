@@ -675,8 +675,8 @@ def test_pay_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
     )
     assert (
         result.exit_code != 0
-        and "Input fee" in result.output
-        and "exceeds limit" in result.output
+        and "Input fee" in result.stderr
+        and "exceeds limit" in result.stderr
     ), (result.exit_code, result.output, result.stderr)
 
     # Test 0: Restrictive fee limit should fail when paying invoice

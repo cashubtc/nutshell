@@ -301,7 +301,7 @@ async def pay(
             max_input_fee_ppk=max_input_fee_ppk,
         )
     except InputFeeExceedsLimitError as e:
-        print(f" Error: {e}")
+        click.echo(f" Error: {e}", err=True)
         ctx.exit(1)
     print("Paying Lightning invoice ...", end="", flush=True)
     assert total_amount > 0, "amount is not positive"
