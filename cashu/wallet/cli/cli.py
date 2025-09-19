@@ -523,10 +523,16 @@ async def invoice(
 
 
 @cli.command("swap", help="Swap funds between mints.")
+@click.option(
+    "--max-input-fee-ppk",
+    default=None,
+    help="Maximum input fee in parts per kilosat. Rejects swaps exceeding this limit.",
+    type=int,
+)
 @click.pass_context
 @coro
 @init_auth_wallet
-async def swap(ctx: Context):
+async def swap(ctx: Context, max_input_fee_ppk: Optional[int] = None):
     print("Select the mint to swap from:")
     outgoing_wallet: Wallet = await get_mint_wallet(ctx, force_select=True)
 
@@ -550,9 +556,19 @@ async def swap(ctx: Context):
     total_amount = melt_quote.amount + melt_quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
-    send_proofs, fees = await outgoing_wallet.select_to_send(
-        outgoing_wallet.proofs, total_amount, set_reserved=True
-    )
+
+    from ..errors import InputFeeExceedsLimitError
+
+    try:
+        send_proofs, fees = await outgoing_wallet.select_to_send(
+            outgoing_wallet.proofs,
+            total_amount,
+            set_reserved=True,
+            max_input_fee_ppk=max_input_fee_ppk,
+        )
+    except InputFeeExceedsLimitError as e:
+        click.echo(f"Error: {e}", err=True)
+        ctx.exit(1)
     await outgoing_wallet.melt(
         send_proofs,
         mint_quote.request,
