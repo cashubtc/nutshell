@@ -23,6 +23,17 @@ def cli_prefix():
     yield ["--wallet", "test_cli_wallet", "--host", settings.mint_url, "--tests"]
 
 
+@pytest.fixture(scope="session")
+def cli_prefix_fee_mint():
+    yield [
+        "--wallet",
+        "test_cli_wallet_fees",
+        "--host",
+        "http://127.0.0.1:3338",
+        "--tests",
+    ]
+
+
 def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, str]:
     invoice = [
         line.split(" ")[1] for line in output.split("\n") if line.startswith("Invoice")
@@ -514,51 +525,107 @@ def test_send_too_much(mint, cli_prefix):
     assert "Balance too low" in str(result.exception)
 
 
-@pytest.mark.skipif(
-    settings.mint_input_fee_ppk != 100,
-    reason="requires conftest.py to have settings.mint_input_fee_ppk=100",
-)
-def test_send_with_input_fee_limit_cli(mint, cli_prefix):
-    """Test send command with input fee limit via CLI runner."""
-    runner = CliRunner()
+def test_send_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
+    """This test is a bit complex:
+
+    - It starts a second mint (see the 'mint_with_fees' fixture in conftest.py) which has fees.
+    - The fee is 5000 ppk, i.e. 5 sats per token
+    - We start with a balance of zero, and then generate a single 64-sat token
+    - As it's a single token, and attempt to spend less than 64 sats will generate 5 sats of see, and hence
+      we won't be able to send more than 59 sats
+    - The primary purpose of this test is to test that --max-input-fee-ppk has the desired effect, blocking 'send'
+      if the fee is too high
+
+    """
+    runner = CliRunner(
+        mix_stderr=False
+    )  # mix_stderr=False ensures that .output and stderr are separate
+
+    # First, let's verify the fee configuration of both mints by checking their keysets
+    print("\n=== VERIFYING MINT CONFIGURATIONS ===")
+
+    # Check main mint (no fees) keysets
+    import httpx
+
+    main_mint_response = httpx.get("http://localhost:3337/v1/keysets")
+    main_keysets = main_mint_response.json()
+    print(f"Main mint (3337) keysets: {main_keysets}")
+
+    # Check fee mint keysets
+    fee_mint_response = httpx.get("http://127.0.0.1:3338/v1/keysets")
+    fee_keysets = fee_mint_response.json()
+    print(f"Fee mint (3338) keysets: {fee_keysets}")
+
+    nofee = main_keysets["keysets"][0]["input_fee_ppk"]
+    fee = fee_keysets["keysets"][0]["input_fee_ppk"]
+    assert fee == 5000 and nofee == 0, (nofee, fee)
+
+    print("=== END MINT VERIFICATION ===\n")
 
     # Check initial balance is zero
     result = runner.invoke(
         cli,
-        [*cli_prefix, "balance"],
+        [*cli_prefix_fee_mint, "balance"],
     )
     assert result.exception is None
-    assert "Balance: 0" in result.output
-    print(f"Initial balance: {result.output}")
+    assert "Balance: 0 sat" in result.output
 
     # First, mint some tokens using split to get a single 64-sat token
     result = runner.invoke(
         cli,
-        [*cli_prefix, "invoice", "64", "--split", "64"],
+        [*cli_prefix_fee_mint, "invoice", "64", "--split", "64"],
     )
-    assert result.exception is None
-    print(f"Invoice result: {result.output}")
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
 
-    # Test 1: Restrictive fee limit should fail
-    # We try to send 3 sats, as that forces a swap on the 64-sat token
+    # Check new balance
     result = runner.invoke(
         cli,
-        [*cli_prefix, "send", "3", "--max-input-fee-ppk", "0"],
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+    assert "Balance: 64" in result.output
+
+    # Now we are set up. We have a single 64-sat token. We'll now try three different sends,
+    # where only the last will succeed
+
+    # Test 1: Restrictive fee limit should fail
+    # We try to send 3 sats, as that forces a swap on the 64-sat token, and that will trigger the fee
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "send", "3", "--max-input-fee-ppk", "0"],
     )
     print(f"Restrictive limit - Exit code: {result.exit_code}")
     print(f"Restrictive limit - Output: {result.output}")
-    assert result.exit_code != 0
-    assert "Input fee" in result.output and "exceeds limit" in result.output
+    assert result.exit_code != 0, (result.exit_code, result.output, result.stderr)
+    assert "Input fee" in result.stderr and "exceeds limit" in result.stderr, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Another test, close to the threshold
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "send", "3", "--max-input-fee-ppk", "4999"],
+    )
+    print(f"Restrictive limit - Exit code: {result.exit_code}")
+    print(f"Restrictive limit - Output: {result.output}")
+    assert result.exit_code != 0, (result.exit_code, result.output, result.stderr)
+    assert "Input fee" in result.stderr and "exceeds limit" in result.stderr, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
 
     # Test 2: Generous fee limit should succeed
     result = runner.invoke(
         cli,
-        [*cli_prefix, "send", "3", "--max-input-fee-ppk", "200"],
+        [*cli_prefix_fee_mint, "send", "3", "--max-input-fee-ppk", "5000"],
     )
     print(f"Generous limit - Exit code: {result.exit_code}")
     print(f"Generous limit - Output: {result.output}")
-    assert result.exception is None
-    assert "cashuB" in result.output
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+    assert "cashuB" in result.output, (result.exit_code, result.output, result.stderr)
 
 
 def test_receive_tokenv3(mint, cli_prefix):
