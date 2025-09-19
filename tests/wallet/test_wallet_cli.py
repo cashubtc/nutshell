@@ -23,6 +23,17 @@ def cli_prefix():
     yield ["--wallet", "test_cli_wallet", "--host", settings.mint_url, "--tests"]
 
 
+@pytest.fixture(scope="session")
+def cli_prefix_fee_mint():
+    yield [
+        "--wallet",
+        "test_cli_wallet_fees",
+        "--host",
+        "http://127.0.0.1:3338",
+        "--tests",
+    ]
+
+
 def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, str]:
     invoice = [
         line.split(" ")[1] for line in output.split("\n") if line.startswith("Invoice")
@@ -512,6 +523,101 @@ def test_send_too_much(mint, cli_prefix):
         [*cli_prefix, "send", "100000"],
     )
     assert "Balance too low" in str(result.exception)
+
+
+def test_send_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
+    """
+    This test uses a secondary test mint (see 'mint_with_fees' in conftext.py) which
+    has fees; 5000ppk (i.e. 5 sats) per token
+
+    This test checks that the --max-input-fee paramter works as expected, by
+    blocking transactions that generate too many fees
+    """
+    runner = CliRunner(
+        mix_stderr=False  # mix_stderr=False ensures that .output and stderr are separate
+    )
+
+    # First, let's verify the fee configuration of both mints by checking their keysets,
+    # to make sure that the main test mint has zero fees and the special secondary
+    # mint has input_fee_ppk=5000
+
+    import httpx
+
+    main_mint_response = httpx.get("http://localhost:3337/v1/keysets")
+    main_keysets = main_mint_response.json()
+
+    # Check fee mint keysets
+    fee_mint_response = httpx.get("http://127.0.0.1:3338/v1/keysets")
+    fee_keysets = fee_mint_response.json()
+
+    should_be_no_fee = main_keysets["keysets"][0]["input_fee_ppk"]
+    should_have_a_fee = fee_keysets["keysets"][0]["input_fee_ppk"]
+    assert should_have_a_fee == 5000 and should_be_no_fee == 0, (
+        should_be_no_fee,
+        should_have_a_fee,
+    )
+
+    # Check initial balance is zero
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exception is None
+    assert "Balance: 0 sat" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Mint a token, using split to get a single 64-sat token
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "invoice", "64", "--split", "64"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+
+    # Check new balance, to confirm we have a 64-sat token
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+    assert "Balance: 64" in result.output
+
+    # Test 1: Restrictive fee limit should fail
+    # We try to send 3 sats, as that forces a swap on the 64-sat token, and that will trigger the fee
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "send", "3", "--max-input-fee-ppk", "0"],
+    )
+    assert result.exit_code != 0, (result.exit_code, result.output, result.stderr)
+    assert "Input fee" in result.stderr and "exceeds limit" in result.stderr, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Another test, close to the threshold. Should also fail
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "send", "3", "--max-input-fee-ppk", "4999"],
+    )
+    assert result.exit_code != 0, (result.exit_code, result.output, result.stderr)
+    assert "Input fee" in result.stderr and "exceeds limit" in result.stderr, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Finally, with a more generous fee limit, so that it should succeed
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "send", "3", "--max-input-fee-ppk", "5000"],
+    )
+    print(f"Generous limit - Exit code: {result.exit_code}")
+    print(f"Generous limit - Output: {result.output}")
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+    assert "cashuB" in result.output, (result.exit_code, result.output, result.stderr)
 
 
 def test_receive_tokenv3(mint, cli_prefix):
