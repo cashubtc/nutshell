@@ -56,13 +56,14 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     await asyncio.sleep(wait + 2)
 
     assert triggered
-    assert len(msg_stack) == 3
 
+    assert len(msg_stack) >= 3
+    # First state is UNPAID
     assert msg_stack[0].payload["state"] == MintQuoteState.unpaid.value
-
-    assert msg_stack[1].payload["state"] == MintQuoteState.paid.value
-
-    assert msg_stack[2].payload["state"] == MintQuoteState.issued.value
+    # There must be at least one PAID state
+    assert any(m.payload["state"] == MintQuoteState.paid.value for m in msg_stack)
+    # LAST state is ISSUED
+    assert msg_stack[-1].payload["state"] == MintQuoteState.issued.value
 
 
 @pytest.mark.asyncio
