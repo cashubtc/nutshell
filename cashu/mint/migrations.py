@@ -52,11 +52,11 @@ async def m001_initial(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {db.table_with_schema('invoices')} (
                     amount {db.big_int} NOT NULL,
-                    pr TEXT NOT NULL,
-                    hash TEXT NOT NULL,
+                    bolt11 TEXT NOT NULL,
+                    id TEXT NOT NULL,
                     issued BOOL NOT NULL,
 
-                    UNIQUE (hash)
+                    UNIQUE (id)
 
                 );
             """
@@ -191,7 +191,7 @@ async def m006_invoices_add_payment_hash(db: Database):
             " TEXT"
         )
         await conn.execute(
-            f"UPDATE {db.table_with_schema('invoices')} SET payment_hash = hash"
+            f"UPDATE {db.table_with_schema('invoices')} SET payment_hash = id"
         )
 
 
@@ -230,16 +230,6 @@ async def m008_promises_dleq(db: Database):
 async def m009_add_out_to_invoices(db: Database):
     # column in invoices for marking whether the invoice is incoming (out=False) or outgoing (out=True)
     async with db.connect() as conn:
-        # rename column pr to bolt11
-        await conn.execute(
-            f"ALTER TABLE {db.table_with_schema('invoices')} RENAME COLUMN pr TO"
-            " bolt11"
-        )
-        # rename column hash to payment_hash
-        await conn.execute(
-            f"ALTER TABLE {db.table_with_schema('invoices')} RENAME COLUMN hash TO id"
-        )
-
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('invoices')} ADD COLUMN out BOOL"
         )

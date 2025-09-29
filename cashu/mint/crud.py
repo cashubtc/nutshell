@@ -6,6 +6,7 @@ from loguru import logger
 
 from ..core.base import (
     Amount,
+    BlindedMessage,
     BlindedSignature,
     MeltQuote,
     MintBalanceLogEntry,
@@ -186,6 +187,15 @@ class LedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
+    async def get_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedMessage]: ...
+
+    @abstractmethod
     async def get_promise(
         self,
         *,
@@ -332,6 +342,22 @@ class LedgerCrudSqlite(LedgerCrud):
                 "swap_id": swap_id,
             },
         )
+
+    async def get_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedMessage]:
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT * from {db.table_with_schema('promises')}
+            WHERE melt_id = :melt_id AND c_ IS NULL
+            """,
+            {"melt_id": melt_id},
+        )
+        return [BlindedMessage.from_row(r) for r in rows] if rows else []
 
     async def delete_blinded_messages_melt_id(
         self,

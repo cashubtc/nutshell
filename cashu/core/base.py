@@ -231,6 +231,10 @@ class BlindedMessage(BaseModel):
     id: str  # Keyset id
     B_: str  # Hex-encoded blinded message
 
+    @classmethod
+    def from_row(cls, row: RowMapping):
+        return cls(amount=row["amount"], B_=row["b_"], id=row["id"])
+
 
 class BlindedMessage_Deprecated(BaseModel):
     """

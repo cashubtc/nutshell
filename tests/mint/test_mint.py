@@ -128,7 +128,8 @@ async def test_generate_promises(ledger: Ledger):
             id="009a1f293253e41e",
         )
     ]
-    promises = await ledger._generate_promises(blinded_messages_mock)
+    await ledger._store_blinded_messages(blinded_messages_mock)
+    promises = await ledger._sign_blinded_messages(blinded_messages_mock)
     assert (
         promises[0].C_
         == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"

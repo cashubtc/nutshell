@@ -726,7 +726,10 @@ class Ledger(
                         pending_proofs, keysets=self.keysets, conn=conn
                     )
                 # change to compensate wallet for overpaid fees
-                if melt_quote.outputs:
+                melt_outputs = await self.crud.get_blinded_messages_melt_id(
+                    melt_id=quote_id, db=self.db
+                )
+                if melt_outputs:
                     total_provided = sum_proofs(pending_proofs)
                     input_fees = self.get_fees_for_proofs(pending_proofs)
                     fee_reserve_provided = (
@@ -736,7 +739,7 @@ class Ledger(
                         fee_provided=fee_reserve_provided,
                         fee_paid=melt_quote.fee_paid,
                         outputs=melt_quote.outputs,
-                        keyset=self.keysets[melt_quote.outputs[0].id],
+                        keyset=self.keysets[melt_outputs[0].id],
                     )
                     melt_quote.change = return_promises
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
