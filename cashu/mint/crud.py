@@ -151,14 +151,35 @@ class LedgerCrud(ABC):
     ) -> Tuple[Amount, Amount]: ...
 
     @abstractmethod
-    async def store_promise(
+    async def store_blinded_message(
+        self,
+        *,
+        db: Database,
+        amount: int,
+        b_: str,
+        id: str,
+        melt_id: Optional[str] = None,
+        swap_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def delete_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def store_blind_signature(
         self,
         *,
         db: Database,
         amount: int,
         b_: str,
         c_: str,
-        id: str,
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
@@ -285,32 +306,75 @@ class LedgerCrudSqlite(LedgerCrud):
         LedgerCrud (ABC): Abstract base class for LedgerCrud.
     """
 
-    async def store_promise(
+    async def store_blinded_message(
+        self,
+        *,
+        db: Database,
+        amount: int,
+        b_: str,
+        id: str,
+        melt_id: Optional[str] = None,
+        swap_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            INSERT INTO {db.table_with_schema('promises')}
+            (amount, b_, id, created)
+            VALUES (:amount, :b_, :id, :created)
+            """,
+            {
+                "amount": amount,
+                "b_": b_,
+                "id": id,
+                "created": db.to_timestamp(db.timestamp_now_str()),
+                "melt_id": melt_id,
+                "swap_id": swap_id,
+            },
+        )
+
+    async def delete_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        """Deletes a blinded message (promise) that has not been signed yet (c_ is NULL) with the given quote ID."""
+        await (conn or db).execute(
+            f"""
+            DELETE FROM {db.table_with_schema('promises')}
+            WHERE melt_id = :melt_id AND c_ IS NULL
+            """,
+            {
+                "melt_id": melt_id,
+            },
+        )
+
+    async def store_blind_signature(
         self,
         *,
         db: Database,
         amount: int,
         b_: str,
         c_: str,
-        id: str,
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('promises')}
-            (amount, b_, c_, dleq_e, dleq_s, id, created)
-            VALUES (:amount, :b_, :c_, :dleq_e, :dleq_s, :id, :created)
+            UPDATE {db.table_with_schema('promises')}
+            SET amount = :amount, c_ = :c_, dleq_e = :dleq_e, dleq_s = :dleq_s, signed_at = :signed_at
+            WHERE b_ = :b_;
             """,
             {
-                "amount": amount,
                 "b_": b_,
+                "amount": amount,
                 "c_": c_,
                 "dleq_e": e,
                 "dleq_s": s,
-                "id": id,
-                "created": db.to_timestamp(db.timestamp_now_str()),
+                "signed_at": db.to_timestamp(db.timestamp_now_str()),
             },
         )
 

@@ -78,7 +78,7 @@ async def create_balance_views(db: Database, conn: Connection):
         SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
             SELECT id, SUM(amount) AS s
             FROM {db.table_with_schema('promises')}
-            WHERE amount > 0
+            WHERE amount > 0 AND c_ IS NOT NULL
             GROUP BY id
         ) AS balance_issued;
         """
@@ -968,3 +968,48 @@ async def m027_add_balance_to_keysets_and_log_table(db: Database):
                 );
             """
         )
+
+
+async def m028_promises_c_allow_null(db: Database):
+    """
+    Allow column that stores the c_ to be NULL.
+    """
+
+    async with db.connect() as conn:
+        # drop the balance views first
+        await drop_balance_views(db, conn)
+
+        # recreate promises with c_ nullable
+        await conn.execute(
+            f"""
+                    CREATE TABLE IF NOT EXISTS {db.table_with_schema('promises_new')} (
+                        amount {db.big_int} NOT NULL,
+                        id TEXT,
+                        b_ TEXT NOT NULL,
+                        c_ TEXT,
+                        dleq_e TEXT,
+                        dleq_s TEXT,
+                        created TIMESTAMP,
+                        signed_at TIMESTAMP,
+                        mint_quote TEXT,
+                        swap_id TEXT,
+
+                        FOREIGN KEY (mint_quote) REFERENCES {db.table_with_schema('mint_quotes')}(quote),
+
+                        UNIQUE (b_)
+                    );
+                """
+        )
+
+        await conn.execute(
+            f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created, mint_quote, swap_id) "
+            f"SELECT amount, id, b_, c_, dleq_e, dleq_s, created, mint_quote, swap_id FROM {db.table_with_schema('promises')}"
+        )
+
+        await conn.execute(f"DROP TABLE {db.table_with_schema('promises')}")
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('promises_new')} RENAME TO {db.table_with_schema('promises')}"
+        )
+
+        # recreate the balance views
+        await create_balance_views(db, conn)
