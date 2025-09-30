@@ -960,9 +960,9 @@ async def m027_add_balance_to_keysets_and_log_table(db: Database):
         )
 
 
-async def m028_promises_c_allow_null(db: Database):
+async def m028_promises_c_allow_null_add_melt_quote(db: Database):
     """
-    Allow column that stores the c_ to be NULL.
+    Allow column that stores the c_ to be NULL and add melt_quote to promises.
     """
 
     async with db.connect() as conn:
@@ -982,9 +982,11 @@ async def m028_promises_c_allow_null(db: Database):
                         created TIMESTAMP,
                         signed_at TIMESTAMP,
                         mint_quote TEXT,
+                        melt_quote TEXT,
                         swap_id TEXT,
 
                         FOREIGN KEY (mint_quote) REFERENCES {db.table_with_schema('mint_quotes')}(quote),
+                        FOREIGN KEY (melt_quote) REFERENCES {db.table_with_schema('melt_quotes')}(quote),
 
                         UNIQUE (b_)
                     );

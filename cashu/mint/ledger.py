@@ -250,6 +250,7 @@ class Ledger(
         fee_provided: int,
         fee_paid: int,
         outputs: Optional[List[BlindedMessage]],
+        melt_id: Optional[str] = None,
         keyset: Optional[MintKeyset] = None,
     ) -> List[BlindedSignature]:
         """Generates a set of new promises (blinded signatures) from a set of blank outputs
@@ -306,6 +307,9 @@ class Ledger(
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate promises.")
         return_promises = await self._sign_blinded_messages(outputs)
+        # delete remaining unsigned blank outputs from db
+        if melt_id:
+            await self.crud.delete_blinded_messages_melt_id(melt_id=melt_id, db=self.db)
         return return_promises
 
     # ------- TRANSACTIONS -------
@@ -491,7 +495,7 @@ class Ledger(
                 raise TransactionError("quote expired")
             if not self._verify_mint_quote_witness(quote, outputs, signature):
                 raise QuoteSignatureInvalidError()
-            await self._store_blinded_messages(outputs)
+            await self._store_blinded_messages(outputs, mint_id=quote_id)
             promises = await self._sign_blinded_messages(outputs)
         except Exception as e:
             await self.db_write._unset_mint_quote_pending(
@@ -738,7 +742,8 @@ class Ledger(
                     return_promises = await self._generate_change_promises(
                         fee_provided=fee_reserve_provided,
                         fee_paid=melt_quote.fee_paid,
-                        outputs=melt_quote.outputs,
+                        outputs=melt_outputs,
+                        melt_id=quote_id,
                         keyset=self.keysets[melt_outputs[0].id],
                     )
                     melt_quote.change = return_promises
@@ -754,6 +759,9 @@ class Ledger(
                 )
                 await self.db_write._unset_proofs_pending(
                     pending_proofs, keysets=self.keysets
+                )
+                await self.crud.delete_blinded_messages_melt_id(
+                    melt_id=quote_id, db=self.db
                 )
 
         return melt_quote
@@ -1017,6 +1025,7 @@ class Ledger(
                 fee_provided=fee_reserve_provided,
                 fee_paid=melt_quote.fee_paid,
                 outputs=outputs,
+                melt_id=melt_quote.quote,
                 keyset=self.keysets[outputs[0].id],
             )
 
@@ -1092,6 +1101,7 @@ class Ledger(
         self,
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
+        mint_id: Optional[str] = None,
         melt_id: Optional[str] = None,
         swap_id: Optional[str] = None,
         conn: Optional[Connection] = None,
@@ -1117,6 +1127,7 @@ class Ledger(
                     id=keyset.id,
                     amount=output.amount,
                     b_=output.B_,
+                    mint_id=mint_id,
                     melt_id=melt_id,
                     swap_id=swap_id,
                     db=self.db,
