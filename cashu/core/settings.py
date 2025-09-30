@@ -71,6 +71,9 @@ class MintSettings(CashuSettings):
         description="Interval (in seconds) for running regular tasks like the invoice checker.",
     )
 
+    mint_retry_exponential_backoff_base_delay: int = Field(default=1)
+    mint_retry_exponential_backoff_max_delay: int = Field(default=10)
+
 
 class MintWatchdogSettings(MintSettings):
     mint_watchdog_enabled: bool = Field(
@@ -201,6 +204,14 @@ class MintInformation(CashuSettings):
     mint_info_urls: List[str] = Field(default=None)
     mint_info_tos_url: str = Field(default=None)
 
+class MintManagementRPCSettings(MintSettings):
+    mint_rpc_server_enable: bool = Field(default=False)
+    mint_rpc_server_ca: str = Field(default=None)
+    mint_rpc_server_cert: str = Field(default=None)
+    mint_rpc_server_key: str = Field(default=None)
+    mint_rpc_server_addr: str = Field(default="localhost")
+    mint_rpc_server_port: int = Field(default=8086)
+    mint_rpc_server_mutual_tls: bool = Field(default=True)
 
 class WalletSettings(CashuSettings):
     tor: bool = Field(default=False)
@@ -214,6 +225,7 @@ class WalletSettings(CashuSettings):
     wallet_name: str = Field(default="wallet")
     wallet_unit: str = Field(default="sat")
     wallet_use_deprecated_h2c: bool = Field(default=False)
+    wallet_verbose_requests: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
 
@@ -317,6 +329,7 @@ class Settings(
     AuthSettings,
     MintRedisCache,
     MintDeprecationFlags,
+    MintManagementRPCSettings,
     MintWatchdogSettings,
     MintSettings,
     MintInformation,

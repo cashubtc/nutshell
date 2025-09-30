@@ -35,7 +35,10 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         return derivation_path
 
     async def rotate_next_keyset(
-        self, unit: Unit, max_order: Optional[int], input_fee_ppk: Optional[int]
+        self,
+        unit: Unit,
+        max_order: Optional[int] = None,
+        input_fee_ppk: Optional[int] = None,
     ) -> MintKeyset:
         """
         This function:
@@ -93,6 +96,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             seed=self.seed,
             amounts=amounts,
             input_fee_ppk=input_fee_ppk,
+            active=True,
         )
 
         logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")

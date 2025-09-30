@@ -1,0 +1,345 @@
+syntax = "proto3";
+
+package cashu;
+
+// The Mint service provides a gRPC interface for managing a Cashu mint.
+// It allows for updating mint information, managing payment methods (NUT-04 and NUT-05),
+// handling quotes, rotating keysets, and configuring fees and authentication limits.
+service Mint {
+    // GetInfo retrieves general information about the mint.
+    rpc GetInfo(GetInfoRequest) returns (GetInfoResponse) {}
+    // UpdateMotd updates the Message of the Day (MOTD) for the mint.
+    rpc UpdateMotd(UpdateMotdRequest) returns (UpdateResponse) {}
+    // UpdateShortDescription updates the short description of the mint.
+    rpc UpdateShortDescription(UpdateDescriptionRequest) returns (UpdateResponse) {}
+    // UpdateLongDescription updates the long description of the mint.
+    rpc UpdateLongDescription(UpdateDescriptionRequest) returns (UpdateResponse) {}
+    // UpdateIconUrl updates the URL for the mint's icon.
+    rpc UpdateIconUrl(UpdateIconUrlRequest) returns (UpdateResponse) {}
+    // UpdateName updates the name of the mint.
+    rpc UpdateName(UpdateNameRequest) returns (UpdateResponse) {}
+    // AddUrl adds a new URL associated with the mint.
+    rpc AddUrl(UpdateUrlRequest) returns (UpdateResponse) {}
+    // RemoveUrl removes an existing URL associated with the mint.
+    rpc RemoveUrl(UpdateUrlRequest) returns (UpdateResponse) {}
+    // AddContact adds a new contact method for the mint.
+    rpc AddContact(UpdateContactRequest) returns (UpdateResponse) {}
+    // RemoveContact removes an existing contact method for the mint.
+    rpc RemoveContact(UpdateContactRequest) returns (UpdateResponse) {}
+    // GetNut04Quote retrieves a specific NUT-04 (minting) quote by its ID.
+    rpc GetNut04Quote(GetNut04QuoteRequest) returns (GetNut04QuoteResponse) {}
+    // GetNut05Quote retrieves a specific NUT-05 (melting) quote by its ID.
+    rpc GetNut05Quote(GetNut05QuoteRequest) returns (GetNut05QuoteResponse) {}
+    // UpdateNut04 configures a NUT-04 (minting) payment method.
+    rpc UpdateNut04(UpdateNut04Request) returns (UpdateResponse) {}
+    // UpdateNut05 configures a NUT-05 (melting) payment method.
+    rpc UpdateNut05(UpdateNut05Request) returns (UpdateResponse) {}
+    // UpdateQuoteTtl updates the Time-To-Live (TTL) for minting and melting quotes.
+    rpc UpdateQuoteTtl(UpdateQuoteTtlRequest) returns (UpdateResponse) {}
+    // UpdateNut04Quote updates the state of a specific NUT-04 (minting) quote.
+    rpc UpdateNut04Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
+    // UpdateNut05Quote updates the state of a specific NUT-05 (melting) quote.
+    rpc UpdateNut05Quote(UpdateQuoteRequest) returns (UpdateResponse) {}
+    // RotateNextKeyset initiates the rotation to a new keyset for a given unit.
+    rpc RotateNextKeyset(RotateNextKeysetRequest) returns (RotateNextKeysetResponse) {}
+    // UpdateLightningFee updates the lightning network fee configuration for the mint.
+    rpc UpdateLightningFee(UpdateLightningFeeRequest) returns (UpdateResponse) {}
+    // UpdateAuthLimits updates the authentication rate limits for the mint.
+    rpc UpdateAuthLimits(UpdateAuthLimitsRequest) returns (UpdateResponse) {}
+}
+
+// GetInfoRequest is an empty message used to request general mint information.
+message GetInfoRequest {
+}
+
+// InfoContact represents a contact method for the mint.
+message InfoContact {
+    // The method of contact (e.g., "email", "telegram", "twitter").
+    string method = 1;
+    // The contact information itself (e.g., "info@example.com", "@mint_support").
+    string info = 2;
+}
+
+// GetInfoResponse contains general information about the mint.
+message GetInfoResponse {
+    // The name of the mint.
+    optional string name = 1;
+    // The public key of the mint.
+    optional string pubkey = 2;
+    // The version of the mint software.
+    optional string version = 3;
+    // A short description of the mint.
+    optional string description = 4;
+    // A longer, more detailed description of the mint.
+    optional string long_description = 5;
+    // A list of contact methods for the mint.
+    repeated InfoContact contact = 6;
+    // The Message of the Day (MOTD) displayed by the mint.
+    optional string motd = 7;
+    // The URL to the mint's icon.
+    optional string icon_url = 8;
+    // A list of URLs associated with the mint.
+    repeated string urls = 9;
+    // The current time on the mint server (Unix timestamp).
+    optional int64 time = 10;
+    // The URL to the mint's Terms of Service.
+    optional string tos_url = 11;
+}
+
+// UpdateResponse is a generic empty message returned for successful update operations.
+message UpdateResponse{
+}
+
+// UpdateMotdRequest is used to update the Message of the Day (MOTD).
+message UpdateMotdRequest {
+    // The new MOTD string.
+    string motd = 1;
+}
+
+// UpdateDescriptionRequest is used to update either the short or long description.
+message UpdateDescriptionRequest {
+    // The new description string.
+    string description = 1;
+}
+
+// UpdateIconUrlRequest is used to update the mint's icon URL.
+message UpdateIconUrlRequest {
+    // The new URL for the mint's icon.
+    string icon_url = 1;
+}
+
+// UpdateNameRequest is used to update the mint's name.
+message UpdateNameRequest {
+    // The new name for the mint.
+    string name = 1;
+}
+
+// UpdateUrlRequest is used to add or remove a URL associated with the mint.
+message UpdateUrlRequest {
+    // The URL to add or remove.
+    string url = 1;
+}
+
+// UpdateContactRequest is used to add or remove a contact method for the mint.
+message UpdateContactRequest {
+    // The method of contact (e.g., "email", "telegram").
+    string method = 1;
+    // The contact information (e.g., "info@example.com").
+    string info = 2;
+}
+
+// MintMethodOptions defines specific options for a NUT-04 (minting) method.
+message MintMethodOptions {
+    // Bolt11 options
+    // Indicates if a description is required for Bolt11 invoices.
+    bool description = 1;
+}
+
+// UpdateNut04Request is used to configure a NUT-04 (minting) payment method.
+message UpdateNut04Request {
+    // The unit of the payment method (e.g., "sat").
+    string unit = 1;
+    // The method of payment (e.g., "bolt11").
+    string method = 2;
+    // Optional: If true, disables this payment method.
+    optional bool disabled = 3;
+    // Optional: The minimum amount allowed for this method.
+    optional uint64 min_amount = 4;
+    // Optional: The maximum amount allowed for this method.
+    optional uint64 max_amount = 5;
+    // Optional: Specific options for this minting method.
+    optional MintMethodOptions options = 6;
+}
+
+// MeltMethodOptions defines specific options for a NUT-05 (melting) method.
+message MeltMethodOptions {
+    // Bolt11 options
+    // Indicates if the amount can be omitted for Bolt11 invoices.
+    bool amountless = 1;
+}
+
+// UpdateNut05Request is used to configure a NUT-05 (melting) payment method.
+message UpdateNut05Request {
+    // The unit of the payment method (e.g., "sat").
+    string unit = 1;
+    // The method of payment (e.g., "bolt11").
+    string method = 2;
+    // Optional: If true, disables this payment method.
+    optional bool disabled = 3;
+    // Optional: The minimum amount allowed for this method.
+    optional uint64 min_amount = 4;
+    // Optional: The maximum amount allowed for this method.
+    optional uint64 max_amount = 5;
+    // Optional: Specific options for this melting method.
+    optional MeltMethodOptions options = 6;
+}
+
+// UpdateQuoteTtlRequest is used to update the Time-To-Live (TTL) for quotes.
+message UpdateQuoteTtlRequest {
+    // Optional: The TTL in seconds for minting (NUT-04) quotes.
+    optional uint64 mint_ttl = 1;
+    // Optional: The TTL in seconds for melting (NUT-05) quotes.
+    optional uint64 melt_ttl = 2;
+}
+
+// Nut04Quote represents a quote for minting (NUT-04).
+message Nut04Quote {
+    // The unique identifier for the quote.
+    string quote = 1;
+    // The payment method used for this quote (e.g., "bolt11").
+    string method = 2;
+    // The original request string (e.g., Bolt11 invoice).
+    string request = 3;
+    // The ID used for checking the payment status.
+    string checking_id = 4;
+    // The unit of the amount (e.g., "sat").
+    string unit = 5;
+    // The amount of tokens to be minted.
+    uint64 amount = 6;
+    // Optional: The current state of the quote (e.g., "pending", "paid", "expired").
+    optional string state = 7;
+    // Optional: The Unix timestamp when the quote was created.
+    optional int64 created_time = 8;
+    // Optional: The Unix timestamp when the quote was paid.
+    optional int64 paid_time = 9;
+    // Optional: The Unix timestamp when the quote expires.
+    optional int64 expiry = 10;
+    // Optional: The public key associated with the quote, if applicable.
+    optional string pubkey = 13;
+}
+
+// BlindedMessage represents a blinded message used in Cashu.
+message BlindedMessage {
+    // The amount of the token.
+    int32 amount = 1;
+    // The ID of the keyset.
+    string id = 2;
+    // The blinded point B_.
+    string B_ = 3;
+    // Optional: The witness for the blinded message.
+    optional string witness = 4;
+}
+
+// DLEQ represents a Discrete Logarithm Equality Proof.
+message DLEQ {
+    // The 'e' value of the DLEQ proof.
+    string e = 1;
+    // The 's' value of the DLEQ proof.
+    string s = 2;
+}
+
+// BlindedSignature represents a blinded signature from the mint.
+message BlindedSignature {
+    // The ID of the keyset.
+    string id = 1;
+    // The amount of the token.
+    int32 amount = 2;
+    // The blinded signature C_.
+    string C_ = 3;
+    // Optional: The DLEQ proof for the signature.
+    optional DLEQ dleq = 4;
+}
+
+// Nut05Quote represents a quote for melting (NUT-05).
+message Nut05Quote {
+    // The unique identifier for the quote.
+    string quote = 1;
+    // The payment method used for this quote (e.g., "bolt11").
+    string method = 2;
+    // The original request string (e.g., Bolt11 invoice).
+    string request = 3;
+    // The ID used for checking the payment status.
+    string checking_id = 4;
+    // The unit of the amount (e.g., "sat").
+    string unit = 5;
+    // The amount of tokens to be melted.
+    int32 amount = 6;
+    // The fee reserve for the melting operation.
+    int32 fee_reserve = 7;
+    // The current state of the quote (e.g., "pending", "paid", "success", "failed").
+    string state = 8;
+    // Optional: The Unix timestamp when the quote was created.
+    optional int64 created_time = 9;
+    // Optional: The Unix timestamp when the quote was paid.
+    optional int64 paid_time = 10;  
+    // The actual fee paid for the melting operation.
+    int32 fee_paid = 11;   
+    // Optional: The payment preimage if the payment was successful.
+    optional string payment_preimage = 12;
+    // Optional: The Unix timestamp when the quote expires.
+    optional int64 expiry = 13;  
+    // A list of blinded messages representing the outputs (e.g., change).
+    repeated BlindedMessage outputs = 14;
+    // A list of blinded signatures representing the change.
+    repeated BlindedSignature change = 15;
+}
+
+// GetNut04QuoteRequest is used to request a specific NUT-04 quote.
+message GetNut04QuoteRequest {
+    // The ID of the NUT-04 quote to retrieve.
+    string quote_id = 1;
+}
+
+// GetNut04QuoteResponse contains the requested NUT-04 quote.
+message GetNut04QuoteResponse {
+    // The NUT-04 quote object.
+    Nut04Quote quote = 1;
+}
+
+// GetNut05QuoteRequest is used to request a specific NUT-05 quote.
+message GetNut05QuoteRequest {
+    // The ID of the NUT-05 quote to retrieve.
+    string quote_id = 1;
+}
+
+// GetNut05QuoteResponse contains the requested NUT-05 quote.
+message GetNut05QuoteResponse {
+    // The NUT-05 quote object.
+    Nut05Quote quote = 1;
+}
+
+// UpdateQuoteRequest is used to update the state of a minting or melting quote.
+message UpdateQuoteRequest {
+    // The ID of the quote to update.
+    string quote_id = 1;
+    // The new state for the quote (e.g., "paid", "expired", "success", "failed").
+    string state = 2;
+}
+
+// RotateNextKeysetRequest is used to initiate a keyset rotation.
+message RotateNextKeysetRequest {
+    // The unit for which to rotate the keyset (e.g., "sat").
+    string unit = 1;
+    // Optional: The maximum order of the new keyset.
+    optional uint32 max_order = 2;
+    // Optional: The input fee per kilobyte for the new keyset.
+    optional uint64 input_fee_ppk = 3;
+}
+
+// RotateNextKeysetResponse contains information about the newly rotated keyset.
+message RotateNextKeysetResponse {
+    // The ID of the new keyset.
+    string id = 1;
+    // The unit of the new keyset.
+    string unit = 2;
+    // The maximum order of the new keyset.
+    uint32 max_order = 3;
+    // The input fee per kilobyte for the new keyset.
+    uint64 input_fee_ppk = 4;
+}
+
+// UpdateLightningFeeRequest is used to update the lightning network fee configuration.
+message UpdateLightningFeeRequest {
+    // Optional: The percentage of the fee.
+    optional double fee_percent = 1;
+    // Optional: The minimum reserve amount for the fee.
+    optional uint64 fee_min_reserve = 2;
+}
+
+// UpdateAuthLimitsRequest is used to update authentication rate limits.
+message UpdateAuthLimitsRequest {
+    // Optional: The maximum number of authentication requests allowed per minute.
+    optional uint64 auth_rate_limit_per_minute = 1;
+    // Optional: The maximum number of blind tokens allowed for authentication.
+    optional uint64 auth_max_blind_tokens = 2;
+}

@@ -415,10 +415,15 @@ class LndRestWallet(LightningBackend):
         return PaymentStatus(result=PaymentResult.UNKNOWN, error_message="timeout")
 
     async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+        retry_delay = 0
+        max_retry_delay = settings.mint_retry_exponential_backoff_max_delay
+        
         while True:
             try:
                 url = "/v1/invoices/subscribe"
                 async with self.client.stream("GET", url, timeout=None) as r:
+                    # Reset retry delay on successful connection
+                    retry_delay = 0
                     async for line in r.aiter_lines():
                         try:
                             inv = json.loads(line)["result"]
@@ -431,10 +436,13 @@ class LndRestWallet(LightningBackend):
                         yield payment_hash
             except Exception as exc:
                 logger.error(
-                    f"lost connection to lnd invoices stream: '{exc}', retrying in 5"
+                    f"lost connection to lnd invoices stream: '{exc}', retrying in {retry_delay}"
                     " seconds"
                 )
-                await asyncio.sleep(5)
+                await asyncio.sleep(retry_delay)
+                
+                # Exponential backoff with jitter
+                retry_delay = max(settings.mint_retry_exponential_backoff_base_delay, min(retry_delay * 2, max_retry_delay))
 
     async def get_payment_quote(
         self, melt_quote: PostMeltQuoteRequest

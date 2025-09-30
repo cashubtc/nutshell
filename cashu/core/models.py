@@ -18,12 +18,16 @@ from .settings import settings
 # ------- API: INFO -------
 
 
+class MintMethodBolt11OptionSetting(BaseModel):
+    description: Optional[bool] = None
+
+
 class MintMethodSetting(BaseModel):
     method: str
     unit: str
     min_amount: Optional[int] = None
     max_amount: Optional[int] = None
-    description: Optional[bool] = None
+    options: Optional[MintMethodBolt11OptionSetting] = None
 
 
 class MeltMethodSetting(BaseModel):
