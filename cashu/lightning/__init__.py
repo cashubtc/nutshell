@@ -12,10 +12,11 @@ from .strike import StrikeWallet  # noqa: F401
 
 backend_settings = [
     settings.mint_backend_bolt11_sat,
+    settings.mint_backend_bolt11_msat,
     settings.mint_backend_bolt11_usd,
     settings.mint_backend_bolt11_eur,
 ]
 if all([s is None for s in backend_settings]):
     raise Exception(
-        "MINT_BACKEND_BOLT11_SAT or MINT_BACKEND_BOLT11_USD or MINT_BACKEND_BOLT11_EUR not set"
+        "At least one MINT_BACKEND_BOLT11_{SAT|MSAT|USD|EUR} must be set"
     )

@@ -35,10 +35,15 @@ required_nip47_methods = [
 
 class NWCWallet(LightningBackend):
 
-    supported_units = {Unit.sat}
+    supported_units = {Unit.sat, Unit.msat}
 
     def __init__(self, unit: Unit, **kwargs):
         logger.debug(f"Initializing NWCWallet with unit: {unit}")
+        logger.debug(f"Unit type: {type(unit)}")
+        logger.debug(f"Supported units: {self.supported_units}")
+        logger.debug(f"Supported units types: {[type(u) for u in self.supported_units]}")
+        logger.debug(f"Unit in supported_units: {unit in self.supported_units}")
+        logger.debug(f"Unit.msat: {Unit.msat}, Unit.sat: {Unit.sat}")
         self.assert_unit_supported(unit)
         self.unit = unit
         self.client = NWCClient(nostrWalletConnectUrl=settings.mint_nwc_url)
@@ -49,20 +54,22 @@ class NWCWallet(LightningBackend):
             if not all([method in info.methods for method in required_nip47_methods]):
                 return StatusResponse(
                     error_message=f"NWC does not support all required methods. Supports: {info.methods}",
-                    balance=Amount(unit=Unit.sat, amount=0),
+                    balance=Amount(unit=self.unit, amount=0),
                 )
             res = await self.client.get_balance()
             balance_msat = res.balance
-            return StatusResponse(balance=Amount(unit=Unit.sat, amount=balance_msat // 1000), error_message=None)
+            # NWC returns balance in msats, convert to configured unit
+            balance_amount = Amount(unit=Unit.msat, amount=balance_msat)
+            return StatusResponse(balance=balance_amount.to(self.unit), error_message=None)
         except Nip47Error as exc:
             return StatusResponse(
                 error_message=str(exc),
-                balance=Amount(unit=Unit.sat, amount=0),
+                balance=Amount(unit=self.unit, amount=0),
             )
         except Exception as exc:
             return StatusResponse(
                 error_message=f"Failed to connect to lightning wallet via NWC due to: {exc}",
-                balance=Amount(unit=Unit.sat, amount=0),
+                balance=Amount(unit=self.unit, amount=0),
             )
 
     async def create_invoice(
@@ -73,8 +80,10 @@ class NWCWallet(LightningBackend):
         unhashed_description: Optional[str] = None,
     ) -> InvoiceResponse:
         try:
+            # NWC expects amount in msats, convert from configured unit
+            amount_msat = amount.to(Unit.msat).amount
             res = await self.client.create_invoice(
-                request=Nip47MakeInvoiceRequest(amount=amount.amount * 1000)
+                request=Nip47MakeInvoiceRequest(amount=amount_msat)
             )
             return InvoiceResponse(
                 checking_id=res.payment_hash,
@@ -103,12 +112,14 @@ class NWCWallet(LightningBackend):
             invoice = await self.client.lookup_invoice(
                 Nip47LookupInvoiceRequest(payment_hash=quote.checking_id)
             )
-            fees = invoice.fees_paid
+            # NWC returns fees in msats, convert to configured unit
+            fees_msat = invoice.fees_paid
+            fees_amount = Amount(unit=Unit.msat, amount=fees_msat)
 
             return PaymentResponse(
                 result=PaymentResult.SETTLED,
                 checking_id=None,
-                fee=Amount(unit=Unit.msat, amount=fees),
+                fee=fees_amount.to(self.unit),
                 preimage=pay_invoice_res.preimage,
             )
         except Nip47Error as exc:
