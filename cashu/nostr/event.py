@@ -16,6 +16,8 @@ class EventKind(IntEnum):
     CONTACTS = 3
     ENCRYPTED_DIRECT_MESSAGE = 4
     DELETE = 5
+    NWC_REQUEST = 23194
+    NWC_RESPONSE = 23195
 
 
 @dataclass
@@ -122,6 +124,35 @@ class EncryptedDirectMessage(Event):
         if self.content is None:
             raise Exception(
                 "EncryptedDirectMessage `id` is undefined until its message is"
+                " encrypted and stored in the `content` field"
+            )
+        return super().id
+
+
+@dataclass
+class NWCRequest(Event):
+    recipient_pubkey: str = None
+    cleartext_content: str = None
+
+    def __post_init__(self):
+        if self.content is not None:
+            self.cleartext_content = self.content
+            self.content = None
+
+        if self.recipient_pubkey is None:
+            raise Exception("Must specify a recipient_pubkey.")
+
+        self.kind = EventKind.NWC_REQUEST
+        super().__post_init__()
+
+        # Must specify the DM recipient's pubkey in a 'p' tag
+        self.add_pubkey_ref(self.recipient_pubkey)
+
+    @property
+    def id(self) -> str:
+        if self.content is None:
+            raise Exception(
+                "NWCRequest `id` is undefined until its message is"
                 " encrypted and stored in the `content` field"
             )
         return super().id
