@@ -174,24 +174,24 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         Used for keyset version "01" (keysets v2).
         
         NUT-13: HMAC_SHA512(seed, "Cashu_KDF_HMAC_SHA512" || keyset_id_bytes || counter_bytes)
+        where counter_bytes is 4-byte big-endian.
         """
         assert self.seed, "Seed not initialized yet."
         
         # Convert keyset_id from hex to bytes
         keyset_id_bytes = bytes.fromhex(keyset_id)
         
-        # Convert counter to 4-byte big-endian format
-        counter_bytes = counter.to_bytes(8, byteorder="big")
+        # Convert counter to 4-byte big-endian format per spec/test vectors
+        counter_bytes = counter.to_bytes(4, byteorder="big")
         
         # Construct the message as per NUT-13
         message = b"Cashu_KDF_HMAC_SHA512" + keyset_id_bytes + counter_bytes
         
-        # Derive 64 bytes using HMAC-SHA512
-        derived_bytes_secret = hmac.new(self.seed, message + b'\x00', hashlib.sha512).digest()
-        derived_bytes_blinding_factor = hmac.new(self.seed, message + b'\x01', hashlib.sha512).digest()
+        # Derive 64 bytes using a single HMAC-SHA512
+        derived_bytes = hmac.new(self.seed, message, hashlib.sha512).digest()
         
-        secret = derived_bytes_secret[:32]
-        r = derived_bytes_blinding_factor[:32]
+        secret = derived_bytes[:32]
+        r = derived_bytes[32:]
         
         # Create derivation path identifier
         derivation_path = f"HMAC-SHA512:{keyset_id}:{counter}"

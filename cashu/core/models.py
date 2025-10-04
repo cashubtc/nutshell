@@ -100,6 +100,7 @@ class KeysResponseKeyset(BaseModel):
     id: str
     unit: str
     keys: Dict[int, str]
+    # Note: Mint remains agnostic to short IDs; final_expiry is tracked and may be returned in /v1/keysets.
 
 
 class KeysResponse(BaseModel):
