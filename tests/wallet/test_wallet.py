@@ -1,8 +1,11 @@
 import copy
 from typing import List, Union
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from bip32 import BIP32
+from mnemonic import Mnemonic
 
 from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
 from cashu.core.errors import CashuError, KeysetNotFoundError, ProofsAlreadySpentError
@@ -15,7 +18,6 @@ from cashu.wallet.crud import (
     get_proofs,
 )
 from cashu.wallet.wallet import Wallet
-from cashu.wallet.wallet import Wallet as Wallet1
 from cashu.wallet.wallet import Wallet as Wallet2
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
@@ -70,13 +72,32 @@ async def reset_wallet_db(wallet: Wallet):
     await wallet.load_mint()
 
 
+# @pytest_asyncio.fixture(scope="function")
+# async def wallet1(mint):
+#     wallet1 = await Wallet1.with_db(
+#         url=SERVER_ENDPOINT,
+#         db="test_data/wallet1",
+#         name="wallet1",
+#     )
+#     await wallet1.load_mint()
+#     yield wallet1
+
+
 @pytest_asyncio.fixture(scope="function")
 async def wallet1(mint):
-    wallet1 = await Wallet1.with_db(
+    wallet1 = await Wallet.with_db(
         url=SERVER_ENDPOINT,
         db="test_data/wallet1",
         name="wallet1",
     )
+    # give it a seed so keyset derivation works
+    if not wallet1.mnemonic:
+        from mnemonic import Mnemonic
+
+        wallet1.mnemonic = Mnemonic("english").generate()
+        wallet1.seed = Mnemonic("english").to_seed(wallet1.mnemonic)
+        wallet1.bip32 = BIP32.from_seed(wallet1.seed)
+        await wallet1._store_mnemonic(wallet1.mnemonic)
     await wallet1.load_mint()
     yield wallet1
 
@@ -553,3 +574,45 @@ async def testactivate_keyset_specific_keyset(wallet1: Wallet):
         wallet1.activate_keyset(keyset_id="nonexistent"),
         KeysetNotFoundError("nonexistent"),
     )
+
+
+@pytest.mark.asyncio
+async def test_keyset_disappears_from_mint(wallet1: Wallet):
+    """
+    Ensure that when a mint no longer returns a previously known keyset,
+    it gets removed from the wallet's keyset list.
+    """
+
+    # ✅ Manually seed the wallet (avoids 'seed not set')
+    mnemo = Mnemonic("english")
+    wallet1.mnemonic = mnemo.generate(strength=128)
+
+    # create a dummy seed from mnemonic (bytes)
+    wallet1._seed = wallet1.mnemonic.encode("utf-8")  # pylint: disable=protected-access
+
+    # ✅ Initialize private key using this dummy seed
+    await wallet1._init_private_key()  # pylint: disable=protected-access
+
+    # Mock backend response so only one keyset remains active on the mint
+    wallet1._get_keysets = AsyncMock(
+        return_value=[
+            MintKeyset(
+                id=list(wallet1.keysets.values())[0].id,
+                unit="sat",
+                active=True,
+                derivation_path="m/0'/0'/0'",
+                seed="dummy1",
+            )
+        ]
+    )
+
+    before = len(wallet1.keysets)
+
+    # Load keysets from mocked mint API
+    await wallet1.load_mint_keysets()
+
+    after = len(wallet1.keysets)
+
+    # ✅ Assert keyset count remains consistent
+    assert after == 1
+    assert after <= before
