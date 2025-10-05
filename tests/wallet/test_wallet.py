@@ -73,17 +73,6 @@ async def reset_wallet_db(wallet: Wallet):
     await wallet.load_mint()
 
 
-# @pytest_asyncio.fixture(scope="function")
-# async def wallet1(mint):
-#     wallet1 = await Wallet1.with_db(
-#         url=SERVER_ENDPOINT,
-#         db="test_data/wallet1",
-#         name="wallet1",
-#     )
-#     await wallet1.load_mint()
-#     yield wallet1
-
-
 @pytest_asyncio.fixture(scope="function")
 async def wallet1(mint):
     wallet1 = await Wallet.with_db(
@@ -91,14 +80,6 @@ async def wallet1(mint):
         db="test_data/wallet1",
         name="wallet1",
     )
-    # give it a seed so keyset derivation works
-    if not wallet1.mnemonic:
-        from mnemonic import Mnemonic
-
-        wallet1.mnemonic = Mnemonic("english").generate()
-        wallet1.seed = Mnemonic("english").to_seed(wallet1.mnemonic)
-        wallet1.bip32 = BIP32.from_seed(wallet1.seed)
-        await wallet1._store_mnemonic(wallet1.mnemonic)
     await wallet1.load_mint()
     yield wallet1
 
