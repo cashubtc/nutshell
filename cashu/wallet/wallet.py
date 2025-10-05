@@ -61,6 +61,7 @@ from .crud import (
     update_bolt11_melt_quote,
     update_bolt11_mint_quote,
     update_keyset,
+    update_keyset_active,
     update_mint,
     update_proof,
 )
@@ -297,8 +298,18 @@ class Wallet(
         logger.trace("Loading mint keysets.")
         mint_keysets_resp = await self._get_keysets()
         mint_keysets_dict = {k.id: k for k in mint_keysets_resp}
-        # load all keysets of thisd mint from the db
+
+        # load all keysets of this mint from the db
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
+
+        # NEW: mark keysets that vanished from mint as inactive
+        active_ids = set(mint_keysets_dict.keys())
+        local_ids = {key.id for key in keysets_in_db}
+        for key_id in local_ids - active_ids:
+            logger.debug(
+                f"Keyset {key_id} no longer reported by mint, marking as inactive"
+            )
+            await update_keyset_active(key_id, active=False, db=self.db)
 
         # db is empty, get all keys from the mint and store them
         if not keysets_in_db:
@@ -352,7 +363,14 @@ class Wallet(
 
         await self.inactivate_base64_keysets(force_old_keysets)
 
-        await self.load_keysets_from_db()
+        # only ACTIVE keysets for this unit go into memory
+        keysets_active_unit = [
+            k for k in keysets_in_db if k.unit == self.unit and k.active
+        ]
+        self.keysets = {k.id: k for k in keysets_active_unit}
+        logger.trace(
+            f"Loaded keysets from db: {[(k.id, k.unit.name, k.input_fee_ppk) for k in self.keysets.values()]}"
+        )
 
     async def activate_keyset(self, keyset_id: Optional[str] = None) -> None:
         """Activates a keyset by setting self.keyset_id. Either activates a specific keyset
