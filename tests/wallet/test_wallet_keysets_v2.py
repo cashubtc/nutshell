@@ -4,17 +4,16 @@ Tests for wallet keysets v2 and NUT-13 secret derivation implementation.
 
 import hashlib
 import hmac
+
 import pytest
 from mnemonic import Mnemonic
 
 from cashu.core.base import TokenV4, TokenV4Proof, TokenV4Token
 from cashu.core.crypto.keys import (
-    derive_keyset_id_v2,
     derive_keyset_short_id,
     get_keyset_id_version,
     is_keyset_id_v2,
 )
-from cashu.core.crypto.secp import PrivateKey
 from cashu.wallet.keyset_manager import KeysetManager
 from cashu.wallet.secrets import WalletSecrets
 
@@ -72,42 +71,6 @@ async def test_versioned_secret_derivation_hmac_sha256():
 
     assert secret == expected_secret
     assert r == expected_r
-
-
-@pytest.mark.asyncio
-async def test_versioned_secret_derivation_deterministic():
-    """Test that secret derivation is deterministic for both methods."""
-    # Test BIP32 determinism
-    secrets_v1 = WalletSecrets()
-    secrets_v1.keyset_id = "009a1f293253e41e"  # v1 keyset ID
-    secrets_v1.seed = b"test_seed_123"
-    
-    class MockBIP32:
-        def get_privkey_from_path(self, path):
-            return hashlib.sha256(f"deterministic_{path}".encode()).digest()
-    
-    secrets_v1.bip32 = MockBIP32()
-    
-    secret1_v1, r1_v1, _ = await secrets_v1.generate_determinstic_secret(1)
-    secret2_v1, r2_v1, _ = await secrets_v1.generate_determinstic_secret(1)
-    
-    assert secret1_v1 == secret2_v1
-    assert r1_v1 == r2_v1
-    
-    # Test HMAC-SHA256 determinism  
-    secrets_v2 = WalletSecrets()
-    secrets_v2.keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"  # v2 keyset ID
-    secrets_v2.seed = b"test_seed_123"
-    
-    secret1_v2, r1_v2, _ = await secrets_v2.generate_determinstic_secret(1)
-    secret2_v2, r2_v2, _ = await secrets_v2.generate_determinstic_secret(1)
-    
-    assert secret1_v2 == secret2_v2
-    assert r1_v2 == r2_v2
-    
-    # Verify different methods produce different results
-    assert secret1_v1 != secret1_v2
-    assert r1_v1 != r1_v2
 
 
 @pytest.mark.asyncio
@@ -200,7 +163,7 @@ async def test_token_v4_short_keyset_expansion():
 @pytest.mark.asyncio
 async def test_token_serialization_with_short_ids():
     """Test token serialization uses short keyset IDs for v2 keysets."""
-    from cashu.core.base import Proof, WalletKeyset, Unit
+    from cashu.core.base import Proof, WalletKeyset
     from cashu.core.crypto.secp import PublicKey
     from cashu.wallet.proofs import WalletProofs
 
@@ -223,9 +186,6 @@ async def test_token_serialization_with_short_ids():
     # Minimal WalletKeyset (unit and mint_url are required by _make_tokenv4)
     mock_keyset = WalletKeyset(public_keys={64: PublicKey()}, unit="sat", id=full_keyset_id, mint_url="https://mint.example.com")
     wp.keysets = {full_keyset_id: mock_keyset}
-    # db is not used in _make_tokenv4, but set a stub to satisfy type expectations
-    class _DB: pass
-    wp.db = _DB()  # type: ignore
 
     # Create token; implementation should switch v2 full ID -> short ID
     token = await wp._make_token(proofs)

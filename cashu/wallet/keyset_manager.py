@@ -2,14 +2,11 @@ from typing import Dict
 
 from loguru import logger
 
-from cashu.core.base import Unit
-from cashu.core.models import KeysetsResponseKeyset
-from cashu.core.settings import settings
 from cashu.core.crypto.keys import (
     derive_keyset_short_id,
     is_keyset_id_v2,
 )
-from cashu.mint.protocols import SupportsKeysets
+from cashu.core.models import KeysetsResponseKeyset
 
 
 class KeysetManager:

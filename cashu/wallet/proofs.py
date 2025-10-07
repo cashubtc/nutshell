@@ -231,8 +231,8 @@ class WalletProofs(SupportsDb, SupportsKeysets):
 
         tokens: List[TokenV4Token] = []
         # Use short keyset IDs for v2 keysets to reduce token size
-        from cashu.wallet.keyset_manager import KeysetManager
         from cashu.core.crypto.keys import is_keyset_id_v2
+        from cashu.wallet.keyset_manager import KeysetManager
         manager = KeysetManager()
         for keyset_id in keyset_ids:
             proofs_keyset = [p for p in proofs if p.id == keyset_id]

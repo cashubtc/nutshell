@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import random
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 from bip32 import BIP32
 

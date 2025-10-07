@@ -26,7 +26,6 @@ from .crypto.keys import (
     derive_keyset_id_deprecated,
     derive_keyset_id_v2,
     derive_pubkeys,
-    is_keyset_id_v2,
 )
 from .crypto.secp import PrivateKey, PublicKey
 from .legacy import derive_keys_backwards_compatible_insecure_pre_0_12
