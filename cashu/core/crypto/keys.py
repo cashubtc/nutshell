@@ -83,13 +83,13 @@ def derive_keyset_id_v2(
     # sort public keys by amount in ascending order
     sorted_keys = dict(sorted(keys.items()))
     
-    # concatenate all public keys to one byte array
+    # concatenate all public keys to one byte array with fixed separator between keys
     keyset_id_bytes = b"".join([p.serialize() for p in sorted_keys.values()])
     
-    # add the lowercase unit string to the byte array
+    # add the lowercase unit string to the byte array (no separator necessary since we hash)
     keyset_id_bytes += f"unit:{unit.name}".encode("utf-8")
     
-    # if a final expiration is specified, add it
+    # only include final_expiry if provided (per spec discussion)
     if final_expiry is not None:
         keyset_id_bytes += f"final_expiry:{final_expiry}".encode("utf-8")
     
