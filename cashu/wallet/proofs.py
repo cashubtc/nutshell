@@ -242,7 +242,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             keyset_hex = keyset_id
             if is_keyset_id_v2(keyset_id):
                 # convert to short id for token serialization
-                short_id = await manager.get_short_keyset_id(keyset_id)
+                short_id = manager.get_short_keyset_id(keyset_id)
                 keyset_hex = short_id
             tokenv4_token = TokenV4Token(i=bytes.fromhex(keyset_hex), p=tokenv4_proofs)
             tokens.append(tokenv4_token)

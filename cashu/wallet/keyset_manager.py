@@ -26,7 +26,7 @@ class KeysetManager:
         self._short_to_full_cache: Dict[str, str] = {}
         self._full_to_short_cache: Dict[str, str] = {}
 
-    async def get_short_keyset_id(self, full_id: str) -> str:
+    def get_short_keyset_id(self, full_id: str) -> str:
         """
         Return the wallet-side short keyset id for a given full keyset id.
         - v1: passthrough
@@ -44,7 +44,7 @@ class KeysetManager:
         self._short_to_full_cache[short_id] = full_id
         return short_id
 
-    async def get_full_keyset_id(self, short_id: str, keysets: Dict[str, KeysetsResponseKeyset] | None = None) -> str:
+    def get_full_keyset_id(self, short_id: str, keysets: Dict[str, KeysetsResponseKeyset] | None = None) -> str:
         """
         Resolve a short keyset id to the full keyset id.
         - First use in-memory cache
@@ -63,7 +63,7 @@ class KeysetManager:
             if len(matches) == 1:
                 full = matches[0]
                 self._short_to_full_cache[short_id] = full
-                self._full_to_short_cache[full] = await self.get_short_keyset_id(full)
+                self._full_to_short_cache[full] = self.get_short_keyset_id(full)
                 logger.debug(f"Resolved short keyset id {short_id} -> {full}")
                 return full
             elif len(matches) > 1:

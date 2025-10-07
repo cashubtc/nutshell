@@ -920,7 +920,7 @@ class MintKeyset:
             amounts=json.loads(row["amounts"]),
             balance=row["balance"],
             fees_paid=row["fees_paid"],
-            final_expiry=row.get("final_expiry"),  # NEW: Include final_expiry
+            final_expiry=row["final_expiry"],
         )
 
     @property
