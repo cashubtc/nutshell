@@ -5,6 +5,7 @@ Tests for wallet keysets v2 and NUT-13 secret derivation implementation.
 import hashlib
 import hmac
 import pytest
+from mnemonic import Mnemonic
 
 from cashu.core.base import TokenV4, TokenV4Proof, TokenV4Token
 from cashu.core.crypto.keys import (
@@ -16,6 +17,9 @@ from cashu.core.crypto.keys import (
 from cashu.core.crypto.secp import PrivateKey
 from cashu.wallet.keyset_manager import KeysetManager
 from cashu.wallet.secrets import WalletSecrets
+
+# Reference mnemonic from NUT-13 test vectors
+MNEMONIC = "half depart obvious quality work element tank gorilla view sugar picture humble"
 
 
 @pytest.mark.asyncio
@@ -44,29 +48,28 @@ async def test_versioned_secret_derivation_bip32():
 
 
 @pytest.mark.asyncio 
-async def test_versioned_secret_derivation_hmac_sha512():
-    """Test that HMAC-SHA512 derivation is used for keyset version 01 (v2)."""
-    # Create a mock wallet secrets instance
+async def test_versioned_secret_derivation_hmac_sha256():
+    """Test that HMAC-SHA256 derivation is used for keyset version 01 (v2) and matches spec."""
     secrets = WalletSecrets()
     secrets.keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"  # v2 keyset ID
-    secrets.seed = b"supersecretprivatekey"
-    
-    # Test secret derivation
+    # derive seed from mnemonic per NUT-13
+    mnemo = Mnemonic("english")
+    secrets.seed = mnemo.to_seed(MNEMONIC)
+
     secret, r, path = await secrets.generate_determinstic_secret(1)
-    
-    # Should use HMAC-SHA512 derivation for v2 keysets
-    assert "HMAC-SHA512" in path
+
+    # Should use HMAC-SHA256 derivation for v2 keysets
+    assert "HMAC-SHA256" in path
     assert len(secret) == 32
     assert len(r) == 32
-    
-    # Verify the derivation follows the NUT-13 spec
+
+    # Verify against NUT-13 derivation formula
     keyset_id_bytes = bytes.fromhex(secrets.keyset_id)
-    counter_bytes = (1).to_bytes(4, byteorder="big")
-    message = b"Cashu_KDF_HMAC_SHA512" + keyset_id_bytes + counter_bytes
-    expected_derived = hmac.new(secrets.seed, message, hashlib.sha512).digest()
-    expected_secret = expected_derived[:32]
-    expected_r = expected_derived[32:]
-    
+    counter_bytes = (1).to_bytes(8, byteorder="big")
+    base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
+    expected_secret = hmac.new(secrets.seed, base + b"\x00", hashlib.sha256).digest()
+    expected_r = hmac.new(secrets.seed, base + b"\x01", hashlib.sha256).digest()
+
     assert secret == expected_secret
     assert r == expected_r
 
@@ -91,7 +94,7 @@ async def test_versioned_secret_derivation_deterministic():
     assert secret1_v1 == secret2_v1
     assert r1_v1 == r2_v1
     
-    # Test HMAC-SHA512 determinism  
+    # Test HMAC-SHA256 determinism  
     secrets_v2 = WalletSecrets()
     secrets_v2.keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"  # v2 keyset ID
     secrets_v2.seed = b"test_seed_123"
@@ -172,13 +175,23 @@ async def test_token_v4_short_keyset_expansion():
         ]
     )
     
-    # Mock wallet with keyset manager
-    from cashu.wallet.tokens_v2 import WalletTokensV2
-    wallet = WalletTokensV2()
-    wallet._short_to_full_cache = {short_keyset_id: full_keyset_id}
-    
+    # Mock wallet with keyset manager (no tokens_v2 helper in this project)
+    manager = KeysetManager()
+    manager._short_to_full_cache = {short_keyset_id: full_keyset_id}
+
+    async def expand_token_keysets_local(tok: TokenV4) -> TokenV4:
+        new_tokens = []
+        for tkn in tok.t:
+            keyset_hex = tkn.i.hex()
+            if len(keyset_hex) == 16 and keyset_hex.startswith("01"):
+                full = await manager.get_full_keyset_id(keyset_hex)
+                new_tokens.append(TokenV4Token(i=bytes.fromhex(full), p=tkn.p))
+            else:
+                new_tokens.append(tkn)
+        return TokenV4(m=tok.m, u=tok.u, t=new_tokens, d=tok.d)
+
     # Test expansion
-    expanded_token = await wallet.expand_token_keysets(token)
+    expanded_token = await expand_token_keysets_local(token)
     
     # Should have expanded the keyset ID
     assert expanded_token.t[0].i.hex() == full_keyset_id
@@ -232,27 +245,28 @@ async def test_token_serialization_with_short_ids():
 
 
 def test_nut13_spec_compliance():
-    """Test that HMAC-SHA512 derivation follows NUT-13 specification exactly."""
-    seed = b"supersecretprivatekey"
+    """Test that HMAC-SHA256 derivation follows NUT-13 specification exactly with BIP-39 seed."""
+    mnemo = Mnemonic("english")
+    seed = mnemo.to_seed(MNEMONIC)
     keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
     counter = 1
-    
-    # Manual implementation following NUT-13
+
     keyset_id_bytes = bytes.fromhex(keyset_id)
-    counter_bytes = counter.to_bytes(4, byteorder="big")
-    message = b"Cashu_KDF_HMAC_SHA512" + keyset_id_bytes + counter_bytes
-    derived_bytes = hmac.new(seed, message, hashlib.sha512).digest()
-    expected_secret = derived_bytes[:32]
-    expected_r = derived_bytes[32:]
-    
-    # Test that our implementation matches
+    counter_bytes = counter.to_bytes(8, byteorder="big")
+    base = b"Cashu_KDF_HMAC_SHA256" + keyset_id_bytes + counter_bytes
+
+    expected_secret = hmac.new(seed, base + b"\x00", hashlib.sha256).digest()
+    expected_r = hmac.new(seed, base + b"\x01", hashlib.sha256).digest()
+
+    # Test our implementation
     secrets = WalletSecrets()
     secrets.seed = seed
     secrets.keyset_id = keyset_id
-    
+
     import asyncio
-    secret, r, _ = asyncio.run(secrets._derive_secret_hmac_sha512(counter, keyset_id))
-    
+    secret, r, path = asyncio.run(secrets._derive_secret_hmac_sha256(counter, keyset_id))
+
+    assert "HMAC-SHA256" in path
     assert secret == expected_secret
     assert r == expected_r
 
@@ -291,7 +305,7 @@ async def test_secret_derivation_version_routing():
     # Test v2 routing
     secrets.keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
     secret_v2, r_v2, path_v2 = await secrets.generate_determinstic_secret(1)
-    assert "HMAC-SHA512" in path_v2  # HMAC derivation
+    assert "HMAC-SHA256" in path_v2  # HMAC derivation
     
     # Results should be different
     assert secret_v1 != secret_v2

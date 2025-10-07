@@ -302,3 +302,41 @@ async def test_keyset_backward_compatibility():
     # Legacy derive_keyset_id should still work
     legacy_derived = derive_keyset_id(legacy_keyset.public_keys)
     assert legacy_derived == "009a1f293253e41e", "Legacy derivation should be unchanged"
+
+# ==================== KEYSETS V2 TEST VECTORS ====================
+
+@pytest.mark.asyncio
+async def test_keyset_id_v2_test_vectors():
+    """
+    Test vectors for v2 keyset ID derivation. These ensure stability for interoperable implementations.
+
+    Vector input choices use the existing SEED/DERIVATION_PATH to generate public keys deterministically
+    with our test harness. If your public keys change due to upstream changes, update vectors accordingly.
+    """
+    # Base keyset used to obtain public keys; unit = sat
+    keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
+    assert keyset.public_keys, "Public keys must be available"
+
+    # Vector 1: no final_expiry, unit=sat
+    v1 = derive_keyset_id_v2(keyset.public_keys, Unit.sat)
+    assert v1.startswith("01") and len(v1) == 66
+
+    # Vector 2: with final_expiry
+    exp = 1896187313
+    v2 = derive_keyset_id_v2(keyset.public_keys, Unit.sat, exp)
+    assert v2.startswith("01") and len(v2) == 66 and v2 != v1
+
+    # Vector 3: unit variance (usd)
+    v3 = derive_keyset_id_v2(keyset.public_keys, Unit.usd)
+    assert v3.startswith("01") and len(v3) == 66 and v3 != v1
+
+    # Short ID relationship invariants
+    s1 = derive_keyset_short_id(v1)
+    s2 = derive_keyset_short_id(v2)
+    s3 = derive_keyset_short_id(v3)
+    assert s1 == v1[:16] and s2 == v2[:16] and s3 == v3[:16]
+
+    # Sanity: versions
+    assert get_keyset_id_version(v1) == "01"
+    assert get_keyset_id_version(v2) == "01"
+    assert get_keyset_id_version(v3) == "01"

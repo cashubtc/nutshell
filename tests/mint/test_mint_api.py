@@ -72,6 +72,7 @@ async def test_api_keys(ledger: Ledger):
                     str(k): v.serialize().hex()
                     for k, v in keyset.public_keys.items()  # type: ignore
                 },
+                "final_expiry": keyset.final_expiry,
             }
             for keyset in ledger.keysets.values()
         ]
@@ -94,12 +95,14 @@ async def test_api_keysets(ledger: Ledger):
                 "unit": "sat",
                 "active": True,
                 "input_fee_ppk": 0,
+                "final_expiry": ledger.keysets["009a1f293253e41e"].final_expiry,
             },
             {
                 "id": "00c074b96c7e2b0e",
                 "unit": "usd",
                 "active": True,
                 "input_fee_ppk": 0,
+                "final_expiry": ledger.keysets["00c074b96c7e2b0e"].final_expiry,
             },
         ]
     }
