@@ -115,7 +115,7 @@ class WalletSecrets(SupportsDb, SupportsKeysets):
         
         NUT-13: Uses keyset version to determine derivation method:
         - Version "00" (legacy): BIP32 derivation 
-        - Version "01" (v2): HMAC-SHA512 derivation
+        - Version "01" (v2): HMAC-SHA256 derivation
         """
         keyset_id = keyset_id or self.keyset_id
         

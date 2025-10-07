@@ -200,32 +200,14 @@ async def test_token_v4_short_keyset_expansion():
 @pytest.mark.asyncio
 async def test_token_serialization_with_short_ids():
     """Test token serialization uses short keyset IDs for v2 keysets."""
-    from cashu.core.base import Proof
-    from cashu.wallet.tokens_v2 import WalletTokensV2
-    
-    # Mock wallet
-    wallet = WalletTokensV2()
-    
+    from cashu.core.base import Proof, WalletKeyset, Unit
+    from cashu.core.crypto.secp import PublicKey
+    from cashu.wallet.proofs import WalletProofs
+
     # Mock keyset data
     full_keyset_id = "01c9c20fb8b348b389e296227c6cc7a63f77354b7388c720dbba6218f720f9b785"
     short_keyset_id = derive_keyset_short_id(full_keyset_id)
-    
-    # Mock keysets
-    from cashu.core.base import WalletKeyset, Unit
-    from cashu.core.crypto.secp import PublicKey
-    
-    mock_keyset = WalletKeyset(
-        public_keys={64: PublicKey()},
-        unit="sat",
-        id=full_keyset_id,
-        mint_url="https://mint.example.com",
-    )
-    wallet.keysets = {full_keyset_id: mock_keyset}
-    
-    # Mock keyset manager methods
-    wallet._full_to_short_cache = {full_keyset_id: short_keyset_id}
-    wallet._short_to_full_cache = {short_keyset_id: full_keyset_id}
-    
+
     # Create proofs with v2 keyset
     proofs = [
         Proof(
@@ -235,10 +217,19 @@ async def test_token_serialization_with_short_ids():
             C="abcd1234"
         )
     ]
-    
-    # Test token creation with short IDs
-    token = await wallet._make_tokenv4_with_short_ids(proofs)
-    
+
+    # Prepare WalletProofs with a minimal keyset map
+    wp = WalletProofs()
+    # Minimal WalletKeyset (unit and mint_url are required by _make_tokenv4)
+    mock_keyset = WalletKeyset(public_keys={64: PublicKey()}, unit="sat", id=full_keyset_id, mint_url="https://mint.example.com")
+    wp.keysets = {full_keyset_id: mock_keyset}
+    # db is not used in _make_tokenv4, but set a stub to satisfy type expectations
+    class _DB: pass
+    wp.db = _DB()  # type: ignore
+
+    # Create token; implementation should switch v2 full ID -> short ID
+    token = await wp._make_token(proofs)
+
     # Token should use short keyset ID
     assert token.t[0].i.hex() == short_keyset_id
     assert len(token.t[0].i.hex()) == 16  # 8 bytes = 16 hex chars
