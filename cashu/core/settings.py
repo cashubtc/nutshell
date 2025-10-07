@@ -91,11 +91,8 @@ class MintDeprecationFlags(MintSettings):
 
 class MintKeysetsV2Settings(MintSettings):
     """Settings for keysets v2 support (NUT-02)."""
-    mint_use_keysets_v2: bool = Field(
-        default=False,
-        title="Enable keysets v2",
-        description="Enable keysets v2 with unit-specific IDs and final expiry support (disabled by default for safety)."
-    )
+    # Keysets v2 are enabled by default implicitly when generating new keysets.
+    # The mint no longer uses a feature flag toggle.
     mint_keysets_v2_default_expiry: Optional[int] = Field(
         default=None,
         title="Default final expiry for new keysets",

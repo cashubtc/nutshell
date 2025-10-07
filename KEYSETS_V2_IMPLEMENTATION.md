@@ -33,9 +33,7 @@
   - Maintains backward compatibility (field is optional)
 
 ### ⚙️ Settings & Configuration
-- **Added `MintKeysetsV2Settings` class**:
-  - `mint_use_keysets_v2: bool = False` - Feature flag (disabled by default)
-  - `mint_keysets_v2_default_expiry: Optional[int] = None` - Default expiry for new keysets
+- **Removed feature flag**: New keysets are generated with v2 IDs by default. Use `final_expiry` to control expiry.
 
 ### 🏗️ Keyset Creation Logic
 - **Updated keyset creation functions**:

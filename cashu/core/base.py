@@ -974,13 +974,10 @@ class MintKeyset:
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
-            elif hasattr(settings, 'mint_use_keysets_v2') and settings.mint_use_keysets_v2:
-                # Use keysets v2 if explicitly enabled
+            else:
+                # Always generate v2 IDs for new keysets unless explicitly specified otherwise
                 self.id = derive_keyset_id_v2(self.public_keys, self.unit, self.final_expiry)  # type: ignore
                 logger.info(f"Generated keyset v2 ID: {self.id}")
-            else:
-                # Default to v1 for backward compatibility
-                self.id = derive_keyset_id(self.public_keys)  # type: ignore
 
 
 # ------- TOKEN -------
