@@ -78,7 +78,7 @@ async def create_balance_views(db: Database, conn: Connection):
         SELECT id AS keyset, COALESCE(s, 0) AS balance FROM (
             SELECT id, SUM(amount) AS s
             FROM {db.table_with_schema('promises')}
-            WHERE amount > 0 AND c_ IS NOT NULL
+            WHERE amount > 0 AND c_b IS NOT NULL
             GROUP BY id
         ) AS balance_issued;
         """
