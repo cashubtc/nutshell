@@ -53,7 +53,9 @@ class KeysetManager:
         - If not found, raise
         """
         if short_id in self._short_to_full_cache:
-            return self._short_to_full_cache[short_id]
+            full = self._short_to_full_cache[short_id]
+            logger.debug(f"Resolved short keyset id {short_id} -> {full}")
+            return full
 
         # If caller provided a keyset listing, try resolution against it
         if keysets is not None:
