@@ -26,8 +26,8 @@ async def m001_initial(db: Database):
             f"""
                 CREATE TABLE IF NOT EXISTS {db.table_with_schema('promises')} (
                     amount {db.big_int} NOT NULL,
-                    b_b TEXT NOT NULL,
-                    c_b TEXT NOT NULL,
+                    b_ TEXT NOT NULL,
+                    c_ TEXT NOT NULL,
 
                     UNIQUE (b_b)
 
@@ -710,7 +710,7 @@ async def m017_foreign_keys_proof_tables(db: Database):
         )
 
         await conn.execute(
-            f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created) SELECT amount, id, b_b, c_b, e, s, created FROM {db.table_with_schema('promises')}"
+            f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created) SELECT amount, id, b_, c_, dleq_e, dleq_s, created FROM {db.table_with_schema('promises')}"
         )
         await conn.execute(f"DROP TABLE {db.table_with_schema('promises')}")
         await conn.execute(
