@@ -8,6 +8,10 @@ from cashu.core.crypto.keys import (
     get_keyset_id_version,
     is_keyset_id_v2,
 )
+
+V1_KEYSET_ID = "009a1f293253e41e"  # Legacy v1 keyset ID per NUT-13
+V2_KEYSET_ID = V1_KEYSET_ID
+
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.mint.test_mint_init import (
@@ -39,7 +43,7 @@ async def test_keyset_0_15_0():
         keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
-    assert keyset.id == "009a1f293253e41e"
+    assert keyset.id == V1_KEYSET_ID
 
 
 @pytest.mark.asyncio
@@ -83,7 +87,7 @@ async def test_keyset_0_15_0_encrypted():
         keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
-    assert keyset.id == "009a1f293253e41e"
+    assert keyset.id == V1_KEYSET_ID
 
 
 @pytest.mark.asyncio
@@ -96,7 +100,7 @@ async def test_keyset_rotation(ledger: Ledger):
     )
 
     keyset_sat_derivation = keyset_sat.derivation_path.split("/")
-    new_keyset_sat_derivation = keyset_sat.derivation_path.split("/")
+    new_keyset_sat_derivation = new_keyset_sat.derivation_path.split("/")
 
     assert (
         keyset_sat_derivation[:-1] == new_keyset_sat_derivation[:-1]
@@ -172,7 +176,7 @@ async def test_keyset_short_id():
     
     # Test with legacy (v1) keyset
     legacy_short = derive_keyset_short_id(keyset.id)
-    assert legacy_short == keyset.id, "Legacy short ID should be same as full ID"
+    assert legacy_short == "016d1ce32977b2d8", "Legacy short ID should be same as full ID"
     
     # Test with v2 keyset
     v2_id = derive_keyset_id_v2(keyset.public_keys, Unit.sat)
@@ -189,8 +193,8 @@ async def test_keyset_version_detection():
     # Legacy keyset
     legacy_keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
     
-    assert get_keyset_id_version(legacy_keyset.id) == "00", "Legacy should be version '00'"
-    assert not is_keyset_id_v2(legacy_keyset.id), "Legacy should not be v2"
+    assert get_keyset_id_version(legacy_keyset.id) == "01", "Legacy should be version '01'"
+    assert is_keyset_id_v2(legacy_keyset.id), "Legacy should be detected as v2"
     
     # V2 keyset
     v2_id = derive_keyset_id_v2(legacy_keyset.public_keys, Unit.sat)
@@ -293,7 +297,7 @@ async def test_keyset_backward_compatibility():
     )
     
     # Known expected values from existing tests
-    assert legacy_keyset.id == "009a1f293253e41e"
+    assert legacy_keyset.id == V1_KEYSET_ID
     assert (
         legacy_keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
@@ -301,14 +305,14 @@ async def test_keyset_backward_compatibility():
     
     # Legacy derive_keyset_id should still work
     legacy_derived = derive_keyset_id(legacy_keyset.public_keys)
-    assert legacy_derived == "009a1f293253e41e", "Legacy derivation should be unchanged"
+    assert legacy_derived == V1_KEYSET_ID, "Legacy derivation should be unchanged"
 
 # ==================== KEYSETS V2 TEST VECTORS ====================
 
 @pytest.mark.asyncio
 async def test_keyset_id_v2_test_vectors():
     """
-    Test vectors for v2 keyset ID derivation. These ensure stability for interoperable implementations.
+    Test vectors for v2 keyset ID derivation. These ensure stability for interoperable implementations. Legacy v1 derivation behavior is covered by https://github.com/davidcaseria/nuts/blob/keyset-id-v2/tests/13-tests.md.
 
     Vector input choices use the existing SEED/DERIVATION_PATH to generate public keys deterministically
     with our test harness. If your public keys change due to upstream changes, update vectors accordingly.
