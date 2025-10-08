@@ -156,24 +156,22 @@ class MintLimits(MintSettings):
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
-    mint_max_mint_bolt11_sat: int = Field(
-        default=None,
-        ge=0,
-        title="Maximum mint amount for bolt11 in satoshis",
-        description="Maximum amount for a bolt11 mint operation in satoshis.",
-    )
-    mint_max_melt_bolt11_sat: int = Field(
-        default=None,
-        ge=0,
-        title="Maximum melt amount for bolt11 in satoshis",
-        description="Maximum amount for a bolt11 melt operation in satoshis.",
-    )
     mint_max_balance: int = Field(
         default=None,
         ge=0,
         title="Maximum mint balance",
         description="Maximum mint balance.",
     )
+    # Unified mint limits configuration
+    # Format: [["unit", max_mint, max_melt, max_balance], ...]
+    # Example: [["sat", 10000, 5000, 100000], ["usd", 100.0, 50.0, 1000.0]]
+    mint_limits: List[List] = Field(
+        default=[],
+        title="Mint limits per unit",
+        description="List of limits per unit in format: [unit, max_mint, max_melt, max_balance]",
+    )
+
+    # Websockets
     mint_websocket_read_timeout: int = Field(
         default=10 * 60,
         gt=0,
@@ -374,12 +372,6 @@ def startup_settings_tasks():
     # backwards compatibility: set mint_backend_bolt11_sat from mint_lightning_backend
     if settings.mint_lightning_backend:
         settings.mint_backend_bolt11_sat = settings.mint_lightning_backend
-
-    # backwards compatibility: mint_max_peg_in and mint_max_peg_out to mint_max_mint_bolt11_sat and mint_max_melt_bolt11_sat
-    if settings.mint_max_peg_in:
-        settings.mint_max_mint_bolt11_sat = settings.mint_max_peg_in
-    if settings.mint_max_peg_out:
-        settings.mint_max_melt_bolt11_sat = settings.mint_max_peg_out
 
     # backwards compatibility: set mint_bolt11_disable_mint from mint_peg_out_only
     if settings.mint_peg_out_only:
