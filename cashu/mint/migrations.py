@@ -710,7 +710,7 @@ async def m017_foreign_keys_proof_tables(db: Database):
         )
 
         await conn.execute(
-            f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created) SELECT amount, id, b_, c_, dleq_e, dleq_s, created FROM {db.table_with_schema('promises')}"
+            f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created) SELECT amount, id, b_, c_, e, s, created FROM {db.table_with_schema('promises')}"
         )
         await conn.execute(f"DROP TABLE {db.table_with_schema('promises')}")
         await conn.execute(
