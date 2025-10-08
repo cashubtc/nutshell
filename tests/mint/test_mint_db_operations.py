@@ -380,7 +380,7 @@ async def test_store_and_sign_blinded_message(ledger: Ledger):
     B_point = PublicKey(bytes.fromhex(B_hex), raw=True)
     C_point, e, s = step2_bob(B_point, private_key_amount)
 
-    await ledger.crud.store_blind_signature(
+    await ledger.crud.update_blind_message_signature(
         db=ledger.db,
         amount=amount,
         b_=B_hex,
@@ -461,7 +461,7 @@ async def test_delete_blinded_messages_by_melt_id(ledger: Ledger):
     # Ensure melt_id linkage is present for this test
     async with ledger.db.connect() as conn:
         await conn.execute(
-            f"UPDATE {ledger.db.table_with_schema('promises')} SET mint_quote = :melt_id WHERE b_ IN (:b1, :b2)",
+            f"UPDATE {ledger.db.table_with_schema('promises')} SET melt_quote = :melt_id WHERE b_ IN (:b1, :b2)",
             {"melt_id": melt_id, "b1": b1_hex, "b2": b2_hex},
         )
 
@@ -505,14 +505,14 @@ async def test_get_blinded_messages_by_melt_id_filters_signed(ledger: Ledger):
     # Link both to the same melt_id
     async with ledger.db.connect() as conn:
         await conn.execute(
-            f"UPDATE {ledger.db.table_with_schema('promises')} SET mint_quote = :melt_id WHERE b_ IN (:b1, :b2)",
+            f"UPDATE {ledger.db.table_with_schema('promises')} SET melt_quote = :melt_id WHERE b_ IN (:b1, :b2)",
             {"melt_id": melt_id, "b1": b1_hex, "b2": b2_hex},
         )
 
     # Sign one of them (it should no longer be returned by get_blinded_messages_melt_id which filters c_ IS NULL)
     priv = ledger.keyset.private_keys[amount]
     C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex), raw=True), priv)
-    await ledger.crud.store_blind_signature(
+    await ledger.crud.update_blind_message_signature(
         db=ledger.db,
         amount=amount,
         b_=b1_hex,
@@ -559,7 +559,7 @@ async def test_store_blinded_message(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_store_blind_signature_before_store_blinded_message_errors(
+async def test_update_blind_message_signature_before_store_blinded_message_errors(
     ledger: Ledger,
 ):
     from cashu.core.crypto.b_dhke import step1_alice, step2_bob
@@ -575,8 +575,8 @@ async def test_store_blind_signature_before_store_blinded_message_errors(
     C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b_hex), raw=True), priv)
 
     # Expect a DB-level error; on SQLite/Postgres this is typically a no-op update, so this test is xfail.
-    await assert_err_multiple(
-        ledger.crud.store_blind_signature(
+    await assert_err(
+        ledger.crud.update_blind_message_signature(
             db=ledger.db,
             amount=amount,
             b_=b_hex,
@@ -584,14 +584,7 @@ async def test_store_blind_signature_before_store_blinded_message_errors(
             e=e.serialize(),
             s=s.serialize(),
         ),
-        [
-            "no such table",
-            "no such column",
-            "constraint",
-            "duplicate",
-            "violates",
-            "error",
-        ],
+        "blinded message does not exist",
     )
 
 

@@ -175,7 +175,7 @@ class LedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
-    async def store_blind_signature(
+    async def update_blind_message_signature(
         self,
         *,
         db: Database,
@@ -380,7 +380,7 @@ class LedgerCrudSqlite(LedgerCrud):
             },
         )
 
-    async def store_blind_signature(
+    async def update_blind_message_signature(
         self,
         *,
         db: Database,
@@ -391,6 +391,16 @@ class LedgerCrudSqlite(LedgerCrud):
         s: str = "",
         conn: Optional[Connection] = None,
     ) -> None:
+        existing = await (conn or db).fetchone(
+            f"""
+                SELECT * from {db.table_with_schema('promises')}
+                WHERE b_ = :b_
+                """,
+            {"b_": str(b_)},
+        )
+        if existing is None:
+            raise ValueError("blinded message does not exist")
+
         await (conn or db).execute(
             f"""
             UPDATE {db.table_with_schema('promises')}
