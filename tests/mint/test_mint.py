@@ -165,7 +165,7 @@ async def test_generate_change_promises(ledger: Ledger):
         )
         for b, _ in blinded_msgs
     ]
-
+    await ledger._store_blinded_messages(outputs)
     promises = await ledger._generate_change_promises(
         fee_provided=fee_reserve, fee_paid=actual_fee, outputs=outputs
     )
@@ -197,6 +197,7 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
         for b, _ in blinded_msgs
     ]
 
+    await ledger._store_blinded_messages(outputs)
     promises = await ledger._generate_change_promises(fee_reserve, actual_fee, outputs)
 
     assert len(promises) == expected_returned_promises
