@@ -29,7 +29,7 @@ async def m001_initial(db: Database):
                     b_ TEXT NOT NULL,
                     c_ TEXT NOT NULL,
 
-                    UNIQUE (b_b)
+                    UNIQUE (b_)
 
                 );
             """
