@@ -10,6 +10,7 @@ import pytest_asyncio
 from cashu.core import db
 from cashu.core.db import Connection
 from cashu.core.migrations import backup_database
+from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -437,12 +438,17 @@ async def test_get_blinded_messages_by_melt_id(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_delete_blinded_messages_by_melt_id(ledger: Ledger):
+async def test_delete_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger):
     from cashu.core.crypto.b_dhke import step1_alice
 
     amount = 4
     keyset_id = ledger.keyset.id
-    melt_id = "test-delete-melt-id-001"
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote = await wallet.request_mint(64)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+    )
+    melt_id = melt_quote.quote
 
     # Create two blinded messages
     B1, _ = step1_alice("delete_by_melt_id_1")
@@ -452,18 +458,11 @@ async def test_delete_blinded_messages_by_melt_id(ledger: Ledger):
 
     # Persist as unsigned messages
     await ledger.crud.store_blinded_message(
-        db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id
+        db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
     )
     await ledger.crud.store_blinded_message(
-        db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id
+        db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id, melt_id=melt_id
     )
-
-    # Ensure melt_id linkage is present for this test
-    async with ledger.db.connect() as conn:
-        await conn.execute(
-            f"UPDATE {ledger.db.table_with_schema('promises')} SET melt_quote = :melt_id WHERE b_ IN (:b1, :b2)",
-            {"melt_id": melt_id, "b1": b1_hex, "b2": b2_hex},
-        )
 
     rows_before = await ledger.crud.get_blinded_messages_melt_id(
         db=ledger.db, melt_id=melt_id
@@ -481,13 +480,20 @@ async def test_delete_blinded_messages_by_melt_id(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_get_blinded_messages_by_melt_id_filters_signed(ledger: Ledger):
+async def test_get_blinded_messages_by_melt_id_filters_signed(
+    wallet: Wallet, ledger: Ledger
+):
     from cashu.core.crypto.b_dhke import step1_alice, step2_bob
     from cashu.core.crypto.secp import PublicKey
 
     amount = 2
     keyset_id = ledger.keyset.id
-    melt_id = "test-filter-melt-id-002"
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote = await wallet.request_mint(64)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+    )
+    melt_id = melt_quote.quote
 
     B1, _ = step1_alice("filter_by_melt_id_1")
     B2, _ = step1_alice("filter_by_melt_id_2")
@@ -496,18 +502,11 @@ async def test_get_blinded_messages_by_melt_id_filters_signed(ledger: Ledger):
 
     # Persist two unsigned messages
     await ledger.crud.store_blinded_message(
-        db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id
+        db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
     )
     await ledger.crud.store_blinded_message(
-        db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id
+        db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id, melt_id=melt_id
     )
-
-    # Link both to the same melt_id
-    async with ledger.db.connect() as conn:
-        await conn.execute(
-            f"UPDATE {ledger.db.table_with_schema('promises')} SET melt_quote = :melt_id WHERE b_ IN (:b1, :b2)",
-            {"melt_id": melt_id, "b1": b1_hex, "b2": b2_hex},
-        )
 
     # Sign one of them (it should no longer be returned by get_blinded_messages_melt_id which filters c_ IS NULL)
     priv = ledger.keyset.private_keys[amount]
