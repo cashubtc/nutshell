@@ -828,7 +828,7 @@ class MintKeyset:
         id: str = "",
         balance: int = 0,
         fees_paid: int = 0,
-        final_expiry: Optional[int] = None,  # NEW: Final expiry timestamp
+        final_expiry: Optional[int] = None,
     ):
         DEFAULT_SEED = "supersecretprivatekey"
         if seed == DEFAULT_SEED:
@@ -864,7 +864,7 @@ class MintKeyset:
         self.balance = balance
         self.fees_paid = fees_paid
         self.input_fee_ppk = input_fee_ppk or 0
-        self.final_expiry = final_expiry  # NEW: Set final expiry
+        self.final_expiry = final_expiry
 
         if self.input_fee_ppk < 0:
             raise Exception("Input fee must be non-negative.")

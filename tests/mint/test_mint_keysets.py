@@ -10,7 +10,7 @@ from cashu.core.crypto.keys import (
 )
 
 V1_KEYSET_ID = "009a1f293253e41e"  # Legacy v1 keyset ID per NUT-13
-V2_KEYSET_ID = V1_KEYSET_ID
+V2_KEYSET_ID = "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1"
 
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
@@ -43,7 +43,7 @@ async def test_keyset_0_15_0():
         keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
-    assert keyset.id == V1_KEYSET_ID
+    assert keyset.id == V2_KEYSET_ID
 
 
 @pytest.mark.asyncio
@@ -87,7 +87,7 @@ async def test_keyset_0_15_0_encrypted():
         keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
-    assert keyset.id == V1_KEYSET_ID
+    assert keyset.id == V2_KEYSET_ID
 
 
 @pytest.mark.asyncio
@@ -108,7 +108,7 @@ async def test_keyset_rotation(ledger: Ledger):
     assert (
         int(new_keyset_sat_derivation[-1].replace("'", ""))
         - int(keyset_sat_derivation[-1].replace("'", ""))
-        == 0
+        == 1
     ), "counters should differ by exactly 1"
 
     assert new_keyset_sat.input_fee_ppk == 1
@@ -297,7 +297,7 @@ async def test_keyset_backward_compatibility():
     )
     
     # Known expected values from existing tests
-    assert legacy_keyset.id == V1_KEYSET_ID
+    assert legacy_keyset.id == V2_KEYSET_ID
     assert (
         legacy_keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
