@@ -292,7 +292,6 @@ class Wallet(
 
     async def load_mint_keysets(self, force_old_keysets=False):
         """Loads all keyset of the mint and makes sure we have them all in the database.
-
         Then loads all keysets from the database for the active mint and active unit into self.keysets.
         """
         logger.trace("Loading mint keysets.")
@@ -302,10 +301,10 @@ class Wallet(
         # load all keysets of this mint from the db
         keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
 
-        # NEW: mark keysets that vanished from mint as inactive
+        # mark keysets that disappeared from mint as inactive
         active_ids = set(mint_keysets_dict.keys())
         local_ids = {key.id for key in keysets_in_db}
-        for key_id in local_ids - active_ids:
+        for key_id in (local_ids - active_ids):
             logger.debug(
                 f"Keyset {key_id} no longer reported by mint, marking as inactive"
             )
@@ -362,6 +361,9 @@ class Wallet(
                     )
 
         await self.inactivate_base64_keysets(force_old_keysets)
+
+        # RE-FETCH after all DB updates so we see the final active 
+        keysets_in_db = await get_keysets(mint_url=self.url, db=self.db)
 
         # only ACTIVE keysets for this unit go into memory
         keysets_active_unit = [

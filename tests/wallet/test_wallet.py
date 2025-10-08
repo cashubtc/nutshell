@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from bip32 import BIP32
 from mnemonic import Mnemonic
 
 from cashu.core.base import MeltQuote, MeltQuoteState, MintKeyset, MintQuoteState, Proof
