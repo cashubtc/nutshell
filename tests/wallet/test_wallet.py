@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-from bip32 import BIP32
 from mnemonic import Mnemonic
 
 from cashu.core.base import MeltQuote, MeltQuoteState, MintQuoteState, Proof
@@ -564,15 +563,15 @@ async def test_keyset_disappears_from_mint(wallet1: Wallet):
     it gets removed from the wallet's keyset list.
     """
 
-    # ✅ Manually seed the wallet (avoids 'seed not set')
+    # Manually seed the wallet (avoids 'seed not set')
     mnemo = Mnemonic("english")
     wallet1.mnemonic = mnemo.generate(strength=128)
 
     # create a dummy seed from mnemonic (bytes)
-    wallet1._seed = wallet1.mnemonic.encode("utf-8")  # pylint: disable=protected-access
+    wallet1._seed = wallet1.mnemonic.encode("utf-8")
 
-    # ✅ Initialize private key using this dummy seed
-    await wallet1._init_private_key()  # pylint: disable=protected-access
+    # Initialize private key using this dummy seed
+    await wallet1._init_private_key()
 
     # Mock backend response so only one keyset remains active on the mint
     wallet1._get_keysets = AsyncMock(
