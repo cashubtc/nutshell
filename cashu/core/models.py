@@ -100,8 +100,7 @@ class KeysResponseKeyset(BaseModel):
     id: str
     unit: str
     keys: Dict[int, str]
-    # Note: Mint remains agnostic to short IDs; final_expiry is tracked and may be returned in /v1/keysets.
-    final_expiry: Optional[int] = None  # NEW: Include final expiry to align with NUT-02 PR #182
+    final_expiry: Optional[int] = None 
 
 
 class KeysResponse(BaseModel):
@@ -113,7 +112,7 @@ class KeysetsResponseKeyset(BaseModel):
     unit: str
     active: bool
     input_fee_ppk: Optional[int] = None
-    final_expiry: Optional[int] = None  # NEW: Final expiry timestamp for keyset v2
+    final_expiry: Optional[int] = None
 
 
 class KeysetsResponse(BaseModel):

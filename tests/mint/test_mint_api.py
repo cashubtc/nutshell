@@ -91,18 +91,18 @@ async def test_api_keysets(ledger: Ledger):
     expected = {
         "keysets": [
             {
+                "final_expiry": None,
                 "id": "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
                 "unit": "sat",
                 "active": True,
                 "input_fee_ppk": 0,
-                "final_expiry": None,
             },
             {
-                "id": "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
+                "final_expiry": None,
+                "id": "012fe3ad4edbad489f0d125958c8c598c9b48d6ef0d9ea5326ca1c94d88fff96aa",
                 "unit": "usd",
                 "active": True,
                 "input_fee_ppk": 0,
-                "final_expiry": None,
             },
         ]
     }
@@ -121,6 +121,7 @@ async def test_api_keyset_keys(ledger: Ledger):
     expected = {
         "keysets": [
             {
+                "final_expiry": None,
                 "id": "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
                 "unit": "sat",
                 "keys": {
@@ -145,6 +146,7 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
     expected = {
         "keysets": [
             {
+                "final_expiry": None,
                 "id": "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1",
                 "unit": "sat",
                 "keys": {
