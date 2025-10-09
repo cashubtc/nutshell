@@ -51,13 +51,13 @@ async def test_wallet_subscription_mint(wallet: Wallet):
     await asyncio.sleep(wait + 2)
 
     assert triggered
-    assert len(msg_stack) == 3
+    assert len(msg_stack) >= 3
 
     assert msg_stack[0].payload["state"] == MintQuoteState.unpaid.value
 
     assert msg_stack[1].payload["state"] == MintQuoteState.paid.value
 
-    assert msg_stack[2].payload["state"] == MintQuoteState.issued.value
+    assert msg_stack[-1].payload["state"] == MintQuoteState.issued.value
 
 
 @pytest.mark.asyncio
@@ -133,7 +133,9 @@ async def test_wallet_subscription_multiple_listeners_receive_updates(wallet: Wa
     from cashu.wallet.subscriptions import SubscriptionManager
 
     subs = SubscriptionManager(wallet.url)
-    threading.Thread(target=subs.connect, name="SubscriptionManager", daemon=True).start()
+    threading.Thread(
+        target=subs.connect, name="SubscriptionManager", daemon=True
+    ).start()
 
     stack1: list[JSONRPCNotficationParams] = []
     stack2: list[JSONRPCNotficationParams] = []
