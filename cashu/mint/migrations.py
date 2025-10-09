@@ -972,6 +972,55 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
         # drop the balance views first
         await drop_balance_views(db, conn)
 
+        # remove obsolete columns outputs and change from melt_quotes
+        if conn.type == "SQLITE":
+            # For SQLite, recreate table without the columns
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+            await conn.execute(
+                f"""
+                    CREATE TABLE IF NOT EXISTS {db.table_with_schema('melt_quotes_new')} (
+                        quote TEXT NOT NULL,
+                        method TEXT NOT NULL,
+                        request TEXT NOT NULL,
+                        checking_id TEXT NOT NULL,
+                        unit TEXT NOT NULL,
+                        amount {db.big_int} NOT NULL,
+                        fee_reserve {db.big_int},
+                        paid BOOL NOT NULL,
+                        created_time TIMESTAMP,
+                        paid_time TIMESTAMP,
+                        fee_paid {db.big_int},
+                        proof TEXT,
+                        state TEXT,
+                        expiry TIMESTAMP,
+
+                        UNIQUE (quote)
+                    );
+                """
+            )
+            await conn.execute(
+                f"""
+                    INSERT INTO {db.table_with_schema('melt_quotes_new')} (
+                        quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof, state, expiry
+                    )
+                    SELECT quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof, state, expiry
+                    FROM {db.table_with_schema('melt_quotes')};
+                """
+            )
+            await conn.execute(f"DROP TABLE {db.table_with_schema('melt_quotes')}")
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('melt_quotes_new')} RENAME TO {db.table_with_schema('melt_quotes')}"
+            )
+            await conn.execute("PRAGMA foreign_keys=ON;")
+        else:
+            # For Postgres/Cockroach, drop the columns directly if they exist
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS outputs"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS change"
+            )
+
         # recreate promises with c_ nullable
         await conn.execute(
             f"""
@@ -1042,61 +1091,6 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
                         "swap_id": None,
                     },
                 )
-
-            # clear outputs from melt_quotes after migration
-            await conn.execute(
-                f"UPDATE {db.table_with_schema('melt_quotes')} SET outputs = NULL WHERE quote = :quote",
-                {"quote": row["quote"]},
-            )
-
-        # remove obsolete columns outputs and change from melt_quotes
-        if conn.type == "SQLITE":
-            # For SQLite, recreate table without the columns
-            await conn.execute("PRAGMA foreign_keys=OFF;")
-            await conn.execute(
-                f"""
-                    CREATE TABLE IF NOT EXISTS {db.table_with_schema('melt_quotes_new')} (
-                        quote TEXT NOT NULL,
-                        method TEXT NOT NULL,
-                        request TEXT NOT NULL,
-                        checking_id TEXT NOT NULL,
-                        unit TEXT NOT NULL,
-                        amount {db.big_int} NOT NULL,
-                        fee_reserve {db.big_int},
-                        paid BOOL NOT NULL,
-                        created_time TIMESTAMP,
-                        paid_time TIMESTAMP,
-                        fee_paid {db.big_int},
-                        proof TEXT,
-                        state TEXT,
-                        expiry TIMESTAMP,
-
-                        UNIQUE (quote)
-                    );
-                """
-            )
-            await conn.execute(
-                f"""
-                    INSERT INTO {db.table_with_schema('melt_quotes_new')} (
-                        quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof, state, expiry
-                    )
-                    SELECT quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof, state, expiry
-                    FROM {db.table_with_schema('melt_quotes')};
-                """
-            )
-            await conn.execute(f"DROP TABLE {db.table_with_schema('melt_quotes')}")
-            await conn.execute(
-                f"ALTER TABLE {db.table_with_schema('melt_quotes_new')} RENAME TO {db.table_with_schema('melt_quotes')}"
-            )
-            await conn.execute("PRAGMA foreign_keys=ON;")
-        else:
-            # For Postgres/Cockroach, drop the columns directly if they exist
-            await conn.execute(
-                f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS outputs"
-            )
-            await conn.execute(
-                f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS change"
-            )
 
         # recreate the balance views
         await create_balance_views(db, conn)

@@ -612,9 +612,6 @@ async def test_promises_fk_constraints_enforced(ledger: Ledger):
 
     # Use a single connection and enable FK enforcement on SQLite
     async with ledger.db.connect() as conn:
-        if ledger.db.type == db.SQLITE:
-            await conn.execute("PRAGMA foreign_keys=ON")
-
         # Fake melt_id should violate FK on promises.melt_quote
         await assert_err_multiple(
             ledger.crud.store_blinded_message(
@@ -632,9 +629,6 @@ async def test_promises_fk_constraints_enforced(ledger: Ledger):
         )
 
     async with ledger.db.connect() as conn:
-        if ledger.db.type == db.SQLITE:
-            await conn.execute("PRAGMA foreign_keys=ON")
-
         # Fake mint_id should violate FK on promises.mint_quote
         await assert_err_multiple(
             ledger.crud.store_blinded_message(

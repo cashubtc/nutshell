@@ -150,7 +150,7 @@ class Database(Compat):
             def _set_sqlite_pragma(dbapi_connection, connection_record):
                 try:
                     cursor = dbapi_connection.cursor()
-                    cursor.execute("PRAGMA foreign_keys=ON")
+                    cursor.execute("PRAGMA foreign_keys=ON;")
                     cursor.close()
                 except Exception as e:
                     logger.warning(f"Could not enable SQLite PRAGMA foreign_keys: {e}")
