@@ -175,7 +175,7 @@ class LedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
-    async def update_blind_message_signature(
+    async def update_blinded_message_signature(
         self,
         *,
         db: Database,
@@ -380,7 +380,7 @@ class LedgerCrudSqlite(LedgerCrud):
             },
         )
 
-    async def update_blind_message_signature(
+    async def update_blinded_message_signature(
         self,
         *,
         db: Database,

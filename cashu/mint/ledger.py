@@ -1180,7 +1180,7 @@ class Ledger(
             for promise in promises:
                 keyset_id, B_, amount, C_, e, s = promise
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
-                await self.crud.update_blind_message_signature(
+                await self.crud.update_blinded_message_signature(
                     amount=amount,
                     b_=B_.serialize().hex(),
                     c_=C_.serialize().hex(),

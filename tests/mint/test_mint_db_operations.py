@@ -381,7 +381,7 @@ async def test_store_and_sign_blinded_message(ledger: Ledger):
     B_point = PublicKey(bytes.fromhex(B_hex), raw=True)
     C_point, e, s = step2_bob(B_point, private_key_amount)
 
-    await ledger.crud.update_blind_message_signature(
+    await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
         amount=amount,
         b_=B_hex,
@@ -509,7 +509,7 @@ async def test_get_blinded_messages_by_melt_id_filters_signed(
     # Sign one of them (it should no longer be returned by get_blinded_messages_melt_id which filters c_ IS NULL)
     priv = ledger.keyset.private_keys[amount]
     C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex), raw=True), priv)
-    await ledger.crud.update_blind_message_signature(
+    await ledger.crud.update_blinded_message_signature(
         db=ledger.db,
         amount=amount,
         b_=b1_hex,
@@ -556,7 +556,7 @@ async def test_store_blinded_message(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_update_blind_message_signature_before_store_blinded_message_errors(
+async def test_update_blinded_message_signature_before_store_blinded_message_errors(
     ledger: Ledger,
 ):
     from cashu.core.crypto.b_dhke import step1_alice, step2_bob
@@ -573,7 +573,7 @@ async def test_update_blind_message_signature_before_store_blinded_message_error
 
     # Expect a DB-level error; on SQLite/Postgres this is typically a no-op update, so this test is xfail.
     await assert_err(
-        ledger.crud.update_blind_message_signature(
+        ledger.crud.update_blinded_message_signature(
             db=ledger.db,
             amount=amount,
             b_=b_hex,
