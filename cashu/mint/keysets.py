@@ -97,11 +97,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             amounts=amounts,
             input_fee_ppk=input_fee_ppk,
             active=True,
-            final_expiry=(
-                settings.mint_keysets_v2_default_expiry
-                if settings.mint_keysets_v2_default_expiry is not None
-                else None
-            ),
+            final_expiry=None
         )
 
         logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
@@ -171,7 +167,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 amounts=self.amounts,
                 version=version,
                 input_fee_ppk=settings.mint_input_fee_ppk,
-                final_expiry=settings.mint_keysets_v2_default_expiry,
+                final_expiry=None,
             )
             logger.debug(f"Generated new keyset with ID '{keyset.id}'.")
 

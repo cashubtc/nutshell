@@ -327,7 +327,6 @@ class Settings(
     AuthSettings,
     MintRedisCache,
     MintDeprecationFlags,
-    MintKeysetsV2Settings,
     MintManagementRPCSettings,
     MintWatchdogSettings,
     MintSettings,
