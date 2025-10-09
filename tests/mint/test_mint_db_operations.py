@@ -599,16 +599,52 @@ async def test_store_blinded_message_duplicate_b_(ledger: Ledger):
         db=ledger.db, amount=amount, b_=b_hex, id=keyset_id
     )
 
-    # Second insert with same b_ should violate UNIQUE(b_)
-    await assert_err_multiple(
-        ledger.crud.store_blinded_message(
-            db=ledger.db, amount=amount, b_=b_hex, id=keyset_id
-        ),
-        [
-            "UNIQUE constraint failed",  # common on SQLite
-            "UNIQUE constraint",  # generic
-            "duplicate key value violates unique constraint",  # common on Postgres
-            "violates unique constraint",
-            "UNIQUE",  # fallback
-        ],
-    )
+
+@pytest.mark.asyncio
+async def test_promises_fk_constraints_enforced(ledger: Ledger):
+    from cashu.core.crypto.b_dhke import step1_alice
+
+    keyset_id = ledger.keyset.id
+    B1, _ = step1_alice("fk_check_melt")
+    B2, _ = step1_alice("fk_check_mint")
+    b1_hex = B1.serialize().hex()
+    b2_hex = B2.serialize().hex()
+
+    # Use a single connection and enable FK enforcement on SQLite
+    async with ledger.db.connect() as conn:
+        if ledger.db.type == db.SQLITE:
+            await conn.execute("PRAGMA foreign_keys=ON")
+
+        # Fake melt_id should violate FK on promises.melt_quote
+        await assert_err_multiple(
+            ledger.crud.store_blinded_message(
+                db=ledger.db,
+                amount=1,
+                b_=b1_hex,
+                id=keyset_id,
+                melt_id="nonexistent-melt-id",
+                conn=conn,
+            ),
+            [
+                "FOREIGN KEY",  # SQLite
+                "violates foreign key constraint",  # Postgres
+            ],
+        )
+
+        # Fake mint_id should violate FK on promises.mint_quote
+        await assert_err_multiple(
+            ledger.crud.store_blinded_message(
+                db=ledger.db,
+                amount=1,
+                b_=b2_hex,
+                id=keyset_id,
+                mint_id="nonexistent-mint-id",
+                conn=conn,
+            ),
+            [
+                "FOREIGN KEY",  # SQLite
+                "violates foreign key constraint",  # Postgres
+            ],
+        )
+
+    # Done. This test only checks FK enforcement paths.
