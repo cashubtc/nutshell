@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.17.0"
+VERSION = "0.18.0"
 
 
 def find_env_file():
@@ -87,18 +87,6 @@ class MintWatchdogSettings(MintSettings):
 
 class MintDeprecationFlags(MintSettings):
     mint_inactivate_base64_keysets: bool = Field(default=False)
-
-
-class MintKeysetsV2Settings(MintSettings):
-    """Settings for keysets v2 support (NUT-02)."""
-    # Keysets v2 are enabled by default implicitly when generating new keysets.
-    # The mint no longer uses a feature flag toggle.
-    mint_keysets_v2_default_expiry: Optional[int] = Field(
-        default=None,
-        title="Default final expiry for new keysets",
-        description="Default Unix timestamp for final expiry of new keysets v2 (None = no expiry)."
-    )
-
 
 class MintBackends(MintSettings):
     mint_lightning_backend: str = Field(default="")  # deprecated

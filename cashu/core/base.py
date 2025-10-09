@@ -963,19 +963,30 @@ class MintKeyset:
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             self.id = id_in_db or derive_keyset_id_deprecated(self.public_keys)  # type: ignore
+        elif self.version_tuple < (0, 18):
+            self.private_keys = derive_keys(
+                self.seed, self.derivation_path, self.amounts
+            )
+            self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
+            
+            if id_in_db:
+                # If loading from DB, preserve existing ID
+                self.id = id_in_db
+            else:
+                self.id = derive_keyset_id(self.public_keys)
+                logger.info(f"Generated keyset v1 ID: {self.id}")
         else:
             self.private_keys = derive_keys(
                 self.seed, self.derivation_path, self.amounts
             )
             self.public_keys = derive_pubkeys(self.private_keys, self.amounts)  # type: ignore
             
-            # KEYSETS V2: Use new keyset ID derivation if configured or requested
+            # KEYSETS V2: Use new keyset ID derivation
             if id_in_db:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
             else:
-                # Always generate v2 IDs for new keysets unless explicitly specified otherwise
-                self.id = derive_keyset_id_v2(self.public_keys, self.unit, self.final_expiry)  # type: ignore
+                self.id = derive_keyset_id_v2(self.public_keys, self.unit, self.final_expiry)
                 logger.info(f"Generated keyset v2 ID: {self.id}")
 
 
