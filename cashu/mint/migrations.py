@@ -972,7 +972,44 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
         # drop the balance views first
         await drop_balance_views(db, conn)
 
-        # remove obsolete columns outputs and change from melt_quotes
+        # STEP 1: migrate stored melt outputs for pending quotes into promises
+        rows = await conn.fetchall(
+            f"""
+                SELECT quote, outputs FROM {db.table_with_schema('melt_quotes')}
+                WHERE state = :state AND outputs IS NOT NULL
+            """,
+            {"state": MeltQuoteState.pending.value},
+        )
+        for row in rows:
+            try:
+                outputs = json.loads(row["outputs"]) if row["outputs"] else []
+            except Exception:
+                outputs = []
+
+            for o in outputs:
+                amount = o.get("amount") if isinstance(o, dict) else None
+                keyset_id = o.get("id") if isinstance(o, dict) else None
+                b_hex = o.get("B_") if isinstance(o, dict) else None
+                if amount is None or keyset_id is None or b_hex is None:
+                    continue
+                await conn.execute(
+                    f"""
+                        INSERT INTO {db.table_with_schema('promises')}
+                        (amount, id, b_, created, mint_quote, melt_quote, swap_id)
+                        VALUES (:amount, :id, :b_, :created, :mint_quote, :melt_quote, :swap_id)
+                    """,
+                    {
+                        "amount": int(amount),
+                        "id": keyset_id,
+                        "b_": b_hex,
+                        "created": db.to_timestamp(db.timestamp_now_str()),
+                        "mint_quote": None,
+                        "melt_quote": row["quote"],
+                        "swap_id": None,
+                    },
+                )
+
+        # STEP 2: remove obsolete columns outputs and change from melt_quotes
         if conn.type == "SQLITE":
             # For SQLite, recreate table without the columns
             await conn.execute("PRAGMA foreign_keys=OFF;")
@@ -1021,7 +1058,7 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
                 f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS change"
             )
 
-        # recreate promises with c_ nullable
+        # STEP 3: recreate promises with c_ nullable
         await conn.execute(
             f"""
                     CREATE TABLE IF NOT EXISTS {db.table_with_schema('promises_new')} (
@@ -1054,43 +1091,6 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
         await conn.execute(
             f"ALTER TABLE {db.table_with_schema('promises_new')} RENAME TO {db.table_with_schema('promises')}"
         )
-
-        # migrate stored melt outputs for pending quotes into promises
-        rows = await conn.fetchall(
-            f"""
-                SELECT quote, outputs FROM {db.table_with_schema('melt_quotes')}
-                WHERE state = :state AND outputs IS NOT NULL
-            """,
-            {"state": MeltQuoteState.pending.value},
-        )
-        for row in rows:
-            try:
-                outputs = json.loads(row["outputs"]) if row["outputs"] else []
-            except Exception:
-                outputs = []
-
-            for o in outputs:
-                amount = o.get("amount") if isinstance(o, dict) else None
-                keyset_id = o.get("id") if isinstance(o, dict) else None
-                b_hex = o.get("B_") if isinstance(o, dict) else None
-                if amount is None or keyset_id is None or b_hex is None:
-                    continue
-                await conn.execute(
-                    f"""
-                        INSERT INTO {db.table_with_schema('promises')}
-                        (amount, id, b_, created, mint_quote, melt_quote, swap_id)
-                        VALUES (:amount, :id, :b_, :created, :mint_quote, :melt_quote, :swap_id)
-                    """,
-                    {
-                        "amount": int(amount),
-                        "id": keyset_id,
-                        "b_": b_hex,
-                        "created": db.to_timestamp(db.timestamp_now_str()),
-                        "mint_quote": None,
-                        "melt_quote": row["quote"],
-                        "swap_id": None,
-                    },
-                )
 
         # recreate the balance views
         await create_balance_views(db, conn)
