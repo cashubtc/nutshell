@@ -5,7 +5,7 @@ import pytest
 from cashu.core.base import BlindedMessage, Proof, Unit
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.helpers import calculate_number_of_blank_outputs
-from cashu.core.models import PostMintQuoteRequest
+from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest
@@ -243,7 +243,14 @@ async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Le
     from cashu.core.crypto.b_dhke import step1_alice
     from cashu.core.split import amount_split
 
-    melt_id = "test-change-promises-signs-and-deletes-001"
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote_resp = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=64, unit="sat")
+    )
+    melt_quote_resp = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote_resp.request, unit="sat")
+    )
+    melt_id = melt_quote_resp.quote
     fee_provided = 2_000
     fee_paid = 100
     overpaid_fee = fee_provided - fee_paid
@@ -304,7 +311,14 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
     from cashu.core.base import BlindedMessage
     from cashu.core.crypto.b_dhke import step1_alice
 
-    melt_id = "test-change-promises-zero-fee-002"
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote_resp = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=64, unit="sat")
+    )
+    melt_quote_resp = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote_resp.request, unit="sat")
+    )
+    melt_id = melt_quote_resp.quote
     fee_provided = 1_000
     fee_paid = 1_000  # no overpaid fee
     n_blank = 4

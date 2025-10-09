@@ -399,13 +399,18 @@ async def test_store_and_sign_blinded_message(ledger: Ledger):
 
 
 @pytest.mark.asyncio
-async def test_get_blinded_messages_by_melt_id(ledger: Ledger):
+async def test_get_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger):
     # Arrange
     from cashu.core.crypto.b_dhke import step1_alice
 
     amount = 8
     keyset_id = ledger.keyset.id
-    melt_id = "test-melt-id-001"
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote = await wallet.request_mint(64)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+    )
+    melt_id = melt_quote.quote
 
     # Create two blinded messages
     B1, _ = step1_alice("get_by_melt_id_1")
@@ -413,20 +418,13 @@ async def test_get_blinded_messages_by_melt_id(ledger: Ledger):
     b1_hex = B1.serialize().hex()
     b2_hex = B2.serialize().hex()
 
-    # Persist as unsigned messages
+    # Persist as unsigned messages with proper melt_id FK
     await ledger.crud.store_blinded_message(
         db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
     )
     await ledger.crud.store_blinded_message(
         db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id, melt_id=melt_id
     )
-
-    # If store_blinded_message didn't persist melt_id, patch it directly so we can validate the read-path.
-    async with ledger.db.connect() as conn:
-        await conn.execute(
-            f"UPDATE {ledger.db.table_with_schema('promises')} SET mint_quote = :melt_id WHERE b_ IN (:b1, :b2)",
-            {"melt_id": melt_id, "b1": b1_hex, "b2": b2_hex},
-        )
 
     # Act
     rows = await ledger.crud.get_blinded_messages_melt_id(db=ledger.db, melt_id=melt_id)
