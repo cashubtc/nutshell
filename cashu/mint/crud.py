@@ -197,6 +197,15 @@ class LedgerCrud(ABC):
     ) -> List[BlindedMessage]: ...
 
     @abstractmethod
+    async def get_blind_signatures_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedSignature]: ...
+
+    @abstractmethod
     async def get_promise(
         self,
         *,
@@ -362,6 +371,22 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return [BlindedMessage.from_row(r) for r in rows] if rows else []
 
+    async def get_blind_signatures_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedSignature]:
+        rows = await (conn or db).fetchall(
+            f"""
+                SELECT * from {db.table_with_schema('promises')}
+                WHERE melt_quote = :melt_id AND c_ IS NOT NULL
+                """,
+            {"melt_id": melt_id},
+        )
+        return [BlindedSignature.from_row(r) for r in rows] if rows else []
+
     async def delete_blinded_messages_melt_id(
         self,
         *,
@@ -427,7 +452,7 @@ class LedgerCrudSqlite(LedgerCrud):
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ = :b_
+            WHERE b_ = :b_ AND c_ IS NOT NULL
             """,
             {"b_": str(b_)},
         )
@@ -443,7 +468,7 @@ class LedgerCrudSqlite(LedgerCrud):
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ IN ({','.join([f":b_{i}" for i in range(len(b_s))])})
+            WHERE b_ IN ({','.join([f":b_{i}" for i in range(len(b_s))])}) AND c_ IS NOT NULL
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
@@ -671,8 +696,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, change, expiry)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :change, :expiry)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, expiry)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :expiry)
             """,
             {
                 "quote": quote.quote,
@@ -692,7 +717,6 @@ class LedgerCrudSqlite(LedgerCrud):
                 ),
                 "fee_paid": quote.fee_paid,
                 "proof": quote.payment_preimage,
-                "change": json.dumps(quote.change) if quote.change else None,
                 "expiry": db.to_timestamp(
                     db.timestamp_from_seconds(quote.expiry) or ""
                 ),
@@ -729,6 +753,13 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             values,
         )
+
+        if row:
+            change = await self.get_blind_signatures_melt_id(
+                db=db, melt_id=row["quote"], conn=conn
+            )
+            row["change"] = change
+
         return MeltQuote.from_row(row) if row else None  # type: ignore
 
     async def get_melt_quote_by_request(
@@ -756,7 +787,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, change = :change, checking_id = :checking_id WHERE quote = :quote
+            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id WHERE quote = :quote
             """,
             {
                 "state": quote.state.value,
@@ -765,11 +796,6 @@ class LedgerCrudSqlite(LedgerCrud):
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 ),
                 "proof": quote.payment_preimage,
-                "change": (
-                    json.dumps([s.dict() for s in quote.change])
-                    if quote.change
-                    else None
-                ),
                 "quote": quote.quote,
                 "checking_id": quote.checking_id,
             },
