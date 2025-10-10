@@ -239,7 +239,7 @@ async def test_secret_derivation_version_routing():
     """Test that the main derivation method routes to correct sub-methods."""
     secrets = WalletSecrets()
     secrets.seed = b"test_seed"    
-    secrets.bip32 = BIP32.from_seed(self.seed)
+    secrets.bip32 = BIP32.from_seed(secrets.seed)
     
     # Test v1 routing
     secrets.keyset_id = LEGACY_V1_KEYSET_ID

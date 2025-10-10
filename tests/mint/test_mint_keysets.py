@@ -9,10 +9,6 @@ from cashu.core.crypto.keys import (
     is_keyset_id_v2,
 )
 from cashu.core.crypto.secp import PublicKey
-
-V1_KEYSET_ID = "009a1f293253e41e"  # Legacy v1 keyset ID per NUT-13
-V2_KEYSET_ID = "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1"
-
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.mint.test_mint_init import (
@@ -21,6 +17,9 @@ from tests.mint.test_mint_init import (
     ENCRYPTED_SEED,
     SEED,
 )
+
+V1_KEYSET_ID = "009a1f293253e41e"
+V2_KEYSET_ID = "016d1ce32977b2d8a340479336a77dc18db8da3e782c5083a6f33d70bc158056d1"
 
 
 async def assert_err(f, msg):
@@ -244,8 +243,8 @@ async def test_keyset_v2_deterministic():
     
     # With expiry
     final_expiry = 1896187313
-    id1_exp = keyset1.id
-    id2_exp = keyset2.id
+    id1_exp = derive_keyset_id_v2(keyset1.public_keys, keyset1.unit, final_expiry)
+    id2_exp = derive_keyset_id_v2(keyset2.public_keys, keyset2.unit, final_expiry)
     
     assert id1_exp == id2_exp, "Same inputs with expiry should produce same v2 keyset ID"
 
