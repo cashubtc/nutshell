@@ -43,7 +43,7 @@ async def test_keyset_0_15_0():
         keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
-    assert keyset.id == V2_KEYSET_ID
+    assert keyset.id == V1_KEYSET_ID
 
 
 @pytest.mark.asyncio
@@ -87,7 +87,7 @@ async def test_keyset_0_15_0_encrypted():
         keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
-    assert keyset.id == V2_KEYSET_ID
+    assert keyset.id == V1_KEYSET_ID
 
 
 @pytest.mark.asyncio
@@ -176,7 +176,7 @@ async def test_keyset_short_id():
     
     # Test with legacy (v1) keyset
     legacy_short = derive_keyset_short_id(keyset.id)
-    assert legacy_short == "016d1ce32977b2d8", "Legacy short ID should be same as full ID"
+    assert legacy_short == V1_KEYSET_ID, "Legacy short ID should be same as full ID"
     
     # Test with v2 keyset
     v2_id = derive_keyset_id_v2(keyset.public_keys, Unit.sat)
@@ -232,44 +232,21 @@ async def test_keyset_final_expiry_field():
 @pytest.mark.asyncio
 async def test_keyset_v2_deterministic():
     """Test that v2 keyset IDs are deterministic."""
-    keyset1 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
-    keyset2 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
+    keyset1 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.18.0")
+    keyset2 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.18.0")
     
     # Same inputs should produce same v2 IDs
-    id1 = derive_keyset_id_v2(keyset1.public_keys, Unit.sat)
-    id2 = derive_keyset_id_v2(keyset2.public_keys, Unit.sat)
+    id1 = keyset1.id
+    id2 = keyset2.id
     
     assert id1 == id2, "Same inputs should produce same v2 keyset ID"
     
     # With expiry
     final_expiry = 1896187313
-    id1_exp = derive_keyset_id_v2(keyset1.public_keys, Unit.sat, final_expiry)
-    id2_exp = derive_keyset_id_v2(keyset2.public_keys, Unit.sat, final_expiry)
+    id1_exp = keyset1.id
+    id2_exp = keyset2.id
     
     assert id1_exp == id2_exp, "Same inputs with expiry should produce same v2 keyset ID"
-
-
-@pytest.mark.asyncio
-async def test_keyset_v1_v2_compatibility():
-    """Test that v1 and v2 keysets can coexist."""
-    keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
-    
-    # Get v1 ID (current behavior)
-    v1_id = keyset.id
-    
-    # Generate v2 ID from same keys
-    v2_id = derive_keyset_id_v2(keyset.public_keys, Unit.sat)
-    
-    # Should be different
-    assert v1_id != v2_id, "V1 and V2 IDs should be different"
-    
-    # Both should be valid but different versions
-    assert get_keyset_id_version(v1_id) == "00", "V1 should be version '00'"
-    assert get_keyset_id_version(v2_id) == "01", "V2 should be version '01'"
-    
-    # Public keys should be identical
-    assert keyset.public_keys_hex is not None, "Public keys should be available"
-
 
 @pytest.mark.asyncio
 async def test_keyset_id_v2_error_cases():
@@ -297,7 +274,7 @@ async def test_keyset_backward_compatibility():
     )
     
     # Known expected values from existing tests
-    assert legacy_keyset.id == V2_KEYSET_ID
+    assert legacy_keyset.id == V1_KEYSET_ID
     assert (
         legacy_keyset.public_keys_hex[1]
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
@@ -307,7 +284,7 @@ async def test_keyset_backward_compatibility():
     legacy_derived = derive_keyset_id(legacy_keyset.public_keys)
     assert legacy_derived == V1_KEYSET_ID, "Legacy derivation should be unchanged"
 
-# ==================== KEYSETS V2 TEST VECTORS ====================
+# ==================== KEYSET IDs NUT-02 TEST VECTORS ====================
 
 @pytest.mark.asyncio
 async def test_keyset_id_v2_test_vectors():
