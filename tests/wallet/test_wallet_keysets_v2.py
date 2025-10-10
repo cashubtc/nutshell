@@ -20,6 +20,8 @@ from cashu.core.crypto.keys import (
 )
 from cashu.wallet.keyset_manager import KeysetManager
 from cashu.wallet.secrets import WalletSecrets
+from cashu.core.base import Proof, WalletKeyset
+from cashu.wallet.proofs import WalletProofs
 
 # Reference mnemonic from NUT-13 test vectors
 MNEMONIC = "half depart obvious quality work element tank gorilla view sugar picture humble"
@@ -309,9 +311,6 @@ async def test_backward_compatibility():
 @pytest.mark.asyncio
 async def test_proof_short_id_expansion():
     """Test that short keyset IDs in proofs are expanded to full IDs."""
-    from cashu.core.base import Proof, WalletKeyset
-    from cashu.wallet.proofs import WalletProofs
-    from cashu.core.crypto.secp import PublicKey
     
     # Create a mock WalletProofs instance
     class MockWallet(WalletProofs):

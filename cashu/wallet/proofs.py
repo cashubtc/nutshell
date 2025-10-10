@@ -82,7 +82,6 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         Args:
             proofs (List[Proof]): List of proofs whose keyset IDs may need expansion
         """
-        from cashu.core.crypto.keys import is_keyset_id_v2
         from cashu.wallet.keyset_manager import KeysetManager
         
         manager = KeysetManager()

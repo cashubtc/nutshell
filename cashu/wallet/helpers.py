@@ -42,7 +42,14 @@ async def redeem_TokenV3(wallet: Wallet, token: TokenV3) -> Wallet:
     """
     if not token.unit:
         # load unit from wallet keyset db
-        keysets = await get_keysets(id=token.token[0].proofs[0].id, db=wallet.db)
+        # Note: if the keyset ID is a v2 short ID, we might not find it in the db
+        # In that case, we'll just skip setting the unit here and let it be set later
+        proof_keyset_id = token.token[0].proofs[0].id
+        keysets = await get_keysets(id=proof_keyset_id, db=wallet.db)
+        if not keysets and proof_keyset_id.startswith("01") and len(proof_keyset_id) == 16:
+            # This might be a v2 short ID, try to find a matching full ID
+            all_keysets = await get_keysets(db=wallet.db)
+            keysets = [k for k in all_keysets if k.id.startswith(proof_keyset_id)]
         if keysets:
             token.unit = keysets[0].unit.name
 
@@ -76,10 +83,14 @@ async def redeem_TokenV4(wallet: Wallet, token: TokenV4) -> Wallet:
     """
     await wallet.load_mint()
     
-    # Expand v2 short keyset IDs to full IDs
-    await wallet._expand_short_keyset_ids(token.proofs)
+    # Get proofs from token (these will have short keyset IDs)
+    proofs = token.proofs
     
-    proofs_to_keep, _ = await wallet.redeem(token.proofs)
+    # Expand v2 short keyset IDs to full IDs in-place
+    await wallet._expand_short_keyset_ids(proofs)
+    
+    # Use the expanded proofs for redemption
+    proofs_to_keep, _ = await wallet.redeem(proofs)
     print(f"Received {wallet.unit.str(sum_proofs(proofs_to_keep))}")
     return wallet
 

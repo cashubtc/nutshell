@@ -973,6 +973,7 @@ class MintKeyset:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
             else:
+                assert self.public_keys is not None
                 self.id = derive_keyset_id(self.public_keys)
                 logger.info(f"Generated keyset v1 ID: {self.id}")
         else:
@@ -986,6 +987,7 @@ class MintKeyset:
                 # If loading from DB, preserve existing ID
                 self.id = id_in_db
             else:
+                assert self.public_keys is not None
                 self.id = derive_keyset_id_v2(self.public_keys, self.unit, self.final_expiry)
                 logger.info(f"Generated keyset v2 ID: {self.id}")
 
