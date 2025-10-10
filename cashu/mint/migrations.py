@@ -968,3 +968,35 @@ async def m027_add_balance_to_keysets_and_log_table(db: Database):
                 );
             """
         )
+
+async def m028_add_fee_tracking_to_proofs_used(db: Database):
+    """
+    Add fee tracking to proofs_used table to distinguish fee proofs from regular proofs.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+            ALTER TABLE {db.table_with_schema('proofs_used')}
+            ADD COLUMN is_fee BOOLEAN NOT NULL DEFAULT FALSE
+            """
+        )
+        await conn.execute(
+            f"""
+            ALTER TABLE {db.table_with_schema('proofs_used')}
+            ADD COLUMN fee_type TEXT
+            """
+        )
+        await conn.execute(
+            f"""
+            ALTER TABLE {db.table_with_schema('proofs_used')}
+            ADD COLUMN fee_amount INTEGER DEFAULT 0
+            """
+        )
+        
+        # Create index for efficient fee queries
+        await conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS proofs_used_fee_idx 
+            ON {db.table_with_schema('proofs_used')} (is_fee, fee_type)
+            """
+        )
