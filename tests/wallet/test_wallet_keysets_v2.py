@@ -86,7 +86,7 @@ async def test_keyset_manager_short_id_mapping():
     expected_short_id = derive_keyset_short_id(full_id_v2)
     
     # Test getting short ID
-    short_id = await manager.get_short_keyset_id(full_id_v2)
+    short_id = manager.get_short_keyset_id(full_id_v2)
     assert short_id == expected_short_id
     assert len(short_id) == 16  # 8 bytes = 16 hex chars
     
@@ -95,7 +95,7 @@ async def test_keyset_manager_short_id_mapping():
     assert manager._short_to_full_cache[short_id] == full_id_v2
     
     # Test getting full ID from short ID
-    retrieved_full_id = await manager.get_full_keyset_id(short_id)
+    retrieved_full_id = manager.get_full_keyset_id(short_id)
     assert retrieved_full_id == full_id_v2
 
 
@@ -108,16 +108,18 @@ async def test_keyset_manager_v1_compatibility():
     v1_keyset_id = LEGACY_V1_KEYSET_ID
     
     # For v1 keysets, should return the original ID
-    short_id = await manager.get_short_keyset_id(v1_keyset_id)
+    short_id = manager.get_short_keyset_id(v1_keyset_id)
     assert short_id == v1_keyset_id  # No change for v1
 
 
 @pytest.mark.asyncio
 async def test_token_v4_short_keyset_expansion():
     """Test TokenV4 short keyset ID expansion."""
-    # Create a TokenV4 with short keyset ID
-    short_keyset_id = LEGACY_V1_KEYSET_ID
+    # Create v2 full and short keyset IDs
     full_keyset_id = V2_KEYSET_ID
+    short_keyset_id = derive_keyset_short_id(full_keyset_id)
+    assert len(short_keyset_id) == 16, "Short ID should be 16 chars"
+    assert short_keyset_id.startswith("01"), "Short ID should start with version 01"
     
     # Create mock token with short keyset ID
     token = TokenV4(
@@ -137,7 +139,7 @@ async def test_token_v4_short_keyset_expansion():
         ]
     )
     
-    # Mock wallet with keyset manager (no tokens_v2 helper in this project)
+    # Mock wallet with keyset manager
     manager = KeysetManager()
     manager._short_to_full_cache = {short_keyset_id: full_keyset_id}
 
@@ -146,7 +148,7 @@ async def test_token_v4_short_keyset_expansion():
         for tkn in tok.t:
             keyset_hex = tkn.i.hex()
             if len(keyset_hex) == 16 and keyset_hex.startswith("01"):
-                full = await manager.get_full_keyset_id(keyset_hex)
+                full = manager.get_full_keyset_id(keyset_hex)
                 new_tokens.append(TokenV4Token(i=bytes.fromhex(full), p=tkn.p))
             else:
                 new_tokens.append(tkn)
@@ -155,7 +157,7 @@ async def test_token_v4_short_keyset_expansion():
     # Test expansion
     expanded_token = await expand_token_keysets_local(token)
     
-    # Should have expanded the keyset ID
+    # Should have expanded the keyset ID from short to full
     assert expanded_token.t[0].i.hex() == full_keyset_id
 
 
@@ -166,8 +168,8 @@ async def test_token_serialization_with_short_ids():
     from cashu.core.crypto.secp import PublicKey
     from cashu.wallet.proofs import WalletProofs
 
-    # Mock keyset data
-    full_keyset_id = "V2_KEYSET_ID"
+    # Mock keyset data - use the actual constant
+    full_keyset_id = V2_KEYSET_ID
     short_keyset_id = derive_keyset_short_id(full_keyset_id)
 
     # Create proofs with v2 keyset
@@ -198,7 +200,7 @@ def test_nut13_spec_compliance():
     """Test that HMAC-SHA256 derivation follows NUT-13 specification exactly with BIP-39 seed."""
     mnemo = Mnemonic("english")
     seed = mnemo.to_seed(MNEMONIC)
-    keyset_id = "V2_KEYSET_ID"
+    keyset_id = V2_KEYSET_ID  # Use the actual constant instead of string literal
     counter = 1
 
     keyset_id_bytes = bytes.fromhex(keyset_id)
@@ -273,10 +275,10 @@ async def test_short_keyset_id_round_trip():
     manager._full_to_short_cache = {full_id: short_id}
     
     # Test both directions
-    retrieved_short = await manager.get_short_keyset_id(full_id)
+    retrieved_short = manager.get_short_keyset_id(full_id)
     assert retrieved_short == short_id
     
-    retrieved_full = await manager.get_full_keyset_id(short_id)
+    retrieved_full = manager.get_full_keyset_id(short_id)
     assert retrieved_full == full_id
 
 
@@ -300,8 +302,62 @@ async def test_backward_compatibility():
     
     # Short ID should be the same as full ID for v1
     manager = KeysetManager()
-    short_id = await manager.get_short_keyset_id(v1_keyset_id)
+    short_id = manager.get_short_keyset_id(v1_keyset_id)
     assert short_id == v1_keyset_id
+
+
+@pytest.mark.asyncio
+async def test_proof_short_id_expansion():
+    """Test that short keyset IDs in proofs are expanded to full IDs."""
+    from cashu.core.base import Proof, WalletKeyset
+    from cashu.wallet.proofs import WalletProofs
+    from cashu.core.crypto.secp import PublicKey
+    
+    # Create a mock WalletProofs instance
+    class MockWallet(WalletProofs):
+        def __init__(self):
+            self.keysets = {}
+    
+    wallet = MockWallet()
+    
+    # Create a v2 full keyset ID and its short version
+    full_keyset_id = V2_KEYSET_ID
+    short_keyset_id = derive_keyset_short_id(full_keyset_id)
+    assert len(short_keyset_id) == 16, "Short ID should be 16 chars"
+    assert short_keyset_id == "016d1ce32977b2d8", "Short ID mismatch"
+    
+    # Mock a keyset in the wallet
+    mock_keyset = WalletKeyset(
+        id=full_keyset_id,
+        unit="sat",
+        public_keys={},
+        mint_url="https://mint.example.com"
+    )
+    wallet.keysets = {full_keyset_id: mock_keyset}
+    
+    # Create proofs with short keyset IDs
+    proofs = [
+        Proof(
+            id=short_keyset_id,
+            amount=64,
+            secret="test_secret_1",
+            C="abcd1234" * 8
+        ),
+        Proof(
+            id=short_keyset_id,
+            amount=32,
+            secret="test_secret_2",
+            C="efab5678" * 8
+        )
+    ]
+    
+    # Expand short IDs
+    await wallet._expand_short_keyset_ids(proofs)
+    
+    # All proof IDs should now be expanded to full IDs
+    for proof in proofs:
+        assert proof.id == full_keyset_id, f"Expected full ID {full_keyset_id}, got {proof.id}"
+        assert len(proof.id) == 66, "Expanded ID should be 66 chars"
 
 
 @pytest.mark.asyncio

@@ -72,6 +72,36 @@ class WalletProofs(SupportsDb, SupportsKeysets):
         keysets: List[str] = [proof.id for proof in proofs]
         return keysets
 
+    async def _expand_short_keyset_ids(self, proofs: List[Proof]) -> None:
+        """
+        Expands v2 short keyset IDs (16 chars) to full keyset IDs (66 chars) in-place.
+        
+        This is necessary when receiving TokenV3 tokens that may contain v2 short IDs.
+        The wallet must expand these to full IDs before sending them to the mint.
+        
+        Args:
+            proofs (List[Proof]): List of proofs whose keyset IDs may need expansion
+        """
+        from cashu.core.crypto.keys import is_keyset_id_v2
+        from cashu.wallet.keyset_manager import KeysetManager
+        
+        manager = KeysetManager()
+        
+        # Build a dictionary of all available keysets for this mint
+        keysets_dict = {k.id: k for k in self.keysets.values()}
+        
+        for proof in proofs:
+            # Check if this is a v2 short ID (16 chars starting with '01')
+            if proof.id.startswith("01") and len(proof.id) == 16:
+                # Expand to full ID
+                try:
+                    full_id = manager.get_full_keyset_id(proof.id, keysets_dict)
+                    logger.debug(f"Expanded short keyset ID {proof.id} -> {full_id}")
+                    proof.id = full_id
+                except (KeyError, ValueError) as e:
+                    logger.warning(f"Could not expand short keyset ID {proof.id}: {e}")
+                    # Leave the ID as-is and let downstream handling deal with it
+
     async def _get_keyset_urls(self, keysets: List[str]) -> Dict[str, List[str]]:
         """Retrieves the mint URLs for a list of keyset id's from the wallet's database.
         Returns a dictionary from URL to keyset ID
