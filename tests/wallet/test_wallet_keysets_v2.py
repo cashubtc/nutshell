@@ -12,16 +12,15 @@ import pytest
 from bip32 import BIP32
 from mnemonic import Mnemonic
 
-from cashu.core.base import TokenV4, TokenV4Proof, TokenV4Token
+from cashu.core.base import Proof, TokenV4, TokenV4Proof, TokenV4Token, WalletKeyset
 from cashu.core.crypto.keys import (
     derive_keyset_short_id,
     get_keyset_id_version,
     is_keyset_id_v2,
 )
 from cashu.wallet.keyset_manager import KeysetManager
-from cashu.wallet.secrets import WalletSecrets
-from cashu.core.base import Proof, WalletKeyset
 from cashu.wallet.proofs import WalletProofs
+from cashu.wallet.secrets import WalletSecrets
 
 # Reference mnemonic from NUT-13 test vectors
 MNEMONIC = "half depart obvious quality work element tank gorilla view sugar picture humble"
