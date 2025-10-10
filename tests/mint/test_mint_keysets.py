@@ -191,16 +191,16 @@ async def test_keyset_short_id():
 @pytest.mark.asyncio
 async def test_keyset_version_detection():
     """Test keyset version detection utilities."""
-    # Legacy keyset
-    legacy_keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
+    # V1 keyset (version 0.15 produces v1 IDs)
+    v1_keyset = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.15.0")
     
-    assert get_keyset_id_version(legacy_keyset.id) == "01", "Legacy should be version '01'"
-    assert is_keyset_id_v2(legacy_keyset.id), "Legacy should be detected as v2"
+    assert get_keyset_id_version(v1_keyset.id) == "00", "V1 keyset should be version '00'"
+    assert not is_keyset_id_v2(v1_keyset.id), "V1 should NOT be detected as v2"
     
-    # V2 keyset
-    v2_id = derive_keyset_id_v2(legacy_keyset.public_keys, Unit.sat)
+    # V2 keyset ID derived manually
+    v2_id = derive_keyset_id_v2(v1_keyset.public_keys, Unit.sat)
     
-    assert get_keyset_id_version(v2_id) == "01", "V2 should be version '01'"
+    assert get_keyset_id_version(v2_id) == "01", "V2 ID should be version '01'"
     assert is_keyset_id_v2(v2_id), "V2 should be detected as v2"
 
 
