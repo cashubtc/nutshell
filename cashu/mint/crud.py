@@ -56,6 +56,9 @@ class LedgerCrud(ABC):
         db: Database,
         proof: Proof,
         quote_id: Optional[str] = None,
+        is_fee: bool = False,
+        fee_type: Optional[str] = None,
+        fee_amount: Optional[int] = None,
         conn: Optional[Connection] = None,
     ) -> None: ...
 
@@ -352,13 +355,16 @@ class LedgerCrudSqlite(LedgerCrud):
         db: Database,
         proof: Proof,
         quote_id: Optional[str] = None,
+        is_fee: bool = False,
+        fee_type: Optional[str] = None,
+        fee_amount: Optional[int] = None,
         conn: Optional[Connection] = None,
     ) -> None:
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('proofs_used')}
-            (amount, c, secret, y, id, witness, created, melt_quote)
-            VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote)
+            (amount, c, secret, y, id, witness, created, melt_quote, is_fee, fee_type, fee_amount)
+            VALUES (:amount, :c, :secret, :y, :id, :witness, :created, :melt_quote, :is_fee, :fee_type, :fee_amount)
             """,
             {
                 "amount": proof.amount,
@@ -369,6 +375,9 @@ class LedgerCrudSqlite(LedgerCrud):
                 "witness": proof.witness,
                 "created": db.to_timestamp(db.timestamp_now_str()),
                 "melt_quote": quote_id,
+                "is_fee": is_fee,
+                "fee_type": fee_type,
+                "fee_amount": fee_amount or 0,
             },
         )
 

@@ -217,12 +217,19 @@ class Ledger(
         proofs: List[Proof],
         quote_id: Optional[str] = None,
         conn: Optional[Connection] = None,
+        is_fee: bool = False,
+        fee_type: Optional[str] = None,
+        fee_amount: Optional[int] = None,
     ) -> None:
         """Adds proofs to the set of spent proofs and stores them in the db.
 
         Args:
             proofs (List[Proof]): Proofs to add to known secret table.
+            quote_id (Optional[str]): Quote ID for fee tracking.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
+            is_fee (bool): Whether these proofs are used for fees.
+            fee_type (Optional[str]): Type of fee (e.g., "lightning").
+            fee_amount (Optional[int]): Actual fee amount paid.
         """
         # sum_proofs = sum([p.amount for p in proofs])
         fees_proofs = self.get_fees_for_proofs(proofs)
@@ -231,7 +238,7 @@ class Ledger(
             for p in proofs:
                 logger.trace(f"Invalidating proof {p.Y}")
                 await self.crud.invalidate_proof(
-                    proof=p, db=self.db, quote_id=quote_id, conn=conn
+                    proof=p, db=self.db, quote_id=quote_id, is_fee=is_fee, fee_type=fee_type, fee_amount=fee_amount, conn=conn
                 )
                 await self.crud.bump_keyset_balance(
                     keyset=self.keysets[p.id], amount=-p.amount, db=self.db, conn=conn
@@ -719,9 +726,42 @@ class Ledger(
                     quote_id=quote_id, db=self.db
                 )
                 async with self.db.get_connection() as conn:
-                    await self._invalidate_proofs(
-                        proofs=pending_proofs, quote_id=quote_id, conn=conn
-                    )
+                    total_provided = sum_proofs(pending_proofs)
+                    input_fees = self.get_fees_for_proofs(pending_proofs)
+                    fee_reserve_provided = total_provided - melt_quote.amount - input_fees
+
+                    #separate fee proofs from payment proofs
+                    regular_proofs = []
+                    fee_proofs = []
+                    current_amount = 0
+
+                    for proof in pending_proofs:
+                        if current_amount < melt_quote.amount:
+                            regular_proofs.append(proof)
+                            current_amount += proof.amount
+                        else:
+                            fee_proofs.append(proof)
+                    
+                    if regular_proofs:
+                        await self._invalidate_proofs(
+                            proofs=regular_proofs, 
+                            quote_id=quote_id, 
+                            conn=conn,
+                            is_fee=False,
+                            fee_type=None,
+                            fee_amount=None
+                        )
+                    
+                    if fee_proofs:
+                        await self._invalidate_proofs(
+                            proofs=fee_proofs, 
+                            quote_id=quote_id, 
+                            conn=conn,
+                            is_fee=True,
+                            fee_type="lightning",
+                            fee_amount=melt_quote.fee_paid
+                        )
+
                     await self.db_write._unset_proofs_pending(
                         pending_proofs, keysets=self.keysets, conn=conn
                     )
@@ -1001,7 +1041,51 @@ class Ledger(
                     return PostMeltQuoteResponse.from_melt_quote(melt_quote)
 
         # melt was successful (either internal or via backend), invalidate proofs
-        await self._invalidate_proofs(proofs=proofs, quote_id=melt_quote.quote)
+        total_provided = sum_proofs(proofs)
+        input_fees = self.get_fees_for_proofs(proofs)
+        
+        #identify which proofs are used for the payment or fees
+        regular_proofs = []
+        fee_proofs = []
+        current_amount = 0
+        target_payment_amount = melt_quote.amount - (melt_quote.fee_paid or 0)
+
+        for proof in proofs:
+            if current_amount < target_payment_amount:
+                regular_proofs.append(proof)
+                current_amount += proof.amount
+            else:
+                fee_proofs.append(proof)
+        
+        # If we need more proofs for fees, take from the largest regular proofs
+        remaining_fee = (melt_quote.fee_paid or 0) - sum(p.amount for p in fee_proofs)
+        if remaining_fee > 0 and regular_proofs:
+            # Move some proofs from regular to fee category
+            regular_proofs.sort(key=lambda p: p.amount, reverse=True)
+            for proof in regular_proofs[:]:
+                if remaining_fee <= 0:
+                    break
+                fee_proofs.append(proof)
+                regular_proofs.remove(proof)
+                remaining_fee -= proof.amount
+        
+        if regular_proofs:
+            await self._invalidate_proofs(
+                proofs=regular_proofs, 
+                quote_id=melt_quote.quote,
+                is_fee=False,
+                fee_type=None,
+                fee_amount=None
+            )
+        
+        if fee_proofs:
+            await self._invalidate_proofs(
+                proofs=fee_proofs, 
+                quote_id=melt_quote.quote,
+                is_fee=True,
+                fee_type="lightning",
+                fee_amount=melt_quote.fee_paid
+            )
         await self.db_write._unset_proofs_pending(proofs, keysets=self.keysets)
 
         # prepare change to compensate wallet for overpaid fees
@@ -1050,7 +1134,7 @@ class Ledger(
         )
         try:
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
-                await self._invalidate_proofs(proofs=proofs, conn=conn)
+                await self._invalidate_proofs(proofs=proofs, conn=conn, is_fee=False, fee_type=None, fee_amount=None)
                 promises = await self._generate_promises(outputs, keyset, conn)
         except Exception as e:
             logger.trace(f"swap failed: {e}")
