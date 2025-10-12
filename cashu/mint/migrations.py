@@ -968,11 +968,10 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
     Drop the change and the outputs columns from melt_quotes.
     """
 
-    async with db.connect() as conn:
-        # drop the balance views first
-        await drop_balance_views(db, conn)
-
-        # STEP 1: migrate stored melt outputs for pending quotes into promises
+    # migrate stored melt outputs for pending quotes into promises
+    async def migrate_stored_melt_outputs_for_pending_quotes(
+        db: Database, conn: Connection
+    ):
         rows = await conn.fetchall(
             f"""
                 SELECT quote, outputs FROM {db.table_with_schema('melt_quotes')}
@@ -1009,7 +1008,8 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
                     },
                 )
 
-        # STEP 2: remove obsolete columns outputs and change from melt_quotes
+    # remove obsolete columns outputs and change from melt_quotes
+    async def remove_obsolete_columns_from_melt_quotes(db: Database, conn: Connection):
         if conn.type == "SQLITE":
             # For SQLite, recreate table without the columns
             await conn.execute("PRAGMA foreign_keys=OFF;")
@@ -1058,39 +1058,70 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
                 f"ALTER TABLE {db.table_with_schema('melt_quotes')} DROP COLUMN IF EXISTS change"
             )
 
-        # STEP 3: recreate promises with c_ nullable
-        await conn.execute(
-            f"""
-                    CREATE TABLE IF NOT EXISTS {db.table_with_schema('promises_new')} (
-                        amount {db.big_int} NOT NULL,
-                        id TEXT,
-                        b_ TEXT NOT NULL,
-                        c_ TEXT,
-                        dleq_e TEXT,
-                        dleq_s TEXT,
-                        created TIMESTAMP,
-                        signed_at TIMESTAMP,
-                        mint_quote TEXT,
-                        melt_quote TEXT,
-                        swap_id TEXT,
+    # recreate promises table with columns mint_quote, melt_quote, swap_id and with c_ nullable
+    async def recreate_promises_table(db: Database, conn: Connection):
+        if conn.type == "SQLITE":
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+            await conn.execute(
+                f"""
+                        CREATE TABLE IF NOT EXISTS {db.table_with_schema('promises_new')} (
+                            amount {db.big_int} NOT NULL,
+                            id TEXT,
+                            b_ TEXT NOT NULL,
+                            c_ TEXT,
+                            dleq_e TEXT,
+                            dleq_s TEXT,
+                            created TIMESTAMP,
+                            signed_at TIMESTAMP,
+                            mint_quote TEXT,
+                            melt_quote TEXT,
+                            swap_id TEXT,
 
-                        FOREIGN KEY (mint_quote) REFERENCES {db.table_with_schema('mint_quotes')}(quote),
-                        FOREIGN KEY (melt_quote) REFERENCES {db.table_with_schema('melt_quotes')}(quote),
+                            FOREIGN KEY (mint_quote) REFERENCES {db.table_with_schema('mint_quotes')}(quote),
+                            FOREIGN KEY (melt_quote) REFERENCES {db.table_with_schema('melt_quotes')}(quote),
 
-                        UNIQUE (b_)
-                    );
-                """
-        )
+                            UNIQUE (b_)
+                        );
+                    """
+            )
 
-        await conn.execute(
-            f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created, mint_quote, swap_id) "
-            f"SELECT amount, id, b_, c_, dleq_e, dleq_s, created, mint_quote, swap_id FROM {db.table_with_schema('promises')}"
-        )
+            await conn.execute(
+                f"INSERT INTO {db.table_with_schema('promises_new')} (amount, id, b_, c_, dleq_e, dleq_s, created, mint_quote, swap_id) "
+                f"SELECT amount, id, b_, c_, dleq_e, dleq_s, created, mint_quote, swap_id FROM {db.table_with_schema('promises')}"
+            )
 
-        await conn.execute(f"DROP TABLE {db.table_with_schema('promises')}")
-        await conn.execute(
-            f"ALTER TABLE {db.table_with_schema('promises_new')} RENAME TO {db.table_with_schema('promises')}"
-        )
+            await conn.execute(f"DROP TABLE {db.table_with_schema('promises')}")
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises_new')} RENAME TO {db.table_with_schema('promises')}"
+            )
+            await conn.execute("PRAGMA foreign_keys=ON;")
+        else:
+            # add columns mint_quote, melt_quote, swap_id and make column c_ nullable
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN mint_quote TEXT"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN melt_quote TEXT"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN swap_id TEXT"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ALTER COLUMN c_ DROP NOT NULL"
+            )
+
+    async with db.connect() as conn:
+        # drop the balance views first
+        await drop_balance_views(db, conn)
+
+        # recreate promises table
+        await recreate_promises_table(db, conn)
+
+        # migrate stored melt outputs for pending quotes into promises
+        await migrate_stored_melt_outputs_for_pending_quotes(db, conn)
+
+        # remove obsolete columns from melt_quotes table
+        await remove_obsolete_columns_from_melt_quotes(db, conn)
 
         # recreate the balance views
         await create_balance_views(db, conn)

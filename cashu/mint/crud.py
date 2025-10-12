@@ -385,7 +385,7 @@ class LedgerCrudSqlite(LedgerCrud):
                 """,
             {"melt_id": melt_id},
         )
-        return [BlindedSignature.from_row(r) for r in rows] if rows else []
+        return [BlindedSignature.from_row(r) for r in rows] if rows else []  # type: ignore
 
     async def delete_blinded_messages_melt_id(
         self,
@@ -754,13 +754,13 @@ class LedgerCrudSqlite(LedgerCrud):
             values,
         )
 
+        change = None
         if row:
             change = await self.get_blind_signatures_melt_id(
                 db=db, melt_id=row["quote"], conn=conn
             )
-            row["change"] = change
 
-        return MeltQuote.from_row(row) if row else None  # type: ignore
+        return MeltQuote.from_row(row, change) if row else None  # type: ignore
 
     async def get_melt_quote_by_request(
         self,

@@ -304,7 +304,7 @@ class MeltQuote(LedgerEvent):
     mint: Optional[str] = None
 
     @classmethod
-    def from_row(cls, row: Row):
+    def from_row(cls, row: Row, change: Optional[List[BlindedSignature]] = None):
         try:
             created_time = int(row["created_time"]) if row["created_time"] else None
             paid_time = int(row["paid_time"]) if row["paid_time"] else None
@@ -317,11 +317,6 @@ class MeltQuote(LedgerEvent):
             expiry = int(row["expiry"].timestamp()) if row["expiry"] else None
 
         payment_preimage = row.get("payment_preimage") or row.get("proof")  # type: ignore
-
-        # parse change from row as json
-        change = None
-        if "change" in row.keys() and row["change"]:
-            change = json.loads(row["change"])
 
         outputs = None
         if "outputs" in row.keys() and row["outputs"]:
