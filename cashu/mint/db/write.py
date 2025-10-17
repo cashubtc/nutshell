@@ -204,18 +204,22 @@ class DbWriteHelper:
             quote (MeltQuote): Melt quote to set as pending.
         """
         quote_copy = quote.copy()
+        if not quote.checking_id:
+            raise TransactionError("Melt quote doesn't have checking ID.")
         async with self.db.get_connection(
             lock_table="melt_quotes",
-            lock_select_statement=f"quote='{quote.quote}'",
+            lock_select_statement=f"checking_id='{quote.checking_id}'",
         ) as conn:
-            # get melt quote from db and check if it is already pending
-            quote_db = await self.crud.get_melt_quote(
-                quote_id=quote.quote, db=self.db, conn=conn
+            # get all melt quotes with same checking_id from db and check if there is one already pending
+            quotes_db = await self.crud.get_melt_quotes_by_checking_id(
+                checking_id=quote.checking_id,
+                db=self.db,
+                conn=conn
             )
-            if not quote_db:
+            if len(quotes_db) == 0:
                 raise TransactionError("Melt quote not found.")
-            if quote_db.pending:
-                raise TransactionError("Melt quote already pending.")
+            if any([quote.state == MeltQuoteState.pending for quote in quotes_db]):
+                raise TransactionError("Melt quote already pending.")                
             # set the quote as pending
             quote_copy.state = MeltQuoteState.pending
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)

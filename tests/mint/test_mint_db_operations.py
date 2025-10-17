@@ -753,3 +753,55 @@ async def test_promises_fk_constraints_enforced(ledger: Ledger):
         )
 
     # Done. This test only checks FK enforcement paths.
+
+
+# Tests for unique pending melt quote checking_id - concurrency and migration
+@pytest.mark.asyncio
+async def test_concurrent_set_melt_quote_pending_same_checking_id(ledger: Ledger):
+    """Test that concurrent attempts to set quotes with same checking_id as pending are handled correctly."""
+    from cashu.core.base import MeltQuote, MeltQuoteState
+    
+    checking_id = "test_checking_id_concurrent"
+    
+    # Create two quotes with the same checking_id
+    quote1 = MeltQuote(
+        quote="quote_id_conc_1",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_conc_2",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+    )
+    
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+    
+    # Try to set both as pending concurrently
+    results = await asyncio.gather(
+        ledger.db_write._set_melt_quote_pending(quote=quote1),
+        ledger.db_write._set_melt_quote_pending(quote=quote2),
+        return_exceptions=True
+    )
+    
+    # One should succeed, one should fail
+    success_count = sum(1 for r in results if isinstance(r, MeltQuote))
+    error_count = sum(1 for r in results if isinstance(r, Exception))
+    
+    assert success_count == 1, "Exactly one quote should be set as pending"
+    assert error_count == 1, "Exactly one should fail"
+    
+    # The error should be about the quote already being pending
+    error = next(r for r in results if isinstance(r, Exception))
+    assert "Melt quote already pending" in str(error)
