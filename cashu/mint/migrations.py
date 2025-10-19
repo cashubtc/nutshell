@@ -1096,9 +1096,12 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
             )
             await conn.execute("PRAGMA foreign_keys=ON;")
         else:
-            # add columns melt_quote, swap_id and make column c_ nullable
+            # add columns melt_quote, signed_at and make column c_ nullable
             await conn.execute(
                 f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN melt_quote TEXT"
+            )
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD COLUMN signed_at TIMESTAMP"
             )
             await conn.execute(
                 f"ALTER TABLE {db.table_with_schema('promises')} ALTER COLUMN c_ DROP NOT NULL"
