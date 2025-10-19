@@ -1106,6 +1106,10 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
             await conn.execute(
                 f"ALTER TABLE {db.table_with_schema('promises')} ALTER COLUMN c_ DROP NOT NULL"
             )
+            # add foreign key constraint to melt_quote
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('promises')} ADD CONSTRAINT fk_promises_melt_quote FOREIGN KEY (melt_quote) REFERENCES {db.table_with_schema('melt_quotes')}(quote)"
+            )
 
     async with db.connect() as conn:
         # drop the balance views first
