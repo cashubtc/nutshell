@@ -199,6 +199,23 @@ MINT_REDIS_CACHE_URL=redis://localhost:6379
 ### NUT-21 Authentication with Keycloak
 Cashu supports clear and blind authentication as defined in [NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md) and [NUT-22](https://github.com/cashubtc/nuts/blob/main/22.md) to limit the use of a mint to a registered set of users. Clear authentication is supported via a OICD provider such as Keycloak. You can set up and run Keycloak instance using the docker compose file `docker/keycloak/docker-compose.yml` in this repository.
 
+### Migrate SQLite mint DB to Postgres
+Use the standalone tool at `cashu/mint/sqlite_to_postgres.py` to migrate a mint database from SQLite to Postgres.
+
+```bash
+# 1) optionally reset the target Postgres database (DROPS ALL DATA)
+psql -U <user> -h <host> -p <port> -d <database> -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL PRIVILEGES ON SCHEMA public TO <user>;"
+
+# 2) run migration (inside poetry env)
+poetry run python cashu/mint/sqlite_to_postgres.py \
+  --sqlite data/mint/mint.sqlite3 \
+  --postgres postgres://<user>:<pass>@<host>:<port>/<database> \
+  --batch-size 2000
+```
+
+- The tool aborts if the Postgres DB appears populated and prints the exact reset command with your connection details.
+- After copying, it verifies row counts and compares the `balance` view across both databases.
+
 # Running tests
 To run the tests in this repository, first install the dev dependencies with
 ```bash

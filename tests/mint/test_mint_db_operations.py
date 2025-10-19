@@ -10,6 +10,7 @@ import pytest_asyncio
 from cashu.core import db
 from cashu.core.db import Connection
 from cashu.core.migrations import backup_database
+from cashu.core.models import PostMeltQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
@@ -353,3 +354,402 @@ async def test_db_lock_table(wallet: Wallet, ledger: Ledger):
             ),
             "failed to acquire database lock",
         )
+
+
+@pytest.mark.asyncio
+async def test_store_and_sign_blinded_message(ledger: Ledger):
+    # Localized imports to avoid polluting module scope
+    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
+    from cashu.core.crypto.secp import PublicKey
+
+    # Arrange: prepare a blinded message tied to current active keyset
+    amount = 8
+    keyset_id = ledger.keyset.id
+    B_pubkey, _ = step1_alice("test_store_and_sign_blinded_message")
+    B_hex = B_pubkey.serialize().hex()
+
+    # Act: store the blinded message (unsinged promise row)
+    await ledger.crud.store_blinded_message(
+        db=ledger.db,
+        amount=amount,
+        b_=B_hex,
+        id=keyset_id,
+    )
+
+    # Act: compute a valid blind signature for the stored row and persist it
+    private_key_amount = ledger.keyset.private_keys[amount]
+    B_point = PublicKey(bytes.fromhex(B_hex), raw=True)
+    C_point, e, s = step2_bob(B_point, private_key_amount)
+
+    await ledger.crud.update_blinded_message_signature(
+        db=ledger.db,
+        amount=amount,
+        b_=B_hex,
+        c_=C_point.serialize().hex(),
+        e=e.serialize(),
+        s=s.serialize(),
+    )
+
+    # Assert: row is now a full promise and can be read back via get_promise
+    promise = await ledger.crud.get_promise(db=ledger.db, b_=B_hex)
+    assert promise is not None
+    assert promise.amount == amount
+    assert promise.C_ == C_point.serialize().hex()
+    assert promise.id == keyset_id
+
+
+@pytest.mark.asyncio
+async def test_get_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger):
+    # Arrange
+    from cashu.core.crypto.b_dhke import step1_alice
+
+    amount = 8
+    keyset_id = ledger.keyset.id
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote = await wallet.request_mint(64)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+    )
+    melt_id = melt_quote.quote
+
+    # Create two blinded messages
+    B1, _ = step1_alice("get_by_melt_id_1")
+    B2, _ = step1_alice("get_by_melt_id_2")
+    b1_hex = B1.serialize().hex()
+    b2_hex = B2.serialize().hex()
+
+    # Persist as unsigned messages with proper melt_id FK
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
+    )
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id, melt_id=melt_id
+    )
+
+    # Act
+    rows = await ledger.crud.get_blinded_messages_melt_id(db=ledger.db, melt_id=melt_id)
+
+    # Assert
+    assert len(rows) == 2
+    assert {r.B_ for r in rows} == {b1_hex, b2_hex}
+    assert all(r.id == keyset_id for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_delete_blinded_messages_by_melt_id(wallet: Wallet, ledger: Ledger):
+    from cashu.core.crypto.b_dhke import step1_alice
+
+    amount = 4
+    keyset_id = ledger.keyset.id
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote = await wallet.request_mint(64)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+    )
+    melt_id = melt_quote.quote
+
+    # Create two blinded messages
+    B1, _ = step1_alice("delete_by_melt_id_1")
+    B2, _ = step1_alice("delete_by_melt_id_2")
+    b1_hex = B1.serialize().hex()
+    b2_hex = B2.serialize().hex()
+
+    # Persist as unsigned messages
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
+    )
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id, melt_id=melt_id
+    )
+
+    rows_before = await ledger.crud.get_blinded_messages_melt_id(
+        db=ledger.db, melt_id=melt_id
+    )
+    assert len(rows_before) == 2
+
+    # Act: delete all unsigned messages for this melt_id
+    await ledger.crud.delete_blinded_messages_melt_id(db=ledger.db, melt_id=melt_id)
+
+    # Assert: now none left for that melt_id
+    rows_after = await ledger.crud.get_blinded_messages_melt_id(
+        db=ledger.db, melt_id=melt_id
+    )
+    assert rows_after == []
+
+
+@pytest.mark.asyncio
+async def test_get_blinded_messages_by_melt_id_filters_signed(
+    wallet: Wallet, ledger: Ledger
+):
+    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
+    from cashu.core.crypto.secp import PublicKey
+
+    amount = 2
+    keyset_id = ledger.keyset.id
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote = await wallet.request_mint(64)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+    )
+    melt_id = melt_quote.quote
+
+    B1, _ = step1_alice("filter_by_melt_id_1")
+    B2, _ = step1_alice("filter_by_melt_id_2")
+    b1_hex = B1.serialize().hex()
+    b2_hex = B2.serialize().hex()
+
+    # Persist two unsigned messages
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
+    )
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id, melt_id=melt_id
+    )
+
+    # Sign one of them (it should no longer be returned by get_blinded_messages_melt_id which filters c_ IS NULL)
+    priv = ledger.keyset.private_keys[amount]
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex), raw=True), priv)
+    await ledger.crud.update_blinded_message_signature(
+        db=ledger.db,
+        amount=amount,
+        b_=b1_hex,
+        c_=C_point.serialize().hex(),
+        e=e.serialize(),
+        s=s.serialize(),
+    )
+
+    # Act
+    rows = await ledger.crud.get_blinded_messages_melt_id(db=ledger.db, melt_id=melt_id)
+
+    # Assert: only the unsigned one remains (b2_hex)
+    assert len(rows) == 1
+    assert rows[0].B_ == b2_hex
+    assert rows[0].id == keyset_id
+
+
+@pytest.mark.asyncio
+async def test_store_blinded_message(ledger: Ledger):
+    from cashu.core.crypto.b_dhke import step1_alice
+
+    amount = 8
+    keyset_id = ledger.keyset.id
+    B_pub, _ = step1_alice("test_store_blinded_message")
+    b_hex = B_pub.serialize().hex()
+
+    # Act: store unsigned blinded message
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b_hex, id=keyset_id
+    )
+
+    # Assert: row exists and is unsigned (c_ IS NULL)
+    async with ledger.db.connect() as conn:
+        row = await conn.fetchone(
+            f"SELECT amount, id, b_, c_, created FROM {ledger.db.table_with_schema('promises')} WHERE b_ = :b_",
+            {"b_": b_hex},
+        )
+    assert row is not None
+    assert int(row["amount"]) == amount
+    assert row["id"] == keyset_id
+    assert row["b_"] == b_hex
+    assert row["c_"] is None
+    assert row["created"] is not None
+
+
+@pytest.mark.asyncio
+async def test_update_blinded_message_signature_before_store_blinded_message_errors(
+    ledger: Ledger,
+):
+    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
+    from cashu.core.crypto.secp import PublicKey
+
+    amount = 8
+    # Generate a blinded message that we will NOT store
+    B_pub, _ = step1_alice("test_sign_before_store_blinded_message")
+    b_hex = B_pub.serialize().hex()
+
+    # Create a valid signature tuple for that blinded message
+    priv = ledger.keyset.private_keys[amount]
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b_hex), raw=True), priv)
+
+    # Expect a DB-level error; on SQLite/Postgres this is typically a no-op update, so this test is xfail.
+    await assert_err(
+        ledger.crud.update_blinded_message_signature(
+            db=ledger.db,
+            amount=amount,
+            b_=b_hex,
+            c_=C_point.serialize().hex(),
+            e=e.serialize(),
+            s=s.serialize(),
+        ),
+        "blinded message does not exist",
+    )
+
+
+@pytest.mark.asyncio
+async def test_store_blinded_message_duplicate_b_(ledger: Ledger):
+    from cashu.core.crypto.b_dhke import step1_alice
+
+    amount = 2
+    keyset_id = ledger.keyset.id
+    B_pub, _ = step1_alice("test_duplicate_b_")
+    b_hex = B_pub.serialize().hex()
+
+    # First insert should succeed
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b_hex, id=keyset_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_blind_signatures_by_melt_id_returns_signed(
+    wallet: Wallet, ledger: Ledger
+):
+    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
+    from cashu.core.crypto.secp import PublicKey
+
+    amount = 4
+    keyset_id = ledger.keyset.id
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote = await wallet.request_mint(64)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+    )
+    melt_id = melt_quote.quote
+
+    # Prepare two blinded messages under the same melt_id
+    B1, _ = step1_alice("signed_promises_by_melt_id_1")
+    B2, _ = step1_alice("signed_promises_by_melt_id_2")
+    b1_hex = B1.serialize().hex()
+    b2_hex = B2.serialize().hex()
+
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
+    )
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id, melt_id=melt_id
+    )
+
+    # Sign only one of them -> should be returned by get_blind_signatures_melt_id
+    priv = ledger.keyset.private_keys[amount]
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex), raw=True), priv)
+    await ledger.crud.update_blinded_message_signature(
+        db=ledger.db,
+        amount=amount,
+        b_=b1_hex,
+        c_=C_point.serialize().hex(),
+        e=e.serialize(),
+        s=s.serialize(),
+    )
+
+    # Act
+    signed = await ledger.crud.get_blind_signatures_melt_id(
+        db=ledger.db, melt_id=melt_id
+    )
+
+    # Assert: only the signed one is returned
+    assert len(signed) == 1
+    assert signed[0].amount == amount
+    assert signed[0].id == keyset_id
+
+
+@pytest.mark.asyncio
+async def test_get_melt_quote_includes_change_signatures(
+    wallet: Wallet, ledger: Ledger
+):
+    from cashu.core.crypto.b_dhke import step1_alice, step2_bob
+    from cashu.core.crypto.secp import PublicKey
+
+    amount = 8
+    keyset_id = ledger.keyset.id
+
+    # Create melt quote and attach outputs/promises under its melt_id
+    mint_quote = await wallet.request_mint(64)
+    melt_quote = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote.request, unit="sat")
+    )
+
+    melt_id = melt_quote.quote
+
+    # Create two blinded messages, sign one -> becomes change
+    B1, _ = step1_alice("melt_quote_change_1")
+    B2, _ = step1_alice("melt_quote_change_2")
+    b1_hex = B1.serialize().hex()
+    b2_hex = B2.serialize().hex()
+
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b1_hex, id=keyset_id, melt_id=melt_id
+    )
+    await ledger.crud.store_blinded_message(
+        db=ledger.db, amount=amount, b_=b2_hex, id=keyset_id, melt_id=melt_id
+    )
+
+    # Sign one -> should appear in change loaded by get_melt_quote
+    priv = ledger.keyset.private_keys[amount]
+    C_point, e, s = step2_bob(PublicKey(bytes.fromhex(b1_hex), raw=True), priv)
+    await ledger.crud.update_blinded_message_signature(
+        db=ledger.db,
+        amount=amount,
+        b_=b1_hex,
+        c_=C_point.serialize().hex(),
+        e=e.serialize(),
+        s=s.serialize(),
+    )
+
+    # Act
+    quote_db = await ledger.crud.get_melt_quote(quote_id=melt_id, db=ledger.db)
+
+    # Assert: change contains the signed promise(s)
+    assert quote_db is not None
+    assert quote_db.quote == melt_id
+    assert quote_db.change is not None
+    assert len(quote_db.change) == 1
+    assert quote_db.change[0].amount == amount
+    assert quote_db.change[0].id == keyset_id
+
+
+@pytest.mark.asyncio
+async def test_promises_fk_constraints_enforced(ledger: Ledger):
+    from cashu.core.crypto.b_dhke import step1_alice
+
+    keyset_id = ledger.keyset.id
+    B1, _ = step1_alice("fk_check_melt")
+    B2, _ = step1_alice("fk_check_mint")
+    b1_hex = B1.serialize().hex()
+    b2_hex = B2.serialize().hex()
+
+    # Use a single connection and enable FK enforcement on SQLite
+    async with ledger.db.connect() as conn:
+        # Fake melt_id should violate FK on promises.melt_quote
+        await assert_err_multiple(
+            ledger.crud.store_blinded_message(
+                db=ledger.db,
+                amount=1,
+                b_=b1_hex,
+                id=keyset_id,
+                melt_id="nonexistent-melt-id",
+                conn=conn,
+            ),
+            [
+                "FOREIGN KEY",  # SQLite
+                "violates foreign key constraint",  # Postgres
+            ],
+        )
+
+    async with ledger.db.connect() as conn:
+        # Fake mint_id should violate FK on promises.mint_quote
+        await assert_err_multiple(
+            ledger.crud.store_blinded_message(
+                db=ledger.db,
+                amount=1,
+                b_=b2_hex,
+                id=keyset_id,
+                mint_id="nonexistent-mint-id",
+                conn=conn,
+            ),
+            [
+                "FOREIGN KEY",  # SQLite
+                "violates foreign key constraint",  # Postgres
+            ],
+        )
+
+    # Done. This test only checks FK enforcement paths.

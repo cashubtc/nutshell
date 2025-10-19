@@ -201,7 +201,8 @@ class AuthLedger(Ledger):
             )
 
         await self._verify_outputs(outputs)
-        promises = await self._generate_promises(outputs)
+        await self._store_blinded_messages(outputs)
+        promises = await self._sign_blinded_messages(outputs)
 
         # update last_access timestamp of the user
         await self.auth_crud.update_user(user_id=user.id, db=self.db)

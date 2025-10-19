@@ -250,6 +250,7 @@ class Ledger(
         fee_provided: int,
         fee_paid: int,
         outputs: Optional[List[BlindedMessage]],
+        melt_id: Optional[str] = None,
         keyset: Optional[MintKeyset] = None,
     ) -> List[BlindedSignature]:
         """Generates a set of new promises (blinded signatures) from a set of blank outputs
@@ -305,7 +306,10 @@ class Ledger(
             outputs[i].amount = return_amounts_sorted[i]  # type: ignore
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionError("duplicate promises.")
-        return_promises = await self._generate_promises(outputs, keyset)
+        return_promises = await self._sign_blinded_messages(outputs)
+        # delete remaining unsigned blank outputs from db
+        if melt_id:
+            await self.crud.delete_blinded_messages_melt_id(melt_id=melt_id, db=self.db)
         return return_promises
 
     # ------- TRANSACTIONS -------
@@ -491,8 +495,8 @@ class Ledger(
                 raise TransactionError("quote expired")
             if not self._verify_mint_quote_witness(quote, outputs, signature):
                 raise QuoteSignatureInvalidError()
-
-            promises = await self._generate_promises(outputs)
+            await self._store_blinded_messages(outputs, mint_id=quote_id)
+            promises = await self._sign_blinded_messages(outputs)
         except Exception as e:
             await self.db_write._unset_mint_quote_pending(
                 quote_id=quote_id, state=previous_state
@@ -726,7 +730,10 @@ class Ledger(
                         pending_proofs, keysets=self.keysets, conn=conn
                     )
                 # change to compensate wallet for overpaid fees
-                if melt_quote.outputs:
+                melt_outputs = await self.crud.get_blinded_messages_melt_id(
+                    melt_id=quote_id, db=self.db
+                )
+                if melt_outputs:
                     total_provided = sum_proofs(pending_proofs)
                     input_fees = self.get_fees_for_proofs(pending_proofs)
                     fee_reserve_provided = (
@@ -735,8 +742,9 @@ class Ledger(
                     return_promises = await self._generate_change_promises(
                         fee_provided=fee_reserve_provided,
                         fee_paid=melt_quote.fee_paid,
-                        outputs=melt_quote.outputs,
-                        keyset=self.keysets[melt_quote.outputs[0].id],
+                        outputs=melt_outputs,
+                        melt_id=quote_id,
+                        keyset=self.keysets[melt_outputs[0].id],
                     )
                     melt_quote.change = return_promises
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
@@ -751,6 +759,9 @@ class Ledger(
                 )
                 await self.db_write._unset_proofs_pending(
                     pending_proofs, keysets=self.keysets
+                )
+                await self.crud.delete_blinded_messages_melt_id(
+                    melt_id=quote_id, db=self.db
                 )
 
         return melt_quote
@@ -873,8 +884,6 @@ class Ledger(
                 raise TransactionError(
                     f"output unit {outputs_unit.name} does not match quote unit {melt_quote.unit}"
                 )
-            # we don't need to set it here, _set_melt_quote_pending will set it in the db
-            melt_quote.outputs = outputs
 
         # verify SIG_ALL signatures
         message_to_sign = (
@@ -907,7 +916,9 @@ class Ledger(
             proofs, keysets=self.keysets, quote_id=melt_quote.quote
         )
         previous_state = melt_quote.state
-        melt_quote = await self.db_write._set_melt_quote_pending(melt_quote, outputs)
+        melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
+        if outputs:
+            await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
 
         # if the melt corresponds to an internal mint, mark both as paid
         melt_quote = await self.melt_mint_settle_internally(melt_quote, proofs)
@@ -966,6 +977,9 @@ class Ledger(
                             await self.db_write._unset_melt_quote_pending(
                                 quote=melt_quote, state=previous_state
                             )
+                            await self.crud.delete_blinded_messages_melt_id(
+                                melt_id=melt_quote.quote, db=self.db
+                            )
                             if status.error_message:
                                 logger.error(
                                     f"Status check error: {status.error_message}"
@@ -1011,6 +1025,7 @@ class Ledger(
                 fee_provided=fee_reserve_provided,
                 fee_paid=melt_quote.fee_paid,
                 outputs=outputs,
+                melt_id=melt_quote.quote,
                 keyset=self.keysets[outputs[0].id],
             )
 
@@ -1050,8 +1065,9 @@ class Ledger(
         )
         try:
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
+                await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
                 await self._invalidate_proofs(proofs=proofs, conn=conn)
-                promises = await self._generate_promises(outputs, keyset, conn)
+                promises = await self._sign_blinded_messages(outputs, conn)
         except Exception as e:
             logger.trace(f"swap failed: {e}")
             raise e
@@ -1081,10 +1097,47 @@ class Ledger(
 
     # ------- BLIND SIGNATURES -------
 
-    async def _generate_promises(
+    async def _store_blinded_messages(
         self,
         outputs: List[BlindedMessage],
         keyset: Optional[MintKeyset] = None,
+        mint_id: Optional[str] = None,
+        melt_id: Optional[str] = None,
+        swap_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        """Stores a blinded message in the database.
+
+        Args:
+            outputs (List[BlindedMessage]): Blinded messages to store.
+            keyset (Optional[MintKeyset], optional): Keyset to use. Uses default keyset if not given. Defaults to None.
+            conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
+        """
+        async with self.db.get_connection(conn) as conn:
+            for output in outputs:
+                keyset = keyset or self.keysets[output.id]
+                if output.id not in self.keysets:
+                    raise TransactionError(f"keyset {output.id} not found")
+                if output.id != keyset.id:
+                    raise TransactionError("keyset id does not match output id")
+                if not keyset.active:
+                    raise TransactionError("keyset is not active")
+                logger.trace(f"Storing blinded message with keyset {keyset.id}.")
+                await self.crud.store_blinded_message(
+                    id=keyset.id,
+                    amount=output.amount,
+                    b_=output.B_,
+                    mint_id=mint_id,
+                    melt_id=melt_id,
+                    swap_id=swap_id,
+                    db=self.db,
+                    conn=conn,
+                )
+                logger.trace(f"Stored blinded message for {output.amount}")
+
+    async def _sign_blinded_messages(
+        self,
+        outputs: List[BlindedMessage],
         conn: Optional[Connection] = None,
     ) -> list[BlindedSignature]:
         """Generates a promises (Blind signatures) for given amount and returns a pair (amount, C').
@@ -1107,9 +1160,9 @@ class Ledger(
         ] = []
         for output in outputs:
             B_ = PublicKey(bytes.fromhex(output.B_), raw=True)
-            keyset = keyset or self.keysets[output.id]
             if output.id not in self.keysets:
                 raise TransactionError(f"keyset {output.id} not found")
+            keyset = self.keysets[output.id]
             if output.id != keyset.id:
                 raise TransactionError("keyset id does not match output id")
             if not keyset.active:
@@ -1127,9 +1180,8 @@ class Ledger(
             for promise in promises:
                 keyset_id, B_, amount, C_, e, s = promise
                 logger.trace(f"crud: _generate_promise storing promise for {amount}")
-                await self.crud.store_promise(
+                await self.crud.update_blinded_message_signature(
                     amount=amount,
-                    id=keyset_id,
                     b_=B_.serialize().hex(),
                     c_=C_.serialize().hex(),
                     e=e.serialize(),

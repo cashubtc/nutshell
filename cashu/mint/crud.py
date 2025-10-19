@@ -6,6 +6,7 @@ from loguru import logger
 
 from ..core.base import (
     Amount,
+    BlindedMessage,
     BlindedSignature,
     MeltQuote,
     MintBalanceLogEntry,
@@ -151,18 +152,58 @@ class LedgerCrud(ABC):
     ) -> Tuple[Amount, Amount]: ...
 
     @abstractmethod
-    async def store_promise(
+    async def store_blinded_message(
+        self,
+        *,
+        db: Database,
+        amount: int,
+        b_: str,
+        id: str,
+        mint_id: Optional[str] = None,
+        melt_id: Optional[str] = None,
+        swap_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def delete_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None: ...
+
+    @abstractmethod
+    async def update_blinded_message_signature(
         self,
         *,
         db: Database,
         amount: int,
         b_: str,
         c_: str,
-        id: str,
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
     ) -> None: ...
+
+    @abstractmethod
+    async def get_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedMessage]: ...
+
+    @abstractmethod
+    async def get_blind_signatures_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedSignature]: ...
 
     @abstractmethod
     async def get_promise(
@@ -285,32 +326,119 @@ class LedgerCrudSqlite(LedgerCrud):
         LedgerCrud (ABC): Abstract base class for LedgerCrud.
     """
 
-    async def store_promise(
+    async def store_blinded_message(
+        self,
+        *,
+        db: Database,
+        amount: int,
+        b_: str,
+        id: str,
+        mint_id: Optional[str] = None,
+        melt_id: Optional[str] = None,
+        swap_id: Optional[str] = None,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        await (conn or db).execute(
+            f"""
+            INSERT INTO {db.table_with_schema('promises')}
+            (amount, b_, id, created, mint_quote, melt_quote, swap_id)
+            VALUES (:amount, :b_, :id, :created, :mint_quote, :melt_quote, :swap_id)
+            """,
+            {
+                "amount": amount,
+                "b_": b_,
+                "id": id,
+                "created": db.to_timestamp(db.timestamp_now_str()),
+                "mint_quote": mint_id,
+                "melt_quote": melt_id,
+                "swap_id": swap_id,
+            },
+        )
+
+    async def get_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedMessage]:
+        rows = await (conn or db).fetchall(
+            f"""
+            SELECT * from {db.table_with_schema('promises')}
+            WHERE melt_quote = :melt_id AND c_ IS NULL
+            """,
+            {"melt_id": melt_id},
+        )
+        return [BlindedMessage.from_row(r) for r in rows] if rows else []
+
+    async def get_blind_signatures_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> List[BlindedSignature]:
+        rows = await (conn or db).fetchall(
+            f"""
+                SELECT * from {db.table_with_schema('promises')}
+                WHERE melt_quote = :melt_id AND c_ IS NOT NULL
+                """,
+            {"melt_id": melt_id},
+        )
+        return [BlindedSignature.from_row(r) for r in rows] if rows else []  # type: ignore
+
+    async def delete_blinded_messages_melt_id(
+        self,
+        *,
+        db: Database,
+        melt_id: str,
+        conn: Optional[Connection] = None,
+    ) -> None:
+        """Deletes a blinded message (promise) that has not been signed yet (c_ is NULL) with the given quote ID."""
+        await (conn or db).execute(
+            f"""
+            DELETE FROM {db.table_with_schema('promises')}
+            WHERE melt_quote = :melt_id AND c_ IS NULL
+            """,
+            {
+                "melt_id": melt_id,
+            },
+        )
+
+    async def update_blinded_message_signature(
         self,
         *,
         db: Database,
         amount: int,
         b_: str,
         c_: str,
-        id: str,
         e: str = "",
         s: str = "",
         conn: Optional[Connection] = None,
     ) -> None:
+        existing = await (conn or db).fetchone(
+            f"""
+                SELECT * from {db.table_with_schema('promises')}
+                WHERE b_ = :b_
+                """,
+            {"b_": str(b_)},
+        )
+        if existing is None:
+            raise ValueError("blinded message does not exist")
+
         await (conn or db).execute(
             f"""
-            INSERT INTO {db.table_with_schema('promises')}
-            (amount, b_, c_, dleq_e, dleq_s, id, created)
-            VALUES (:amount, :b_, :c_, :dleq_e, :dleq_s, :id, :created)
+            UPDATE {db.table_with_schema('promises')}
+            SET amount = :amount, c_ = :c_, dleq_e = :dleq_e, dleq_s = :dleq_s, signed_at = :signed_at
+            WHERE b_ = :b_;
             """,
             {
-                "amount": amount,
                 "b_": b_,
+                "amount": amount,
                 "c_": c_,
                 "dleq_e": e,
                 "dleq_s": s,
-                "id": id,
-                "created": db.to_timestamp(db.timestamp_now_str()),
+                "signed_at": db.to_timestamp(db.timestamp_now_str()),
             },
         )
 
@@ -324,7 +452,7 @@ class LedgerCrudSqlite(LedgerCrud):
         row = await (conn or db).fetchone(
             f"""
             SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ = :b_
+            WHERE b_ = :b_ AND c_ IS NOT NULL
             """,
             {"b_": str(b_)},
         )
@@ -340,7 +468,7 @@ class LedgerCrudSqlite(LedgerCrud):
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ IN ({','.join([f":b_{i}" for i in range(len(b_s))])})
+            WHERE b_ IN ({','.join([f":b_{i}" for i in range(len(b_s))])}) AND c_ IS NOT NULL
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
@@ -568,8 +696,8 @@ class LedgerCrudSqlite(LedgerCrud):
         await (conn or db).execute(
             f"""
             INSERT INTO {db.table_with_schema('melt_quotes')}
-            (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, outputs, change, expiry)
-            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :outputs, :change, :expiry)
+            (quote, method, request, checking_id, unit, amount, fee_reserve, state, paid, created_time, paid_time, fee_paid, proof, expiry)
+            VALUES (:quote, :method, :request, :checking_id, :unit, :amount, :fee_reserve, :state, :paid, :created_time, :paid_time, :fee_paid, :proof, :expiry)
             """,
             {
                 "quote": quote.quote,
@@ -589,8 +717,6 @@ class LedgerCrudSqlite(LedgerCrud):
                 ),
                 "fee_paid": quote.fee_paid,
                 "proof": quote.payment_preimage,
-                "outputs": json.dumps(quote.outputs) if quote.outputs else None,
-                "change": json.dumps(quote.change) if quote.change else None,
                 "expiry": db.to_timestamp(
                     db.timestamp_from_seconds(quote.expiry) or ""
                 ),
@@ -627,7 +753,14 @@ class LedgerCrudSqlite(LedgerCrud):
             """,
             values,
         )
-        return MeltQuote.from_row(row) if row else None  # type: ignore
+
+        change = None
+        if row:
+            change = await self.get_blind_signatures_melt_id(
+                db=db, melt_id=row["quote"], conn=conn
+            )
+
+        return MeltQuote.from_row(row, change) if row else None  # type: ignore
 
     async def get_melt_quote_by_request(
         self,
@@ -654,7 +787,7 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> None:
         await (conn or db).execute(
             f"""
-            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, outputs = :outputs, change = :change, checking_id = :checking_id WHERE quote = :quote
+            UPDATE {db.table_with_schema('melt_quotes')} SET state = :state, fee_paid = :fee_paid, paid_time = :paid_time, proof = :proof, checking_id = :checking_id WHERE quote = :quote
             """,
             {
                 "state": quote.state.value,
@@ -663,16 +796,6 @@ class LedgerCrudSqlite(LedgerCrud):
                     db.timestamp_from_seconds(quote.paid_time) or ""
                 ),
                 "proof": quote.payment_preimage,
-                "outputs": (
-                    json.dumps([s.dict() for s in quote.outputs])
-                    if quote.outputs
-                    else None
-                ),
-                "change": (
-                    json.dumps([s.dict() for s in quote.change])
-                    if quote.change
-                    else None
-                ),
                 "quote": quote.quote,
                 "checking_id": quote.checking_id,
             },
