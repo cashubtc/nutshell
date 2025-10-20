@@ -3,13 +3,13 @@ from typing import List, Optional, Union
 
 from loguru import logger
 
-from ..core.nuts.nut14 import verify_htlc_spending_conditions
 from ..core.base import BlindedMessage, P2PKWitness, Proof
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
     TransactionError,
 )
 from ..core.htlc import HTLCSecret
+from ..core.nuts.nut14 import verify_htlc_spending_conditions
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
