@@ -163,7 +163,7 @@ class LedgerSpendingConditions:
         # HTLC
         if SecretKind(secret.kind) == SecretKind.HTLC:
             htlc_secret = HTLCSecret.from_secret(secret)
-            verify_htlc_spending_conditions(proof, proof.htlcpreimage)
+            verify_htlc_spending_conditions(proof)
             return self._verify_p2pk_sig_inputs(proof, htlc_secret)
 
         # no spending condition present

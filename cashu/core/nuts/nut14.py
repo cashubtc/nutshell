@@ -10,35 +10,29 @@ from ..secret import Secret, SecretKind
 
 def verify_htlc_spending_conditions(
     proof: Proof,
-    preimage: Optional[str] = None,
 ) -> bool:
     """
     Verifies an HTLC spending condition.
     Either the preimage is provided or the locktime has passed and a refund is requested.
     """
     secret = Secret.deserialize(proof.secret)
-    print(f"{secret = }")
     if not secret.kind or secret.kind != SecretKind.HTLC.value:
         raise TransactionError("not an HTLC secret.")
     htlc_secret = HTLCSecret.from_secret(secret)
-
-    # if a preimage is provided, the proof is spendable if the hash of the preimage
-    # matches the hash in the secret
-    if preimage:
-        # Add a length check for the preimage
-        if len(preimage) != 64:
-            raise TransactionError("HTLC preimage must be 64 characters hex.")
-        try:
-            if htlc_secret.data != sha256(bytes.fromhex(preimage)).hexdigest():
-                raise TransactionError("invalid preimage for HTLC.")
-            return True
-        except ValueError:
-            raise TransactionError("invalid preimage for HTLC: not a hex string.")
-
-    # if no preimage is provided, we check the locktime
+    # hash lock
+    if not proof.htlcpreimage:
+        raise TransactionError("no HTLC preimage provided")
+    # verify correct preimage (the hashlock) if the locktime hasn't passed
     now = time.time()
     if not htlc_secret.locktime or htlc_secret.locktime > now:
-        raise TransactionError("HTLC locktime has not passed yet.")
-
-    # locktime has passed.
+        try:
+            if len(proof.htlcpreimage) != 64:
+                raise TransactionError("HTLC preimage must be 64 characters hex.")
+            if not sha256(
+                bytes.fromhex(proof.htlcpreimage)
+            ).digest() == bytes.fromhex(htlc_secret.data):
+                raise TransactionError("HTLC preimage does not match.")
+        except ValueError as e:
+            raise TransactionError("invalid preimage for HTLC: not a hex string.")
     return True
+

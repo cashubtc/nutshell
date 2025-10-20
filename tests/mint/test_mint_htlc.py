@@ -17,7 +17,7 @@ def test_htlc():
     htlc_preimage = proof.htlcpreimage
     assert htlc_preimage
 
-    verify_htlc_spending_conditions(proof, preimage=htlc_preimage)
+    verify_htlc_spending_conditions(proof)
 
 def test_htlc_case_insensitive():
     proof = Proof.from_dict({
@@ -31,7 +31,7 @@ def test_htlc_case_insensitive():
     htlc_preimage = proof.htlcpreimage
     assert htlc_preimage
 
-    verify_htlc_spending_conditions(proof, preimage=htlc_preimage)
+    verify_htlc_spending_conditions(proof)
 
 def test_invalid_preimage():
     proof = Proof.from_dict({
@@ -46,10 +46,10 @@ def test_invalid_preimage():
     assert htlc_preimage
 
     try:
-        verify_htlc_spending_conditions(proof, preimage=htlc_preimage)
+        verify_htlc_spending_conditions(proof)
         assert False, "Expected a TransactionError"
     except TransactionError as e:
-        assert "invalid preimage for HTLC." in e.detail
+        assert "HTLC preimage does not match." in e.detail
 
 def test_htlc_preimage_too_large():
     proof = Proof.from_dict({
@@ -64,7 +64,7 @@ def test_htlc_preimage_too_large():
     assert htlc_preimage
 
     try:
-        verify_htlc_spending_conditions(proof, preimage=htlc_preimage)
+        verify_htlc_spending_conditions(proof)
         assert False, "Expected a TransactionError"
     except TransactionError as e:
         assert "HTLC preimage must be 64 characters hex." in e.detail
@@ -82,7 +82,7 @@ def test_htlc_nonhex_preimage():
     assert htlc_preimage
 
     try:
-        verify_htlc_spending_conditions(proof, preimage=htlc_preimage)
+        verify_htlc_spending_conditions(proof)
         assert False, "Expected a TransactionError"
     except TransactionError as e:
         assert "invalid preimage for HTLC: not a hex string." in e.detail
