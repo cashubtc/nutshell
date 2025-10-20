@@ -1,9 +1,9 @@
-import hashlib
 import time
 from typing import List, Optional, Union
 
 from loguru import logger
 
+from ...core.nuts.nut14 import verify_htlc_spending_conditions
 from ..core.base import BlindedMessage, P2PKWitness, Proof
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
@@ -74,56 +74,6 @@ class LedgerSpendingConditions:
         return self._verify_p2pk_signatures(
             message_to_sign, pubkeys, proof.p2pksigs, n_sigs
         )
-
-    def _verify_htlc_spending_conditions(
-        self,
-        proof: Proof,
-        secret: HTLCSecret,
-        message_to_sign: Optional[str] = None,
-    ) -> bool:
-        """
-        Verify HTLC spending condition for a single input.
-
-        We return True:
-        - if the secret is not a HTLCSecret spending condition
-
-        We first verify the time lock. If the locktime has passed, we require
-        a valid signature if a 'refund' pubkey is present. If it isn't present,
-        anyone can spend.
-
-        We return True:
-        - if 'refund' pubkeys are present and a valid signature is provided for one of them
-        We raise an exception:
-        - if 'refund' but no valid signature is present
-
-
-        We then verify the hash lock. We require a valid preimage. We require a valid
-        signature if 'pubkeys' are present. If they aren't present, anyone who provides
-        a valid preimage can spend.
-
-        We raise an exception:
-        - if no preimage is provided
-        - if preimage does not match the hash lock in the secret
-
-        We return True:
-        - if 'pubkeys' are present and a valid signature is provided for one of them
-
-        We raise an exception:
-        - if 'pubkeys' are present but no valid signature is provided
-        """
-
-        htlc_secret = secret
-        # hash lock
-        if not proof.htlcpreimage:
-            raise TransactionError("no HTLC preimage provided")
-        # verify correct preimage (the hashlock) if the locktime hasn't passed
-        now = time.time()
-        if not htlc_secret.locktime or htlc_secret.locktime > now:
-            if not hashlib.sha256(
-                bytes.fromhex(proof.htlcpreimage)
-            ).digest() == bytes.fromhex(htlc_secret.data):
-                raise TransactionError("HTLC preimage does not match.")
-        return True
 
     def _verify_p2pk_signatures(
         self,
@@ -213,7 +163,7 @@ class LedgerSpendingConditions:
         # HTLC
         if SecretKind(secret.kind) == SecretKind.HTLC:
             htlc_secret = HTLCSecret.from_secret(secret)
-            self._verify_htlc_spending_conditions(proof, htlc_secret)
+            verify_htlc_spending_conditions(proof, proof.htlcpreimage)
             return self._verify_p2pk_sig_inputs(proof, htlc_secret)
 
         # no spending condition present
