@@ -3,7 +3,7 @@ from typing import List, Optional, Union
 
 from loguru import logger
 
-from ...core.nuts.nut14 import verify_htlc_spending_conditions
+from ..core.nuts.nut14 import verify_htlc_spending_conditions
 from ..core.base import BlindedMessage, P2PKWitness, Proof
 from ..core.crypto.secp import PublicKey
 from ..core.errors import (
