@@ -28,9 +28,12 @@ def verify_htlc_spending_conditions(
         # Add a length check for the preimage
         if len(preimage) != 64:
             raise TransactionError("HTLC preimage must be 64 characters hex.")
-        if htlc_secret.data != sha256(bytes.fromhex(preimage)).hexdigest():
-            raise TransactionError("invalid preimage for HTLC.")
-        return True
+        try:
+            if htlc_secret.data != sha256(bytes.fromhex(preimage)).hexdigest():
+                raise TransactionError("invalid preimage for HTLC.")
+            return True
+        except ValueError:
+            raise TransactionError("invalid preimage for HTLC: not a hex string.")
 
     # if no preimage is provided, we check the locktime
     now = time.time()
