@@ -1,6 +1,5 @@
 import time
 from hashlib import sha256
-from typing import Optional
 
 from ..base import Proof
 from ..errors import TransactionError
@@ -32,7 +31,7 @@ def verify_htlc_spending_conditions(
                 bytes.fromhex(proof.htlcpreimage)
             ).digest() == bytes.fromhex(htlc_secret.data):
                 raise TransactionError("HTLC preimage does not match.")
-        except ValueError as e:
+        except ValueError:
             raise TransactionError("invalid preimage for HTLC: not a hex string.")
     return True
 
