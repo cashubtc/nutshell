@@ -1,10 +1,10 @@
 
 import pytest
-from cashu.core.errors import CashuError
+from cashu.core.errors import CashuError, TransactionError
 from cashu.core.nuts.nut14 import verify_htlc_spending_conditions
 from cashu.core.htlc import HTLCSecret
 from cashu.core.base import Proof, HTLCWitness
-from ..helpers import assert_err
+from tests.helpers import assert_err
 
 def test_htlc():    
     proof = Proof.from_dict({
@@ -15,6 +15,7 @@ def test_htlc():
         "witness": "{\"preimage\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\"}"
     })
 
+    print(f"{proof.secret = }")
     htlc_preimage = proof.htlcpreimage
     assert htlc_preimage
 
@@ -34,7 +35,7 @@ def test_htlc_case_insensitive():
 
     verify_htlc_spending_conditions(proof, preimage=htlc_preimage)
 
-
+@pytest.mark.asyncio
 async def test_htlc_preimage_too_large():
     proof = Proof.from_dict({
         "amount": 0,
@@ -47,5 +48,9 @@ async def test_htlc_preimage_too_large():
     htlc_preimage = proof.htlcpreimage
     assert htlc_preimage
 
-    assert_err(verify_htlc_spending_conditions(proof, preimage=htlc_preimage), "HTLC preimage must be 64 characters hex.")
+    try:
+        verify_htlc_spending_conditions(proof, preimage=htlc_preimage)
+        assert False, "Expected a TransactionError"
+    except TransactionError as e:
+        assert "HTLC preimage must be 64 characters hex." in e.detail
 

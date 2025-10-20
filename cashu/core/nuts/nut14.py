@@ -17,7 +17,8 @@ def verify_htlc_spending_conditions(
     Either the preimage is provided or the locktime has passed and a refund is requested.
     """
     secret = Secret.deserialize(proof.secret)
-    if not secret.kind or secret.kind != SecretKind.HTLC:
+    print(f"{secret = }")
+    if not secret.kind or secret.kind != SecretKind.HTLC.value:
         raise TransactionError("not an HTLC secret.")
     htlc_secret = HTLCSecret.from_secret(secret)
 
