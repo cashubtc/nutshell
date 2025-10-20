@@ -991,22 +991,33 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
                 b_hex = o.get("B_") if isinstance(o, dict) else None
                 if amount is None or keyset_id is None or b_hex is None:
                     continue
-                await conn.execute(
+                # check if promise with b_ already exists
+                existing_promise = await conn.fetchone(
                     f"""
-                        INSERT INTO {db.table_with_schema('promises')}
-                        (amount, id, b_, created, mint_quote, melt_quote, swap_id)
-                        VALUES (:amount, :id, :b_, :created, :mint_quote, :melt_quote, :swap_id)
+                        SELECT * FROM {db.table_with_schema('promises')}
+                        WHERE b_ = :b_
                     """,
                     {
-                        "amount": int(amount),
-                        "id": keyset_id,
                         "b_": b_hex,
-                        "created": db.to_timestamp(db.timestamp_now_str()),
-                        "mint_quote": None,
-                        "melt_quote": row["quote"],
-                        "swap_id": None,
                     },
                 )
+                if not existing_promise:
+                    await conn.execute(
+                        f"""
+                            INSERT INTO {db.table_with_schema('promises')}
+                            (amount, id, b_, created, mint_quote, melt_quote, swap_id)
+                            VALUES (:amount, :id, :b_, :created, :mint_quote, :melt_quote, :swap_id)
+                        """,
+                        {
+                            "amount": int(amount),
+                            "id": keyset_id,
+                            "b_": b_hex,
+                            "created": db.to_timestamp(db.timestamp_now_str()),
+                            "mint_quote": None,
+                            "melt_quote": row["quote"],
+                            "swap_id": None,
+                        },
+                    )
 
     # remove obsolete columns outputs and change from melt_quotes
     async def remove_obsolete_columns_from_melt_quotes(db: Database, conn: Connection):
