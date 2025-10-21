@@ -63,7 +63,7 @@ async def test_create_htlc_secret(wallet1: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(preimage=preimage)
     assert secret.data == preimage_hash
@@ -74,7 +74,7 @@ async def test_htlc_split(wallet1: Wallet, wallet2: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(preimage=preimage)
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
@@ -87,7 +87,7 @@ async def test_htlc_redeem_with_preimage(wallet1: Wallet, wallet2: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(preimage=preimage)
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
@@ -101,7 +101,7 @@ async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet)
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(
         preimage=f"{preimage[:-5]}11111"
@@ -110,7 +110,7 @@ async def test_htlc_redeem_with_wrong_preimage(wallet1: Wallet, wallet2: Wallet)
     for p in send_proofs:
         p.witness = HTLCWitness(preimage=preimage).json()
     await assert_err(
-        wallet1.redeem(send_proofs), "Mint Error: HTLC preimage does not match"
+        wallet1.redeem(send_proofs), "Mint Error: HTLC preimage does not match."
     )
 
 
@@ -119,7 +119,7 @@ async def test_htlc_redeem_with_no_signature(wallet1: Wallet, wallet2: Wallet):
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(
@@ -139,7 +139,7 @@ async def test_htlc_redeem_with_wrong_signature(wallet1: Wallet, wallet2: Wallet
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(
@@ -163,7 +163,7 @@ async def test_htlc_redeem_with_correct_signature(wallet1: Wallet, wallet2: Wall
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(
@@ -183,7 +183,7 @@ async def test_htlc_redeem_with_2_of_1_signatures(wallet1: Wallet, wallet2: Wall
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -207,7 +207,7 @@ async def test_htlc_redeem_with_2_of_2_signatures(wallet1: Wallet, wallet2: Wall
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -233,7 +233,7 @@ async def test_htlc_redeem_with_2_of_2_signatures_with_duplicate_pubkeys(
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = pubkey_wallet1
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -262,7 +262,7 @@ async def test_htlc_redeem_with_3_of_3_signatures_but_only_2_provided(
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -291,7 +291,7 @@ async def test_htlc_redeem_with_2_of_3_signatures_with_2_valid_and_1_invalid_pro
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     privatekey_wallet3 = PrivateKey(secrets.token_bytes(32), raw=True)
@@ -322,7 +322,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -356,7 +356,7 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -395,7 +395,7 @@ async def test_htlc_redeem_timelock_2_of_2_signatures(wallet1: Wallet, wallet2: 
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
     await wallet1.mint(64, quote_id=mint_quote.quote)
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
@@ -444,7 +444,7 @@ async def test_htlc_sigall_behavior(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64, quote_id=mint_quote.quote)
 
     # Setup HTLC parameters
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
 
@@ -495,13 +495,13 @@ async def test_htlc_n_sigs_refund_locktime(wallet1: Wallet, wallet2: Wallet):
     await wallet1.mint(64, quote_id=mint_quote.quote)
 
     # Setup parameters
-    preimage = "00000000000000000000000000000000"
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
     pubkey_wallet3 = await wallet3.create_p2pk_pubkey()
 
     # Wrong preimage - making it so we can only spend via locktime
-    wrong_preimage = "11111111111111111111111111111111"
+    wrong_preimage = "1111111111111111111111111111111111111111111111111111111111111111"
 
     # Create HTLC with:
     # 1. Timelock in the past
