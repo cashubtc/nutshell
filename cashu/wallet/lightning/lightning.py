@@ -57,11 +57,12 @@ class LightningWallet(Wallet):
             payment_request=mint_quote.request,
         )
 
-    async def pay_invoice(self, request: str) -> PaymentResponse:
+    async def pay_invoice(self, request: str, prefer_async: bool = False) -> PaymentResponse:
         """Pay lightning invoice
 
         Args:
             request (str): bolt11 payment request
+            prefer_async (bool): If set, will append a `Prefer: respond-async` header to the request
 
         Returns:
             PaymentResponse: containing details of the operation
@@ -74,7 +75,7 @@ class LightningWallet(Wallet):
             return PaymentResponse(result=PaymentResult.FAILED)
         _, send_proofs = await self.swap_to_send(self.proofs, total_amount)
         try:
-            resp = await self.melt(send_proofs, request, quote.fee_reserve, quote.quote)
+            resp = await self.melt(send_proofs, request, quote.fee_reserve, quote.quote, prefer_async)
             if resp.change:
                 fees_paid_sat = quote.fee_reserve - sum_promises(resp.change)
             else:
