@@ -13,6 +13,7 @@ from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     is_regtest,
+    is_fake,
 )
 
 SEED = "TEST_PRIVATE_KEY"
@@ -573,3 +574,32 @@ async def test_set_melt_quote_pending_checks_all_states(ledger: Ledger):
     # Verify the unpaid quote is now pending
     quote_db = await ledger.crud.get_melt_quote(quote_id="quote_id_states_unpaid", db=ledger.db)
     assert quote_db.state == MeltQuoteState.pending
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_mint_pay_with_duplicate_checking_id(wallet):
+    mint_quote1 = await wallet.request_mint(1024)
+    mint_quote2 = await wallet.request_mint(1024)
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=1024, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=1024, quote_id=mint_quote2.quote)
+
+    invoice = get_real_invoice(64)['payment_request']
+
+    # Get two melt quotes for the same invoice
+    melt_quote1 = await wallet.melt_quote(invoice)
+    melt_quote2 = await wallet.melt_quote(invoice)
+
+    response1 = await wallet.melt(
+        proofs=proofs1, invoice=invoice, fee_reserve_sat=melt_quote1.fee_reserve, quote_id=melt_quote1.quote
+    )    
+    assert response1.state == 'PAID'
+
+    assert_err(wallet.melt(
+        proofs=proofs2, invoice=invoice, fee_reserve_sat=melt_quote2.fee_reserve, quote_id=melt_quote2.quote
+    ), "Melt operation already SETTLED -- Reverting")
+    
+    #melt_quote2 = await wallet.get_melt_quote(melt_quote2.quote)
+    #assert melt_quote2.state == MeltQuoteState.paid
