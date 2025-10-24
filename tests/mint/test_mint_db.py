@@ -341,3 +341,143 @@ async def test_db_update_melt_quote_state(wallet: Wallet, ledger: Ledger):
         ),
         "Cannot change state of a paid melt quote.",
     )
+
+
+
+# Tests for get_melt_quotes_by_checking_id CRUD method
+@pytest.mark.asyncio
+async def test_get_melt_quotes_by_checking_id_empty(ledger: Ledger):
+    """Test that get_melt_quotes_by_checking_id returns empty list for non-existent checking_id."""
+    
+    quotes = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id="non_existent_id",
+        db=ledger.db
+    )
+    assert quotes == []
+
+
+@pytest.mark.asyncio
+async def test_get_melt_quotes_by_checking_id_single(ledger: Ledger):
+    """Test that get_melt_quotes_by_checking_id returns a single quote when only one exists."""
+    from cashu.core.base import MeltQuote
+    
+    checking_id = "test_checking_id_single"
+    quote = MeltQuote(
+        quote="quote_id_1",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+    
+    quotes = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id=checking_id,
+        db=ledger.db
+    )
+    
+    assert len(quotes) == 1
+    assert quotes[0].quote == "quote_id_1"
+    assert quotes[0].checking_id == checking_id
+
+
+@pytest.mark.asyncio
+async def test_get_melt_quotes_by_checking_id_multiple(ledger: Ledger):
+    """Test that get_melt_quotes_by_checking_id returns all quotes with the same checking_id."""
+    from cashu.core.base import MeltQuote
+    
+    checking_id = "test_checking_id_multiple"
+    
+    quote1 = MeltQuote(
+        quote="quote_id_m1",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_m2",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.paid,
+    )
+    quote3 = MeltQuote(
+        quote="quote_id_m3",
+        method="bolt11",
+        request="lnbc789",
+        checking_id=checking_id,
+        unit="sat",
+        amount=300,
+        fee_reserve=3,
+        state=MeltQuoteState.unpaid,
+    )
+    
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote3, db=ledger.db)
+    
+    quotes = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id=checking_id,
+        db=ledger.db
+    )
+    
+    assert len(quotes) == 3
+    quote_ids = {q.quote for q in quotes}
+    assert quote_ids == {"quote_id_m1", "quote_id_m2", "quote_id_m3"}
+
+
+@pytest.mark.asyncio
+async def test_get_melt_quotes_by_checking_id_different_checking_ids(ledger: Ledger):
+    """Test that get_melt_quotes_by_checking_id only returns quotes with the specified checking_id."""
+    from cashu.core.base import MeltQuote
+    
+    checking_id_1 = "test_checking_id_diff_1"
+    checking_id_2 = "test_checking_id_diff_2"
+    
+    quote1 = MeltQuote(
+        quote="quote_id_diff_1",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id_1,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_diff_2",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id_2,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+    )
+    
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+    
+    quotes_1 = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id=checking_id_1,
+        db=ledger.db
+    )
+    assert len(quotes_1) == 1
+    assert quotes_1[0].quote == "quote_id_diff_1"
+    
+    quotes_2 = await ledger.crud.get_melt_quotes_by_checking_id(
+        checking_id=checking_id_2,
+        db=ledger.db
+    )
+    assert len(quotes_2) == 1
+    assert quotes_2[0].quote == "quote_id_diff_2"
