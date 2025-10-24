@@ -12,8 +12,10 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
-    is_regtest,
+    get_real_invoice,
     is_fake,
+    is_regtest,
+    pay_if_regtest,
 )
 
 SEED = "TEST_PRIVATE_KEY"
