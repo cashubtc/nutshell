@@ -770,21 +770,27 @@ class RotateNextKeysetRequest(google.protobuf.message.Message):
     UNIT_FIELD_NUMBER: builtins.int
     MAX_ORDER_FIELD_NUMBER: builtins.int
     INPUT_FEE_PPK_FIELD_NUMBER: builtins.int
+    FINAL_EXPIRY_FIELD_NUMBER: builtins.int
     unit: builtins.str
     """The unit for which to rotate the keyset (e.g., "sat")."""
     max_order: builtins.int
     """Optional: The maximum order of the new keyset."""
     input_fee_ppk: builtins.int
     """Optional: The input fee per kilobyte for the new keyset."""
+    final_expiry: builtins.int
+    """Optional: The final expiry of the keyset, as a unix epoch in seconds"""
     def __init__(
         self,
         *,
         unit: builtins.str = ...,
         max_order: builtins.int | None = ...,
         input_fee_ppk: builtins.int | None = ...,
+        final_expiry: builtins.int | None = ...,
     ) -> None: ...
-    def HasField(self, field_name: typing.Literal["_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing.Literal["_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "final_expiry", b"final_expiry", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "_input_fee_ppk", b"_input_fee_ppk", "_max_order", b"_max_order", "final_expiry", b"final_expiry", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
+    @typing.overload
+    def WhichOneof(self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]) -> typing.Literal["final_expiry"] | None: ...
     @typing.overload
     def WhichOneof(self, oneof_group: typing.Literal["_input_fee_ppk", b"_input_fee_ppk"]) -> typing.Literal["input_fee_ppk"] | None: ...
     @typing.overload
@@ -802,6 +808,7 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
     UNIT_FIELD_NUMBER: builtins.int
     MAX_ORDER_FIELD_NUMBER: builtins.int
     INPUT_FEE_PPK_FIELD_NUMBER: builtins.int
+    FINAL_EXPIRY_FIELD_NUMBER: builtins.int
     id: builtins.str
     """The ID of the new keyset."""
     unit: builtins.str
@@ -810,6 +817,8 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
     """The maximum order of the new keyset."""
     input_fee_ppk: builtins.int
     """The input fee per kilobyte for the new keyset."""
+    final_expiry: builtins.int
+    """Optional: The final expiry of the keyset, as a unix epoch in seconds"""
     def __init__(
         self,
         *,
@@ -817,8 +826,11 @@ class RotateNextKeysetResponse(google.protobuf.message.Message):
         unit: builtins.str = ...,
         max_order: builtins.int = ...,
         input_fee_ppk: builtins.int = ...,
+        final_expiry: builtins.int | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing.Literal["id", b"id", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
+    def HasField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "final_expiry", b"final_expiry"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing.Literal["_final_expiry", b"_final_expiry", "final_expiry", b"final_expiry", "id", b"id", "input_fee_ppk", b"input_fee_ppk", "max_order", b"max_order", "unit", b"unit"]) -> None: ...
+    def WhichOneof(self, oneof_group: typing.Literal["_final_expiry", b"_final_expiry"]) -> typing.Literal["final_expiry"] | None: ...
 
 global___RotateNextKeysetResponse = RotateNextKeysetResponse
 
