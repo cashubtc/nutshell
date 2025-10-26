@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from environs import Env  # type: ignore
-from pydantic import BaseSettings, Extra, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 env = Env()
 
@@ -24,19 +25,16 @@ def find_env_file():
 
 
 class CashuSettings(BaseSettings):
-    env_file: str = Field(default=None)
     lightning_fee_percent: float = Field(default=1.0)
     lightning_reserve_fee_min: int = Field(default=2000)
     max_order: int = Field(default=64)
 
-    class Config(BaseSettings.Config):
-        env_file = find_env_file()
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        extra = Extra.ignore
-
-        # def __init__(self, env_file=None):
-        #     self.env_file = env_file or self.env_file
+    model_config: SettingsConfigDict = SettingsConfigDict(
+        case_sensitive=False,
+        env_file=find_env_file(),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 class EnvSettings(CashuSettings):
@@ -45,13 +43,13 @@ class EnvSettings(CashuSettings):
     cashu_dir: str = Field(default=os.path.join(str(Path.home()), ".cashu"))
     debug_profiling: bool = Field(default=False)
     debug_mint_only_deprecated: bool = Field(default=False)
-    db_backup_path: Optional[str] = Field(default=None)
+    db_backup_path: None | str = Field(default=None)
     db_connection_pool: bool = Field(default=True)
 
 
 class MintSettings(CashuSettings):
-    mint_private_key: str = Field(default=None)
-    mint_seed_decryption_key: Optional[str] = Field(default=None)
+    mint_private_key: None | str = Field(default=None)
+    mint_seed_decryption_key: None | str = Field(default=None)
     mint_derivation_path: str = Field(default="m/0'/0'/0'")
     mint_derivation_path_list: List[str] = Field(default=[])
     mint_listen_host: str = Field(default="127.0.0.1")
@@ -99,10 +97,10 @@ class MintBackends(MintSettings):
     mint_backend_bolt11_usd: str = Field(default="")
     mint_backend_bolt11_eur: str = Field(default="")
 
-    mint_lnbits_endpoint: str = Field(default=None)
-    mint_lnbits_key: str = Field(default=None)
-    mint_strike_key: str = Field(default=None)
-    mint_blink_key: str = Field(default=None)
+    mint_lnbits_endpoint: None | str = Field(default=None)
+    mint_lnbits_key: None | str = Field(default=None)
+    mint_strike_key: None | str = Field(default=None)
+    mint_blink_key: None | str = Field(default=None)
 
 
 class MintLimits(MintSettings):
@@ -144,31 +142,31 @@ class MintLimits(MintSettings):
         description="Mint allows no bolt11 melting operations.",
     )
 
-    mint_max_peg_in: int = Field(  # deprecated for mint_max_mint_bolt11_sat
+    mint_max_peg_in: None | int = Field(  # deprecated for mint_max_mint_bolt11_sat
         default=None,
         ge=0,
         title="Maximum peg-in",
         description="Maximum amount for a mint operation.",
     )
-    mint_max_peg_out: int = Field(  # deprecated for mint_max_melt_bolt11_sat
+    mint_max_peg_out: None | int = Field(  # deprecated for mint_max_melt_bolt11_sat
         default=None,
         ge=0,
         title="Maximum peg-out",
         description="Maximum amount for a melt operation.",
     )
-    mint_max_mint_bolt11_sat: int = Field(
+    mint_max_mint_bolt11_sat: None | int = Field(
         default=None,
         ge=0,
         title="Maximum mint amount for bolt11 in satoshis",
         description="Maximum amount for a bolt11 mint operation in satoshis.",
     )
-    mint_max_melt_bolt11_sat: int = Field(
+    mint_max_melt_bolt11_sat: None | int = Field(
         default=None,
         ge=0,
         title="Maximum melt amount for bolt11 in satoshis",
         description="Maximum amount for a bolt11 melt operation in satoshis.",
     )
-    mint_max_balance: int = Field(
+    mint_max_balance: None | int = Field(
         default=None,
         ge=0,
         title="Maximum mint balance",
@@ -184,13 +182,13 @@ class MintLimits(MintSettings):
 
 class FakeWalletSettings(MintSettings):
     fakewallet_brr: bool = Field(default=True)
-    fakewallet_delay_outgoing_payment: Optional[float] = Field(default=3.0)
-    fakewallet_delay_incoming_payment: Optional[float] = Field(default=3.0)
+    fakewallet_delay_outgoing_payment: None | float = Field(default=3.0)
+    fakewallet_delay_incoming_payment: None | float = Field(default=3.0)
     fakewallet_stochastic_invoice: bool = Field(default=False)
-    fakewallet_payment_state: Optional[str] = Field(default="SETTLED")
-    fakewallet_payment_state_exception: Optional[bool] = Field(default=False)
-    fakewallet_pay_invoice_state: Optional[str] = Field(default="SETTLED")
-    fakewallet_pay_invoice_state_exception: Optional[bool] = Field(default=False)
+    fakewallet_payment_state: None | str = Field(default="SETTLED")
+    fakewallet_payment_state_exception: None | bool = Field(default=False)
+    fakewallet_pay_invoice_state: None | str = Field(default="SETTLED")
+    fakewallet_pay_invoice_state_exception: None | bool = Field(default=False)
     fakewallet_balance_sat: int = Field(default=1337)
     fakewallet_balance_usd: int = Field(default=1337)
     fakewallet_balance_eur: int = Field(default=1337)
@@ -198,30 +196,32 @@ class FakeWalletSettings(MintSettings):
 
 class MintInformation(CashuSettings):
     mint_info_name: str = Field(default="Cashu mint")
-    mint_info_description: str = Field(default=None)
-    mint_info_description_long: str = Field(default=None)
-    mint_info_contact: List[List[str]] = Field(default=[])
-    mint_info_motd: str = Field(default=None)
-    mint_info_icon_url: str = Field(default=None)
-    mint_info_urls: List[str] = Field(default=None)
-    mint_info_tos_url: str = Field(default=None)
+    mint_info_description: None | str = Field(default=None)
+    mint_info_description_long: None | str = Field(default=None)
+    mint_info_contact: list[List[str]] = Field(default=[])
+    mint_info_motd: None | str = Field(default=None)
+    mint_info_icon_url: None | str = Field(default=None)
+    mint_info_urls: None | list[str] = Field(default=None)
+    mint_info_tos_url: None | str = Field(default=None)
+
 
 class MintManagementRPCSettings(MintSettings):
     mint_rpc_server_enable: bool = Field(default=False)
-    mint_rpc_server_ca: str = Field(default=None)
-    mint_rpc_server_cert: str = Field(default=None)
-    mint_rpc_server_key: str = Field(default=None)
+    mint_rpc_server_ca: None | str = Field(default=None)
+    mint_rpc_server_cert: None | str = Field(default=None)
+    mint_rpc_server_key: None | str = Field(default=None)
     mint_rpc_server_addr: str = Field(default="localhost")
     mint_rpc_server_port: int = Field(default=8086)
     mint_rpc_server_mutual_tls: bool = Field(default=True)
 
+
 class WalletSettings(CashuSettings):
     tor: bool = Field(default=False)
-    socks_host: str = Field(default=None)  # deprecated
+    socks_host: None | str = Field(default=None)  # deprecated
     socks_port: int = Field(default=9050)  # deprecated
-    socks_proxy: str = Field(default=None)
-    http_proxy: str = Field(default=None)
-    mint_url: str = Field(default=None)
+    socks_proxy: None | str = Field(default=None)
+    http_proxy: None | str = Field(default=None)
+    mint_url: None | str = Field(default=None)
     mint_host: str = Field(default="8333.space")
     mint_port: int = Field(default=3338)
     wallet_name: str = Field(default="wallet")
@@ -231,7 +231,7 @@ class WalletSettings(CashuSettings):
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
 
-    nostr_private_key: str = Field(default=None)
+    nostr_private_key: None | str = Field(default=None)
     nostr_relays: List[str] = Field(
         default=[
             "wss://nostr-pub.wellorder.net",
@@ -263,38 +263,38 @@ class WalletDeprecationFlags(CashuSettings):
 
 
 class LndRestFundingSource(MintSettings):
-    mint_lnd_rest_endpoint: Optional[str] = Field(default=None)
-    mint_lnd_rest_cert: Optional[str] = Field(default=None)
+    mint_lnd_rest_endpoint: None | str = Field(default=None)
+    mint_lnd_rest_cert: None | str = Field(default=None)
     mint_lnd_rest_cert_verify: bool = Field(default=True)
-    mint_lnd_rest_macaroon: Optional[str] = Field(default=None)
-    mint_lnd_rest_admin_macaroon: Optional[str] = Field(default=None)
-    mint_lnd_rest_invoice_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_rest_macaroon: None | str = Field(default=None)
+    mint_lnd_rest_admin_macaroon: None | str = Field(default=None)
+    mint_lnd_rest_invoice_macaroon: None | str = Field(default=None)
     mint_lnd_enable_mpp: bool = Field(default=True)
 
 
 class LndRPCFundingSource(MintSettings):
-    mint_lnd_rpc_endpoint: Optional[str] = Field(default=None)
-    mint_lnd_rpc_cert: Optional[str] = Field(default=None)
-    mint_lnd_rpc_macaroon: Optional[str] = Field(default=None)
+    mint_lnd_rpc_endpoint: None | str = Field(default=None)
+    mint_lnd_rpc_cert: None | str = Field(default=None)
+    mint_lnd_rpc_macaroon: None | str = Field(default=None)
 
 
 class CLNRestFundingSource(MintSettings):
-    mint_clnrest_url: Optional[str] = Field(default=None)
-    mint_clnrest_cert: Optional[str] = Field(default=None)
-    mint_clnrest_rune: Optional[str] = Field(default=None)
+    mint_clnrest_url: None | str = Field(default=None)
+    mint_clnrest_cert: None | str = Field(default=None)
+    mint_clnrest_rune: None | str = Field(default=None)
     mint_clnrest_enable_mpp: bool = Field(default=True)
 
 
 class CoreLightningRestFundingSource(MintSettings):
-    mint_corelightning_rest_url: Optional[str] = Field(default=None)
-    mint_corelightning_rest_macaroon: Optional[str] = Field(default=None)
-    mint_corelightning_rest_cert: Optional[str] = Field(default=None)
+    mint_corelightning_rest_url: None | str = Field(default=None)
+    mint_corelightning_rest_macaroon: None | str = Field(default=None)
+    mint_corelightning_rest_cert: None | str = Field(default=None)
 
 
 class AuthSettings(MintSettings):
     mint_auth_database: str = Field(default="data/mint")
     mint_require_auth: bool = Field(default=False)
-    mint_auth_oicd_discovery_url: Optional[str] = Field(default=None)
+    mint_auth_oicd_discovery_url: None | str = Field(default=None)
     mint_auth_oicd_client_id: str = Field(default="cashu-client")
     mint_auth_rate_limit_per_minute: int = Field(
         default=5,
@@ -315,8 +315,8 @@ class AuthSettings(MintSettings):
 
 class MintRedisCache(MintSettings):
     mint_redis_cache_enabled: bool = Field(default=False)
-    mint_redis_cache_url: Optional[str] = Field(default=None)
-    mint_redis_cache_ttl: Optional[int] = Field(default=60 * 60 * 24 * 7)  # 1 week
+    mint_redis_cache_url: None | str = Field(default=None)
+    mint_redis_cache_ttl: None | int = Field(default=60 * 60 * 24 * 7)  # 1 week
 
 
 class Settings(
@@ -341,17 +341,11 @@ class Settings(
 ):
     version: str = Field(default=VERSION)
 
-    # def __init__(self, env_file=None):
-    #     super().Config(env_file=env_file)
-
 
 settings = Settings()
 
 
 def startup_settings_tasks():
-    # set env_file (this does not affect the settings module, it's just for reading)
-    settings.env_file = find_env_file()
-
     if not settings.debug:
         # set traceback limit
         sys.tracebacklimit = 0

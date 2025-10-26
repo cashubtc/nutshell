@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Union
 
 import cbor2
 from loguru import logger
-from pydantic import BaseModel, root_validator
+from pydantic import BaseModel, RootModel, ValidationInfo, field_validator
 from sqlalchemy import RowMapping
 
 from cashu.core.json_rpc.base import JSONRPCSubscriptionKinds
@@ -67,12 +67,12 @@ class ProofState(LedgerEvent):
     state: ProofSpentState
     witness: Optional[str] = None
 
-    @root_validator()
-    def check_witness(cls, values):
-        state, witness = values.get("state"), values.get("witness")
-        if witness is not None and state != ProofSpentState.spent:
+    @field_validator("witness", mode="after")
+    @classmethod
+    def check_witness(cls, value: str, info: ValidationInfo) -> Optional[str]:
+        if value is not None and info.data["witness"] != ProofSpentState.spent:
             raise ValueError('Witness can only be set if the spent state is "SPENT"')
-        return values
+        return value
 
     @property
     def identifier(self) -> str:
@@ -217,10 +217,9 @@ class Proof(BaseModel):
             return None
 
 
-class Proofs(BaseModel):
+class Proofs(RootModel):
     # NOTE: not used in Pydantic validation
-    __root__: List[Proof]
-
+    root: List[Proof]
 
 class BlindedMessage(BaseModel):
     """

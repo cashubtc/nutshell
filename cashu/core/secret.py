@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, RootModel
 
 from .crypto.secp import PrivateKey
 
@@ -13,12 +13,12 @@ class SecretKind(Enum):
     HTLC = "HTLC"
 
 
-class Tags(BaseModel):
+class Tags(RootModel):
     """
     Tags are used to encode additional information in the Secret of a Proof.
     """
 
-    __root__: List[List[str]] = []
+    root: List[List[str]] = []
 
     def __init__(self, tags: Optional[List[List[str]]] = None, **kwargs):
         super().__init__(**kwargs)
