@@ -95,6 +95,7 @@ class MintBackends(MintSettings):
     mint_backend_bolt11_msat: str = Field(default="")
     mint_backend_bolt11_usd: str = Field(default="")
     mint_backend_bolt11_eur: str = Field(default="")
+    mint_backend_bolt11_thb: str = Field(default="")
 
     mint_lnbits_endpoint: str = Field(default=None)
     mint_lnbits_key: str = Field(default=None)
@@ -168,6 +169,7 @@ class FakeWalletSettings(MintSettings):
     fakewallet_balance_sat: int = Field(default=1337)
     fakewallet_balance_usd: int = Field(default=1337)
     fakewallet_balance_eur: int = Field(default=1337)
+    fakewallet_balance_thb: int = Field(default=1337)
 
 
 class MintInformation(CashuSettings):
@@ -237,6 +239,14 @@ class LndRestFundingSource(MintSettings):
     mint_lnd_enable_mpp: bool = Field(default=True)
 
 
+class TapRestFundingSource(MintSettings):
+    mint_tap_rest_endpoint: Optional[str] = Field(default=None)
+    mint_tap_rest_cert: Optional[str] = Field(default=None)
+    mint_tap_rest_cert_verify: bool = Field(default=True)
+    mint_tap_rest_lnd_macaroon: Optional[str] = Field(default=None)
+    mint_tap_rest_tap_macaroon: Optional[str] = Field(default=None)
+
+
 class LndRPCFundingSource(MintSettings):
     mint_lnd_rpc_endpoint: Optional[str] = Field(default=None)
     mint_lnd_rpc_cert: Optional[str] = Field(default=None)
@@ -288,6 +298,7 @@ class Settings(
     EnvSettings,
     LndRPCFundingSource,
     LndRestFundingSource,
+    TapRestFundingSource,
     CoreLightningRestFundingSource,
     CLNRestFundingSource,
     FakeWalletSettings,

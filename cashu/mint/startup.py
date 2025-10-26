@@ -35,6 +35,9 @@ for key, value in settings.dict().items():
         "mint_lnd_rest_macaroon",
         "mint_lnd_rest_admin_macaroon",
         "mint_lnd_rest_invoice_macaroon",
+        "mint_tap_rest_macaroon",
+        "mint_tap_rest_admin_macaroon",
+        "mint_tap_rest_invoice_macaroon",
         "mint_corelightning_rest_macaroon",
         "mint_clnrest_rune",
     ]:
@@ -68,6 +71,11 @@ if settings.mint_backend_bolt11_eur:
         unit=Unit.eur
     )
     backends.setdefault(Method.bolt11, {})[Unit.eur] = backend_bolt11_eur
+if settings.mint_backend_bolt11_thb:
+    backend_bolt11_thb = getattr(wallets_module, settings.mint_backend_bolt11_thb)(
+        unit=Unit.thb
+    )
+    backends.setdefault(Method.bolt11, {})[Unit.thb] = backend_bolt11_thb
 if not backends:
     raise Exception("No backends are set.")
 
