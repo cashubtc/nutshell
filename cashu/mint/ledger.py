@@ -248,9 +248,16 @@ class Ledger(
                         Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
                     )
                 )
-            await self.crud.bump_keyset_fees_paid(
-                keyset=self.keyset, amount=fees_proofs, db=self.db, conn=conn
-            )
+            
+            total_fee = fees_proofs + (fee_amount or 0)
+            if total_fee > 0:
+                logger.debug(
+                    f"[Ledger] Recorded total fees: base={fees_proofs}, "
+                    f"extra={fee_amount or 0}, total={total_fee}"
+                )
+                await self.crud.bump_keyset_fees_paid(
+                    keyset=self.keyset, amount=total_fee, db=self.db, conn=conn
+                )
 
     async def _generate_change_promises(
         self,
@@ -1147,10 +1154,27 @@ class Ledger(
         await self.db_write._verify_spent_proofs_and_set_pending(
             proofs, keysets=self.keysets
         )
+
+        sum_inputs = sum(proof.amount for proof in proofs)
+        sum_outputs = sum(output.amount for output in outputs)
+        fee_amount = sum_inputs - sum_outputs if sum_inputs > sum_outputs else 0
+
+        if fee_amount > 0:
+            logger.debug(
+                f"[Swap] Detected implicit fee of {fee_amount} sats "
+                f"(inputs={sum_inputs}, outputs={sum_outputs})"
+            )
+  
         try:
             async with self.db.get_connection(lock_table="proofs_pending") as conn:
                 await self._store_blinded_messages(outputs, keyset=keyset, conn=conn)
-                await self._invalidate_proofs(proofs=proofs, conn=conn, is_fee=False, fee_type=None, fee_amount=None)
+                await self._invalidate_proofs(
+                    proofs=proofs, 
+                    conn=conn, 
+                    is_fee=fee_amount > 0, 
+                    fee_type="swap" if fee_amount > 0 else None, 
+                    fee_amount=fee_amount if fee_amount > 0 else None
+                    )
                 promises = await self._sign_blinded_messages(outputs, conn)
         except Exception as e:
             logger.trace(f"swap failed: {e}")
