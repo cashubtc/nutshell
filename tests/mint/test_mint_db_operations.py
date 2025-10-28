@@ -804,4 +804,4 @@ async def test_concurrent_set_melt_quote_pending_same_checking_id(ledger: Ledger
     
     # The error should be about the quote already being pending
     error = next(r for r in results if isinstance(r, Exception))
-    assert "Melt quote already pending" in str(error)
+    assert "Melt quote already paid or pending." in str(error)
