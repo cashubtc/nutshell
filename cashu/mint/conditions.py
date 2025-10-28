@@ -8,13 +8,13 @@ from ..core.crypto.secp import PublicKey
 from ..core.errors import (
     TransactionError,
 )
-from ..core.htlc import HTLCSecret
 from ..core.nuts import nut11, nut14
-from ..core.p2pk import (
+from ..core.nuts.nut11 import (
     P2PKSecret,
     SigFlags,
     verify_schnorr_signature,
 )
+from ..core.nuts.nut14 import HTLCSecret
 from ..core.secret import Secret, SecretKind
 
 

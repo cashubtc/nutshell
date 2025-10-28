@@ -9,7 +9,7 @@ from cashu.core.base import P2PKWitness
 from cashu.core.crypto.secp import PrivateKey
 from cashu.core.migrations import migrate_databases
 from cashu.core.nuts import nut11
-from cashu.core.p2pk import P2PKSecret, SigFlags
+from cashu.core.nuts.nut11 import P2PKSecret, SigFlags
 from cashu.core.secret import SecretKind, Tags
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet

@@ -4,7 +4,7 @@ from typing import List
 
 from ..core.base import HTLCWitness, Proof
 from ..core.db import Database
-from ..core.htlc import (
+from ..core.nuts.nut14 import (
     HTLCSecret,
 )
 from ..core.secret import SecretKind, Tags

@@ -8,7 +8,7 @@ import pytest_asyncio
 from cashu.core.base import BlindedMessage, P2PKWitness
 from cashu.core.migrations import migrate_databases
 from cashu.core.nuts import nut11
-from cashu.core.p2pk import P2PKSecret, SigFlags
+from cashu.core.nuts.nut11 import P2PKSecret, SigFlags
 from cashu.core.secret import Secret, SecretKind, Tags
 from cashu.mint.ledger import Ledger
 from cashu.wallet import migrations

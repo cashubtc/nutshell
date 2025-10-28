@@ -11,13 +11,13 @@ from ..core.base import (
 )
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
-from ..core.htlc import HTLCSecret
 from ..core.nuts import nut11
-from ..core.p2pk import (
+from ..core.nuts.nut11 import (
     P2PKSecret,
     SigFlags,
     schnorr_sign,
 )
+from ..core.nuts.nut14 import HTLCSecret
 from ..core.secret import Secret, SecretKind, Tags
 from .protocols import SupportsDb, SupportsPrivateKey
 
