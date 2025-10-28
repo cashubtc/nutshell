@@ -45,7 +45,6 @@ from ..core.models import (
     PostMeltQuoteResponse,
     PostMintQuoteRequest,
 )
-from ..core.nuts import nut11
 from ..core.settings import settings
 from ..core.split import amount_split
 from ..lightning.base import (
@@ -887,7 +886,9 @@ class Ledger(
                 )
 
         # verify SIG_ALL signatures
-        message_to_sign = nut11.sigall_message_to_sign(proofs, outputs or []) + quote
+        message_to_sign = (
+            "".join([p.secret for p in proofs] + [o.B_ for o in outputs or []]) + quote
+        )
         self._verify_sigall_spending_conditions(proofs, outputs or [], message_to_sign)
 
         # verify that the amount of the input proofs is equal to the amount of the quote
