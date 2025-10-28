@@ -210,19 +210,20 @@ class DbWriteHelper:
             lock_table="melt_quotes",
             lock_select_statement=f"checking_id='{quote.checking_id}'",
         ) as conn:
-            # get all melt quotes with same checking_id from db and check if there is one already pending
+            # get all melt quotes with same checking_id from db and check if there is one already pending or paid
             quotes_db = await self.crud.get_melt_quotes_by_checking_id(
-                checking_id=quote.checking_id,
-                db=self.db,
-                conn=conn
+                checking_id=quote.checking_id, db=self.db, conn=conn
             )
             if len(quotes_db) == 0:
                 raise TransactionError("Melt quote not found.")
-            if any([quote.state == MeltQuoteState.pending
-                or quote.state == MeltQuoteState.paid
-                for quote in quotes_db
-            ]):
-                raise TransactionError("Melt quote already paid or pending.")                
+            if any(
+                [
+                    quote.state == MeltQuoteState.pending
+                    or quote.state == MeltQuoteState.paid
+                    for quote in quotes_db
+                ]
+            ):
+                raise TransactionError("Melt quote already paid or pending.")
             # set the quote as pending
             quote_copy.state = MeltQuoteState.pending
             await self.crud.update_melt_quote(quote=quote_copy, db=self.db, conn=conn)

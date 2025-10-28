@@ -916,7 +916,7 @@ class Ledger(
             proofs, keysets=self.keysets, quote_id=melt_quote.quote
         )
         previous_state = melt_quote.state
-        
+
         melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
         if outputs:
             await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
@@ -927,7 +927,6 @@ class Ledger(
         if not melt_quote.paid:
             logger.debug(f"Lightning: pay invoice {melt_quote.request}")
             try:
-                # Proceed with payment attempt
                 payment = await self.backends[method][unit].pay_invoice(
                     melt_quote, melt_quote.fee_reserve * 1000
                 )
