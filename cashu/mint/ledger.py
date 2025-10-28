@@ -916,7 +916,6 @@ class Ledger(
             proofs, keysets=self.keysets, quote_id=melt_quote.quote
         )
         previous_state = melt_quote.state
-
         melt_quote = await self.db_write._set_melt_quote_pending(melt_quote)
         if outputs:
             await self._store_blinded_messages(outputs, melt_id=melt_quote.quote)
