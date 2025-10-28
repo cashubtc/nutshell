@@ -926,22 +926,6 @@ class Ledger(
         # quote not paid yet (not internal), pay it with the backend
         if not melt_quote.paid:
             logger.debug(f"Lightning: pay invoice {melt_quote.request}")
-            # CLIENT RUG MITIGATION: We prevent any attempt of paying an invoice that was already settled
-            # by checking the invoice beforehand
-            status = await self.backends[method][unit].get_payment_status(
-                melt_quote.checking_id
-            )
-            if (status.result == PaymentResult.SETTLED
-                or status.result == PaymentResult.PENDING
-            ):
-                await self.db_write._unset_proofs_pending(
-                    proofs, keysets=self.keysets
-                )
-                await self.db_write._unset_melt_quote_pending(
-                    quote=melt_quote, state=previous_state
-                )
-                raise TransactionError(f"Melt operation already {status.result.name} -- Reverting")
-
             try:
                 # Proceed with payment attempt
                 payment = await self.backends[method][unit].pay_invoice(

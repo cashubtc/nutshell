@@ -445,7 +445,7 @@ async def test_set_melt_quote_pending_prevents_duplicate_checking_id(ledger: Led
         await ledger.db_write._set_melt_quote_pending(quote=quote2)
         raise AssertionError("Expected TransactionError")
     except TransactionError as e:
-        assert "Melt quote already pending" in str(e)
+        assert "Melt quote already paid or pending." in str(e)
     
     # Verify the second quote is still unpaid
     quote2_db = await ledger.crud.get_melt_quote(quote_id="quote_id_dup_second", db=ledger.db)
@@ -533,49 +533,12 @@ async def test_set_melt_quote_pending_after_unset(ledger: Ledger):
     quote1_db = await ledger.crud.get_melt_quote(quote_id="quote_id_unset_first", db=ledger.db)
     assert quote1_db.state == MeltQuoteState.paid
     
-    # Now the second quote should be able to be set as pending
-    await ledger.db_write._set_melt_quote_pending(quote=quote2)
+    # Now the second quote should still
+    assert_err(ledger.db_write._set_melt_quote_pending(quote=quote2), "Melt quote already paid or pending.")
     
-    # Verify the second quote is pending
+    # Verify the second quote is unpaid
     quote2_db = await ledger.crud.get_melt_quote(quote_id="quote_id_unset_second", db=ledger.db)
-    assert quote2_db.state == MeltQuoteState.pending
-
-
-@pytest.mark.asyncio
-async def test_set_melt_quote_pending_checks_all_states(ledger: Ledger):
-    """Test that only the pending state prevents setting another quote as pending."""
-    checking_id = "test_checking_id_states_test"
-    
-    quote_paid = MeltQuote(
-        quote="quote_id_states_paid",
-        method="bolt11",
-        request="lnbc123",
-        checking_id=checking_id,
-        unit="sat",
-        amount=100,
-        fee_reserve=1,
-        state=MeltQuoteState.paid,
-    )
-    quote_unpaid = MeltQuote(
-        quote="quote_id_states_unpaid",
-        method="bolt11",
-        request="lnbc456",
-        checking_id=checking_id,
-        unit="sat",
-        amount=200,
-        fee_reserve=2,
-        state=MeltQuoteState.unpaid,
-    )
-    
-    await ledger.crud.store_melt_quote(quote=quote_paid, db=ledger.db)
-    await ledger.crud.store_melt_quote(quote=quote_unpaid, db=ledger.db)
-    
-    # Setting the unpaid quote as pending should succeed (even though there's a paid quote)
-    await ledger.db_write._set_melt_quote_pending(quote=quote_unpaid)
-    
-    # Verify the unpaid quote is now pending
-    quote_db = await ledger.crud.get_melt_quote(quote_id="quote_id_states_unpaid", db=ledger.db)
-    assert quote_db.state == MeltQuoteState.pending
+    assert quote2_db.state == MeltQuoteState.unpaid
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_fake, reason="only regtest")
@@ -601,7 +564,5 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
 
     assert_err(wallet.melt(
         proofs=proofs2, invoice=invoice, fee_reserve_sat=melt_quote2.fee_reserve, quote_id=melt_quote2.quote
-    ), "Melt operation already SETTLED -- Reverting")
+    ), "Melt quote already paid or pending.")
     
-    #melt_quote2 = await wallet.get_melt_quote(melt_quote2.quote)
-    #assert melt_quote2.state == MeltQuoteState.paid
