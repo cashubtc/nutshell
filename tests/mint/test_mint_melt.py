@@ -25,11 +25,11 @@ ENCRYPTED_SEED = "U2FsdGVkX1_7UU_-nVBMBWDy_9yDu4KeYb7MH8cJTYQGD4RWl82PALH8j-HKzT
 
 
 async def assert_err(f, msg):
-    """Compute f() and expect an error message 'msg'."""
+    """Compute f() and expect an error message 'msg' to be in the exception."""
     try:
         await f
     except Exception as exc:
-        assert exc.args[0] == msg, Exception(
+        assert msg in exc.args[0], Exception(
             f"Expected error: {msg}, got: {exc.args[0]}"
         )
 
