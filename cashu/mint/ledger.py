@@ -746,7 +746,7 @@ class Ledger(
                         melt_id=quote_id,
                         keyset=self.keysets[melt_outputs[0].id],
                     )
-                    melt_quote.change = return_promises
+                    melt_quote.change = return_promises or None
                 await self.crud.update_melt_quote(quote=melt_quote, db=self.db)
                 await self.events.submit(melt_quote)
             if status.failed or (rollback_unknown and status.unknown):

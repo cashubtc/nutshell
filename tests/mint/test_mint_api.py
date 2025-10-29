@@ -362,25 +362,17 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
 
     assert result["expiry"] == expiry
 
-    # # get melt quote again from api
-    # response = httpx.get(
-    #     f"{BASE_URL}/v1/melt/quote/bolt11/{result['quote']}",
-    # )
-    # assert response.status_code == 200, f"{response.url} {response.status_code}"
-    # result2 = response.json()
-    # assert result2["quote"] == result["quote"]
-
-    # # deserialize the response
-    # resp_quote = PostMeltQuoteResponse(**result2)
-    # assert resp_quote.quote == result["quote"]
-    # assert resp_quote.payment_preimage is not None
-    # assert len(resp_quote.payment_preimage) == 64
-    # assert resp_quote.change is not None
-    # assert resp_quote.state == MeltQuoteState.paid.value
-
-    # # check if DEPRECATED paid flag is also returned
-    # assert result2["paid"] is True
-    # assert resp_quote.paid is True
+    # GET the melt quote
+    response = httpx.get(f"{BASE_URL}/v1/melt/quote/bolt11/{result['quote']}")
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    resp_quote_get = PostMeltQuoteResponse(**response.json())
+    assert resp_quote_get.quote == result["quote"]
+    assert resp_quote_get.amount == 64
+    assert resp_quote_get.unit == "sat"
+    assert resp_quote_get.request == request
+    assert resp_quote_get.payment_preimage is None
+    assert resp_quote_get.change is None
+    assert resp_quote_get.state == MeltQuoteState.unpaid.value
 
 
 @pytest.mark.asyncio
@@ -530,6 +522,21 @@ async def test_melt_external(ledger: Ledger, wallet: Wallet):
     # check if DEPRECATED paid flag is also returned
     assert result["paid"] is True
     assert resp_quote.paid is True
+
+    # GET the melt quote
+    response = httpx.get(
+        f"{BASE_URL}/v1/melt/quote/bolt11/{quote.quote}",
+    )
+    assert response.status_code == 200, f"{response.url} {response.status_code}"
+    resp_quote_get = PostMeltQuoteResponse(**response.json())
+    assert resp_quote_get.quote == quote.quote
+    assert resp_quote_get.amount == 62
+    assert resp_quote_get.unit == "sat"
+    assert resp_quote_get.request == invoice_payment_request
+    assert resp_quote_get.payment_preimage is not None
+    assert len(resp_quote_get.payment_preimage) == 64
+    assert resp_quote_get.change
+    assert resp_quote_get.change[0].amount == 2
 
 
 @pytest.mark.asyncio

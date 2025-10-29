@@ -335,7 +335,7 @@ class MeltQuote(LedgerEvent):
             paid_time=paid_time,
             fee_paid=row["fee_paid"],
             outputs=outputs,
-            change=change,
+            change=change or None,
             expiry=expiry,
             payment_preimage=payment_preimage,
         )
