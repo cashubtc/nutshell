@@ -139,7 +139,7 @@ class TapRestWallet(LightningBackend):
     ) -> InvoiceResponse:
         self.assert_unit_supported(amount.unit)
         data: Dict = {
-            "asset_id": "Pl83dHG7PiIC87C7m27keaRNSqUh+AmHLWZr2ilCg6k=",
+            "asset_id": base64.b64encode(bytes.fromhex(settings.mint_tap_rest_asset_id)).decode('utf-8'),
             "asset_amount": amount.amount * 100,
             "invoice_request": {
                 "memo": memo or "",
@@ -196,8 +196,8 @@ class TapRestWallet(LightningBackend):
         # set the fee limit for the payment
         fee_limit = fee_reserve(int(invoice.amount_msat))
         data: Dict = {
-            "asset_id": "Pl83dHG7PiIC87C7m27keaRNSqUh+AmHLWZr2ilCg6k=",
-            "peer_pubkey": "A6rkzPl6lbzx7Jnqr2Z6kMgrJqAxc0IlcJ1rruGAWd2t",
+            "asset_id": base64.b64encode(bytes.fromhex(settings.mint_tap_rest_asset_id)).decode('utf-8'),
+            "peer_pubkey": base64.b64encode(bytes.fromhex(settings.mint_tap_rest_peer_pubkey)).decode('utf-8'),
             "payment_request": {
                 "payment_request": quote.request,
                 "fee_limit_msat": fee_limit
@@ -334,7 +334,7 @@ class TapRestWallet(LightningBackend):
         self, melt_quote: PostMeltQuoteRequest
     ) -> PaymentQuoteResponse:
         data: Dict = {
-            "asset_id": "Pl83dHG7PiIC87C7m27keaRNSqUh+AmHLWZr2ilCg6k=",
+            "asset_id": base64.b64encode(bytes.fromhex(settings.mint_tap_rest_asset_id)).decode('utf-8'),
             "pay_req_string": melt_quote.request
         }
         try:

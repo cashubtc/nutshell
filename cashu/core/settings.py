@@ -245,6 +245,8 @@ class TapRestFundingSource(MintSettings):
     mint_tap_rest_cert_verify: bool = Field(default=True)
     mint_tap_rest_lnd_macaroon: Optional[str] = Field(default=None)
     mint_tap_rest_tap_macaroon: Optional[str] = Field(default=None)
+    mint_tap_rest_asset_id: Optional[str] = Field(default=None)
+    mint_tap_rest_peer_pubkey: Optional[str] = Field(default=None)
 
 
 class LndRPCFundingSource(MintSettings):
