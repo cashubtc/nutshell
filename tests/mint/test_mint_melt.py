@@ -5,6 +5,7 @@ import pytest_asyncio
 
 from cashu.core.base import MeltQuote, MeltQuoteState, Proof
 from cashu.core.errors import LightningPaymentFailedError
+from cashu.core.helpers import calculate_number_of_blank_outputs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
@@ -22,6 +23,7 @@ SEED = "TEST_PRIVATE_KEY"
 DERIVATION_PATH = "m/0'/0'/0'"
 DECRYPTON_KEY = "testdecryptionkey"
 ENCRYPTED_SEED = "U2FsdGVkX1_7UU_-nVBMBWDy_9yDu4KeYb7MH8cJTYQGD4RWl82PALH8j-HKzTrI"
+PAYMENT_REQUEST = "lnbc1u1p5sys4spp55e39xcanmwdscvuyncxpy0sehzl6tkh0sr94ld7g48uy4plw0aqqdp42phhwetjv4jzqcneypekzarn9ekk7cnfypq9xct5wdxk7cnfgfhhgcqzzsxqrrssrzjqvq5ztkzvh6ejph3cz89ws3hfyfajp3spemqjcmuj3mwj54gsmz0kr9y6vqqg8qqqyqqqqlgqqqp8zqqjqsp500ryhrfawljla6s9udenacv879cdnka5n5jcmh73xmlal8ytpyts9qxpqysgqg80uhpye6cg6m059aa8dual4n86mf43y5ncyf2jq5hu3cd8y3we4g6zwcxudad8d75c9tsr2v760a44duuttfwzkdy2204c2944kvgqp4w52wa"
 
 
 async def assert_err(f, msg):
@@ -597,3 +599,65 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
         ),
         "Melt quote already paid or pending.",
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_regtest, reason="only fake wallet")
+async def test_melt_fakewallet(ledger: Ledger, wallet: Wallet):
+    """End-to-end melt using FakeWallet with a 100 sat invoice.
+
+    Verifies melt quote fields before payment, performs payment via wallet.melt
+    with change outputs, and then verifies quote fields (including change) after payment.
+    """
+    # Create melt quote for 100 sat invoice
+    melt_quote_resp = await ledger.melt_quote(
+        PostMeltQuoteRequest(unit="sat", request=PAYMENT_REQUEST)
+    )
+
+    # Initial expectations
+    assert melt_quote_resp.amount == 100
+    assert melt_quote_resp.unit == "sat"
+    assert melt_quote_resp.request == PAYMENT_REQUEST.lower()
+    # fee_reserve = max(2% of 100_000 msat, 2000 msat) => 2000 msat => 2 sat
+    assert melt_quote_resp.fee_reserve == 2
+    assert melt_quote_resp.state == MeltQuoteState.unpaid.value
+    assert melt_quote_resp.change is None
+
+    # GET melt quote before paying; should be unchanged
+    mq_before = await ledger.get_melt_quote(quote_id=melt_quote_resp.quote)
+    assert mq_before.amount == melt_quote_resp.amount
+    assert mq_before.unit == melt_quote_resp.unit
+    assert mq_before.request == melt_quote_resp.request
+    assert mq_before.fee_reserve == melt_quote_resp.fee_reserve
+    assert mq_before.state == MeltQuoteState.unpaid
+    assert mq_before.change is None
+
+    # Mint exactly 102 sat (100 + 2 fee reserve)
+    mint_q = await wallet.request_mint(102)
+    await ledger.get_mint_quote(mint_q.quote)  # mark as paid in fakewallet
+    proofs = await wallet.mint(102, quote_id=mint_q.quote)
+    assert wallet.balance == 102
+
+    # Pay the melt quote directly on the ledger using minted proofs and blank change outputs
+    n_change_outputs = calculate_number_of_blank_outputs(melt_quote_resp.fee_reserve)
+    change_outputs = await wallet.construct_outputs([1] * n_change_outputs)
+    melt_pay_resp = await ledger.melt(
+        proofs=proofs,
+        quote=melt_quote_resp.quote,
+        outputs=change_outputs,
+    )
+    assert melt_pay_resp.state == MeltQuoteState.paid.value
+    assert melt_pay_resp.change is not None and len(melt_pay_resp.change) > 0
+
+    # Change should be 1 sat (fee_reserve 2 - fee_paid 1)
+    assert sum([p.amount for p in melt_pay_resp.change]) == 1
+
+    # GET the melt quote after paying; verify fields including change
+    mq_after = await ledger.get_melt_quote(quote_id=melt_quote_resp.quote)
+    assert mq_after.state == MeltQuoteState.paid
+    assert mq_after.amount == 100
+    assert mq_after.unit == "sat"
+    assert mq_after.fee_paid == 1
+    assert mq_after.payment_preimage is not None and len(mq_after.payment_preimage) > 0
+    assert mq_after.change is not None and len(mq_after.change) > 0
+    assert sum([p.amount for p in mq_after.change]) == 1
