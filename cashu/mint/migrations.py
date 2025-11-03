@@ -741,7 +741,8 @@ async def m018_duplicate_deprecated_keyset_ids(db: Database):
             if keyset.version_tuple < (0, 15):
                 keyset_copy.id = derive_keyset_id(keyset_copy.public_keys)
             else:
-                keyset_copy.id = derive_keyset_id_deprecated(keyset_copy.public_keys)
+                keyset_copy.id = derive_keyset_id_deprecated(
+                    keyset_copy.public_keys)
             duplicated_keysets.append(keyset_copy)
 
         for keyset in duplicated_keysets:
@@ -1137,3 +1138,36 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
 
         # recreate the balance views
         await create_balance_views(db, conn)
+
+
+async def m029_remove_paid_from_mint_quote(db: Database):
+    """
+    Remove the deprecated 'paid' field from mint_quotes
+    The 'state' column now fully represents payment status.
+    """
+
+    async with db.connect() as conn:
+        if conn.type == "SQLITE":
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+
+            # Recreate mint_quotes without 'paid'
+            await conn.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS {db.table_with_schema('mint_quotes_new')} AS
+                SELECT quote, method, request, checking_id, unit, amount,
+                       issued, created_time, paid_time, state, pubkey
+                FROM {db.table_with_schema('mint_quotes')};
+                """
+            )
+            await conn.execute(f"DROP TABLE {db.table_with_schema('mint_quotes')}")
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('mint_quotes_new')} RENAME TO {db.table_with_schema('mint_quotes')}"
+            )
+
+            await conn.execute("PRAGMA foreign_keys=ON;")
+
+        else:
+            # Postgres and Cockroach
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('mint_quotes')} DROP COLUMN IF EXISTS paid"
+            )
