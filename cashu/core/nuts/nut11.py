@@ -13,6 +13,6 @@ def sigall_message_to_sign(proofs: List[Proof], outputs: List[BlindedMessage]) -
     message = "".join([p.secret + p.C for p in proofs])
 
     # Concatenate all output attributes
-    message += "".join([str(o.amount) + o.id + o.B_ for o in outputs])
+    message += "".join([str(o.amount) + o.B_ for o in outputs])
 
     return message
