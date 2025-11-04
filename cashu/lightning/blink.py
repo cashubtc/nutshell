@@ -72,7 +72,7 @@ class BlinkWallet(LightningBackend):
                 "Content-Type": "application/json",
             },
             base_url=self.endpoint,
-            timeout=15,
+            timeout=None,
         )
 
     async def status(self) -> StatusResponse:
