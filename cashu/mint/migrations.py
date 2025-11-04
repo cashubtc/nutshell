@@ -1140,7 +1140,24 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
         await create_balance_views(db, conn)
 
 
-async def m029_remove_paid_from_mint_quote(db: Database):
+async def m029_remove_overlong_witness_values(db: Database):
+    """
+    Delete any witness values longer than 1024 characters in proofs tables.
+    """
+    async with db.connect() as conn:
+        # Clean proofs_used
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('proofs_used')} SET witness = NULL "
+            "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
+        )
+
+        # Clean proofs_pending (column exists in newer schemas)
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('proofs_pending')} SET witness = NULL "
+            "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
+        )
+
+async def m030_remove_paid_from_mint_quote(db: Database):
     """
     Remove the deprecated 'paid' field from mint_quotes
     The 'state' column now fully represents payment status.

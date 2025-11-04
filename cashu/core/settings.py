@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.18.0"
+VERSION = "0.18.1"
 
 
 def find_env_file():
