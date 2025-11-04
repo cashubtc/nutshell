@@ -124,6 +124,7 @@ class StrikeWallet(LightningBackend):
         self.client = httpx.AsyncClient(
             verify=not settings.debug,
             headers=bearer_auth,
+            timeout=None,
         )
 
     async def status(self) -> StatusResponse:
