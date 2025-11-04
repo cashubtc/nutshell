@@ -500,7 +500,7 @@ class Ledger(
             raise TransactionError("Mint quote already pending.")
         if quote.issued:
             raise QuoteAlreadyIssuedError()
-        if not quote.paid:
+        if quote.state != MintQuoteState.paid:
             raise QuoteNotPaidError()
 
         previous_state = quote.state

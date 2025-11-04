@@ -214,10 +214,6 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
 
-    # check if DEPRECATED paid flag is also returned
-    assert result["paid"] is False
-    assert resp_quote.paid is False
-
     invoice = bolt11.decode(result["request"])
     assert invoice.amount_msat == 100 * 1000
 
@@ -245,9 +241,6 @@ async def test_mint_quote(ledger: Ledger):
     assert resp_quote.unit == "sat"
     assert resp_quote.request == result["request"]
 
-    # check if DEPRECATED paid flag is also returned
-    assert result2["paid"] is True
-    assert resp_quote.paid is True
     assert resp_quote.pubkey == "02" + "00" * 32
 
 
@@ -355,10 +348,6 @@ async def test_melt_quote_internal(ledger: Ledger, wallet: Wallet):
     assert resp_quote.amount == 64
     assert resp_quote.unit == "sat"
     assert resp_quote.request == request
-
-    # check if DEPRECATED paid flag is also returned
-    assert result["paid"] is False
-    assert resp_quote.paid is False
 
     invoice_obj = bolt11.decode(request)
 
