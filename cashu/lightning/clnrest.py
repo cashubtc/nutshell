@@ -80,7 +80,7 @@ class CLNRestWallet(LightningBackend):
 
         self.cert = settings.mint_clnrest_cert or False
         self.client = httpx.AsyncClient(
-            base_url=self.url, verify=self.cert, headers=self.auth
+            base_url=self.url, verify=self.cert, headers=self.auth, timeout=None,
         )
         self.last_pay_index = 0
 
