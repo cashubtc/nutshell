@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, RootModel, field_validator
 
 from .base import (
     BlindedMessage,
@@ -66,17 +66,19 @@ class GetInfoResponse(BaseModel):
 
     # BEGIN DEPRECATED: NUT-06 contact field change
     # NUT-06 PR: https://github.com/cashubtc/nuts/pull/117
-    @root_validator(pre=True)
-    def preprocess_deprecated_contact_field(cls, values: dict):
-        if "contact" in values and values["contact"]:
-            if isinstance(values["contact"][0], list):
-                values["contact"] = [
+    @field_validator("contact", mode="before")
+    @classmethod
+    def preprocess_deprecated_contact_field(
+        cls, value: Optional[List[MintInfoContact]]
+    ) -> Optional[List[MintInfoContact]]:
+        if value is not None and isinstance(value, list):
+            if isinstance(value[0], list):
+                value = [
                     MintInfoContact(method=method, info=info)
-                    for method, info in values["contact"]
+                    for method, info in value
                     if method and info
                 ]
-        return values
-
+        return value
     # END DEPRECATED: NUT-06 contact field change
 
 
@@ -121,8 +123,8 @@ class KeysetsResponse(BaseModel):
     keysets: list[KeysetsResponseKeyset]
 
 
-class KeysResponse_deprecated(BaseModel):
-    __root__: Dict[str, str]
+class KeysResponse_deprecated(RootModel):
+    root: Dict[str, str]
 
 
 class KeysetsResponse_deprecated(BaseModel):
