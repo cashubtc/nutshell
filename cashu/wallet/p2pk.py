@@ -65,9 +65,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             tags["locktime"] = str(
                 int((datetime.now() + timedelta(seconds=locktime_seconds)).timestamp())
             )
-        tags["sigflag"] = (
-            SigFlags.SIG_ALL.value if sig_all else SigFlags.SIG_INPUTS.value
-        )
+        if sig_all:
+            tags["sigflag"] = SigFlags.SIG_ALL.value
         if n_sigs > 1:
             tags["n_sigs"] = str(n_sigs)
         logger.debug(f"After tags: {tags}")

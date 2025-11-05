@@ -4,6 +4,8 @@ from typing import Optional
 
 from loguru import logger
 
+from cashu.core.secret import Tags
+
 from ..core.base import Token, TokenV3, TokenV4
 from ..core.db import Database
 from ..core.helpers import sum_proofs
@@ -121,6 +123,7 @@ async def send(
     include_fees: bool = False,
     memo: Optional[str] = None,
     force_swap: bool = False,
+    lock_tags: Optional[str] = None,
 ):
     """
     Prints token to send to stdout.
@@ -137,11 +140,23 @@ async def send(
             logger.debug(
                 f"Adding a time lock of {settings.locktime_delta_seconds} seconds."
             )
+            # parse tags
+            tags: Optional[Tags] = None
+            if lock_tags:
+                tags = Tags(
+                    tags=[
+                        [tag.split("=")[0], tag.split("=")[1]]
+                        for tag in lock_tags.split(",")
+                    ]
+                )
+            else:
+                tags = None
             secret_lock = await wallet.create_p2pk_lock(
                 lock.split(":")[1],
                 locktime_seconds=settings.locktime_delta_seconds,
                 sig_all=sigall,
                 n_sigs=1,
+                tags=tags,
             )
             logger.debug(f"Secret lock: {secret_lock}")
         else:
