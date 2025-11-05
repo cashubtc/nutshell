@@ -1155,3 +1155,35 @@ async def m029_remove_overlong_witness_values(db: Database):
             f"UPDATE {db.table_with_schema('proofs_pending')} SET witness = NULL "
             "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
         )
+
+async def m030_add_fee_tracking_to_proofs_used(db: Database):
+    """
+    Add fee tracking to proofs_used table to distinguish fee proofs from regular proofs.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            f"""
+            ALTER TABLE {db.table_with_schema('proofs_used')}
+            ADD COLUMN is_fee BOOLEAN NOT NULL DEFAULT FALSE
+            """
+        )
+        await conn.execute(
+            f"""
+            ALTER TABLE {db.table_with_schema('proofs_used')}
+            ADD COLUMN fee_type TEXT
+            """
+        )
+        await conn.execute(
+            f"""
+            ALTER TABLE {db.table_with_schema('proofs_used')}
+            ADD COLUMN fee_amount INTEGER DEFAULT 0
+            """
+        )
+
+        # Create index for efficient fee queries
+        await conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS proofs_used_fee_idx 
+            ON {db.table_with_schema('proofs_used')} (is_fee, fee_type)
+            """
+        )
