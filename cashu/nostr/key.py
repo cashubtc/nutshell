@@ -7,7 +7,7 @@ from cryptography.hazmat.primitives import padding
 from hashlib import sha256
 
 from .delegation import Delegation
-from .event import EncryptedDirectMessage, Event, EventKind
+from .event import EncryptedDirectMessage, Event, EventKind, NWCRequest
 from . import bech32
 
 
@@ -109,7 +109,10 @@ class PrivateKey:
         return sig.hex()
 
     def sign_event(self, event: Event) -> None:
-        if event.kind == EventKind.ENCRYPTED_DIRECT_MESSAGE and event.content is None:
+        if (
+            event.kind in {EventKind.ENCRYPTED_DIRECT_MESSAGE, EventKind.NWC_REQUEST}
+            and event.content is None
+        ):
             self.encrypt_dm(event)
         if event.public_key is None:
             event.public_key = self.public_key.hex()

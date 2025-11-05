@@ -20,7 +20,7 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 
 ### Feature overview
 
-- Bitcoin Lightning support (LND, CLN, et al.)
+- Bitcoin Lightning support (LND, CLN, NWC, et al.)
 - Full support for the Cashu protocol [specifications](https://github.com/cashubtc/nuts)
 - Standalone CLI wallet and mint server
 - Wallet and mint library you can include in other Python projects
