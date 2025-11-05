@@ -1138,7 +1138,25 @@ async def m028_promises_c_allow_null_add_melt_quote(db: Database):
         # recreate the balance views
         await create_balance_views(db, conn)
 
-async def m029_add_fee_tracking_to_proofs_used(db: Database):
+
+async def m029_remove_overlong_witness_values(db: Database):
+    """
+    Delete any witness values longer than 1024 characters in proofs tables.
+    """
+    async with db.connect() as conn:
+        # Clean proofs_used
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('proofs_used')} SET witness = NULL "
+            "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
+        )
+
+        # Clean proofs_pending (column exists in newer schemas)
+        await conn.execute(
+            f"UPDATE {db.table_with_schema('proofs_pending')} SET witness = NULL "
+            "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
+        )
+
+async def m030_add_fee_tracking_to_proofs_used(db: Database):
     """
     Add fee tracking to proofs_used table to distinguish fee proofs from regular proofs.
     """
@@ -1161,7 +1179,7 @@ async def m029_add_fee_tracking_to_proofs_used(db: Database):
             ADD COLUMN fee_amount INTEGER DEFAULT 0
             """
         )
-        
+
         # Create index for efficient fee queries
         await conn.execute(
             f"""

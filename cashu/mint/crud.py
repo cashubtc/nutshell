@@ -285,6 +285,15 @@ class LedgerCrud(ABC):
     ) -> Optional[MeltQuote]: ...
 
     @abstractmethod
+    async def get_melt_quotes_by_checking_id(
+        self,
+        *,
+        checking_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]: ...
+
+    @abstractmethod
     async def get_melt_quote_by_request(
         self,
         *,
@@ -1037,3 +1046,19 @@ class LedgerCrudSqlite(LedgerCrud):
         )
 
         return MintBalanceLogEntry.from_row(row) if row else None
+    
+    async def get_melt_quotes_by_checking_id(
+        self,
+        *,
+        checking_id: str,
+        db: Database,
+        conn: Optional[Connection] = None,
+    ) -> List[MeltQuote]:
+        results = await (conn or db).fetchall(
+            f"""
+            SELECT * FROM {db.table_with_schema('melt_quotes')}
+            WHERE checking_id = :checking_id
+            """,
+            {"checking_id": checking_id}
+        )
+        return [MeltQuote.from_row(row) for row in results]  # type: ignore

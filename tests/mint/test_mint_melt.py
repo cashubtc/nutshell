@@ -12,7 +12,10 @@ from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
+    get_real_invoice,
+    is_fake,
     is_regtest,
+    pay_if_regtest,
 )
 
 SEED = "TEST_PRIVATE_KEY"
@@ -369,3 +372,197 @@ async def test_mint_melt_different_units(ledger: Ledger, wallet: Wallet):
     mint_resp = await ledger.mint(outputs=outputs, quote_id=sat_mint_quote.quote)
 
     assert len(mint_resp) == len(outputs)
+
+
+# Tests for unique pending melt quote checking_id constraint
+@pytest.mark.asyncio
+async def test_set_melt_quote_pending_without_checking_id(ledger: Ledger):
+    """Test that setting a melt quote as pending without a checking_id raises an error."""
+    from cashu.core.errors import TransactionError
+    
+    quote = MeltQuote(
+        quote="quote_id_no_checking",
+        method="bolt11",
+        request="lnbc123",
+        checking_id="temp_id",
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    await ledger.crud.store_melt_quote(quote=quote, db=ledger.db)
+    
+    # Set checking_id to empty to simulate the error condition
+    quote.checking_id = ""
+    
+    try:
+        await ledger.db_write._set_melt_quote_pending(quote=quote)
+        raise AssertionError("Expected TransactionError")
+    except TransactionError as e:
+        assert "Melt quote doesn't have checking ID" in str(e)
+
+
+@pytest.mark.asyncio
+async def test_set_melt_quote_pending_prevents_duplicate_checking_id(ledger: Ledger):
+    """Test that setting a melt quote as pending fails if another quote with same checking_id is already pending."""
+    from cashu.core.errors import TransactionError
+    
+    checking_id = "test_checking_id_duplicate"
+    
+    quote1 = MeltQuote(
+        quote="quote_id_dup_first",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_dup_second",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+    )
+    
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+    
+    # Set the first quote as pending
+    await ledger.db_write._set_melt_quote_pending(quote=quote1)
+    
+    # Verify the first quote is pending
+    quote1_db = await ledger.crud.get_melt_quote(quote_id="quote_id_dup_first", db=ledger.db)
+    assert quote1_db.state == MeltQuoteState.pending
+    
+    # Attempt to set the second quote as pending should fail
+    try:
+        await ledger.db_write._set_melt_quote_pending(quote=quote2)
+        raise AssertionError("Expected TransactionError")
+    except TransactionError as e:
+        assert "Melt quote already paid or pending." in str(e)
+    
+    # Verify the second quote is still unpaid
+    quote2_db = await ledger.crud.get_melt_quote(quote_id="quote_id_dup_second", db=ledger.db)
+    assert quote2_db.state == MeltQuoteState.unpaid
+
+
+@pytest.mark.asyncio
+async def test_set_melt_quote_pending_allows_different_checking_id(ledger: Ledger):
+    """Test that setting melt quotes as pending succeeds when they have different checking_ids."""
+    checking_id_1 = "test_checking_id_allow_1"
+    checking_id_2 = "test_checking_id_allow_2"
+    
+    quote1 = MeltQuote(
+        quote="quote_id_allow_1",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id_1,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_allow_2",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id_2,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+    )
+    
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+    
+    # Set both quotes as pending - should succeed
+    await ledger.db_write._set_melt_quote_pending(quote=quote1)
+    await ledger.db_write._set_melt_quote_pending(quote=quote2)
+    
+    # Verify both quotes are pending
+    quote1_db = await ledger.crud.get_melt_quote(quote_id="quote_id_allow_1", db=ledger.db)
+    quote2_db = await ledger.crud.get_melt_quote(quote_id="quote_id_allow_2", db=ledger.db)
+    assert quote1_db.state == MeltQuoteState.pending
+    assert quote2_db.state == MeltQuoteState.pending
+
+
+@pytest.mark.asyncio
+async def test_set_melt_quote_pending_after_unset(ledger: Ledger):
+    """Test that a quote can be set as pending again after being unset."""
+    checking_id = "test_checking_id_unset_test"
+    
+    quote1 = MeltQuote(
+        quote="quote_id_unset_first",
+        method="bolt11",
+        request="lnbc123",
+        checking_id=checking_id,
+        unit="sat",
+        amount=100,
+        fee_reserve=1,
+        state=MeltQuoteState.unpaid,
+    )
+    quote2 = MeltQuote(
+        quote="quote_id_unset_second",
+        method="bolt11",
+        request="lnbc456",
+        checking_id=checking_id,
+        unit="sat",
+        amount=200,
+        fee_reserve=2,
+        state=MeltQuoteState.unpaid,
+    )
+    
+    await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
+    await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
+    
+    # Set the first quote as pending
+    quote1_pending = await ledger.db_write._set_melt_quote_pending(quote=quote1)
+    assert quote1_pending.state == MeltQuoteState.pending
+    
+    # Unset the first quote (mark as paid)
+    await ledger.db_write._unset_melt_quote_pending(quote=quote1_pending, state=MeltQuoteState.paid)
+    
+    # Verify the first quote is no longer pending
+    quote1_db = await ledger.crud.get_melt_quote(quote_id="quote_id_unset_first", db=ledger.db)
+    assert quote1_db.state == MeltQuoteState.paid
+    
+    # Now the second quote should still
+    assert_err(ledger.db_write._set_melt_quote_pending(quote=quote2), "Melt quote already paid or pending.")
+    
+    # Verify the second quote is unpaid
+    quote2_db = await ledger.crud.get_melt_quote(quote_id="quote_id_unset_second", db=ledger.db)
+    assert quote2_db.state == MeltQuoteState.unpaid
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(is_fake, reason="only regtest")
+async def test_mint_pay_with_duplicate_checking_id(wallet):
+    mint_quote1 = await wallet.request_mint(1024)
+    mint_quote2 = await wallet.request_mint(1024)
+    await pay_if_regtest(mint_quote1.request)
+    await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=1024, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=1024, quote_id=mint_quote2.quote)
+
+    invoice = get_real_invoice(64)['payment_request']
+
+    # Get two melt quotes for the same invoice
+    melt_quote1 = await wallet.melt_quote(invoice)
+    melt_quote2 = await wallet.melt_quote(invoice)
+
+    response1 = await wallet.melt(
+        proofs=proofs1, invoice=invoice, fee_reserve_sat=melt_quote1.fee_reserve, quote_id=melt_quote1.quote
+    )    
+    assert response1.state == 'PAID'
+
+    assert_err(wallet.melt(
+        proofs=proofs2, invoice=invoice, fee_reserve_sat=melt_quote2.fee_reserve, quote_id=melt_quote2.quote
+    ), "Melt quote already paid or pending.")
+    
