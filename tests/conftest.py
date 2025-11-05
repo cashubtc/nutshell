@@ -2,6 +2,7 @@ import importlib
 import multiprocessing
 import os
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -152,3 +153,77 @@ def mint():
 
     yield server
     server.stop()
+
+
+@pytest.fixture(scope="session")
+def mint_with_fees():
+    """Start a separate mint process with input fees enabled."""
+    import time
+
+    import httpx
+
+    # Create separate database directory
+    fee_mint_dir = Path("test_data/mint_with_fees")
+    fee_mint_dir.mkdir(parents=True, exist_ok=True)
+
+    # Start separate mint process with custom environment
+    env = os.environ.copy()
+    env.update(
+        {
+            # An 'OVERRIDE_' system is implemented in 'find_env_file()' in order to ensure
+            # that we can set some variables via environment variables such that they
+            # take precendence over anything in the .env file.
+            "OVERRIDE_MINT_INPUT_FEE_PPK": "5000",  # Use override to bypass .env file
+            "OVERRIDE_MINT_PRIVATE_KEY": "TEST_PRIVATE_KEY_FEES",
+            # "MINT_DATABASE": "test_data/mint_with_fees",
+            # "MINT_LISTEN_PORT": "3338",
+            # "MINT_LISTEN_HOST": "127.0.0.1",
+            # "MINT_BACKEND_BOLT11_SAT": "FakeWallet",
+            # "MINT_DERIVATION_PATH": "m/0'/0'/0'",
+            # "CASHU_DIR": "./test_data/",
+            # "DEBUG": "TRUE",
+            # "LOG_LEVEL": "TRACE",
+        }
+    )
+
+    process = subprocess.Popen(
+        [
+            "python",
+            "-m",
+            "uvicorn",
+            "cashu.mint.app:app",
+            "--port",
+            "3338",
+            "--host",
+            "127.0.0.1",
+            "--log-level",
+            "trace",
+        ],
+        env=env,
+        cwd=os.getcwd(),
+    )
+
+    # Wait for startup
+    fee_mint_url = "http://127.0.0.1:3338"
+    tries = 0
+    while tries < 100:
+        try:
+            httpx.get(fee_mint_url)
+            break
+        except httpx.ConnectError:
+            tries += 1
+            time.sleep(0.1)
+    else:
+        # If we couldn't connect after 10 seconds, kill process and fail
+        process.terminate()
+        process.wait()
+        raise Exception("Fee mint failed to start")
+
+    yield process
+
+    # Cleanup
+    process.terminate()
+    process.wait()
+
+    # Clean up database directory
+    shutil.rmtree(fee_mint_dir, ignore_errors=True)
