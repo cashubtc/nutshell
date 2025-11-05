@@ -32,6 +32,7 @@ settings.mint_url = SERVER_ENDPOINT
 settings.tor = False
 settings.wallet_unit = "sat"
 settings.mint_backend_bolt11_sat = settings.mint_backend_bolt11_sat or "FakeWallet"
+settings.mint_backend_bolt11_msat = ""
 settings.mint_backend_bolt11_usd = settings.mint_backend_bolt11_usd or "FakeWallet"
 settings.fakewallet_brr = True
 settings.fakewallet_delay_outgoing_payment = 0
