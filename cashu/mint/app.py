@@ -7,7 +7,9 @@ from traceback import print_exception
 from fastapi import FastAPI, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from loguru import logger
+from pathlib import Path
 from starlette.requests import Request
 
 from ..core.errors import CashuError
@@ -124,3 +126,14 @@ else:
 
 if settings.mint_require_auth:
     app.include_router(auth_router, tags=["Auth"])
+
+# Serve static files (landing page) at root URL
+# Mount AFTER all API routers to avoid route conflicts
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
+
+# Check if static directory exists, if not, skip mounting (prevents startup failures)
+if STATIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+else:
+    logger.warning(f"Static directory not found: {STATIC_DIR}. Skipping static file serving.")
