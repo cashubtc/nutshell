@@ -8,6 +8,129 @@ from cashu.mint import migrations as mint_migrations
 
 
 @pytest.mark.asyncio
+async def test_m026_keyset_specific_balance_views():
+    db = Database("mint", "./test_data/mig_keyset_specific_balance_views")
+
+    # Ensure schema is at latest so tables exist
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        # Determine target keyset id the migration will use
+        krow = await conn.fetchone(
+            f"SELECT id FROM {db.table_with_schema('keysets')} WHERE id LIKE '00%' ORDER BY first_seen LIMIT 1"
+        )
+        if not krow:
+            await conn.execute(
+                f"""
+                INSERT INTO {db.table_with_schema('keysets')} (
+                    id, derivation_path, seed, active, version, unit, input_fee_ppk, amounts, balance, fees_paid
+                ) VALUES (
+                    :id, :dp, :seed, 1, :ver, :unit, 0, '[]', 0, 0
+                )
+                """,
+                {
+                    "id": "00_test_keyset",
+                    "dp": "m/0'/0'/0'",
+                    "seed": "seed",
+                    "ver": "0.18.1",
+                    "unit": "sat",
+                },
+            )
+            krow = await conn.fetchone(
+                f"SELECT id FROM {db.table_with_schema('keysets')} WHERE id LIKE '00%' ORDER BY first_seen LIMIT 1"
+            )
+        assert krow is not None, "Expected at least one keyset with id starting '00'"
+        target_id = krow["id"]
+
+        # Insert rows with NULL id into promises, proofs_used, proofs_pending
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema('promises')} (amount, id, b_, c_, created)
+            VALUES (1, NULL, 'bm026_1', 'cm026_1', {db.timestamp_now})
+            """
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema('proofs_used')} (amount, id, c, secret, y, witness, created, melt_quote)
+            VALUES (1, NULL, 'cu1', 'su1', 'yu1', NULL, {db.timestamp_now}, NULL)
+            """
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema('proofs_pending')} (amount, id, c, secret, y, witness, created, melt_quote)
+            VALUES (1, NULL, 'cp1', 'sp1', 'yp1', NULL, {db.timestamp_now}, NULL)
+            """
+        )
+
+    # Run the migration under test directly
+    await mint_migrations.m026_keyset_specific_balance_views(db)
+
+    # Validate that NULL ids were set to target keyset id and views recreated
+    async with db.connect() as conn:
+        prow = await conn.fetchone(
+            f"SELECT id FROM {db.table_with_schema('promises')} WHERE b_ = 'bm026_1'"
+        )
+        assert prow is not None and prow["id"] == target_id
+
+        urow = await conn.fetchone(
+            f"SELECT id FROM {db.table_with_schema('proofs_used')} WHERE secret = 'su1'"
+        )
+        assert urow is not None and urow["id"] == target_id
+
+        prow2 = await conn.fetchone(
+            f"SELECT id FROM {db.table_with_schema('proofs_pending')} WHERE secret = 'sp1'"
+        )
+        assert prow2 is not None and prow2["id"] == target_id
+
+        # Views should exist after migration
+        v_balance = await conn.fetchone(
+            f"SELECT name FROM sqlite_master WHERE type='view' AND name='{db.table_with_schema('balance')}'"
+        )
+        assert v_balance is not None
+
+
+@pytest.mark.asyncio
+async def test_m025_add_amounts_to_keysets():
+    db = Database("mint", "./test_data/mig_add_amounts_to_keysets")
+
+    # Ensure schema is at latest so base tables exist
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        # If amounts already present, recreate keysets without it to simulate pre-m025
+        cols = await conn.fetchall("PRAGMA table_info(keysets)")
+        col_names = {c["name"] for c in cols}
+        if "amounts" in col_names:
+            await conn.execute(
+                f"CREATE TABLE {db.table_with_schema('keysets_pre25')} AS "
+                f"SELECT id, derivation_path, seed, valid_from, valid_to, first_seen, active, version, unit, encrypted_seed, seed_encryption_method, input_fee_ppk FROM {db.table_with_schema('keysets')}"
+            )
+            await conn.execute(f"DROP TABLE {db.table_with_schema('keysets')}")
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('keysets_pre25')} RENAME TO {db.table_with_schema('keysets')}"
+            )
+
+    # Run the migration under test directly
+    await mint_migrations.m025_add_amounts_to_keysets(db)
+
+    # Validate amounts column exists and defaulted to '[]'
+    async with db.connect() as conn:
+        cols2 = await conn.fetchall("PRAGMA table_info(keysets)")
+        names2 = {c["name"] for c in cols2}
+        assert "amounts" in names2
+
+        # All rows should have '[]' after migration
+        r = await conn.fetchone(
+            f"SELECT COUNT(*) as cnt FROM {db.table_with_schema('keysets')} WHERE amounts = '[]'"
+        )
+        # If there are zero rows, it's still ok structurally; else ensure all set
+        if r is not None:
+            total = await conn.fetchone(
+                f"SELECT COUNT(*) as cnt FROM {db.table_with_schema('keysets')}"
+            )
+            assert r["cnt"] == (total["cnt"] if total else 0)
+
+
 async def test_m027_add_balance_to_keysets_and_log_table():
     db = Database("mint", "./test_data/mig_add_balance_to_keysets")
 
