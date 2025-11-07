@@ -8,6 +8,243 @@ from cashu.mint import migrations as mint_migrations
 
 
 @pytest.mark.asyncio
+async def test_m024_add_melt_quote_outputs():
+    db = Database("mint", "./test_data/mig_add_melt_quote_outputs")
+
+    # Ensure schema is at latest so tables exist
+    await migrate_databases(db, mint_migrations)
+
+    # Run the migration under test directly
+    await mint_migrations.m024_add_melt_quote_outputs(db)
+
+    # Validate outputs column exists
+    async with db.connect() as conn:
+        cols = await conn.fetchall("PRAGMA table_info(melt_quotes)")
+        col_names = {c["name"] for c in cols}
+        assert "outputs" in col_names
+
+
+@pytest.mark.asyncio
+async def test_m023_add_key_to_mint_quote_table():
+    db = Database("mint", "./test_data/mig_add_key_to_mint_quote_table")
+
+    await migrate_databases(db, mint_migrations)
+
+    # Ensure pubkey column is absent to simulate pre-m023
+    async with db.connect() as conn:
+        cols = await conn.fetchall("PRAGMA table_info(mint_quotes)")
+        names = {c["name"] for c in cols}
+        if "pubkey" in names:
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+            await conn.execute(
+                f"""
+                CREATE TABLE {db.table_with_schema('mint_quotes_new')} (
+                    quote TEXT NOT NULL,
+                    method TEXT NOT NULL,
+                    request TEXT NOT NULL,
+                    checking_id TEXT NOT NULL,
+                    unit TEXT NOT NULL,
+                    amount {db.big_int} NOT NULL,
+                    paid BOOL NOT NULL,
+                    issued BOOL NOT NULL,
+                    created_time TIMESTAMP,
+                    paid_time TIMESTAMP,
+                    state TEXT,
+
+                    UNIQUE (quote)
+                );
+                """
+            )
+            await conn.execute(
+                f"""
+                INSERT INTO {db.table_with_schema('mint_quotes_new')} (
+                    quote, method, request, checking_id, unit, amount, paid, issued, created_time, paid_time, state
+                )
+                SELECT quote, method, request, checking_id, unit, amount, paid, issued, created_time, paid_time, state
+                FROM {db.table_with_schema('mint_quotes')}
+                """
+            )
+            await conn.execute(f"DROP TABLE {db.table_with_schema('mint_quotes')}")
+            await conn.execute(
+                f"ALTER TABLE {db.table_with_schema('mint_quotes_new')} RENAME TO {db.table_with_schema('mint_quotes')}"
+            )
+            await conn.execute("PRAGMA foreign_keys=ON;")
+
+    # Run the migration under test directly
+    await mint_migrations.m023_add_key_to_mint_quote_table(db)
+
+    # Validate pubkey column exists
+    async with db.connect() as conn:
+        cols2 = await conn.fetchall("PRAGMA table_info(mint_quotes)")
+        names2 = {c["name"] for c in cols2}
+        assert "pubkey" in names2
+
+
+@pytest.mark.asyncio
+async def test_m022_quote_set_states_to_values():
+    db = Database("mint", "./test_data/mig_quote_set_states_to_values")
+
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        # Insert lowercase states to be converted
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema('mint_quotes')} (
+                quote, method, request, checking_id, unit, amount, paid, issued, created_time, paid_time, state
+            ) VALUES (
+                'mq_state', 'bolt11', 'req', 'chk', 'sat', 1, 0, 0, {db.timestamp_now}, NULL, 'paid'
+            )
+            """
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema('melt_quotes')} (
+                quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof, state
+            ) VALUES (
+                'melq_state', 'bolt11', 'req', 'chk', 'sat', 1, NULL, 0, {db.timestamp_now}, NULL, NULL, NULL, 'unpaid'
+            )
+            """
+        )
+
+    # Run the migration under test directly
+    await mint_migrations.m022_quote_set_states_to_values(db)
+
+    # Validate uppercase conversion
+    async with db.connect() as conn:
+        r1 = await conn.fetchone(
+            f"SELECT state FROM {db.table_with_schema('mint_quotes')} WHERE quote = 'mq_state'"
+        )
+        assert r1 is not None and r1["state"] == "PAID"
+
+        r2 = await conn.fetchone(
+            f"SELECT state FROM {db.table_with_schema('melt_quotes')} WHERE quote = 'melq_state'"
+        )
+        assert r2 is not None and r2["state"] == "UNPAID"
+
+
+@pytest.mark.asyncio
+async def test_m021_add_change_and_expiry_to_melt_quotes():
+    db = Database("mint", "./test_data/mig_add_change_and_expiry_to_melt_quotes")
+
+    await migrate_databases(db, mint_migrations)
+
+    # Run the migration under test directly
+    await mint_migrations.m021_add_change_and_expiry_to_melt_quotes(db)
+
+    # Validate columns exist
+    async with db.connect() as conn:
+        cols = await conn.fetchall("PRAGMA table_info(melt_quotes)")
+        names = {c["name"] for c in cols}
+        assert "change" in names
+        assert "expiry" in names
+
+
+@pytest.mark.asyncio
+async def test_m020_add_state_to_mint_and_melt_quotes():
+    db = Database("mint", "./test_data/mig_add_state_to_mint_and_melt_quotes")
+
+    await migrate_databases(db, mint_migrations)
+
+    async with db.connect() as conn:
+        # Recreate tables without state column and insert test rows
+        await conn.execute("PRAGMA foreign_keys=OFF;")
+        # mint_quotes without state
+        await conn.execute(
+            f"""
+            CREATE TABLE {db.table_with_schema('mint_quotes_no_state')} (
+                quote TEXT NOT NULL,
+                method TEXT NOT NULL,
+                request TEXT NOT NULL,
+                checking_id TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                amount {db.big_int} NOT NULL,
+                paid BOOL NOT NULL,
+                issued BOOL NOT NULL,
+                created_time TIMESTAMP,
+                paid_time TIMESTAMP,
+                UNIQUE (quote)
+            );
+            """
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema('mint_quotes_no_state')} (
+                quote, method, request, checking_id, unit, amount, paid, issued, created_time, paid_time
+            ) VALUES
+            ('mq_unpaid', 'bolt11', 'req', 'chk', 'sat', 1, 0, 0, {db.timestamp_now}, NULL),
+            ('mq_paid', 'bolt11', 'req', 'chk', 'sat', 1, 1, 0, {db.timestamp_now}, NULL),
+            ('mq_issued', 'bolt11', 'req', 'chk', 'sat', 1, 1, 1, {db.timestamp_now}, NULL)
+            """
+        )
+        await conn.execute(f"DROP TABLE {db.table_with_schema('mint_quotes')}")
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('mint_quotes_no_state')} RENAME TO {db.table_with_schema('mint_quotes')}"
+        )
+
+        # melt_quotes without state
+        await conn.execute(
+            f"""
+            CREATE TABLE {db.table_with_schema('melt_quotes_no_state')} (
+                quote TEXT NOT NULL,
+                method TEXT NOT NULL,
+                request TEXT NOT NULL,
+                checking_id TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                amount {db.big_int} NOT NULL,
+                fee_reserve {db.big_int},
+                paid BOOL NOT NULL,
+                created_time TIMESTAMP,
+                paid_time TIMESTAMP,
+                fee_paid {db.big_int},
+                proof TEXT,
+                UNIQUE (quote)
+            );
+            """
+        )
+        await conn.execute(
+            f"""
+            INSERT INTO {db.table_with_schema('melt_quotes_no_state')} (
+                quote, method, request, checking_id, unit, amount, fee_reserve, paid, created_time, paid_time, fee_paid, proof
+            ) VALUES
+            ('melq_unpaid', 'bolt11', 'req', 'chk', 'sat', 1, NULL, 0, {db.timestamp_now}, NULL, NULL, NULL),
+            ('melq_paid', 'bolt11', 'req', 'chk', 'sat', 1, NULL, 1, {db.timestamp_now}, NULL, NULL, NULL)
+            """
+        )
+        await conn.execute(f"DROP TABLE {db.table_with_schema('melt_quotes')}")
+        await conn.execute(
+            f"ALTER TABLE {db.table_with_schema('melt_quotes_no_state')} RENAME TO {db.table_with_schema('melt_quotes')}"
+        )
+        await conn.execute("PRAGMA foreign_keys=ON;")
+
+    # Run migration under test
+    await mint_migrations.m020_add_state_to_mint_and_melt_quotes(db)
+
+    # Validate state computed from paid/issued
+    async with db.connect() as conn:
+        mq_unpaid = await conn.fetchone(
+            f"SELECT state FROM {db.table_with_schema('mint_quotes')} WHERE quote = 'mq_unpaid'"
+        )
+        mq_paid = await conn.fetchone(
+            f"SELECT state FROM {db.table_with_schema('mint_quotes')} WHERE quote = 'mq_paid'"
+        )
+        mq_issued = await conn.fetchone(
+            f"SELECT state FROM {db.table_with_schema('mint_quotes')} WHERE quote = 'mq_issued'"
+        )
+        assert mq_unpaid and mq_unpaid["state"] == "unpaid"
+        assert mq_paid and mq_paid["state"] == "paid"
+        assert mq_issued and mq_issued["state"] == "issued"
+
+        melq_unpaid = await conn.fetchone(
+            f"SELECT state FROM {db.table_with_schema('melt_quotes')} WHERE quote = 'melq_unpaid'"
+        )
+        melq_paid = await conn.fetchone(
+            f"SELECT state FROM {db.table_with_schema('melt_quotes')} WHERE quote = 'melq_paid'"
+        )
+        assert melq_unpaid and melq_unpaid["state"] == "unpaid"
+        assert melq_paid and melq_paid["state"] == "paid"
+
+
 async def test_m026_keyset_specific_balance_views():
     db = Database("mint", "./test_data/mig_keyset_specific_balance_views")
 
