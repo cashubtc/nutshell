@@ -50,7 +50,7 @@ class KeysetManager:
         """
         if short_id in self._short_to_full_cache:
             full = self._short_to_full_cache[short_id]
-            logger.debug(f"Resolved short keyset id {short_id} -> {full}")
+            logger.trace(f"Resolved short keyset id {short_id} -> {full}")
             return full
 
         # If caller provided a keyset listing, try resolution against it
@@ -60,7 +60,7 @@ class KeysetManager:
                 full = matches[0]
                 self._short_to_full_cache[short_id] = full
                 self._full_to_short_cache[full] = self.get_short_keyset_id(full)
-                logger.debug(f"Resolved short keyset id {short_id} -> {full}")
+                logger.trace(f"Resolved short keyset id {short_id} -> {full}")
                 return full
             elif len(matches) > 1:
                 raise ValueError("Ambiguous short keyset id; use full id instead")

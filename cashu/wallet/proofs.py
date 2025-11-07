@@ -92,7 +92,7 @@ class WalletProofs(SupportsDb, SupportsKeysets):
             # Check if this is a v2 short ID (16 chars starting with '01')
             if proof.id.startswith("01") and len(proof.id) == 16:
                 full_id = manager.get_full_keyset_id(proof.id, keysets_dict)
-                logger.debug(f"Expanded short keyset ID {proof.id} -> {full_id}")
+                logger.trace(f"Expanded short keyset ID {proof.id} -> {full_id}")
                 proof.id = full_id
 
     async def _get_keyset_urls(self, keysets: List[str]) -> Dict[str, List[str]]:
