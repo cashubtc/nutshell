@@ -313,16 +313,16 @@ async def test_keyset_versions_produce_correct_id_format():
     keyset_0_17 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.17.0")
     assert keyset_0_17.id.startswith("00"), "Version 0.17 should produce v1 ID starting with '00'"
     assert len(keyset_0_17.id) == 16, "V1 ID should be 16 characters (8 bytes hex)"
+
+    keyset_0_18 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.18.0")
+    assert keyset_0_18.id.startswith("00"), "Version 0.18 should produce v1 ID starting with '00'"
+    assert len(keyset_0_18.id) == 16, "V1 ID should be 16 characters (8 bytes hex)"
     
-    # Test version 0.18+: v2 ID (01...)
-    keyset_0_18 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.18.2")
-    assert keyset_0_18.id.startswith("01"), "Version 0.18 should produce v2 ID starting with '01'"
-    assert len(keyset_0_18.id) == 66, "V2 ID should be 66 characters (33 bytes hex)"
-    assert is_keyset_id_v2(keyset_0_18.id), "Should be detected as v2"
-    
+    # Test version 0.19+: v2 ID (01...)
     keyset_0_19 = MintKeyset(seed=SEED, derivation_path=DERIVATION_PATH, version="0.19.0")
-    assert keyset_0_19.id.startswith("01"), "Version 0.19+ should produce v2 ID starting with '01'"
+    assert keyset_0_19.id.startswith("01"), "Version 0.19 should produce v2 ID starting with '01'"
     assert len(keyset_0_19.id) == 66, "V2 ID should be 66 characters (33 bytes hex)"
+    assert is_keyset_id_v2(keyset_0_19.id), "Should be detected as v2"
 
 
 # ==================== KEYSET IDs NUT-02 TEST VECTORS ====================
