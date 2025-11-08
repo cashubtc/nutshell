@@ -135,8 +135,7 @@ async def test_p2pk_sig_all_message_aggregation(
     outputs = await create_test_outputs(wallet2, 16)
 
     message_to_sign_expected = "".join(
-        [p.secret + p.C for p in send_proofs]
-        + [str(o.amount) + o.id + o.B_ for o in outputs]
+        [p.secret + p.C for p in send_proofs] + [str(o.amount) + o.B_ for o in outputs]
     )
     message_to_sign_actual = nut11.sigall_message_to_sign(send_proofs, outputs)
     assert message_to_sign_actual == message_to_sign_expected
