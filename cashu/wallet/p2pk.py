@@ -3,8 +3,6 @@ from typing import List, Optional
 
 from loguru import logger
 
-from cashu.core.htlc import HTLCSecret
-
 from ..core.base import (
     BlindedMessage,
     HTLCWitness,
@@ -13,6 +11,8 @@ from ..core.base import (
 )
 from ..core.crypto.secp import PrivateKey
 from ..core.db import Database
+from ..core.htlc import HTLCSecret
+from ..core.nuts import nut11
 from ..core.p2pk import (
     P2PKSecret,
     SigFlags,
@@ -157,8 +157,8 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
             secrets = set([Secret.deserialize(p.secret) for p in proofs])
             if not len(secrets) == 1:
                 raise Exception("Secrets not identical")
-            message_to_sign = message_to_sign or "".join(
-                [p.secret for p in proofs] + [o.B_ for o in outputs]
+            message_to_sign = message_to_sign or nut11.sigall_message_to_sign(
+                proofs, outputs
             )
             signature = self.schnorr_sign_message(message_to_sign)
             # add witness to only the first proof
@@ -195,9 +195,7 @@ class WalletP2PK(SupportsPrivateKey, SupportsDb):
     ) -> List[Proof]:
         # sign proofs if they are P2PK SIG_INPUTS
         proofs = self.add_witnesses_sig_inputs(proofs)
-        message_to_sign = (
-            "".join([p.secret for p in proofs] + [o.B_ for o in outputs]) + quote_id
-        )
+        message_to_sign = nut11.sigall_message_to_sign(proofs, outputs) + quote_id
         # sign first proof if swap is SIG_ALL
         return self.add_witness_swap_sig_all(proofs, outputs, message_to_sign)
 
