@@ -90,7 +90,7 @@ def step1_alice(
 ) -> tuple[PublicKey, PrivateKey]:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
     r = blinding_factor or PrivateKey()
-    B_: PublicKey = Y + r.pubkey  # type: ignore
+    B_: PublicKey = Y.mult(r)  # type: ignore
     return B_, r
 
 
@@ -101,8 +101,8 @@ def step2_bob(B_: PublicKey, a: PrivateKey) -> Tuple[PublicKey, PrivateKey, Priv
     return C_, e, s
 
 
-def step3_alice(C_: PublicKey, r: PrivateKey, A: PublicKey) -> PublicKey:
-    C: PublicKey = C_ - A.mult(r)  # type: ignore
+def step3_alice(C_: PublicKey, r: PrivateKey) -> PublicKey:
+    C: PublicKey = C_.mult_inverse(r)  # type: ignore
     return C
 
 
@@ -166,8 +166,8 @@ def carol_verify_dleq(
     A: PublicKey,
 ) -> bool:
     Y: PublicKey = hash_to_curve(secret_msg.encode("utf-8"))
-    C_: PublicKey = C + A.mult(r)  # type: ignore
-    B_: PublicKey = Y + r.pubkey  # type: ignore
+    C_: PublicKey = C.mult(r)  # type: ignore
+    B_: PublicKey = Y.mult(r)  # type: ignore
     valid = alice_verify_dleq(B_, C_, e, s, A)
     # BEGIN: BACKWARDS COMPATIBILITY < 0.15.1
     if not valid:
@@ -222,24 +222,3 @@ def carol_verify_dleq_deprecated(
     B_: PublicKey = Y + r.pubkey  # type: ignore
     valid = alice_verify_dleq(B_, C_, e, s, A)
     return valid
-
-
-# Below is a test of a simple positive and negative case
-
-# # Alice's keys
-# a = PrivateKey()
-# A = a.pubkey
-# secret_msg = "test"
-# B_, r = step1_alice(secret_msg)
-# C_ = step2_bob(B_, a)
-# C = step3_alice(C_, r, A)
-# print("C:{}, secret_msg:{}".format(C, secret_msg))
-# assert verify(a, C, secret_msg)
-# assert verify(a, C + C, secret_msg) == False  # adding C twice shouldn't pass
-# assert verify(a, A, secret_msg) == False  # A shouldn't pass
-
-# # Test operations
-# b = PrivateKey()
-# B = b.pubkey
-# assert -A -A + A == -A  # neg
-# assert B.mult(a) == A.mult(b)  # a*B = A*b
