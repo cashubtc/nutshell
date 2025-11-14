@@ -12,7 +12,7 @@ from cashu.core.json_rpc.base import (
     JSONRPCNotification,
     JSONRPCSubscriptionKinds,
 )
-from cashu.core.models import PostMeltQuoteRequest
+from cashu.core.models import PostMeltQuoteRequest, PostMeltQuoteResponse
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
 from tests.conftest import SERVER_ENDPOINT
@@ -287,9 +287,11 @@ async def test_db_events_add_client(wallet: Wallet, ledger: Ledger):
     notification = JSONRPCNotification(
         method=JSONRPCMethods.SUBSCRIBE.value,
         params=JSONRPCNotficationParams(
-            subId="subId", payload=PostMeltQuoteResponse.from_melt_quote(quote_pending)
+            subId="subId", payload=PostMeltQuoteResponse.from_melt_quote(quote_pending).dict()
         ).dict(),
     )
+
+    websocket_mock.send_text.assert_called_with(notification.json())
 
     # remove subscription
     client.remove_subscription("subId")
