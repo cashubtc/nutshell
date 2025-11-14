@@ -225,7 +225,7 @@ class Ledger(
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
         # Group proofs by keyset_id to calculate fees per keyset
-        proofs_by_keyset = {}
+        proofs_by_keyset: Dict[str, List[Proof]] = {}
         for p in proofs:
             if p.id not in proofs_by_keyset:
                 proofs_by_keyset[p.id] = []
