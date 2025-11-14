@@ -204,9 +204,9 @@ class LedgerEventClientManager:
 
     def serialize_event(self, event: LedgerEvent) -> dict:
         if isinstance(event, MintQuote):
-            return_dict = PostMintQuoteResponse.parse_obj(event.dict()).dict()
+            return_dict = PostMintQuoteResponse.from_mint_quote(event).dict()
         elif isinstance(event, MeltQuote):
-            return_dict = PostMeltQuoteResponse.parse_obj(event.dict()).dict()
+            return_dict = PostMeltQuoteResponse.from_melt_quote(event).dict()
         elif isinstance(event, ProofState):
             return_dict = event.dict(exclude_unset=True, exclude_none=True)
         return return_dict
@@ -219,13 +219,13 @@ class LedgerEventClientManager:
                 quote_id=filter, db=self.db_read.db
             )
             if mint_quote:
-                await self._send_obj(mint_quote.dict(), subId)
+                await self._send_obj(PostMintQuoteResponse.from_mint_quote(mint_quote).dict(), subId)
         elif kind == JSONRPCSubscriptionKinds.BOLT11_MELT_QUOTE:
             melt_quote = await self.db_read.crud.get_melt_quote(
                 quote_id=filter, db=self.db_read.db
             )
             if melt_quote:
-                await self._send_obj(melt_quote.dict(), subId)
+                await self._send_obj(PostMeltQuoteResponse.from_melt_quote(melt_quote).dict(), subId)
         elif kind == JSONRPCSubscriptionKinds.PROOF_STATE:
             proofs = await self.db_read.get_proofs_states(Ys=[filter])
             if len(proofs):
