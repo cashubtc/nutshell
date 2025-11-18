@@ -206,7 +206,7 @@ class LedgerCrud(ABC):
     ) -> List[BlindedSignature]: ...
 
     @abstractmethod
-    async def get_promise(
+    async def get_blind_signature(
         self,
         *,
         db: Database,
@@ -215,13 +215,13 @@ class LedgerCrud(ABC):
     ) -> Optional[BlindedSignature]: ...
 
     @abstractmethod
-    async def get_promises(
+    async def get_outputs(
         self,
         *,
         db: Database,
         b_s: List[str],
         conn: Optional[Connection] = None,
-    ) -> List[BlindedSignature]: ...
+    ) -> List[BlindedMessage]: ...
 
     @abstractmethod
     async def store_mint_quote(
@@ -451,7 +451,7 @@ class LedgerCrudSqlite(LedgerCrud):
             },
         )
 
-    async def get_promise(
+    async def get_blind_signature(
         self,
         *,
         db: Database,
@@ -467,21 +467,22 @@ class LedgerCrudSqlite(LedgerCrud):
         )
         return BlindedSignature.from_row(row) if row else None  # type: ignore
 
-    async def get_promises(
+    async def get_outputs(
         self,
         *,
         db: Database,
         b_s: List[str],
         conn: Optional[Connection] = None,
-    ) -> List[BlindedSignature]:
+    ) -> List[BlindedMessage]:
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema('promises')}
-            WHERE b_ IN ({','.join([f":b_{i}" for i in range(len(b_s))])}) AND c_ IS NOT NULL
+            WHERE b_ IN ({','.join([f":b_{i}" for i in range(len(b_s))])})
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
-        return [BlindedSignature.from_row(r) for r in rows] if rows else []  # type: ignore
+        # could be unsigned (BlindedMessage) or signed (BlindedSignature), but BlindedMessage is a subclass of BlindedSignature
+        return [BlindedMessage.from_row(r) for r in rows] if rows else []  # type: ignore
 
     async def invalidate_proof(
         self,
@@ -1037,7 +1038,7 @@ class LedgerCrudSqlite(LedgerCrud):
         )
 
         return MintBalanceLogEntry.from_row(row) if row else None
-    
+
     async def get_melt_quotes_by_checking_id(
         self,
         *,
@@ -1050,6 +1051,6 @@ class LedgerCrudSqlite(LedgerCrud):
             SELECT * FROM {db.table_with_schema('melt_quotes')}
             WHERE checking_id = :checking_id
             """,
-            {"checking_id": checking_id}
+            {"checking_id": checking_id},
         )
         return [MeltQuote.from_row(row) for row in results]  # type: ignore
