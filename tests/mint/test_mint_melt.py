@@ -10,6 +10,7 @@ from cashu.core.settings import settings
 from cashu.lightning.base import PaymentResult
 from cashu.mint.ledger import Ledger
 from cashu.wallet.wallet import Wallet
+from cashu.wallet.crud import bump_secret_derivation
 from tests.conftest import SERVER_ENDPOINT
 from tests.helpers import (
     get_real_invoice,
@@ -84,6 +85,85 @@ async def create_pending_melts(
     assert melt_quotes
     return pending_proof, quote
 
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="only fakewallet")
+async def test_pending_melt_outputs_already_signed_regression_(wallet, ledger: Ledger):
+
+    settings.fakewallet_payment_state = PaymentResult.PENDING.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
+
+    mint_quote1 = await wallet.request_mint(100)
+    mint_quote2 = await wallet.request_mint(100)
+    #await pay_if_regtest(mint_quote1.request)
+    #await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
+
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+
+    # Get two melt quotes
+    melt_quote1 = await wallet.melt_quote(invoice_64_sat)
+    melt_quote2 = await wallet.melt_quote(invoice_62_sat)
+
+    n_change_outputs = 7
+    (
+        change_secrets,
+        change_rs,
+        change_derivation_paths,
+    ) = await wallet.generate_n_secrets(n_change_outputs, skip_bump=True)
+    change_outputs, change_rs = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets, change_rs
+    )
+    response1 = await ledger.melt(
+        proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
+    )    
+    assert response1.state == 'PENDING'
+
+    await assert_err(ledger.melt(
+        proofs=proofs2, quote=melt_quote2.quote, outputs=change_outputs,
+    ), "outputs have already been signed before.")
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(not is_fake, reason="only fakewallet")
+async def test_settled_melt_outputs_already_signed_regression(wallet, ledger: Ledger):
+
+    settings.fakewallet_payment_state = PaymentResult.SETTLED.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.SETTLED.name
+
+    mint_quote1 = await wallet.request_mint(100)
+    mint_quote2 = await wallet.request_mint(100)
+    #await pay_if_regtest(mint_quote1.request)
+    #await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
+
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+
+    # Get two melt quotes
+    melt_quote1 = await wallet.melt_quote(invoice_64_sat)
+    melt_quote2 = await wallet.melt_quote(invoice_62_sat)
+
+    n_change_outputs = 7
+    (
+        change_secrets,
+        change_rs,
+        change_derivation_paths,
+    ) = await wallet.generate_n_secrets(n_change_outputs, skip_bump=True)
+    change_outputs, change_rs = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets, change_rs
+    )
+    response1 = await ledger.melt(
+        proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
+    )    
+    assert response1.state == 'PAID'
+
+    await assert_err(ledger.melt(
+        proofs=proofs2, quote=melt_quote2.quote, outputs=change_outputs,
+    ), "outputs have already been signed before.")
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
@@ -534,7 +614,7 @@ async def test_set_melt_quote_pending_after_unset(ledger: Ledger):
     assert quote1_db.state == MeltQuoteState.paid
     
     # Now the second quote should still
-    assert_err(ledger.db_write._set_melt_quote_pending(quote=quote2), "Melt quote already paid or pending.")
+    await assert_err(ledger.db_write._set_melt_quote_pending(quote=quote2), "Melt quote already paid or pending.")
     
     # Verify the second quote is unpaid
     quote2_db = await ledger.crud.get_melt_quote(quote_id="quote_id_unset_second", db=ledger.db)
@@ -565,4 +645,7 @@ async def test_mint_pay_with_duplicate_checking_id(wallet):
     assert_err(wallet.melt(
         proofs=proofs2, invoice=invoice, fee_reserve_sat=melt_quote2.fee_reserve, quote_id=melt_quote2.quote
     ), "Melt quote already paid or pending.")
+
+
+
     
