@@ -61,7 +61,7 @@ class MintSettings(CashuSettings):
     mint_test_database: str = Field(default="test_data/test_mint")
     mint_max_secret_length: int = Field(default=1024)
 
-    mint_input_fee_ppk: int = Field(default=0)
+    mint_input_fee_ppk: int = Field(default=100)
     mint_disable_melt_on_error: bool = Field(default=False)
 
     mint_regular_tasks_interval_seconds: int = Field(
