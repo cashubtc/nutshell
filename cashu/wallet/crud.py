@@ -243,12 +243,13 @@ async def update_keyset(
     await (conn or db).execute(
         """
         UPDATE keysets
-        SET active = :active
+        SET active = :active, input_fee_ppk = :input_fee_ppk
         WHERE id = :id
         """,
         {
             "active": keyset.active,
             "id": keyset.id,
+            "input_fee_ppk": keyset.input_fee_ppk,
         },
     )
 
