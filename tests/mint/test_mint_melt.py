@@ -91,11 +91,13 @@ async def create_pending_melts(
     not is_fake or is_deprecated_api_only,
     reason="only fakewallet and non-deprecated api",
 )
-async def test_pending_melt_quote_outputs_registration_regression(wallet, ledger: Ledger):
-    '''When paying a request results in a PENDING melt quote,
-        the change outputs should be registered properly
-        and further requests with the same outputs should result in an expected error.
-    '''
+async def test_pending_melt_quote_outputs_registration_regression(
+    wallet, ledger: Ledger
+):
+    """When paying a request results in a PENDING melt quote,
+    the change outputs should be registered properly
+    and further requests with the same outputs should result in an expected error.
+    """
     settings.fakewallet_payment_state = PaymentResult.PENDING.name
     settings.fakewallet_pay_invoice_state = PaymentResult.PENDING.name
 
@@ -137,16 +139,24 @@ async def test_pending_melt_quote_outputs_registration_regression(wallet, ledger
         OutputsAlreadySignedError.detail,
     )
 
+    # use get_melt_quote to verify that the quote state is updated
+    melt_quote1_updated = await ledger.get_melt_quote(melt_quote1.quote)
+    assert melt_quote1_updated.state == MeltQuoteState.pending
+
+    melt_quote2_updated = await ledger.get_melt_quote(melt_quote2.quote)
+    assert melt_quote2_updated.state == MeltQuoteState.unpaid
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(
     not is_fake or is_deprecated_api_only,
     reason="only fakewallet and non-deprecated api",
 )
-async def test_settled_melt_quote_outputs_registration_regression(wallet, ledger: Ledger):
-    '''Verify that if one melt request fails, we can still use the same outputs in another request
-    '''
-    
+async def test_settled_melt_quote_outputs_registration_regression(
+    wallet, ledger: Ledger
+):
+    """Verify that if one melt request fails, we can still use the same outputs in another request"""
+
     settings.fakewallet_payment_state = PaymentResult.FAILED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.FAILED.name
 
@@ -174,18 +184,75 @@ async def test_settled_melt_quote_outputs_registration_regression(wallet, ledger
     change_outputs, change_rs = wallet._construct_outputs(
         n_change_outputs * [1], change_secrets, change_rs
     )
-    await assert_err(ledger.melt(
-        proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs
-    ), "Lightning payment failed.")
+    await assert_err(
+        ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),
+        "Lightning payment failed.",
+    )
 
     settings.fakewallet_payment_state = PaymentResult.SETTLED.name
     settings.fakewallet_pay_invoice_state = PaymentResult.SETTLED.name
 
     response2 = await ledger.melt(
-        proofs=proofs2, quote=melt_quote2.quote, outputs=change_outputs,
+        proofs=proofs2,
+        quote=melt_quote2.quote,
+        outputs=change_outputs,
     )
 
-    assert response2.state == 'PAID'
+    assert response2.state == "PAID"
+
+    # use get_melt_quote to verify that the quote state is updated
+    melt_quote2_updated = await ledger.get_melt_quote(melt_quote2.quote)
+    assert melt_quote2_updated.state == MeltQuoteState.paid
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(
+    not is_fake or is_deprecated_api_only,
+    reason="only fakewallet and non-deprecated api",
+)
+async def test_melt_quote_reuse_same_outputs(wallet, ledger: Ledger):
+    """Verify that if the same outputs are used in two melt requests,
+    the second one fails.
+    """
+
+    settings.fakewallet_payment_state = PaymentResult.SETTLED.name
+    settings.fakewallet_pay_invoice_state = PaymentResult.SETTLED.name
+
+    mint_quote1 = await wallet.request_mint(100)
+    mint_quote2 = await wallet.request_mint(100)
+    # await pay_if_regtest(mint_quote1.request)
+    # await pay_if_regtest(mint_quote2.request)
+
+    proofs1 = await wallet.mint(amount=100, quote_id=mint_quote1.quote)
+    proofs2 = await wallet.mint(amount=100, quote_id=mint_quote2.quote)
+
+    invoice_64_sat = "lnbcrt640n1pn0r3tfpp5e30xac756gvd26cn3tgsh8ug6ct555zrvl7vsnma5cwp4g7auq5qdqqcqzzsxqyz5vqsp5xfhtzg0y3mekv6nsdnj43c346smh036t4f8gcfa2zwpxzwcryqvs9qxpqysgqw5juev8y3zxpdu0mvdrced5c6a852f9x7uh57g6fgjgcg5muqzd5474d7xgh770frazel67eejfwelnyr507q46hxqehala880rhlqspw07ta0"
+    invoice_62_sat = "lnbcrt620n1pn0r3vepp5zljn7g09fsyeahl4rnhuy0xax2puhua5r3gspt7ttlfrley6valqdqqcqzzsxqyz5vqsp577h763sel3q06tfnfe75kvwn5pxn344sd5vnays65f9wfgx4fpzq9qxpqysgqg3re9afz9rwwalytec04pdhf9mvh3e2k4r877tw7dr4g0fvzf9sny5nlfggdy6nduy2dytn06w50ls34qfldgsj37x0ymxam0a687mspp0ytr8"
+
+    # Get two melt quotes
+    melt_quote1 = await wallet.melt_quote(invoice_64_sat)
+    melt_quote2 = await wallet.melt_quote(invoice_62_sat)
+
+    n_change_outputs = 7
+    (
+        change_secrets,
+        change_rs,
+        change_derivation_paths,
+    ) = await wallet.generate_n_secrets(n_change_outputs, skip_bump=True)
+    change_outputs, change_rs = wallet._construct_outputs(
+        n_change_outputs * [1], change_secrets, change_rs
+    )
+    (ledger.melt(proofs=proofs1, quote=melt_quote1.quote, outputs=change_outputs),)
+
+    await assert_err(
+        ledger.melt(
+            proofs=proofs2,
+            quote=melt_quote2.quote,
+            outputs=change_outputs,
+        ),
+        OutputsAlreadySignedError.detail,
+    )
+
 
 @pytest.mark.asyncio
 @pytest.mark.skipif(is_regtest, reason="only fake wallet")
