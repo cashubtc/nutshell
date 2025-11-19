@@ -227,10 +227,8 @@ class Ledger(
         # Group proofs by keyset_id to calculate fees per keyset
         proofs_by_keyset: Dict[str, List[Proof]] = {}
         for p in proofs:
-            if p.id not in proofs_by_keyset:
-                proofs_by_keyset[p.id] = []
-            proofs_by_keyset[p.id].append(p)
-        
+            proofs_by_keyset.setdefault(p.id, []).append(p)
+
         async with self.db.get_connection(conn) as conn:
             # store in db
             for p in proofs:
@@ -246,14 +244,17 @@ class Ledger(
                         Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
                     )
                 )
-            
+
             # Calculate and increment fees for each keyset separately
             for keyset_id, keyset_proofs in proofs_by_keyset.items():
                 keyset_fees = self.get_fees_for_proofs(keyset_proofs)
                 if keyset_fees > 0:
                     logger.trace(f"Adding fees {keyset_fees} to keyset {keyset_id}")
                     await self.crud.bump_keyset_fees_paid(
-                        keyset=self.keysets[keyset_id], amount=keyset_fees, db=self.db, conn=conn
+                        keyset=self.keysets[keyset_id],
+                        amount=keyset_fees,
+                        db=self.db,
+                        conn=conn,
                     )
 
     async def _generate_change_promises(
