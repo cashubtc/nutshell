@@ -1086,7 +1086,7 @@ class Ledger(
         async with self.db.get_connection() as conn:
             for output in outputs:
                 logger.trace(f"looking for promise: {output}")
-                promise = await self.crud.get_promise(
+                promise = await self.crud.get_blind_signature(
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
