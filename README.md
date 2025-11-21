@@ -33,7 +33,6 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 - Programmable ecash: P2PK and HTLCs ([NUT-10](https://github.com/cashubtc/nuts/blob/main/10.md))
 - Wallet and mint support for keyset rotations
 - DLEQ proofs for offline transactions ([NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md))
-- Send and receive tokens via nostr
 - Optional caching using Redis ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md))
 - Optional authentication using Keycloak ([NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md))
 

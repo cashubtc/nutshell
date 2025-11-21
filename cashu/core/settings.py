@@ -247,23 +247,6 @@ class WalletSettings(CashuSettings):
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
 
-    nostr_private_key: str = Field(default=None)
-    nostr_relays: List[str] = Field(
-        default=[
-            "wss://nostr-pub.wellorder.net",
-            "wss://relay.damus.io",
-            "wss://nostr.mom",
-            "wss://relay.snort.social",
-            "wss://nostr.mutinywallet.com",
-            "wss://relay.minibits.cash",
-            "wss://nos.lol",
-            "wss://relay.nostr.band",
-            "wss://relay.bitcoiner.social",
-            "wss://140.f7z.io",
-            "wss://relay.primal.net",
-        ]
-    )
-
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
     proofs_batch_size: int = Field(default=200)
 
