@@ -20,7 +20,7 @@ class NotAllowedError(CashuError):
 
 
 class OutputsAlreadySignedError(CashuError):
-    detail = "outputs have already been signed before or are pending."
+    detail = "outputs have already been signed before."
     code = 10002
 
     def __init__(self, detail: Optional[str] = None, code: Optional[int] = None):
