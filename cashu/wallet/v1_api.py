@@ -523,6 +523,7 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
         quote: str,
         proofs: List[Proof],
         outputs: Optional[List[BlindedMessage]],
+        prefer_async: bool = False,
     ) -> PostMeltQuoteResponse:
         """
         Accepts proofs and a lightning invoice to pay in exchange.
@@ -542,11 +543,13 @@ class LedgerAPI(LedgerAPIDeprecated, SupportsAuth):
                 "outputs": {i: outputs_include for i in range(len(outputs))},
             }
 
+        headers = {"Prefer": "respond-async"} if prefer_async else None
         resp = await self._request(
             POST,
             "melt/bolt11",
             json=payload.dict(include=_meltrequest_include_fields(proofs, outputs)),  # type: ignore
             timeout=None,
+            headers=headers,
         )
         try:
             self.raise_on_error_request(resp)
