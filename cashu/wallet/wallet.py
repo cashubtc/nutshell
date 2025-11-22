@@ -39,7 +39,7 @@ from ..core.models import (
     PostMeltQuoteResponse,
 )
 from ..core.nuts import nut20
-from ..core.p2pk import Secret
+from ..core.secret import Secret
 from ..core.settings import settings
 from . import migrations
 from .compat import WalletCompat
