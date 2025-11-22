@@ -157,7 +157,9 @@ def init_auth_wallet(func):
 )
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool):
+async def cli(
+    ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool
+):
     if settings.debug:
         configure_logger()
     if settings.tor and not TorProxy().check_platform():
@@ -672,6 +674,13 @@ async def balance(ctx: Context, verbose):
     help="Force swap token.",
     type=bool,
 )
+@click.option(
+    "--lock-tags",
+    "-t",
+    default=None,
+    help="Comma-separated tags for locked tokens.",
+    type=str,
+)
 @click.pass_context
 @coro
 @init_auth_wallet
@@ -688,6 +697,7 @@ async def send_command(
     offline: bool,
     include_fees: bool,
     force_swap: bool,
+    lock_tags: Optional[str] = None,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
@@ -702,6 +712,7 @@ async def send_command(
             include_fees=include_fees,
             memo=memo,
             force_swap=force_swap,
+            lock_tags=lock_tags,
         )
     else:
         await send_nostr(wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes)
