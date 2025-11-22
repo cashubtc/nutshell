@@ -741,7 +741,8 @@ async def m018_duplicate_deprecated_keyset_ids(db: Database):
             if keyset.version_tuple < (0, 15):
                 keyset_copy.id = derive_keyset_id(keyset_copy.public_keys)
             else:
-                keyset_copy.id = derive_keyset_id_deprecated(keyset_copy.public_keys)
+                keyset_copy.id = derive_keyset_id_deprecated(
+                    keyset_copy.public_keys)
             duplicated_keysets.append(keyset_copy)
 
         for keyset in duplicated_keysets:
@@ -1155,3 +1156,43 @@ async def m029_remove_overlong_witness_values(db: Database):
             f"UPDATE {db.table_with_schema('proofs_pending')} SET witness = NULL "
             "WHERE witness IS NOT NULL AND LENGTH(witness) > 1024"
         )
+
+async def m030_remove_paid_from_mint_quote(db: Database):
+    """
+    Remove the deprecated 'paid' field from mint_quotes
+    The 'state' column now fully represents payment status.
+    """
+    async with db.connect() as conn:
+        if conn.type == "SQLITE":
+            await conn.execute("PRAGMA foreign_keys=OFF;")
+
+            # Recreate mint_quotes without 'paid'
+            await conn.execute("""
+                CREATE TABLE mint_quotes_new (
+                    quote TEXT PRIMARY KEY,
+                    method TEXT,
+                    request TEXT,
+                    checking_id TEXT,
+                    unit TEXT,
+                    amount INT,
+                    issued NUM,
+                    created_time NUM,
+                    paid_time NUM,
+                    state TEXT,
+                    pubkey TEXT
+                );
+            """)
+
+            # Copy data
+            await conn.execute("""
+                INSERT INTO mint_quotes_new
+                SELECT quote, method, request, checking_id, unit, amount,
+                       issued, created_time, paid_time, state, pubkey
+                FROM mint_quotes;
+            """)
+
+            # Swap tables
+            await conn.execute("DROP TABLE mint_quotes;")
+            await conn.execute("ALTER TABLE mint_quotes_new RENAME TO mint_quotes;")
+
+            await conn.execute("PRAGMA foreign_keys=ON;")
