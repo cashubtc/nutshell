@@ -121,6 +121,7 @@ async def send(
     include_fees: bool = False,
     memo: Optional[str] = None,
     force_swap: bool = False,
+    max_input_fee_ppk: Optional[int] = None,
 ):
     """
     Prints token to send to stdout.
@@ -156,6 +157,7 @@ async def send(
             amount,
             set_reserved=False,  # we set reserved later
             secret_lock=secret_lock,
+            max_input_fee_ppk=max_input_fee_ppk,
         )
     else:
         send_proofs, fees = await wallet.select_to_send(
@@ -164,6 +166,7 @@ async def send(
             set_reserved=False,  # we set reserved later
             offline=offline,
             include_fees=include_fees,
+            max_input_fee_ppk=max_input_fee_ppk,
         )
 
     token = await wallet.serialize_proofs(

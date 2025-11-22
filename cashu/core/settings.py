@@ -20,6 +20,15 @@ def find_env_file():
         env.read_env(env_file, recurse=False, override=True)
     else:
         env_file = ""
+
+    # Apply override environment variables at the end
+    # This allows OVERRIDE_* env vars to override .env file settings
+    for key, value in os.environ.items():
+        if key.startswith("OVERRIDE_"):
+            # Remove OVERRIDE_ prefix and set the environment variable
+            actual_key = key[9:]  # Remove "OVERRIDE_" (9 characters)
+            os.environ[actual_key] = value
+
     return env_file
 
 
@@ -229,6 +238,7 @@ class MintManagementRPCSettings(MintSettings):
     mint_rpc_server_mutual_tls: bool = Field(
         default=True, description="Require client certificates."
     )
+
 
 
 class WalletSettings(CashuSettings):

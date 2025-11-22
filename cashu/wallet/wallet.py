@@ -652,6 +652,7 @@ class Wallet(
         amount: int,
         secret_lock: Optional[Secret] = None,
         include_fees: bool = False,
+        max_input_fee_ppk: Optional[int] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
         """Calls the swap API to split the proofs into two sets of proofs, one for keeping and one for sending.
 
@@ -679,6 +680,9 @@ class Wallet(
         assert amount >= 0, "amount can't be negative."
         # make sure we're operating on an independent copy of proofs
         proofs = copy.copy(proofs)
+
+        # Check input fee limit before performing swap
+        self._check_input_fee_limit(proofs, max_input_fee_ppk)
 
         input_fees = self.get_fees_for_proofs(proofs)
         logger.trace(f"Input fees: {input_fees}")
@@ -1169,6 +1173,7 @@ class Wallet(
         set_reserved: bool = False,
         offline: bool = False,
         include_fees: bool = False,
+        max_input_fee_ppk: Optional[int] = None,
     ) -> Tuple[List[Proof], int]:
         """
         Selects proofs such that a desired `amount` can be sent. If the offline coin selection is unsuccessful,
@@ -1197,6 +1202,7 @@ class Wallet(
 
         # coin selection for potentially offline sending
         send_proofs = self.coinselect(proofs, amount, include_fees=include_fees)
+        self._check_input_fee_limit(send_proofs, max_input_fee_ppk)
         fees = self.get_fees_for_proofs(send_proofs)
         logger.trace(
             f"select_to_send: selected: {self.unit.str(sum_proofs(send_proofs))} (+ {self.unit.str(fees)} fees) – wanted: {self.unit.str(amount)}"
@@ -1211,6 +1217,7 @@ class Wallet(
                     amount,
                     set_reserved=False,
                     include_fees=include_fees,
+                    max_input_fee_ppk=max_input_fee_ppk,
                 )
             else:
                 raise Exception(
@@ -1229,6 +1236,7 @@ class Wallet(
         secret_lock: Optional[Secret] = None,
         set_reserved: bool = False,
         include_fees: bool = False,
+        max_input_fee_ppk: Optional[int] = None,
     ) -> Tuple[List[Proof], List[Proof]]:
         """
         Swaps a set of proofs with the mint to get a set that sums up to a desired amount that can be sent. The remaining
@@ -1268,7 +1276,11 @@ class Wallet(
             f"Amount to send: {self.unit.str(amount)} (+ {self.unit.str(fees)} fees)"
         )
         keep_proofs, send_proofs = await self.split(
-            swap_proofs, amount, secret_lock, include_fees=include_fees
+            swap_proofs,
+            amount,
+            secret_lock,
+            include_fees=include_fees,
+            max_input_fee_ppk=max_input_fee_ppk,
         )
         if set_reserved:
             await self.set_reserved_for_send(send_proofs, reserved=True)

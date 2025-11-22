@@ -157,7 +157,9 @@ def init_auth_wallet(func):
 )
 @click.pass_context
 @coro
-async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool):
+async def cli(
+    ctx: Context, host: str, walletname: str, unit: str, tests: bool, verbose: bool
+):
     if settings.debug:
         configure_logger()
     if settings.tor and not TorProxy().check_platform():
@@ -243,11 +245,21 @@ async def cli(ctx: Context, host: str, walletname: str, unit: str, tests: bool, 
 @click.option(
     "--yes", "-y", default=False, is_flag=True, help="Skip confirmation.", type=bool
 )
+@click.option(
+    "--max-input-fee-ppk",
+    default=None,
+    help="Maximum input fee in parts per kilosat. Rejects swaps exceeding this limit.",
+    type=int,
+)
 @click.pass_context
 @coro
 @init_auth_wallet
 async def pay(
-    ctx: Context, invoice: str, amount: Optional[int] = None, yes: bool = False
+    ctx: Context,
+    invoice: str,
+    amount: Optional[int] = None,
+    yes: bool = False,
+    max_input_fee_ppk: Optional[int] = None,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
     await wallet.load_mint()
@@ -276,11 +288,21 @@ async def pay(
     if wallet.available_balance < total_amount + ecash_fees:
         print(" Error: Balance too low.")
         return
+    from ..errors import InputFeeExceedsLimitError
+
     assert total_amount > 0, "amount is not positive"
     # we need to include fees so we can use the proofs for melting the `total_amount`
-    send_proofs, _ = await wallet.select_to_send(
-        wallet.proofs, total_amount, include_fees=True, set_reserved=False
-    )
+    try:
+        send_proofs, _ = await wallet.select_to_send(
+            wallet.proofs,
+            total_amount,
+            include_fees=True,
+            set_reserved=False,
+            max_input_fee_ppk=max_input_fee_ppk,
+        )
+    except InputFeeExceedsLimitError as e:
+        click.echo(f" Error: {e}", err=True)
+        ctx.exit(1)
     print("Paying Lightning invoice ...", end="", flush=True)
     assert total_amount > 0, "amount is not positive"
     logger.debug(
@@ -501,10 +523,16 @@ async def invoice(
 
 
 @cli.command("swap", help="Swap funds between mints.")
+@click.option(
+    "--max-input-fee-ppk",
+    default=None,
+    help="Maximum input fee in parts per kilosat. Rejects swaps exceeding this limit.",
+    type=int,
+)
 @click.pass_context
 @coro
 @init_auth_wallet
-async def swap(ctx: Context):
+async def swap(ctx: Context, max_input_fee_ppk: Optional[int] = None):
     print("Select the mint to swap from:")
     outgoing_wallet: Wallet = await get_mint_wallet(ctx, force_select=True)
 
@@ -528,9 +556,19 @@ async def swap(ctx: Context):
     total_amount = melt_quote.amount + melt_quote.fee_reserve
     if outgoing_wallet.available_balance < total_amount:
         raise Exception("balance too low")
-    send_proofs, fees = await outgoing_wallet.select_to_send(
-        outgoing_wallet.proofs, total_amount, set_reserved=True
-    )
+
+    from ..errors import InputFeeExceedsLimitError
+
+    try:
+        send_proofs, fees = await outgoing_wallet.select_to_send(
+            outgoing_wallet.proofs,
+            total_amount,
+            set_reserved=True,
+            max_input_fee_ppk=max_input_fee_ppk,
+        )
+    except InputFeeExceedsLimitError as e:
+        click.echo(f"Error: {e}", err=True)
+        ctx.exit(1)
     await outgoing_wallet.melt(
         send_proofs,
         mint_quote.request,
@@ -665,6 +703,12 @@ async def balance(ctx: Context, verbose):
     type=bool,
 )
 @click.option(
+    "--max-input-fee-ppk",
+    default=None,
+    help="Maximum input fee in parts per kilosat. Rejects swaps exceeding this limit.",
+    type=int,
+)
+@click.option(
     "--force-swap",
     "-s",
     default=False,
@@ -687,25 +731,35 @@ async def send_command(
     yes: bool,
     offline: bool,
     include_fees: bool,
+    max_input_fee_ppk: Optional[int],
     force_swap: bool,
 ):
     wallet: Wallet = ctx.obj["WALLET"]
+    from ..errors import InputFeeExceedsLimitError
+
     amount = int(amount * 100) if wallet.unit in [Unit.usd, Unit.eur] else int(amount)
-    if not nostr:
-        await send(
-            wallet,
-            amount=amount,
-            lock=lock,
-            legacy=legacy,
-            offline=offline,
-            include_dleq=dleq,
-            include_fees=include_fees,
-            memo=memo,
-            force_swap=force_swap,
-        )
-    else:
-        await send_nostr(wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes)
-    await print_balance(ctx)
+    try:
+        if not nostr:
+            await send(
+                wallet,
+                amount=amount,
+                lock=lock,
+                legacy=legacy,
+                offline=offline,
+                include_dleq=dleq,
+                include_fees=include_fees,
+                memo=memo,
+                force_swap=force_swap,
+                max_input_fee_ppk=max_input_fee_ppk,
+            )
+        else:
+            await send_nostr(
+                wallet, amount=amount, pubkey=nostr, verbose=verbose, yes=yes
+            )
+        await print_balance(ctx)
+    except InputFeeExceedsLimitError as e:
+        click.echo(f"Error: {e}", err=True)
+        ctx.exit(1)
 
 
 @cli.command("receive", help="Receive tokens.")
@@ -1247,10 +1301,18 @@ async def restore(ctx: Context, to: int, batch: int):
 
 @cli.command("selfpay", help="Refresh tokens.")
 # @click.option("--all", default=False, is_flag=True, help="Execute on all available mints.")
+@click.option(
+    "--max-input-fee-ppk",
+    default=None,
+    help="Maximum input fee in parts per kilosat. Rejects swaps exceeding this limit.",
+    type=int,
+)
 @click.pass_context
 @coro
 @init_auth_wallet
-async def selfpay(ctx: Context, all: bool = False):
+async def selfpay(
+    ctx: Context, max_input_fee_ppk: Optional[int] = None, all: bool = False
+):
     wallet = await get_mint_wallet(ctx, force_select=True)
     await wallet.load_mint()
 
@@ -1258,9 +1320,19 @@ async def selfpay(ctx: Context, all: bool = False):
     mint_balance_dict = await wallet.balance_per_minturl()
     mint_balance = int(mint_balance_dict[wallet.url]["available"])
     # send balance once to mark as reserved
-    await wallet.select_to_send(
-        wallet.proofs, mint_balance, set_reserved=True, include_fees=False
-    )
+    from ..errors import InputFeeExceedsLimitError
+
+    try:
+        await wallet.select_to_send(
+            wallet.proofs,
+            mint_balance,
+            set_reserved=True,
+            include_fees=False,
+            max_input_fee_ppk=max_input_fee_ppk,
+        )
+    except InputFeeExceedsLimitError as e:
+        click.echo(f"Error: {e}", err=True)
+        ctx.exit(1)
     # load all reserved proofs (including the one we just sent)
     reserved_proofs = await get_reserved_proofs(wallet.db)
     if not len(reserved_proofs):

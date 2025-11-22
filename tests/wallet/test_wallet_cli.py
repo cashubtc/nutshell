@@ -23,6 +23,17 @@ def cli_prefix():
     yield ["--wallet", "test_cli_wallet", "--host", settings.mint_url, "--tests"]
 
 
+@pytest.fixture(scope="session")
+def cli_prefix_fee_mint():
+    yield [
+        "--wallet",
+        "test_cli_wallet_fees",
+        "--host",
+        "http://127.0.0.1:3338",
+        "--tests",
+    ]
+
+
 def get_bolt11_and_invoice_id_from_invoice_command(output: str) -> Tuple[str, str]:
     invoice = [
         line.split(" ")[1] for line in output.split("\n") if line.startswith("Invoice")
@@ -512,6 +523,232 @@ def test_send_too_much(mint, cli_prefix):
         [*cli_prefix, "send", "100000"],
     )
     assert "Balance too low" in str(result.exception)
+
+
+def test_send_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
+    """
+    This test uses a secondary test mint (see 'mint_with_fees' in conftext.py) which
+    has fees; 5000ppk (i.e. 5 sats) per token
+
+    This test checks that the --max-input-fee parameter works as expected, by
+    blocking transactions that generate too many fees
+    """
+    runner = CliRunner(
+        mix_stderr=False  # mix_stderr=False ensures that .output and stderr are separate
+    )
+
+    # First, let's verify the fee configuration of this special mint by checking the keyset,
+
+    import httpx
+
+    fee_mint_response = httpx.get("http://127.0.0.1:3338/v1/keysets")
+    fee_keysets = fee_mint_response.json()
+
+    should_have_a_fee = fee_keysets["keysets"][0]["input_fee_ppk"]
+    assert should_have_a_fee == 5000, should_have_a_fee
+
+    # Check initial balance is zero
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exception is None
+    assert "Balance: 0 sat" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Mint a token, using split to get a single 64-sat token
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "invoice", "64", "--split", "64"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+
+    # Check new balance, to confirm we have a 64-sat token
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+    assert "Balance: 64" in result.output
+
+    # Test 1: Restrictive fee limit should fail
+    # We try to send 3 sats, as that forces a swap on the 64-sat token, and that will trigger the fee
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "send", "3", "--max-input-fee-ppk", "0"],
+    )
+    assert result.exit_code != 0, (result.exit_code, result.output, result.stderr)
+    assert "Input fee" in result.stderr and "exceeds limit" in result.stderr, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Another test, close to the threshold. Should also fail
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "send", "3", "--max-input-fee-ppk", "4999"],
+    )
+    assert result.exit_code != 0, (result.exit_code, result.output, result.stderr)
+    assert "Input fee" in result.stderr and "exceeds limit" in result.stderr, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Finally, with a more generous fee limit, so that it should succeed
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "send", "3", "--max-input-fee-ppk", "5000"],
+    )
+    print(f"Generous limit - Exit code: {result.exit_code}")
+    print(f"Generous limit - Output: {result.output}")
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+    assert "cashuB" in result.output, (result.exit_code, result.output, result.stderr)
+
+
+def test_pay_with_input_fee_limit_cli(mint_with_fees, cli_prefix_fee_mint):
+    """Test pay command with input fee limit via CLI runner using fee-enabled mint."""
+    runner = CliRunner(
+        mix_stderr=False  # mix_stderr=False ensures that .output and stderr are separate
+    )
+
+    # Verify the fee configuration of the fee mint
+    import httpx
+
+    fee_mint_response = httpx.get("http://127.0.0.1:3338/v1/keysets")
+    fee_keysets = fee_mint_response.json()
+    should_have_a_fee = fee_keysets["keysets"][0]["input_fee_ppk"]
+    assert should_have_a_fee == 5000, should_have_a_fee
+
+    # Check initial balance is zero
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exception is None and "Balance: 0 sat" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Mint a token, using split to get a single 64-sat token
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "invoice", "64", "--split", "64"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+
+    # Check balance after minting
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exit_code == 0 and "Balance: 64" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Create a test Lightning invoice to pay (using FakeWallet backend)
+    # For testing, we'll create an invoice from the same mint
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "invoice", "10", "--no-check"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+
+    # Extract the invoice from the output using regex
+    import re
+
+    invoice_match = re.search(r"Invoice: (ln\w+)", result.output)
+    assert invoice_match, f"Could not find invoice in output: {result.output}"
+    invoice = invoice_match.group(1)
+
+    # Test 0: Restrictive fee limit should fail when paying invoice
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "pay", invoice, "--max-input-fee-ppk", "4999", "--yes"],
+    )
+    assert (
+        result.exit_code != 0
+        and "Input fee" in result.stderr
+        and "exceeds limit" in result.stderr
+    ), (result.exit_code, result.output, result.stderr)
+
+    # Test 0: Restrictive fee limit should fail when paying invoice
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "pay", invoice, "--max-input-fee-ppk", "5000", "--yes"],
+    )
+    assert result.exit_code == 0 and "Invoice paid" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+
+def test_selfpay_with_input_fee_limit_cli(
+    mint, mint_with_fees, cli_prefix, cli_prefix_fee_mint
+):
+    """Test selfpay command with input fee limit."""
+    runner = CliRunner(
+        mix_stderr=False  # mix_stderr=False ensures that .output and stderr are separate
+    )
+
+    # Set up some balance on the fee mint first
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "invoice", "64", "--split", "64"],
+    )
+    assert result.exit_code == 0, (result.exit_code, result.output, result.stderr)
+
+    # Check balance on fee mint
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exit_code == 0 and "Balance: 64" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # Test 1: Restrictive fee limit should fail when doing selfpay
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "selfpay", "--max-input-fee-ppk", "4999"],
+    )
+    assert (
+        result.exit_code != 0
+        and "Input fee" in result.stderr
+        and "exceeds limit" in result.stderr
+    ), (result.exit_code, result.output, result.stderr)
+
+    # Test 2: Generous fee limit should succeed when doing selfpay
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "selfpay", "--max-input-fee-ppk", "5000"],
+    )
+    assert result.exit_code == 0 and "Selfpay token for mint" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
+
+    # The final balance should be 64-5 = 59, as we paid 5 sats in fees
+    result = runner.invoke(
+        cli,
+        [*cli_prefix_fee_mint, "balance"],
+    )
+    assert result.exit_code == 0 and "Balance: 59" in result.output, (
+        result.exit_code,
+        result.output,
+        result.stderr,
+    )
 
 
 def test_receive_tokenv3(mint, cli_prefix):
