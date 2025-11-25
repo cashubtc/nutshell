@@ -71,6 +71,13 @@ class MintSettings(CashuSettings):
         description="Interval (in seconds) for running regular tasks like the invoice checker.",
     )
 
+    # New toggle to enable/disable regular tasks (useful for tests and deployments)
+    mint_regular_tasks_enabled: bool = Field(
+        default=True,
+        title="Enable regular mint tasks",
+        description="Enable the ledger's periodic background tasks such as pending proof checks and expiry sweeps.",
+    )
+
     mint_retry_exponential_backoff_base_delay: int = Field(default=1)
     mint_retry_exponential_backoff_max_delay: int = Field(default=10)
 

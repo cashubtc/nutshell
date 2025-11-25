@@ -144,7 +144,9 @@ class Ledger(
     async def startup_ledger(self) -> None:
         await self._startup_keysets()
         await self._check_backends()
-        self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
+        # only start regular tasks if enabled
+        if settings.mint_regular_tasks_enabled:
+            self.regular_tasks.append(asyncio.create_task(self._run_regular_tasks()))
         self.invoice_listener_tasks = await self.dispatch_listeners()
         if settings.mint_watchdog_enabled:
             self.watchdog_tasks = await self.dispatch_watchdogs()
@@ -156,12 +158,28 @@ class Ledger(
             await self.activate_keyset(derivation_path=derivation_path)
 
     async def _run_regular_tasks(self) -> None:
-        try:
-            await self._check_pending_proofs_and_melt_quotes()
-            await asyncio.sleep(settings.mint_regular_tasks_interval_seconds)
-        except Exception as e:
-            logger.error(f"Ledger regular task failed: {e}")
-            await asyncio.sleep(60)
+        """
+        Runs periodic ledger maintenance tasks forever.
+        This function intentionally loops forever and is designed to be scheduled as a Task.
+        """
+        logger.info("Starting ledger regular tasks loop")
+        while True:
+            try:
+                await self._check_pending_proofs_and_melt_quotes()
+                await self._check_expired_quotes()
+            except Exception as e:
+                logger.error(f"Ledger regular task failed: {e}")
+            
+             # sleep between iterations. Keep this outside the try to ensure we always sleep.
+            try:
+                await asyncio.sleep(settings.mint_regular_tasks_interval_seconds)
+            except asyncio.CancelledError:
+                logger.info("Ledger regular tasks loop cancelled")
+                break
+            except Exception as e:
+                # If sleep fails for some reason, log and retry after a short delay
+                logger.exception(f"Sleep failed in regular tasks loop: {e}")
+                await asyncio.sleep(60)
 
     async def _check_backends(self) -> None:
         for method in self.backends:
@@ -209,6 +227,40 @@ class Ledger(
             quote = await self.get_melt_quote(quote_id=quote.quote)
             logger.info(f"Melt quote {quote.quote} state: {quote.state}")
 
+    async def _check_expired_quotes(self):
+        """
+        Find and expire mint and melt quotes which have passed their expiry time
+        and are still in a pending state.
+        """
+        # expire melt quotes
+        try:
+            expired_melts: List[MeltQuote] = await self.crud.get_expired_melt_quotes(
+                db=self.db
+            )
+            if expired_melts:
+                logger.info(f"Found {len(expired_melts)} expired melt quotes to expire")
+            for mq in expired_melts:
+                logger.info(f"Expiring melt quote {mq.quote}")
+                try:
+                    await self.crud.expire_melt_quote(db=self.db, quote_id=mq.quote)
+                except Exception as e:
+                    logger.exception(f"Failed to expire melt quote {mq.quote}: {e}")
+        except Exception as e:
+            logger.exception(f"Failed to fetch/expire melt quotes: {e}")
+
+        # expire mint quotes
+        try:
+            expired_mints = await self.crud.get_expired_mint_quotes(db=self.db)
+            if expired_mints:
+                logger.info(f"Found {len(expired_mints)} expired mint quotes to expire")
+            for mq in expired_mints:
+                logger.info(f"Expiring mint quote {mq.quote}")
+                try:
+                    await self.crud.expire_mint_quote(db=self.db, quote_id=mq.quote)
+                except Exception as e:
+                    logger.exception(f"Failed to expire mint quote {mq.quote}: {e}")
+        except Exception as e:
+            logger.exception(f"Failed to fetch/expire mint quotes: {e}")
     # ------- ECASH -------
 
     async def _invalidate_proofs(

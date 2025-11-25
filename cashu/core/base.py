@@ -280,6 +280,7 @@ class MeltQuoteState(Enum):
     unpaid = "UNPAID"
     pending = "PENDING"
     paid = "PAID"
+    expired = "EXPIRED"
 
     def __str__(self):
         return self.name
@@ -409,6 +410,7 @@ class MintQuoteState(Enum):
     paid = "PAID"
     pending = "PENDING"
     issued = "ISSUED"
+    expired = "EXPIRED"
 
     def __str__(self):
         return self.name
