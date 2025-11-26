@@ -71,7 +71,7 @@ class MintSettings(CashuSettings):
         description="Interval (in seconds) for running regular tasks like the invoice checker.",
     )
 
-    # New toggle to enable/disable regular tasks (useful for tests and deployments)
+    #toggle to enable/disable regular tasks
     mint_regular_tasks_enabled: bool = Field(
         default=True,
         title="Enable regular mint tasks",

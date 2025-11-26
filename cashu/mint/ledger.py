@@ -177,7 +177,7 @@ class Ledger(
                 logger.info("Ledger regular tasks loop cancelled")
                 break
             except Exception as e:
-                # If sleep fails for some reason, log and retry after a short delay
+                #if sleep fails for some reason, log and retry after a short delay
                 logger.exception(f"Sleep failed in regular tasks loop: {e}")
                 await asyncio.sleep(60)
 

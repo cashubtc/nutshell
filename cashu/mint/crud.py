@@ -23,7 +23,7 @@ from ..core.db import (
     Database,
 )
 
-EXPIRY_SECONDS = 300  # e.g., 5 minutes
+EXPIRY_SECONDS = 300  #5 minutes
 
 class LedgerCrud(ABC):
     """
@@ -1101,9 +1101,8 @@ class LedgerCrudSqlite(LedgerCrud):
     ) -> List[MeltQuote]:
         """
         Return melt quotes that are still pending and older than EXPIRY_SECONDS,
-        using created_time as the determination of age (no schema changes required).
+        using created_time as the determination of age.
         """
-        # compute cutoff timestamp in the DB's timestamp format
         cutoff_ts = db.to_timestamp(db.timestamp_from_seconds(int(time.time()) - EXPIRY_SECONDS))
 
         rows = await (conn or db).fetchall(
