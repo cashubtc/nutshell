@@ -1,15 +1,13 @@
-import secrets
-from typing import AsyncGenerator, Dict, Optional, Union
+import hashlib
+import hmac
 import json
+from base64 import b64encode
+from typing import AsyncGenerator, Optional
 
 import httpx
-from pydantic import BaseModel
-from bolt11 import decode, Bolt11Exception
+from bolt11 import Bolt11Exception, decode
 from loguru import logger
-
-import hmac
-import hashlib
-from base64 import b64encode
+from pydantic import BaseModel
 
 from ..core.base import Amount, MeltQuote, Unit
 from ..core.helpers import fee_reserve
@@ -24,6 +22,7 @@ from .base import (
     PaymentStatus,
     StatusResponse,
 )
+
 
 class LNMarketsDepositResponse(BaseModel):
     depositId: str
@@ -232,7 +231,7 @@ class LNMarketsWallet(LightningBackend):
                 if hasattr(e, 'response') and hasattr(e.response, 'json'):
                     error_data = e.response.json()
                     error_msg = error_data.get("message", str(e))
-            except:
+            except Exception:
                 pass
 
             return InvoiceResponse(
@@ -319,7 +318,7 @@ class LNMarketsWallet(LightningBackend):
                             result=PaymentResult.FAILED,
                             error_message="Cannot pay to another LN Markets account via invoice"
                         )
-            except:
+            except Exception:
                 pass
 
             return PaymentResponse(
@@ -421,5 +420,5 @@ class LNMarketsWallet(LightningBackend):
             )
 
 
-    async def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
+    def paid_invoices_stream(self) -> AsyncGenerator[str, None]:
         raise NotImplementedError("paid_invoices_stream not implemented")
