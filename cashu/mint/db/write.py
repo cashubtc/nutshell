@@ -135,7 +135,12 @@ class DbWriteHelper:
         pending_proofs = await self.crud.get_proofs_pending(
             Ys=[p.Y for p in proofs], db=self.db, conn=conn
         )
-        if not (len(pending_proofs) == 0):
+        if pending_proofs:
+            logger.debug(
+                "Detected %s pending proofs blocking transaction: %s",
+                len(pending_proofs),
+                [p.Y for p in pending_proofs],
+            )
             raise TransactionError("proofs are pending.")
 
     async def _set_mint_quote_pending(self, quote_id: str) -> MintQuote:

@@ -137,6 +137,16 @@ class LedgerVerification(
             outputs, conn
         )
         if any(signed_before):
+            already_stored = [
+                {"B_": output.B_, "present": present}
+                for output, present in zip(outputs, signed_before)
+                if present
+            ]
+            logger.debug(
+                "Detected %s outputs already stored (pending or issued): %s",
+                len(already_stored),
+                already_stored,
+            )
             raise OutputsAlreadySignedError()
         logger.trace(f"Verified {len(outputs)} outputs.")
 
