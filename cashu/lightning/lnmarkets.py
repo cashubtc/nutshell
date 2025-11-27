@@ -348,7 +348,11 @@ class LNMarketsWallet(LightningBackend):
             )
             r.raise_for_status()
 
-            deposits_data = r.json()
+            response_json = r.json()
+            logger.debug(f"Checking invoice status for: {checking_id}")
+            logger.debug(f"Response: {response_json}")
+
+            deposits_data = response_json['data']
 
             for deposit_data in deposits_data:
                 deposit = LNMarketsDeposit.parse_obj(deposit_data)
@@ -359,9 +363,11 @@ class LNMarketsWallet(LightningBackend):
                     else:
                         return PaymentStatus(result=PaymentResult.PENDING)
 
+            logger.warning(f"Deposit {checking_id} not found in {len(deposits_data)} deposits")
             return PaymentStatus(result=PaymentResult.PENDING)
 
         except Exception as e:
+            logger.error(f"Error checking invoice status: {str(e)}")
             return PaymentStatus(
                 result=PaymentResult.UNKNOWN,
                 error_message=f"Failed to get invoice status: {str(e)}"
@@ -381,7 +387,10 @@ class LNMarketsWallet(LightningBackend):
             )
             r.raise_for_status()
 
-            withdrawals_data = r.json()
+            response_json = r.json()
+            logger.debug(f"Response: {response_json}")
+
+            withdrawals_data = response_json['data']
 
             for withdrawal_data in withdrawals_data:
                 withdrawal = LNMarketsWithdrawal.parse_obj(withdrawal_data)
@@ -406,7 +415,7 @@ class LNMarketsWallet(LightningBackend):
                             error_message=f"Unknown status: {withdrawal.status}"
                         )
 
-            logger.warning(f"Payment {checking_id} not found in LN Markets withdrawals")
+            logger.warning(f"Withdrawal {checking_id} not found in {len(withdrawals_data)} withdrawals")
             return PaymentStatus(
                 result=PaymentResult.UNKNOWN,
                 error_message=f"Payment {checking_id} not found"
