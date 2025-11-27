@@ -35,6 +35,8 @@ for key, value in settings.dict().items():
         "mint_lnbits_key",
         "mint_blink_key",
         "mint_strike_key",
+        "mint_spark_api_key",
+        "mint_spark_mnemonic",
         "mint_lnd_rest_macaroon",
         "mint_lnd_rest_admin_macaroon",
         "mint_lnd_rest_invoice_macaroon",
