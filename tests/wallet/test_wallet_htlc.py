@@ -350,6 +350,35 @@ async def test_htlc_redeem_hashlock_wrong_signature_timelock_correct_signature(
 
 
 @pytest.mark.asyncio
+async def test_htlc_hashlock_path_valid_after_locktime(
+    wallet1: Wallet, wallet2: Wallet
+):
+    """Ensure the preimage path continues to work even after the locktime expires."""
+    mint_quote = await wallet1.request_mint(64)
+    await pay_if_regtest(mint_quote.request)
+    await wallet1.mint(64, quote_id=mint_quote.quote)
+
+    preimage = "0000000000000000000000000000000000000000000000000000000000000000"
+    pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
+
+    # locktime_seconds negative => locktime already in the past
+    secret = await wallet1.create_htlc_lock(
+        preimage=preimage,
+        hashlock_pubkeys=[pubkey_wallet2],
+        locktime_seconds=-5,
+    )
+
+    _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
+
+    signatures = wallet2.signatures_proofs_sig_inputs(send_proofs)
+    for proof, signature in zip(send_proofs, signatures):
+        proof.witness = HTLCWitness(preimage=preimage, signatures=[signature]).json()
+
+    # Even though locktime expired, hashlock path should still be honored
+    await wallet2.redeem(send_proofs)
+
+
+@pytest.mark.asyncio
 async def test_htlc_redeem_hashlock_wrong_signature_timelock_wrong_signature(
     wallet1: Wallet, wallet2: Wallet
 ):
@@ -518,21 +547,22 @@ async def test_htlc_n_sigs_refund_locktime(wallet1: Wallet, wallet2: Wallet):
     _, send_proofs = await wallet1.swap_to_send(wallet1.proofs, 8, secret_lock=secret)
     send_proofs_copy = copy.deepcopy(send_proofs)
 
-    # # First, try correct preimage but should fail as we're using wrong preimage hash
-    # for p in send_proofs:
-    #     p.witness = HTLCWitness(preimage=preimage).json()
-
-    # await assert_err(
-    #     wallet2.redeem(send_proofs), "Mint Error: HTLC preimage does not match"
-    # )
-
-    # # Wait for locktime to pass
-    # await asyncio.sleep(2)
-
-    # Try redeeming with only 1 signature after locktime
+    # First, try to redeem with a preimage + signatures, which will trigger the preimage path and fail
     signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs_copy)
     for p, sig in zip(send_proofs_copy, signatures1):
         p.witness = HTLCWitness(preimage=preimage, signatures=[sig]).json()
+
+    # Should fail because we need 2 signatures
+    await assert_err(
+        wallet1.redeem(send_proofs_copy),
+        "HTLC preimage does not match.",
+    )
+
+    # NOW: try to redeem via locktime path but with only 1 signature
+    # Try redeeming with only 1 signature after locktime
+    signatures1 = wallet1.signatures_proofs_sig_inputs(send_proofs_copy)
+    for p, sig in zip(send_proofs_copy, signatures1):
+        p.witness = HTLCWitness(signatures=[sig]).json()
 
     # Should fail because we need 2 signatures
     await assert_err(
@@ -546,7 +576,7 @@ async def test_htlc_n_sigs_refund_locktime(wallet1: Wallet, wallet2: Wallet):
     signatures2 = wallet2.signatures_proofs_sig_inputs(send_proofs_copy2)
 
     for p, sig1, sig2 in zip(send_proofs_copy2, signatures1, signatures2):
-        p.witness = HTLCWitness(preimage=preimage, signatures=[sig1, sig2]).json()
+        p.witness = HTLCWitness(signatures=[sig1, sig2]).json()
 
     # Should succeed with 2 of 3 signatures after locktime
     await wallet1.redeem(send_proofs_copy2)

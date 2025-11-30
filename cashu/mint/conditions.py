@@ -28,9 +28,13 @@ class LedgerSpendingConditions:
         """
         Verify P2PK spending condition for a single input.
 
+        Two spending paths are available:
+        1. Normal path: signatures from the main pubkeys (always valid)
+        2. Refund path: signatures from refund pubkeys (only valid after locktime)
+
         We return True:
         - if the secret is not a P2PKSecret spending condition
-        - if the locktime has passed and no refund pubkey is present
+        - if either spending path is satisfied
 
         We raise an exception:
         - if the pubkeys in the secret are not unique
@@ -38,8 +42,7 @@ class LedgerSpendingConditions:
         - if the signatures are not unique
         - if n_sigs is not positive
         - if n_sigs is larger than the number of provided signatures
-        - if no valid signatures are present
-        - if the signature threshold is not met
+        - if neither spending path is satisfied
         """
 
         p2pk_secret = secret
@@ -52,28 +55,61 @@ class LedgerSpendingConditions:
         ):
             return True
 
-        # extract pubkeys that we require signatures from depending on whether the
-        # locktime has passed (refund) or not (pubkeys in secret.data and in tags)
-        # for P2PK, we use the data field as a pubkey
-        pubkeys: List[str] = []
+        # Build the main pubkeys list (always available)
+        main_pubkeys: List[str] = []
         if SecretKind(p2pk_secret.kind) == SecretKind.P2PK:
-            pubkeys = [p2pk_secret.data]
+            main_pubkeys = [p2pk_secret.data]
         # get all additional pubkeys from tags for multisig
-        pubkeys += p2pk_secret.tags.get_tag_all("pubkeys")
-        n_sigs = p2pk_secret.n_sigs or 1
-        # check if locktime is passed and if so, only consider refund pubkeys
+        main_pubkeys += p2pk_secret.tags.get_tag_all("pubkeys")
+        main_n_sigs = p2pk_secret.n_sigs or 1
+
+        exception_to_raise = None
+
+        # Check if we can spend via the normal path (main pubkeys)
+        if main_pubkeys:
+            try:
+                if self._verify_p2pk_signatures(
+                    message_to_sign, main_pubkeys, proof.p2pksigs.copy(), main_n_sigs
+                ):
+                    logger.trace("Spending condition satisfied via main pubkeys.")
+                    return True
+            except Exception as e:
+                # Main path failed, continue to check refund path
+                exception_to_raise = e
+                pass
+
+        # Check if locktime has passed and refund path is available
         now = time.time()
         if p2pk_secret.locktime and p2pk_secret.locktime < now:
-            logger.trace(f"p2pk locktime ran out ({p2pk_secret.locktime}<{now}).")
-            pubkeys = p2pk_secret.tags.get_tag_all("refund")
-            n_sigs = p2pk_secret.n_sigs_refund or 1
-        if not pubkeys:
-            # no pubkeys are present, anyone can spend
+            logger.trace(
+                f"p2pk locktime passed ({p2pk_secret.locktime}<{now}). Checking refund path."
+            )
+
+            refund_pubkeys = p2pk_secret.tags.get_tag_all("refund")
+            refund_n_sigs = p2pk_secret.n_sigs_refund or 1
+
+            if refund_pubkeys:
+                try:
+                    if self._verify_p2pk_signatures(
+                        message_to_sign,
+                        refund_pubkeys,
+                        proof.p2pksigs.copy(),
+                        refund_n_sigs,
+                    ):
+                        logger.trace("Spending condition satisfied via refund pubkeys.")
+                        return True
+                except Exception as e:
+                    # Refund path also failed
+                    exception_to_raise = e
+                    pass
+            else:
+                return True  # no refund pubkeys, anyone can spend
+
+        if exception_to_raise:
+            raise exception_to_raise
+        else:
+            # if no pubkeys are present, anyone can spend
             return True
-        # require signatures from pubkeys
-        return self._verify_p2pk_signatures(
-            message_to_sign, pubkeys, proof.p2pksigs, n_sigs
-        )
 
     def _verify_p2pk_signatures(
         self,
