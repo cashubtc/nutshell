@@ -526,30 +526,6 @@ async def set_secret_derivation(
     )
 
 
-async def set_nostr_last_check_timestamp(
-    db: Database,
-    timestamp: int,
-    conn: Optional[Connection] = None,
-) -> None:
-    await (conn or db).execute(
-        "UPDATE nostr SET last = :last WHERE type = :type",
-        {"last": timestamp, "type": "dm"},
-    )
-
-
-async def get_nostr_last_check_timestamp(
-    db: Database,
-    conn: Optional[Connection] = None,
-) -> Optional[int]:
-    row = await (conn or db).fetchone(
-        """
-        SELECT last from nostr WHERE type = :type
-        """,
-        {"type": "dm"},
-    )
-    return row[0] if row else None  # type: ignore
-
-
 async def get_seed_and_mnemonic(
     db: Database,
     conn: Optional[Connection] = None,
