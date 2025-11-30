@@ -105,10 +105,11 @@ class LedgerSpendingConditions:
             else:
                 return True  # no refund pubkeys, anyone can spend
 
-        # Neither spending path worked
-        raise exception_to_raise or TransactionError(
-            "Neither main nor refund spending path satisfied."
-        )
+        if exception_to_raise:
+            raise exception_to_raise
+        else:
+            # if no pubkeys are present, anyone can spend
+            return True
 
     def _verify_p2pk_signatures(
         self,

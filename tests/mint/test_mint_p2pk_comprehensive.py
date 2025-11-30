@@ -492,11 +492,11 @@ async def test_p2pk_locktime_allows_both_paths_after_expiry(
     # --- Refund path becomes available after locktime ---
     mint_quote = await wallet1.request_mint(64)
     await pay_if_regtest(mint_quote.request)
-    await wallet1.mint(64, quote_id=mint_quote.quote)
+    proofs2 = await wallet1.mint(64, quote_id=mint_quote.quote)
 
     secret_refund = await wallet1.create_p2pk_lock(receiver_pubkey, tags=expired_tags())
     _, proofs_refund = await wallet1.swap_to_send(
-        wallet1.proofs, 16, secret_lock=secret_refund
+        proofs2, 16, secret_lock=secret_refund
     )
 
     outputs_refund = await create_test_outputs(wallet3, 16)
