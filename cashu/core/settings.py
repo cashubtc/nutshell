@@ -35,9 +35,6 @@ class CashuSettings(BaseSettings):
         case_sensitive = False
         extra = Extra.ignore
 
-        # def __init__(self, env_file=None):
-        #     self.env_file = env_file or self.env_file
-
 
 class EnvSettings(CashuSettings):
     debug: bool = Field(default=False)
@@ -103,6 +100,14 @@ class MintBackends(MintSettings):
     mint_lnbits_key: str = Field(default=None)
     mint_strike_key: str = Field(default=None)
     mint_blink_key: str = Field(default=None)
+
+    # Spark SDK settings
+    mint_spark_api_key: str = Field(default=None)
+    mint_spark_mnemonic: str = Field(default=None)
+    mint_spark_network: str = Field(default="mainnet")
+    mint_spark_storage_dir: str = Field(default="data/spark")
+    mint_spark_connection_timeout: int = Field(default=30)
+    mint_spark_retry_attempts: int = Field(default=3)
 
 
 class MintLimits(MintSettings):

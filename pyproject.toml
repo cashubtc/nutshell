@@ -44,6 +44,7 @@ redis = "^5.1.1"
 brotli = "^1.1.0"
 zstandard = "^0.23.0"
 jinja2 = "^3.1.5"
+breez-sdk-spark = "^0.4.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest-asyncio = "^0.24.0"
