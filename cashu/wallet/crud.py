@@ -253,7 +253,6 @@ async def update_keyset(
         },
     )
 
-
 async def store_bolt11_mint_quote(
     db: Database,
     quote: MintQuote,
