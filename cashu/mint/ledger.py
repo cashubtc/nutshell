@@ -224,8 +224,11 @@ class Ledger(
             proofs (List[Proof]): Proofs to add to known secret table.
             conn: (Optional[Connection], optional): Database connection to reuse. Will create a new one if not given. Defaults to None.
         """
-        # sum_proofs = sum([p.amount for p in proofs])
-        fees_proofs = self.get_fees_for_proofs(proofs)
+        # Group proofs by keyset_id to calculate fees per keyset
+        proofs_by_keyset: Dict[str, List[Proof]] = {}
+        for p in proofs:
+            proofs_by_keyset.setdefault(p.id, []).append(p)
+
         async with self.db.get_connection(conn) as conn:
             # store in db
             for p in proofs:
@@ -241,9 +244,18 @@ class Ledger(
                         Y=p.Y, state=ProofSpentState.spent, witness=p.witness or None
                     )
                 )
-            await self.crud.bump_keyset_fees_paid(
-                keyset=self.keyset, amount=fees_proofs, db=self.db, conn=conn
-            )
+
+            # Calculate and increment fees for each keyset separately
+            for keyset_id, keyset_proofs in proofs_by_keyset.items():
+                keyset_fees = self.get_fees_for_proofs(keyset_proofs)
+                if keyset_fees > 0:
+                    logger.trace(f"Adding fees {keyset_fees} to keyset {keyset_id}")
+                    await self.crud.bump_keyset_fees_paid(
+                        keyset=self.keysets[keyset_id],
+                        amount=keyset_fees,
+                        db=self.db,
+                        conn=conn,
+                    )
 
     async def _generate_change_promises(
         self,
@@ -337,7 +349,7 @@ class Ledger(
                 f"Maximum mint amount is {settings.mint_max_mint_bolt11_sat} sat."
             )
         if settings.mint_bolt11_disable_mint:
-            raise NotAllowedError("Minting with bol11 is disabled.")
+            raise NotAllowedError("Minting with bolt11 is disabled.")
 
         unit, method = self._verify_and_get_unit_method(
             quote_request.unit, Method.bolt11.name
@@ -1086,7 +1098,7 @@ class Ledger(
         async with self.db.get_connection() as conn:
             for output in outputs:
                 logger.trace(f"looking for promise: {output}")
-                promise = await self.crud.get_promise(
+                promise = await self.crud.get_blind_signature(
                     b_=output.B_, db=self.db, conn=conn
                 )
                 if promise is not None:
@@ -1204,3 +1216,4 @@ class Ledger(
                 )
 
             return signatures
+

@@ -2,6 +2,7 @@ import pytest
 import pytest_asyncio
 
 from cashu.core.base import MeltQuoteState, MintQuoteState
+from cashu.core.errors import OutputsAlreadySignedError
 from cashu.core.helpers import sum_proofs
 from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.nuts import nut20
@@ -145,7 +146,7 @@ async def test_mint_internal(wallet1: Wallet, ledger: Ledger):
 
     await assert_err(
         ledger.mint(outputs=outputs, quote_id=mint_quote.quote),
-        "outputs have already been signed before.",
+        OutputsAlreadySignedError.detail,
     )
 
     mint_quote_after_payment = await ledger.get_mint_quote(mint_quote.quote)
@@ -294,7 +295,7 @@ async def test_split_twice_with_same_outputs(wallet1: Wallet, ledger: Ledger):
     # try to spend other proofs with the same outputs again
     await assert_err(
         ledger.swap(proofs=inputs2, outputs=outputs),
-        "outputs have already been signed before.",
+        OutputsAlreadySignedError.detail,
     )
 
     # try to spend inputs2 again with new outputs
@@ -328,7 +329,7 @@ async def test_mint_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     signature = nut20.sign_mint_quote(mint_quote_2.quote, outputs, mint_quote_2.privkey)
     await assert_err(
         ledger.mint(outputs=outputs, quote_id=mint_quote_2.quote, signature=signature),
-        "outputs have already been signed before.",
+        OutputsAlreadySignedError.detail,
     )
 
 
@@ -358,7 +359,7 @@ async def test_melt_with_same_outputs_twice(wallet1: Wallet, ledger: Ledger):
     )
     await assert_err(
         ledger.melt(proofs=wallet1.proofs, quote=melt_quote.quote, outputs=outputs),
-        "outputs have already been signed before.",
+        OutputsAlreadySignedError.detail,
     )
 
 

@@ -322,3 +322,15 @@ async def m015_add_mints_table(db: Database):
                 );
             """
         )
+
+
+async def m016_remove_nostr_table(db: Database):
+    """
+    Removes the nostr table as nostr functionality has been removed.
+    """
+    async with db.connect() as conn:
+        await conn.execute(
+            """
+            DROP TABLE IF EXISTS nostr;
+            """
+        )

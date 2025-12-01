@@ -733,7 +733,7 @@ class WalletKeyset:
         self.valid_from = valid_from
         self.valid_to = valid_to
         self.first_seen = first_seen
-        self.active = active
+        self.active = bool(active)
         self.mint_url = mint_url
         self.input_fee_ppk = input_fee_ppk
 

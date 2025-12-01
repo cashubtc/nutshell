@@ -133,17 +133,19 @@ class LedgerVerification(
         if not self._verify_no_duplicate_outputs(outputs):
             raise TransactionDuplicateOutputsError()
         # verify that outputs have not been signed previously
-        signed_before = await self._check_outputs_issued_before(outputs, conn)
+        signed_before = await self._check_outputs_pending_or_issued_before(
+            outputs, conn
+        )
         if any(signed_before):
             raise OutputsAlreadySignedError()
         logger.trace(f"Verified {len(outputs)} outputs.")
 
-    async def _check_outputs_issued_before(
+    async def _check_outputs_pending_or_issued_before(
         self,
         outputs: List[BlindedMessage],
         conn: Optional[Connection] = None,
     ) -> List[bool]:
-        """Checks whether the provided outputs have previously been signed by the mint
+        """Checks whether the provided outputs have previously stored (as blinded messages) been signed (as blind signatures) by the mint
         (which would lead to a duplication error later when trying to store these outputs again).
 
         Args:
@@ -153,7 +155,7 @@ class LedgerVerification(
             result (List[bool]): Whether outputs are already present in the database.
         """
         async with self.db.get_connection(conn) as conn:
-            promises = await self.crud.get_promises(
+            promises = await self.crud.get_outputs(
                 b_s=[output.B_ for output in outputs], db=self.db, conn=conn
             )
         return [True if promise else False for promise in promises]
