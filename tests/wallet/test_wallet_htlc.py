@@ -9,9 +9,9 @@ import pytest_asyncio
 
 from cashu.core.base import HTLCWitness, Proof
 from cashu.core.crypto.secp import PrivateKey
-from cashu.core.htlc import HTLCSecret
 from cashu.core.migrations import migrate_databases
-from cashu.core.p2pk import SigFlags
+from cashu.core.nuts.nut11 import SigFlags
+from cashu.core.nuts.nut14 import HTLCSecret
 from cashu.core.secret import SecretKind
 from cashu.wallet import migrations
 from cashu.wallet.wallet import Wallet
