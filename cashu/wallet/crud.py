@@ -253,15 +253,6 @@ async def update_keyset(
         },
     )
 
-
-async def update_keyset_active(
-    keyset_id: str, active: bool, db: Database, conn: Optional[Connection] = None
-) -> None:
-    """Set keyset.active = ? for a single keyset id."""
-    query = "UPDATE keysets SET active = :active WHERE id = :id"
-    await (conn or db).execute(query, {"active": int(active), "id": keyset_id})
-
-
 async def store_bolt11_mint_quote(
     db: Database,
     quote: MintQuote,

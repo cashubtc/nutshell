@@ -61,7 +61,6 @@ from .crud import (
     update_bolt11_melt_quote,
     update_bolt11_mint_quote,
     update_keyset,
-    update_keyset_active,
     update_mint,
     update_proof,
 )
@@ -304,11 +303,15 @@ class Wallet(
         # mark keysets that disappeared from mint as inactive
         active_ids = set(mint_keysets_dict.keys())
         local_ids = {key.id for key in keysets_in_db}
+        keysets_in_db_dict = {k.id: k for k in keysets_in_db}
+
         for key_id in (local_ids - active_ids):
             logger.debug(
                 f"Keyset {key_id} no longer reported by mint, marking as inactive"
             )
-            await update_keyset_active(key_id, active=False, db=self.db)
+            ks = keysets_in_db_dict[key_id]
+            ks.active = False
+            await update_keyset(keyset=ks, db=self.db)
 
         # db is empty, get all keys from the mint and store them
         if not keysets_in_db:
