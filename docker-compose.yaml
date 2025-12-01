@@ -13,6 +13,8 @@ services:
       - MINT_LISTEN_PORT=3338
       - MINT_PRIVATE_KEY=TEST_PRIVATE_KEY
     command: ["poetry", "run", "mint"]
+    volumes:
+      - ./data/mint:/app/data/mint
   wallet:
     build:
       context: .
