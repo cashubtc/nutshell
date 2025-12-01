@@ -33,7 +33,6 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 - Programmable ecash: P2PK and HTLCs ([NUT-10](https://github.com/cashubtc/nuts/blob/main/10.md))
 - Wallet and mint support for keyset rotations
 - DLEQ proofs for offline transactions ([NUT-12](https://github.com/cashubtc/nuts/blob/main/12.md))
-- Send and receive tokens via nostr
 - Optional caching using Redis ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md))
 - Optional authentication using Keycloak ([NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md))
 
@@ -177,7 +176,7 @@ This command runs the mint on your local computer. Skip this step if you want to
 ## Docker
 
 ```
-docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.18.1 poetry run mint
+docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.18.2 poetry run mint
 ```
 
 ## From this repository

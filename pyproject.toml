@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cashu"
-version = "0.18.1"
+version = "0.18.2"
 description = "Ecash wallet and mint"
 authors = ["calle <callebtc@protonmail.com>"]
 license = "MIT"
@@ -85,7 +85,6 @@ unfixable = []
 
 # Exclude a variety of commonly ignored directories.
 exclude = [
-    "cashu/nostr/*",
     "cashu/core/bolt11.py",
     ".bzr",
     ".direnv",

@@ -8,7 +8,7 @@ from pydantic import BaseSettings, Extra, Field
 
 env = Env()
 
-VERSION = "0.18.1"
+VERSION = "0.18.2"
 
 
 def find_env_file():
@@ -61,7 +61,7 @@ class MintSettings(CashuSettings):
     mint_test_database: str = Field(default="test_data/test_mint")
     mint_max_secret_length: int = Field(default=1024)
 
-    mint_input_fee_ppk: int = Field(default=0)
+    mint_input_fee_ppk: int = Field(default=100)
     mint_disable_melt_on_error: bool = Field(default=False)
 
     mint_regular_tasks_interval_seconds: int = Field(
@@ -208,13 +208,27 @@ class MintInformation(CashuSettings):
 
 
 class MintManagementRPCSettings(MintSettings):
-    mint_rpc_server_enable: bool = Field(default=False)
-    mint_rpc_server_ca: str = Field(default=None)
-    mint_rpc_server_cert: str = Field(default=None)
+    mint_rpc_server_enable: bool = Field(
+        default=False, description="Enable the management RPC server."
+    )
+    mint_rpc_server_ca: str = Field(
+        default=None,
+        description="CA certificate file path for the management RPC server.",
+    )
+    mint_rpc_server_cert: str = Field(
+        default=None,
+        description="Server certificate file path for the management RPC server.",
+    )
     mint_rpc_server_key: str = Field(default=None)
-    mint_rpc_server_addr: str = Field(default="localhost")
-    mint_rpc_server_port: int = Field(default=8086)
-    mint_rpc_server_mutual_tls: bool = Field(default=True)
+    mint_rpc_server_addr: str = Field(
+        default="localhost", description="Address for the management RPC server."
+    )
+    mint_rpc_server_port: int = Field(
+        default=8086, gt=0, lt=65536, description="Port for the management RPC server."
+    )
+    mint_rpc_server_mutual_tls: bool = Field(
+        default=True, description="Require client certificates."
+    )
 
 
 class WalletSettings(CashuSettings):
@@ -232,23 +246,6 @@ class WalletSettings(CashuSettings):
     wallet_verbose_requests: bool = Field(default=False)
     api_port: int = Field(default=4448)
     api_host: str = Field(default="127.0.0.1")
-
-    nostr_private_key: str = Field(default=None)
-    nostr_relays: List[str] = Field(
-        default=[
-            "wss://nostr-pub.wellorder.net",
-            "wss://relay.damus.io",
-            "wss://nostr.mom",
-            "wss://relay.snort.social",
-            "wss://nostr.mutinywallet.com",
-            "wss://relay.minibits.cash",
-            "wss://nos.lol",
-            "wss://relay.nostr.band",
-            "wss://relay.bitcoiner.social",
-            "wss://140.f7z.io",
-            "wss://relay.primal.net",
-        ]
-    )
 
     locktime_delta_seconds: int = Field(default=86400)  # 1 day
     proofs_batch_size: int = Field(default=200)

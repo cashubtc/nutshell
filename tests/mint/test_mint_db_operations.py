@@ -390,8 +390,8 @@ async def test_store_and_sign_blinded_message(ledger: Ledger):
         s=s.serialize(),
     )
 
-    # Assert: row is now a full promise and can be read back via get_promise
-    promise = await ledger.crud.get_promise(db=ledger.db, b_=B_hex)
+    # Assert: row is now a full promise and can be read back via get_blind_signature
+    promise = await ledger.crud.get_blind_signature(db=ledger.db, b_=B_hex)
     assert promise is not None
     assert promise.amount == amount
     assert promise.C_ == C_point.serialize().hex()
@@ -760,9 +760,9 @@ async def test_promises_fk_constraints_enforced(ledger: Ledger):
 async def test_concurrent_set_melt_quote_pending_same_checking_id(ledger: Ledger):
     """Test that concurrent attempts to set quotes with same checking_id as pending are handled correctly."""
     from cashu.core.base import MeltQuote, MeltQuoteState
-    
+
     checking_id = "test_checking_id_concurrent"
-    
+
     # Create two quotes with the same checking_id
     quote1 = MeltQuote(
         quote="quote_id_conc_1",
@@ -784,24 +784,24 @@ async def test_concurrent_set_melt_quote_pending_same_checking_id(ledger: Ledger
         fee_reserve=2,
         state=MeltQuoteState.unpaid,
     )
-    
+
     await ledger.crud.store_melt_quote(quote=quote1, db=ledger.db)
     await ledger.crud.store_melt_quote(quote=quote2, db=ledger.db)
-    
+
     # Try to set both as pending concurrently
     results = await asyncio.gather(
         ledger.db_write._set_melt_quote_pending(quote=quote1),
         ledger.db_write._set_melt_quote_pending(quote=quote2),
-        return_exceptions=True
+        return_exceptions=True,
     )
-    
+
     # One should succeed, one should fail
     success_count = sum(1 for r in results if isinstance(r, MeltQuote))
     error_count = sum(1 for r in results if isinstance(r, Exception))
-    
+
     assert success_count == 1, "Exactly one quote should be set as pending"
     assert error_count == 1, "Exactly one should fail"
-    
+
     # The error should be about the quote already being pending
     error = next(r for r in results if isinstance(r, Exception))
     assert "Melt quote already paid or pending." in str(error)

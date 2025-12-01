@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 from ...core.base import (
+    BlindedMessage,
     BlindedSignature,
     MeltQuote,
     MintKeyset,
@@ -129,7 +130,7 @@ class AuthLedgerCrud(ABC):
     ) -> None: ...
 
     @abstractmethod
-    async def get_promise(
+    async def get_blind_signature(
         self,
         *,
         db: Database,
@@ -138,13 +139,13 @@ class AuthLedgerCrud(ABC):
     ) -> Optional[BlindedSignature]: ...
 
     @abstractmethod
-    async def get_promises(
+    async def get_outputs(
         self,
         *,
         db: Database,
         b_s: List[str],
         conn: Optional[Connection] = None,
-    ) -> List[BlindedSignature]: ...
+    ) -> List[BlindedMessage]: ...
 
 
 class AuthLedgerCrudSqlite(AuthLedgerCrud):
@@ -234,7 +235,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             },
         )
 
-    async def get_promise(
+    async def get_blind_signature(
         self,
         *,
         db: Database,
@@ -248,15 +249,15 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             """,
             {"b_": str(b_)},
         )
-        return BlindedSignature.from_row(row) if row else None
+        return BlindedSignature.from_row(row) if row else None  # type: ignore
 
-    async def get_promises(
+    async def get_outputs(
         self,
         *,
         db: Database,
         b_s: List[str],
         conn: Optional[Connection] = None,
-    ) -> List[BlindedSignature]:
+    ) -> List[BlindedMessage]:
         rows = await (conn or db).fetchall(
             f"""
             SELECT * from {db.table_with_schema('promises')}
@@ -264,7 +265,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             """,
             {f"b_{i}": b_s[i] for i in range(len(b_s))},
         )
-        return [BlindedSignature.from_row(r) for r in rows] if rows else []
+        return [BlindedMessage.from_row(r) for r in rows] if rows else []
 
     async def invalidate_proof(
         self,
@@ -303,7 +304,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             SELECT * from {db.table_with_schema('melt_quotes')} WHERE quote in (SELECT DISTINCT melt_quote FROM {db.table_with_schema('proofs_pending')})
             """
         )
-        return [MeltQuote.from_row(r) for r in rows]
+        return [MeltQuote.from_row(r) for r in rows] if rows else []  # type: ignore
 
     async def get_pending_proofs_for_quote(
         self,
@@ -441,7 +442,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         )
         if row is None:
             return None
-        return MintQuote.from_row(row) if row else None
+        return MintQuote.from_row(row) if row else None  # type: ignore
 
     async def get_mint_quote_by_request(
         self,
@@ -457,7 +458,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
             """,
             {"request": request},
         )
-        return MintQuote.from_row(row) if row else None
+        return MintQuote.from_row(row) if row else None  # type: ignore
 
     async def update_mint_quote(
         self,
@@ -549,7 +550,7 @@ class AuthLedgerCrudSqlite(AuthLedgerCrud):
         )
         if row is None:
             return None
-        return MeltQuote.from_row(row) if row else None
+        return MeltQuote.from_row(row) if row else None  # type: ignore
 
     async def update_melt_quote(
         self,

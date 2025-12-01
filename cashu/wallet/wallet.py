@@ -343,6 +343,9 @@ class Wallet(
                     ].input_fee_ppk = mint_keyset.input_fee_ppk
                     changed = True
                 if changed:
+                    logger.debug(
+                        f"Updating mint keyset: {mint_keyset.id} ({mint_keyset.unit}) fee: {mint_keyset.input_fee_ppk} ppk, active: {mint_keyset.active}"
+                    )
                     await update_keyset(
                         keyset=keysets_in_db_dict[mint_keyset.id], db=self.db
                     )
