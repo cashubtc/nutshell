@@ -530,24 +530,6 @@ def test_receive_tokenv3(mint, cli_prefix):
     print(result.output)
 
 
-def test_nostr_send(mint, cli_prefix):
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        [
-            *cli_prefix,
-            "send",
-            "1",
-            "-n",
-            "aafa164a8ab54a6b6c67bbac98a5d5aec7ea4075af8928a11478ab9d74aec4ca",
-            "-y",
-        ],
-    )
-    assert result.exception is None
-    print("NOSTR_SEND")
-    print(result.output)
-
-
 def test_pending(cli_prefix):
     runner = CliRunner()
     result = runner.invoke(

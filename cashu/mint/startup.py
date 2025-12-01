@@ -31,7 +31,6 @@ for key, value in settings.dict().items():
     if key in [
         "mint_private_key",
         "mint_seed_decryption_key",
-        "nostr_private_key",
         "mint_lnbits_key",
         "mint_blink_key",
         "mint_strike_key",
@@ -133,10 +132,14 @@ async def shutdown_mint():
     logger.info("Mint shutdown.")
     logger.remove()
 
+
 rpc_server = None
+
+
 async def start_management_rpc():
     global rpc_server
     rpc_server = await management_rpc.serve(copy(ledger))
+
 
 async def shutdown_management_rpc():
     if rpc_server:

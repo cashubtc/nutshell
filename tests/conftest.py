@@ -37,6 +37,8 @@ settings.fakewallet_brr = True
 settings.fakewallet_delay_outgoing_payment = 0
 settings.fakewallet_delay_incoming_payment = 1
 settings.fakewallet_stochastic_invoice = False
+settings.lightning_fee_percent = 2.0
+settings.lightning_reserve_fee_min = 2000  # msat
 assert (
     settings.mint_test_database != settings.mint_database
 ), "Test database is the same as the main database"

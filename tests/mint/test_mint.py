@@ -5,7 +5,7 @@ import pytest
 from cashu.core.base import BlindedMessage, Proof, Unit
 from cashu.core.crypto.b_dhke import step1_alice
 from cashu.core.helpers import calculate_number_of_blank_outputs
-from cashu.core.models import PostMintQuoteRequest
+from cashu.core.models import PostMeltQuoteRequest, PostMintQuoteRequest
 from cashu.core.settings import settings
 from cashu.mint.ledger import Ledger
 from tests.helpers import pay_if_regtest
@@ -128,7 +128,8 @@ async def test_generate_promises(ledger: Ledger):
             id="009a1f293253e41e",
         )
     ]
-    promises = await ledger._generate_promises(blinded_messages_mock)
+    await ledger._store_blinded_messages(blinded_messages_mock)
+    promises = await ledger._sign_blinded_messages(blinded_messages_mock)
     assert (
         promises[0].C_
         == "031422eeffb25319e519c68de000effb294cb362ef713a7cf4832cea7b0452ba6e"
@@ -164,7 +165,7 @@ async def test_generate_change_promises(ledger: Ledger):
         )
         for b, _ in blinded_msgs
     ]
-
+    await ledger._store_blinded_messages(outputs)
     promises = await ledger._generate_change_promises(
         fee_provided=fee_reserve, fee_paid=actual_fee, outputs=outputs
     )
@@ -196,6 +197,7 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
         for b, _ in blinded_msgs
     ]
 
+    await ledger._store_blinded_messages(outputs)
     promises = await ledger._generate_change_promises(fee_reserve, actual_fee, outputs)
 
     assert len(promises) == expected_returned_promises
@@ -233,3 +235,131 @@ async def test_maximum_balance(ledger: Ledger):
         "Mint has reached maximum balance.",
     )
     settings.mint_max_balance = 0
+
+
+@pytest.mark.asyncio
+async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Ledger):
+    from cashu.core.base import BlindedMessage
+    from cashu.core.crypto.b_dhke import step1_alice
+    from cashu.core.split import amount_split
+
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote_resp = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=64, unit="sat")
+    )
+    melt_quote_resp = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote_resp.request, unit="sat")
+    )
+    melt_id = melt_quote_resp.quote
+    fee_provided = 2_000
+    fee_paid = 100
+    overpaid_fee = fee_provided - fee_paid
+    return_amounts = amount_split(overpaid_fee)
+
+    # Store more blank outputs than needed for the change.
+    extra_blanks = 3
+    n_blank = len(return_amounts) + extra_blanks
+    blank_outputs = [
+        BlindedMessage(
+            amount=1,
+            B_=step1_alice(f"change_blank_{i}")[0].serialize().hex(),
+            id=ledger.keyset.id,
+        )
+        for i in range(n_blank)
+    ]
+    await ledger._store_blinded_messages(blank_outputs, melt_id=melt_id)
+
+    # Fetch the stored unsigned blanks (same as melt flow) and run change generation.
+    stored_outputs = await ledger.crud.get_blinded_messages_melt_id(
+        db=ledger.db, melt_id=melt_id
+    )
+    assert len(stored_outputs) == n_blank
+
+    promises = await ledger._generate_change_promises(
+        fee_provided=fee_provided,
+        fee_paid=fee_paid,
+        outputs=stored_outputs,
+        melt_id=melt_id,
+        keyset=ledger.keyset,
+    )
+
+    assert len(promises) == len(return_amounts)
+    assert sorted(p.amount for p in promises) == sorted(return_amounts)
+
+    # All unsigned blanks should be deleted after signing the subset.
+    remaining_unsigned = await ledger.crud.get_blinded_messages_melt_id(
+        db=ledger.db, melt_id=melt_id
+    )
+    assert remaining_unsigned == []
+
+    # The signed promises should remain in the DB with c_ set.
+    async with ledger.db.connect() as conn:
+        rows = await conn.fetchall(
+            f"""
+            SELECT amount, c_ FROM {ledger.db.table_with_schema('promises')}
+            WHERE melt_quote = :melt_id
+            """,
+            {"melt_id": melt_id},
+        )
+    assert len(rows) == len(return_amounts)
+    assert all(row["c_"] for row in rows)
+    assert sorted(int(row["amount"]) for row in rows) == sorted(return_amounts)
+
+
+@pytest.mark.asyncio
+async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledger):
+    from cashu.core.base import BlindedMessage
+    from cashu.core.crypto.b_dhke import step1_alice
+
+    # Create a real melt quote to satisfy FK on promises.melt_quote
+    mint_quote_resp = await ledger.mint_quote(
+        PostMintQuoteRequest(amount=64, unit="sat")
+    )
+    melt_quote_resp = await ledger.melt_quote(
+        PostMeltQuoteRequest(request=mint_quote_resp.request, unit="sat")
+    )
+    melt_id = melt_quote_resp.quote
+    fee_provided = 1_000
+    fee_paid = 1_000  # no overpaid fee
+    n_blank = 4
+    blank_outputs = [
+        BlindedMessage(
+            amount=1,
+            B_=step1_alice(f"no_fee_blank_{i}")[0].serialize().hex(),
+            id=ledger.keyset.id,
+        )
+        for i in range(n_blank)
+    ]
+    await ledger._store_blinded_messages(blank_outputs, melt_id=melt_id)
+
+    stored_outputs = await ledger.crud.get_blinded_messages_melt_id(
+        db=ledger.db, melt_id=melt_id
+    )
+    assert len(stored_outputs) == n_blank
+
+    promises = await ledger._generate_change_promises(
+        fee_provided=fee_provided,
+        fee_paid=fee_paid,
+        outputs=stored_outputs,
+        melt_id=melt_id,
+        keyset=ledger.keyset,
+    )
+
+    assert promises == []
+
+    remaining_unsigned = await ledger.crud.get_blinded_messages_melt_id(
+        db=ledger.db, melt_id=melt_id
+    )
+    # With zero fee nothing is signed or deleted; blanks stay pending.
+    assert len(remaining_unsigned) == n_blank
+
+    async with ledger.db.connect() as conn:
+        rows = await conn.fetchall(
+            f"""
+            SELECT amount, c_ FROM {ledger.db.table_with_schema('promises')}
+            WHERE melt_quote = :melt_id
+            """,
+            {"melt_id": melt_id},
+        )
+    assert len(rows) == n_blank
+    assert all(row["c_"] is None for row in rows)

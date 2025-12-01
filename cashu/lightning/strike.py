@@ -99,6 +99,7 @@ class StrikeWallet(LightningBackend):
         unit: Unit,
     ) -> int:
         fee_str = strike_quote.totalFee.amount
+        fee: int = 0
         if strike_quote.totalFee.currency == self.currency_map[Unit.sat]:
             if unit == Unit.sat:
                 fee = int(float(fee_str) * 1e8)
@@ -107,8 +108,13 @@ class StrikeWallet(LightningBackend):
         elif strike_quote.totalFee.currency in [
             self.currency_map[Unit.usd],
             self.currency_map[Unit.eur],
+            USDT,
         ]:
             fee = int(float(fee_str) * 100)
+        else:
+            raise Exception(
+                f"Unexpected currency {strike_quote.totalFee.currency} in fee"
+            )
         return fee
 
     def __init__(self, unit: Unit, **kwargs):
@@ -124,6 +130,7 @@ class StrikeWallet(LightningBackend):
         self.client = httpx.AsyncClient(
             verify=not settings.debug,
             headers=bearer_auth,
+            timeout=None,
         )
 
     async def status(self) -> StatusResponse:
@@ -153,7 +160,7 @@ class StrikeWallet(LightningBackend):
                     balance=Amount.from_float(float(balance["total"]), self.unit),
                 )
 
-        # if no the unit is USD but no USD balance was found, we try USDT
+        # if the unit is USD but no USD balance was found, we try USDT
         if self.unit == Unit.usd:
             for balance in data:
                 if balance["currency"] == USDT:
