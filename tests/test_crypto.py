@@ -59,9 +59,7 @@ def test_step1():
         B_.format().hex()
         == "025cc16fe33b953e2ace39653efb3e7a7049711ae1d8a2f7a9108753f1cdea742b"
     )
-    assert blinding_factor.private_key == bytes.fromhex(
-        "0000000000000000000000000000000000000000000000000000000000000001"
-    )
+    assert blinding_factor.to_hex() == "0000000000000000000000000000000000000000000000000000000000000001"
 
 
 def test_step2():
@@ -375,9 +373,7 @@ def test_step1_deprecated():
         B_.format().hex()
         == "02a9acc1e48c25eeeb9289b5031cc57da9fe72f3fe2861d264bdc074209b107ba2"
     )
-    assert blinding_factor.private_key == bytes.fromhex(
-        "0000000000000000000000000000000000000000000000000000000000000001"
-    )
+    assert blinding_factor.to_hex() == "0000000000000000000000000000000000000000000000000000000000000001"
 
 
 def test_step2_deprecated():
