@@ -141,8 +141,8 @@ def step2_bob_dleq(
     A = a.public_key
     assert A
     e = hash_e(R1, R2, A, C_)  # e = hash(R1, R2, A, C_)
-    s = p.add(a.multiply(e))  # s = p + ek
-    spk = PrivateKey(s)
+    s = p.add(bytes.fromhex(a.multiply(e).to_hex()))  # s = p + ek
+    spk = PrivateKey(bytes.fromhex(s.to_hex()))
     epk = PrivateKey(e)
     return epk, spk
 
