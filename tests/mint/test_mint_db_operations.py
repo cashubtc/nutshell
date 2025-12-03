@@ -386,8 +386,8 @@ async def test_store_and_sign_blinded_message(ledger: Ledger):
         amount=amount,
         b_=B_hex,
         c_=C_point.format().hex(),
-        e=e.serialize(),
-        s=s.serialize(),
+        e=e.to_hex(),
+        s=s.to_hex(),
     )
 
     # Assert: row is now a full promise and can be read back via get_blind_signature
@@ -514,8 +514,8 @@ async def test_get_blinded_messages_by_melt_id_filters_signed(
         amount=amount,
         b_=b1_hex,
         c_=C_point.format().hex(),
-        e=e.serialize(),
-        s=s.serialize(),
+        e=e.to_hex(),
+        s=s.to_hex(),
     )
 
     # Act
@@ -578,8 +578,8 @@ async def test_update_blinded_message_signature_before_store_blinded_message_err
             amount=amount,
             b_=b_hex,
             c_=C_point.format().hex(),
-            e=e.serialize(),
-            s=s.serialize(),
+            e=e.to_hex(),
+            s=s.to_hex(),
         ),
         "blinded message does not exist",
     )
@@ -637,8 +637,8 @@ async def test_get_blind_signatures_by_melt_id_returns_signed(
         amount=amount,
         b_=b1_hex,
         c_=C_point.format().hex(),
-        e=e.serialize(),
-        s=s.serialize(),
+        e=e.to_hex(),
+        s=s.to_hex(),
     )
 
     # Act
@@ -691,8 +691,8 @@ async def test_get_melt_quote_includes_change_signatures(
         amount=amount,
         b_=b1_hex,
         c_=C_point.format().hex(),
-        e=e.serialize(),
-        s=s.serialize(),
+        e=e.to_hex(),
+        s=s.to_hex(),
     )
 
     # Act
