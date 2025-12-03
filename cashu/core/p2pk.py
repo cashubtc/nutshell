@@ -2,6 +2,8 @@ import hashlib
 from enum import Enum
 from typing import Union
 
+from coincurve import PublicKeyXOnly
+
 from .crypto.secp import PrivateKey, PublicKey
 from .secret import Secret, SecretKind
 
@@ -43,8 +45,8 @@ class P2PKSecret(Secret):
 
 
 def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
-    signature = private_key.schnorr_sign(
-        hashlib.sha256(message).digest(), None, raw=True
+    signature = private_key.sign_schnorr(
+        hashlib.sha256(message).digest()
     )
     return signature
 
@@ -52,6 +54,8 @@ def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
 def verify_schnorr_signature(
     message: bytes, pubkey: PublicKey, signature: bytes
 ) -> bool:
-    return pubkey.schnorr_verify(
-        hashlib.sha256(message).digest(), signature, None, raw=True
+    xonly_pubkey: PublicKeyXOnly = PublicKeyXOnly(pubkey.format()[1:])
+    return xonly_pubkey.verify(
+        signature,
+        hashlib.sha256(message).digest(),
     )

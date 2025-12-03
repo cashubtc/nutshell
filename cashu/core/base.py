@@ -146,7 +146,7 @@ class Proof(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.Y = hash_to_curve(self.secret.encode("utf-8")).serialize().hex()
+        self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
 
     @classmethod
     def from_dict(cls, proof_dict: dict):
@@ -755,14 +755,14 @@ class WalletKeyset:
 
     def serialize(self):
         return json.dumps(
-            {amount: key.serialize().hex() for amount, key in self.public_keys.items()}
+            {amount: key.format().hex() for amount, key in self.public_keys.items()}
         )
 
     @classmethod
     def from_row(cls, row: Row):
         def deserialize(serialized: str) -> Dict[int, PublicKey]:
             return {
-                int(amount): PublicKey(bytes.fromhex(hex_key), raw=True)
+                int(amount): PublicKey(bytes.fromhex(hex_key))
                 for amount, hex_key in dict(json.loads(serialized)).items()
             }
 
@@ -920,7 +920,7 @@ class MintKeyset:
     def public_keys_hex(self) -> Dict[int, str]:
         assert self.public_keys, "public keys not set"
         return {
-            int(amount): key.serialize().hex()
+            int(amount): key.format().hex()
             for amount, key in self.public_keys.items()
         }
 

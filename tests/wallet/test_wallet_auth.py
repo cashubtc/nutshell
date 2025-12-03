@@ -147,7 +147,7 @@ async def test_wallet_auth_mint_manually_invalid_cat(wallet: Wallet):
 
     amounts = auth_wallet.mint_info.bat_max_mint * [1]  # 1 AUTH tokens
     secrets = [hashlib.sha256(os.urandom(32)).hexdigest() for _ in amounts]
-    rs = [PrivateKey(privkey=os.urandom(32), raw=True) for _ in amounts]
+    rs = [PrivateKey(os.urandom(32)) for _ in amounts]
     outputs, rs = auth_wallet._construct_outputs(amounts, secrets, rs)
 
     # should fail because of invalid CAT

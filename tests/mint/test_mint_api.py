@@ -45,7 +45,7 @@ async def test_info(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/v1/info")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.pubkey
-    assert response.json()["pubkey"] == ledger.pubkey.serialize().hex()
+    assert response.json()["pubkey"] == ledger.pubkey.format().hex()
     info = GetInfoResponse(**response.json())
     assert info.nuts
     assert info.nuts[MINT_NUT]["disabled"] is False
@@ -71,7 +71,7 @@ async def test_api_keys(ledger: Ledger):
                 "id": keyset.id,
                 "unit": keyset.unit.name,
                 "keys": {
-                    str(k): v.serialize().hex()
+                    str(k): v.format().hex()
                     for k, v in keyset.public_keys.items()  # type: ignore
                 },
             }
@@ -123,7 +123,7 @@ async def test_api_keyset_keys(ledger: Ledger):
                 "id": "009a1f293253e41e",
                 "unit": "sat",
                 "keys": {
-                    str(k): v.serialize().hex()
+                    str(k): v.format().hex()
                     for k, v in ledger.keysets["009a1f293253e41e"].public_keys.items()  # type: ignore
                 },
             }
@@ -147,7 +147,7 @@ async def test_api_keyset_keys_old_keyset_id(ledger: Ledger):
                 "id": "009a1f293253e41e",
                 "unit": "sat",
                 "keys": {
-                    str(k): v.serialize().hex()
+                    str(k): v.format().hex()
                     for k, v in ledger.keysets["009a1f293253e41e"].public_keys.items()  # type: ignore
                 },
             }
