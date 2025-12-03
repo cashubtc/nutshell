@@ -52,7 +52,7 @@ def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
 def verify_schnorr_signature(
     message: bytes, pubkey: PublicKey, signature: bytes
 ) -> bool:
-    xonly_pubkey: PublicKeyXOnly = PublicKeyXOnly(pubkey.format())
+    xonly_pubkey: PublicKeyXOnly = PublicKeyXOnly(pubkey.format()[1:])
     return xonly_pubkey.verify(
         signature,
         hashlib.sha256(message).digest(),

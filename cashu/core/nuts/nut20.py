@@ -37,7 +37,7 @@ def verify_mint_quote(
     public_key: str,
     signature: str,
 ) -> bool:
-    pubkey = PublicKeyXOnly(bytes.fromhex(public_key))
+    pubkey = PublicKeyXOnly(bytes.fromhex(public_key)[1:])
     msgbytes = construct_message(quote_id, outputs)
     sig = bytes.fromhex(signature)
     return pubkey.verify(sig, msgbytes)

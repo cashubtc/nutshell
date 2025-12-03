@@ -150,7 +150,7 @@ def step2_bob_dleq(
 def alice_verify_dleq(
     B_: PublicKey, C_: PublicKey, e: PrivateKey, s: PrivateKey, A: PublicKey
 ) -> bool:
-    R1 = s.pubkey - A * e  # type: ignore
+    R1 = s.public_key - A * e  # type: ignore
     R2 = B_ * s - C_ * e  # type: ignore
     e_bytes = bytes.fromhex(e.to_hex())
     return e_bytes == hash_e(R1, R2, A, C_)
