@@ -1206,7 +1206,7 @@ class Ledger(
                     id=keyset_id,
                     amount=amount,
                     C_=C_.format().hex(),
-                    dleq=DLEQ(e=e.serialize(), s=s.serialize()),
+                    dleq=DLEQ(e=e.to_hex(), s=s.to_hex()),
                 )
                 signatures.append(signature)
 

@@ -146,7 +146,7 @@ class Proof(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.Y = hash_to_curve(self.secret.encode("utf-8")).serialize().hex()
+        self.Y = hash_to_curve(self.secret.encode("utf-8")).format().hex()
 
     @classmethod
     def from_dict(cls, proof_dict: dict):

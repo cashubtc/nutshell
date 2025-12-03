@@ -94,7 +94,7 @@ async def test_bump_secret_derivation(wallet3: Wallet):
     secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(0, 4)
     assert wallet3.keyset_id == "009a1f293253e41e"
     assert secrets1 == secrets2
-    assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
+    assert [r.to_hex() for r in rs1] == [r.to_hex() for r in rs2]
     assert derivation_paths1 == derivation_paths2
     for s in secrets1:
         print(f'"{s}",')
@@ -105,7 +105,7 @@ async def test_bump_secret_derivation(wallet3: Wallet):
         "59284fd1650ea9fa17db2b3acf59ecd0f2d52ec3261dd4152785813ff27a33bf",
         "576c23393a8b31cc8da6688d9c9a96394ec74b40fdaf1f693a6bb84284334ea0",
     ]
-    assert [r.private_key.hex() for r in rs1 if r.private_key] == [
+    assert [r.to_hex() for r in rs1] == [
         "ad00d431add9c673e843d4c2bf9a778a5f402b985b8da2d5550bf39cda41d679",
         "967d5232515e10b81ff226ecf5a9e2e2aff92d66ebc3edf0987eb56357fd6248",
         "b20f47bb6ae083659f3aa986bfa0435c55c6d93f687d51a01f26862d9b9a4899",
@@ -136,7 +136,7 @@ async def test_bump_secret_derivation_two_steps(wallet3: Wallet):
     rs1 = rs1_1 + rs1_2
     secrets2, rs2, derivation_paths = await wallet3.generate_secrets_from_to(0, 4)
     assert secrets1 == secrets2
-    assert [r.private_key for r in rs1] == [r.private_key for r in rs2]
+    assert [r.to_hex() for r in rs1] == [r.to_hex() for r in rs2]
 
 
 @pytest.mark.asyncio
@@ -150,7 +150,7 @@ async def test_generate_secrets_from_to(wallet3: Wallet):
     secrets2, rs2, derivation_paths2 = await wallet3.generate_secrets_from_to(2, 4)
     assert len(secrets2) == 3
     assert secrets1[2:] == secrets2
-    assert [r.private_key for r in rs1[2:]] == [r.private_key for r in rs2]
+    assert [r.to_hex() for r in rs1[2:]] == [r.to_hex() for r in rs2]
 
 
 @pytest.mark.asyncio

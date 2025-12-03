@@ -23,7 +23,7 @@ class PublicKeyExt(PublicKey):
         else:
             raise TypeError(f"Can't add pubkey and {pubkey2.__class__}")
 
-    def mult(self, privkey):
+    def __mul__(self, privkey):
         if isinstance(privkey, PrivateKey):
             return self.multiply(bytes.fromhex(privkey.to_hex()))
         else:
@@ -46,6 +46,6 @@ class PublicKeyExt(PublicKey):
 PublicKey.__add__ = PublicKeyExt.__add__  # type: ignore
 PublicKey.__neg__ = PublicKeyExt.__neg__  # type: ignore
 PublicKey.__sub__ = PublicKeyExt.__sub__  # type: ignore
-PublicKey.mult = PublicKeyExt.mult  # type: ignore
+PublicKey.__mul__ = PublicKeyExt.__mul__  # type: ignore
 PublicKey.__eq__ = PublicKeyExt.__eq__  # type: ignore
 PublicKey.to_data = PublicKeyExt.to_data  # type: ignore

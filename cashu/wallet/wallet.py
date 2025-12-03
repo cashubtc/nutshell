@@ -1002,7 +1002,7 @@ class Wallet(
             proof = Proof(
                 id=promise.id,
                 amount=promise.amount,
-                C=C.serialize().hex(),
+                C=C.format().hex(),
                 secret=secret,
                 derivation_path=path,
             )
