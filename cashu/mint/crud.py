@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
+from ..core.settings import settings
 
 from ..core.base import (
     Amount,
@@ -22,8 +23,6 @@ from ..core.db import (
     Connection,
     Database,
 )
-
-EXPIRY_SECONDS = 300  #5 minutes
 
 class LedgerCrud(ABC):
     """
@@ -1100,10 +1099,10 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> List[MeltQuote]:
         """
-        Return melt quotes that are still pending and older than EXPIRY_SECONDS,
+        Return melt quotes that are still pending and older than quote_expiry_seconds,
         using created_time as the determination of age.
         """
-        cutoff_ts = db.to_timestamp(db.timestamp_from_seconds(int(time.time()) - EXPIRY_SECONDS))
+        cutoff_ts = db.to_timestamp(db.timestamp_from_seconds(int(time.time()) - settings.mint_quote_expiry_seconds))
 
         rows = await (conn or db).fetchall(
             f"""
@@ -1144,9 +1143,9 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> List[MintQuote]:
         """
-        Return mint quotes that are still pending and older than EXPIRY_SECONDS.
+        Return mint quotes that are still pending and older than quote_expiry_seconds.
         """
-        cutoff_ts = db.to_timestamp(db.timestamp_from_seconds(int(time.time()) - EXPIRY_SECONDS))
+        cutoff_ts = db.to_timestamp(db.timestamp_from_seconds(int(time.time()) - settings.mint_quote_expiry_seconds))
 
         rows = await (conn or db).fetchall(
             f"""

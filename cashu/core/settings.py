@@ -80,6 +80,7 @@ class MintSettings(CashuSettings):
 
     mint_retry_exponential_backoff_base_delay: int = Field(default=1)
     mint_retry_exponential_backoff_max_delay: int = Field(default=10)
+    mint_quote_expiry_seconds: int = Field(default=300) #5 minutes
 
 
 class MintWatchdogSettings(MintSettings):
