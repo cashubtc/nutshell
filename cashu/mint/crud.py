@@ -1099,12 +1099,10 @@ class LedgerCrudSqlite(LedgerCrud):
         conn: Optional[Connection] = None,
     ) -> List[MeltQuote]:
         """
-        Return melt quotes that are still pending and older than mint_quote_expiry_seconds,
-        based on created_time.
+        Return melt quotes that are still pending and older than quote_expiry_seconds,
+        using created_time as the determination of age.
         """
-        now_ts = int(time.time())
-        expiry_ts = now_ts - settings.mint_quote_expiry_seconds
-        cutoff_ts = db.timestamp_from_seconds(expiry_ts)
+        cutoff_ts = db.to_timestamp(db.timestamp_from_seconds(int(time.time()) - settings.mint_quote_expiry_seconds))
 
         rows = await (conn or db).fetchall(
             f"""
@@ -1114,7 +1112,6 @@ class LedgerCrudSqlite(LedgerCrud):
             {"expiry_cutoff": cutoff_ts},
         )
         return [MeltQuote.from_row(r) for r in rows]  # type: ignore
-
 
     async def expire_melt_quote(
         self,
