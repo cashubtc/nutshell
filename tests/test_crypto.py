@@ -49,7 +49,7 @@ def test_step1():
     B_, blinding_factor = step1_alice(
         secret_msg,
         blinding_factor=PrivateKey(
-            privkey=bytes.fromhex(
+            bytes.fromhex(
                 "0000000000000000000000000000000000000000000000000000000000000001"
             )  # 32 bytes
         ),

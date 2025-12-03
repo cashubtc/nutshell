@@ -169,7 +169,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         keys: dict = resp.json()
         assert len(keys), Exception("did not receive any keys")
         keyset_keys = {
-            int(amt): PublicKey(bytes.fromhex(val), raw=True)
+            int(amt): PublicKey(bytes.fromhex(val))
             for amt, val in keys.items()
         }
         keyset = WalletKeyset(unit="sat", public_keys=keyset_keys, mint_url=url)
@@ -199,7 +199,7 @@ class LedgerAPIDeprecated(SupportsHttpxClient, SupportsMintURL):
         keys = resp.json()
         assert len(keys), Exception("did not receive any keys")
         keyset_keys = {
-            int(amt): PublicKey(bytes.fromhex(val), raw=True)
+            int(amt): PublicKey(bytes.fromhex(val))
             for amt, val in keys.items()
         }
         keyset = WalletKeyset(

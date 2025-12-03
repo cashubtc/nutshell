@@ -3,13 +3,14 @@ from typing import List
 
 from ..base import BlindedMessage
 from ..crypto.secp import PrivateKey, PublicKey
+from coincurve import PublicKeyXOnly
 
 
 def generate_keypair() -> tuple[str, str]:
     privkey = PrivateKey()
-    assert privkey.pubkey
-    pubkey = privkey.pubkey
-    return privkey.serialize(), pubkey.serialize(True).hex()
+    assert privkey.public_key
+    pubkey = privkey.public_key
+    return privkey.to_hex(), pubkey.format().hex()
 
 
 def construct_message(quote_id: str, outputs: List[BlindedMessage]) -> bytes:
@@ -23,9 +24,10 @@ def sign_mint_quote(
     outputs: List[BlindedMessage],
     private_key: str,
 ) -> str:
-    privkey = PrivateKey(bytes.fromhex(private_key), raw=True)
+
+    privkey = PrivateKey(bytes.fromhex(private_key))
     msgbytes = construct_message(quote_id, outputs)
-    sig = privkey.schnorr_sign(msgbytes, None, raw=True)
+    sig = privkey.sign_schnorr(msgbytes)
     return sig.hex()
 
 
@@ -35,7 +37,7 @@ def verify_mint_quote(
     public_key: str,
     signature: str,
 ) -> bool:
-    pubkey = PublicKey(bytes.fromhex(public_key), raw=True)
+    pubkey = PublicKeyXOnly(bytes.fromhex(public_key))
     msgbytes = construct_message(quote_id, outputs)
     sig = bytes.fromhex(signature)
-    return pubkey.schnorr_verify(msgbytes, sig, None, raw=True)
+    return pubkey.verify(sig, msgbytes)

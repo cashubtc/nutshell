@@ -4,7 +4,7 @@ from typing import Union
 
 from .crypto.secp import PrivateKey, PublicKey
 from .secret import Secret, SecretKind
-
+from coincurve import PublicKeyXOnly
 
 class SigFlags(Enum):
     # require signatures only on the inputs (default signature flag)
@@ -43,8 +43,8 @@ class P2PKSecret(Secret):
 
 
 def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
-    signature = private_key.schnorr_sign(
-        hashlib.sha256(message).digest(), None, raw=True
+    signature = private_key.sign_schnorr(
+        hashlib.sha256(message).digest()
     )
     return signature
 
@@ -52,6 +52,8 @@ def schnorr_sign(message: bytes, private_key: PrivateKey) -> bytes:
 def verify_schnorr_signature(
     message: bytes, pubkey: PublicKey, signature: bytes
 ) -> bool:
-    return pubkey.schnorr_verify(
-        hashlib.sha256(message).digest(), signature, None, raw=True
+    xonly_pubkey: PublicKeyXOnly = PublicKeyXOnly(pubkey.format())
+    return xonly_pubkey.verify(
+        signature,
+        hashlib.sha256(message).digest(),
     )
