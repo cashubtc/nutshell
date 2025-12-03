@@ -2,9 +2,11 @@ import hashlib
 from enum import Enum
 from typing import Union
 
+from coincurve import PublicKeyXOnly
+
 from .crypto.secp import PrivateKey, PublicKey
 from .secret import Secret, SecretKind
-from coincurve import PublicKeyXOnly
+
 
 class SigFlags(Enum):
     # require signatures only on the inputs (default signature flag)

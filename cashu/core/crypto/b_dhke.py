@@ -52,6 +52,7 @@ If true, a in A = a*G must be equal to a in C' = a*B'
 
 import hashlib
 from typing import Optional, Tuple
+
 from .secp import PrivateKey, PublicKey
 
 DOMAIN_SEPARATOR = b"Secp256k1_HashToCurve_Cashu_"

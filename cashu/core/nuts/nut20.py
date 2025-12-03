@@ -1,9 +1,10 @@
 from hashlib import sha256
 from typing import List
 
-from ..base import BlindedMessage
-from ..crypto.secp import PrivateKey, PublicKey
 from coincurve import PublicKeyXOnly
+
+from ..base import BlindedMessage
+from ..crypto.secp import PrivateKey
 
 
 def generate_keypair() -> tuple[str, str]:

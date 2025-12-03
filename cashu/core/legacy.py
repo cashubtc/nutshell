@@ -1,7 +1,6 @@
 import hashlib
 
 from ..core.crypto.secp import PrivateKey
-
 from ..core.settings import settings
 
 
