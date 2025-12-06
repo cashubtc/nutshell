@@ -1,12 +1,11 @@
 import asyncio
 from typing import List, Tuple
-from datetime import datetime, timezone
 
 import bolt11
 import pytest
 import pytest_asyncio
 
-from cashu.core.base import MintQuoteState, MeltQuote, MeltQuoteState, MintQuote, Method, Proof, Unit
+from cashu.core.base import MeltQuote, MeltQuoteState, Method, Proof, Unit
 from cashu.core.crypto.aes import AESCipher
 from cashu.core.db import Database
 from cashu.core.settings import settings
@@ -527,49 +526,3 @@ async def test_regtest_check_nonexisting_melt_quote(wallet: Wallet, ledger: Ledg
     )
     assert melt_quotes
     assert melt_quotes.state == MeltQuoteState.unpaid
-
-@pytest.mark.asyncio
-async def test_expired_quotes_sweep(ledger: Ledger):
-    """Test that expired mint and melt quotes are correctly marked as EXPIRED."""
-
-    now_ts = int(datetime.now(timezone.utc).timestamp())
-
-    # create expired mint quote
-    expired_mint = MintQuote(
-        quote="expired-mint",
-        method="bolt11",
-        request="lnbc-expired",
-        checking_id="chk-mint",
-        unit="sat",
-        amount=100,
-        state=MintQuoteState.pending,
-        created_time=now_ts - 600,  # older than 5 minutes        
-        expiry=now_ts - 300,  # 5 minutes ago
-    )
-    await ledger.crud.store_mint_quote(quote=expired_mint, db=ledger.db)
-
-    # create expired melt quote
-    expired_melt = MeltQuote(
-        quote="expired-melt",
-        method="bolt11",
-        request="lnbc-expired",
-        checking_id="chk-melt",
-        unit="sat",
-        amount=50,
-        fee_reserve=0,
-        state=MeltQuoteState.pending,
-        created_time=now_ts - 600,  # older than 5 minutes
-        expiry=now_ts - 300,
-    )
-    await ledger.crud.store_melt_quote(quote=expired_melt, db=ledger.db)
-
-    # run the expiration sweep
-    await ledger._check_expired_quotes()
-
-    # Assert mint quote state
-    updated_mint = await ledger.crud.get_mint_quote(quote_id="expired-mint", db=ledger.db)
-    assert updated_mint.state == MintQuoteState.expired
-
-    # Assert melt quote state
-    updated_melt = await ledger.crud.get_melt_quote(quote_id="expired-melt", db=ledger.db)
-    assert updated_melt.state == MeltQuoteState.expired

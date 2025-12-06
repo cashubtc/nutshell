@@ -166,7 +166,6 @@ class Ledger(
         while True:
             try:
                 await self._check_pending_proofs_and_melt_quotes()
-                await self._check_expired_quotes()
             except Exception as e:
                 logger.error(f"Ledger regular task failed: {e}")
             
@@ -227,40 +226,6 @@ class Ledger(
             quote = await self.get_melt_quote(quote_id=quote.quote)
             logger.info(f"Melt quote {quote.quote} state: {quote.state}")
 
-    async def _check_expired_quotes(self):
-        """
-        Find and expire mint and melt quotes which have passed their expiry time
-        and are still in a pending state.
-        """
-        # expire melt quotes
-        try:
-            expired_melts: List[MeltQuote] = await self.crud.get_expired_melt_quotes(
-                db=self.db
-            )
-            if expired_melts:
-                logger.info(f"Found {len(expired_melts)} expired melt quotes to expire")
-            for mq in expired_melts:
-                logger.info(f"Expiring melt quote {mq.quote}")
-                try:
-                    await self.crud.expire_melt_quote(db=self.db, quote_id=mq.quote)
-                except Exception as e:
-                    logger.exception(f"Failed to expire melt quote {mq.quote}: {e}")
-        except Exception as e:
-            logger.exception(f"Failed to fetch/expire melt quotes: {e}")
-
-        # expire mint quotes
-        try:
-            expired_mints = await self.crud.get_expired_mint_quotes(db=self.db)
-            if expired_mints:
-                logger.info(f"Found {len(expired_mints)} expired mint quotes to expire")
-            for mq in expired_mints:
-                logger.info(f"Expiring mint quote {mq.quote}")
-                try:
-                    await self.crud.expire_mint_quote(db=self.db, quote_id=mq.quote)
-                except Exception as e:
-                    logger.exception(f"Failed to expire mint quote {mq.quote}: {e}")
-        except Exception as e:
-            logger.exception(f"Failed to fetch/expire mint quotes: {e}")
     # ------- ECASH -------
 
     async def _invalidate_proofs(

@@ -1,21 +1,17 @@
 import json
-import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
-from ..core.settings import settings
 
 from ..core.base import (
     Amount,
     BlindedMessage,
     BlindedSignature,
     MeltQuote,
-    MeltQuoteState,
     MintBalanceLogEntry,
     MintKeyset,
     MintQuote,
-    MintQuoteState,
     Proof,
     Unit,
 )
@@ -329,40 +325,6 @@ class LedgerCrud(ABC):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> MintBalanceLogEntry | None: ...
-
-    @abstractmethod
-    async def get_expired_melt_quotes(
-        self,
-        *,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> List[MeltQuote]: ...
-
-    @abstractmethod
-    async def expire_melt_quote(
-        self,
-        *,
-        db: Database,
-        quote_id: str,
-        conn: Optional[Connection] = None,
-    ) -> None: ...
-
-    @abstractmethod
-    async def get_expired_mint_quotes(
-        self,
-        *,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> List[MintQuote]: ...
-
-    @abstractmethod
-    async def expire_mint_quote(
-        self,
-        *,
-        db: Database,
-        quote_id: str,
-        conn: Optional[Connection] = None,
-    ) -> None: ...
 
 class LedgerCrudSqlite(LedgerCrud):
     """Implementation of LedgerCrud for sqlite.
@@ -1090,91 +1052,3 @@ class LedgerCrudSqlite(LedgerCrud):
             {"checking_id": checking_id},
         )
         return [MeltQuote.from_row(row) for row in results]  # type: ignore
-
-
-    async def get_expired_melt_quotes(
-        self,
-        *,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> List[MeltQuote]:
-        """
-        Return melt quotes that are still pending and older than quote_expiry_seconds,
-        using created_time as the determination of age.
-        """
-        cutoff_ts = db.to_timestamp(db.timestamp_from_seconds(int(time.time()) - settings.mint_quote_expiry_seconds))
-
-        rows = await (conn or db).fetchall(
-            f"""
-            SELECT * FROM {db.table_with_schema('melt_quotes')}
-            WHERE state = 'PENDING' AND created_time < :expiry_cutoff
-            """,
-            {"expiry_cutoff": cutoff_ts},
-        )
-        return [MeltQuote.from_row(r) for r in rows]  # type: ignore
-
-    async def expire_melt_quote(
-        self,
-        *,
-        db: Database,
-        quote_id: str,
-        conn: Optional[Connection] = None,
-    ) -> None:
-        """
-        Mark a melt quote as expired.
-        """
-        await (conn or db).execute(
-            f"""
-            UPDATE {db.table_with_schema('melt_quotes')}
-            SET state = :state
-            WHERE quote = :quote AND state = :pending
-            """,
-            {
-                "state": MeltQuoteState.expired.value,
-                "quote": quote_id,
-                "pending": MeltQuoteState.pending.value,
-            },
-        )
-
-    async def get_expired_mint_quotes(
-        self,
-        *,
-        db: Database,
-        conn: Optional[Connection] = None,
-    ) -> List[MintQuote]:
-        """
-        Return mint quotes that are still pending and older than quote_expiry_seconds.
-        """
-        cutoff_ts = db.to_timestamp(db.timestamp_from_seconds(int(time.time()) - settings.mint_quote_expiry_seconds))
-
-        rows = await (conn or db).fetchall(
-            f"""
-            SELECT * FROM {db.table_with_schema('mint_quotes')}
-            WHERE state = 'PENDING' AND created_time < :expiry_cutoff
-            """,
-            {"expiry_cutoff": cutoff_ts},
-        )
-        return [MintQuote.from_row(r) for r in rows]  # type: ignore
-
-    async def expire_mint_quote(
-        self,
-        *,
-        db: Database,
-        quote_id: str,
-        conn: Optional[Connection] = None,
-    ) -> None:
-        """
-        Mark a mint quote as expired.
-        """
-        await (conn or db).execute(
-            f"""
-            UPDATE {db.table_with_schema('mint_quotes')}
-            SET state = :state
-            WHERE quote = :quote AND state = :pending
-            """,
-            {
-                "state": MintQuoteState.expired.value,
-                "quote": quote_id,
-                "pending": MintQuoteState.pending.value,
-            },
-        )
