@@ -20,7 +20,6 @@ from ..core.db import (
     Database,
 )
 
-
 class LedgerCrud(ABC):
     """
     Database interface for Cashu mint.
@@ -326,7 +325,6 @@ class LedgerCrud(ABC):
         db: Database,
         conn: Optional[Connection] = None,
     ) -> MintBalanceLogEntry | None: ...
-
 
 class LedgerCrudSqlite(LedgerCrud):
     """Implementation of LedgerCrud for sqlite.
