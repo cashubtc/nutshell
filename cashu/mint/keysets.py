@@ -39,6 +39,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         unit: Unit,
         max_order: Optional[int] = None,
         input_fee_ppk: Optional[int] = None,
+        final_expiry: Optional[int] = None,
     ) -> MintKeyset:
         """
         This function:
@@ -52,6 +53,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             unit (Unit): Unit of the keyset.
             max_order (Optional[int], optional): The number of keys to generate, which correspond to powers of 2.
             input_fee_ppk (Optional[int], optional):  The new keyset's fee
+            final_expiry (Optional[int], optional): The keyset's expiration date, after which it might be dropped from the database.
         Returns:
             MintKeyset: Resulting keyset of the rotation
         """
@@ -97,6 +99,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
             amounts=amounts,
             input_fee_ppk=input_fee_ppk,
             active=True,
+            final_expiry=final_expiry
         )
 
         logger.debug(f"New keyset was generated with Id {new_keyset.id}. Saving...")
@@ -135,26 +138,16 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         if not derivation_path:
             raise ValueError("Derivation path must be provided.")
 
-        seed = seed or self.seed
-        version = version or settings.version
-        # Initialize a temporary keyset to derive the ID
-        temp_keyset = MintKeyset(
-            seed=seed,
-            derivation_path=derivation_path,
-            version=version,
-            amounts=self.amounts,
-        )
-        logger.debug(
-            f"Activating keyset for derivation path '{derivation_path}' with ID '{temp_keyset.id}'."
-        )
-
         # Attempt to retrieve existing keysets from the database
         existing_keysets: List[MintKeyset] = await self.crud.get_keyset(
-            id=temp_keyset.id, db=self.db
+            derivation_path=derivation_path, db=self.db
         )
         logger.trace(
             f"Retrieved {len(existing_keysets)} keyset(s) for derivation path '{derivation_path}'."
         )
+
+        seed = seed or self.seed
+        version = version or settings.version
 
         if existing_keysets:
             keyset = existing_keysets[0]
@@ -166,6 +159,7 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
                 amounts=self.amounts,
                 version=version,
                 input_fee_ppk=settings.mint_input_fee_ppk,
+                final_expiry=None,
             )
             logger.debug(f"Generated new keyset with ID '{keyset.id}'.")
 
