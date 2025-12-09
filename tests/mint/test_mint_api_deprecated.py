@@ -34,7 +34,7 @@ async def test_info(ledger: Ledger):
     response = httpx.get(f"{BASE_URL}/info")
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.pubkey
-    assert response.json()["pubkey"] == ledger.pubkey.serialize().hex()
+    assert response.json()["pubkey"] == ledger.pubkey.format().hex()
 
 
 @pytest.mark.asyncio
@@ -43,7 +43,7 @@ async def test_api_keys(ledger: Ledger):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     assert response.json() == {
-        str(k): v.serialize().hex() for k, v in ledger.keyset.public_keys.items()
+        str(k): v.format().hex() for k, v in ledger.keyset.public_keys.items()
     }
 
 
@@ -62,7 +62,7 @@ async def test_api_keyset_keys(ledger: Ledger):
     assert response.status_code == 200, f"{response.url} {response.status_code}"
     assert ledger.keyset.public_keys
     assert response.json() == {
-        str(k): v.serialize().hex() for k, v in ledger.keyset.public_keys.items()
+        str(k): v.format().hex() for k, v in ledger.keyset.public_keys.items()
     }
 
 

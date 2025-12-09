@@ -30,11 +30,11 @@ def assert_amt(proofs: List[Proof], expected: int):
 async def test_pubkeys(ledger: Ledger):
     assert ledger.keyset.public_keys
     assert (
-        ledger.keyset.public_keys[1].serialize().hex()
+        ledger.keyset.public_keys[1].format().hex()
         == "02194603ffa36356f4a56b7df9371fc3192472351453ec7398b8da8117e7c3e104"
     )
     assert (
-        ledger.keyset.public_keys[2 ** (settings.max_order - 1)].serialize().hex()
+        ledger.keyset.public_keys[2 ** (settings.max_order - 1)].format().hex()
         == "023c84c0895cc0e827b348ea0a62951ca489a5e436f3ea7545f3c1d5f1bea1c866"
     )
 
@@ -43,11 +43,11 @@ async def test_pubkeys(ledger: Ledger):
 async def test_privatekeys(ledger: Ledger):
     assert ledger.keyset.private_keys
     assert (
-        ledger.keyset.private_keys[1].serialize()
+        ledger.keyset.private_keys[1].to_hex()
         == "8300050453f08e6ead1296bb864e905bd46761beed22b81110fae0751d84604d"
     )
     assert (
-        ledger.keyset.private_keys[2 ** (settings.max_order - 1)].serialize()
+        ledger.keyset.private_keys[2 ** (settings.max_order - 1)].to_hex()
         == "b0477644cb3d82ffcc170bc0a76e0409727232e87c5ae51d64a259936228c7be"
     )
 
@@ -115,7 +115,7 @@ async def test_mint_invalid_blinded_message(ledger: Ledger):
     ]
     await assert_err(
         ledger.mint(outputs=blinded_messages_mock_invalid_key, quote_id=quote.quote),
-        "invalid public key",
+        "The public key could not be parsed or is invalid.",
     )
 
 
@@ -160,7 +160,7 @@ async def test_generate_change_promises(ledger: Ledger):
     outputs = [
         BlindedMessage(
             amount=1,
-            B_=b.serialize().hex(),
+            B_=b.format().hex(),
             id="009a1f293253e41e",
         )
         for b, _ in blinded_msgs
@@ -191,7 +191,7 @@ async def test_generate_change_promises_legacy_wallet(ledger: Ledger):
     outputs = [
         BlindedMessage(
             amount=1,
-            B_=b.serialize().hex(),
+            B_=b.format().hex(),
             id="009a1f293253e41e",
         )
         for b, _ in blinded_msgs
@@ -262,7 +262,7 @@ async def test_generate_change_promises_signs_subset_and_deletes_rest(ledger: Le
     blank_outputs = [
         BlindedMessage(
             amount=1,
-            B_=step1_alice(f"change_blank_{i}")[0].serialize().hex(),
+            B_=step1_alice(f"change_blank_{i}")[0].format().hex(),
             id=ledger.keyset.id,
         )
         for i in range(n_blank)
@@ -325,7 +325,7 @@ async def test_generate_change_promises_zero_fee_deletes_all_blanks(ledger: Ledg
     blank_outputs = [
         BlindedMessage(
             amount=1,
-            B_=step1_alice(f"no_fee_blank_{i}")[0].serialize().hex(),
+            B_=step1_alice(f"no_fee_blank_{i}")[0].format().hex(),
             id=ledger.keyset.id,
         )
         for i in range(n_blank)

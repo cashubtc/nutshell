@@ -258,4 +258,4 @@ class LedgerKeysets(SupportsKeysets, SupportsSeed, SupportsDb):
         keyset = self.keysets[keyset_id] if keyset_id else self.keyset
         if not keyset.public_keys:
             raise KeysetError("no public keys for this keyset")
-        return {a: p.serialize().hex() for a, p in keyset.public_keys.items()}
+        return {a: p.format().hex() for a, p in keyset.public_keys.items()}

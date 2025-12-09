@@ -53,7 +53,7 @@ async def wallet2():
         SERVER_ENDPOINT, "test_data/wallet_p2pk_2", "wallet2"
     )
     await migrate_databases(wallet2.db, migrations)
-    wallet2.private_key = PrivateKey(secrets.token_bytes(32), raw=True)
+    wallet2.private_key = PrivateKey(secrets.token_bytes(32))
     await wallet2.load_mint()
     yield wallet2
 
@@ -294,9 +294,9 @@ async def test_htlc_redeem_with_2_of_3_signatures_with_2_valid_and_1_invalid_pro
     preimage = "0000000000000000000000000000000000000000000000000000000000000000"
     pubkey_wallet1 = await wallet1.create_p2pk_pubkey()
     pubkey_wallet2 = await wallet2.create_p2pk_pubkey()
-    privatekey_wallet3 = PrivateKey(secrets.token_bytes(32), raw=True)
-    assert privatekey_wallet3.pubkey
-    pubkey_wallet3 = privatekey_wallet3.pubkey.serialize().hex()
+    privatekey_wallet3 = PrivateKey(secrets.token_bytes(32))
+    assert privatekey_wallet3.public_key
+    pubkey_wallet3 = privatekey_wallet3.public_key.format().hex()
 
     # preimage_hash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
     secret = await wallet1.create_htlc_lock(
@@ -486,7 +486,7 @@ async def test_htlc_n_sigs_refund_locktime(wallet1: Wallet, wallet2: Wallet):
         SERVER_ENDPOINT, "test_data/wallet_htlc_3", "wallet3"
     )
     await migrate_databases(wallet3.db, migrations)
-    wallet3.private_key = PrivateKey(secrets.token_bytes(32), raw=True)
+    wallet3.private_key = PrivateKey(secrets.token_bytes(32))
     await wallet3.load_mint()
 
     # Mint tokens for testing
