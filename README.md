@@ -4,9 +4,6 @@
 
 <a href="https://pypi.org/project/cashu/"><img alt="Release" src="https://img.shields.io/pypi/v/cashu?color=black"></a> <a href="https://pepy.tech/project/cashu"> <img alt="Downloads" src="https://pepy.tech/badge/cashu"></a> <a href="https://app.codecov.io/gh/cashubtc/nutshell"><img alt="Coverage" src="https://img.shields.io/codecov/c/gh/cashubtc/nutshell"></a>
 
-
-
-
 Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nuts) based on David Wagner's variant of Chaumian blinding called [Blind Diffie-Hellman Key Exchange](https://cypherpunks.venona.com/date/1996/03/msg01848.html) scheme written down [here](https://gist.github.com/RubenSomsen/be7a4760dd4596d06963d67baf140406).
 
 <p align="center">
@@ -29,6 +26,7 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 - Use multiple mints in a single wallet
 
 ### Advanced features
+
 - Deterministic wallet with seed phrase backup ([NUT-13](https://github.com/cashubtc/nuts/blob/main/13.md))
 - Programmable ecash: P2PK and HTLCs ([NUT-10](https://github.com/cashubtc/nuts/blob/main/10.md))
 - Wallet and mint support for keyset rotations
@@ -37,11 +35,13 @@ Cashu is a free and open-source [Ecash protocol](https://github.com/cashubtc/nut
 - Optional authentication using Keycloak ([NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md))
 
 ## The Cashu protocol
-Different Cashu clients and mints use the same protocol to achieve interoperability. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in developing on your own Cashu project, please refer to the protocol specs [protocol specs](https://github.com/cashubtc/nuts).
+
+Different Cashu clients and mints use the same protocol to achieve interoperability. See the [documentation page](https://docs.cashu.space/) for more information on other projects. If you are interested in developing on your own Cashu project, please refer to the [protocol specs](https://github.com/cashubtc/nuts).
 
 ## Easy Install: Nutshell wallet
 
-The easiest way to use Cashu is to install the package it via pip:
+The easiest way to use Cashu is to install the package via pip:
+
 ```bash
 pip install cashu
 ```
@@ -62,9 +62,13 @@ You can build the image yourself by running the following command. Make sure to 
 docker compose up mint
 ```
 
-Alternatively, you can use the pre-built Docker images, see [Running a mint](#running-a-mint).
+**Note:** If you have a local `.env` file, it will be copied into the container and may override docker-compose environment variables. To ensure the mint is accessible from your host machine, either:
+
+- Set `MINT_LISTEN_HOST=0.0.0.0` in your `.env` file, or
+- Use the pre-built Docker image command in the [Running a mint](#running-a-mint) section which sets environment variables directly.
 
 ## Manual install: Poetry
+
 These steps help you install Python via pyenv and Poetry. If you already have Poetry running on your computer, you can skip this step and jump right to [Poetry: Install Cashu Nutshell](#poetry-install-cashu-nutshell).
 
 #### Poetry: Prerequisites
@@ -87,7 +91,9 @@ curl -sSL https://install.python-poetry.org | python3 - --version 1.8.5
 echo export PATH=\"$HOME/.local/bin:$PATH\" >> ~/.bashrc
 source ~/.bashrc
 ```
+
 #### Poetry: Install Cashu Nutshell
+
 ```bash
 # install nutshell
 git clone https://github.com/cashubtc/nutshell.git nutshell
@@ -98,10 +104,13 @@ poetry install
 ```
 
 #### Poetry: Update Cashu
+
 To update Cashu to the newest version enter
+
 ```bash
 git pull && poetry install
 ```
+
 #### Poetry: Using the Nutshell wallet
 
 Cashu should be now installed. To execute the following commands, activate your virtual Poetry environment via
@@ -111,7 +120,9 @@ poetry shell
 ```
 
 If you don't activate your environment, just prepend `poetry run` to all following commands.
+
 ## Configuration
+
 ```bash
 mv .env.example .env
 # edit .env file
@@ -124,17 +135,21 @@ To use the wallet with the [public test mint](#test-instance), you need to chang
 *Warning: this instance is just for demonstration purposes and development only. The satoshis are not real.*
 
 Change the appropriate `.env` file settings to
+
 ```bash
 MINT_URL=https://testnut.cashu.space
 ```
 
 # Using Cashu
+
 ```bash
 cashu info
 ```
+
 This command shows information about your wallet.
 
 #### Check balance
+
 ```bash
 cashu balance
 ```
@@ -150,37 +165,49 @@ cashu invoice 420
 The client will check every few seconds if the invoice has been paid. If you abort this step but still pay the invoice, you can use the command `cashu invoice <amount> --id <id>`.
 
 #### Pay a Lightning invoice
+
 ```bash
 cashu pay lnbc120n1p3jfmdapp5r9jz...
 ```
 
 #### Send tokens
+
 To send tokens to another user, enter
+
 ```bash
 cashu send 69
 ```
+
 You should see the encoded token. Copy the token and send it to another user such as via email or a messenger. The token looks like this:
+
 ```bash
 cashuBo2F0gaJhaUgA2...
 ```
 
 #### Receive tokens
+
 To receive tokens, another user enters:
+
 ```bash
 cashu receive cashuBo2F0gaJhaUgA2...
 ```
 
 # Running a mint
+
 This command runs the mint on your local computer. Skip this step if you want to use the [public test mint](#test-instance) instead.
 
 ## Docker
 
-```
+Run the mint using the pre-built Docker image. This method sets environment variables directly and works reliably regardless of local `.env` files:
+
+```bash
 docker run -d -p 3338:3338 --name nutshell -e MINT_BACKEND_BOLT11_SAT=FakeWallet -e MINT_LISTEN_HOST=0.0.0.0 -e MINT_LISTEN_PORT=3338 -e MINT_PRIVATE_KEY=TEST_PRIVATE_KEY cashubtc/nutshell:0.18.2 poetry run mint
 ```
 
 ## From this repository
+
 Before you can run your own mint, make sure to enable a Lightning backend in `MINT_BACKEND_BOLT11_SAT` and set `MINT_PRIVATE_KEY` in your `.env` file.
+
 ```bash
 poetry run mint
 ```
@@ -188,17 +215,22 @@ poetry run mint
 For testing, you can use Nutshell without a Lightning backend by setting `MINT_BACKEND_BOLT11_SAT=FakeWallet` in the `.env` file.
 
 ### NUT-19 Caching with Redis
+
 To cache HTTP responses ([NUT-19](https://github.com/cashubtc/nuts/blob/main/19.md)), you can either install Redis manually or use the docker compose file in `docker/redis/docker-compose.yaml` to start Redis in a container.
 
 Edit the `.env` file and uncomment the Redis lines:
-```
+
+```bash
 MINT_REDIS_CACHE_ENABLED=TRUE
 MINT_REDIS_CACHE_URL=redis://localhost:6379
 ```
+
 ### NUT-21 Authentication with Keycloak
-Cashu supports clear and blind authentication as defined in [NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md) and [NUT-22](https://github.com/cashubtc/nuts/blob/main/22.md) to limit the use of a mint to a registered set of users. Clear authentication is supported via a OICD provider such as Keycloak. You can set up and run Keycloak instance using the docker compose file `docker/keycloak/docker-compose.yml` in this repository.
+
+Cashu supports clear and blind authentication as defined in [NUT-21](https://github.com/cashubtc/nuts/blob/main/21.md) and [NUT-22](https://github.com/cashubtc/nuts/blob/main/22.md) to limit the use of a mint to a registered set of users. Clear authentication is supported via an OIDC provider such as Keycloak. You can set up and run Keycloak instance using the docker compose file `docker/keycloak/docker-compose.yml` in this repository.
 
 ### Migrate SQLite mint DB to Postgres
+
 Use the standalone tool at `cashu/mint/sqlite_to_postgres.py` to migrate a mint database from SQLite to Postgres.
 
 ```bash
@@ -216,21 +248,25 @@ poetry run python cashu/mint/sqlite_to_postgres.py \
 - After copying, it verifies row counts and compares the `balance` view across both databases.
 
 # Running tests
+
 To run the tests in this repository, first install the dev dependencies with
+
 ```bash
 poetry install --with dev
 ```
 
 Then, make sure to set up your mint's `.env` file to use a fake Lightning backend and disable Tor:
+
 ```bash
 MINT_BACKEND_BOLT11_SAT=FakeWallet
 TOR=FALSE
 ```
+
 You can run the tests with
+
 ```bash
 poetry run pytest tests
 ```
-
 
 # Contributing
 
