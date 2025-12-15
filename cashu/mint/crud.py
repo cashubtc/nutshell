@@ -20,6 +20,7 @@ from ..core.db import (
     Database,
 )
 
+
 class LedgerCrud(ABC):
     """
     Database interface for Cashu mint.
